@@ -1,0 +1,64 @@
+package com.kaanelloed.iconeration
+
+import android.annotation.SuppressLint
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.drawable.Drawable
+
+class ApplicationManager {
+    //Too many apps for this one
+    @SuppressLint("QueryPermissionsNeeded")
+    fun getInstalledAppsFromPack(pm: PackageManager, includeSystemPackages: Boolean): Array<PackageInfoStruct> {
+        val packages = pm.getInstalledPackages(PackageManager.GET_META_DATA)
+        val packInfoStructs = mutableListOf<PackageInfoStruct>()
+
+        for (pack in packages) {
+            if (!includeSystemPackages && pack.versionName == null) continue
+
+            val packInfo = PackageInfoStruct()
+            packInfo.appName = pack.applicationInfo.loadLabel(pm).toString()
+            packInfo.packageName = pack.packageName
+            packInfo.activityName = ""
+            packInfo.versionName = pack.versionName
+            packInfo.versionCode = pack.versionCode
+            packInfo.icon = pack.applicationInfo.loadIcon(pm)
+
+            packInfoStructs.add(packInfo)
+        }
+
+        return packInfoStructs.toTypedArray()
+    }
+
+    fun getInstalledAppsFromIntent(pm: PackageManager, includeSystemPackages: Boolean): Array<PackageInfoStruct> {
+        val mainIntent = Intent(Intent.ACTION_MAIN, null)
+        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER)
+
+        val resolves = pm.queryIntentActivities(mainIntent, 0)
+        val packInfoStructs = mutableListOf<PackageInfoStruct>()
+
+        for (pack in resolves) {
+            //val res = pm.getResourcesForApplication(pack.activityInfo.applicationInfo)
+
+            var packInfo = PackageInfoStruct()
+            packInfo.appName = pack.activityInfo.applicationInfo.loadLabel(pm).toString()
+            packInfo.packageName = pack.activityInfo.packageName
+            packInfo.activityName = pack.activityInfo.name
+            packInfo.versionName = ""
+            packInfo.versionCode = 0
+            packInfo.icon = pack.activityInfo.applicationInfo.loadIcon(pm)
+
+            packInfoStructs.add(packInfo)
+        }
+
+        return packInfoStructs.toTypedArray()
+    }
+}
+
+class PackageInfoStruct {
+    lateinit var appName: String
+    lateinit var packageName: String
+    lateinit var activityName: String
+    lateinit var versionName: String
+    var versionCode: Int = 0
+    lateinit var icon: Drawable
+}

@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Iconeration</string>
+    <string name="action_settings">Settings</string>
+    <!-- Strings used for fragments for navigation -->
+    <string name="home_fragment_label">Home</string>
+    <string name="icon_fragment_label">Icons</string>
+    <string name="next">Next</string>
+    <string name="previous">Previous</string>
+    <string name="generate">Generate</string>
+    <string name="home_text">Generate icons for every application in your device with edge detection.</string>
+    <string name="list_icon_desc">Icon of the application</string>
+</resources>
