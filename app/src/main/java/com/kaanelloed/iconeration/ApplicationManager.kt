@@ -1,12 +1,11 @@
 package com.kaanelloed.iconeration
 
-import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 
 class ApplicationManager {
-    fun getInstalledAppsFromIntent(pm: PackageManager, includeSystemPackages: Boolean): Array<PackageInfoStruct> {
+    fun getInstalledApps(pm: PackageManager, includeSystemPackages: Boolean): Array<PackageInfoStruct> {
         val mainIntent = Intent(Intent.ACTION_MAIN, null)
         mainIntent.addCategory(Intent.CATEGORY_LAUNCHER)
 

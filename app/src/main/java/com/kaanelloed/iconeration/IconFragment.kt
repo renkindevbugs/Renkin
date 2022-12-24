@@ -1,6 +1,6 @@
 package com.kaanelloed.iconeration
 
-import android.graphics.Color
+import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
@@ -9,6 +9,7 @@ import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
 import androidx.core.graphics.drawable.toBitmap
+import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.kaanelloed.iconeration.databinding.FragmentIconBinding
@@ -34,10 +35,10 @@ class IconFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val am = ApplicationManager()
-        apps = activity?.packageManager?.let { it1 -> am.getInstalledAppsFromIntent(it1, false) }
+        apps = activity?.packageManager?.let { it1 -> am.getInstalledApps(it1, false) }
         view.findViewById<RecyclerView>(R.id.appView).apply {
             layoutManager = LinearLayoutManager(view.context)
-            adapter = apps?.let { AppListAdapter(it) }
+            adapter = apps?.let { AppListAdapter(it, PreferenceManager.getDefaultSharedPreferences(this.context)) }
         }
 
         binding.buttonSecond.setOnClickListener {
@@ -51,7 +52,7 @@ class IconFragment : Fragment() {
     }
 }
 
-class AppListAdapter(private val dataSet: Array<PackageInfoStruct>): RecyclerView.Adapter<AppListAdapter.ViewHolder>() {
+class AppListAdapter(private val dataSet: Array<PackageInfoStruct>, private val prefs: SharedPreferences): RecyclerView.Adapter<AppListAdapter.ViewHolder>() {
     var edgeDetector = CannyEdgeDetector()
 
     class ViewHolder(view: View): RecyclerView.ViewHolder(view) {
@@ -84,7 +85,7 @@ class AppListAdapter(private val dataSet: Array<PackageInfoStruct>): RecyclerVie
         if (app.icon.minimumHeight == 0) return
 
         edgeDetector = CannyEdgeDetector()
-        edgeDetector.process(app.icon.toBitmap(), Color.WHITE)
+        edgeDetector.process(app.icon.toBitmap(), prefs.getString("edgeColor", "-1")!!.toInt())
 
         viewHolder.appIcon.setImageDrawable(app.icon)
         viewHolder.genIcon.setImageBitmap(edgeDetector.edgesImage)
