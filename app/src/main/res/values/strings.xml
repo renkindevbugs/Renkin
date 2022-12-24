@@ -10,25 +10,11 @@
     <string name="home_text">Generate icons for every application in your device with edge detection.</string>
     <string name="list_icon_desc">Icon of the application</string>
     <string name="title_activity_settings">SettingsActivity</string>
+    <string name="create_icon_pack">Create Icon Pack</string>
 
     <!-- Settings -->
     <string name="settings_icon_gen">Icon Generation</string>
     <string name="settings_edgeColor_label">Edge color</string>
     <string name="settings_edgeColor_white">White</string>
     <string name="settings_edgeColor_black">Black</string>
-
-    <!-- Preference Titles -->
-    <string name="messages_header">Messages</string>
-    <string name="sync_header">Sync</string>
-
-    <!-- Messages Preferences -->
-    <string name="signature_title">Your signature</string>
-    <string name="reply_title">Default reply action</string>
-
-    <!-- Sync Preferences -->
-    <string name="sync_title">Sync email periodically</string>
-    <string name="attachment_title">Download incoming attachments</string>
-    <string name="attachment_summary_on">Automatically download attachments for incoming emails
-    </string>
-    <string name="attachment_summary_off">Only download attachments when manually requested</string>
 </resources>

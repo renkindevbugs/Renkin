@@ -41,7 +41,7 @@ class IconFragment : Fragment() {
             adapter = apps?.let { AppListAdapter(it, PreferenceManager.getDefaultSharedPreferences(this.context)) }
         }
 
-        binding.buttonSecond.setOnClickListener {
+        binding.btnCreatePack.setOnClickListener {
             //findNavController().navigate(R.id.action_SecondFragment_to_FirstFragment)
         }
     }
