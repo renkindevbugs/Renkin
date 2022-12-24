@@ -1,0 +1,1 @@
+Icon generator for Android using edge detection on current icon
