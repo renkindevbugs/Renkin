@@ -1,6 +1,5 @@
 package com.kaanelloed.iconeration
 
-import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
@@ -35,14 +34,25 @@ class IconFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         val am = ApplicationManager()
-        apps = activity?.packageManager?.let { it1 -> am.getInstalledApps(it1, false) }
+        val pm = activity?.packageManager!!
+        apps = am.getInstalledApps(pm)
+
+        val prefs = PreferenceManager.getDefaultSharedPreferences(view.context)
+        var edgeDetector: CannyEdgeDetector
+        for (app in apps!!) {
+            edgeDetector = CannyEdgeDetector()
+            edgeDetector.process(app.icon.toBitmap(), prefs.getString("edgeColor", "-1")!!.toInt())
+            app.genIcon = edgeDetector.edgesImage
+        }
+
         view.findViewById<RecyclerView>(R.id.appView).apply {
             layoutManager = LinearLayoutManager(view.context)
-            adapter = apps?.let { AppListAdapter(it, PreferenceManager.getDefaultSharedPreferences(this.context)) }
+            adapter = AppListAdapter(apps!!)
         }
 
         binding.btnCreatePack.setOnClickListener {
-            //findNavController().navigate(R.id.action_SecondFragment_to_FirstFragment)
+            val creator = IconPackCreator(view.context, pm.packageInstaller, apps!!)
+            creator.create()
         }
     }
 
@@ -52,9 +62,7 @@ class IconFragment : Fragment() {
     }
 }
 
-class AppListAdapter(private val dataSet: Array<PackageInfoStruct>, private val prefs: SharedPreferences): RecyclerView.Adapter<AppListAdapter.ViewHolder>() {
-    var edgeDetector = CannyEdgeDetector()
-
+class AppListAdapter(private val dataSet: Array<PackageInfoStruct>): RecyclerView.Adapter<AppListAdapter.ViewHolder>() {
     class ViewHolder(view: View): RecyclerView.ViewHolder(view) {
         val appIcon: ImageView
         val genIcon: ImageView
@@ -84,11 +92,8 @@ class AppListAdapter(private val dataSet: Array<PackageInfoStruct>, private val 
         val app = dataSet[position]
         if (app.icon.minimumHeight == 0) return
 
-        edgeDetector = CannyEdgeDetector()
-        edgeDetector.process(app.icon.toBitmap(), prefs.getString("edgeColor", "-1")!!.toInt())
-
         viewHolder.appIcon.setImageDrawable(app.icon)
-        viewHolder.genIcon.setImageBitmap(edgeDetector.edgesImage)
+        viewHolder.genIcon.setImageBitmap(app.genIcon)
         viewHolder.appName.text = app.appName
     }
 
