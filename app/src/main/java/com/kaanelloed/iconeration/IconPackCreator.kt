@@ -7,28 +7,28 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import androidx.core.content.FileProvider
-import java.io.BufferedOutputStream
+import brut.androlib.Androlib
+import brut.androlib.ApkDecoder
+import brut.androlib.options.BuildOptions
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
-import java.util.zip.ZipEntry
-import java.util.zip.ZipFile
-import java.util.zip.ZipOutputStream
 
 class IconPackCreator(private val ctx: Context, private val pm: PackageInstaller, private val apps: Array<PackageInfoStruct>) {
-    private val cacheDir: String = ctx.cacheDir.absolutePath
-    private val extractedDir = File(cacheDir).resolve("apkExtracted")
+    private val cacheDirPath = ctx.cacheDir.absolutePath
+    private val apkDir = File(cacheDirPath).resolve("apk")
+    private val extractedDir = apkDir.resolve("apkExtracted")
     private val assetDir = extractedDir.resolve("assets")
-    private val assetFile = "app-release.apk"
+    private val drawableDir = extractedDir.resolve("res").resolve("drawable")
+    private val apkFile = "app-release-unsigned.apk"
 
     fun create() {
         clearCache()
 
-        val apk = assetToFile(assetFile, cacheDir, assetFile)
-        val zip = ZipFile(apk)
+        val apk = assetToFile(apkFile, apkDir.absolutePath, apkFile)
 
-        extractApk(zip, extractedDir.absolutePath)
-        apk.delete() //Delete after extracting
+        extractApk(apk)
+        apk.delete()
 
         writeIcons()
         writeDrawable()
@@ -36,79 +36,73 @@ class IconPackCreator(private val ctx: Context, private val pm: PackageInstaller
 
         buildApk(apk)
 
-        val apkSigned = File(cacheDir).resolve("app-release.apk")
+        val apkSigned = apkDir.resolve("app-release.apk")
 
         signApk(apk, apkSigned)
         installApk(apkSigned)
     }
 
-    private fun extractApk(zip: ZipFile, dest: String) {
-        for (entry in zip.entries()) {
-            val file = File(dest, entry.name)
+    private fun extractApk(apk: File) {
+        val opt = BuildOptions()
+        opt.frameworkFolderLocation = cacheDirPath
+        val lib = Androlib(opt)
 
-            if (entry.isDirectory) {
-                file.mkdirs()
-            } else {
-                file.parentFile?.mkdirs()
-
-                copyAndCloseStream(zip.getInputStream(entry), file.outputStream())
-            }
-        }
+        val decoder = ApkDecoder(apk, lib)
+        decoder.setOutDir(extractedDir)
+        decoder.decode()
     }
 
     private fun writeIcons() {
         for (app in apps) {
-            val icon = app.genIcon
-
-            val file = assetDir.resolve(app.packageName + ".png")
+            val file = drawableDir.resolve(app.packageName.replace('.', '_') + ".png")
 
             val outStream = file.outputStream()
-            icon.compress(Bitmap.CompressFormat.PNG, 100, outStream)
+            app.genIcon.compress(Bitmap.CompressFormat.PNG, 100, outStream)
             outStream.close()
         }
     }
 
     private fun writeDrawable() {
         val file = assetDir.resolve("drawable.xml")
+        if (file.exists()) file.delete()
 
-        file.appendText("<?xml version=\"1.0\" encoding=\"utf-8\"?>")
-        file.appendText("<resources>")
-        file.appendText("    <version>1</version>")
-        file.appendText("    <category title=\"All Apps\" />")
+        file.appendText("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
+        file.appendText("<resources>\n")
+        file.appendText("    <version>1</version>\n")
+        file.appendText("    <category title=\"All Apps\" />\n")
 
         for (app in apps) {
-            file.appendText("    <item drawable=\"${app.packageName}\" />")
+            file.appendText("    <item drawable=\"${app.packageName.replace('.', '_')}\" />\n")
         }
 
         file.appendText("</resources>")
     }
 
     private fun writeAppFilter() {
-        //TODO
+        val file = assetDir.resolve("appfilter.xml")
+        if (file.exists()) file.delete()
+
+        file.appendText("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
+        file.appendText("<resources>\n")
+        for (app in apps) {
+            file.appendText("    <item component=\"ComponentInfo{${app.packageName}/${app.activityName}}\" drawable=\"${app.packageName.replace('.', '_')}\" />\n")
+        }
+
+        file.appendText("</resources>")
     }
 
     private fun buildApk(dest: File) {
-        val outStream = ZipOutputStream(BufferedOutputStream(dest.outputStream()))
-
-        for (file in extractedDir.walkTopDown()) {
-            var zipName = file.absolutePath.removePrefix(extractedDir.absolutePath).removePrefix("/")
-            if (file.isDirectory) zipName += "/"
-
-            val entry = ZipEntry(zipName)
-            outStream.putNextEntry(entry)
-
-            if (file.isFile) {
-                val inStream = file.inputStream()
-                inStream.copyTo(outStream)
-                inStream.close()
-            }
-        }
-
-        outStream.close()
+        val opt = BuildOptions()
+        opt.frameworkFolderLocation = cacheDirPath
+        opt.aaptPath = File(ctx.applicationInfo.nativeLibraryDir).resolve("libaapt2.so").absolutePath
+        opt.aaptVersion = 2
+        opt.useAapt2 = true
+        Androlib(opt).build(extractedDir, dest)
     }
 
     private fun signApk(file: File, outFile: File) {
-        //TODO
+        val keyStoreFile = ctx.cacheDir.resolve("iconeration.keystore")
+        Signer("Iconeration", "s3cur3p@ssw0rd").signApk(file, outFile, keyStoreFile)
     }
 
     private fun installApk(file: File) {
@@ -151,7 +145,7 @@ class IconPackCreator(private val ctx: Context, private val pm: PackageInstaller
     }
 
     private fun clearCache() {
-        ctx.cacheDir.deleteRecursively()
-        ctx.cacheDir.mkdir()
+        apkDir.deleteRecursively()
+        apkDir.mkdir()
     }
 }
