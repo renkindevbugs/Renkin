@@ -20,7 +20,7 @@ class IconPackCreator(private val ctx: Context, private val pm: PackageInstaller
     private val extractedDir = apkDir.resolve("apkExtracted")
     private val assetDir = extractedDir.resolve("assets")
     private val drawableDir = extractedDir.resolve("res").resolve("drawable")
-    private val apkFile = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) "app-release-unsignedAPI33.apk" else "app-release-unsigned.apk"
+    private val apkFile = "app-release-unsigned.apk"
 
     fun create() {
         clearCache()
