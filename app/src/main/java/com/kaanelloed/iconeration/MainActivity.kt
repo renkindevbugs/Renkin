@@ -11,7 +11,9 @@ import androidx.navigation.ui.navigateUp
 import androidx.navigation.ui.setupActionBarWithNavController
 import android.view.Menu
 import android.view.MenuItem
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.fragment.app.Fragment
+import androidx.preference.PreferenceManager
 import com.kaanelloed.iconeration.databinding.ActivityMainBinding
 
 class MainActivity : AppCompatActivity() {
@@ -24,6 +26,8 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
+
+        setDarkMode()
 
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
@@ -65,5 +69,11 @@ class MainActivity : AppCompatActivity() {
     private fun currentFragment(): Fragment {
         val nav = supportFragmentManager.findFragmentById(R.id.nav_host_fragment_content_main)!!
         return nav.childFragmentManager.primaryNavigationFragment!!
+    }
+
+    private fun setDarkMode() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val mode = prefs.getString(getString(R.string.settings_darkMode_key), getString(R.string.settings_darkMode_def_value))!!.toInt()
+        AppCompatDelegate.setDefaultNightMode(mode)
     }
 }

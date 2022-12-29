@@ -58,25 +58,26 @@ class IconFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         Thread {
-            val prog = activity?.findViewById<ProgressBar>(R.id.progress_loader)!!
+            val progBar = activity?.findViewById<ProgressBar>(R.id.progress_loader)!!
 
             view.post {
                 requireActivity().window.setFlags(
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
-                prog.visibility = View.VISIBLE
+                progBar.visibility = View.VISIBLE
             }
 
             val act = requireActivity() as MainActivity
             act.apps = ApplicationManager().getInstalledApps(activity?.packageManager!!)
 
             val prefs = PreferenceManager.getDefaultSharedPreferences(view.context)
+            val color = prefs.getString(getString(R.string.settings_edgeColor_key), getString(R.string.settings_edgeColor_def_value))!!.toInt()
             var edgeDetector: CannyEdgeDetector
             for (app in act.apps!!) {
                 edgeDetector = CannyEdgeDetector()
                 edgeDetector.process(
                     app.icon.toBitmap(),
-                    prefs.getString("edgeColor", "-1")!!.toInt()
+                    color
                 )
                 app.genIcon = edgeDetector.edgesImage
             }
@@ -93,7 +94,7 @@ class IconFragment : Fragment() {
             }
 
             view.post {
-                prog.visibility = View.INVISIBLE
+                progBar.visibility = View.INVISIBLE
                 binding.btnCreatePack.isEnabled = true
                 requireActivity().window.clearFlags(
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);

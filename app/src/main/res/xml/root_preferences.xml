@@ -1,10 +1,20 @@
 <PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+    <PreferenceCategory app:title="@string/settings_ui">
+        <ListPreference
+            app:defaultValue="@string/settings_darkMode_def_value"
+            app:entries="@array/dark_mode_entries"
+            app:entryValues="@array/dark_mode_values"
+            app:key="@string/settings_darkMode_key"
+            app:title="@string/settings_darkMode_label"
+            app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
     <PreferenceCategory app:title="@string/settings_icon_gen">
         <ListPreference
-            app:defaultValue="-1"
+            app:defaultValue="@string/settings_edgeColor_def_value"
             app:entries="@array/edge_color_entries"
             app:entryValues="@array/edge_color_values"
-            app:key="edgeColor"
+            app:key="@string/settings_edgeColor_key"
             app:title="@string/settings_edgeColor_label"
             app:useSimpleSummaryProvider="true" />
     </PreferenceCategory>

@@ -14,8 +14,12 @@
     <string name="create_icon_pack">Create Icon Pack</string>
 
     <!-- Settings -->
+    <string name="settings_ui">UI</string>
+    <string name="settings_darkMode_key">darkMode</string>
+    <string name="settings_darkMode_label">Theme</string>
+    <string name="settings_darkMode_def_value">-1</string>
     <string name="settings_icon_gen">Icon Generation</string>
+    <string name="settings_edgeColor_key">edgeColor</string>
     <string name="settings_edgeColor_label">Edge color</string>
-    <string name="settings_edgeColor_white">White</string>
-    <string name="settings_edgeColor_black">Black</string>
+    <string name="settings_edgeColor_def_value">-1</string>
 </resources>
