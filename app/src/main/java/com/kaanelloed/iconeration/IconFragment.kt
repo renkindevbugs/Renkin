@@ -5,22 +5,46 @@ import androidx.fragment.app.Fragment
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.WindowManager
 import android.widget.ImageView
+import android.widget.ProgressBar
 import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.core.graphics.drawable.toBitmap
+import androidx.navigation.fragment.findNavController
 import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.snackbar.Snackbar
 import com.kaanelloed.iconeration.databinding.FragmentIconBinding
 
 class IconFragment : Fragment() {
 
+    private var loaded = false
     private var _binding: FragmentIconBinding? = null
-    private var apps: Array<PackageInfoStruct>? = null
 
     // This property is only valid between onCreateView and
     // onDestroyView.
     private val binding get() = _binding!!
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        requireActivity().onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (loaded)
+                    findNavController().popBackStack()
+                else
+                    Snackbar.make(
+                        binding.root,
+                        "Please wait until the process is complete",
+                        Snackbar.LENGTH_LONG
+                    )
+                        .setAnchorView(R.id.nav_host_fragment_content_main)
+                        .setAction("Wait", null).show()
+            }
+        })
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -33,27 +57,51 @@ class IconFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val am = ApplicationManager()
-        val pm = activity?.packageManager!!
-        apps = am.getInstalledApps(pm)
+        Thread {
+            val prog = activity?.findViewById<ProgressBar>(R.id.progress_loader)!!
 
-        val prefs = PreferenceManager.getDefaultSharedPreferences(view.context)
-        var edgeDetector: CannyEdgeDetector
-        for (app in apps!!) {
-            edgeDetector = CannyEdgeDetector()
-            edgeDetector.process(app.icon.toBitmap(), prefs.getString("edgeColor", "-1")!!.toInt())
-            app.genIcon = edgeDetector.edgesImage
-        }
+            view.post {
+                requireActivity().window.setFlags(
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+                prog.visibility = View.VISIBLE
+            }
 
-        view.findViewById<RecyclerView>(R.id.appView).apply {
-            layoutManager = LinearLayoutManager(view.context)
-            adapter = AppListAdapter(apps!!)
-        }
+            val act = requireActivity() as MainActivity
+            act.apps = ApplicationManager().getInstalledApps(activity?.packageManager!!)
 
-        binding.btnCreatePack.setOnClickListener {
-            val creator = IconPackCreator(view.context, pm.packageInstaller, apps!!)
-            creator.create()
-        }
+            val prefs = PreferenceManager.getDefaultSharedPreferences(view.context)
+            var edgeDetector: CannyEdgeDetector
+            for (app in act.apps!!) {
+                edgeDetector = CannyEdgeDetector()
+                edgeDetector.process(
+                    app.icon.toBitmap(),
+                    prefs.getString("edgeColor", "-1")!!.toInt()
+                )
+                app.genIcon = edgeDetector.edgesImage
+            }
+
+            view.post {
+                view.findViewById<RecyclerView>(R.id.appView).apply {
+                    layoutManager = LinearLayoutManager(view.context)
+                    adapter = AppListAdapter(act.apps!!)
+                }
+
+                binding.btnCreatePack.setOnClickListener {
+                    findNavController().navigate(R.id.action_IconFragment_to_iconPackFragment)
+                }
+            }
+
+            view.post {
+                prog.visibility = View.INVISIBLE
+                binding.btnCreatePack.isEnabled = true
+                requireActivity().window.clearFlags(
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+            }
+
+            loaded = true
+
+        }.start()
     }
 
     override fun onDestroyView() {

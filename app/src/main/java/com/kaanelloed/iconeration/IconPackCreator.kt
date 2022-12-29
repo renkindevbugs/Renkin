@@ -2,7 +2,6 @@ package com.kaanelloed.iconeration
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageInstaller
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
@@ -14,7 +13,7 @@ import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 
-class IconPackCreator(private val ctx: Context, private val pm: PackageInstaller, private val apps: Array<PackageInfoStruct>) {
+class IconPackCreator(private val ctx: Context, private val apps: Array<PackageInfoStruct>) {
     private val cacheDirPath = ctx.cacheDir.absolutePath
     private val apkDir = File(cacheDirPath).resolve("apk")
     private val extractedDir = apkDir.resolve("apkExtracted")
@@ -22,24 +21,34 @@ class IconPackCreator(private val ctx: Context, private val pm: PackageInstaller
     private val drawableDir = extractedDir.resolve("res").resolve("drawable")
     private val apkFile = "app-release-unsigned.apk"
 
-    fun create() {
+    fun create(textMethod: (text: String) -> Unit) {
         clearCache()
 
+        textMethod("Extracting apk ...")
         val apk = assetToFile(apkFile, apkDir.absolutePath, apkFile)
 
         extractApk(apk)
         apk.delete()
 
+        textMethod("Writing icons ...")
         writeIcons()
+        textMethod("Writing drawable.xml ...")
         writeDrawable()
+        textMethod("Writing appfilter.xml ...")
         writeAppFilter()
 
+        textMethod("Building apk ...")
         buildApk(apk)
 
         val apkSigned = apkDir.resolve("app-release.apk")
 
+        textMethod("Signing apk ...")
         signApk(apk, apkSigned)
+        textMethod("Installing apk ...")
         installApk(apkSigned)
+
+        clearTmpFiles()
+        textMethod("Done")
     }
 
     private fun extractApk(apk: File) {
@@ -147,5 +156,15 @@ class IconPackCreator(private val ctx: Context, private val pm: PackageInstaller
     private fun clearCache() {
         apkDir.deleteRecursively()
         apkDir.mkdir()
+    }
+
+    private fun clearTmpFiles() {
+        val tmpFile = ctx.cacheDir.listFiles()!!
+
+        for (file in tmpFile) {
+            if (!file.isDirectory && file.path.endsWith(".tmp")) {
+                file.delete()
+            }
+        }
     }
 }

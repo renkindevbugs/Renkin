@@ -12,7 +12,7 @@
         tools:layout="@layout/fragment_home">
 
         <action
-            android:id="@+id/action_FirstFragment_to_SecondFragment"
+            android:id="@+id/action_HomeFragment_to_IconFragment"
             app:destination="@id/IconFragment" />
     </fragment>
     <fragment
@@ -22,7 +22,20 @@
         tools:layout="@layout/fragment_icon">
 
         <action
-            android:id="@+id/action_SecondFragment_to_FirstFragment"
+            android:id="@+id/action_IconFragment_to_HomeFragment"
             app:destination="@id/HomeFragment" />
+        <action
+            android:id="@+id/action_IconFragment_to_iconPackFragment"
+            app:destination="@id/iconPackFragment" />
     </fragment>
+    <fragment
+        android:id="@+id/iconPackFragment"
+        android:name="com.kaanelloed.iconeration.IconPackFragment"
+        android:label="@string/icon_pack_fragment_label"
+        tools:layout="@layout/fragment_icon_pack">
+        <action
+            android:id="@+id/action_iconPackFragment_to_IconFragment"
+            app:destination="@id/IconFragment" />
+    </fragment>
+
 </navigation>
