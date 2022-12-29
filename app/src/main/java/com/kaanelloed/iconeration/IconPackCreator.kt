@@ -16,7 +16,7 @@ import java.util.zip.ZipFile
 
 class IconPackCreator(private val ctx: Context, private val apps: Array<PackageInfoStruct>) {
     private val cacheDirPath = ctx.cacheDir.absolutePath
-    private val apkDir = File(cacheDirPath).resolve("apk")
+    private val apkDir = ctx.cacheDir.resolve("apk")
     private val extractedDir = apkDir.resolve("apkExtracted")
     private val assetDir = extractedDir.resolve("assets")
     private val drawableDir = extractedDir.resolve("res").resolve("drawable")
@@ -32,9 +32,9 @@ class IconPackCreator(private val ctx: Context, private val apps: Array<PackageI
         extractApk(apk)
         apk.delete()*/
 
-        val apk = File(apkDir.absolutePath, apkFile)
-        val zip = assetToFile(zipFile, apkDir.absolutePath, zipFile)
-        assetToFile(frameworkFile, cacheDirPath, frameworkFile)
+        val apk = apkDir.resolve(apkFile)
+        val zip = assetToFile(zipFile, apkDir.resolve(zipFile))
+        assetToFile(frameworkFile, ctx.cacheDir.resolve(frameworkFile))
         unzipApk(zip)
 
         textMethod("Writing icons ...")
@@ -97,30 +97,34 @@ class IconPackCreator(private val ctx: Context, private val apps: Array<PackageI
     private fun writeDrawable() {
         val file = assetDir.resolve("drawable.xml")
         if (file.exists()) file.delete()
+        val fileContent = mutableListOf<String>()
 
-        file.appendText("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
-        file.appendText("<resources>\n")
-        file.appendText("    <version>1</version>\n")
-        file.appendText("    <category title=\"All Apps\" />\n")
+        fileContent.add("<?xml version=\"1.0\" encoding=\"utf-8\"?>")
+        fileContent.add("<resources>")
+        fileContent.add("    <version>1</version>")
+        fileContent.add("    <category title=\"All Apps\" />")
 
         for (app in apps) {
-            file.appendText("    <item drawable=\"${app.packageName.replace('.', '_')}\" />\n")
+            fileContent.add("    <item drawable=\"${app.packageName.replace('.', '_')}\" />")
         }
 
-        file.appendText("</resources>")
+        fileContent.add("</resources>")
+        file.appendText(fileContent.joinToString("\n"))
     }
 
     private fun writeAppFilter() {
         val file = assetDir.resolve("appfilter.xml")
         if (file.exists()) file.delete()
+        val fileContent = mutableListOf<String>()
 
-        file.appendText("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n")
-        file.appendText("<resources>\n")
+        fileContent.add("<?xml version=\"1.0\" encoding=\"utf-8\"?>")
+        fileContent.add("<resources>")
         for (app in apps) {
-            file.appendText("    <item component=\"ComponentInfo{${app.packageName}/${app.activityName}}\" drawable=\"${app.packageName.replace('.', '_')}\" />\n")
+            fileContent.add("    <item component=\"ComponentInfo{${app.packageName}/${app.activityName}}\" drawable=\"${app.packageName.replace('.', '_')}\" />")
         }
 
-        file.appendText("</resources>")
+        fileContent.add("</resources>")
+        file.appendText(fileContent.joinToString("\n"))
     }
 
     private fun buildApk(dest: File) {
@@ -160,14 +164,13 @@ class IconPackCreator(private val ctx: Context, private val apps: Array<PackageI
         //TODO: use PackageInstaller instead
     }
 
-    private fun assetToFile(assetName: String, fileDir: String, fileName: String): File {
+    private fun assetToFile(assetName: String, file: File): File {
         val inStream = ctx.assets.open(assetName)
-        val tmpFile = File(fileDir).resolve(fileName)
-        val outStream = tmpFile.outputStream()
+        val outStream = file.outputStream()
 
         copyAndCloseStream(inStream, outStream)
 
-        return tmpFile
+        return file
     }
 
     private fun copyAndCloseStream(input: InputStream, output: OutputStream) {
