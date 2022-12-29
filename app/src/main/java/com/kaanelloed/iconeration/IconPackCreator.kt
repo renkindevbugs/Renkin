@@ -12,6 +12,7 @@ import brut.androlib.options.BuildOptions
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
+import java.util.zip.ZipFile
 
 class IconPackCreator(private val ctx: Context, private val apps: Array<PackageInfoStruct>) {
     private val cacheDirPath = ctx.cacheDir.absolutePath
@@ -20,15 +21,21 @@ class IconPackCreator(private val ctx: Context, private val apps: Array<PackageI
     private val assetDir = extractedDir.resolve("assets")
     private val drawableDir = extractedDir.resolve("res").resolve("drawable")
     private val apkFile = "app-release-unsigned.apk"
+    private val zipFile = "app-release-unsigned.zip"
+    private val frameworkFile = "1.apk"
 
     fun create(textMethod: (text: String) -> Unit) {
         clearCache()
 
         textMethod("Extracting apk ...")
-        val apk = assetToFile(apkFile, apkDir.absolutePath, apkFile)
-
+        /*val apk = assetToFile(apkFile, apkDir.absolutePath, apkFile)
         extractApk(apk)
-        apk.delete()
+        apk.delete()*/
+
+        val apk = File(apkDir.absolutePath, apkFile)
+        val zip = assetToFile(zipFile, apkDir.absolutePath, zipFile)
+        assetToFile(frameworkFile, cacheDirPath, frameworkFile)
+        unzipApk(zip)
 
         textMethod("Writing icons ...")
         writeIcons()
@@ -59,6 +66,22 @@ class IconPackCreator(private val ctx: Context, private val apps: Array<PackageI
         val decoder = ApkDecoder(apk, lib)
         decoder.setOutDir(extractedDir)
         decoder.decode()
+    }
+
+    private fun unzipApk(apk: File) {
+        val zip = ZipFile(apk)
+
+        for (entry in zip.entries()) {
+            val file = File(extractedDir, entry.name)
+
+            if (entry.isDirectory) {
+                file.mkdirs()
+            } else {
+                file.parentFile?.mkdirs()
+
+                copyAndCloseStream(zip.getInputStream(entry), file.outputStream())
+            }
+        }
     }
 
     private fun writeIcons() {
