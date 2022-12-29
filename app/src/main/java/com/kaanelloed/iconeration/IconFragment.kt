@@ -68,18 +68,24 @@ class IconFragment : Fragment() {
             }
 
             val act = requireActivity() as MainActivity
-            act.apps = ApplicationManager().getInstalledApps(activity?.packageManager!!)
 
-            val prefs = PreferenceManager.getDefaultSharedPreferences(view.context)
-            val color = prefs.getString(getString(R.string.settings_edgeColor_key), getString(R.string.settings_edgeColor_def_value))!!.toInt()
-            var edgeDetector: CannyEdgeDetector
-            for (app in act.apps!!) {
-                edgeDetector = CannyEdgeDetector()
-                edgeDetector.process(
-                    app.icon.toBitmap(),
-                    color
-                )
-                app.genIcon = edgeDetector.edgesImage
+            if (act.apps == null) {
+                act.apps = ApplicationManager().getInstalledApps(activity?.packageManager!!)
+
+                val prefs = PreferenceManager.getDefaultSharedPreferences(view.context)
+                val color = prefs.getString(
+                    getString(R.string.settings_edgeColor_key),
+                    getString(R.string.settings_edgeColor_def_value)
+                )!!.toInt()
+                var edgeDetector: CannyEdgeDetector
+                for (app in act.apps!!) {
+                    edgeDetector = CannyEdgeDetector()
+                    edgeDetector.process(
+                        app.icon.toBitmap(),
+                        color
+                    )
+                    app.genIcon = edgeDetector.edgesImage
+                }
             }
 
             view.post {
