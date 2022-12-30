@@ -57,6 +57,10 @@ class IconFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        binding.btnCreatePack.setOnClickListener {
+            findNavController().navigate(R.id.action_IconFragment_to_iconPackFragment)
+        }
+
         Thread {
             val progBar = activity?.findViewById<ProgressBar>(R.id.progress_loader)!!
 
@@ -69,8 +73,15 @@ class IconFragment : Fragment() {
 
             val act = requireActivity() as MainActivity
 
-            if (act.apps == null) {
-                act.apps = ApplicationManager().getInstalledApps(activity?.packageManager!!)
+            if (act.apps == null || act.currentPack != act.lastPack) {
+                val am = ApplicationManager(activity?.packageManager!!)
+
+                if (act.currentPack == null)
+                    act.apps = am.getInstalledApps()
+                else
+                    act.apps = am.getMissingPackageApps(act.currentPack!!)
+
+                act.apps!!.sort()
 
                 val prefs = PreferenceManager.getDefaultSharedPreferences(view.context)
                 val color = prefs.getString(
@@ -86,6 +97,8 @@ class IconFragment : Fragment() {
                     )
                     app.genIcon = edgeDetector.edgesImage
                 }
+
+                act.lastPack = act.currentPack
             }
 
             view.post {
@@ -94,12 +107,6 @@ class IconFragment : Fragment() {
                     adapter = AppListAdapter(act.apps!!)
                 }
 
-                binding.btnCreatePack.setOnClickListener {
-                    findNavController().navigate(R.id.action_IconFragment_to_iconPackFragment)
-                }
-            }
-
-            view.post {
                 progBar.visibility = View.INVISIBLE
                 binding.btnCreatePack.isEnabled = true
                 requireActivity().window.clearFlags(
@@ -144,7 +151,6 @@ class IconFragment : Fragment() {
             // Get element from your dataset at this position and replace the
             // contents of the view with that element
             val app = dataSet[position]
-            if (app.icon.minimumHeight == 0) return
 
             viewHolder.appIcon.setImageDrawable(app.icon)
             viewHolder.genIcon.setImageBitmap(app.genIcon)

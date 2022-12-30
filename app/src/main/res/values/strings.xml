@@ -7,8 +7,8 @@
     <string name="icon_pack_fragment_label">Icon Pack</string>
     <string name="next">Next</string>
     <string name="previous">Previous</string>
-    <string name="generate">Generate</string>
-    <string name="home_text">Generate icons for every application in your device with edge detection.</string>
+    <string name="generate">Generate All</string>
+    <string name="home_text">Generate icons for each application in your device with edge detection or click on the icon pack to generate only the missing icons.</string>
     <string name="list_icon_desc">Icon of the application</string>
     <string name="title_activity_settings">SettingsActivity</string>
     <string name="create_icon_pack">Create Icon Pack</string>

@@ -45,9 +45,10 @@ dependencies {
     implementation 'androidx.navigation:navigation-ui-ktx:2.5.3'
     implementation 'androidx.preference:preference:1.2.0'
 
-    // Decode and encode APK
     //noinspection DuplicatePlatformClasses
     implementation 'xpp3:xpp3:1.1.4c'
+
+    // Decode and encode APK
     implementation 'org.smali:baksmali:2.5.2'
     implementation 'commons-cli:commons-cli:1.5.0'
     implementation 'commons-io:commons-io:2.11.0'

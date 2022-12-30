@@ -19,6 +19,9 @@ import com.kaanelloed.iconeration.databinding.ActivityMainBinding
 class MainActivity : AppCompatActivity() {
 
     var apps: Array<PackageInfoStruct>? = null
+    var packs: Array<PackageInfoStruct>? = null
+    var currentPack: String? = null
+    var lastPack: String? = null
 
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
