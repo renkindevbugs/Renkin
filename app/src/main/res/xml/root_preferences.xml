@@ -17,5 +17,10 @@
             app:key="@string/settings_edgeColor_key"
             app:title="@string/settings_edgeColor_label"
             app:useSimpleSummaryProvider="true" />
+
+        <SwitchPreference
+            app:defaultValue="@string/settings_includeAvailable_def_value"
+            app:key="@string/settings_includeAvailable_key"
+            app:title="@string/settings_includeAvailable_label" />
     </PreferenceCategory>
 </PreferenceScreen>

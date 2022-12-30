@@ -9,6 +9,7 @@ import android.graphics.drawable.Drawable
 import android.os.Build.VERSION
 import android.os.Build.VERSION_CODES
 import androidx.core.content.res.ResourcesCompat
+import androidx.core.graphics.drawable.toBitmap
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
@@ -35,7 +36,14 @@ class ApplicationManager(private val pm: PackageManager) {
         return emptyArray()
     }
 
-    fun getMissingPackageApps(packageName: String): Array<PackageInfoStruct> {
+    fun getMissingPackageApps(packageName: String, includeAvailable: Boolean = false): Array<PackageInfoStruct> {
+        return if (includeAvailable)
+            getPackageAppsWithMissing(packageName)
+        else
+            getMissingPackageAppsOnly(packageName)
+    }
+
+    private fun getMissingPackageAppsOnly(packageName: String): Array<PackageInfoStruct> {
         val missingApps = mutableListOf<PackageInfoStruct>()
         val packApps = getPackageApps(packageName)
         val installedApps = getInstalledApps()
@@ -43,6 +51,33 @@ class ApplicationManager(private val pm: PackageManager) {
         for (installedApp in installedApps) {
             if (!packApps.contains(installedApp)) {
                 missingApps.add(installedApp)
+            }
+        }
+
+        return missingApps.toTypedArray()
+    }
+
+    private fun getPackageAppsWithMissing(packageName: String): Array<PackageInfoStruct> {
+        val missingApps = mutableListOf<PackageInfoStruct>()
+        val packApps = getPackageApps(packageName)
+        val installedApps = getInstalledApps()
+
+        for (installedApp in installedApps) {
+            if (!packApps.contains(installedApp)) {
+                missingApps.add(installedApp)
+            } else {
+                val i = packApps.indexOf(installedApp)
+                val packApp = packApps[i]
+
+                val packInfo = PackageInfoStruct()
+                packInfo.appName = installedApp.appName
+                packInfo.packageName = installedApp.packageName
+                packInfo.activityName = installedApp.activityName
+                packInfo.icon = installedApp.icon
+                packInfo.genIcon = packApp.icon.toBitmap()
+                packInfo.source = PackageInfoStruct.PackageSource.IconPack
+
+                missingApps.add(packInfo)
             }
         }
 
@@ -61,6 +96,7 @@ class ApplicationManager(private val pm: PackageManager) {
             packInfo.packageName = pack.activityInfo.packageName
             packInfo.activityName = pack.activityInfo.name
             packInfo.icon = pack.activityInfo.applicationInfo.loadIcon(pm)
+            packInfo.source = PackageInfoStruct.PackageSource.Device
 
             packInfoStructs.add(packInfo)
         }
@@ -88,6 +124,7 @@ class ApplicationManager(private val pm: PackageManager) {
                             packInfo.packageName = components.packageName
                             packInfo.activityName = components.activityNane
                             packInfo.icon = icon!!
+                            packInfo.source = PackageInfoStruct.PackageSource.IconPack
 
                             packApps.add(packInfo)
                         }

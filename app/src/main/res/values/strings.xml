@@ -18,8 +18,13 @@
     <string name="settings_darkMode_key">darkMode</string>
     <string name="settings_darkMode_label">Theme</string>
     <string name="settings_darkMode_def_value">-1</string>
+
     <string name="settings_icon_gen">Icon Generation</string>
     <string name="settings_edgeColor_key">edgeColor</string>
     <string name="settings_edgeColor_label">Edge color</string>
     <string name="settings_edgeColor_def_value">-1</string>
+
+    <string name="settings_includeAvailable_key">includeAvailable</string>
+    <string name="settings_includeAvailable_label">Include available pack icons with missing ones</string>
+    <string name="settings_includeAvailable_def_value">false</string>
 </resources>

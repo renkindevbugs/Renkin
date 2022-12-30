@@ -73,32 +73,41 @@ class IconFragment : Fragment() {
 
             val act = requireActivity() as MainActivity
 
-            if (act.apps == null || act.currentPack != act.lastPack) {
+            val prefs = PreferenceManager.getDefaultSharedPreferences(view.context)
+            val includeAvailable = prefs.getBoolean(
+                getString(R.string.settings_includeAvailable_key),
+                getString(R.string.settings_includeAvailable_def_value).toBoolean()
+            )
+
+            if (act.apps == null || act.currentPack != act.lastPack || act.lastIncludeAvail != includeAvailable) {
                 val am = ApplicationManager(activity?.packageManager!!)
 
-                if (act.currentPack == null)
+                if (act.currentPack == null) {
                     act.apps = am.getInstalledApps()
-                else
-                    act.apps = am.getMissingPackageApps(act.currentPack!!)
+                } else {
+                    act.apps = am.getMissingPackageApps(act.currentPack!!, includeAvailable)
+                }
 
                 act.apps!!.sort()
 
-                val prefs = PreferenceManager.getDefaultSharedPreferences(view.context)
                 val color = prefs.getString(
                     getString(R.string.settings_edgeColor_key),
                     getString(R.string.settings_edgeColor_def_value)
                 )!!.toInt()
                 var edgeDetector: CannyEdgeDetector
                 for (app in act.apps!!) {
-                    edgeDetector = CannyEdgeDetector()
-                    edgeDetector.process(
-                        app.icon.toBitmap(),
-                        color
-                    )
-                    app.genIcon = edgeDetector.edgesImage
+                    if (app.source == PackageInfoStruct.PackageSource.Device) {
+                        edgeDetector = CannyEdgeDetector()
+                        edgeDetector.process(
+                            app.icon.toBitmap(),
+                            color
+                        )
+                        app.genIcon = edgeDetector.edgesImage
+                    }
                 }
 
                 act.lastPack = act.currentPack
+                act.lastIncludeAvail = includeAvailable
             }
 
             view.post {

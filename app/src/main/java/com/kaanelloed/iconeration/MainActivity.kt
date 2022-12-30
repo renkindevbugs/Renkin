@@ -22,6 +22,7 @@ class MainActivity : AppCompatActivity() {
     var packs: Array<PackageInfoStruct>? = null
     var currentPack: String? = null
     var lastPack: String? = null
+    var lastIncludeAvail: Boolean? = null
 
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
