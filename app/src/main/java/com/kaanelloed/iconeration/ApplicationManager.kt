@@ -150,10 +150,15 @@ class ApplicationManager(private val pm: PackageManager) {
             private set
 
         fun parse(text: String): Boolean {
+            var newText = text
+
             if (!text.startsWith(componentPrefix, true))
                 return false
 
-            val firstSplit = text.split("{")
+            newText = newText.replace("(", "{")
+            newText = newText.replace(")", "}")
+
+            val firstSplit = newText.split("{")
             if (firstSplit.count() != 2)
                 return false
 
@@ -162,7 +167,7 @@ class ApplicationManager(private val pm: PackageManager) {
                 return false
 
             val thirdSplit = secondSplit[0].split("/")
-            if (thirdSplit.count() != 2)
+            if (thirdSplit.count() < 2)
                 return false
 
             packageName = thirdSplit[0]
