@@ -2,8 +2,6 @@ package com.kaanelloed.iconeration
 
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
 
 class ApplicationManager {
     fun getInstalledApps(pm: PackageManager): Array<PackageInfoStruct> {
@@ -27,12 +25,4 @@ class ApplicationManager {
 
         return packInfoStructs.toTypedArray()
     }
-}
-
-class PackageInfoStruct {
-    lateinit var appName: String
-    lateinit var packageName: String
-    lateinit var activityName: String
-    lateinit var icon: Drawable
-    lateinit var genIcon: Bitmap
 }

@@ -115,43 +115,43 @@ class IconFragment : Fragment() {
         super.onDestroyView()
         _binding = null
     }
-}
 
-class AppListAdapter(private val dataSet: Array<PackageInfoStruct>): RecyclerView.Adapter<AppListAdapter.ViewHolder>() {
-    class ViewHolder(view: View): RecyclerView.ViewHolder(view) {
-        val appIcon: ImageView
-        val genIcon: ImageView
-        val appName: TextView
+    class AppListAdapter(private val dataSet: Array<PackageInfoStruct>): RecyclerView.Adapter<AppListAdapter.ViewHolder>() {
+        class ViewHolder(view: View): RecyclerView.ViewHolder(view) {
+            val appIcon: ImageView
+            val genIcon: ImageView
+            val appName: TextView
 
-        init {
-            // Define click listener for the ViewHolder's View
-            appIcon = view.findViewById(R.id.appIcon)
-            genIcon = view.findViewById(R.id.genIcon)
-            appName = view.findViewById(R.id.appName)
+            init {
+                // Define click listener for the ViewHolder's View
+                appIcon = view.findViewById(R.id.appIcon)
+                genIcon = view.findViewById(R.id.genIcon)
+                appName = view.findViewById(R.id.appName)
+            }
         }
+
+        override fun onCreateViewHolder(viewGroup: ViewGroup, viewType: Int): ViewHolder {
+            // Create a new view, which defines the UI of the list item
+            val view = LayoutInflater.from(viewGroup.context)
+                .inflate(R.layout.app_info_item, viewGroup, false)
+
+            return ViewHolder(view)
+        }
+
+        // Replace the contents of a view (invoked by the layout manager)
+        override fun onBindViewHolder(viewHolder: ViewHolder, position: Int) {
+
+            // Get element from your dataset at this position and replace the
+            // contents of the view with that element
+            val app = dataSet[position]
+            if (app.icon.minimumHeight == 0) return
+
+            viewHolder.appIcon.setImageDrawable(app.icon)
+            viewHolder.genIcon.setImageBitmap(app.genIcon)
+            viewHolder.appName.text = app.appName
+        }
+
+        // Return the size of your dataset (invoked by the layout manager)
+        override fun getItemCount() = dataSet.size
     }
-
-    override fun onCreateViewHolder(viewGroup: ViewGroup, viewType: Int): ViewHolder {
-        // Create a new view, which defines the UI of the list item
-        val view = LayoutInflater.from(viewGroup.context)
-            .inflate(R.layout.app_info_item, viewGroup, false)
-
-        return ViewHolder(view)
-    }
-
-    // Replace the contents of a view (invoked by the layout manager)
-    override fun onBindViewHolder(viewHolder: ViewHolder, position: Int) {
-
-        // Get element from your dataset at this position and replace the
-        // contents of the view with that element
-        val app = dataSet[position]
-        if (app.icon.minimumHeight == 0) return
-
-        viewHolder.appIcon.setImageDrawable(app.icon)
-        viewHolder.genIcon.setImageBitmap(app.genIcon)
-        viewHolder.appName.text = app.appName
-    }
-
-    // Return the size of your dataset (invoked by the layout manager)
-    override fun getItemCount() = dataSet.size
 }
