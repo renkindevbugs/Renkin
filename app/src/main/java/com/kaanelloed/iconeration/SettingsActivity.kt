@@ -6,12 +6,16 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.PreferenceManager
+import com.kaanelloed.iconeration.databinding.SettingsActivityBinding
 
 class SettingsActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceChangeListener {
 
+    private lateinit var binding: SettingsActivityBinding
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.settings_activity)
+        binding = SettingsActivityBinding.inflate(layoutInflater)
+        setContentView(binding.root)
         if (savedInstanceState == null) {
             supportFragmentManager
                 .beginTransaction()
@@ -19,6 +23,10 @@ class SettingsActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferen
                 .commit()
         }
         supportActionBar?.setDisplayHomeAsUpEnabled(true)
+
+        binding.settingsBtnBack.setOnClickListener {
+            finish()
+        }
 
         PreferenceManager.getDefaultSharedPreferences(this)
             .registerOnSharedPreferenceChangeListener(this)
