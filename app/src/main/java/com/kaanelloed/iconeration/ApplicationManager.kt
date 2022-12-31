@@ -84,6 +84,22 @@ class ApplicationManager(private val pm: PackageManager) {
         return missingApps.toTypedArray()
     }
 
+    private fun getAllPackageAppsWithMissing(packageName: String): Array<PackageInfoStruct> {
+        val missingApps = mutableListOf<PackageInfoStruct>()
+        val packApps = getPackageApps(packageName)
+        val installedApps = getInstalledApps()
+
+        for (installedApp in installedApps) {
+            if (!packApps.contains(installedApp)) {
+                missingApps.add(installedApp)
+            }
+        }
+
+        missingApps.addAll(packApps)
+
+        return missingApps.toTypedArray()
+    }
+
     private fun getApps(intent: Intent): Array<PackageInfoStruct> {
         val resolves = getResolves(intent)
         val packInfoStructs = mutableListOf<PackageInfoStruct>()
