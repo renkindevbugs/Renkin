@@ -100,7 +100,7 @@ class IconFragment : Fragment() {
                 }
 
                 progBar.visibility = View.INVISIBLE
-                binding.btnCreatePack.isEnabled = true
+                if (act.apps!!.isNotEmpty()) binding.btnCreatePack.isEnabled = true
                 requireActivity().window.clearFlags(
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
             }
