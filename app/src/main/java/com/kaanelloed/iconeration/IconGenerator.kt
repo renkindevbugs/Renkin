@@ -30,9 +30,11 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
     }
 
     private fun generateFirstLetter() {
+        val gen = LetterGenerator(ctx)
+
         for (app in apps) {
             if (app.source == PackageInfoStruct.PackageSource.Device) {
-                val draw = LetterGenerator(ctx).generateFirstLetter(app.appName)
+                val draw = gen.generateTwoLetters(app.appName)
                 draw.colorFilter = LightingColorFilter(color, color)
                 app.genIcon = draw.toBitmap(256, 256)
             }
