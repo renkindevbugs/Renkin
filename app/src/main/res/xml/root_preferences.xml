@@ -11,11 +11,11 @@
 
     <PreferenceCategory app:title="@string/settings_icon_gen">
         <ListPreference
-            app:defaultValue="@string/settings_edgeColor_def_value"
-            app:entries="@array/edge_color_entries"
-            app:entryValues="@array/edge_color_values"
-            app:key="@string/settings_edgeColor_key"
-            app:title="@string/settings_edgeColor_label"
+            app:defaultValue="@string/settings_iconColor_def_value"
+            app:entries="@array/icon_color_entries"
+            app:entryValues="@array/icon_color_values"
+            app:key="@string/settings_iconColor_key"
+            app:title="@string/settings_iconColor_label"
             app:useSimpleSummaryProvider="true" />
 
         <SwitchPreference

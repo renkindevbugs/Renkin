@@ -8,20 +8,20 @@
     </string-array>
 
     <string-array name="dark_mode_values">
-        <item>-1</item>
-        <item>1</item>
-        <item>2</item>
-        <item>3</item>
+        <item>MODE_NIGHT_FOLLOW_SYSTEM</item>
+        <item>MODE_NIGHT_NO</item>
+        <item>MODE_NIGHT_YES</item>
+        <item>MODE_NIGHT_AUTO_BATTERY</item>
     </string-array>
 
     <!-- Icon Generation -->
-    <string-array name="edge_color_entries">
+    <string-array name="icon_color_entries">
         <item>White</item>
         <item>Black</item>
     </string-array>
 
-    <string-array name="edge_color_values">
-        <item>-1</item>
-        <item>-16777216</item>
+    <string-array name="icon_color_values">
+        <item>#FFFFFFFF</item>
+        <item>#FF000000</item>
     </string-array>
 </resources>

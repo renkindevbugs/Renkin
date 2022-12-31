@@ -1,4 +1,4 @@
-<resources>
+<resources xmlns:tools="http://schemas.android.com/tools">
     <string name="app_name">Iconeration</string>
     <string name="action_settings">Settings</string>
     <!-- Strings used for fragments for navigation -->
@@ -17,12 +17,12 @@
     <string name="settings_ui">UI</string>
     <string name="settings_darkMode_key">darkMode</string>
     <string name="settings_darkMode_label">Theme</string>
-    <string name="settings_darkMode_def_value">-1</string>
+    <string name="settings_darkMode_def_value">MODE_NIGHT_FOLLOW_SYSTEM</string>
 
     <string name="settings_icon_gen">Icon Generation</string>
-    <string name="settings_edgeColor_key">edgeColor</string>
-    <string name="settings_edgeColor_label">Edge color</string>
-    <string name="settings_edgeColor_def_value">-1</string>
+    <string name="settings_iconColor_key">iconColor</string>
+    <string name="settings_iconColor_label">Icon color</string>
+    <string name="settings_iconColor_def_value">#FFFFFFFF</string>
 
     <string name="settings_includeAvailable_key">includeAvailable</string>
     <string name="settings_includeAvailable_label">Include available pack icons with missing ones</string>

@@ -35,8 +35,8 @@ class SettingsActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferen
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         val darkModeKey = getString(R.string.settings_darkMode_key)
         key?.let {
-            if (it == darkModeKey) sharedPreferences?.let { pref ->
-                val mode = pref.getString(getString(R.string.settings_darkMode_key), getString(R.string.settings_darkMode_def_value))!!.toInt()
+            if (it == darkModeKey) {
+                val mode = PreferencesHelper(this).getNightMode()
                 AppCompatDelegate.setDefaultNightMode(mode)
             }
         }

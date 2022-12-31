@@ -73,11 +73,7 @@ class IconFragment : Fragment() {
 
             val act = requireActivity() as MainActivity
 
-            val prefs = PreferenceManager.getDefaultSharedPreferences(view.context)
-            val includeAvailable = prefs.getBoolean(
-                getString(R.string.settings_includeAvailable_key),
-                getString(R.string.settings_includeAvailable_def_value).toBoolean()
-            )
+            val includeAvailable = PreferencesHelper(view.context).getIncludeAvailableIcon()
 
             if (act.apps == null || act.currentPack != act.lastPack || act.lastIncludeAvail != includeAvailable) {
                 val am = ApplicationManager(activity?.packageManager!!)
@@ -90,21 +86,8 @@ class IconFragment : Fragment() {
 
                 act.apps!!.sort()
 
-                val color = prefs.getString(
-                    getString(R.string.settings_edgeColor_key),
-                    getString(R.string.settings_edgeColor_def_value)
-                )!!.toInt()
-                var edgeDetector: CannyEdgeDetector
-                for (app in act.apps!!) {
-                    if (app.source == PackageInfoStruct.PackageSource.Device) {
-                        edgeDetector = CannyEdgeDetector()
-                        edgeDetector.process(
-                            app.icon.toBitmap(),
-                            color
-                        )
-                        app.genIcon = edgeDetector.edgesImage
-                    }
-                }
+                val color = PreferencesHelper(view.context).getIconColor()
+                IconGenerator(view.context, act.apps!!, color).generateIcons(IconGenerator.GenerationType.EdgeDetection)
 
                 act.lastPack = act.currentPack
                 act.lastIncludeAvail = includeAvailable

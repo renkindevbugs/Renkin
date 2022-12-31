@@ -76,8 +76,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setDarkMode() {
-        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
-        val mode = prefs.getString(getString(R.string.settings_darkMode_key), getString(R.string.settings_darkMode_def_value))!!.toInt()
+        val mode = PreferencesHelper(this).getNightMode()
         AppCompatDelegate.setDefaultNightMode(mode)
     }
 }

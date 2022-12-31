@@ -57,8 +57,8 @@ class HomeFragment : Fragment() {
     }
 
     override fun onDestroyView() {
-        val adapter = binding.root.findViewById<RecyclerView>(R.id.packView).adapter as PackListAdapter
-        adapter.onItemClick = null
+        //val adapter = binding.root.findViewById<RecyclerView>(R.id.packView).adapter as PackListAdapter
+        //adapter.onItemClick = null
 
         super.onDestroyView()
         _binding = null
