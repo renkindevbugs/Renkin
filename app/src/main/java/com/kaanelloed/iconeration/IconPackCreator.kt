@@ -137,7 +137,7 @@ class IconPackCreator(private val ctx: Context, private val apps: Array<PackageI
     }
 
     private fun signApk(file: File, outFile: File) {
-        val keyStoreFile = ctx.cacheDir.resolve("iconeration.keystore")
+        val keyStoreFile = assetToFile("iconeration.keystore", ctx.cacheDir.resolve("iconeration.keystore"))
         Signer("Iconeration", "s3cur3p@ssw0rd").signApk(file, outFile, keyStoreFile)
     }
 

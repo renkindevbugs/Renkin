@@ -22,39 +22,9 @@ internal class Signer(
     private val cn: String, password: String
 ) {
     private val passwordCharArray = password.toCharArray()
-    private fun newKeystore(out: File) {
-        val (publicKey, privateKey) = createKey()
-        val privateKS = KeyStore.getInstance("BKS", "BC")
-        privateKS.load(null, passwordCharArray)
-        privateKS.setKeyEntry("alias", privateKey, passwordCharArray, arrayOf(publicKey))
-        privateKS.store(FileOutputStream(out), passwordCharArray)
-    }
-
-    private fun createKey(): Pair<X509Certificate, PrivateKey> {
-        val gen = KeyPairGenerator.getInstance("RSA")
-        gen.initialize(2048)
-        val pair = gen.generateKeyPair()
-        var serialNumber: BigInteger
-        do serialNumber =
-            BigInteger.valueOf(SecureRandom().nextLong()) while (serialNumber < BigInteger.ZERO)
-        val x500Name = X500Name("CN=$cn")
-        val builder = X509v3CertificateBuilder(
-            x500Name,
-            serialNumber,
-            Date(System.currentTimeMillis() - 1000L * 60L * 60L * 24L * 30L),
-            Date(System.currentTimeMillis() + 1000L * 60L * 60L * 24L * 366L * 30L),
-            Locale.ENGLISH,
-            x500Name,
-            SubjectPublicKeyInfo.getInstance(pair.public.encoded)
-        )
-        val signer: ContentSigner = JcaContentSignerBuilder("SHA256withRSA").build(pair.private)
-        return JcaX509CertificateConverter().getCertificate(builder.build(signer)) to pair.private
-    }
 
     fun signApk(input: File, output: File, ks: File) {
         Security.addProvider(BouncyCastleProvider())
-
-        if (!ks.exists()) newKeystore(ks)
 
         val keyStore = KeyStore.getInstance("BKS", "BC")
         FileInputStream(ks).use { fis -> keyStore.load(fis, null) }
