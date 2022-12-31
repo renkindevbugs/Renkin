@@ -9,7 +9,6 @@ import androidx.preference.PreferenceManager
 import com.kaanelloed.iconeration.databinding.SettingsActivityBinding
 
 class SettingsActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceChangeListener {
-
     private lateinit var binding: SettingsActivityBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {

@@ -19,6 +19,10 @@
     <string name="settings_darkMode_label">Theme</string>
     <string name="settings_darkMode_def_value">MODE_NIGHT_FOLLOW_SYSTEM</string>
 
+    <string name="settings_genType_key">genType</string>
+    <string name="settings_genType_label">Generation type</string>
+    <string name="settings_genType_def_value">ARCTICONS_FIRST_LETTER</string>
+
     <string name="settings_icon_gen">Icon Generation</string>
     <string name="settings_iconColor_key">iconColor</string>
     <string name="settings_iconColor_label">Icon color</string>

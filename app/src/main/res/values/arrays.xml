@@ -15,6 +15,16 @@
     </string-array>
 
     <!-- Icon Generation -->
+    <string-array name="gen_type_entries">
+        <item>Edge Detection</item>
+        <item>First Letter (Arcticons font)</item>
+    </string-array>
+
+    <string-array name="gen_type_values">
+        <item>EDGE_DETECTION</item>
+        <item>ARCTICONS_FIRST_LETTER</item>
+    </string-array>
+
     <string-array name="icon_color_entries">
         <item>White</item>
         <item>Black</item>

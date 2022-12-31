@@ -38,4 +38,17 @@ class PreferencesHelper(private val ctx: Context) {
             ctx.getString(R.string.settings_includeAvailable_def_value).toBoolean()
         )
     }
+
+    fun getGenType(): IconGenerator.GenerationType {
+        val prefValue = prefs.getString(
+            ctx.getString(R.string.settings_genType_key),
+            ctx.getString(R.string.settings_genType_def_value)
+        )!!
+
+        return when (prefValue) {
+            "EDGE_DETECTION" -> IconGenerator.GenerationType.EdgeDetection
+            "ARCTICONS_FIRST_LETTER" -> IconGenerator.GenerationType.FirstLetter
+            else -> IconGenerator.GenerationType.FirstLetter
+        }
+    }
 }

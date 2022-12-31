@@ -2,6 +2,9 @@ package com.kaanelloed.iconeration
 
 import android.content.Context
 import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.LightingColorFilter
+import android.graphics.PorterDuff
 import androidx.core.graphics.drawable.toBitmap
 
 class IconGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>, private val color: Int) {
@@ -27,11 +30,11 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
     }
 
     private fun generateFirstLetter() {
-        var firstLetter: LetterGenerator
         for (app in apps) {
             if (app.source == PackageInfoStruct.PackageSource.Device) {
-                firstLetter = LetterGenerator(ctx)
-                app.genIcon = firstLetter.generateFirstLetter(app.appName).toBitmap()
+                val draw = LetterGenerator(ctx).generateFirstLetter(app.appName)
+                draw.colorFilter = LightingColorFilter(color, color)
+                app.genIcon = draw.toBitmap(256, 256)
             }
         }
     }

@@ -11,6 +11,14 @@
 
     <PreferenceCategory app:title="@string/settings_icon_gen">
         <ListPreference
+            app:defaultValue="@string/settings_genType_def_value"
+            app:entries="@array/gen_type_entries"
+            app:entryValues="@array/gen_type_values"
+            app:key="@string/settings_genType_key"
+            app:title="@string/settings_genType_label"
+            app:useSimpleSummaryProvider="true" />
+
+        <ListPreference
             app:defaultValue="@string/settings_iconColor_def_value"
             app:entries="@array/icon_color_entries"
             app:entryValues="@array/icon_color_values"

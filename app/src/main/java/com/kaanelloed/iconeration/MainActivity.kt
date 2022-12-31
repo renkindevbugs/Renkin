@@ -2,6 +2,7 @@ package com.kaanelloed.iconeration
 
 import android.content.ComponentName
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -16,13 +17,11 @@ import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
 import com.kaanelloed.iconeration.databinding.ActivityMainBinding
 
-class MainActivity : AppCompatActivity() {
-
+class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceChangeListener {
     var apps: Array<PackageInfoStruct>? = null
     var packs: Array<PackageInfoStruct>? = null
     var currentPack: String? = null
     var lastPack: String? = null
-    var lastIncludeAvail: Boolean? = null
 
     private lateinit var appBarConfiguration: AppBarConfiguration
     private lateinit var binding: ActivityMainBinding
@@ -41,6 +40,9 @@ class MainActivity : AppCompatActivity() {
         val navController = findNavController(R.id.nav_host_fragment_content_main)
         appBarConfiguration = AppBarConfiguration(navController.graph)
         setupActionBarWithNavController(navController, appBarConfiguration)
+
+        PreferenceManager.getDefaultSharedPreferences(this)
+            .registerOnSharedPreferenceChangeListener(this)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -68,6 +70,22 @@ class MainActivity : AppCompatActivity() {
         val navController = findNavController(R.id.nav_host_fragment_content_main)
         return navController.navigateUp(appBarConfiguration)
                 || super.onSupportNavigateUp()
+    }
+
+    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
+        key?.let {
+            when (it) {
+                getString(R.string.settings_iconColor_key) -> apps = null
+                getString(R.string.settings_includeAvailable_key) -> apps = null
+                getString(R.string.settings_genType_key) -> apps = null
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        PreferenceManager.getDefaultSharedPreferences(this)
+            .unregisterOnSharedPreferenceChangeListener(this)
     }
 
     private fun currentFragment(): Fragment {

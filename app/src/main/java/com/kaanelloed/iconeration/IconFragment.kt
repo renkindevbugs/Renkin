@@ -75,7 +75,7 @@ class IconFragment : Fragment() {
 
             val includeAvailable = PreferencesHelper(view.context).getIncludeAvailableIcon()
 
-            if (act.apps == null || act.currentPack != act.lastPack || act.lastIncludeAvail != includeAvailable) {
+            if (act.apps == null || act.currentPack != act.lastPack) {
                 val am = ApplicationManager(activity?.packageManager!!)
 
                 if (act.currentPack == null) {
@@ -87,10 +87,10 @@ class IconFragment : Fragment() {
                 act.apps!!.sort()
 
                 val color = PreferencesHelper(view.context).getIconColor()
-                IconGenerator(view.context, act.apps!!, color).generateIcons(IconGenerator.GenerationType.EdgeDetection)
+                val genType = PreferencesHelper(view.context).getGenType()
+                IconGenerator(view.context, act.apps!!, color).generateIcons(genType)
 
                 act.lastPack = act.currentPack
-                act.lastIncludeAvail = includeAvailable
             }
 
             view.post {
