@@ -17,12 +17,16 @@
     <!-- Icon Generation -->
     <string-array name="gen_type_entries">
         <item>Edge Detection</item>
-        <item>First Letter (Arcticons font)</item>
+        <item>First Letter</item>
+        <item>Two Letters</item>
+        <item>Application Name</item>
     </string-array>
 
     <string-array name="gen_type_values">
         <item>EDGE_DETECTION</item>
         <item>ARCTICONS_FIRST_LETTER</item>
+        <item>ARCTICONS_TWO_LETTERS</item>
+        <item>ARCTICONS_APP_NAME</item>
     </string-array>
 
     <string-array name="icon_color_entries">

@@ -12,6 +12,8 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         when (type) {
             GenerationType.EdgeDetection -> generateEdgeDetection()
             GenerationType.FirstLetter -> generateFirstLetter()
+            GenerationType.TwoLetters -> generateTwoLetter()
+            GenerationType.AppName -> generateAppName()
         }
     }
 
@@ -34,7 +36,31 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
 
         for (app in apps) {
             if (app.source == PackageInfoStruct.PackageSource.Device) {
+                val draw = gen.generateFirstLetter(app.appName)
+                draw.colorFilter = LightingColorFilter(color, color)
+                app.genIcon = draw.toBitmap(256, 256)
+            }
+        }
+    }
+
+    private fun generateTwoLetter() {
+        val gen = LetterGenerator(ctx)
+
+        for (app in apps) {
+            if (app.source == PackageInfoStruct.PackageSource.Device) {
                 val draw = gen.generateTwoLetters(app.appName)
+                draw.colorFilter = LightingColorFilter(color, color)
+                app.genIcon = draw.toBitmap(256, 256)
+            }
+        }
+    }
+
+    private fun generateAppName() {
+        val gen = LetterGenerator(ctx)
+
+        for (app in apps) {
+            if (app.source == PackageInfoStruct.PackageSource.Device) {
+                val draw = gen.generateAppName(app.appName)
                 draw.colorFilter = LightingColorFilter(color, color)
                 app.genIcon = draw.toBitmap(256, 256)
             }
@@ -43,6 +69,8 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
 
     enum class GenerationType {
         EdgeDetection,
-        FirstLetter
+        FirstLetter,
+        TwoLetters,
+        AppName
     }
 }
