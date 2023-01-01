@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Color
 import kotlin.math.*
 
-class CannyEdgeDetector() {
+class CannyEdgeDetector {
     private val gaussianCutOff: Float = 0.005F
     private val magnitudeScale: Float = 100F
     private val magnitudeLimit: Float = 1000F
@@ -20,27 +20,27 @@ class CannyEdgeDetector() {
     lateinit var edgesImage: Bitmap
         private set
 
-    var gaussianKernelRadius: Float = 0F
+    private var gaussianKernelRadius: Float = 0F
         set(value) {
             if (value < 0.1F) throw java.lang.IllegalArgumentException()
             field = value
         }
-    var lowThreshold: Float = 0F
+    private var lowThreshold: Float = 0F
         set(value) {
             if (value < 0) throw java.lang.IllegalArgumentException()
             field = value
         }
-    var highThreshold: Float = 0F
+    private var highThreshold: Float = 0F
         set(value) {
             if (value < 0) throw java.lang.IllegalArgumentException()
             field = value
         }
-    var gaussianKernelWidth: Int = 0
+    private var gaussianKernelWidth: Int = 0
         set(value) {
             if (value < 2) throw java.lang.IllegalArgumentException()
             field = value
         }
-    var contrastNormalized: Boolean = false
+    private var contrastNormalized: Boolean = false
 
     private lateinit var xConv: FloatArray
     private lateinit var yConv: FloatArray

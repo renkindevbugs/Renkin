@@ -10,9 +10,7 @@ import android.widget.ImageView
 import android.widget.ProgressBar
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
-import androidx.core.graphics.drawable.toBitmap
 import androidx.navigation.fragment.findNavController
-import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.snackbar.Snackbar
@@ -49,7 +47,7 @@ class IconFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
+    ): View {
         _binding = FragmentIconBinding.inflate(inflater, container, false)
         return binding.root
     }
@@ -67,7 +65,7 @@ class IconFragment : Fragment() {
             view.post {
                 requireActivity().window.setFlags(
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
                 progBar.visibility = View.VISIBLE
             }
 
@@ -102,7 +100,7 @@ class IconFragment : Fragment() {
                 progBar.visibility = View.INVISIBLE
                 if (act.apps!!.isNotEmpty()) binding.btnCreatePack.isEnabled = true
                 requireActivity().window.clearFlags(
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
             }
 
             loaded = true

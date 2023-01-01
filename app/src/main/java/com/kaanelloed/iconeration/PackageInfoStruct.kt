@@ -22,7 +22,7 @@ class PackageInfoStruct: Comparable<PackageInfoStruct> {
     override fun compareTo(other: PackageInfoStruct): Int = when {
         this.appName != other.appName -> this.appName.lowercase() compareTo other.appName.lowercase() // compareTo() in the infix form
         else -> 0
-    }
+    } //TODO: Handle diacritics
 
     enum class PackageSource {
         Device, IconPack

@@ -14,7 +14,7 @@ import androidx.navigation.fragment.findNavController
 import com.google.android.material.snackbar.Snackbar
 import com.kaanelloed.iconeration.databinding.FragmentIconPackBinding
 
-class IconPackFragment() : Fragment() {
+class IconPackFragment : Fragment() {
 
     private var loaded = false
     private var _binding: FragmentIconPackBinding? = null
@@ -45,7 +45,7 @@ class IconPackFragment() : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
+    ): View {
         _binding = FragmentIconPackBinding.inflate(inflater, container, false)
         return binding.root
     }
@@ -59,7 +59,7 @@ class IconPackFragment() : Fragment() {
             requireView().post {
                 requireActivity().window.setFlags(
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
             }
 
             val creator = IconPackCreator(view.context, act.apps!!)
@@ -68,7 +68,7 @@ class IconPackFragment() : Fragment() {
             requireView().post {
                 view.findViewById<ProgressBar>(R.id.progressBar).visibility = View.INVISIBLE
                 requireActivity().window.clearFlags(
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE);
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
             }
 
             loaded = true

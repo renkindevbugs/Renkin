@@ -1,5 +1,6 @@
 package com.kaanelloed.iconeration
 
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.PackageManager.ResolveInfoFlags
@@ -123,7 +124,7 @@ class ApplicationManager(private val pm: PackageManager) {
                             packInfo.appName = iconName
                             packInfo.packageName = components.packageName
                             packInfo.activityName = components.activityNane
-                            packInfo.icon = icon!!
+                            packInfo.icon = icon
                             packInfo.source = PackageInfoStruct.PackageSource.IconPack
 
                             packApps.add(packInfo)
@@ -151,6 +152,7 @@ class ApplicationManager(private val pm: PackageManager) {
         return getAssetAppfilter(res)
     }
 
+    @SuppressLint("DiscouragedApi")
     private fun getResAppfilter(res: Resources, packageName: String): XmlPullParser? {
         val id = res.getIdentifier("appfilter", "xml", packageName)
         if (id > 0) return res.getXml(id)
@@ -172,14 +174,15 @@ class ApplicationManager(private val pm: PackageManager) {
         return null
     }
 
+    @SuppressLint("DiscouragedApi")
     private fun getResIcon(res: Resources, iconName: String, packageName: String): Drawable? {
         val id = res.getIdentifier(iconName, "drawable", packageName)
         if (id > 0) return ResourcesCompat.getDrawable(res, id, null)
 
-        return null;
+        return null
     }
 
-    inner class ComponentInfo() {
+    inner class ComponentInfo {
         private val componentPrefix = "ComponentInfo"
         lateinit var packageName: String
             private set

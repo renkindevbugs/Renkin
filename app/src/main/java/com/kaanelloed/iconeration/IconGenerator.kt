@@ -1,10 +1,7 @@
 package com.kaanelloed.iconeration
 
 import android.content.Context
-import android.graphics.Color
-import android.graphics.ColorFilter
 import android.graphics.LightingColorFilter
-import android.graphics.PorterDuff
 import androidx.core.graphics.drawable.toBitmap
 
 class IconGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>, private val color: Int) {

@@ -23,7 +23,7 @@ class HomeFragment : Fragment() {
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
-    ): View? {
+    ): View {
         _binding = FragmentHomeBinding.inflate(inflater, container, false)
         return binding.root
     }
@@ -68,8 +68,8 @@ class HomeFragment : Fragment() {
         var onItemClick: ((PackageInfoStruct) -> Unit)? = null
 
         inner class ViewHolder(view: View): RecyclerView.ViewHolder(view) {
-            val appIcon = view.findViewById<ImageView>(R.id.appIcon)
-            val appName = view.findViewById<TextView>(R.id.appName)
+            val appIcon: ImageView = view.findViewById(R.id.appIcon)
+            val appName: TextView = view.findViewById(R.id.appName)
 
             init {
                 // Define click listener for the ViewHolder's View
