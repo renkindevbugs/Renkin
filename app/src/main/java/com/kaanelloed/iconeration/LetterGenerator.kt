@@ -5,12 +5,13 @@ import android.graphics.Color
 import android.graphics.drawable.Drawable
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
+import java.text.Normalizer
 
 class LetterGenerator(private val ctx: Context) {
     private val font = ResourcesCompat.getFont(ctx, R.font.arcticons_regular)!!
 
     fun generateFirstLetter(appName: String): Drawable {
-        val resID = getResIDOfLetter(appName[0])
+        val resID = getResIDOfLetter(removeDiacritics(appName)[0])
         return ContextCompat.getDrawable(ctx, resID)!!
     }
 
@@ -70,5 +71,9 @@ class LetterGenerator(private val ctx: Context) {
             'Z' -> R.drawable.arcticons_font_z
             else -> R.drawable.arcticons_font_qm
         }
+    }
+
+    private fun removeDiacritics(text: String): String {
+        return Normalizer.normalize(text, Normalizer.Form.NFD).replace("\\p{Mn}+".toRegex(), "")
     }
 }
