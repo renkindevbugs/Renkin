@@ -33,7 +33,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
 
         for (app in apps) {
             if (app.source == PackageInfoStruct.PackageSource.Device) {
-                val draw = gen.generateFirstLetter(app.appName)
+                val draw = gen.generateFirstLetter(app.normalizeName())
                 draw.colorFilter = LightingColorFilter(color, color)
                 app.genIcon = draw.toBitmap(256, 256)
             }
