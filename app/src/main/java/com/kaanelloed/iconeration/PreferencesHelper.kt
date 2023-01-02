@@ -3,18 +3,17 @@ package com.kaanelloed.iconeration
 import android.content.Context
 import android.graphics.Color
 import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
 
 class PreferencesHelper(private val ctx: Context) {
     private val prefs = PreferenceManager.getDefaultSharedPreferences(ctx)
 
     fun getIconColor(): Int {
-        val prefValue = prefs.getString(
+        return prefs.getInt(
             ctx.getString(R.string.settings_iconColor_key),
-            ctx.getString(R.string.settings_iconColor_def_value)
-        )!!
-
-        return Color.parseColor(prefValue)
+            ContextCompat.getColor(ctx, R.color.settings_iconColor_def_value)
+        )
     }
 
     fun getNightMode(): Int {

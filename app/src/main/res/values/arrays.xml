@@ -38,4 +38,29 @@
         <item>#FFFFFFFF</item>
         <item>#FF000000</item>
     </string-array>
+
+    <array name="custom_colors">
+        <item>@color/white</item>
+        <item>@color/black</item>
+        <item>@color/red</item>
+        <item>@color/salmon</item>
+        <item>@color/pink</item>
+        <item>@color/purple</item>
+        <item>@color/deep_purple</item>
+        <item>@color/indigo</item>
+        <item>@color/blue</item>
+        <item>@color/light_blue</item>
+        <item>@color/cyan</item>
+        <item>@color/teal</item>
+        <item>@color/green</item>
+        <item>@color/light_green</item>
+        <item>@color/lime</item>
+        <item>@color/yellow</item>
+        <item>@color/amber</item>
+        <item>@color/orange</item>
+        <item>@color/deep_orange</item>
+        <item>@color/brown</item>
+        <item>@color/blue_grey</item>
+        <item>@color/grey</item>
+    </array>
 </resources>

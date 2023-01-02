@@ -44,6 +44,7 @@ dependencies {
     implementation 'androidx.navigation:navigation-fragment-ktx:2.5.3'
     implementation 'androidx.navigation:navigation-ui-ktx:2.5.3'
     implementation 'androidx.preference:preference:1.2.0'
+    implementation 'com.jaredrummler:colorpicker:1.1.0'
 
     //noinspection DuplicatePlatformClasses
     implementation 'xpp3:xpp3:1.1.4c'

@@ -18,13 +18,12 @@
             app:title="@string/settings_genType_label"
             app:useSimpleSummaryProvider="true" />
 
-        <ListPreference
-            app:defaultValue="@string/settings_iconColor_def_value"
-            app:entries="@array/icon_color_entries"
-            app:entryValues="@array/icon_color_values"
+        <com.jaredrummler.android.colorpicker.ColorPreferenceCompat
+            app:defaultValue="@color/settings_iconColor_def_value"
             app:key="@string/settings_iconColor_key"
             app:title="@string/settings_iconColor_label"
-            app:useSimpleSummaryProvider="true" />
+            app:cpv_colorPresets="@array/custom_colors"
+            app:cpv_showAlphaSlider="true" />
 
         <SwitchPreference
             app:defaultValue="@string/settings_includeAvailable_def_value"

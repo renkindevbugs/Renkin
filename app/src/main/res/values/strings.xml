@@ -24,9 +24,8 @@
     <string name="settings_genType_def_value">ARCTICONS_FIRST_LETTER</string>
 
     <string name="settings_icon_gen">Icon Generation</string>
-    <string name="settings_iconColor_key">iconColor</string>
+    <string name="settings_iconColor_key">iconMainColor</string>
     <string name="settings_iconColor_label">Icon color</string>
-    <string name="settings_iconColor_def_value">#FFFFFFFF</string>
 
     <string name="settings_includeAvailable_key">includeAvailable</string>
     <string name="settings_includeAvailable_label">Include available pack icons with missing ones</string>

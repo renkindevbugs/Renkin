@@ -14,7 +14,7 @@ class LetterGenerator(private val ctx: Context) {
         return ContextCompat.getDrawable(ctx, resID)!!
     }
 
-    fun generateTwoLetters(appName: String): Drawable {
+    fun generateTwoLetters(appName: String, color: Int): Drawable {
         var text = appName.trim()
         text = if (text.contains(" ")) {
             val words = text.split(" ")
@@ -23,11 +23,11 @@ class LetterGenerator(private val ctx: Context) {
             if (text.length > 2) text.substring(0, 2) else text
         }
 
-        return TextDrawable(text, font, 200F, Color.WHITE)
+        return TextDrawable(text, font, 200F, color)
     }
 
-    fun generateAppName(appName: String): Drawable {
-        return TextDrawable(appName, font, 50F, Color.WHITE)
+    fun generateAppName(appName: String, color: Int): Drawable {
+        return TextDrawable(appName, font, 50F, color)
     }
 
     private fun getResIDOfLetter(letter: Char): Int {

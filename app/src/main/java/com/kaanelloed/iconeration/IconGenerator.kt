@@ -1,8 +1,9 @@
 package com.kaanelloed.iconeration
 
 import android.content.Context
-import android.graphics.LightingColorFilter
+import android.graphics.*
 import androidx.core.graphics.drawable.toBitmap
+
 
 class IconGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>, private val color: Int) {
     fun generateIcons(type: GenerationType) {
@@ -24,7 +25,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
                     color
                 )
                 app.genIcon = edgeDetector.edgesImage
-            }
+            } else changeIconPackColor(app)
         }
     }
 
@@ -36,7 +37,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
                 val draw = gen.generateFirstLetter(app.normalizeName())
                 draw.colorFilter = LightingColorFilter(color, color)
                 app.genIcon = draw.toBitmap(256, 256)
-            }
+            } else changeIconPackColor(app)
         }
     }
 
@@ -45,10 +46,9 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
 
         for (app in apps) {
             if (app.source == PackageInfoStruct.PackageSource.Device) {
-                val draw = gen.generateTwoLetters(app.appName)
-                draw.colorFilter = LightingColorFilter(color, color)
+                val draw = gen.generateTwoLetters(app.appName, color)
                 app.genIcon = draw.toBitmap(256, 256)
-            }
+            } else changeIconPackColor(app)
         }
     }
 
@@ -57,11 +57,20 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
 
         for (app in apps) {
             if (app.source == PackageInfoStruct.PackageSource.Device) {
-                val draw = gen.generateAppName(app.appName)
-                draw.colorFilter = LightingColorFilter(color, color)
+                val draw = gen.generateAppName(app.appName, color)
                 app.genIcon = draw.toBitmap(256, 256)
-            }
+            } else changeIconPackColor(app)
         }
+    }
+
+    private fun changeIconPackColor(app: PackageInfoStruct) {
+        val coloredIcon: Bitmap = app.genIcon.copy(app.genIcon.config, true)
+        val paint = Paint()
+
+        paint.colorFilter = LightingColorFilter(color, color)
+        Canvas(coloredIcon).drawBitmap(coloredIcon, 0F, 0F, paint)
+
+        app.genIcon = coloredIcon
     }
 
     enum class GenerationType {
