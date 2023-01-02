@@ -4,7 +4,6 @@ import android.content.Context
 import android.graphics.*
 import androidx.core.graphics.drawable.toBitmap
 
-
 class IconGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>, private val color: Int) {
     private var applyColorOnAvailable = false
 
@@ -39,7 +38,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         for (app in apps) {
             if (app.source == PackageInfoStruct.PackageSource.Device) {
                 val draw = gen.generateFirstLetter(app.normalizeName())
-                draw.colorFilter = LightingColorFilter(color, color)
+                draw.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
                 app.genIcon = draw.toBitmap(256, 256)
             } else changeIconPackColor(app)
         }
@@ -72,7 +71,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
             val coloredIcon: Bitmap = app.genIcon.copy(app.genIcon.config, true)
             val paint = Paint()
 
-            paint.colorFilter = LightingColorFilter(color, color)
+            paint.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
             Canvas(coloredIcon).drawBitmap(coloredIcon, 0F, 0F, paint)
 
             app.genIcon = coloredIcon
