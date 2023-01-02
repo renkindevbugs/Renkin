@@ -30,4 +30,8 @@
     <string name="settings_includeAvailable_key">includeAvailable</string>
     <string name="settings_includeAvailable_label">Include available pack icons with missing ones</string>
     <string name="settings_includeAvailable_def_value">false</string>
+
+    <string name="settings_applyColorAvailable_key">applyColorAvailable</string>
+    <string name="settings_applyColorAvailable_label">Apply color on the available icons</string>
+    <string name="settings_applyColorAvailable_def_value">false</string>
 </resources>

@@ -31,13 +31,6 @@ class PreferencesHelper(private val ctx: Context) {
         }
     }
 
-    fun getIncludeAvailableIcon(): Boolean {
-        return prefs.getBoolean(
-            ctx.getString(R.string.settings_includeAvailable_key),
-            ctx.getString(R.string.settings_includeAvailable_def_value).toBoolean()
-        )
-    }
-
     fun getGenType(): IconGenerator.GenerationType {
         val prefValue = prefs.getString(
             ctx.getString(R.string.settings_genType_key),
@@ -51,5 +44,19 @@ class PreferencesHelper(private val ctx: Context) {
             "ARCTICONS_APP_NAME" -> IconGenerator.GenerationType.AppName
             else -> IconGenerator.GenerationType.FirstLetter
         }
+    }
+
+    fun getIncludeAvailableIcon(): Boolean {
+        return prefs.getBoolean(
+            ctx.getString(R.string.settings_includeAvailable_key),
+            ctx.getString(R.string.settings_includeAvailable_def_value).toBoolean()
+        )
+    }
+
+    fun getApplyColorAvailableIcon(): Boolean {
+        return prefs.getBoolean(
+            ctx.getString(R.string.settings_applyColorAvailable_key),
+            ctx.getString(R.string.settings_applyColorAvailable_def_value).toBoolean()
+        )
     }
 }

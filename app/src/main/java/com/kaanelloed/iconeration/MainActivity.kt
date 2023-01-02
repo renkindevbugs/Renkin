@@ -76,8 +76,9 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
         key?.let {
             when (it) {
                 getString(R.string.settings_iconColor_key) -> apps = null
-                getString(R.string.settings_includeAvailable_key) -> apps = null
                 getString(R.string.settings_genType_key) -> apps = null
+                getString(R.string.settings_includeAvailable_key) -> apps = null
+                getString(R.string.settings_applyColorAvailable_key) -> apps = null
             }
         }
     }

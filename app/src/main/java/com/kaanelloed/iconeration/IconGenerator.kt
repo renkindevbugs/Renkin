@@ -6,7 +6,11 @@ import androidx.core.graphics.drawable.toBitmap
 
 
 class IconGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>, private val color: Int) {
+    private var applyColorOnAvailable = false
+
     fun generateIcons(type: GenerationType) {
+        applyColorOnAvailable = PreferencesHelper(ctx).getApplyColorAvailableIcon()
+
         when (type) {
             GenerationType.EdgeDetection -> generateEdgeDetection()
             GenerationType.FirstLetter -> generateFirstLetter()
@@ -64,13 +68,15 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
     }
 
     private fun changeIconPackColor(app: PackageInfoStruct) {
-        val coloredIcon: Bitmap = app.genIcon.copy(app.genIcon.config, true)
-        val paint = Paint()
+        if (applyColorOnAvailable) {
+            val coloredIcon: Bitmap = app.genIcon.copy(app.genIcon.config, true)
+            val paint = Paint()
 
-        paint.colorFilter = LightingColorFilter(color, color)
-        Canvas(coloredIcon).drawBitmap(coloredIcon, 0F, 0F, paint)
+            paint.colorFilter = LightingColorFilter(color, color)
+            Canvas(coloredIcon).drawBitmap(coloredIcon, 0F, 0F, paint)
 
-        app.genIcon = coloredIcon
+            app.genIcon = coloredIcon
+        }
     }
 
     enum class GenerationType {
