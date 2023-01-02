@@ -28,7 +28,7 @@ class PreferencesHelper(private val ctx: Context) {
             "MODE_NIGHT_NO" -> AppCompatDelegate.MODE_NIGHT_NO
             "MODE_NIGHT_YES" -> AppCompatDelegate.MODE_NIGHT_YES
             "MODE_NIGHT_AUTO_BATTERY" -> AppCompatDelegate.MODE_NIGHT_AUTO_BATTERY
-            else -> 0
+            else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
         }
     }
 
