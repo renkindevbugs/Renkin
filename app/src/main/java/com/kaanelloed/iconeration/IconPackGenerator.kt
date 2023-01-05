@@ -6,20 +6,17 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
 import androidx.core.content.FileProvider
-import brut.androlib.Androlib
-import brut.androlib.ApkDecoder
-import brut.androlib.options.BuildOptions
 import java.io.File
 import java.io.InputStream
 import java.io.OutputStream
 import java.util.zip.ZipFile
 
-class IconPackCreator(private val ctx: Context, private val apps: Array<PackageInfoStruct>) {
-    private val cacheDirPath = ctx.cacheDir.absolutePath
+class IconPackGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>) {
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val extractedDir = apkDir.resolve("apkExtracted")
     private val assetDir = extractedDir.resolve("assets")
-    private val drawableDir = extractedDir.resolve("res").resolve("drawable")
+    private val resourcesDir = extractedDir.resolve("res")
+    private val drawableDir = resourcesDir.resolve("drawable")
     private val apkFile = "app-release-unsigned.apk"
     private val zipFile = "app-release-unsigned.zip"
     private val frameworkFile = "1.apk"
@@ -28,11 +25,7 @@ class IconPackCreator(private val ctx: Context, private val apps: Array<PackageI
         clearCache()
 
         textMethod("Extracting apk ...")
-        /*val apk = assetToFile(apkFile, apkDir.absolutePath, apkFile)
-        extractApk(apk)
-        apk.delete()*/
-
-        val apk = apkDir.resolve(apkFile)
+        val apk = assetToFile(apkFile, apkDir.resolve(apkFile))
         val zip = assetToFile(zipFile, apkDir.resolve(zipFile))
         assetToFile(frameworkFile, ctx.cacheDir.resolve(frameworkFile))
         unzipApk(zip)
@@ -56,16 +49,6 @@ class IconPackCreator(private val ctx: Context, private val apps: Array<PackageI
 
         clearTmpFiles()
         textMethod("Done")
-    }
-
-    private fun extractApk(apk: File) {
-        val opt = BuildOptions()
-        opt.frameworkFolderLocation = cacheDirPath
-        val lib = Androlib(opt)
-
-        val decoder = ApkDecoder(apk, lib)
-        decoder.setOutDir(extractedDir)
-        decoder.decode()
     }
 
     private fun unzipApk(apk: File) {
@@ -128,12 +111,11 @@ class IconPackCreator(private val ctx: Context, private val apps: Array<PackageI
     }
 
     private fun buildApk(dest: File) {
-        val opt = BuildOptions()
-        opt.frameworkFolderLocation = cacheDirPath
-        opt.aaptPath = File(ctx.applicationInfo.nativeLibraryDir).resolve("libaapt2.so").absolutePath
-        opt.aaptVersion = 2
-        opt.useAapt2 = true
-        Androlib(opt).build(extractedDir, dest)
+        val opts = ResourcesBuilder.BuildOptions("127", "21", "28", "1", "0.1.0")
+        val builder = ResourcesBuilder(ctx, ctx.cacheDir.resolve(frameworkFile))
+
+        val classesFile = builder.getClassesFromApk(apkDir.resolve(apkFile), "classes.dex", extractedDir)
+        builder.buildApk(opts, extractedDir.resolve("AndroidManifest.xml"), resourcesDir, assetDir, classesFile, arrayOf("resources.arsc", "png"), dest)
     }
 
     private fun signApk(file: File, outFile: File) {

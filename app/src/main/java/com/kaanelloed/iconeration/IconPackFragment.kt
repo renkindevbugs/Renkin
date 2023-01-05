@@ -62,7 +62,7 @@ class IconPackFragment : Fragment() {
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
             }
 
-            val creator = IconPackCreator(view.context, act.apps!!)
+            val creator = IconPackGenerator(view.context, act.apps!!)
             creator.create(this::addText)
 
             requireView().post {
