@@ -15,7 +15,8 @@ class ResourcesBuilder(ctx: Context, private val framework: File) {
     fun buildApk(options: BuildOptions, manifest: File, resourceDir: File, assetDir: File, classesFile: File, notCompress: Array<String>, apkFile: File) {
         opts = options
 
-        if (!tmpDir.exists()) tmpDir.mkdirs()
+        tmpDir.deleteRecursively()
+        tmpDir.mkdirs()
 
         val notCompressFile = tmpDir.resolve("notCompress.txt")
         notCompressFile.appendText(notCompress.joinToString("\n"))

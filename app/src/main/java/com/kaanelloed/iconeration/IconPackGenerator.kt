@@ -50,7 +50,6 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         textMethod("Installing apk ...")
         installApk(apkSigned)
 
-        clearTmpFiles()
         textMethod("Done")
     }
 
@@ -167,15 +166,5 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     private fun clearCache() {
         apkDir.deleteRecursively()
         apkDir.mkdir()
-    }
-
-    private fun clearTmpFiles() {
-        val tmpFile = ctx.cacheDir.listFiles()!!
-
-        for (file in tmpFile) {
-            if (!file.isDirectory && file.path.endsWith(".tmp")) {
-                file.delete()
-            }
-        }
     }
 }
