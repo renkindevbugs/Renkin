@@ -17,17 +17,20 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     private val assetDir = extractedDir.resolve("assets")
     private val resourcesDir = extractedDir.resolve("res")
     private val drawableDir = resourcesDir.resolve("drawable")
-    private val apkFile = "app-release-unsigned.apk"
-    private val zipFile = "app-release-unsigned.zip"
-    private val frameworkFile = "1.apk"
+    private val apkFileName = "app-release-unsigned.apk"
+    private val zipFileName = "app-release-unsigned.zip"
+    private val frameworkFileName = "1.apk"
+    private val frameworkFile = ctx.cacheDir.resolve(frameworkFileName)
+    private val keyStoreFileName = "iconeration.keystore"
+    private val keyStoreFile = ctx.cacheDir.resolve(keyStoreFileName)
 
     fun create(textMethod: (text: String) -> Unit) {
         clearCache()
 
         textMethod("Extracting apk ...")
-        val apk = assetToFile(apkFile, apkDir.resolve(apkFile))
-        val zip = assetToFile(zipFile, apkDir.resolve(zipFile))
-        assetToFile(frameworkFile, ctx.cacheDir.resolve(frameworkFile))
+        val apk = assetToFile(apkFileName, apkDir.resolve(apkFileName))
+        val zip = assetToFile(zipFileName, apkDir.resolve(zipFileName))
+        if (!frameworkFile.exists()) assetToFile(frameworkFileName, frameworkFile)
         unzipApk(zip)
 
         textMethod("Writing icons ...")
@@ -112,14 +115,14 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
     private fun buildApk(dest: File) {
         val opts = ResourcesBuilder.BuildOptions("127", "21", "28", "1", "0.1.0")
-        val builder = ResourcesBuilder(ctx, ctx.cacheDir.resolve(frameworkFile))
+        val builder = ResourcesBuilder(ctx, frameworkFile)
 
-        val classesFile = builder.getClassesFromApk(apkDir.resolve(apkFile), "classes.dex", extractedDir)
+        val classesFile = builder.getClassesFromApk(apkDir.resolve(apkFileName), "classes.dex", extractedDir)
         builder.buildApk(opts, extractedDir.resolve("AndroidManifest.xml"), resourcesDir, assetDir, classesFile, arrayOf("resources.arsc", "png"), dest)
     }
 
     private fun signApk(file: File, outFile: File) {
-        val keyStoreFile = assetToFile("iconeration.keystore", ctx.cacheDir.resolve("iconeration.keystore"))
+        if (!keyStoreFile.exists()) assetToFile(keyStoreFileName, keyStoreFile)
         Signer("Iconeration", "s3cur3p@ssw0rd").signApk(file, outFile, keyStoreFile)
     }
 
