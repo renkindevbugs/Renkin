@@ -11,8 +11,8 @@ android {
         applicationId "com.kaanelloed.iconeration"
         minSdk 21
         targetSdk 33
-        versionCode 6
-        versionName "0.3.1"
+        versionCode 7
+        versionName "0.4.0"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -36,7 +36,6 @@ android {
 }
 
 dependencies {
-
     implementation 'androidx.core:core-ktx:1.9.0'
     implementation 'androidx.appcompat:appcompat:1.5.1'
     implementation 'com.google.android.material:material:1.8.0-beta01'
