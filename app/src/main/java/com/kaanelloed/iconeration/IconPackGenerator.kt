@@ -14,24 +14,26 @@ import java.util.zip.ZipFile
 class IconPackGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>) {
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val extractedDir = apkDir.resolve("apkExtracted")
-    private val assetDir = extractedDir.resolve("assets")
+    private val assetsDir = extractedDir.resolve("assets")
     private val resourcesDir = extractedDir.resolve("res")
     private val drawableDir = resourcesDir.resolve("drawable")
-    private val apkFileName = "app-release-unsigned.apk"
-    private val zipFileName = "app-release-unsigned.zip"
-    private val frameworkFileName = "1.apk"
-    private val frameworkFile = ctx.cacheDir.resolve(frameworkFileName)
-    private val keyStoreFileName = "iconeration.keystore"
-    private val keyStoreFile = ctx.cacheDir.resolve(keyStoreFileName)
+    private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
+    private val signedApk = apkDir.resolve("app-release.apk")
+    private val frameworkFile = ctx.cacheDir.resolve("1.apk")
+    private val keyStoreFile = ctx.cacheDir.resolve("iconeration.keystore")
 
     fun create(textMethod: (text: String) -> Unit) {
         clearCache()
 
         textMethod("Extracting apk ...")
-        val apk = assetToFile(apkFileName, apkDir.resolve(apkFileName))
-        val zip = assetToFile(zipFileName, apkDir.resolve(zipFileName))
-        if (!frameworkFile.exists()) assetToFile(frameworkFileName, frameworkFile)
-        unzipApk(zip)
+        if (!frameworkFile.exists()) assetToFile(frameworkFile.name, frameworkFile)
+
+        drawableDir.mkdirs()
+        assetsDir.mkdirs()
+
+        val zipFile = extractedDir.resolve("apkFiles.zip")
+        assetToFile(zipFile.name, zipFile)
+        unzip(zipFile, extractedDir)
 
         textMethod("Writing icons ...")
         writeIcons()
@@ -41,23 +43,21 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         writeAppFilter()
 
         textMethod("Building apk ...")
-        buildApk(apk)
-
-        val apkSigned = apkDir.resolve("app-release.apk")
+        buildApk(unsignedApk)
 
         textMethod("Signing apk ...")
-        signApk(apk, apkSigned)
+        signApk(unsignedApk, signedApk)
         textMethod("Installing apk ...")
-        installApk(apkSigned)
+        installApk(signedApk)
 
         textMethod("Done")
     }
 
-    private fun unzipApk(apk: File) {
-        val zip = ZipFile(apk)
+    private fun unzip(zipFile: File, dest: File) {
+        val zip = ZipFile(zipFile)
 
         for (entry in zip.entries()) {
-            val file = File(extractedDir, entry.name)
+            val file = File(dest, entry.name)
 
             if (entry.isDirectory) {
                 file.mkdirs()
@@ -80,7 +80,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     }
 
     private fun writeDrawable() {
-        val file = assetDir.resolve("drawable.xml")
+        val file = assetsDir.resolve("drawable.xml")
         if (file.exists()) file.delete()
         val fileContent = mutableListOf<String>()
 
@@ -98,7 +98,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     }
 
     private fun writeAppFilter() {
-        val file = assetDir.resolve("appfilter.xml")
+        val file = assetsDir.resolve("appfilter.xml")
         if (file.exists()) file.delete()
         val fileContent = mutableListOf<String>()
 
@@ -116,12 +116,11 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         val opts = ResourcesBuilder.BuildOptions("127", "21", "28", "1", "0.1.0")
         val builder = ResourcesBuilder(ctx, frameworkFile)
 
-        val classesFile = builder.getClassesFromApk(apkDir.resolve(apkFileName), "classes.dex", extractedDir)
-        builder.buildApk(opts, extractedDir.resolve("AndroidManifest.xml"), resourcesDir, assetDir, classesFile, arrayOf("resources.arsc", "png"), dest)
+        builder.buildApk(opts, extractedDir.resolve("AndroidManifest.xml"), resourcesDir, assetsDir, extractedDir.resolve("classes.dex"), arrayOf("resources.arsc", "png"), dest)
     }
 
     private fun signApk(file: File, outFile: File) {
-        if (!keyStoreFile.exists()) assetToFile(keyStoreFileName, keyStoreFile)
+        if (!keyStoreFile.exists()) assetToFile(keyStoreFile.name, keyStoreFile)
         Signer("Iconeration", "s3cur3p@ssw0rd").signApk(file, outFile, keyStoreFile)
     }
 
