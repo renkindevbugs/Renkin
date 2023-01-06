@@ -26,7 +26,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         clearCache()
 
         textMethod("Extracting apk ...")
-        if (!frameworkFile.exists()) assetToFile(frameworkFile.name, frameworkFile)
+        assetToFile(frameworkFile.name, frameworkFile, false)
 
         drawableDir.mkdirs()
         assetsDir.mkdirs()
@@ -120,7 +120,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     }
 
     private fun signApk(file: File, outFile: File) {
-        if (!keyStoreFile.exists()) assetToFile(keyStoreFile.name, keyStoreFile)
+        assetToFile(keyStoreFile.name, keyStoreFile, false)
         Signer("Iconeration", "s3cur3p@ssw0rd").signApk(file, outFile, keyStoreFile)
     }
 
@@ -145,6 +145,13 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         intent.putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending")
         ctx.startActivity(intent)
         //TODO: use PackageInstaller instead
+    }
+
+    private fun assetToFile(assetName: String, file: File, overwrite: Boolean): File {
+        if (file.exists() && !overwrite)
+            return file
+
+        return assetToFile(assetName, file)
     }
 
     private fun assetToFile(assetName: String, file: File): File {
