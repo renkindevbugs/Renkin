@@ -48,9 +48,6 @@ dependencies {
     implementation 'org.apktool:brut.j.util:2.7.0'
     implementation 'org.apktool:brut.j.dir:2.7.0'
 
-    //noinspection DuplicatePlatformClasses
-    implementation 'xpp3:xpp3:1.1.4c'
-
     // Signing & aligning
     implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
     implementation("com.android.tools.build:apksig:7.2.2")
