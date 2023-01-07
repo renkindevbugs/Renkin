@@ -1,7 +1,6 @@
 package com.kaanelloed.iconeration
 
 import android.content.Context
-import android.graphics.Color
 import android.graphics.drawable.Drawable
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat

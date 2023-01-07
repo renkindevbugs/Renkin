@@ -7,9 +7,6 @@ import android.net.Uri
 import android.os.Build
 import androidx.core.content.FileProvider
 import java.io.File
-import java.io.InputStream
-import java.io.OutputStream
-import java.util.zip.ZipFile
 
 class IconPackGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>) {
     private val apkDir = ctx.cacheDir.resolve("apk")
@@ -23,17 +20,18 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     private val keyStoreFile = ctx.cacheDir.resolve("iconeration.keystore")
 
     fun create(textMethod: (text: String) -> Unit) {
+        val assets = AssetHandler(ctx)
         clearCache()
 
         textMethod("Extracting apk ...")
-        assetToFile(frameworkFile.name, frameworkFile, false)
+        assets.assetToFile(frameworkFile.name, frameworkFile, false)
 
         drawableDir.mkdirs()
         assetsDir.mkdirs()
 
         val zipFile = extractedDir.resolve("apkFiles.zip")
-        assetToFile(zipFile.name, zipFile)
-        unzip(zipFile, extractedDir)
+        assets.assetToFile(zipFile.name, zipFile)
+        ZipHandler().unzip(zipFile, extractedDir)
 
         textMethod("Writing icons ...")
         writeIcons()
@@ -51,22 +49,6 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         installApk(signedApk)
 
         textMethod("Done")
-    }
-
-    private fun unzip(zipFile: File, dest: File) {
-        val zip = ZipFile(zipFile)
-
-        for (entry in zip.entries()) {
-            val file = File(dest, entry.name)
-
-            if (entry.isDirectory) {
-                file.mkdirs()
-            } else {
-                file.parentFile?.mkdirs()
-
-                copyAndCloseStream(zip.getInputStream(entry), file.outputStream())
-            }
-        }
     }
 
     private fun writeIcons() {
@@ -120,7 +102,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     }
 
     private fun signApk(file: File, outFile: File) {
-        assetToFile(keyStoreFile.name, keyStoreFile, false)
+        AssetHandler(ctx).assetToFile(keyStoreFile.name, keyStoreFile, false)
         Signer("Iconeration", "s3cur3p@ssw0rd").signApk(file, outFile, keyStoreFile)
     }
 
@@ -145,28 +127,6 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         intent.putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending")
         ctx.startActivity(intent)
         //TODO: use PackageInstaller instead
-    }
-
-    private fun assetToFile(assetName: String, file: File, overwrite: Boolean): File {
-        if (file.exists() && !overwrite)
-            return file
-
-        return assetToFile(assetName, file)
-    }
-
-    private fun assetToFile(assetName: String, file: File): File {
-        val inStream = ctx.assets.open(assetName)
-        val outStream = file.outputStream()
-
-        copyAndCloseStream(inStream, outStream)
-
-        return file
-    }
-
-    private fun copyAndCloseStream(input: InputStream, output: OutputStream) {
-        input.copyTo(output)
-        input.close()
-        output.close()
     }
 
     private fun clearCache() {

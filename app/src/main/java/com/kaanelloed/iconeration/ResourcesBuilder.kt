@@ -1,9 +1,6 @@
 package com.kaanelloed.iconeration
 
 import android.content.Context
-import brut.directory.ExtFile
-import brut.directory.ZipUtils
-import brut.util.OS
 import java.io.File
 
 class ResourcesBuilder(ctx: Context, private val framework: File) {
@@ -27,17 +24,10 @@ class ResourcesBuilder(ctx: Context, private val framework: File) {
         compileResources(resourceDir, compiledResources)
         linkResources(manifest, compiledResources, notCompressFile, linkedResources)
         fillBuildDir(linkedResources, classesFile, buildDir)
+        assetDir.copyRecursively(buildDir.resolve(assetDir.name))
 
-        ZipUtils.zipFolders(buildDir, apkFile, assetDir, notCompress.toList())
+        ZipHandler().zip(buildDir, apkFile, notCompress)
         tmpDir.deleteRecursively()
-    }
-
-    fun getClassesFromApk(apkFile: File, fileName: String, destDir: File): File {
-        val extApkFile = ExtFile(apkFile)
-        extApkFile.directory.copyToDir(destDir, fileName)
-        extApkFile.close()
-
-        return destDir.resolve(fileName)
     }
 
     private fun compileResources(resourceDir: File, dest: File) {
@@ -50,7 +40,7 @@ class ResourcesBuilder(ctx: Context, private val framework: File) {
         compileArgs.add("-o")
         compileArgs.add(dest.absolutePath)
 
-        OS.exec(compileArgs.toTypedArray())
+        executeCommands(compileArgs.toTypedArray())
     }
 
     private fun linkResources(manifest: File, resourceZip: File, notCompressFile: File, dest: File) {
@@ -84,15 +74,25 @@ class ResourcesBuilder(ctx: Context, private val framework: File) {
         linkArgs.add(manifest.absolutePath)
         linkArgs.add(resourceZip.absolutePath)
 
-        OS.exec(linkArgs.toTypedArray())
+        executeCommands(linkArgs.toTypedArray())
     }
 
     private fun fillBuildDir(linkedFile: File, classesFile: File, dest: File) {
-        val extLinked = ExtFile(linkedFile)
-        extLinked.directory.copyToDir(dest)
-        extLinked.close()
+        ZipHandler().unzip(linkedFile, dest)
+        classesFile.copyToDirectory(dest)
+    }
 
-        classesFile.copyTo(dest.resolve(classesFile.name))
+    private fun File.copyToDirectory(directory: File) {
+        if (this.isFile && directory.isDirectory) {
+            this.copyTo(directory.resolve(this.name))
+        }
+    }
+
+    private fun executeCommands(commands: Array<String>): Int {
+        val processBuilder = ProcessBuilder(commands.toList())
+        val process = processBuilder.start()
+
+        return process.waitFor()
     }
 
     class BuildOptions(var packageId: String, var minSdk: String, var targetSdk: String, var versionCode: String, var versionName: String)
