@@ -1,6 +1,7 @@
 package com.kaanelloed.iconeration
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Color
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
@@ -13,6 +14,23 @@ class PreferencesHelper(private val ctx: Context) {
         return prefs.getInt(
             ctx.getString(R.string.settings_iconColor_key),
             ContextCompat.getColor(ctx, R.color.settings_iconColor_def_value)
+        )
+    }
+
+    fun colorIconSet(): Boolean {
+        return prefs.contains(ctx.getString(R.string.settings_iconColor_key))
+    }
+
+    fun getIconColorForTheme(): Int {
+        val defaultColor = when (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) {
+            Configuration.UI_MODE_NIGHT_NO -> Color.BLACK
+            Configuration.UI_MODE_NIGHT_YES -> Color.WHITE
+            else -> Color.WHITE
+        }
+
+        return prefs.getInt(
+            ctx.getString(R.string.settings_iconColor_key),
+            defaultColor
         )
     }
 

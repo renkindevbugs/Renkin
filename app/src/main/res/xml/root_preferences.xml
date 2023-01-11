@@ -19,7 +19,6 @@
             app:useSimpleSummaryProvider="true" />
 
         <com.jaredrummler.android.colorpicker.ColorPreferenceCompat
-            app:defaultValue="@color/settings_iconColor_def_value"
             app:key="@string/settings_iconColor_key"
             app:title="@string/settings_iconColor_label"
             app:cpv_colorPresets="@array/custom_colors"

@@ -70,8 +70,9 @@ class IconFragment : Fragment() {
             }
 
             val act = requireActivity() as MainActivity
+            val prefs = PreferencesHelper(view.context)
 
-            val includeAvailable = PreferencesHelper(view.context).getIncludeAvailableIcon()
+            val includeAvailable = prefs.getIncludeAvailableIcon()
 
             if (act.apps == null || act.currentPack != act.lastPack) {
                 val am = ApplicationManager(activity?.packageManager!!)
@@ -84,8 +85,8 @@ class IconFragment : Fragment() {
 
                 act.apps!!.sort()
 
-                val color = PreferencesHelper(view.context).getIconColor()
-                val genType = PreferencesHelper(view.context).getGenType()
+                val color = prefs.getIconColorForTheme()
+                val genType = prefs.getGenType()
                 IconGenerator(view.context, act.apps!!, color).generateIcons(genType)
 
                 act.lastPack = act.currentPack
