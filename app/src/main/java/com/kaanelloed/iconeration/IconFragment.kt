@@ -60,9 +60,9 @@ class IconFragment : Fragment() {
         }
 
         Thread {
-            val progBar = activity?.findViewById<ProgressBar>(R.id.progress_loader)!!
-
             view.post {
+                val progBar = requireActivity().findViewById<ProgressBar>(R.id.progress_loader)!!
+
                 requireActivity().window.setFlags(
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
@@ -93,6 +93,8 @@ class IconFragment : Fragment() {
             }
 
             view.post {
+                val progBar = requireActivity().findViewById<ProgressBar>(R.id.progress_loader)!!
+
                 view.findViewById<RecyclerView>(R.id.appView).apply {
                     layoutManager = LinearLayoutManager(view.context)
                     adapter = AppListAdapter(act.apps!!)
