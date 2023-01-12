@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
 import java.io.File
 
@@ -43,12 +44,17 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         textMethod("Building apk ...")
         buildApk(unsignedApk)
 
-        textMethod("Signing apk ...")
-        signApk(unsignedApk, signedApk)
-        textMethod("Installing apk ...")
-        installApk(signedApk)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            textMethod("Signing apk ...")
+            signApk(unsignedApk, signedApk)
+            textMethod("Installing apk ...")
+            installApk(signedApk)
 
-        textMethod("Done")
+            textMethod("Done")
+        } else {
+            textMethod("Apk cannot be signed, you must be at least in the Android Oreo version ...")
+            textMethod("Apk cannot be installed")
+        }
     }
 
     private fun writeIcons() {
@@ -101,6 +107,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         builder.buildApk(opts, extractedDir.resolve("AndroidManifest.xml"), resourcesDir, assetsDir, extractedDir.resolve("classes.dex"), arrayOf("resources.arsc", "png"), dest)
     }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun signApk(file: File, outFile: File) {
         AssetHandler(ctx).assetToFile(keyStoreFile.name, keyStoreFile, false)
         Signer("Iconeration", "s3cur3p@ssw0rd").signApk(file, outFile, keyStoreFile)
