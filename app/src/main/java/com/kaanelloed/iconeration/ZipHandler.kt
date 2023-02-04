@@ -34,7 +34,7 @@ class ZipHandler {
         val outStream = ZipOutputStream(BufferedOutputStream(dest.outputStream()))
 
         for (directory in directories) {
-            zip(outStream, directory, dest, notCompress)
+            zip(outStream, directory, notCompress)
         }
         outStream.close()
     }
@@ -42,7 +42,7 @@ class ZipHandler {
     fun zip(directory: File, dest: File, notCompress: Array<String>) {
         val outStream = ZipOutputStream(BufferedOutputStream(dest.outputStream()))
 
-        zip(outStream, directory, dest, notCompress)
+        zip(outStream, directory, notCompress)
         outStream.close()
     }
 
@@ -69,7 +69,7 @@ class ZipHandler {
         copyAndCloseStream(zip.getInputStream(entry), dest)
     }
 
-    private fun zip(outStream: ZipOutputStream, directory: File, dest: File, notCompress: Array<String>) {
+    private fun zip(outStream: ZipOutputStream, directory: File, notCompress: Array<String>) {
         for (file in directory.walkTopDown()) {
             var zipName = file.absolutePath.removePrefix(directory.absolutePath).removePrefix("/")
             if (file.isDirectory) zipName += "/"
