@@ -13,4 +13,7 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "Iconeration"
-include ':app'
+include ':app', ':ARSCLib' //Temp until V1.1.6 is published
+
+//Temp until V1.1.6 is published
+project(':ARSCLib').projectDir = new File('libs/ARSCLib')

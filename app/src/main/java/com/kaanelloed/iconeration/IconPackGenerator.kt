@@ -7,16 +7,26 @@ import android.net.Uri
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
+import com.reandroid.archive.ZipAlign
+import com.reandroid.apk.ApkJsonDecoder
+import com.reandroid.apk.ApkJsonEncoder
+import com.reandroid.apk.ApkModule
+import com.reandroid.arsc.chunk.xml.ResXmlDocument
+import com.reandroid.json.JSONObject
 import java.io.File
+
 
 class IconPackGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>) {
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val extractedDir = apkDir.resolve("apkExtracted")
-    private val assetsDir = extractedDir.resolve("assets")
-    private val resourcesDir = extractedDir.resolve("res")
+    private val baseDir = extractedDir.resolve("base")
+    private val rootDir = baseDir.resolve("root")
+    private val assetsDir = rootDir.resolve("assets")
+    private val resourcesDir = rootDir.resolve("res")
     private val drawableDir = resourcesDir.resolve("drawable")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
+    private val packFile = ctx.cacheDir.resolve("iconpack.apk")
     private val frameworkFile = ctx.cacheDir.resolve("1.apk")
     private val keyStoreFile = ctx.cacheDir.resolve("iconeration.keystore")
 
@@ -25,14 +35,16 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         clearCache()
 
         textMethod("Extracting apk ...")
-        assets.assetToFile(frameworkFile.name, frameworkFile, false)
+        extractedDir.mkdirs()
+        assets.assetToFile(packFile.name, packFile, false)
+        decodeApk(packFile, extractedDir)
 
-        drawableDir.mkdirs()
-        assetsDir.mkdirs()
+        //drawableDir.mkdirs()
+        //assetsDir.mkdirs()
 
-        val zipFile = extractedDir.resolve("apkFiles.zip")
+        /*val zipFile = extractedDir.resolve("apkFiles.zip")
         assets.assetToFile(zipFile.name, zipFile)
-        ZipHandler().unzip(zipFile, extractedDir)
+        ZipHandler().unzip(zipFile, extractedDir)*/
 
         textMethod("Writing icons ...")
         writeIcons()
@@ -40,6 +52,8 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         writeDrawable()
         textMethod("Writing appfilter.xml ...")
         writeAppFilter()
+
+        updateARSC()
 
         textMethod("Building apk ...")
         buildApk(unsignedApk)
@@ -59,7 +73,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
     private fun writeIcons() {
         for (app in apps) {
-            val file = drawableDir.resolve(app.packageName.replace('.', '_') + ".png")
+            val file = resourcesDir.resolve(app.packageName.replace('.', '_') + ".png")
 
             val outStream = file.outputStream()
             app.genIcon.compress(Bitmap.CompressFormat.PNG, 100, outStream)
@@ -100,11 +114,57 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         file.appendText(fileContent.joinToString("\n"))
     }
 
+    private fun updateARSC() {
+        //TODO: make it better
+        val arscFile = baseDir.resolve("resources.arsc.json")
+        val json = JSONObject(arscFile.readText())
+
+        val pack = json.getJSONArray("packages")[0] as JSONObject
+        val spec = pack.getJSONArray("specs")[0] as JSONObject
+        val type = spec.getJSONArray("types")[0] as JSONObject
+        val entries = type.getJSONArray("entries")
+
+        var id = 1
+
+        for (app in apps) {
+            val appName = app.packageName.replace('.', '_')
+            val entryObj = JSONObject()
+            entryObj.put("entry_name", appName)
+
+            val valueObj = JSONObject()
+            valueObj.put("value_type", "STRING")
+            valueObj.put("data", "res/${appName}.png")
+
+            entryObj.put("value", valueObj)
+            entryObj.put("id", id++)
+
+            entries.put(entryObj)
+        }
+
+        arscFile.writeText(json.toString())
+    }
+
+    private fun decodeApk(src: File, dest: File) {
+        val apkModule = ApkModule.loadApkFile(src)
+        val decoder = ApkJsonDecoder(apkModule)
+        decoder.sanitizeFilePaths()
+        decoder.writeToDirectory(dest)
+    }
+
     private fun buildApk(dest: File) {
-        val opts = ResourcesBuilder.BuildOptions("127", "21", "28", "1", "0.1.0")
+        val encoder = ApkJsonEncoder()
+        val loadedModule: ApkModule = encoder.scanDirectory(baseDir)
+
+        loadedModule.apkArchive.sortApkFiles()
+        loadedModule.writeApk(dest)
+
+        ZipAlign.align4(dest)
+
+        /*val opts = ResourcesBuilder.BuildOptions("127", "21", "28", "1", "0.1.0")
         val builder = ResourcesBuilder(ctx, frameworkFile)
 
         builder.buildApk(opts, extractedDir.resolve("AndroidManifest.xml"), resourcesDir, assetsDir, extractedDir.resolve("classes.dex"), arrayOf("resources.arsc", "png"), dest)
+        */
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
