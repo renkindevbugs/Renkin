@@ -11,7 +11,6 @@ import com.reandroid.archive.ZipAlign
 import com.reandroid.apk.ApkJsonDecoder
 import com.reandroid.apk.ApkJsonEncoder
 import com.reandroid.apk.ApkModule
-import com.reandroid.arsc.chunk.xml.ResXmlDocument
 import com.reandroid.json.JSONObject
 import java.io.File
 
@@ -23,11 +22,9 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     private val rootDir = baseDir.resolve("root")
     private val assetsDir = rootDir.resolve("assets")
     private val resourcesDir = rootDir.resolve("res")
-    private val drawableDir = resourcesDir.resolve("drawable")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
     private val packFile = ctx.cacheDir.resolve("iconpack.apk")
-    private val frameworkFile = ctx.cacheDir.resolve("1.apk")
     private val keyStoreFile = ctx.cacheDir.resolve("iconeration.keystore")
 
     fun create(textMethod: (text: String) -> Unit) {
@@ -39,13 +36,6 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         assets.assetToFile(packFile.name, packFile, false)
         decodeApk(packFile, extractedDir)
 
-        //drawableDir.mkdirs()
-        //assetsDir.mkdirs()
-
-        /*val zipFile = extractedDir.resolve("apkFiles.zip")
-        assets.assetToFile(zipFile.name, zipFile)
-        ZipHandler().unzip(zipFile, extractedDir)*/
-
         textMethod("Writing icons ...")
         writeIcons()
         textMethod("Writing drawable.xml ...")
@@ -53,9 +43,8 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         textMethod("Writing appfilter.xml ...")
         writeAppFilter()
 
-        updateARSC()
-
         textMethod("Building apk ...")
+        updateARSC()
         buildApk(unsignedApk)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -159,12 +148,6 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         loadedModule.writeApk(dest)
 
         ZipAlign.align4(dest)
-
-        /*val opts = ResourcesBuilder.BuildOptions("127", "21", "28", "1", "0.1.0")
-        val builder = ResourcesBuilder(ctx, frameworkFile)
-
-        builder.buildApk(opts, extractedDir.resolve("AndroidManifest.xml"), resourcesDir, assetsDir, extractedDir.resolve("classes.dex"), arrayOf("resources.arsc", "png"), dest)
-        */
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
