@@ -3,9 +3,6 @@ package com.kaanelloed.iconeration
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.net.Uri
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
 import com.reandroid.archive.ZipAlign
 import com.reandroid.apk.ApkJsonDecoder
@@ -47,17 +44,12 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         updateARSC()
         buildApk(unsignedApk)
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            textMethod("Signing apk ...")
-            signApk(unsignedApk, signedApk)
-            textMethod("Installing apk ...")
-            installApk(signedApk)
+        textMethod("Signing apk ...")
+        signApk(unsignedApk, signedApk)
+        textMethod("Installing apk ...")
+        installApk(signedApk)
 
-            textMethod("Done")
-        } else {
-            textMethod("Apk cannot be signed, you must be at least in the Android Oreo version ...")
-            textMethod("Apk cannot be installed")
-        }
+        textMethod("Done")
     }
 
     private fun writeIcons() {
@@ -150,28 +142,19 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         ZipAlign.align4(dest)
     }
 
-    @RequiresApi(Build.VERSION_CODES.O)
     private fun signApk(file: File, outFile: File) {
         AssetHandler(ctx).assetToFile(keyStoreFile.name, keyStoreFile, false)
         Signer("Iconeration", "s3cur3p@ssw0rd").signApk(file, outFile, keyStoreFile)
     }
 
     private fun installApk(file: File) {
-        val intent: Intent
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-            intent = Intent(Intent.ACTION_INSTALL_PACKAGE)
-            intent.data = FileProvider.getUriForFile(
-                ctx,
-                "${BuildConfig.APPLICATION_ID}.fileProvider",
-                file
-            )
-            intent.flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
-        } else {
-            intent = Intent(Intent.ACTION_VIEW)
-            intent.setDataAndType(Uri.fromFile(file), "application/vnd.android.package-archive")
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
+        val intent = Intent(Intent.ACTION_INSTALL_PACKAGE)
+        intent.data = FileProvider.getUriForFile(
+            ctx,
+            "${BuildConfig.APPLICATION_ID}.fileProvider",
+            file
+        )
+        intent.flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
 
         intent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
         intent.putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending")

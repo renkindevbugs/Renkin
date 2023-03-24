@@ -9,7 +9,7 @@ android {
 
     defaultConfig {
         applicationId "com.kaanelloed.iconeration"
-        minSdk 21
+        minSdk 26
         targetSdk 33
         versionCode 8
         versionName "0.4.1"
