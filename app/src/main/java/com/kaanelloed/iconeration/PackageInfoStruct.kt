@@ -25,6 +25,10 @@ class PackageInfoStruct: Comparable<PackageInfoStruct> {
         else -> 0
     }
 
+    fun getFileName(): String {
+        return packageName.replace('.', '_')
+    }
+
     fun normalizeName(): String {
         return removeDiacritics(appName)
     }

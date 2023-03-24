@@ -54,7 +54,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
     private fun writeIcons() {
         for (app in apps) {
-            val file = resourcesDir.resolve(app.packageName.replace('.', '_') + ".png")
+            val file = resourcesDir.resolve(app.getFileName() + ".png")
 
             val outStream = file.outputStream()
             app.genIcon.compress(Bitmap.CompressFormat.PNG, 100, outStream)
@@ -73,7 +73,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         fileContent.add("    <category title=\"All Apps\" />")
 
         for (app in apps) {
-            fileContent.add("    <item drawable=\"${app.packageName.replace('.', '_')}\" />")
+            fileContent.add("    <item drawable=\"${app.getFileName()}\" />")
         }
 
         fileContent.add("</resources>")
@@ -88,7 +88,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         fileContent.add("<?xml version=\"1.0\" encoding=\"utf-8\"?>")
         fileContent.add("<resources>")
         for (app in apps) {
-            fileContent.add("    <item component=\"ComponentInfo{${app.packageName}/${app.activityName}}\" drawable=\"${app.packageName.replace('.', '_')}\" />")
+            fileContent.add("    <item component=\"ComponentInfo{${app.packageName}/${app.activityName}}\" drawable=\"${app.getFileName()}\" />")
         }
 
         fileContent.add("</resources>")
@@ -108,13 +108,12 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         var id = 1
 
         for (app in apps) {
-            val appName = app.packageName.replace('.', '_')
             val entryObj = JSONObject()
-            entryObj.put("entry_name", appName)
+            entryObj.put("entry_name", app.getFileName())
 
             val valueObj = JSONObject()
             valueObj.put("value_type", "STRING")
-            valueObj.put("data", "res/${appName}.png")
+            valueObj.put("data", "res/${app.getFileName()}.png")
 
             entryObj.put("value", valueObj)
             entryObj.put("id", id++)
