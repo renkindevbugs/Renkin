@@ -5,5 +5,3 @@ Generation type:
 - First Letter of the application name with Arcticons SVG font *(experimental)*
 - Two letters of the application name with Arcticons TTF font *(experimental)*
 - Application name with Arcticons TTF font *(experimental)*
-
-Great work by the [ReVanced](https://github.com/revanced) team for signing APK, ApkTool and aapt2 binaries.
