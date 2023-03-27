@@ -1,4 +1,4 @@
-Icon generator for Android. For now, this project is intended to be a temporary solution for [Arcticons](https://github.com/Donnnno/Arcticons) when icons are not yet available.
+Icon pack generator for Android. For now, this project is intended to be a temporary solution for [Arcticons](https://github.com/Donnnno/Arcticons) when icons are not yet available.
 
 Generation type:
 - Canny Edge detection on the application icon *(experimental)*
