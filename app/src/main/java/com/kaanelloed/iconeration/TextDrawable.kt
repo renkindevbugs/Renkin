@@ -21,6 +21,7 @@ class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize:
         _intrinsicHeight = Paint.FontMetricsInt().ascent
     }
 
+    @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int {
         return paint.alpha
     }
