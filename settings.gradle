@@ -10,10 +10,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        maven {url 'https://repo1.maven.org/maven2/'} //Needed for ARSCLib, not sure why, it's suppose to already look there
     }
 }
 rootProject.name = "Iconeration"
-include ':app', ':ARSCLib' //Temp until V1.1.6 is published
-
-//Temp until V1.1.6 is published
-project(':ARSCLib').projectDir = new File('libs/ARSCLib')
+include ':app'
