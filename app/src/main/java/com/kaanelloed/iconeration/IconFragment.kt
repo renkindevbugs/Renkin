@@ -75,10 +75,10 @@ class IconFragment : Fragment() {
             val includeAvailable = prefs.getIncludeAvailableIcon()
 
             if (act.apps == null || act.currentPack != act.lastPack) {
-                val am = ApplicationManager(activity?.packageManager!!)
+                val am = ApplicationManager(activity?.packageManager!!, view.context)
 
                 if (act.currentPack == null) {
-                    act.apps = am.getInstalledApps()
+                    act.apps = am.getAllInstalledApps()
                 } else {
                     act.apps = am.getMissingPackageApps(act.currentPack!!, includeAvailable)
                 }

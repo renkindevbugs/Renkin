@@ -40,7 +40,7 @@ class HomeFragment : Fragment() {
 
         Thread {
             if (act.packs == null)
-                act.packs = ApplicationManager(activity?.packageManager!!).getIconPackApps()
+                act.packs = ApplicationManager(activity?.packageManager!!, view.context).getIconPackApps()
 
             view.post {
                 val packAdapter = PackListAdapter(act.packs!!)
