@@ -11,7 +11,6 @@ import com.reandroid.apk.ApkModule
 import com.reandroid.json.JSONObject
 import java.io.File
 
-
 class IconPackGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>) {
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val extractedDir = apkDir.resolve("apkExtracted")
@@ -25,12 +24,11 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     private val keyStoreFile = ctx.cacheDir.resolve("iconeration.keystore")
 
     fun create(textMethod: (text: String) -> Unit) {
-        val assets = AssetHandler(ctx)
         clearCache()
 
         textMethod("Extracting apk ...")
         extractedDir.mkdirs()
-        assets.assetToFile(packFile.name, packFile, false)
+        AssetHandler(ctx).assetToFile(packFile.name, packFile, false)
         decodeApk(packFile, extractedDir)
 
         textMethod("Writing icons ...")
@@ -137,8 +135,6 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
         loadedModule.apkArchive.sortApkFiles()
         loadedModule.writeApk(dest)
-
-        ZipAlign.align4(dest)
     }
 
     private fun signApk(file: File, outFile: File) {
