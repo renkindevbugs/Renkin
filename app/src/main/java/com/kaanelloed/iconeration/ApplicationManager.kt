@@ -17,11 +17,12 @@ import androidx.core.graphics.drawable.toBitmap
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
-class ApplicationManager(private val pm: PackageManager, private val ctx: Context) {
+class ApplicationManager(private val ctx: Context) {
+    private val pm = ctx.packageManager
+
     fun getInstalledApps(): Array<PackageInfoStruct> {
         val mainIntent = Intent(Intent.ACTION_MAIN, null)
         mainIntent.addCategory(Intent.CATEGORY_LAUNCHER)
-
         return getApps(mainIntent)
     }
 
@@ -210,6 +211,15 @@ class ApplicationManager(private val pm: PackageManager, private val ctx: Contex
         if (id > 0) return ResourcesCompat.getDrawable(res, id, null)
 
         return null
+    }
+
+    fun getIconerationIconPackPath(): String? {
+        return try {
+            val app = pm.getApplicationInfo("com.kaanelloed.iconerationiconpack", 0)
+            app.sourceDir
+        } catch (e: PackageManager.NameNotFoundException) {
+            null
+        }
     }
 
     inner class ComponentInfo {
