@@ -8,7 +8,10 @@ import android.content.pm.PackageManager
 import android.content.pm.PackageManager.ResolveInfoFlags
 import android.content.pm.ResolveInfo
 import android.content.res.Resources
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
+import android.graphics.drawable.VectorDrawable
 import android.os.Build.VERSION
 import android.os.Build.VERSION_CODES
 import android.os.UserManager
@@ -43,6 +46,16 @@ class ApplicationManager(private val ctx: Context) {
                     packInfo.activityName = app.componentName.className
                     packInfo.icon = app.applicationInfo.loadIcon(pm)
                     packInfo.source = PackageInfoStruct.PackageSource.Device
+
+                    if (packInfo.icon is AdaptiveIconDrawable) {
+                        val adapIcon = packInfo.icon as AdaptiveIconDrawable
+
+                        if (adapIcon.foreground is BitmapDrawable || adapIcon.foreground is VectorDrawable)
+                            packInfo.icon = ForegroundIconDrawable(adapIcon.foreground)
+
+                        //if (VERSION.SDK_INT >= VERSION_CODES.TIRAMISU && adapIcon.monochrome != null)
+                        //    packInfo.icon = ForegroundIconDrawable(adapIcon.monochrome!!)
+                    }
 
                     if (!packInfoStructs.contains(packInfo))
                         packInfoStructs.add(packInfo)
