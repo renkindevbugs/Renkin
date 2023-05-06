@@ -47,6 +47,7 @@ dependencies {
     implementation 'io.github.reandroid:ARSCLib:1.1.6'
     implementation 'org.bouncycastle:bcpkix-jdk15on:1.70'
     implementation 'com.android.tools.build:apksig:7.4.2'
+    implementation 'com.caverock:androidsvg:1.4'
 
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test.ext:junit:1.1.5'

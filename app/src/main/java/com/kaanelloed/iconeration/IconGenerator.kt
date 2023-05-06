@@ -1,8 +1,14 @@
 package com.kaanelloed.iconeration
 
 import android.content.Context
-import android.graphics.*
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
 import androidx.core.graphics.drawable.toBitmap
+import com.caverock.androidsvg.SVG
+import jankovicsandras.imagetracerandroid.ImageTracerAndroid
 
 class IconGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>, private val color: Int) {
     private var applyColorOnAvailable = false
@@ -11,14 +17,14 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         applyColorOnAvailable = PreferencesHelper(ctx).getApplyColorAvailableIcon()
 
         when (type) {
-            GenerationType.EdgeDetection -> generateEdgeDetection()
+            GenerationType.EdgeDetection -> generateColorQuantizationDetection()
             GenerationType.FirstLetter -> generateFirstLetter()
             GenerationType.TwoLetters -> generateTwoLetter()
             GenerationType.AppName -> generateAppName()
         }
     }
 
-    private fun generateEdgeDetection() {
+    private fun generateCannyEdgeDetection() {
         var edgeDetector: CannyEdgeDetector
         for (app in apps) {
             if (app.source == PackageInfoStruct.PackageSource.Device) {
@@ -28,6 +34,26 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
                     color
                 )
                 app.genIcon = edgeDetector.edgesImage
+            } else changeIconPackColor(app)
+        }
+    }
+
+    private fun generateColorQuantizationDetection() {
+        for (app in apps) {
+            if (app.source == PackageInfoStruct.PackageSource.Device) {
+                val options = HashMap<String, Float>()
+                //options["numberofcolors"] = 64f
+                options["colorsampling"] = 0f
+                val svgString = ImageTracerAndroid.imageToSVG(app.icon.toBitmap(), options, null)!!
+
+                val svg = SVG.getFromString(svgString)
+
+                val bmp = Bitmap.createBitmap(app.icon.intrinsicWidth, app.icon.intrinsicHeight, Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bmp)
+
+                svg.renderToCanvas(canvas)
+
+                app.genIcon = bmp
             } else changeIconPackColor(app)
         }
     }
