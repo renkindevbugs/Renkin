@@ -60,7 +60,7 @@ class PreferencesHelper(private val ctx: Context) {
             "ARCTICONS_FIRST_LETTER" -> IconGenerator.GenerationType.FirstLetter
             "ARCTICONS_TWO_LETTERS" -> IconGenerator.GenerationType.TwoLetters
             "ARCTICONS_APP_NAME" -> IconGenerator.GenerationType.AppName
-            else -> IconGenerator.GenerationType.FirstLetter
+            else -> IconGenerator.GenerationType.EdgeDetection
         }
     }
 
