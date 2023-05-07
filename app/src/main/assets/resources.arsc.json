@@ -1,0 +1,24 @@
+{
+ "arsc_lib_version": "1.1.6",
+ "packages": [{
+  "arsc_lib_version": "1.1.6",
+  "package_id": 127,
+  "package_name": "com.kaanelloed.iconerationiconpack",
+  "specs": [{
+   "spec": {"id": 1},
+   "types": [{
+    "id": 1,
+    "name": "drawable",
+    "config": {},
+    "entries": [{
+     "entry_name": "test",
+     "value": {
+      "value_type": "STRING",
+      "data": "res/BV.png"
+     },
+     "id": 0
+    }]
+   }]
+  }]
+ }]
+}

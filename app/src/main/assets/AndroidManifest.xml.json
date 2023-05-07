@@ -1,0 +1,785 @@
+{"element": {
+ "node_type": "element",
+ "line": 2,
+ "namespaces": [{
+  "namespace_uri": "http://schemas.android.com/apk/res/android",
+  "namespace_prefix": "android"
+ }],
+ "name": "manifest",
+ "attributes": [
+  {
+   "name": "versionCode",
+   "id": 16843291,
+   "namespace_uri": "http://schemas.android.com/apk/res/android",
+   "value_type": "INT_DEC",
+   "data": 1
+  },
+  {
+   "name": "versionName",
+   "id": 16843292,
+   "namespace_uri": "http://schemas.android.com/apk/res/android",
+   "value_type": "STRING",
+   "data": "0.1.0"
+  },
+  {
+   "name": "compileSdkVersion",
+   "id": 16844146,
+   "namespace_uri": "http://schemas.android.com/apk/res/android",
+   "value_type": "INT_DEC",
+   "data": 28
+  },
+  {
+   "name": "compileSdkVersionCodename",
+   "id": 16844147,
+   "namespace_uri": "http://schemas.android.com/apk/res/android",
+   "value_type": "STRING",
+   "data": "9"
+  },
+  {
+   "name": "package",
+   "id": 0,
+   "value_type": "STRING",
+   "data": "com.kaanelloed.iconerationiconpack"
+  },
+  {
+   "name": "platformBuildVersionCode",
+   "id": 0,
+   "value_type": "INT_DEC",
+   "data": 28
+  },
+  {
+   "name": "platformBuildVersionName",
+   "id": 0,
+   "value_type": "INT_DEC",
+   "data": 9
+  }
+ ],
+ "childes": [
+  {
+   "node_type": "element",
+   "line": 7,
+   "name": "uses-sdk",
+   "attributes": [
+    {
+     "name": "minSdkVersion",
+     "id": 16843276,
+     "namespace_uri": "http://schemas.android.com/apk/res/android",
+     "value_type": "INT_DEC",
+     "data": 21
+    },
+    {
+     "name": "targetSdkVersion",
+     "id": 16843376,
+     "namespace_uri": "http://schemas.android.com/apk/res/android",
+     "value_type": "INT_DEC",
+     "data": 28
+    }
+   ]
+  },
+  {
+   "node_type": "element",
+   "line": 11,
+   "name": "application",
+   "attributes": [
+    {
+     "name": "label",
+     "id": 16842753,
+     "namespace_uri": "http://schemas.android.com/apk/res/android",
+     "value_type": "STRING",
+     "data": "Iconeration Icon Pack"
+    },
+    {
+     "name": "allowBackup",
+     "id": 16843392,
+     "namespace_uri": "http://schemas.android.com/apk/res/android",
+     "value_type": "INT_BOOLEAN",
+     "data": true
+    },
+    {
+     "name": "supportsRtl",
+     "id": 16843695,
+     "namespace_uri": "http://schemas.android.com/apk/res/android",
+     "value_type": "INT_BOOLEAN",
+     "data": true
+    }
+   ],
+   "childes": [{
+    "node_type": "element",
+    "line": 15,
+    "name": "activity",
+    "attributes": [
+     {
+      "name": "name",
+      "id": 16842755,
+      "namespace_uri": "http://schemas.android.com/apk/res/android",
+      "value_type": "STRING",
+      "data": "com.kaanelloed.iconerationiconpack.MainActivity"
+     },
+     {
+      "name": "exported",
+      "id": 16842768,
+      "namespace_uri": "http://schemas.android.com/apk/res/android",
+      "value_type": "INT_BOOLEAN",
+      "data": true
+     },
+     {
+      "name": "launchMode",
+      "id": 16842781,
+      "namespace_uri": "http://schemas.android.com/apk/res/android",
+      "value_type": "INT_DEC",
+      "data": 1
+     },
+     {
+      "name": "configChanges",
+      "id": 16842783,
+      "namespace_uri": "http://schemas.android.com/apk/res/android",
+      "value_type": "INT_HEX",
+      "data": 1696
+     }
+    ],
+    "childes": [
+     {
+      "node_type": "element",
+      "line": 20,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [{
+       "node_type": "element",
+       "line": 21,
+       "name": "action",
+       "attributes": [{
+        "name": "name",
+        "id": 16842755,
+        "namespace_uri": "http://schemas.android.com/apk/res/android",
+        "value_type": "STRING",
+        "data": "android.intent.action.MAIN"
+       }]
+      }]
+     },
+     {
+      "node_type": "element",
+      "line": 25,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 26,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "org.adw.launcher.THEMES"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 28,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.category.DEFAULT"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 31,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 32,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "org.adw.launcher.icons.ACTION_PICK_ICON"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 34,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.category.DEFAULT"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 37,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 38,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.action.MAIN"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 40,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "com.anddoes.launcher.THEME"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 43,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 44,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.action.MAIN"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 45,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "com.gau.go.launcherex.theme"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 47,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.category.DEFAULT"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 50,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [{
+       "node_type": "element",
+       "line": 51,
+       "name": "action",
+       "attributes": [{
+        "name": "name",
+        "id": 16842755,
+        "namespace_uri": "http://schemas.android.com/apk/res/android",
+        "value_type": "STRING",
+        "data": "com.dlto.atom.launcher.THEME"
+       }]
+      }]
+     },
+     {
+      "node_type": "element",
+      "line": 54,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 55,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "com.phonemetra.turbo.launcher.icons.ACTION_PICK_ICON"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 57,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.category.DEFAULT"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 60,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 61,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "com.gridappsinc.launcher.theme.apk_action"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 63,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.category.DEFAULT"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 66,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 67,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "ch.deletescape.lawnchair.ICONPACK"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 69,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "ch.deletescape.lawnchair.PICK_ICON"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 72,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 73,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "com.novalauncher.THEME"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 75,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "com.novalauncher.category.CUSTOM_ICON_PICKER"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 78,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 79,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.action.MAIN"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 80,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "home.solo.launcher.free.THEMES"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 81,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "home.solo.launcher.free.ACTION_ICON"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 84,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 85,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.action.MAIN"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 86,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "com.lge.launcher2.THEME"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 88,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.category.DEFAULT"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 91,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 92,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "net.oneplus.launcher.icons.ACTION_PICK_ICON"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 94,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.category.DEFAULT"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 97,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 98,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "com.tsf.shell.themes"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 100,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.category.DEFAULT"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 103,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 104,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "ginlemon.smartlauncher.THEMES"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 106,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.category.DEFAULT"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 109,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 110,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "com.sonymobile.home.ICON_PACK"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 112,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.category.DEFAULT"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 115,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 116,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "com.gau.go.launcherex.theme"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 117,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "com.zeroteam.zerolauncher.theme"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 118,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.action.MAIN"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 121,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 122,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "jp.co.a_tm.android.launcher.icons.ACTION_PICK_ICON"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 124,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.category.DEFAULT"
+        }]
+       }
+      ]
+     },
+     {
+      "node_type": "element",
+      "line": 127,
+      "name": "intent-filter",
+      "attributes": [],
+      "childes": [
+       {
+        "node_type": "element",
+        "line": 128,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.action.MAIN"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 129,
+        "name": "action",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "com.vivid.launcher.theme"
+        }]
+       },
+       {
+        "node_type": "element",
+        "line": 131,
+        "name": "category",
+        "attributes": [{
+         "name": "name",
+         "id": 16842755,
+         "namespace_uri": "http://schemas.android.com/apk/res/android",
+         "value_type": "STRING",
+         "data": "android.intent.category.DEFAULT"
+        }]
+       }
+      ]
+     }
+    ]
+   }]
+  }
+ ]
+}}

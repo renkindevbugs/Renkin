@@ -1,0 +1,14 @@
+{
+ "extensions": [
+  ".mp3",
+  ".jpg",
+  ".mp4",
+  ".webp",
+  ".wav",
+  ".png"
+ ],
+ "paths": [
+  "resources.arsc",
+  "res/BV.png"
+ ]
+}
