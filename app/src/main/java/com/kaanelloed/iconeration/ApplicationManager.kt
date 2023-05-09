@@ -3,6 +3,7 @@ package com.kaanelloed.iconeration
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.content.pm.LauncherApps
 import android.content.pm.PackageManager
 import android.content.pm.PackageManager.ResolveInfoFlags
@@ -227,9 +228,12 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     fun getIconerationIconPackPath(): String? {
+        return getApp("com.kaanelloed.iconerationiconpack")?.sourceDir
+    }
+
+    private fun getApp(packageName: String): ApplicationInfo? {
         return try {
-            val app = pm.getApplicationInfo("com.kaanelloed.iconerationiconpack", 0)
-            app.sourceDir
+            pm.getApplicationInfo(packageName, 0)
         } catch (e: PackageManager.NameNotFoundException) {
             null
         }
