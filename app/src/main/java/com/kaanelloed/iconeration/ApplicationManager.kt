@@ -161,7 +161,7 @@ class ApplicationManager(private val ctx: Context) {
                     val componentInfo = xmlParser.getAttributeValue(null, "component")
 
                     val components = ComponentInfo()
-                    if (components.parse(componentInfo)) {
+                    if (iconName != null && componentInfo != null && components.parse(componentInfo)) {
                         val icon = getResIcon(res, iconName, packageName)
 
                         if (icon != null) {
