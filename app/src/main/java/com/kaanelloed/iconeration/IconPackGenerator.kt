@@ -132,7 +132,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         val encoder = ApkJsonEncoder()
         val loadedModule: ApkModule = encoder.scanDirectory(baseDir)
 
-        loadedModule.apkArchive.sortApkFiles()
+        loadedModule.apkArchive.autoSortApkFiles()
         loadedModule.writeApk(dest)
     }
 
