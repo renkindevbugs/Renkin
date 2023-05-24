@@ -184,6 +184,33 @@ class ApplicationManager(private val ctx: Context) {
         return packApps.toTypedArray()
     }
 
+    fun checkAppFilter(xmlParser: XmlPullParser): Array<String> {
+        val badlyFormattedComponents = mutableListOf<String>()
+        var type = xmlParser.eventType
+
+        while (type != XmlPullParser.END_DOCUMENT) {
+            if (type == XmlPullParser.START_TAG) {
+                if (xmlParser.name == "item") {
+                    val iconName = xmlParser.getAttributeValue(null, "drawable")
+                    val componentInfo = xmlParser.getAttributeValue(null, "component")
+
+                    val components = ComponentInfo()
+                    if (iconName == null || componentInfo == null || !components.parse(componentInfo)) {
+                        var item = ""
+                        for (i in 0 until  xmlParser.attributeCount) {
+                            item += "${xmlParser.getAttributeName(i)}=\"${xmlParser.getAttributeValue(i)}\" "
+                        }
+                        badlyFormattedComponents.add(item.trimEnd())
+                    }
+                }
+            }
+
+            type = xmlParser.next()
+        }
+
+        return badlyFormattedComponents.toTypedArray()
+    }
+
     private fun getResolves(intent: Intent): List<ResolveInfo> {
         if (VERSION.SDK_INT >= VERSION_CODES.TIRAMISU)
             return pm.queryIntentActivities(intent, ResolveInfoFlags.of(0))
