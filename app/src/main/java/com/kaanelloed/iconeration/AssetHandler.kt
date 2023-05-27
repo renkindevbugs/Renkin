@@ -6,6 +6,10 @@ import java.io.InputStream
 import java.io.OutputStream
 
 class AssetHandler(private val ctx: Context) {
+    fun assetToFile(file: File, overwrite: Boolean = true): File {
+        return assetToFile(file.name, file, overwrite)
+    }
+
     fun assetToFile(assetName: String, file: File, overwrite: Boolean = true): File {
         if (file.exists() && !overwrite)
             return file

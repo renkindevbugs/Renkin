@@ -4,42 +4,84 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.core.content.FileProvider
-import com.reandroid.apk.ApkJsonDecoder
-import com.reandroid.apk.ApkJsonEncoder
+import com.android.tools.smali.dexlib2.Opcodes
+import com.android.tools.smali.dexlib2.writer.builder.DexBuilder
+import com.android.tools.smali.dexlib2.writer.io.MemoryDataStore
+import com.android.tools.smali.smali.Smali
+import com.android.tools.smali.smali.SmaliOptions
+import com.kaanelloed.iconeration.xml.AppFilterXml
+import com.kaanelloed.iconeration.xml.DrawableXml
 import com.reandroid.apk.ApkModule
-import com.reandroid.json.JSONObject
+import com.reandroid.archive.APKArchive
+import com.reandroid.archive.ByteInputSource
+import com.reandroid.arsc.chunk.TableBlock
+import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
+import com.reandroid.arsc.chunk.xml.ResXmlElement
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 class IconPackGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>) {
     private val apkDir = ctx.cacheDir.resolve("apk")
-    private val extractedDir = apkDir.resolve("apkExtracted")
-    private val baseDir = extractedDir.resolve("base")
-    private val rootDir = baseDir.resolve("root")
-    private val assetsDir = rootDir.resolve("assets")
-    private val resourcesDir = rootDir.resolve("res")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
-    private val packFile = ctx.cacheDir.resolve("iconpack.apk")
     private val keyStoreFile = ctx.cacheDir.resolve("iconeration.keystore")
+    private val smaliDir = ctx.cacheDir.resolve("smali")
+    private val activityFile = smaliDir.resolve("MainActivity.smali")
+    private val buildFile = smaliDir.resolve("BuildConfig.smali")
+    private val rFile = smaliDir.resolve("R.smali")
+    private val drawableFile = smaliDir.resolve("R\$drawable.smali")
 
     fun create(textMethod: (text: String) -> Unit) {
-        clearCache()
+        val apkModule = ApkModule("base", APKArchive())
 
-        textMethod("Extracting apk ...")
-        extractedDir.mkdirs()
-        AssetHandler(ctx).assetToFile(packFile.name, packFile, false)
-        decodeApk(packFile, extractedDir)
+        val tableBlock = TableBlock()
+        val manifest = AndroidManifestBlock()
 
-        textMethod("Writing icons ...")
-        writeIcons()
-        textMethod("Writing drawable.xml ...")
-        writeDrawable()
-        textMethod("Writing appfilter.xml ...")
-        writeAppFilter()
+        apkModule.tableBlock = tableBlock
+        apkModule.setManifest(manifest)
+
+        textMethod("Initializing framework ...")
+        val framework = apkModule.initializeAndroidFramework(28)
+        val packageBlock = tableBlock.newPackage(0x7f, "com.kaanelloed.iconerationiconpack")
+
+        textMethod("Writing icons, drawable.xml and appfilter.xml ...")
+        val drawableXml = DrawableXml()
+        val appfilterXml = AppFilterXml()
+
+        for (app in apps) {
+            val iconName = "res/${app.getFileName()}.png"
+
+            val icon = packageBlock.getOrCreate("", "drawable", app.getFileName())
+            icon.setValueAsString(iconName)
+
+            val outStream = ByteArrayOutputStream()
+            app.genIcon.compress(Bitmap.CompressFormat.PNG, 100, outStream)
+            apkModule.add(ByteInputSource(outStream.toByteArray(), iconName))
+            outStream.close()
+
+            drawableXml.item(app.getFileName())
+            appfilterXml.item(app.packageName, app.activityName, app.getFileName())
+        }
+
+        textMethod("Generating manifest ...")
+        apkModule.add(ByteInputSource(drawableXml.readAndClose(), "assets/drawable.xml"))
+        apkModule.add(ByteInputSource(appfilterXml.readAndClose(), "assets/appfilter.xml"))
+
+        manifest.packageName = "com.kaanelloed.iconerationiconpack"
+        manifest.versionCode = 1
+        manifest.versionName = "0.1.0"
+        manifest.compileSdkVersion = framework.versionCode
+        manifest.compileSdkVersionCodename = framework.versionName
+        manifest.platformBuildVersionCode = framework.versionCode
+        manifest.platformBuildVersionName = framework.versionName
+        manifest.setApplicationLabel("Iconeration Icon Pack")
+
+        createMainActivity(manifest)
 
         textMethod("Building apk ...")
-        updateARSC()
-        buildApk(unsignedApk)
+        apkModule.add(ByteInputSource(compileSmali(), "classes.dex"))
+        apkModule.uncompressedFiles.addCommonExtensions()
+        apkModule.writeApk(unsignedApk)
 
         textMethod("Signing apk ...")
         signApk(unsignedApk, signedApk)
@@ -49,91 +91,88 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         textMethod("Done")
     }
 
-    private fun writeIcons() {
-        for (app in apps) {
-            val file = resourcesDir.resolve(app.getFileName() + ".png")
+    private fun createMainActivity(manifest: AndroidManifestBlock) {
+        val application = manifest.orCreateApplicationElement
+        val activity = application.createChildElement(AndroidManifestBlock.TAG_activity)
 
-            val outStream = file.outputStream()
-            app.genIcon.compress(Bitmap.CompressFormat.PNG, 100, outStream)
-            outStream.close()
+        createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN), emptyArray())
+        createIntentFilter(activity, arrayOf("org.adw.launcher.THEMES"), arrayOf("android.intent.category.DEFAULT")) //ADW Launcher
+        createIntentFilter(activity, arrayOf("org.adw.launcher.icons.ACTION_PICK_ICON"), arrayOf("android.intent.category.DEFAULT")) //ADW Launcher Custom Icon Picker
+        createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN), arrayOf("com.anddoes.launcher.THEME")) //Apex Launcher
+        createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN, "com.gau.go.launcherex.theme"), arrayOf("android.intent.category.DEFAULT")) //GO Launcher
+        createIntentFilter(activity, arrayOf("com.dlto.atom.launcher.THEME"), emptyArray()) //Atom Launcher
+        createIntentFilter(activity, arrayOf("com.phonemetra.turbo.launcher.icons.ACTION_PICK_ICON"), arrayOf("android.intent.category.DEFAULT")) //Turbo Launcher Custom Icon Picker
+        createIntentFilter(activity, arrayOf("com.gridappsinc.launcher.theme.apk_action"), arrayOf("android.intent.category.DEFAULT")) //Nine Launcher
+        createIntentFilter(activity, arrayOf("ch.deletescape.lawnchair.ICONPACK"), arrayOf("ch.deletescape.lawnchair.PICK_ICON")) //Lawnchair
+        createIntentFilter(activity, arrayOf("com.novalauncher.THEME"), arrayOf("com.novalauncher.category.CUSTOM_ICON_PICKER")) //Nova Launcher Custom Icon Picker
+        createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN, "home.solo.launcher.free.THEMES", "home.solo.launcher.free.ACTION_ICON"), emptyArray()) //Solo Launcher
+        createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN, "com.lge.launcher2.THEME"), arrayOf("android.intent.category.DEFAULT")) //LG Home
+        createIntentFilter(activity, arrayOf("net.oneplus.launcher.icons.ACTION_PICK_ICON"), arrayOf("android.intent.category.DEFAULT")) //OnePlus Launcher
+        createIntentFilter(activity, arrayOf("com.tsf.shell.themes"), arrayOf("android.intent.category.DEFAULT")) //TSF Shell
+        createIntentFilter(activity, arrayOf("ginlemon.smartlauncher.THEMES"), arrayOf("android.intent.category.DEFAULT")) //Smart Launcher
+        createIntentFilter(activity, arrayOf("com.sonymobile.home.ICON_PACK"), arrayOf("android.intent.category.DEFAULT")) //Sony Launcher
+        createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN, "com.gau.go.launcherex.theme", "com.zeroteam.zerolauncher.theme"), emptyArray()) //GO Launcher & Zero Launcher
+        createIntentFilter(activity, arrayOf("jp.co.a_tm.android.launcher.icons.ACTION_PICK_ICON"), arrayOf("android.intent.category.DEFAULT")) //+HOME Icon Picker
+        createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN, "com.vivid.launcher.theme"), arrayOf("android.intent.category.DEFAULT")) //V Launcher
+
+        val attribute = activity.getOrCreateAndroidAttribute(
+            AndroidManifestBlock.NAME_name,
+            AndroidManifestBlock.ID_name
+        )
+        attribute.valueAsString = "com.kaanelloed.iconerationiconpack.MainActivity"
+    }
+
+    private fun createIntentFilter(activity: ResXmlElement, actions: Array<String>, categories: Array<String>) {
+        val intentFilter = activity.createChildElement(AndroidManifestBlock.TAG_intent_filter)
+
+        for (actionValue in actions) {
+            val action = intentFilter.createChildElement(AndroidManifestBlock.TAG_action)
+            val attribute = action.getOrCreateAndroidAttribute(
+                AndroidManifestBlock.NAME_name,
+                AndroidManifestBlock.ID_name
+            )
+            attribute.valueAsString = actionValue
+        }
+
+        for (categoryValue in categories) {
+            val category = intentFilter.createChildElement(AndroidManifestBlock.TAG_category)
+            val attribute = category.getOrCreateAndroidAttribute(
+                AndroidManifestBlock.NAME_name,
+                AndroidManifestBlock.ID_name
+            )
+            attribute.valueAsString = categoryValue
         }
     }
 
-    private fun writeDrawable() {
-        val file = assetsDir.resolve("drawable.xml")
-        if (file.exists()) file.delete()
-        val fileContent = mutableListOf<String>()
+    private fun compileSmali(): ByteArray {
+        smaliDir.mkdirs()
 
-        fileContent.add("<?xml version=\"1.0\" encoding=\"utf-8\"?>")
-        fileContent.add("<resources>")
-        fileContent.add("    <version>1</version>")
-        fileContent.add("    <category title=\"All Apps\" />")
+        val assets = AssetHandler(ctx)
+        assets.assetToFile(activityFile)
+        assets.assetToFile(buildFile)
+        assets.assetToFile(rFile)
+        assets.assetToFile(drawableFile)
 
-        for (app in apps) {
-            fileContent.add("    <item drawable=\"${app.getFileName()}\" />")
-        }
+        val opt = SmaliOptions()
+        opt.outputDexFile = ctx.cacheDir.resolve("out.dex").absolutePath
+        Smali.assemble(opt, smaliDir.absolutePath)
 
-        fileContent.add("</resources>")
-        file.appendText(fileContent.joinToString("\n"))
+        val dex = File(opt.outputDexFile)
+        val data = dex.readBytes()
+        dex.delete()
+
+        return data
     }
 
-    private fun writeAppFilter() {
-        val file = assetsDir.resolve("appfilter.xml")
-        if (file.exists()) file.delete()
-        val fileContent = mutableListOf<String>()
+    private fun getDex(): ByteArray {
+        val dexBuilder = DexBuilder(Opcodes.forApi(15))
 
-        fileContent.add("<?xml version=\"1.0\" encoding=\"utf-8\"?>")
-        fileContent.add("<resources>")
-        for (app in apps) {
-            fileContent.add("    <item component=\"ComponentInfo{${app.packageName}/${app.activityName}}\" drawable=\"${app.getFileName()}\" />")
-        }
+        //TODO : write dex instead of compiling Smali
 
-        fileContent.add("</resources>")
-        file.appendText(fileContent.joinToString("\n"))
-    }
+        val dataStore = MemoryDataStore()
+        dexBuilder.writeTo(dataStore)
 
-    private fun updateARSC() {
-        //TODO: make it better
-        val arscFile = baseDir.resolve("resources.arsc.json")
-        val json = JSONObject(arscFile.readText())
-
-        val pack = json.getJSONArray("packages")[0] as JSONObject
-        val spec = pack.getJSONArray("specs")[0] as JSONObject
-        val type = spec.getJSONArray("types")[0] as JSONObject
-        val entries = type.getJSONArray("entries")
-
-        var id = 1
-
-        for (app in apps) {
-            val entryObj = JSONObject()
-            entryObj.put("entry_name", app.getFileName())
-
-            val valueObj = JSONObject()
-            valueObj.put("value_type", "STRING")
-            valueObj.put("data", "res/${app.getFileName()}.png")
-
-            entryObj.put("value", valueObj)
-            entryObj.put("id", id++)
-
-            entries.put(entryObj)
-        }
-
-        arscFile.writeText(json.toString())
-    }
-
-    private fun decodeApk(src: File, dest: File) {
-        val apkModule = ApkModule.loadApkFile(src)
-        val decoder = ApkJsonDecoder(apkModule)
-        decoder.sanitizeFilePaths()
-        decoder.writeToDirectory(dest)
-    }
-
-    private fun buildApk(dest: File) {
-        val encoder = ApkJsonEncoder()
-        val loadedModule: ApkModule = encoder.scanDirectory(baseDir)
-
-        loadedModule.apkArchive.autoSortApkFiles()
-        loadedModule.writeApk(dest)
+        return dataStore.data
     }
 
     private fun signApk(file: File, outFile: File) {
@@ -154,10 +193,5 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         intent.putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending")
         ctx.startActivity(intent)
         //TODO: use PackageInstaller instead
-    }
-
-    private fun clearCache() {
-        apkDir.deleteRecursively()
-        apkDir.mkdir()
     }
 }
