@@ -4,11 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import androidx.core.content.FileProvider
-import com.android.tools.smali.dexlib2.Opcodes
-import com.android.tools.smali.dexlib2.writer.builder.DexBuilder
-import com.android.tools.smali.dexlib2.writer.io.MemoryDataStore
-import com.android.tools.smali.smali.Smali
-import com.android.tools.smali.smali.SmaliOptions
 import com.kaanelloed.iconeration.xml.AppFilterXml
 import com.kaanelloed.iconeration.xml.DrawableXml
 import com.reandroid.apk.ApkModule
@@ -25,11 +20,6 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
     private val keyStoreFile = ctx.cacheDir.resolve("iconeration.keystore")
-    private val smaliDir = ctx.cacheDir.resolve("smali")
-    private val activityFile = smaliDir.resolve("MainActivity.smali")
-    private val buildFile = smaliDir.resolve("BuildConfig.smali")
-    private val rFile = smaliDir.resolve("R.smali")
-    private val drawableFile = smaliDir.resolve("R\$drawable.smali")
 
     fun create(textMethod: (text: String) -> Unit) {
         val apkModule = ApkModule("base", APKArchive())
@@ -79,7 +69,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         createMainActivity(manifest)
 
         textMethod("Building apk ...")
-        apkModule.add(ByteInputSource(compileSmali(), "classes.dex"))
+        apkModule.add(ByteInputSource(ByteArray(0), "classes.dex"))
         apkModule.uncompressedFiles.addCommonExtensions()
         apkModule.writeApk(unsignedApk)
 
@@ -142,37 +132,6 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
             )
             attribute.valueAsString = categoryValue
         }
-    }
-
-    private fun compileSmali(): ByteArray {
-        smaliDir.mkdirs()
-
-        val assets = AssetHandler(ctx)
-        assets.assetToFile(activityFile)
-        assets.assetToFile(buildFile)
-        assets.assetToFile(rFile)
-        assets.assetToFile(drawableFile)
-
-        val opt = SmaliOptions()
-        opt.outputDexFile = ctx.cacheDir.resolve("out.dex").absolutePath
-        Smali.assemble(opt, smaliDir.absolutePath)
-
-        val dex = File(opt.outputDexFile)
-        val data = dex.readBytes()
-        dex.delete()
-
-        return data
-    }
-
-    private fun getDex(): ByteArray {
-        val dexBuilder = DexBuilder(Opcodes.forApi(15))
-
-        //TODO : write dex instead of compiling Smali
-
-        val dataStore = MemoryDataStore()
-        dexBuilder.writeTo(dataStore)
-
-        return dataStore.data
     }
 
     private fun signApk(file: File, outFile: File) {
