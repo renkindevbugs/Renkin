@@ -16,6 +16,7 @@
 
     <!-- Icon Generation -->
     <string-array name="gen_type_entries">
+        <item>Path Detection</item>
         <item>Edge Detection</item>
         <item>First Letter</item>
         <item>Two Letters</item>
@@ -23,6 +24,7 @@
     </string-array>
 
     <string-array name="gen_type_values">
+        <item>PATH_DETECTION</item>
         <item>EDGE_DETECTION</item>
         <item>ARCTICONS_FIRST_LETTER</item>
         <item>ARCTICONS_TWO_LETTERS</item>

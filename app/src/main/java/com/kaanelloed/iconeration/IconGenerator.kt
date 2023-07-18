@@ -17,7 +17,8 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         applyColorOnAvailable = PreferencesHelper(ctx).getApplyColorAvailableIcon()
 
         when (type) {
-            GenerationType.EdgeDetection -> generateColorQuantizationDetection()
+            GenerationType.PathDetection -> generateColorQuantizationDetection()
+            GenerationType.EdgeDetection -> generateCannyEdgeDetection()
             GenerationType.FirstLetter -> generateFirstLetter()
             GenerationType.TwoLetters -> generateTwoLetter()
             GenerationType.AppName -> generateAppName()
@@ -105,6 +106,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
     }
 
     enum class GenerationType {
+        PathDetection,
         EdgeDetection,
         FirstLetter,
         TwoLetters,

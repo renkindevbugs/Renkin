@@ -21,7 +21,7 @@
 
     <string name="settings_genType_key">genType</string>
     <string name="settings_genType_label">Generation type</string>
-    <string name="settings_genType_def_value">EDGE_DETECTION</string>
+    <string name="settings_genType_def_value">PATH_DETECTION</string>
 
     <string name="settings_icon_gen">Icon Generation</string>
     <string name="settings_iconColor_key">iconMainColor</string>
