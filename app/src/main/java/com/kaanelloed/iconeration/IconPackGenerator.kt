@@ -58,11 +58,8 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
             val icon = packageBlock.getOrCreate("", "drawable", app.getFileName())
             icon.setValueAsString(iconName)
-
-            val outStream = ByteArrayOutputStream()
-            app.genIcon.compress(Bitmap.CompressFormat.PNG, 100, outStream)
-            apkModule.add(ByteInputSource(outStream.toByteArray(), iconName))
-            outStream.close()
+            
+            apkModule.add(generatePng(app.genIcon, iconName))
 
             drawableXml.item(app.getFileName())
             appfilterXml.item(app.packageName, app.activityName, app.getFileName())
@@ -147,6 +144,15 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
             )
             attribute.valueAsString = categoryValue
         }
+    }
+
+    private fun generatePng(image: Bitmap, name: String): ByteInputSource {
+        val outStream = ByteArrayOutputStream()
+        image.compress(Bitmap.CompressFormat.PNG, 100, outStream)
+        val src = ByteInputSource(outStream.toByteArray(), name)
+        outStream.close()
+
+        return src
     }
 
     @SuppressWarnings("deprecation")
