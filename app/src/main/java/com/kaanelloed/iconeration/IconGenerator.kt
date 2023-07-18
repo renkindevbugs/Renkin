@@ -6,6 +6,9 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.VectorDrawable
 import androidx.core.graphics.drawable.toBitmap
 import com.caverock.androidsvg.SVG
 import jankovicsandras.imagetracerandroid.ImageTracerAndroid
@@ -31,7 +34,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
             if (app.source == PackageInfoStruct.PackageSource.Device) {
                 edgeDetector = CannyEdgeDetector()
                 edgeDetector.process(
-                    app.icon.toBitmap(),
+                    getAppIconBitmap(app),
                     color
                 )
                 app.genIcon = edgeDetector.edgesImage
@@ -45,7 +48,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
                 val options = HashMap<String, Float>()
                 //options["numberofcolors"] = 64f
                 options["colorsampling"] = 0f
-                val svgString = ImageTracerAndroid.imageToSVG(app.icon.toBitmap(), options, null)!!
+                val svgString = ImageTracerAndroid.imageToSVG(getAppIconBitmap(app), options, null)!!
 
                 val svg = SVG.getFromString(svgString)
 
@@ -57,6 +60,22 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
                 app.genIcon = bmp
             } else changeIconPackColor(app)
         }
+    }
+
+    private fun getAppIconBitmap(app: PackageInfoStruct): Bitmap {
+        var newIcon = app.icon
+
+        if (newIcon is AdaptiveIconDrawable) {
+            val adapIcon = newIcon as AdaptiveIconDrawable
+
+            if (adapIcon.foreground is BitmapDrawable || adapIcon.foreground is VectorDrawable)
+                newIcon = ForegroundIconDrawable(adapIcon.foreground)
+
+            //if (VERSION.SDK_INT >= VERSION_CODES.TIRAMISU && adapIcon.monochrome != null)
+            //    newIcon = ForegroundIconDrawable(adapIcon.monochrome!!)
+        }
+
+        return newIcon.toBitmap()
     }
 
     private fun generateFirstLetter() {

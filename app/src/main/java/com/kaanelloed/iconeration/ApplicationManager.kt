@@ -49,16 +49,6 @@ class ApplicationManager(private val ctx: Context) {
                     packInfo.icon = app.applicationInfo.loadIcon(pm)
                     packInfo.source = PackageInfoStruct.PackageSource.Device
 
-                    if (packInfo.icon is AdaptiveIconDrawable) {
-                        val adapIcon = packInfo.icon as AdaptiveIconDrawable
-
-                        if (adapIcon.foreground is BitmapDrawable || adapIcon.foreground is VectorDrawable)
-                            packInfo.icon = ForegroundIconDrawable(adapIcon.foreground)
-
-                        //if (VERSION.SDK_INT >= VERSION_CODES.TIRAMISU && adapIcon.monochrome != null)
-                        //    packInfo.icon = ForegroundIconDrawable(adapIcon.monochrome!!)
-                    }
-
                     if (!packInfoStructs.contains(packInfo))
                         packInfoStructs.add(packInfo)
                 }
