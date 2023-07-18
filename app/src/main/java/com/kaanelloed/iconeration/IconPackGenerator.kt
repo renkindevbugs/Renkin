@@ -3,7 +3,10 @@ package com.kaanelloed.iconeration
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.os.Build
 import androidx.core.content.FileProvider
+import app.revanced.manager.compose.util.signing.Signer
+import app.revanced.manager.compose.util.signing.SigningOptions
 import com.kaanelloed.iconeration.xml.AppFilterXml
 import com.kaanelloed.iconeration.xml.DrawableXml
 import com.reandroid.apk.ApkModule
@@ -19,9 +22,21 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
-    private val keyStoreFile = ctx.cacheDir.resolve("iconeration.keystore")
+    private val keyStoreFile = ctx.dataDir.resolve("iconeration.keystore")
+
+    private val iconPackName = "com.kaanelloed.iconerationiconpack"
+    private val newVersionCode = 1
 
     fun create(textMethod: (text: String) -> Unit) {
+        val currentVersionCode = getCurrentVersionCode()
+        if (currentVersionCode != 0L) {
+            if (!keyStoreFile.exists() || newVersionCode > currentVersionCode) {
+                textMethod("Old and new icon pack are not compatible")
+                textMethod("Please uninstall it and try again ...")
+                return
+            }
+        }
+
         val apkModule = ApkModule("base", APKArchive())
 
         val tableBlock = TableBlock()
@@ -32,7 +47,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
         textMethod("Initializing framework ...")
         val framework = apkModule.initializeAndroidFramework(28)
-        val packageBlock = tableBlock.newPackage(0x7f, "com.kaanelloed.iconerationiconpack")
+        val packageBlock = tableBlock.newPackage(0x7f, iconPackName)
 
         textMethod("Writing icons, drawable.xml and appfilter.xml ...")
         val drawableXml = DrawableXml()
@@ -57,8 +72,8 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         apkModule.add(ByteInputSource(drawableXml.readAndClose(), "assets/drawable.xml"))
         apkModule.add(ByteInputSource(appfilterXml.readAndClose(), "assets/appfilter.xml"))
 
-        manifest.packageName = "com.kaanelloed.iconerationiconpack"
-        manifest.versionCode = 1
+        manifest.packageName = iconPackName
+        manifest.versionCode = newVersionCode
         manifest.versionName = "0.1.0"
         manifest.compileSdkVersion = framework.versionCode
         manifest.compileSdkVersionCodename = framework.versionName
@@ -134,9 +149,23 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         }
     }
 
+    @SuppressWarnings("deprecation")
+    private fun getCurrentVersionCode(): Long {
+        val iconPack = ApplicationManager(ctx).getPackage(iconPackName)
+            ?: return 0L
+
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+            iconPack.longVersionCode
+        else
+            iconPack.versionCode.toLong()
+    }
+
     private fun signApk(file: File, outFile: File) {
         AssetHandler(ctx).assetToFile(keyStoreFile.name, keyStoreFile, false)
-        Signer("Iconeration", "s3cur3p@ssw0rd").signApk(file, outFile, keyStoreFile)
+
+        val opt = SigningOptions("Iconeration", "s3cur3p@ssw0rd", keyStoreFile.path)
+        val signer = Signer(opt)
+        signer.signApk(file, outFile)
     }
 
     private fun installApk(file: File) {
