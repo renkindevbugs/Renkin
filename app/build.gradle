@@ -44,7 +44,7 @@ dependencies {
     implementation 'androidx.navigation:navigation-ui-ktx:2.6.0'
     implementation 'androidx.preference:preference:1.2.0'
     implementation 'com.jaredrummler:colorpicker:1.1.0'
-    implementation 'io.github.reandroid:ARSCLib:1.2.0'
+    implementation 'io.github.reandroid:ARSCLib:1.2.3'
     implementation 'org.bouncycastle:bcpkix-jdk15on:1.70'
     implementation 'com.android.tools.build:apksig:8.0.2'
     implementation 'com.caverock:androidsvg:1.4'

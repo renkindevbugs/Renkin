@@ -10,8 +10,8 @@ import app.revanced.manager.compose.util.signing.SigningOptions
 import com.kaanelloed.iconeration.xml.AppFilterXml
 import com.kaanelloed.iconeration.xml.DrawableXml
 import com.reandroid.apk.ApkModule
-import com.reandroid.archive.APKArchive
 import com.reandroid.archive.ByteInputSource
+import com.reandroid.archive.ZipEntryMap
 import com.reandroid.arsc.chunk.TableBlock
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
 import com.reandroid.arsc.chunk.xml.ResXmlElement
@@ -37,7 +37,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
             }
         }
 
-        val apkModule = ApkModule("base", APKArchive())
+        val apkModule = ApkModule()
 
         val tableBlock = TableBlock()
         val manifest = AndroidManifestBlock()
@@ -167,8 +167,6 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     }
 
     private fun signApk(file: File, outFile: File) {
-        AssetHandler(ctx).assetToFile(keyStoreFile.name, keyStoreFile, false)
-
         val opt = SigningOptions("Iconeration", "s3cur3p@ssw0rd", keyStoreFile.path)
         val signer = Signer(opt)
         signer.signApk(file, outFile)
