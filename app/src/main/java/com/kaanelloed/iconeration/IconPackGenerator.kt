@@ -4,17 +4,22 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
+import android.util.Xml
 import androidx.core.content.FileProvider
 import app.revanced.manager.compose.util.signing.Signer
 import app.revanced.manager.compose.util.signing.SigningOptions
 import com.kaanelloed.iconeration.xml.AppFilterXml
 import com.kaanelloed.iconeration.xml.DrawableXml
+import com.kaanelloed.iconeration.xml.XmlMemoryFile
+import com.reandroid.apk.AndroidFrameworks
 import com.reandroid.apk.ApkModule
 import com.reandroid.archive.ByteInputSource
-import com.reandroid.archive.ZipEntryMap
 import com.reandroid.arsc.chunk.TableBlock
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
+import com.reandroid.arsc.chunk.xml.ResXmlDocument
 import com.reandroid.arsc.chunk.xml.ResXmlElement
+import org.xmlpull.v1.XmlPullParser
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -66,8 +71,17 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         }
 
         textMethod("Generating manifest ...")
-        apkModule.add(ByteInputSource(drawableXml.readAndClose(), "assets/drawable.xml"))
-        apkModule.add(ByteInputSource(appfilterXml.readAndClose(), "assets/appfilter.xml"))
+        apkModule.add(ByteInputSource(drawableXml.getBytes(), "assets/drawable.xml"))
+        apkModule.add(ByteInputSource(appfilterXml.getBytes(), "assets/appfilter.xml"))
+
+        val drawableRes = packageBlock.getOrCreate("", "xml", "drawable")
+        drawableRes.setValueAsString("res/drawable.xml")
+
+        val appfilterRes = packageBlock.getOrCreate("", "xml", "appfilter")
+        appfilterRes.setValueAsString("res/appfilter.xml")
+
+        apkModule.add(getXMLSource(drawableXml, "res/drawable.xml"))
+        apkModule.add(getXMLSource(appfilterXml, "res/appfilter.xml"))
 
         manifest.packageName = iconPackName
         manifest.versionCode = newVersionCode
@@ -91,6 +105,25 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         installApk(signedApk)
 
         textMethod("Done")
+    }
+
+    private fun getXMLSource(xmlFile: XmlMemoryFile, name: String): ByteInputSource {
+        return ByteInputSource(encodeXML(xmlFile.getBytes()), name)
+    }
+
+    private fun encodeXML(bytes: ByteArray): ByteArray {
+        val parser = Xml.newPullParser()
+        parser.setInput(ByteArrayInputStream(bytes), "UTF-8")
+
+        return encodeXML(parser)
+    }
+
+    private fun encodeXML(parser: XmlPullParser): ByteArray {
+        val doc = ResXmlDocument()
+        doc.packageBlock = AndroidFrameworks.getLatest().tableBlock.packages.next()
+        doc.parse(parser)
+
+        return doc.bytes
     }
 
     private fun createMainActivity(manifest: AndroidManifestBlock) {

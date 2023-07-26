@@ -8,21 +8,23 @@ abstract class XmlMemoryFile {
     private val stream = ByteArrayOutputStream()
     private val xmlSerializer = Xml.newSerializer()
 
+    private var bytes: ByteArray? = null
+
     protected open fun initialize() {
         xmlSerializer.setOutput(stream, encoding)
         xmlSerializer.startDocument(encoding, true)
     }
 
-    protected fun startTag(name: String) {
-        xmlSerializer.startTag(null, name)
+    protected fun startTag(name: String, namespace: String? = null) {
+        xmlSerializer.startTag(namespace, name)
     }
 
-    protected fun endTag(name: String) {
-        xmlSerializer.endTag(null, name)
+    protected fun endTag(name: String, namespace: String? = null) {
+        xmlSerializer.endTag(namespace, name)
     }
 
-    protected fun attribute(name: String, value: String) {
-        xmlSerializer.attribute(null, name, value)
+    protected fun attribute(name: String, value: String, namespace: String? = null) {
+        xmlSerializer.attribute(namespace, name, value)
     }
 
     protected fun text(text: String) {
@@ -31,10 +33,18 @@ abstract class XmlMemoryFile {
 
     open fun readAndClose():ByteArray {
         xmlSerializer.endDocument()
-        val bytes = stream.toByteArray()
+        bytes = stream.toByteArray()
         stream.close()
 
-        return bytes
+        return bytes!!
+    }
+
+    fun getBytes(): ByteArray {
+        if (bytes == null) {
+            readAndClose()
+        }
+
+        return bytes!!
     }
 
     fun close() {
