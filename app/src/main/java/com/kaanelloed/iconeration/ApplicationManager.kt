@@ -10,10 +10,7 @@ import android.content.pm.PackageManager
 import android.content.pm.PackageManager.ResolveInfoFlags
 import android.content.pm.ResolveInfo
 import android.content.res.Resources
-import android.graphics.drawable.AdaptiveIconDrawable
-import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.VectorDrawable
 import android.os.Build.VERSION
 import android.os.Build.VERSION_CODES
 import android.os.UserManager
@@ -47,6 +44,7 @@ class ApplicationManager(private val ctx: Context) {
                     packInfo.packageName = app.componentName.packageName
                     packInfo.activityName = app.componentName.className
                     packInfo.icon = app.applicationInfo.loadIcon(pm)
+                    packInfo.iconID = app.applicationInfo.icon
                     packInfo.source = PackageInfoStruct.PackageSource.Device
 
                     if (!packInfoStructs.contains(packInfo))
@@ -133,6 +131,7 @@ class ApplicationManager(private val ctx: Context) {
             packInfo.packageName = pack.activityInfo.packageName
             packInfo.activityName = pack.activityInfo.name
             packInfo.icon = pack.activityInfo.applicationInfo.loadIcon(pm)
+            packInfo.iconID = pack.activityInfo.applicationInfo.icon
             packInfo.source = PackageInfoStruct.PackageSource.Device
 
             packInfoStructs.add(packInfo)
@@ -259,6 +258,11 @@ class ApplicationManager(private val ctx: Context) {
         } catch (e: PackageManager.NameNotFoundException) {
             null
         }
+    }
+
+    fun getPackageResourceXml(packageName: String, resourceId: Int): XmlPullParser? {
+        val res = pm.getResourcesForApplication(packageName)
+        return res.getXml(resourceId)
     }
 
     inner class ComponentInfo {

@@ -9,6 +9,7 @@ class PackageInfoStruct: Comparable<PackageInfoStruct> {
     lateinit var packageName: String
     lateinit var activityName: String
     lateinit var icon: Drawable
+    var iconID: Int = 0
     lateinit var genIcon: Bitmap
     lateinit var source: PackageSource
 
