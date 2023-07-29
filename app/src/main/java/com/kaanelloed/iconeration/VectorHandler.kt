@@ -74,7 +74,7 @@ class VectorHandler {
         return parser
     }
 
-    fun toXML(): ByteArray {
+    fun toXMLFile(): VectorXml {
         val xml = VectorXml()
 
         xml.vectorSize(vector.width, vector.height, vector.viewportWidth, vector.viewportHeight)
@@ -86,11 +86,16 @@ class VectorHandler {
             }
             xml.endGroup()
         }
+
         for (path in vector.paths) {
             xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillToHex(), path.strokeToHex(), path.fillType, path.strokeLineCap)
         }
 
-        return xml.readAndClose()
+        return xml
+    }
+
+    fun toXML(): ByteArray {
+        return toXMLFile().readAndClose()
     }
 
     fun toXMLParser(): XmlPullParser {
@@ -264,8 +269,20 @@ class VectorHandler {
 
                 var newValue = value
 
-                if (newValue.length < 9) {
-                    newValue += "0".repeat(9 - newValue.length)
+                if (newValue.length == 2) {
+                    newValue = "#" + newValue[1].toString().repeat(8)
+                }
+
+                if (newValue.length == 4) {
+                    newValue = "#FF" + newValue[1] + newValue[1] + newValue[2] + newValue[2] + newValue[3] + newValue[3]
+                }
+
+                if (newValue.length == 5) {
+                    newValue = "#" + newValue[1] + newValue[1] + newValue[2] + newValue[2] + newValue[3] + newValue[3] + newValue[4] + newValue[4]
+                }
+
+                if (newValue.length < 7) {
+                    newValue += "0".repeat(7 - newValue.length)
                 }
 
                 return Color.valueOf(Color.parseColor(newValue))
@@ -281,7 +298,11 @@ class VectorHandler {
         }
 
         private fun colorToHex(color: Color): String {
-            return "#" + Integer.toHexString(color.toArgb());
+            var hex = "#" + Integer.toHexString(color.toArgb())
+            if (hex.length == 2)
+                hex = "#" + hex[1].toString().repeat(8)
+
+            return hex
         }
     }
 

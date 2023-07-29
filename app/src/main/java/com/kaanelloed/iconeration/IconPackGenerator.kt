@@ -4,22 +4,22 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.os.Build
-import android.util.Xml
 import androidx.core.content.FileProvider
 import app.revanced.manager.compose.util.signing.Signer
 import app.revanced.manager.compose.util.signing.SigningOptions
+import com.kaanelloed.iconeration.xml.AdaptiveIconXml
 import com.kaanelloed.iconeration.xml.AppFilterXml
 import com.kaanelloed.iconeration.xml.DrawableXml
+import com.kaanelloed.iconeration.xml.XMLEncoder
 import com.kaanelloed.iconeration.xml.XmlMemoryFile
 import com.reandroid.apk.AndroidFrameworks
 import com.reandroid.apk.ApkModule
+import com.reandroid.apk.FrameworkApk
 import com.reandroid.archive.ByteInputSource
+import com.reandroid.arsc.chunk.PackageBlock
 import com.reandroid.arsc.chunk.TableBlock
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
-import com.reandroid.arsc.chunk.xml.ResXmlDocument
 import com.reandroid.arsc.chunk.xml.ResXmlElement
-import org.xmlpull.v1.XmlPullParser
-import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -43,7 +43,6 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         }
 
         val apkModule = ApkModule()
-
         val tableBlock = TableBlock()
         val manifest = AndroidManifestBlock()
 
@@ -54,35 +53,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         val framework = apkModule.initializeAndroidFramework(28)
         val packageBlock = tableBlock.newPackage(0x7f, iconPackName)
 
-        textMethod("Writing icons, drawable.xml and appfilter.xml ...")
-        val drawableXml = DrawableXml()
-        val appfilterXml = AppFilterXml()
-
-        for (app in apps) {
-            val iconName = "res/${app.getFileName()}.png"
-
-            val icon = packageBlock.getOrCreate("", "drawable", app.getFileName())
-            icon.setValueAsString(iconName)
-            
-            apkModule.add(generatePng(app.genIcon, iconName))
-
-            drawableXml.item(app.getFileName())
-            appfilterXml.item(app.packageName, app.activityName, app.getFileName())
-        }
-
         textMethod("Generating manifest ...")
-        apkModule.add(ByteInputSource(drawableXml.getBytes(), "assets/drawable.xml"))
-        apkModule.add(ByteInputSource(appfilterXml.getBytes(), "assets/appfilter.xml"))
-
-        val drawableRes = packageBlock.getOrCreate("", "xml", "drawable")
-        drawableRes.setValueAsString("res/drawable.xml")
-
-        val appfilterRes = packageBlock.getOrCreate("", "xml", "appfilter")
-        appfilterRes.setValueAsString("res/appfilter.xml")
-
-        apkModule.add(getXMLSource(drawableXml, "res/drawable.xml"))
-        apkModule.add(getXMLSource(appfilterXml, "res/appfilter.xml"))
-
         manifest.packageName = iconPackName
         manifest.versionCode = newVersionCode
         manifest.versionName = "0.1.0"
@@ -93,6 +64,32 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         manifest.setApplicationLabel("Iconeration Icon Pack")
 
         createMainActivity(manifest)
+
+        textMethod("Writing icons, drawable.xml and appfilter.xml ...")
+        val drawableXml = DrawableXml()
+        val appfilterXml = AppFilterXml()
+
+        for (app in apps) {
+            val appFileName = app.getFileName()
+            val adaptive = AdaptiveIconXml()
+            adaptive.foreground(appFileName)
+
+            if (app.exportType == PackageInfoStruct.ExportType.XML)
+                createXmlDrawableResource(apkModule, packageBlock, app.vector.toXMLFile(), appFileName + "_foreground")
+            else
+                createPngResource(apkModule, packageBlock, app.genIcon, appFileName + "_foreground")
+
+            createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
+
+            drawableXml.item(appFileName)
+            appfilterXml.item(app.packageName, app.activityName, appFileName)
+        }
+
+        apkModule.add(ByteInputSource(drawableXml.getBytes(), "assets/drawable.xml"))
+        apkModule.add(ByteInputSource(appfilterXml.getBytes(), "assets/appfilter.xml"))
+
+        createXmlResource(apkModule, packageBlock, drawableXml, "drawable")
+        createXmlResource(apkModule, packageBlock, appfilterXml, "appfilter")
 
         textMethod("Building apk ...")
         apkModule.add(ByteInputSource(ByteArray(0), "classes.dex"))
@@ -105,25 +102,6 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         installApk(signedApk)
 
         textMethod("Done")
-    }
-
-    private fun getXMLSource(xmlFile: XmlMemoryFile, name: String): ByteInputSource {
-        return ByteInputSource(encodeXML(xmlFile.getBytes()), name)
-    }
-
-    private fun encodeXML(bytes: ByteArray): ByteArray {
-        val parser = Xml.newPullParser()
-        parser.setInput(ByteArrayInputStream(bytes), "UTF-8")
-
-        return encodeXML(parser)
-    }
-
-    private fun encodeXML(parser: XmlPullParser): ByteArray {
-        val doc = ResXmlDocument()
-        doc.packageBlock = AndroidFrameworks.getLatest().tableBlock.packages.next()
-        doc.parse(parser)
-
-        return doc.bytes
     }
 
     private fun createMainActivity(manifest: AndroidManifestBlock) {
@@ -177,6 +155,35 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
             )
             attribute.valueAsString = categoryValue
         }
+    }
+
+    private fun createXmlResource(apkModule: ApkModule, packageBlock: PackageBlock, xmlFile: XmlMemoryFile, name: String) {
+        val resPath = "res/${name}.xml"
+        val xmlEncoder = XMLEncoder(packageBlock)
+
+        val res = packageBlock.getOrCreate("", "xml", name)
+        res.setValueAsString(resPath)
+
+        apkModule.add(xmlEncoder.encodeToSource(xmlFile, resPath))
+    }
+
+    private fun createXmlDrawableResource(apkModule: ApkModule, packageBlock: PackageBlock, xmlFile: XmlMemoryFile, name: String) {
+        val resPath = "res/${name}.xml"
+        val xmlEncoder = XMLEncoder(packageBlock)
+
+        val res = packageBlock.getOrCreate("", "drawable", name)
+        res.setValueAsString(resPath)
+
+        apkModule.add(xmlEncoder.encodeToSource(xmlFile, resPath))
+    }
+
+    private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String) {
+        val resPath = "res/${name}.png"
+
+        val icon = packageBlock.getOrCreate("", "drawable", name)
+        icon.setValueAsString(resPath)
+
+        apkModule.add(generatePng(bitmap, resPath))
     }
 
     private fun generatePng(image: Bitmap, name: String): ByteInputSource {

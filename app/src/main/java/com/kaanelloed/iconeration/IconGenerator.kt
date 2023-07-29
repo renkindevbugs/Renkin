@@ -53,6 +53,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
             if (app.source == PackageInfoStruct.PackageSource.Device) {
                 if (isVectorDrawable(app.icon)) {
                     generatePathFromXML(appMan, app)
+                    app.exportType = PackageInfoStruct.ExportType.XML
                 } else {
                     generateColorQuantizationDetection(app)
                 }
@@ -98,6 +99,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         svg.setDocumentViewBox(offset, offset, offset * 4, offset * 4)
 
         app.genIcon = SVGDrawable(svg).toBitmap(198, 198)
+        app.vector = vec
     }
 
     private fun generateColorQuantizationDetection(app: PackageInfoStruct) {

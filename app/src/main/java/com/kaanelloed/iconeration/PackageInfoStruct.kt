@@ -12,6 +12,8 @@ class PackageInfoStruct: Comparable<PackageInfoStruct> {
     var iconID: Int = 0
     lateinit var genIcon: Bitmap
     lateinit var source: PackageSource
+    var exportType: ExportType = ExportType.PNG
+    lateinit var vector: VectorHandler
 
     override fun equals(other: Any?): Boolean {
         if (other is PackageInfoStruct) {
@@ -40,5 +42,9 @@ class PackageInfoStruct: Comparable<PackageInfoStruct> {
 
     enum class PackageSource {
         Device, IconPack
+    }
+
+    enum class ExportType {
+        PNG, XML
     }
 }

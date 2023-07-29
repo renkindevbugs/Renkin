@@ -9,6 +9,7 @@ class VectorXml: XmlMemoryFile() {
 
     override fun initialize() {
         super.initialize()
+        namespace("android", androidNamespace)
         startTag("vector")
     }
 
