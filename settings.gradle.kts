@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "Iconeration"
-include ':app'
+include(":app")
