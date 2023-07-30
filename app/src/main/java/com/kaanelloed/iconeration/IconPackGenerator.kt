@@ -12,14 +12,13 @@ import com.kaanelloed.iconeration.xml.AppFilterXml
 import com.kaanelloed.iconeration.xml.DrawableXml
 import com.kaanelloed.iconeration.xml.XMLEncoder
 import com.kaanelloed.iconeration.xml.XmlMemoryFile
-import com.reandroid.apk.AndroidFrameworks
 import com.reandroid.apk.ApkModule
-import com.reandroid.apk.FrameworkApk
 import com.reandroid.archive.ByteInputSource
 import com.reandroid.arsc.chunk.PackageBlock
 import com.reandroid.arsc.chunk.TableBlock
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
 import com.reandroid.arsc.chunk.xml.ResXmlElement
+import com.reandroid.arsc.coder.ValueCoder
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -50,7 +49,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         apkModule.setManifest(manifest)
 
         textMethod("Initializing framework ...")
-        val framework = apkModule.initializeAndroidFramework(28)
+        val framework = apkModule.initializeAndroidFramework(33)
         val packageBlock = tableBlock.newPackage(0x7f, iconPackName)
 
         textMethod("Generating manifest ...")
@@ -65,6 +64,12 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
         createMainActivity(manifest)
 
+        createColorResource(packageBlock, "icon_color", "#FFFFFFFF")
+        createColorResource(packageBlock, "icon_background_color", "#FF000000")
+
+        createRefColor31Resource(packageBlock, "icon_color", "@android:color/system_accent1_100")
+        createRefColor31Resource(packageBlock, "icon_background_color", "@android:color/system_accent1_800")
+
         textMethod("Writing icons, drawable.xml and appfilter.xml ...")
         val drawableXml = DrawableXml()
         val appfilterXml = AppFilterXml()
@@ -73,6 +78,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
             val appFileName = app.getFileName()
             val adaptive = AdaptiveIconXml()
             adaptive.foreground(appFileName)
+            adaptive.background("@color/icon_background_color")
 
             if (app.exportType == PackageInfoStruct.ExportType.XML)
                 createXmlDrawableResource(apkModule, packageBlock, app.vector.toXMLFile(), appFileName + "_foreground")
@@ -193,6 +199,18 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         outStream.close()
 
         return src
+    }
+
+    private fun createColorResource(packageBlock: PackageBlock, name: String, color: String) {
+        val res = packageBlock.getOrCreate("", "color", name)
+        val coder = ValueCoder.encode(color)
+        res.setValueAsRaw(coder.valueType, coder.value)
+    }
+
+    private fun createRefColor31Resource(packageBlock: PackageBlock, name: String, reference: String) {
+        val res = packageBlock.getOrCreate("v31", "color", name)
+        val coder = ValueCoder.encodeReference(packageBlock, reference)
+        res.setValueAsRaw(coder.valueType, coder.value)
     }
 
     @SuppressWarnings("deprecation")

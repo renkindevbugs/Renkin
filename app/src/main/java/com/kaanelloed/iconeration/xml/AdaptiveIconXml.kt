@@ -19,6 +19,12 @@ class AdaptiveIconXml: XmlMemoryFile() {
         endTag("foreground")
     }
 
+    fun background(value: String) {
+        startTag("background")
+        attribute("drawable", value, androidNamespace)
+        endTag("background")
+    }
+
     override fun readAndClose(): ByteArray {
         endTag("adaptive-icon")
         return super.readAndClose()

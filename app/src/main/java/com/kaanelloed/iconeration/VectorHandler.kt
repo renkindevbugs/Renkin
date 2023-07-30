@@ -82,13 +82,13 @@ class VectorHandler {
         for (grp in vector.groups) {
             xml.startGroup(grp.scaleX, grp.scaleY, grp.translateX, grp.translateY)
             for (path in grp.paths) {
-                xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillToHex(), path.strokeToHex(), path.fillType, path.strokeLineCap)
+                xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillToHex(), "@color/icon_color", path.fillType, path.strokeLineCap)
             }
             xml.endGroup()
         }
 
         for (path in vector.paths) {
-            xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillToHex(), path.strokeToHex(), path.fillType, path.strokeLineCap)
+            xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillToHex(), "@color/icon_color", path.fillType, path.strokeLineCap)
         }
 
         return xml
