@@ -42,7 +42,7 @@ dependencies {
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
     implementation("androidx.navigation:navigation-fragment-ktx:2.6.0")
     implementation("androidx.navigation:navigation-ui-ktx:2.6.0")
-    implementation("androidx.preference:preference:1.2.0")
+    implementation("androidx.preference:preference:1.2.1")
     implementation("com.jaredrummler:colorpicker:1.1.0")
     implementation("io.github.reandroid:ARSCLib:1.2.3")
     implementation("org.bouncycastle:bcpkix-jdk15on:1.70")

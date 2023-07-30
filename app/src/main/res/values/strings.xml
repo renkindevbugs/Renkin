@@ -34,4 +34,12 @@
     <string name="settings_applyColorAvailable_key">applyColorAvailable</string>
     <string name="settings_applyColorAvailable_label">Apply color on the available icons</string>
     <string name="settings_applyColorAvailable_def_value">false</string>
+
+    <string name="settings_useMonochrome_key">useMonochrome</string>
+    <string name="settings_useMonochrome_label">Use monochrome icon if available</string>
+    <string name="settings_useMonochrome_def_value">false</string>
+
+    <string name="settings_exportThemed_key">exportThemed</string>
+    <string name="settings_exportThemed_label">Export themed icons if possible</string>
+    <string name="settings_exportThemed_def_value">false</string>
 </resources>

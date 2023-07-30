@@ -32,6 +32,8 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     private val newVersionCode = 1
 
     fun create(textMethod: (text: String) -> Unit) {
+        val themed = PreferencesHelper(ctx).getExportThemed()
+
         val currentVersionCode = getCurrentVersionCode()
         if (currentVersionCode != 0L) {
             if (!keyStoreFile.exists() || newVersionCode > currentVersionCode) {
@@ -76,16 +78,21 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
         for (app in apps) {
             val appFileName = app.getFileName()
-            val adaptive = AdaptiveIconXml()
-            adaptive.foreground(appFileName)
-            adaptive.background("@color/icon_background_color")
 
-            if (app.exportType == PackageInfoStruct.ExportType.XML)
-                createXmlDrawableResource(apkModule, packageBlock, app.vector.toXMLFile(), appFileName + "_foreground")
+            if (themed) {
+                val adaptive = AdaptiveIconXml()
+                adaptive.foreground(appFileName)
+                adaptive.background("@color/icon_background_color")
+
+                if (app.exportType == PackageInfoStruct.ExportType.XML)
+                    createXmlDrawableResource(apkModule, packageBlock, app.vector.toXMLFile(), appFileName + "_foreground")
+                else
+                    createPngResource(apkModule, packageBlock, app.genIcon, appFileName + "_foreground")
+
+                createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
+            }
             else
-                createPngResource(apkModule, packageBlock, app.genIcon, appFileName + "_foreground")
-
-            createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
+                createPngResource(apkModule, packageBlock, app.genIcon, appFileName)
 
             drawableXml.item(appFileName)
             appfilterXml.item(app.packageName, app.activityName, appFileName)

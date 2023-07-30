@@ -19,6 +19,7 @@ import org.xmlpull.v1.XmlPullParser
 
 class IconGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>, private val color: Int) {
     private var applyColorOnAvailable = false
+    private val useMonochrome = PreferencesHelper(ctx).getUseMonochrome()
 
     fun generateIcons(type: GenerationType) {
         applyColorOnAvailable = PreferencesHelper(ctx).getApplyColorAvailableIcon()
@@ -67,7 +68,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         if (app.icon is AdaptiveIconDrawable) {
             val adaptiveIcon = app.icon as AdaptiveIconDrawable
 
-            parser = if (monochromeExits(adaptiveIcon))
+            parser = if (monochromeExits(adaptiveIcon) && useMonochrome)
                 appMan.getPackageResourceXml(app.packageName, getMonochromeXMLID(parser))!!
             else
                 appMan.getPackageResourceXml(app.packageName, getForegroundXMLID(parser))!!
@@ -140,7 +141,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
             if (image.foreground is VectorDrawable)
                 return true
 
-            return monochromeExits(image)
+            return monochromeExits(image) && useMonochrome
         }
 
         return false

@@ -34,5 +34,15 @@
             app:key="@string/settings_applyColorAvailable_key"
             app:title="@string/settings_applyColorAvailable_label"
             app:dependency="@string/settings_includeAvailable_key" />
+
+        <SwitchPreference
+            app:defaultValue="@string/settings_useMonochrome_def_value"
+            app:key="@string/settings_useMonochrome_key"
+            app:title="@string/settings_useMonochrome_label" />
+
+        <SwitchPreference
+            app:defaultValue="@string/settings_exportThemed_def_value"
+            app:key="@string/settings_exportThemed_key"
+            app:title="@string/settings_exportThemed_label" />
     </PreferenceCategory>
 </PreferenceScreen>

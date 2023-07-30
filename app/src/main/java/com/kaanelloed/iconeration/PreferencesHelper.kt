@@ -78,4 +78,18 @@ class PreferencesHelper(private val ctx: Context) {
             ctx.getString(R.string.settings_applyColorAvailable_def_value).toBoolean()
         )
     }
+
+    fun getUseMonochrome(): Boolean {
+        return prefs.getBoolean(
+            ctx.getString(R.string.settings_useMonochrome_key),
+            ctx.getString(R.string.settings_useMonochrome_def_value).toBoolean()
+        )
+    }
+
+    fun getExportThemed(): Boolean {
+        return prefs.getBoolean(
+            ctx.getString(R.string.settings_exportThemed_key),
+            ctx.getString(R.string.settings_exportThemed_def_value).toBoolean()
+        )
+    }
 }
