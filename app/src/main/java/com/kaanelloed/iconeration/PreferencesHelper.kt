@@ -57,6 +57,7 @@ class PreferencesHelper(private val ctx: Context) {
 
         return when (prefValue) {
             "PATH_DETECTION" -> IconGenerator.GenerationType.PathDetection
+            "PATH_DETECTION_VECTOR" -> IconGenerator.GenerationType.PathDetectionVector
             "EDGE_DETECTION" -> IconGenerator.GenerationType.EdgeDetection
             "ARCTICONS_FIRST_LETTER" -> IconGenerator.GenerationType.FirstLetter
             "ARCTICONS_TWO_LETTERS" -> IconGenerator.GenerationType.TwoLetters

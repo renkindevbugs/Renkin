@@ -25,7 +25,8 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         applyColorOnAvailable = PreferencesHelper(ctx).getApplyColorAvailableIcon()
 
         when (type) {
-            GenerationType.PathDetection -> generatePathDetection()
+            GenerationType.PathDetection -> generatePathDetection(false)
+            GenerationType.PathDetectionVector -> generatePathDetection(true)
             GenerationType.EdgeDetection -> generateCannyEdgeDetection()
             GenerationType.FirstLetter -> generateFirstLetter()
             GenerationType.TwoLetters -> generateTwoLetter()
@@ -47,12 +48,12 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         }
     }
 
-    private fun generatePathDetection() {
+    private fun generatePathDetection(includeVector: Boolean) {
         val appMan = ApplicationManager(ctx)
 
         for (app in apps) {
             if (app.source == PackageInfoStruct.PackageSource.Device) {
-                if (isVectorDrawable(app.icon)) {
+                if (isVectorDrawable(app.icon) && includeVector) {
                     generatePathFromXML(appMan, app)
                     app.exportType = PackageInfoStruct.ExportType.XML
                 } else {
@@ -240,6 +241,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
 
     enum class GenerationType {
         PathDetection,
+        PathDetectionVector,
         EdgeDetection,
         FirstLetter,
         TwoLetters,
