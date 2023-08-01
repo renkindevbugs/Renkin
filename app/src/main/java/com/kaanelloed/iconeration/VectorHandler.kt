@@ -48,17 +48,41 @@ class VectorHandler {
         }
     }
 
+    fun parseSvg(svg: String) {
+        val parser = getPullParser()
+        parser.setInput(StringReader(svg))
+
+        parseSvg(parser)
+    }
+
+    fun parseSvg(parser: XmlPullParser) {
+        while (parser.eventType != XmlPullParser.END_DOCUMENT) {
+            if (parser.eventType == XmlPullParser.START_TAG) {
+                if (parser.name == "svg") {
+                    vector = Vector.parse(parser)
+                }
+
+                if (parser.name == "path") {
+                    val path = Path.parseSvg(parser)
+                    vector.paths.add(path)
+                }
+            }
+
+            parser.next();
+        }
+    }
+
     fun toSVG(): String {
         var svg = "<svg viewBox=\"0 0 ${vector.viewportWidth} ${vector.viewportHeight}\">"
         for (grp in vector.groups) {
             svg += "<g transform=\"translate(${grp.translateX} ${grp.translateY}) scale(${grp.scaleX} ${grp.scaleY})\">"
             for (path in grp.paths) {
-                svg += "<path fill=\"${path.fillToHex()}\" stroke=\"${path.strokeToHex()}\" stroke-width=\"${path.strokeWidth}\" d=\"${path.pathDataRaw}\"/>"
+                svg += "<path fill=\"${path.fillColor}\" stroke=\"${path.strokeColor}\" stroke-width=\"${path.strokeWidth}\" d=\"${path.pathDataRaw}\" />"
             }
             svg += "</g>"
         }
         for (path in vector.paths) {
-            svg += "<path fill=\"${path.fillToHex()}\" stroke=\"${path.strokeToHex()}\" stroke-width=\"${path.strokeWidth}\" d=\"${path.pathDataRaw}\"/>"
+            svg += "<path fill=\"${path.fillColor}\" stroke=\"${path.strokeColor}\" stroke-width=\"${path.strokeWidth}\" d=\"${path.pathDataRaw}\" />"
         }
 
         svg += "</svg>"
@@ -82,13 +106,13 @@ class VectorHandler {
         for (grp in vector.groups) {
             xml.startGroup(grp.scaleX, grp.scaleY, grp.translateX, grp.translateY)
             for (path in grp.paths) {
-                xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillToHex(), "@color/icon_color", path.fillType, path.strokeLineCap)
+                xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillColor.toString(), "@color/icon_color", path.fillType, path.strokeLineCap)
             }
             xml.endGroup()
         }
 
         for (path in vector.paths) {
-            xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillToHex(), "@color/icon_color", path.fillType, path.strokeLineCap)
+            xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillColor.toString(), "@color/icon_color", path.fillType, path.strokeLineCap)
         }
 
         return xml
@@ -203,8 +227,8 @@ class VectorHandler {
 
     class Path(var name: String
         , var pathDataRaw: String
-        , var fillColor: Color
-        , var strokeColor: Color
+        , var fillColor: ColorResource
+        , var strokeColor: ColorResource
         , var strokeWidth: Float
         , var strokeAlpha: Float
         , var fillAlpha: Float
@@ -220,13 +244,13 @@ class VectorHandler {
             fun parse(parser: XmlPullParser): Path {
                 var name = ""
                 var pathData = ""
-                var fillColor = Color()
-                var strokeColor = Color()
+                var fillColor = ColorResource()
+                var strokeColor = ColorResource()
                 var strokeWidth = 0F
                 var strokeAlpha = 1F
                 var fillAlpha = 1F
                 var trimPathStart = 0F
-                var trimPathEnd = 0F
+                var trimPathEnd = 1F
                 var trimPathOffset = 0F
                 var strokeLineCap = "butt"
                 var strokeLineJoin = "miter"
@@ -242,8 +266,8 @@ class VectorHandler {
                     when (attrName) {
                         "name" -> name = attrValue
                         "pathData" -> pathData = attrValue
-                        "fillColor" -> fillColor = getColor(attrValue)
-                        "strokeColor" -> strokeColor = getColor(attrValue)
+                        "fillColor" -> fillColor.parse(attrValue)
+                        "strokeColor" -> strokeColor.parse(attrValue)
                         "strokeWidth" -> strokeWidth = attrValue.toFloat()
                         "fillAlpha" -> fillAlpha = attrValue.toFloat()
                         "strokeAlpha" -> strokeAlpha = attrValue.toFloat()
@@ -260,7 +284,52 @@ class VectorHandler {
                 return Path(name, pathData, fillColor, strokeColor, strokeWidth, strokeAlpha, fillAlpha, trimPathStart, trimPathEnd, trimPathOffset, strokeLineCap, strokeLineJoin, strokeMiterLimit, fillType)
             }
 
+            fun parseSvg(parser: XmlPullParser): Path {
+                var name = ""
+                var pathData = ""
+                var fillColor = ColorResource()
+                var strokeColor = ColorResource()
+                var strokeWidth = 0F
+                var strokeAlpha = 1F
+                var fillAlpha = 1F
+                var trimPathStart = 0F
+                var trimPathEnd = 1F
+                var trimPathOffset = 0F
+                var strokeLineCap = "butt"
+                var strokeLineJoin = "miter"
+                var strokeMiterLimit = 4F
+                var fillType = "nonZero"
+
+
+                for (i in 0 until parser.attributeCount) {
+                    val namespace = parser.getAttributeNamespace(i)
+                    val attrName = parser.getAttributeName(i)
+                    val attrValue = parser.getAttributeValue(i)
+
+                    when (attrName) {
+                        "d" -> pathData = attrValue
+                        "fill" -> fillColor.parse(attrValue)
+                        "stroke" -> strokeColor.parse(attrValue)
+                        "stroke-width" -> strokeWidth = attrValue.toFloat()
+                        "opacity" -> fillAlpha = attrValue.toFloat()
+                    }
+                }
+
+                return Path(name, pathData, fillColor, strokeColor, strokeWidth, strokeAlpha, fillAlpha, trimPathStart, trimPathEnd, trimPathOffset, strokeLineCap, strokeLineJoin, strokeMiterLimit, fillType)
+            }
+
             private fun getColor(value: String): Color {
+                if (value == "none")
+                    return Color.valueOf(Color.TRANSPARENT)
+
+                if (value.startsWith("rgb")) {
+                    val red = value.substring(4, 7).toFloat()
+                    val green = value.substring(8, 11).toFloat()
+                    val blue = value.substring(12, 15).toFloat()
+
+                    return Color.valueOf(red, green, blue)
+                }
+
                 if (value.startsWith("@")) {
                     //TODO: Handle color resource id and gradient
 
@@ -287,22 +356,6 @@ class VectorHandler {
 
                 return Color.valueOf(Color.parseColor(newValue))
             }
-        }
-
-        fun fillToHex(): String {
-            return colorToHex(fillColor)
-        }
-
-        fun strokeToHex(): String {
-            return colorToHex(strokeColor)
-        }
-
-        private fun colorToHex(color: Color): String {
-            var hex = "#" + Integer.toHexString(color.toArgb())
-            if (hex.length == 2)
-                hex = "#" + hex[1].toString().repeat(8)
-
-            return hex
         }
     }
 

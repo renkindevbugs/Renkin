@@ -53,9 +53,10 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
 
         for (app in apps) {
             if (app.source == PackageInfoStruct.PackageSource.Device) {
+                app.exportType = PackageInfoStruct.ExportType.XML
+
                 if (isVectorDrawable(app.icon) && includeVector) {
                     generatePathFromXML(appMan, app)
-                    app.exportType = PackageInfoStruct.ExportType.XML
                 } else {
                     generateColorQuantizationDetection(app)
                 }
@@ -80,18 +81,24 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
 
         val stroke = vec.vector.viewportHeight / 108 //1F at 108
 
+        val fillColor = ColorResource()
+        fillColor.fromInt(Color.TRANSPARENT)
+
+        val strokeColor = ColorResource()
+        strokeColor.fromInt(color)
+
         for (grp in vec.vector.groups) {
             for (path in grp.paths) {
                 path.strokeWidth = stroke
-                path.fillColor = Color.valueOf(Color.TRANSPARENT)
-                path.strokeColor = Color.valueOf(color)
+                path.fillColor = fillColor
+                path.strokeColor = strokeColor
             }
         }
 
         for (path in vec.vector.paths) {
             path.strokeWidth = stroke
-            path.fillColor = Color.valueOf(Color.TRANSPARENT)
-            path.strokeColor = Color.valueOf(color)
+            path.fillColor = fillColor
+            path.strokeColor = strokeColor
         }
 
         val svg = SVG.getFromString(vec.toSVG())
@@ -110,7 +117,28 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         options["colorsampling"] = 0f
         val svgString = ImageTracerAndroid.imageToSVG(getAppIconBitmap(app), options, null)!!
 
-        val svg = SVG.getFromString(svgString)
+        val vector = VectorHandler()
+        vector.parseSvg(svgString)
+
+        vector.vector.viewportWidth = app.icon.intrinsicWidth.toFloat()
+        vector.vector.viewportHeight = app.icon.intrinsicHeight.toFloat()
+
+        vector.vector.width += "dp"
+        vector.vector.height += "dp"
+
+        val fillColor = ColorResource()
+        fillColor.fromInt(Color.TRANSPARENT)
+
+        val strokeColor = ColorResource()
+        strokeColor.fromInt(color)
+
+        for (path in vector.vector.paths) {
+            path.strokeWidth = 2F
+            path.fillColor = fillColor
+            path.strokeColor = strokeColor
+        }
+
+        val svg = SVG.getFromString(vector.toSVG())
 
         val bmp = Bitmap.createBitmap(app.icon.intrinsicWidth, app.icon.intrinsicHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
@@ -118,6 +146,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         svg.renderToCanvas(canvas)
 
         app.genIcon = bmp
+        app.vector = vector
     }
 
     private fun getAppIconBitmap(app: PackageInfoStruct): Bitmap {

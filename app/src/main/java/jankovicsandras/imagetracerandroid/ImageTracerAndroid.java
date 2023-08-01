@@ -840,9 +840,7 @@ public class ImageTracerAndroid{
 
 
 	static String tosvgcolorstr (byte[] c){
-		//return "fill=\"rgb("+(c[0]+128)+","+(c[1]+128)+","+(c[2]+128)+")\" stroke=\"rgb("+(c[0]+128)+","+(c[1]+128)+","+(c[2]+128)+")\" stroke-width=\"1\" opacity=\""+((c[3]+128)/255.0)+"\" ";
-		//For Iconeration :
-		return "fill=\"none\" stroke=\"rgb(255,255,255)\" stroke-width=\"2\" opacity=\""+Math.round((c[3]+128)/255.0)+"\" ";
+		return "fill=\"rgb("+(c[0]+128)+","+(c[1]+128)+","+(c[2]+128)+")\" stroke=\"rgb("+(c[0]+128)+","+(c[1]+128)+","+(c[2]+128)+")\" stroke-width=\"1\" opacity=\""+((c[3]+128)/255.0)+"\" ";
 	}
 
 
