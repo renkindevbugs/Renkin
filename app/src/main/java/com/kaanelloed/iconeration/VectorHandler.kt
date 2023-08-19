@@ -77,12 +77,12 @@ class VectorHandler {
         for (grp in vector.groups) {
             svg += "<g transform=\"translate(${grp.translateX} ${grp.translateY}) scale(${grp.scaleX} ${grp.scaleY})\">"
             for (path in grp.paths) {
-                svg += "<path fill=\"${path.fillColor}\" stroke=\"${path.strokeColor}\" stroke-width=\"${path.strokeWidth}\" d=\"${path.pathDataRaw}\" />"
+                svg += "<path fill=\"${path.fillColor}\" opacity=\"${path.strokeAlpha}\" stroke=\"${path.strokeColor}\" stroke-width=\"${path.strokeWidth}\" d=\"${path.pathDataRaw}\" />"
             }
             svg += "</g>"
         }
         for (path in vector.paths) {
-            svg += "<path fill=\"${path.fillColor}\" stroke=\"${path.strokeColor}\" stroke-width=\"${path.strokeWidth}\" d=\"${path.pathDataRaw}\" />"
+            svg += "<path fill=\"${path.fillColor}\" opacity=\"${path.strokeAlpha}\" stroke=\"${path.strokeColor}\" stroke-width=\"${path.strokeWidth}\" d=\"${path.pathDataRaw}\" />"
         }
 
         svg += "</svg>"
@@ -311,7 +311,10 @@ class VectorHandler {
                         "fill" -> fillColor.parse(attrValue)
                         "stroke" -> strokeColor.parse(attrValue)
                         "stroke-width" -> strokeWidth = attrValue.toFloat()
-                        "opacity" -> fillAlpha = attrValue.toFloat()
+                        "opacity" -> {
+                            fillAlpha = attrValue.toFloat()
+                            strokeAlpha = attrValue.toFloat()
+                        }
                     }
                 }
 
