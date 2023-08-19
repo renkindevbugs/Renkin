@@ -21,8 +21,8 @@ class ColorResource {
             parseRGB(color)
         }
 
-        if (color.startsWith("argb")) {
-            parseARBG(color)
+        if (color.startsWith("rgba")) {
+            parseRBGA(color)
         }
     }
 
@@ -40,6 +40,10 @@ class ColorResource {
 
     fun toRGBString(): String{
         return "rgb(${currentColor.red()}, ${currentColor.green()}, ${currentColor.blue()})"
+    }
+
+    fun toRGBAString(): String{
+        return "rgba(${currentColor.red()}, ${currentColor.green()}, ${currentColor.blue()}, ${currentColor.alpha()})"
     }
 
     private fun parseRaw(color: String) {
@@ -77,15 +81,15 @@ class ColorResource {
         currentColor = Color.valueOf(red, green, blue)
     }
 
-    private fun parseARBG(color: String) {
+    private fun parseRBGA(color: String) {
         val rgb = color.substring(4, color.length - 2)
 
         val elements = rgb.split(",")
 
-        val alpha = elements[0].toFloat()
-        val red = elements[1].toFloat()
-        val green = elements[2].toFloat()
-        val blue = elements[3].toFloat()
+        val red = elements[0].toFloat()
+        val green = elements[1].toFloat()
+        val blue = elements[2].toFloat()
+        val alpha = elements[3].toFloat()
 
         currentColor = Color.valueOf(red, green, blue, alpha)
     }

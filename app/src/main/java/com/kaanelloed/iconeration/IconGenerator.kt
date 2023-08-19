@@ -138,7 +138,8 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
             path.strokeColor = strokeColor
         }
 
-        val svg = SVG.getFromString(vector.toSVG())
+        val newSvg = vector.toSVG()
+        val svg = SVG.getFromString(newSvg)
 
         val bmp = Bitmap.createBitmap(app.icon.intrinsicWidth, app.icon.intrinsicHeight, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)

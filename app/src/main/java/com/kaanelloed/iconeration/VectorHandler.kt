@@ -227,6 +227,7 @@ class VectorHandler {
 
     class Path(var name: String
         , var pathDataRaw: String
+        , var pathData: Array<PathData>?
         , var fillColor: ColorResource
         , var strokeColor: ColorResource
         , var strokeWidth: Float
@@ -235,11 +236,11 @@ class VectorHandler {
         , var trimPathStart: Float
         , var trimPathEnd: Float
         , var trimPathOffset: Float
-        , var strokeLineCap: String
+        , var strokeLineCap: String //butt, round, square
         , var strokeLineJoin: String //bevel, miter, round
         , var strokeMiterLimit: Float
         , var fillType: String //evenOdd, nonZero
-        ) { //butt, round, square
+        ) {
         companion object Factory {
             fun parse(parser: XmlPullParser): Path {
                 var name = ""
@@ -281,7 +282,7 @@ class VectorHandler {
                     }
                 }
 
-                return Path(name, pathData, fillColor, strokeColor, strokeWidth, strokeAlpha, fillAlpha, trimPathStart, trimPathEnd, trimPathOffset, strokeLineCap, strokeLineJoin, strokeMiterLimit, fillType)
+                return Path(name, pathData, null, fillColor, strokeColor, strokeWidth, strokeAlpha, fillAlpha, trimPathStart, trimPathEnd, trimPathOffset, strokeLineCap, strokeLineJoin, strokeMiterLimit, fillType)
             }
 
             fun parseSvg(parser: XmlPullParser): Path {
@@ -300,7 +301,6 @@ class VectorHandler {
                 var strokeMiterLimit = 4F
                 var fillType = "nonZero"
 
-
                 for (i in 0 until parser.attributeCount) {
                     val namespace = parser.getAttributeNamespace(i)
                     val attrName = parser.getAttributeName(i)
@@ -315,7 +315,7 @@ class VectorHandler {
                     }
                 }
 
-                return Path(name, pathData, fillColor, strokeColor, strokeWidth, strokeAlpha, fillAlpha, trimPathStart, trimPathEnd, trimPathOffset, strokeLineCap, strokeLineJoin, strokeMiterLimit, fillType)
+                return Path(name, pathData, null, fillColor, strokeColor, strokeWidth, strokeAlpha, fillAlpha, trimPathStart, trimPathEnd, trimPathOffset, strokeLineCap, strokeLineJoin, strokeMiterLimit, fillType)
             }
 
             private fun getColor(value: String): Color {
@@ -381,27 +381,33 @@ class VectorHandler {
         }
     }
 
-    private class PathData(private val type: Char) {
+    class PathData(private val type: Char) {
+        private val components = mutableListOf<PathComponent>()
+
         companion object Factory {
             fun parse(data: String): Array<PathData> {
                 val paths = mutableListOf<PathData>()
+                var currentType = ' '
                 var currComp = 0
                 var i = 0
 
                 for (c in data) {
-                    if (c.isLetter() && i > 0) {
-                        val path = PathData(c)
-                        path.parse(data.substring(currComp, i))
-                        paths.add(path)
+                    if (c.isLetter()) {
+                        if (i > 0) {
+                            val path = PathData(currentType)
+                            path.parse(data.substring(currComp + 1, i))
+                            paths.add(path)
+                        }
 
                         currComp = i
+                        currentType = c
                     }
 
                     i++
                 }
 
                 val path = PathData(data[currComp])
-                path.parse(data.substring(currComp))
+                path.parse(data.substring(currComp + 1))
                 paths.add(path)
 
                 return paths.toTypedArray()
@@ -409,11 +415,10 @@ class VectorHandler {
         }
 
         private fun parse(data: String) {
-            val components = data.split(' ')
+            val components = data.split(' ', ',')
 
-            for (component in components) {
+            val dataType = getDataType(type)
 
-            }
         }
 
         private fun getDataType(letter: Char): PathDataType {
