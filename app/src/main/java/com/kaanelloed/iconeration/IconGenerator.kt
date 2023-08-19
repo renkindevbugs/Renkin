@@ -20,13 +20,13 @@ import org.xmlpull.v1.XmlPullParser
 class IconGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>, private val color: Int) {
     private var applyColorOnAvailable = false
     private val useMonochrome = PreferencesHelper(ctx).getUseMonochrome()
+    private val includeVector = PreferencesHelper(ctx).getIncludeVector()
 
     fun generateIcons(type: GenerationType) {
         applyColorOnAvailable = PreferencesHelper(ctx).getApplyColorAvailableIcon()
 
         when (type) {
-            GenerationType.PathDetection -> generatePathDetection(false)
-            GenerationType.PathDetectionVector -> generatePathDetection(true)
+            GenerationType.PathDetection -> generatePathDetection()
             GenerationType.EdgeDetection -> generateCannyEdgeDetection()
             GenerationType.FirstLetter -> generateFirstLetter()
             GenerationType.TwoLetters -> generateTwoLetter()
@@ -48,7 +48,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         }
     }
 
-    private fun generatePathDetection(includeVector: Boolean) {
+    private fun generatePathDetection() {
         val appMan = ApplicationManager(ctx)
 
         for (app in apps) {
@@ -271,7 +271,6 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
 
     enum class GenerationType {
         PathDetection,
-        PathDetectionVector,
         EdgeDetection,
         FirstLetter,
         TwoLetters,

@@ -80,6 +80,7 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
                 getString(R.string.settings_includeAvailable_key) -> apps = null
                 getString(R.string.settings_applyColorAvailable_key) -> apps = null
                 getString(R.string.settings_useMonochrome_key) -> apps = null
+                getString(R.string.settings_includeVector_key) -> apps = null
             }
         }
     }
