@@ -5,12 +5,12 @@ plugins {
 
 android {
     namespace = "com.kaanelloed.iconeration"
-    compileSdk = 33
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "com.kaanelloed.iconeration"
         minSdk = 26
-        targetSdk = 33
+        targetSdk = 34
         versionCode = 12
         versionName = "0.6.0"
 
@@ -40,13 +40,13 @@ dependencies {
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.9.0")
     implementation("androidx.constraintlayout:constraintlayout:2.1.4")
-    implementation("androidx.navigation:navigation-fragment-ktx:2.6.0")
-    implementation("androidx.navigation:navigation-ui-ktx:2.6.0")
-    implementation("androidx.preference:preference:1.2.1")
+    implementation("androidx.navigation:navigation-fragment-ktx:2.7.1")
+    implementation("androidx.navigation:navigation-ui-ktx:2.7.1")
+    implementation("androidx.preference:preference-ktx:1.2.1")
     implementation("com.jaredrummler:colorpicker:1.1.0")
-    implementation("io.github.reandroid:ARSCLib:1.2.3")
+    implementation("io.github.reandroid:ARSCLib:1.2.4")
     implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
-    implementation("com.android.tools.build:apksig:8.0.2")
+    implementation("com.android.tools.build:apksig:8.1.1")
     implementation("com.caverock:androidsvg:1.4")
 
     testImplementation("junit:junit:4.13.2")
