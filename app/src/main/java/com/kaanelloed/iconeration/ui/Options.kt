@@ -1,6 +1,5 @@
 package com.kaanelloed.iconeration.ui
 
-import android.content.Context
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -13,7 +12,6 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -27,8 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.kaanelloed.iconeration.IconGenerator
-import com.kaanelloed.iconeration.PackageInfoStruct
 
 @Composable
 fun AppOptions(app: String, onDismiss: (() -> Unit)) {
@@ -47,15 +43,6 @@ fun OptionsDialog(app: String, onDismiss: (() -> Unit)) {
         },
         confirmButton = {}
     )
-}
-
-@Composable
-fun CreateButton(ctx: Context, apps: Array<PackageInfoStruct>) {
-    FilledTonalButton(onClick = {
-        IconGenerator(ctx, apps, android.graphics.Color.WHITE).generateIcons(IconGenerator.GenerationType.EdgeDetection)
-    }) {
-        Text("Create")
-    }
 }
 
 @Preview(showBackground = true)
