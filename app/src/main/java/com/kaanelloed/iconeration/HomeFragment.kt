@@ -31,7 +31,7 @@ class HomeFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        val act = requireActivity() as MainActivity
+        val act = requireActivity() as MainActivityOld
 
         binding.buttonFirst.setOnClickListener {
             act.currentPack = null

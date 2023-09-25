@@ -17,7 +17,7 @@ import androidx.fragment.app.Fragment
 import androidx.preference.PreferenceManager
 import com.kaanelloed.iconeration.databinding.ActivityMainBinding
 
-class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceChangeListener {
+class MainActivityOld : AppCompatActivity(), SharedPreferences.OnSharedPreferenceChangeListener {
     var apps: Array<PackageInfoStruct>? = null
     var packs: Array<PackageInfoStruct>? = null
     var currentPack: String? = null

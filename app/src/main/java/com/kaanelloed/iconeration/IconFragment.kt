@@ -69,7 +69,7 @@ class IconFragment : Fragment() {
                 progBar.visibility = View.VISIBLE
             }
 
-            val act = requireActivity() as MainActivity
+            val act = requireActivity() as MainActivityOld
             val prefs = PreferencesHelper(view.context)
 
             val includeAvailable = prefs.getIncludeAvailableIcon()

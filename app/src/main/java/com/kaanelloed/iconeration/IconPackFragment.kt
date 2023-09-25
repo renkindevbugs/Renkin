@@ -54,7 +54,7 @@ class IconPackFragment : Fragment() {
         super.onViewCreated(view, savedInstanceState)
 
         Thread {
-            val act = requireActivity() as MainActivity
+            val act = requireActivity() as MainActivityOld
 
             requireView().post {
                 requireActivity().window.setFlags(
