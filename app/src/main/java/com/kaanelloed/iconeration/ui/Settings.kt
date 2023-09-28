@@ -11,15 +11,25 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import com.kaanelloed.iconeration.data.DarkMode
+import com.kaanelloed.iconeration.data.DarkModeLabels
+import com.kaanelloed.iconeration.data.getDarkMode
+import com.kaanelloed.iconeration.data.getDarkModeValue
+import com.kaanelloed.iconeration.data.setDarkMode
+import kotlinx.coroutines.launch
 
 @Composable
-fun SettingsDialog(onDismiss: (() -> Unit)) {
+fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.background,
@@ -27,7 +37,7 @@ fun SettingsDialog(onDismiss: (() -> Unit)) {
         onDismissRequest = onDismiss,
         title = { Text("Settings") },
         text = {
-            NightModeDropdown()
+            DarkModeDropdown(prefs)
         },
         confirmButton = {}
     )
@@ -35,10 +45,11 @@ fun SettingsDialog(onDismiss: (() -> Unit)) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NightModeDropdown() {
-    val options = listOf("Follow System", "Dark Mode", "Light Mode")
+fun DarkModeDropdown(prefs: DataStore<Preferences>) {
     var expanded by remember { mutableStateOf(false) }
-    var selectedOptionText by remember { mutableStateOf(options[0]) }
+    var selectedOptionText by remember { mutableStateOf(DarkMode.FOLLOW_SYSTEM) }
+
+    val scope = rememberCoroutineScope()
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -49,7 +60,7 @@ fun NightModeDropdown() {
     ) {
         TextField(
             readOnly = true,
-            value = selectedOptionText,
+            value = DarkModeLabels[prefs.getDarkModeValue()]!!,
             onValueChange = { },
             label = { Text("Theme") },
             trailingIcon = {
@@ -66,12 +77,14 @@ fun NightModeDropdown() {
                 expanded = false
             }
         ) {
-            options.forEach { selectionOption ->
+            DarkModeLabels.forEach { selectionOption ->
                 DropdownMenuItem(
-                    text = { Text(text = selectionOption) },
+                    text = { Text(text = selectionOption.value) },
                     onClick = {
-                        selectedOptionText = selectionOption
+                        selectedOptionText = selectionOption.key
                         expanded = false
+
+                        scope.launch { prefs.setDarkMode(selectionOption.key) }
                     }
                 )
             }

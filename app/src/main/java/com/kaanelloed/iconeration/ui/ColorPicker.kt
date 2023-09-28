@@ -59,7 +59,7 @@ fun ColorButton(colors: List<Color>, onColorSelected: (Color) -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Select colour",
+                text = "Select color",
             )
 
             Canvas(

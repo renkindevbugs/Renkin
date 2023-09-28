@@ -38,6 +38,7 @@ fun OptionsDialog(app: String, onDismiss: (() -> Unit)) {
         containerColor = MaterialTheme.colorScheme.background,
         titleContentColor = MaterialTheme.colorScheme.outline,
         onDismissRequest = onDismiss,
+        title = { Text(app) },
         text = {
             Text(app)
         },
