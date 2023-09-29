@@ -39,7 +39,7 @@ fun ColorButton(colors: List<Color>, onColorSelected: (Color) -> Unit) {
 
     Box(
         modifier = Modifier
-            .padding(top = 16.dp, start = 5.dp, end = 5.dp, bottom = 5.dp)
+            .padding(8.dp)
             .fillMaxWidth(0.8f)
             .clip(RoundedCornerShape(20))
             .border(
@@ -59,7 +59,7 @@ fun ColorButton(colors: List<Color>, onColorSelected: (Color) -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Select color",
+                text = "Icon color",
             )
 
             Canvas(

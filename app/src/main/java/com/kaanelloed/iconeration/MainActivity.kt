@@ -4,20 +4,16 @@ import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Modifier
 import androidx.core.graphics.drawable.toBitmap
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
-import com.kaanelloed.iconeration.data.DarkMode
-import com.kaanelloed.iconeration.data.getDarkMode
-import com.kaanelloed.iconeration.data.getDarkModeValue
+import com.kaanelloed.iconeration.data.isDarkModeEnabled
 import com.kaanelloed.iconeration.ui.*
 import com.kaanelloed.iconeration.ui.theme.IconerationTheme
 
@@ -42,11 +38,7 @@ class MainActivity : ComponentActivity() {
         val packApps = packDao.getIconPacksWithApps()*/
 
         setContent {
-            val darkMode = when (applicationContext.dataStore.getDarkModeValue()) {
-                DarkMode.FOLLOW_SYSTEM -> isSystemInDarkTheme()
-                DarkMode.DARK -> true
-                DarkMode.LIGHT -> false
-            }
+            val darkMode = applicationContext.dataStore.isDarkModeEnabled()
 
             IconerationTheme(darkMode) {
                 Surface(
@@ -55,8 +47,8 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Column {
                         TitleBar(applicationContext.dataStore)
-                        OptionsCard()
-                        CreateButton(applicationContext, apps)
+                        OptionsCard(applicationContext.dataStore)
+                        CreateButton(applicationContext, applicationContext.dataStore, apps)
                         ApplicationList(apps)
                     }
                 }

@@ -11,7 +11,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -23,7 +22,6 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.kaanelloed.iconeration.data.DarkMode
 import com.kaanelloed.iconeration.data.DarkModeLabels
-import com.kaanelloed.iconeration.data.getDarkMode
 import com.kaanelloed.iconeration.data.getDarkModeValue
 import com.kaanelloed.iconeration.data.setDarkMode
 import kotlinx.coroutines.launch
@@ -47,8 +45,9 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
 @Composable
 fun DarkModeDropdown(prefs: DataStore<Preferences>) {
     var expanded by remember { mutableStateOf(false) }
-    var selectedOptionText by remember { mutableStateOf(DarkMode.FOLLOW_SYSTEM) }
+    var selectedOption by remember { mutableStateOf(DarkMode.FOLLOW_SYSTEM) }
 
+    selectedOption = prefs.getDarkModeValue()
     val scope = rememberCoroutineScope()
 
     ExposedDropdownMenuBox(
@@ -60,7 +59,7 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
     ) {
         TextField(
             readOnly = true,
-            value = DarkModeLabels[prefs.getDarkModeValue()]!!,
+            value = DarkModeLabels[selectedOption]!!,
             onValueChange = { },
             label = { Text("Theme") },
             trailingIcon = {
@@ -81,7 +80,7 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
                 DropdownMenuItem(
                     text = { Text(text = selectionOption.value) },
                     onClick = {
-                        selectedOptionText = selectionOption.key
+                        selectedOption = selectionOption.key
                         expanded = false
 
                         scope.launch { prefs.setDarkMode(selectionOption.key) }

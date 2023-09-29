@@ -86,8 +86,8 @@ class IconFragment : Fragment() {
                 act.apps!!.sort()
 
                 val color = prefs.getIconColorForTheme()
-                val genType = prefs.getGenType()
-                IconGenerator(view.context, act.apps!!, color).generateIcons(genType)
+                //val genType = prefs.getGenType()
+                //IconGenerator(view.context, act.apps!!, color).generateIcons(genType)
 
                 act.lastPack = act.currentPack
             }

@@ -49,7 +49,7 @@ class PreferencesHelper(private val ctx: Context) {
         }
     }
 
-    fun getGenType(): IconGenerator.GenerationType {
+    /*fun getGenType(): IconGenerator.GenerationType {
         val prefValue = prefs.getString(
             ctx.getString(R.string.settings_genType_key),
             ctx.getString(R.string.settings_genType_def_value)
@@ -63,7 +63,7 @@ class PreferencesHelper(private val ctx: Context) {
             "ARCTICONS_APP_NAME" -> IconGenerator.GenerationType.AppName
             else -> IconGenerator.GenerationType.EdgeDetection
         }
-    }
+    }*/
 
     fun getIncludeAvailableIcon(): Boolean {
         return prefs.getBoolean(
