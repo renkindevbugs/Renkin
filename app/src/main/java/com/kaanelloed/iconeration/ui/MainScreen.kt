@@ -33,6 +33,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.kaanelloed.iconeration.IconGenerator
+import com.kaanelloed.iconeration.IconPackGenerator
 import com.kaanelloed.iconeration.PackageInfoStruct
 import com.kaanelloed.iconeration.data.getIconColorValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
@@ -94,6 +95,15 @@ fun CreateButton(ctx: Context, prefs: DataStore<Preferences>, apps: Array<Packag
         IconGenerator(ctx, opt, apps).generateIcons(type)
     }) {
         Text("Create")
+    }
+}
+
+@Composable
+fun CreatePackButton(ctx: Context, apps: Array<PackageInfoStruct>) {
+    Button(onClick = {
+        IconPackGenerator(ctx, apps).create {  }
+    }) {
+        Text("Create pack")
     }
 }
 

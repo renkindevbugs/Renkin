@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
                         TitleBar(applicationContext.dataStore)
                         OptionsCard(applicationContext.dataStore)
                         CreateButton(applicationContext, applicationContext.dataStore, apps)
+                        CreatePackButton(applicationContext, apps)
                         ApplicationList(apps)
                     }
                 }
