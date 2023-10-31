@@ -19,6 +19,7 @@ import com.reandroid.arsc.chunk.TableBlock
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
 import com.reandroid.arsc.chunk.xml.ResXmlElement
 import com.reandroid.arsc.coder.ValueCoder
+import com.reandroid.arsc.value.ValueType
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -62,6 +63,8 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         manifest.compileSdkVersionCodename = framework.versionName
         manifest.platformBuildVersionCode = framework.versionCode
         manifest.platformBuildVersionName = framework.versionName
+
+        setSdkVersions(manifest.manifestElement, 26, framework.versionCode)
         manifest.setApplicationLabel("Iconeration Icon Pack")
 
         createMainActivity(manifest)
@@ -117,6 +120,22 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         textMethod("Done")
     }
 
+    private fun setSdkVersions(manifest: ResXmlElement, minSdkVersion: Int, targetSdkVersion: Int) {
+        val useSdk = manifest.createChildElement(AndroidManifestBlock.TAG_uses_sdk)
+
+        val minSdk = useSdk.getOrCreateAndroidAttribute(
+            AndroidManifestBlock.NAME_minSdkVersion,
+            AndroidManifestBlock.ID_minSdkVersion
+        )
+        minSdk.setTypeAndData(ValueType.DEC, minSdkVersion)
+
+        val targetSdk = useSdk.getOrCreateAndroidAttribute(
+            AndroidManifestBlock.NAME_targetSdkVersion,
+            AndroidManifestBlock.ID_targetSdkVersion
+        )
+        targetSdk.setTypeAndData(ValueType.DEC, targetSdkVersion)
+    }
+
     private fun createMainActivity(manifest: AndroidManifestBlock) {
         val application = manifest.orCreateApplicationElement
         val activity = application.createChildElement(AndroidManifestBlock.TAG_activity)
@@ -141,11 +160,17 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         createIntentFilter(activity, arrayOf("jp.co.a_tm.android.launcher.icons.ACTION_PICK_ICON"), arrayOf("android.intent.category.DEFAULT")) //+HOME Icon Picker
         createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN, "com.vivid.launcher.theme"), arrayOf("android.intent.category.DEFAULT")) //V Launcher
 
-        val attribute = activity.getOrCreateAndroidAttribute(
+        val activityName = activity.getOrCreateAndroidAttribute(
             AndroidManifestBlock.NAME_name,
             AndroidManifestBlock.ID_name
         )
-        attribute.valueAsString = "com.kaanelloed.iconerationiconpack.MainActivity"
+        activityName.valueAsString = "com.kaanelloed.iconerationiconpack.MainActivity"
+
+        val exported = activity.getOrCreateAndroidAttribute(
+            NAME_exported,
+            ID_exported
+        )
+        exported.valueAsBoolean = true
     }
 
     private fun createIntentFilter(activity: ResXmlElement, actions: Array<String>, categories: Array<String>) {
@@ -251,4 +276,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         ctx.startActivity(intent)
         //TODO: use PackageInstaller instead
     }
+
+    private val NAME_exported = "exported"
+    private val ID_exported = 0x01010010
 }
