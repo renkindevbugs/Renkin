@@ -31,6 +31,9 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
     private val iconPackName = "com.kaanelloed.iconerationiconpack"
     private val newVersionCode = 1
+    private val newVersionName = "0.1.0"
+    private val frameworkVersion = 33
+    private val minSdkVersion = 26
 
     fun create(textMethod: (text: String) -> Unit) {
         val themed = PreferencesHelper(ctx).getExportThemed()
@@ -52,19 +55,19 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         apkModule.setManifest(manifest)
 
         textMethod("Initializing framework ...")
-        val framework = apkModule.initializeAndroidFramework(33)
+        val framework = apkModule.initializeAndroidFramework(frameworkVersion)
         val packageBlock = tableBlock.newPackage(0x7f, iconPackName)
 
         textMethod("Generating manifest ...")
         manifest.packageName = iconPackName
         manifest.versionCode = newVersionCode
-        manifest.versionName = "0.1.0"
+        manifest.versionName = newVersionName
         manifest.compileSdkVersion = framework.versionCode
         manifest.compileSdkVersionCodename = framework.versionName
         manifest.platformBuildVersionCode = framework.versionCode
         manifest.platformBuildVersionName = framework.versionName
 
-        setSdkVersions(manifest.manifestElement, 26, framework.versionCode)
+        setSdkVersions(manifest.manifestElement, minSdkVersion, framework.versionCode)
         manifest.setApplicationLabel("Iconeration Icon Pack")
 
         createMainActivity(manifest)
