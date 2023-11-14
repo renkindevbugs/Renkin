@@ -35,9 +35,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     private val frameworkVersion = 33
     private val minSdkVersion = 26
 
-    fun create(textMethod: (text: String) -> Unit) {
-        val themed = PreferencesHelper(ctx).getExportThemed()
-
+    fun create(themed: Boolean, textMethod: (text: String) -> Unit) {
         val currentVersionCode = getCurrentVersionCode()
         if (currentVersionCode != 0L) {
             if (!keyStoreFile.exists() || newVersionCode > currentVersionCode) {

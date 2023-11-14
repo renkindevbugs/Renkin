@@ -63,7 +63,7 @@ class IconPackFragment : Fragment() {
             }
 
             val creator = IconPackGenerator(view.context, act.apps!!)
-            creator.create(this::addText)
+            creator.create(PreferencesHelper(view.context).getExportThemed(), this::addText)
 
             requireView().post {
                 view.findViewById<ProgressBar>(R.id.progressBar).visibility = View.INVISIBLE
