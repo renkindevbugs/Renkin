@@ -68,17 +68,22 @@ class IconGenerator(private val ctx: Context, private val options: GenerationOpt
     }
 
     private fun generatePathFromXML(appMan: ApplicationManager, app: PackageInfoStruct) {
-        var parser = appMan.getPackageResourceXml(app.packageName, app.iconID)!!
+        var parser = appMan.getPackageResourceXml(app.packageName, app.iconID)
 
-        if (app.icon is AdaptiveIconDrawable) {
+        if (app.icon is AdaptiveIconDrawable && parser != null) {
             val adaptiveIcon = app.icon as AdaptiveIconDrawable
 
-            parser = if (monochromeExits(adaptiveIcon) && options.monochrome) {
-                appMan.getPackageResourceXml(app.packageName, getMonochromeXMLID(parser))!!
+            val monoParser = if (monochromeExits(adaptiveIcon) && options.monochrome) {
+                appMan.getPackageResourceXml(app.packageName, getMonochromeXMLID(parser))
             }
-            else {
-                appMan.getPackageResourceXml(app.packageName, getForegroundXMLID(parser))!!
-            }
+            else { null }
+
+            parser = monoParser ?: appMan.getPackageResourceXml(app.packageName, getForegroundXMLID(parser))
+        }
+
+        if (parser == null) {
+            generateColorQuantizationDetection(app)
+            return
         }
 
         val vec = VectorHandler()
