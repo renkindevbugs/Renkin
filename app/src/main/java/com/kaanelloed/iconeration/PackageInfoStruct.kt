@@ -14,6 +14,8 @@ class PackageInfoStruct: Comparable<PackageInfoStruct> {
     lateinit var source: PackageSource
     var exportType: ExportType = ExportType.PNG
     lateinit var vector: VectorHandler
+    var versionCode: Long = 0
+    lateinit var versionName: String
 
     override fun equals(other: Any?): Boolean {
         if (other is PackageInfoStruct) {

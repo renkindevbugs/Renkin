@@ -35,6 +35,7 @@ import androidx.core.graphics.scale
 import com.kaanelloed.iconeration.IconGenerator
 import com.kaanelloed.iconeration.IconPackGenerator
 import com.kaanelloed.iconeration.PackageInfoStruct
+import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.getBackgroundColorValue
 import com.kaanelloed.iconeration.data.getExportThemedValue
 import com.kaanelloed.iconeration.data.getIconColorValue
@@ -47,7 +48,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun ApplicationList(iconPacks: Array<PackageInfoStruct>, apps: Array<PackageInfoStruct>) {
+fun ApplicationList(iconPacks: List<IconPack>, apps: Array<PackageInfoStruct>) {
     LazyColumn {
         items(apps) {app ->
             ApplicationItem(iconPacks, app)
@@ -56,7 +57,7 @@ fun ApplicationList(iconPacks: Array<PackageInfoStruct>, apps: Array<PackageInfo
 }
 
 @Composable
-fun ApplicationItem(iconPacks: Array<PackageInfoStruct>, app: PackageInfoStruct) {
+fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct) {
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
 
     Row(modifier = Modifier.fillMaxWidth(),

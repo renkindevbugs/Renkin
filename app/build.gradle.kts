@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -66,7 +67,8 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.5.0")
 
     //Data
-    implementation("androidx.room:room-runtime:2.6.0")
+    implementation("androidx.room:room-ktx:2.6.0")
+    ksp("androidx.room:room-compiler:2.6.0")
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     //Test

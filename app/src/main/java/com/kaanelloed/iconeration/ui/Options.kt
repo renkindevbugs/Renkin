@@ -39,6 +39,7 @@ import coil.compose.AsyncImage
 import com.kaanelloed.iconeration.IconGenerator
 import com.kaanelloed.iconeration.PackageInfoStruct
 import com.kaanelloed.iconeration.data.GenerationType
+import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.TypeLabels
 import com.kaanelloed.iconeration.data.getBackgroundColorValue
 import com.kaanelloed.iconeration.data.getExportThemedValue
@@ -59,12 +60,12 @@ var generatingOptions: IconGenerator.GenerationOptions? = null
 var generatingType = GenerationType.PATH
 
 @Composable
-fun AppOptions(iconPacks: Array<PackageInfoStruct>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit)) {
+fun AppOptions(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit)) {
     OptionsDialog(iconPacks, app, onConfirmation, onDismiss)
 }
 
 @Composable
-fun OptionsDialog(iconPacks: Array<PackageInfoStruct>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit)) {
+fun OptionsDialog(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit)) {
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.background,
@@ -97,7 +98,7 @@ fun OptionsDialog(iconPacks: Array<PackageInfoStruct>, app: PackageInfoStruct, o
 }
 
 @Composable
-fun OptionColumn(iconPacks: Array<PackageInfoStruct>, app: PackageInfoStruct) {
+fun OptionColumn(iconPacks: List<IconPack>, app: PackageInfoStruct) {
     var genType by rememberSaveable { mutableStateOf(GenerationType.PATH) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
@@ -152,7 +153,7 @@ fun OptionColumn(iconPacks: Array<PackageInfoStruct>, app: PackageInfoStruct) {
 }
 
 @Composable
-fun OptionsCard(iconPacks: Array<PackageInfoStruct>) {
+fun OptionsCard(iconPacks: List<IconPack>) {
     val prefs = getPreferences()
 
     var expanded by remember { mutableStateOf(false) }
@@ -325,9 +326,13 @@ fun TypeDropdown(type: GenerationType, onChange: ((newValue: GenerationType) -> 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun IconPackDropdown(iconPacks: Array<PackageInfoStruct>, onChange: ((newValue: PackageInfoStruct) -> Unit)) {
+fun IconPackDropdown(iconPacks: List<IconPack>, onChange: ((newValue: IconPack) -> Unit)) {
+    val emptyPack = IconPack("", "None", 0, "", 0)
+
     var expanded by remember { mutableStateOf(false) }
-    var selectedOption by remember { mutableStateOf(iconPacks[0]) }
+    var selectedOption by remember { mutableStateOf(emptyPack) }
+
+    val newList = listOf(emptyPack) + iconPacks
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -338,7 +343,7 @@ fun IconPackDropdown(iconPacks: Array<PackageInfoStruct>, onChange: ((newValue: 
     ) {
         TextField(
             readOnly = true,
-            value = selectedOption.appName,
+            value = selectedOption.applicationName,
             onValueChange = { },
             label = { Text("Icon Pack") },
             trailingIcon = {
@@ -355,9 +360,9 @@ fun IconPackDropdown(iconPacks: Array<PackageInfoStruct>, onChange: ((newValue: 
                 expanded = false
             }
         ) {
-            iconPacks.forEach { selectionOption ->
+            newList.forEach { selectionOption ->
                 DropdownMenuItem(
-                    text = { Text(text = selectionOption.appName) },
+                    text = { Text(text = selectionOption.applicationName) },
                     onClick = {
                         selectedOption = selectionOption
                         expanded = false

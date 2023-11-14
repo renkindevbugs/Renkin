@@ -15,18 +15,18 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.room.Room
+import com.kaanelloed.iconeration.data.AppDatabase
 import com.kaanelloed.iconeration.data.isDarkModeEnabled
 import com.kaanelloed.iconeration.ui.*
 import com.kaanelloed.iconeration.ui.theme.IconerationTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 class MainActivity : ComponentActivity() {
-    /*val db = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java, "packapps"
-        ).build()*/
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -37,10 +37,8 @@ class MainActivity : ComponentActivity() {
 
         apps.sort()
 
-        val iconPacks = ApplicationManager(applicationContext).getIconPackApps()
-
-        /*val packDao = db.iconPackDao()
-        val packApps = packDao.getIconPacksWithApps()*/
+        val iconPacks = ApplicationManager(applicationContext).getIconPacks()
+        syncIconPacks()
 
         setContent {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
@@ -59,6 +57,44 @@ class MainActivity : ComponentActivity() {
                         }
                         ApplicationList(iconPacks, apps)
                     }
+                }
+            }
+        }
+    }
+
+    private fun syncIconPacks() {
+        CoroutineScope(Dispatchers.Default).launch {
+            val appMan = ApplicationManager(applicationContext)
+            val iconPacks = appMan.getIconPacks()
+
+            val db = Room.databaseBuilder(
+                applicationContext,
+                AppDatabase::class.java, "iconPackApps"
+            ).build()
+
+            val packDao = db.iconPackDao()
+            val packList = packDao.getAll()
+
+            //Remove uninstalled icon packs
+            for (dbApp in packList) {
+                if (!iconPacks.any { it.packageName == dbApp.packageName }) {
+                    packDao.delete(dbApp)
+                    packDao.deleteApplicationByIconPackage(dbApp.packageName)
+                }
+            }
+
+            for (iconPack in iconPacks) {
+                val dbApp = packList.find { it.packageName == iconPack.packageName }
+                val sameVersion = if (dbApp != null) { dbApp.versionCode == iconPack.versionCode } else false
+
+                if (!sameVersion) {
+                    if (dbApp != null) {
+                        packDao.delete(dbApp)
+                        packDao.deleteApplicationByIconPackage(iconPack.packageName)
+                    }
+
+                    val packApps = appMan.getIconPackApplications(iconPack.packageName)
+                    packDao.insertIconPackWithApplications(iconPack, packApps)
                 }
             }
         }

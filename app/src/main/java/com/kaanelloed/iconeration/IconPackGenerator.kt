@@ -248,13 +248,12 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
     @SuppressWarnings("deprecation")
     private fun getCurrentVersionCode(): Long {
-        val iconPack = ApplicationManager(ctx).getPackage(iconPackName)
+        val appMan = ApplicationManager(ctx)
+
+        val iconPack = appMan.getPackage(iconPackName)
             ?: return 0L
 
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-            iconPack.longVersionCode
-        else
-            iconPack.versionCode.toLong()
+        return appMan.getVersionCode(iconPack)
     }
 
     private fun signApk(file: File, outFile: File) {
