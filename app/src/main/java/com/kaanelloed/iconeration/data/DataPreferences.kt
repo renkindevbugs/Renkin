@@ -21,6 +21,7 @@ const val INCLUDE_VECTOR_NAME = "INCLUDE_VECTOR"
 const val MONOCHROME_NAME = "MONOCHROME"
 const val EXPORT_THEMED_NAME = "EXPORT_THEMED"
 const val ICON_COLOR_NAME = "ICON_COLOR"
+const val BACKGROUND_COLOR_NAME = "BACKGROUND_COLOR"
 
 val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
 val TYPE_DEFAULT = GenerationType.PATH
@@ -37,6 +38,8 @@ val ExportThemedKey: Preferences.Key<Boolean>
     get() = booleanPreferencesKey(EXPORT_THEMED_NAME)
 val IconColorKey: Preferences.Key<String>
     get() = stringPreferencesKey(ICON_COLOR_NAME)
+val BackgroundColorKey: Preferences.Key<String>
+    get() = stringPreferencesKey(BACKGROUND_COLOR_NAME)
 
 val DarkModeLabels = mapOf(DarkMode.FOLLOW_SYSTEM to "Follow System"
     , DarkMode.DARK to "Dark Mode"
@@ -130,14 +133,19 @@ suspend fun DataStore<Preferences>.setExportThemed(value: Boolean) {
 }
 
 //Icon Color
+@Composable
+fun DataStore<Preferences>.getDefaultIconColor(): Color {
+    return if (isDarkModeEnabled()) Color.White else Color.Black
+}
+
 fun DataStore<Preferences>.getIconColor(): Flow<String?> {
     return getPrefs(IconColorKey)
 }
 
 @Composable
 fun DataStore<Preferences>.getIconColorValue(): Color {
-    val default = if (isDarkModeEnabled()) Color.White else Color.Black
-    val hex = getIconColor().collectAsState(initial = default.toHexString()).value
+    val default = getDefaultIconColor()
+    val hex = getIconColor().collectAsState(initial = getDefaultIconColor().toHexString()).value
     return hex?.toColor() ?: default
 }
 
@@ -147,6 +155,31 @@ suspend fun DataStore<Preferences>.setIconColor(value: String) {
 
 suspend fun DataStore<Preferences>.setIconColor(value: Color) {
     setPrefs(IconColorKey, value.toHexString())
+}
+
+//Background Color
+@Composable
+fun DataStore<Preferences>.getDefaultBackgroundColor(): Color {
+    return if (isDarkModeEnabled()) Color.Black else Color.White
+}
+
+fun DataStore<Preferences>.getBackgroundColor(): Flow<String?> {
+    return getPrefs(BackgroundColorKey)
+}
+
+@Composable
+fun DataStore<Preferences>.getBackgroundColorValue(): Color {
+    val default = getDefaultBackgroundColor()
+    val hex = getBackgroundColor().collectAsState(initial = default.toHexString()).value
+    return hex?.toColor() ?: default
+}
+
+suspend fun DataStore<Preferences>.setBackgroundColor(value: String) {
+    setPrefs(BackgroundColorKey, value)
+}
+
+suspend fun DataStore<Preferences>.setBackgroundColor(value: Color) {
+    setPrefs(BackgroundColorKey, value.toHexString())
 }
 
 fun <T : Any> DataStore<Preferences>.getPrefs(key: Preferences.Key<T>): Flow<T?> {

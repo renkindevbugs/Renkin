@@ -17,8 +17,9 @@ import com.kaanelloed.iconeration.data.isDarkModeEnabled
 import com.kaanelloed.iconeration.ui.*
 import com.kaanelloed.iconeration.ui.theme.IconerationTheme
 
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+
 class MainActivity : ComponentActivity() {
-    val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
     /*val db = Room.databaseBuilder(
             applicationContext,
             AppDatabase::class.java, "packapps"
@@ -46,10 +47,10 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     Column {
-                        TitleBar(applicationContext.dataStore)
-                        OptionsCard(applicationContext.dataStore)
-                        CreateButton(applicationContext, applicationContext.dataStore, apps)
-                        CreatePackButton(applicationContext, apps)
+                        TitleBar()
+                        OptionsCard()
+                        CreateButton(apps)
+                        CreatePackButton(apps)
                         ApplicationList(apps)
                     }
                 }

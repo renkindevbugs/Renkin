@@ -33,7 +33,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun ColorButton(colors: List<Color>, onColorSelected: (Color) -> Unit) {
+fun ColorButton(caption: String, colors: List<Color>, onColorSelected: (Color) -> Unit) {
     var colorPickerOpen by rememberSaveable { mutableStateOf(false) }
     var currentlySelected by rememberSaveable(saver = colourSaver()) { mutableStateOf(colors[0]) }
 
@@ -59,7 +59,7 @@ fun ColorButton(colors: List<Color>, onColorSelected: (Color) -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                text = "Icon color",
+                text = caption,
             )
 
             Canvas(

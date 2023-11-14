@@ -18,8 +18,16 @@ import com.kaanelloed.iconeration.data.GenerationType
 import jankovicsandras.imagetracerandroid.ImageTracerAndroid
 import org.xmlpull.v1.XmlPullParser
 
-class IconGenerator(private val ctx: Context, private val options: GenerationOptions, private val apps: Array<PackageInfoStruct>) {
-    fun generateIcons(type: GenerationType) {
+class IconGenerator(private val ctx: Context, private val options: GenerationOptions) {
+    private lateinit var apps: Array<PackageInfoStruct>
+
+    fun generateIcons(application: PackageInfoStruct, type: GenerationType) {
+        generateIcons(arrayOf(application), type)
+    }
+
+    fun generateIcons(applications: Array<PackageInfoStruct>, type: GenerationType) {
+        apps = applications
+
         when (type) {
             GenerationType.PATH -> generatePathDetection()
             GenerationType.EDGE -> generateCannyEdgeDetection()
