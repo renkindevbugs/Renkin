@@ -217,7 +217,7 @@ fun VectorSwitch(useVector: Boolean, onChange: ((newValue: Boolean) -> Unit)) {
         .fillMaxWidth()
         .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text("Vector")
+        Text("Vector (BETA)")
         Switch(
             checked = checked,
             onCheckedChange = {
@@ -239,7 +239,7 @@ fun MonochromeSwitch(useMonochrome: Boolean, onChange: ((newValue: Boolean) -> U
         .fillMaxWidth()
         .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text("Monochrome")
+        Text("Monochrome (BETA)")
         Switch(
             checked = checked,
             onCheckedChange = {
@@ -261,7 +261,7 @@ fun ThemedIconsSwitch(useThemed: Boolean, onChange: ((newValue: Boolean) -> Unit
         .fillMaxWidth()
         .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text("Themed Icons")
+        Text("Themed Icons (BETA)")
         Switch(
             checked = checked,
             onCheckedChange = {
