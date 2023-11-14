@@ -88,7 +88,7 @@ fun OptionsDialog(iconPacks: Array<PackageInfoStruct>, app: PackageInfoStruct, o
                 onClick = {
                     onDismiss()
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             ) {
                 Text("Dismiss")
             }
@@ -178,7 +178,7 @@ fun OptionsCard(iconPacks: Array<PackageInfoStruct>) {
         shape = RoundedCornerShape(8.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp)
+            .padding(16.dp, 4.dp)
             .clickable(
                 onClick = { expanded = !expanded }
             )
