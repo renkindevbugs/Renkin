@@ -5,7 +5,9 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.ui.Modifier
@@ -35,6 +37,8 @@ class MainActivity : ComponentActivity() {
 
         apps.sort()
 
+        val iconPacks = ApplicationManager(applicationContext).getIconPackApps()
+
         /*val packDao = db.iconPackDao()
         val packApps = packDao.getIconPacksWithApps()*/
 
@@ -48,10 +52,12 @@ class MainActivity : ComponentActivity() {
                 ) {
                     Column {
                         TitleBar()
-                        OptionsCard()
-                        CreateButton(apps)
-                        CreatePackButton(apps)
-                        ApplicationList(apps)
+                        OptionsCard(iconPacks)
+                        Row(modifier = Modifier.fillMaxWidth()) {
+                            RefreshButton(apps)
+                            BuildPackButton(apps)
+                        }
+                        ApplicationList(iconPacks, apps)
                     }
                 }
             }

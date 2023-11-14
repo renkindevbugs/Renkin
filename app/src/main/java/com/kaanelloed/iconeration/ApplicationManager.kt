@@ -260,9 +260,22 @@ class ApplicationManager(private val ctx: Context) {
         }
     }
 
+    fun getPackageResourceType(packageName: String, resourceId: Int): String? {
+        val res = pm.getResourcesForApplication(packageName)
+        return try {
+            res.getResourceTypeName(resourceId)
+        } catch (e: Resources.NotFoundException) {
+            null
+        }
+    }
+
     fun getPackageResourceXml(packageName: String, resourceId: Int): XmlPullParser? {
         val res = pm.getResourcesForApplication(packageName)
-        return res.getXml(resourceId)
+        return try {
+            res.getXml(resourceId)
+        } catch (e: Resources.NotFoundException) {
+            null
+        }
     }
 
     inner class ComponentInfo {

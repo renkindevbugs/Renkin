@@ -73,10 +73,12 @@ class IconGenerator(private val ctx: Context, private val options: GenerationOpt
         if (app.icon is AdaptiveIconDrawable) {
             val adaptiveIcon = app.icon as AdaptiveIconDrawable
 
-            parser = if (monochromeExits(adaptiveIcon) && options.monochrome)
+            parser = if (monochromeExits(adaptiveIcon) && options.monochrome) {
                 appMan.getPackageResourceXml(app.packageName, getMonochromeXMLID(parser))!!
-            else
+            }
+            else {
                 appMan.getPackageResourceXml(app.packageName, getForegroundXMLID(parser))!!
+            }
         }
 
         val vec = VectorHandler()

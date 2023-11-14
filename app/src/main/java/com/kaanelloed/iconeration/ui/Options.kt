@@ -1,10 +1,11 @@
 package com.kaanelloed.iconeration.ui
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -33,9 +35,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import coil.compose.rememberAsyncImagePainter
+import coil.compose.AsyncImage
 import com.kaanelloed.iconeration.IconGenerator
 import com.kaanelloed.iconeration.PackageInfoStruct
 import com.kaanelloed.iconeration.data.GenerationType
@@ -53,13 +53,17 @@ import com.kaanelloed.iconeration.data.setMonochrome
 import com.kaanelloed.iconeration.data.setType
 import kotlinx.coroutines.launch
 
+var uploadedImage: Bitmap? = null
+var generatingOptions: IconGenerator.GenerationOptions? = null
+var generatingType = GenerationType.PATH
+
 @Composable
-fun AppOptions(app: PackageInfoStruct, onDismiss: (() -> Unit)) {
-    OptionsDialog(app, onDismiss = onDismiss)
+fun AppOptions(iconPacks: Array<PackageInfoStruct>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit)) {
+    OptionsDialog(iconPacks, app, onConfirmation, onDismiss)
 }
 
 @Composable
-fun OptionsDialog(app: PackageInfoStruct, onDismiss: (() -> Unit)) {
+fun OptionsDialog(iconPacks: Array<PackageInfoStruct>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit)) {
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.background,
@@ -67,26 +71,46 @@ fun OptionsDialog(app: PackageInfoStruct, onDismiss: (() -> Unit)) {
         onDismissRequest = onDismiss,
         title = { Text(app.appName) },
         text = {
-            OptionColumn(app)
+            OptionColumn(iconPacks, app)
         },
         confirmButton = {
-
+            Button(
+                onClick = {
+                    onConfirmation()
+                }
+            ) {
+                Text("Confirm")
+            }
+        },
+        dismissButton = {
+            Button(
+                onClick = {
+                    onDismiss()
+                },
+                colors = ButtonDefaults.buttonColors(containerColor = Color.Red)
+            ) {
+                Text("Dismiss")
+            }
         }
     )
 }
 
 @Composable
-fun OptionColumn(app: PackageInfoStruct) {
+fun OptionColumn(iconPacks: Array<PackageInfoStruct>, app: PackageInfoStruct) {
     var genType by rememberSaveable { mutableStateOf(GenerationType.PATH) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
     var useThemed by rememberSaveable { mutableStateOf(false) }
+    var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
 
     var upload by remember { mutableStateOf(false) }
     var imageUri by remember { mutableStateOf(Uri.EMPTY) }
 
     val fgColors = getColors(Color.White)
     val bgColors = getColors(Color.Black)
+
+    uploadedImage = null
+    generatingOptions = null
 
     Column {
         Text(
@@ -100,45 +124,34 @@ fun OptionColumn(app: PackageInfoStruct) {
         if (upload) {
             UploadButton { imageUri = it }
             if (imageUri != Uri.EMPTY) {
+                AsyncImage(imageUri, contentDescription = null)
+
                 val contentResolver = getCurrentContext().contentResolver
-
-                Image(painter = rememberAsyncImagePainter(imageUri), contentDescription = null)
-
-                Button(onClick = {
-                    val bp = contentResolver.openInputStream(imageUri).use { BitmapFactory.decodeStream(it) }
-                    app.genIcon = bp
-                }) {
-                    Text("Confirm")
-                }
+                uploadedImage = contentResolver.openInputStream(imageUri).use { BitmapFactory.decodeStream(it) }
             }
         } else {
             TypeDropdown(genType) { genType = it }
-            IconPackDropdown()
-            ColorButton("Icon color", fgColors) { }
+            IconPackDropdown(iconPacks) {  }
+            ColorButton("Icon color", fgColors) { iconColor = it }
 
             if (genType == GenerationType.PATH) {
                 VectorSwitch(useVector) { useVector = it }
                 MonochromeSwitch(useMonochrome) { useMonochrome = it }
                 ThemedIconsSwitch(useThemed) { useThemed = it }
 
-                if (useThemed) {
+                if (useThemed && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
                     ColorButton("Background color", bgColors) { }
                 }
             }
 
-            val ctx = getCurrentContext()
-            Button(onClick = {
-                val opt = IconGenerator.GenerationOptions(android.graphics.Color.parseColor(Color.White.toHexString()), useMonochrome, useVector)
-                IconGenerator(ctx, opt).generateIcons(app, genType)
-            }) {
-                Text("Confirm")
-            }
+            generatingType = genType
+            generatingOptions = IconGenerator.GenerationOptions(android.graphics.Color.parseColor(iconColor.toHexString()), useMonochrome, useVector)
         }
     }
 }
 
 @Composable
-fun OptionsCard() {
+fun OptionsCard(iconPacks: Array<PackageInfoStruct>) {
     val prefs = getPreferences()
 
     var expanded by remember { mutableStateOf(false) }
@@ -146,6 +159,8 @@ fun OptionsCard() {
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
     var useThemed by rememberSaveable { mutableStateOf(false) }
+
+    var iconPack by rememberSaveable { mutableStateOf("") }
 
     val currentColor = prefs.getIconColorValue()
     val currentBgColor = prefs.getBackgroundColorValue()
@@ -175,7 +190,7 @@ fun OptionsCard() {
             )
             if (expanded) {
                 TypeDropdown(genType) { scope.launch { prefs.setType(it) } }
-                IconPackDropdown()
+                IconPackDropdown(iconPacks) {  }
                 ColorButton("Icon color", fgColors) { scope.launch { prefs.setIconColor(it) } }
 
                 if (genType == GenerationType.PATH) {
@@ -183,7 +198,7 @@ fun OptionsCard() {
                     MonochromeSwitch(useMonochrome) { scope.launch { prefs.setMonochrome(it) } }
                     ThemedIconsSwitch(useThemed) { scope.launch { prefs.setExportThemed(it) } }
 
-                    if (useThemed) {
+                    if (useThemed && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
                         ColorButton("Background color", bgColors) {  }
                     }
                 }
@@ -309,10 +324,9 @@ fun TypeDropdown(type: GenerationType, onChange: ((newValue: GenerationType) -> 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun IconPackDropdown() {
-    val options = listOf("1", "2", "3")
+fun IconPackDropdown(iconPacks: Array<PackageInfoStruct>, onChange: ((newValue: PackageInfoStruct) -> Unit)) {
     var expanded by remember { mutableStateOf(false) }
-    var selectedOptionText by remember { mutableStateOf(options[0]) }
+    var selectedOption by remember { mutableStateOf(iconPacks[0]) }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -323,7 +337,7 @@ fun IconPackDropdown() {
     ) {
         TextField(
             readOnly = true,
-            value = selectedOptionText,
+            value = selectedOption.appName,
             onValueChange = { },
             label = { Text("Icon Pack") },
             trailingIcon = {
@@ -340,12 +354,14 @@ fun IconPackDropdown() {
                 expanded = false
             }
         ) {
-            options.forEach { selectionOption ->
+            iconPacks.forEach { selectionOption ->
                 DropdownMenuItem(
-                    text = { Text(text = selectionOption) },
+                    text = { Text(text = selectionOption.appName) },
                     onClick = {
-                        selectedOptionText = selectionOption
+                        selectedOption = selectionOption
                         expanded = false
+
+                        onChange(selectionOption)
                     }
                 )
             }

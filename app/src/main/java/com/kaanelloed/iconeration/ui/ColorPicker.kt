@@ -35,7 +35,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun ColorButton(caption: String, colors: List<Color>, onColorSelected: (Color) -> Unit) {
     var colorPickerOpen by rememberSaveable { mutableStateOf(false) }
-    var currentlySelected by rememberSaveable(saver = colourSaver()) { mutableStateOf(colors[0]) }
+    var currentlySelected by rememberSaveable(saver = colorSaver()) { mutableStateOf(colors[0]) }
 
     Box(
         modifier = Modifier
@@ -143,7 +143,7 @@ private fun ColorDialog(
 }
 
 
-fun colourSaver() = Saver<MutableState<Color>, String>(
+fun colorSaver() = Saver<MutableState<Color>, String>(
     save = { state -> state.value.toHexString() },
     restore = { value -> mutableStateOf(value.toColor()) }
 )

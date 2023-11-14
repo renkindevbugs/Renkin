@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import com.kaanelloed.iconeration.MainActivity
 import com.kaanelloed.iconeration.dataStore
 
 @Composable
@@ -24,6 +25,11 @@ fun getCurrentActivity(): Activity {
     }
 
     throw IllegalStateException("No Activity")
+}
+
+@Composable
+fun getCurrentMainActivity(): MainActivity {
+    return getCurrentActivity() as MainActivity
 }
 
 @Composable
