@@ -37,6 +37,7 @@ import androidx.core.graphics.scale
 import com.kaanelloed.iconeration.IconGenerator
 import com.kaanelloed.iconeration.IconPackGenerator
 import com.kaanelloed.iconeration.PackageInfoStruct
+import com.kaanelloed.iconeration.data.getBackgroundColorValue
 import com.kaanelloed.iconeration.data.getExportThemedValue
 import com.kaanelloed.iconeration.data.getIconColorValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
@@ -124,9 +125,11 @@ fun RefreshButton(apps: Array<PackageInfoStruct>) {
 fun BuildPackButton(apps: Array<PackageInfoStruct>) {
     val ctx = getCurrentContext()
     val themed = getPreferences().getExportThemedValue()
+    val iconColor = getPreferences().getIconColorValue()
+    val bgColor = getPreferences().getBackgroundColorValue()
 
     IconButton(onClick = {
-        IconPackGenerator(ctx, apps).create(themed) {  }
+        IconPackGenerator(ctx, apps).create(themed, iconColor.toHexString(), bgColor.toHexString()) {  }
     }) {
         Icon(
             imageVector = Icons.Filled.Build,

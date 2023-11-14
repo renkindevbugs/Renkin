@@ -35,7 +35,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
     private val frameworkVersion = 33
     private val minSdkVersion = 26
 
-    fun create(themed: Boolean, textMethod: (text: String) -> Unit) {
+    fun create(themed: Boolean, iconColor: String, backgroundColor: String, textMethod: (text: String) -> Unit) {
         val currentVersionCode = getCurrentVersionCode()
         if (currentVersionCode != 0L) {
             if (!keyStoreFile.exists() || newVersionCode > currentVersionCode) {
@@ -70,8 +70,8 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
         createMainActivity(manifest)
 
-        createColorResource(packageBlock, "icon_color", "#FFFFFFFF")
-        createColorResource(packageBlock, "icon_background_color", "#FF000000")
+        createColorResource(packageBlock, "icon_color", iconColor)
+        createColorResource(packageBlock, "icon_background_color", backgroundColor)
 
         createRefColor31Resource(packageBlock, "icon_color", "@android:color/system_accent1_100")
         createRefColor31Resource(packageBlock, "icon_background_color", "@android:color/system_accent1_800")

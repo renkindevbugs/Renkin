@@ -46,6 +46,7 @@ import com.kaanelloed.iconeration.data.getIconColorValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
 import com.kaanelloed.iconeration.data.getMonochromeValue
 import com.kaanelloed.iconeration.data.getTypeValue
+import com.kaanelloed.iconeration.data.setBackgroundColor
 import com.kaanelloed.iconeration.data.setExportThemed
 import com.kaanelloed.iconeration.data.setIconColor
 import com.kaanelloed.iconeration.data.setIncludeVector
@@ -199,7 +200,7 @@ fun OptionsCard(iconPacks: Array<PackageInfoStruct>) {
                     ThemedIconsSwitch(useThemed) { scope.launch { prefs.setExportThemed(it) } }
 
                     if (useThemed && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                        ColorButton("Background color", bgColors) {  }
+                        ColorButton("Background color", bgColors) { scope.launch { prefs.setBackgroundColor(it) } }
                     }
                 }
             }
