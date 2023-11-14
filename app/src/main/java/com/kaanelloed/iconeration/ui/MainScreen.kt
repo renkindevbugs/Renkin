@@ -1,6 +1,5 @@
 package com.kaanelloed.iconeration.ui
 
-import android.graphics.Bitmap
 import android.graphics.Color
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
@@ -24,7 +23,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,7 +41,10 @@ import com.kaanelloed.iconeration.data.getIconColorValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
 import com.kaanelloed.iconeration.data.getMonochromeValue
 import com.kaanelloed.iconeration.data.getTypeValue
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun ApplicationList(iconPacks: Array<PackageInfoStruct>, apps: Array<PackageInfoStruct>) {
@@ -84,11 +85,13 @@ fun ApplicationItem(iconPacks: Array<PackageInfoStruct>, app: PackageInfoStruct)
     if (openAppOptions) {
         val ctx = getCurrentContext()
         AppOptions(iconPacks, app, {
-            if (uploadedImage != null) {
-                app.genIcon = uploadedImage!!
-            }
-            if (generatingOptions != null) {
-                IconGenerator(ctx, generatingOptions!!).generateIcons(app, generatingType)
+            CoroutineScope(Dispatchers.Default).launch {
+                if (uploadedImage != null) {
+                    app.genIcon = uploadedImage!!
+                }
+                if (generatingOptions != null) {
+                    IconGenerator(ctx, generatingOptions!!).generateIcons(app, generatingType)
+                }
             }
 
             openAppOptions = false
@@ -105,12 +108,15 @@ fun RefreshButton(apps: Array<PackageInfoStruct>) {
     val iconColor = prefs.getIconColorValue()
 
     val ctx = getCurrentContext()
-    val scope = rememberCoroutineScope()
 
     IconButton(onClick = {
-        scope.launch {
+        CoroutineScope(Dispatchers.Default).launch {
             val opt = IconGenerator.GenerationOptions(Color.parseColor(iconColor.toHexString()), monochrome, vector)
             IconGenerator(ctx, opt).generateIcons(apps, type)
+
+            withContext(Dispatchers.Main) {
+
+            }
         }
     }) {
         Icon(
@@ -129,7 +135,9 @@ fun BuildPackButton(apps: Array<PackageInfoStruct>) {
     val bgColor = getPreferences().getBackgroundColorValue()
 
     IconButton(onClick = {
-        IconPackGenerator(ctx, apps).create(themed, iconColor.toHexString(), bgColor.toHexString()) {  }
+        CoroutineScope(Dispatchers.Default).launch {
+            IconPackGenerator(ctx, apps).create(themed, iconColor.toHexString(), bgColor.toHexString()) {  }
+        }
     }) {
         Icon(
             imageVector = Icons.Filled.Build,
