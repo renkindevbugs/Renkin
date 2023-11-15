@@ -8,11 +8,14 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -30,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.graphics.scale
 import com.kaanelloed.iconeration.IconGenerator
@@ -153,6 +157,7 @@ fun BuildPackButton(apps: Array<PackageInfoStruct>) {
 fun TitleBar() {
     val prefs = getPreferences()
     var openSettings by rememberSaveable { mutableStateOf(false) }
+    var openInfo by rememberSaveable { mutableStateOf(false) }
 
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
@@ -163,6 +168,13 @@ fun TitleBar() {
             Text("Iconeration")
         },
         actions = {
+            IconButton(onClick = { openInfo = true }) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = "Info",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
             IconButton(onClick = { openSettings = true }) {
                 Icon(
                     imageVector = Icons.Filled.Settings,
@@ -176,6 +188,53 @@ fun TitleBar() {
     if (openSettings) {
         SettingsDialog(prefs) {
             openSettings = false
+        }
+    }
+
+    if (openInfo) {
+        InfoDialog() {
+            openInfo = false
+        }
+    }
+}
+
+@Composable
+fun InfoDialog(onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(16.dp),
+
+            ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = "Info",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(end = 16.dp)
+                )
+                Text(text = "Refresh icons with options provided")
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Build,
+                    contentDescription = "Build",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(end = 16.dp)
+                )
+                Text(text = "Build the icon pack")
+            }
         }
     }
 }
