@@ -154,7 +154,7 @@ fun BuildPackButton(apps: Array<PackageInfoStruct>) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TitleBar() {
+fun TitleBar(apps: Array<PackageInfoStruct>) {
     val prefs = getPreferences()
     var openSettings by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
@@ -168,6 +168,8 @@ fun TitleBar() {
             Text("Iconeration")
         },
         actions = {
+            RefreshButton(apps)
+            BuildPackButton(apps)
             IconButton(onClick = { openInfo = true }) {
                 Icon(
                     imageVector = Icons.Filled.Info,

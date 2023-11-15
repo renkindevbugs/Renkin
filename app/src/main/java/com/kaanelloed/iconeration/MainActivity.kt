@@ -49,12 +49,8 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     Column {
-                        TitleBar()
+                        TitleBar(apps)
                         OptionsCard(iconPacks)
-                        Row(modifier = Modifier.fillMaxWidth()) {
-                            RefreshButton(apps)
-                            BuildPackButton(apps)
-                        }
                         ApplicationList(iconPacks, apps)
                     }
                 }
