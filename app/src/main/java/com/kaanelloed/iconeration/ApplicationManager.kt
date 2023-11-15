@@ -19,6 +19,7 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.IconPackApplication
+import com.kaanelloed.iconeration.data.InstalledApplication
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
@@ -29,6 +30,18 @@ class ApplicationManager(private val ctx: Context) {
         val mainIntent = Intent(Intent.ACTION_MAIN, null)
         mainIntent.addCategory(Intent.CATEGORY_LAUNCHER)
         return getApps(mainIntent)
+    }
+
+    fun getAllInstalledApplications(): List<InstalledApplication> {
+        val apps = getAllInstalledApps()
+        val packs = mutableListOf<InstalledApplication>()
+
+        for (app in apps) {
+            val pack = InstalledApplication(app.packageName, app.iconID)
+            packs.add(pack)
+        }
+
+        return packs.toList()
     }
 
     fun getAllInstalledApps(): Array<PackageInfoStruct> {

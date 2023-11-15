@@ -205,8 +205,7 @@ fun InfoDialog(onDismiss: () -> Unit) {
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(16.dp),
-            shape = RoundedCornerShape(16.dp),
-
+            shape = RoundedCornerShape(16.dp)
             ) {
             Row(
                 modifier = Modifier

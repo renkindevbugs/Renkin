@@ -30,7 +30,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val apps = ApplicationManager(applicationContext).getInstalledApps()
+        val apps = ApplicationManager(applicationContext).getAllInstalledApps()
         for (app in apps) {
             app.genIcon = app.icon.toBitmap()
         }
@@ -74,6 +74,9 @@ class MainActivity : ComponentActivity() {
 
             val packDao = db.iconPackDao()
             val packList = packDao.getAll()
+
+            packDao.deleteInstalledApplications()
+            packDao.insertAll(appMan.getAllInstalledApplications())
 
             //Remove uninstalled icon packs
             for (dbApp in packList) {

@@ -28,6 +28,12 @@ data class IconPackApplication constructor(
     val resourceID: Int
 )
 
+@Entity
+data class InstalledApplication constructor(
+    @PrimaryKey val packageName: String,
+    val iconID: Int,
+)
+
 @Dao
 interface IconPackDao {
     @Query("SELECT * FROM IconPack")
@@ -37,7 +43,13 @@ interface IconPackDao {
     fun insertAll(vararg packs: IconPack)
 
     @Insert
-    fun insertAll(vararg packs: IconPackApplication)
+    fun insertAll(vararg apps: IconPackApplication)
+
+    @Insert
+    fun insertAll(vararg apps: InstalledApplication)
+
+    @Insert
+    fun insertAll(apps: List<InstalledApplication>)
 
     @Insert
     fun insertIconPackWithApplications(packs: IconPack, apps: List<IconPackApplication>)
@@ -51,14 +63,24 @@ interface IconPackDao {
     @Query("DELETE FROM IconPackApplication WHERE iconPackName = :packageName")
     fun deleteApplicationByIconPackage(packageName: String)
 
+    @Query("DELETE FROM InstalledApplication")
+    fun deleteInstalledApplications()
+
     @Query(
-        "SELECT * FROM IconPack " +
-        "JOIN IconPackApplication ON IconPack.packageName = IconPackApplication.iconPackName"
+        "SELECT * FROM IconPack AS pack " +
+                "JOIN IconPackApplication AS apps ON pack.packageName = apps.iconPackName"
     )
     fun getIconPacksWithApps(): Map<IconPack, List<IconPackApplication>>
+
+    @Query(
+        "SELECT * FROM IconPack AS pack " +
+                "JOIN IconPackApplication AS apps ON pack.packageName = apps.iconPackName " +
+                "JOIN InstalledApplication AS inst ON apps.packageName = inst.packageName"
+    )
+    fun getIconPacksWithInstalledApps(): Map<IconPack, List<IconPackApplication>>
 }
 
-@Database(entities = [IconPack::class, IconPackApplication::class], version = 1)
+@Database(entities = [IconPack::class, IconPackApplication::class, InstalledApplication::class], version = 1)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun iconPackDao(): IconPackDao
 }
