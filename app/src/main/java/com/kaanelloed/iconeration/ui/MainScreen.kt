@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.graphics.scale
+import com.kaanelloed.iconeration.ApplicationManager
 import com.kaanelloed.iconeration.IconGenerator
 import com.kaanelloed.iconeration.IconPackGenerator
 import com.kaanelloed.iconeration.PackageInfoStruct
@@ -95,10 +96,26 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
 
         AppOptions(iconPacks, app, {
             CoroutineScope(Dispatchers.Default).launch {
+                var toGenerate = true
+                if (iconPackageName != "") {
+                    val key = activity.iconPackApplications.keys.find { it.packageName == iconPackageName }
+                    val apps = activity.iconPackApplications[key]!!
+                    val packApp = apps.find { it.packageName == app.packageName }
+
+                    if (packApp != null) {
+                        val icon = ApplicationManager(ctx).getResIcon(packApp.iconPackName, packApp.resourceID)!!
+                        val newApp = app.changeExport(genIcon = icon.toBitmap())
+                        activity.editApplication(app, newApp)
+
+                        IconGenerator(ctx, activity, generatingOptions!!).colorizeFromIconPack(newApp)
+                        toGenerate = false
+                    }
+                }
+
                 if (uploadedImage != null) {
                     activity.editApplication(index, app.changeExport(genIcon = uploadedImage))
                 }
-                if (generatingOptions != null) {
+                if (generatingOptions != null && toGenerate) {
                     IconGenerator(ctx, activity, generatingOptions!!).generateIcons(app, generatingType)
                 }
             }
@@ -123,7 +140,7 @@ fun RefreshButton() {
         CoroutineScope(Dispatchers.Default).launch {
             val opt = IconGenerator.GenerationOptions(Color.parseColor(iconColor.toHexString()), monochrome, vector)
             IconGenerator(ctx, activity, opt).generateIcons(activity.applicationList, type)
-
+            TODO() //Handle icon-pack
             /*withContext(Dispatchers.Main) {
 
             }*/

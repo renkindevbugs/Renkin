@@ -37,6 +37,10 @@ class IconGenerator(private val ctx: Context, private val activity: MainActivity
         }
     }
 
+    fun colorizeFromIconPack(application: PackageInfoStruct) {
+        changeIconPackColor(application)
+    }
+
     private fun generateCannyEdgeDetection() {
         var edgeDetector: CannyEdgeDetector
         for (app in apps) {

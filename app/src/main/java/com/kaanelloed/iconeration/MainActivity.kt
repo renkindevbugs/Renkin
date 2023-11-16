@@ -18,6 +18,8 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.kaanelloed.iconeration.data.AppDatabase
+import com.kaanelloed.iconeration.data.IconPack
+import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.data.isDarkModeEnabled
 import com.kaanelloed.iconeration.ui.*
 import com.kaanelloed.iconeration.ui.theme.IconerationTheme
@@ -29,6 +31,9 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "se
 
 class MainActivity : ComponentActivity() {
     var applicationList: List<PackageInfoStruct> by mutableStateOf(listOf())
+        private set
+
+    var iconPackApplications: Map<IconPack, List<IconPackApplication>> = emptyMap()
         private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -101,6 +106,8 @@ class MainActivity : ComponentActivity() {
                     packDao.insertIconPackWithApplications(iconPack, packApps)
                 }
             }
+
+            iconPackApplications = packDao.getIconPacksWithInstalledApps()
         }
     }
 

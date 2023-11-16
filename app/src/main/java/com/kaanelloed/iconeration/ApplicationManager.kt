@@ -302,6 +302,11 @@ class ApplicationManager(private val ctx: Context) {
         return null
     }
 
+    fun getResIcon(packageName: String, resourceId: Int): Drawable? {
+        val res = pm.getResourcesForApplication(packageName)
+        return getResIcon(res, resourceId)
+    }
+
     @SuppressLint("DiscouragedApi")
     private fun getIdentifier(res: Resources, iconName: String, packageName: String): Int {
         return res.getIdentifier(iconName, "drawable", packageName)

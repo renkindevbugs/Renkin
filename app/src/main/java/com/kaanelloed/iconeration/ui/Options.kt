@@ -58,6 +58,7 @@ import kotlinx.coroutines.launch
 var uploadedImage: Bitmap? = null
 var generatingOptions: IconGenerator.GenerationOptions? = null
 var generatingType = GenerationType.PATH
+var iconPackageName = ""
 
 @Composable
 fun AppOptions(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit)) {
@@ -73,7 +74,7 @@ fun OptionsDialog(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmat
         onDismissRequest = onDismiss,
         title = { Text(app.appName) },
         text = {
-            OptionColumn(iconPacks, app)
+            OptionColumn(iconPacks)
         },
         confirmButton = {
             Button(
@@ -98,12 +99,14 @@ fun OptionsDialog(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmat
 }
 
 @Composable
-fun OptionColumn(iconPacks: List<IconPack>, app: PackageInfoStruct) {
+fun OptionColumn(iconPacks: List<IconPack>) {
     var genType by rememberSaveable { mutableStateOf(GenerationType.PATH) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
     var useThemed by rememberSaveable { mutableStateOf(false) }
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
+
+    var iconPack by rememberSaveable { mutableStateOf("") }
 
     var upload by remember { mutableStateOf(false) }
     var imageUri by remember { mutableStateOf(Uri.EMPTY) }
@@ -133,7 +136,7 @@ fun OptionColumn(iconPacks: List<IconPack>, app: PackageInfoStruct) {
             }
         } else {
             TypeDropdown(genType) { genType = it }
-            IconPackDropdown(iconPacks) {  }
+            IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
             ColorButton("Icon color", fgColors) { iconColor = it }
 
             if (genType == GenerationType.PATH) {
@@ -146,6 +149,7 @@ fun OptionColumn(iconPacks: List<IconPack>, app: PackageInfoStruct) {
                 }
             }
 
+            iconPackageName = iconPack
             generatingType = genType
             generatingOptions = IconGenerator.GenerationOptions(android.graphics.Color.parseColor(iconColor.toHexString()), useMonochrome, useVector)
         }
@@ -192,7 +196,7 @@ fun OptionsCard(iconPacks: List<IconPack>) {
             )
             if (expanded) {
                 TypeDropdown(genType) { scope.launch { prefs.setType(it) } }
-                IconPackDropdown(iconPacks) {  }
+                IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
                 ColorButton("Icon color", fgColors) { scope.launch { prefs.setIconColor(it) } }
 
                 if (genType == GenerationType.PATH) {
@@ -326,13 +330,12 @@ fun TypeDropdown(type: GenerationType, onChange: ((newValue: GenerationType) -> 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun IconPackDropdown(iconPacks: List<IconPack>, onChange: ((newValue: IconPack) -> Unit)) {
+fun IconPackDropdown(iconPacks: List<IconPack>, packageName: String, onChange: ((newValue: IconPack) -> Unit)) {
     val emptyPack = IconPack("", "None", 0, "", 0)
+    val newList = listOf(emptyPack) + iconPacks
 
     var expanded by remember { mutableStateOf(false) }
-    var selectedOption by remember { mutableStateOf(emptyPack) }
-
-    val newList = listOf(emptyPack) + iconPacks
+    var selectedOption by remember { mutableStateOf(newList.find { it.packageName == packageName }!!) }
 
     ExposedDropdownMenuBox(
         expanded = expanded,
