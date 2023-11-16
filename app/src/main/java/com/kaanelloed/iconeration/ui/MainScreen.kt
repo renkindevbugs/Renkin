@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
@@ -49,19 +49,20 @@ import com.kaanelloed.iconeration.data.getTypeValue
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
-fun ApplicationList(iconPacks: List<IconPack>, apps: Array<PackageInfoStruct>) {
+fun ApplicationList(iconPacks: List<IconPack>) {
+    val activity = getCurrentMainActivity()
+
     LazyColumn {
-        items(apps) {app ->
-            ApplicationItem(iconPacks, app)
+        itemsIndexed(activity.applicationList) { index, app ->
+            ApplicationItem(iconPacks, app, index)
         }
     }
 }
 
 @Composable
-fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct) {
+fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: Int) {
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
 
     Row(modifier = Modifier.fillMaxWidth(),
@@ -70,9 +71,10 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct) {
             , contentDescription = null
             , modifier = Modifier.padding(2.dp))
 
-        Image(painter = BitmapPainter(app.genIcon.scale(198, 198).asImageBitmap())
-            , contentDescription = null
-            , modifier = Modifier.padding(2.dp))
+        if (app.genIcon != null)
+            Image(painter = BitmapPainter(app.genIcon.scale(198, 198).asImageBitmap())
+                , contentDescription = null
+                , modifier = Modifier.padding(2.dp))
 
         Column() {
             Text(app.appName)
@@ -89,13 +91,15 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct) {
 
     if (openAppOptions) {
         val ctx = getCurrentContext()
+        val activity = getCurrentMainActivity()
+
         AppOptions(iconPacks, app, {
             CoroutineScope(Dispatchers.Default).launch {
                 if (uploadedImage != null) {
-                    app.genIcon = uploadedImage!!
+                    activity.editApplication(index, app.changeExport(genIcon = uploadedImage))
                 }
                 if (generatingOptions != null) {
-                    IconGenerator(ctx, generatingOptions!!).generateIcons(app, generatingType)
+                    IconGenerator(ctx, activity, generatingOptions!!).generateIcons(app, generatingType)
                 }
             }
 
@@ -105,7 +109,7 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct) {
 }
 
 @Composable
-fun RefreshButton(apps: Array<PackageInfoStruct>) {
+fun RefreshButton() {
     val prefs = getPreferences()
     val type = prefs.getTypeValue()
     val monochrome = prefs.getMonochromeValue()
@@ -113,15 +117,16 @@ fun RefreshButton(apps: Array<PackageInfoStruct>) {
     val iconColor = prefs.getIconColorValue()
 
     val ctx = getCurrentContext()
+    val activity = getCurrentMainActivity()
 
     IconButton(onClick = {
         CoroutineScope(Dispatchers.Default).launch {
             val opt = IconGenerator.GenerationOptions(Color.parseColor(iconColor.toHexString()), monochrome, vector)
-            IconGenerator(ctx, opt).generateIcons(apps, type)
+            IconGenerator(ctx, activity, opt).generateIcons(activity.applicationList, type)
 
-            withContext(Dispatchers.Main) {
+            /*withContext(Dispatchers.Main) {
 
-            }
+            }*/
         }
     }) {
         Icon(
@@ -133,15 +138,16 @@ fun RefreshButton(apps: Array<PackageInfoStruct>) {
 }
 
 @Composable
-fun BuildPackButton(apps: Array<PackageInfoStruct>) {
+fun BuildPackButton() {
     val ctx = getCurrentContext()
+    val activity = getCurrentMainActivity()
     val themed = getPreferences().getExportThemedValue()
     val iconColor = getPreferences().getIconColorValue()
     val bgColor = getPreferences().getBackgroundColorValue()
 
     IconButton(onClick = {
         CoroutineScope(Dispatchers.Default).launch {
-            IconPackGenerator(ctx, apps).create(themed, iconColor.toHexString(), bgColor.toHexString()) {  }
+            IconPackGenerator(ctx, activity.applicationList).create(themed, iconColor.toHexString(), bgColor.toHexString()) {  }
         }
     }) {
         Icon(
@@ -154,7 +160,7 @@ fun BuildPackButton(apps: Array<PackageInfoStruct>) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TitleBar(apps: Array<PackageInfoStruct>) {
+fun TitleBar() {
     val prefs = getPreferences()
     var openSettings by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
@@ -168,8 +174,8 @@ fun TitleBar(apps: Array<PackageInfoStruct>) {
             Text("Iconeration")
         },
         actions = {
-            RefreshButton(apps)
-            BuildPackButton(apps)
+            RefreshButton()
+            BuildPackButton()
             IconButton(onClick = { openInfo = true }) {
                 Icon(
                     imageVector = Icons.Filled.Info,

@@ -55,13 +55,23 @@ class ApplicationManager(private val ctx: Context) {
 
             if (usrApps.isNotEmpty()) {
                 for (app in usrApps) {
-                    val packInfo = PackageInfoStruct()
-                    packInfo.appName = app.applicationInfo.loadLabel(pm).toString()
-                    packInfo.packageName = app.componentName.packageName
-                    packInfo.activityName = app.componentName.className
-                    packInfo.icon = app.applicationInfo.loadIcon(pm)
-                    packInfo.iconID = app.applicationInfo.icon
-                    packInfo.source = PackageInfoStruct.PackageSource.Device
+                    val appName = app.applicationInfo.loadLabel(pm).toString()
+                    val packageName = app.componentName.packageName
+                    val activityName = app.componentName.className
+                    val icon = app.applicationInfo.loadIcon(pm)
+                    val iconID = app.applicationInfo.icon
+                    val source = PackageInfoStruct.PackageSource.Device
+
+                    val packInfo = PackageInfoStruct(
+                        appName,
+                        packageName,
+                        activityName,
+                        icon,
+                        iconID,
+                        0,
+                        "",
+                        source
+                    )
 
                     if (!packInfoStructs.contains(packInfo))
                         packInfoStructs.add(packInfo)
@@ -144,14 +154,14 @@ class ApplicationManager(private val ctx: Context) {
                 val i = packApps.indexOf(installedApp)
                 val packApp = packApps[i]
 
-                val packInfo = PackageInfoStruct()
-                packInfo.appName = installedApp.appName
-                packInfo.packageName = installedApp.packageName
-                packInfo.activityName = installedApp.activityName
-                packInfo.icon = installedApp.icon
-                packInfo.genIcon = packApp.icon.toBitmap()
-                packInfo.source = PackageInfoStruct.PackageSource.IconPack
+                val appName = installedApp.appName
+                val appPackageName = installedApp.packageName
+                val activityName = installedApp.activityName
+                val icon = installedApp.icon
+                val genIcon = packApp.icon.toBitmap()
+                val source = PackageInfoStruct.PackageSource.IconPack
 
+                val packInfo = PackageInfoStruct(appName, appPackageName, activityName, icon, 0, 0, "", source, genIcon = genIcon)
                 missingApps.add(packInfo)
             }
         }
@@ -166,17 +176,18 @@ class ApplicationManager(private val ctx: Context) {
         for (pack in resolves) {
             //val res = pm.getResourcesForApplication(pack.activityInfo.applicationInfo)
 
-            val packInfo = PackageInfoStruct()
-            packInfo.appName = pack.activityInfo.applicationInfo.loadLabel(pm).toString()
-            packInfo.packageName = pack.activityInfo.packageName
-            packInfo.activityName = pack.activityInfo.name
-            packInfo.icon = pack.activityInfo.applicationInfo.loadIcon(pm)
-            packInfo.iconID = pack.activityInfo.applicationInfo.icon
-            packInfo.source = PackageInfoStruct.PackageSource.Device
+            val appName = pack.activityInfo.applicationInfo.loadLabel(pm).toString()
+            val packageName = pack.activityInfo.packageName
+            val activityName = pack.activityInfo.name
+            val icon = pack.activityInfo.applicationInfo.loadIcon(pm)
+            val iconID = pack.activityInfo.applicationInfo.icon
+            val source = PackageInfoStruct.PackageSource.Device
 
             val pack2 = getPackage(pack.activityInfo.packageName)!!
-            packInfo.versionCode = getVersionCode(pack2)
-            packInfo.versionName = pack2.versionName
+            val versionCode = getVersionCode(pack2)
+            val versionName = pack2.versionName
+
+            val packInfo = PackageInfoStruct(appName, packageName, activityName, icon, iconID, versionCode, versionName, source)
 
             packInfoStructs.add(packInfo)
         }
@@ -197,16 +208,14 @@ class ApplicationManager(private val ctx: Context) {
                     val components = ComponentInfo()
                     if (iconName != null && componentInfo != null && components.parse(componentInfo)) {
                         val iconId = getIdentifier(res, iconName, packageName)
-                        val icon = getResIcon(res, iconId)
 
                         if (iconId > 0) {
-                            val packInfo = PackageInfoStruct()
-                            packInfo.appName = iconName
-                            packInfo.packageName = components.packageName
-                            packInfo.activityName = components.activityNane
-                            packInfo.icon = icon!!
-                            packInfo.iconID = iconId
-                            packInfo.source = PackageInfoStruct.PackageSource.IconPack
+                            val appPackageName = components.packageName
+                            val activityName = components.activityNane
+                            val icon = getResIcon(res, iconId)!!
+                            val source = PackageInfoStruct.PackageSource.IconPack
+
+                            val packInfo = PackageInfoStruct(iconName, appPackageName, activityName, icon, iconId, 0, "", source)
 
                             if (!packApps.contains(packInfo))
                                 packApps.add(packInfo)
@@ -332,7 +341,8 @@ class ApplicationManager(private val ctx: Context) {
         }
     }
 
-    @SuppressWarnings("deprecation")
+    @Suppress("DEPRECATION")
+    @SuppressWarnings("DEPRECATION")
     fun getVersionCode(pack: PackageInfo): Long {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
             pack.longVersionCode

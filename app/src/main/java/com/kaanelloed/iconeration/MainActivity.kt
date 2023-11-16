@@ -5,11 +5,12 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.core.graphics.drawable.toBitmap
 import androidx.datastore.core.DataStore
@@ -27,18 +28,22 @@ import kotlinx.coroutines.launch
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 class MainActivity : ComponentActivity() {
+    var applicationList: List<PackageInfoStruct> by mutableStateOf(listOf())
+        private set
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         val apps = ApplicationManager(applicationContext).getAllInstalledApps()
-        for (app in apps) {
-            app.genIcon = app.icon.toBitmap()
-        }
-
         apps.sort()
 
         val iconPacks = ApplicationManager(applicationContext).getIconPacks()
         syncIconPacks()
+
+        applicationList = apps.toList()
+        for (app in apps) {
+            editApplication(app, app.changeExport(genIcon = app.icon.toBitmap()))
+        }
 
         setContent {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
@@ -49,9 +54,9 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     Column {
-                        TitleBar(apps)
+                        TitleBar()
                         OptionsCard(iconPacks)
-                        ApplicationList(iconPacks, apps)
+                        ApplicationList(iconPacks)
                     }
                 }
             }
@@ -96,6 +101,18 @@ class MainActivity : ComponentActivity() {
                     packDao.insertIconPackWithApplications(iconPack, packApps)
                 }
             }
+        }
+    }
+
+    fun editApplication(oldApp: PackageInfoStruct, newApp: PackageInfoStruct) {
+        val index = applicationList.indexOf(oldApp)
+        if (index >= 0)
+            editApplication(index, newApp)
+    }
+
+    fun editApplication(index: Int, newApp: PackageInfoStruct) {
+        applicationList = applicationList.toMutableList().also {
+            it[index] = newApp
         }
     }
 }

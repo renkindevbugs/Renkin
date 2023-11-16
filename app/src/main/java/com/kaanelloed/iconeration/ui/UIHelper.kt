@@ -17,7 +17,7 @@ fun getCurrentContext(): Context {
 
 @Composable
 fun getCurrentActivity(): Activity {
-    var context = getCurrentContext()
+    var context = LocalContext.current
 
     while (context is ContextWrapper) {
         if (context is Activity) return context

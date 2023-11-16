@@ -23,7 +23,7 @@ import com.reandroid.arsc.value.ValueType
 import java.io.ByteArrayOutputStream
 import java.io.File
 
-class IconPackGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>) {
+class IconPackGenerator(private val ctx: Context, private val apps: List<PackageInfoStruct>) {
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
@@ -89,14 +89,14 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
                 adaptive.background("@color/icon_background_color")
 
                 if (app.exportType == PackageInfoStruct.ExportType.XML)
-                    createXmlDrawableResource(apkModule, packageBlock, app.vector.toXMLFile(), appFileName + "_foreground")
+                    createXmlDrawableResource(apkModule, packageBlock, app.vector!!.toXMLFile(), appFileName + "_foreground")
                 else
-                    createPngResource(apkModule, packageBlock, app.genIcon, appFileName + "_foreground")
+                    createPngResource(apkModule, packageBlock, app.genIcon!!, appFileName + "_foreground")
 
                 createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
             }
             else
-                createPngResource(apkModule, packageBlock, app.genIcon, appFileName)
+                createPngResource(apkModule, packageBlock, app.genIcon!!, appFileName)
 
             drawableXml.item(appFileName)
             appfilterXml.item(app.packageName, app.activityName, appFileName)

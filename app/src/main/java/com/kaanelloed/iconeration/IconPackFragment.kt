@@ -62,8 +62,8 @@ class IconPackFragment : Fragment() {
                     WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE)
             }
 
-            val creator = IconPackGenerator(view.context, act.apps!!)
-            creator.create(PreferencesHelper(view.context).getExportThemed(), "#FFFFFFFF", "#FF000000", this::addText)
+            //val creator = IconPackGenerator(view.context, act.apps!!)
+            //creator.create(PreferencesHelper(view.context).getExportThemed(), "#FFFFFFFF", "#FF000000", this::addText)
 
             requireView().post {
                 view.findViewById<ProgressBar>(R.id.progressBar).visibility = View.INVISIBLE

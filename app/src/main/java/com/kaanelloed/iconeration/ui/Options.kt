@@ -179,7 +179,7 @@ fun OptionsCard(iconPacks: List<IconPack>) {
         shape = RoundedCornerShape(8.dp),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(16.dp, 4.dp)
+            .padding(16.dp, 8.dp)
             .clickable(
                 onClick = { expanded = !expanded }
             )
