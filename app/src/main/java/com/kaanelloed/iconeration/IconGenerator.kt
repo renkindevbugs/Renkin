@@ -15,10 +15,16 @@ import android.os.Build
 import androidx.core.graphics.drawable.toBitmap
 import com.caverock.androidsvg.SVG
 import com.kaanelloed.iconeration.data.GenerationType
+import com.kaanelloed.iconeration.data.IconPackApplication
 import jankovicsandras.imagetracerandroid.ImageTracerAndroid
 import org.xmlpull.v1.XmlPullParser
 
-class IconGenerator(private val ctx: Context, private val activity: MainActivity, val options: GenerationOptions) {
+class IconGenerator(
+    private val ctx: Context,
+    private val activity: MainActivity,
+    private val options: GenerationOptions,
+    private val iconPackApplications: Map<IconPackApplication, Drawable>
+) {
     private lateinit var apps: List<PackageInfoStruct>
 
     fun generateIcons(application: PackageInfoStruct, type: GenerationType) {
@@ -37,21 +43,23 @@ class IconGenerator(private val ctx: Context, private val activity: MainActivity
         }
     }
 
-    fun colorizeFromIconPack(application: PackageInfoStruct) {
-        changeIconPackColor(application)
+    fun colorizeFromIconPack(application: PackageInfoStruct, icon: Drawable) {
+        changeIconPackColor(application, icon)
     }
 
     private fun generateCannyEdgeDetection() {
         var edgeDetector: CannyEdgeDetector
         for (app in apps) {
-            if (app.source == PackageInfoStruct.PackageSource.Device) {
+            val iconPack = iconPackApplicationIcon(app.packageName)
+
+            if (iconPack == null) {
                 edgeDetector = CannyEdgeDetector()
                 edgeDetector.process(
                     getAppIconBitmap(app),
                     options.color
                 )
                 activity.editApplication(app, app.changeExport(genIcon = edgeDetector.edgesImage))
-            } else changeIconPackColor(app)
+            } else changeIconPackColor(app, iconPack)
         }
     }
 
@@ -59,13 +67,15 @@ class IconGenerator(private val ctx: Context, private val activity: MainActivity
         val appMan = ApplicationManager(ctx)
 
         for (app in apps) {
-            if (app.source == PackageInfoStruct.PackageSource.Device) {
+            val iconPack = iconPackApplicationIcon(app.packageName)
+
+            if (iconPack == null) {
                 if (isVectorDrawable(app.icon) && options.vector) {
                     generatePathFromXML(appMan, app)
                 } else {
                     generateColorQuantizationDetection(app)
                 }
-            } else changeIconPackColor(app)
+            } else changeIconPackColor(app, iconPack)
         }
     }
 
@@ -240,12 +250,14 @@ class IconGenerator(private val ctx: Context, private val activity: MainActivity
         val gen = LetterGenerator(ctx)
 
         for (app in apps) {
-            if (app.source == PackageInfoStruct.PackageSource.Device) {
+            val iconPack = iconPackApplicationIcon(app.packageName)
+
+            if (iconPack == null) {
                 val draw = gen.generateFirstLetter(app.normalizeName())
                 draw.colorFilter = PorterDuffColorFilter(options.color, PorterDuff.Mode.SRC_IN)
                 val newIcon = draw.toBitmap(256, 256)
                 activity.editApplication(app, app.changeExport(genIcon = newIcon))
-            } else changeIconPackColor(app)
+            } else changeIconPackColor(app, iconPack)
         }
     }
 
@@ -253,11 +265,13 @@ class IconGenerator(private val ctx: Context, private val activity: MainActivity
         val gen = LetterGenerator(ctx)
 
         for (app in apps) {
-            if (app.source == PackageInfoStruct.PackageSource.Device) {
+            val iconPack = iconPackApplicationIcon(app.packageName)
+
+            if (iconPack == null) {
                 val draw = gen.generateTwoLetters(app.appName, options.color)
                 val newIcon = draw.toBitmap(256, 256)
                 activity.editApplication(app, app.changeExport(genIcon = newIcon))
-            } else changeIconPackColor(app)
+            } else changeIconPackColor(app, iconPack)
         }
     }
 
@@ -265,22 +279,35 @@ class IconGenerator(private val ctx: Context, private val activity: MainActivity
         val gen = LetterGenerator(ctx)
 
         for (app in apps) {
-            if (app.source == PackageInfoStruct.PackageSource.Device) {
+            val iconPack = iconPackApplicationIcon(app.packageName)
+
+            if (iconPack == null) {
                 val draw = gen.generateAppName(app.appName, options.color)
                 val newIcon = draw.toBitmap(256, 256)
                 activity.editApplication(app, app.changeExport(genIcon = newIcon))
-            } else changeIconPackColor(app)
+            } else changeIconPackColor(app, iconPack)
         }
     }
 
-    private fun changeIconPackColor(app: PackageInfoStruct) {
-        val coloredIcon: Bitmap = app.genIcon!!.copy(app.genIcon.config, true)
+    private fun changeIconPackColor(app: PackageInfoStruct, icon: Drawable) {
+        val oldIcon = icon.toBitmap()
+        val coloredIcon: Bitmap = oldIcon.copy(oldIcon.config, true)
         val paint = Paint()
 
         paint.colorFilter = PorterDuffColorFilter(options.color, PorterDuff.Mode.SRC_IN)
         Canvas(coloredIcon).drawBitmap(coloredIcon, 0F, 0F, paint)
 
         activity.editApplication(app, app.changeExport(genIcon = coloredIcon))
+    }
+
+    private fun iconPackApplicationIcon(packageName: String): Drawable? {
+        val app = iconPackApplications.keys.find { it.packageName == packageName }
+
+        if (app != null) {
+            return iconPackApplications[app]
+        }
+
+        return null
     }
 
     class GenerationOptions(val color: Int, val monochrome: Boolean, val vector: Boolean) { }

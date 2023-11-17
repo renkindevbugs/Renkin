@@ -28,10 +28,11 @@ data class IconPackApplication constructor(
     val resourceID: Int
 )
 
-@Entity
+@Entity(primaryKeys = ["packageName", "activityName"])
 data class InstalledApplication constructor(
-    @PrimaryKey val packageName: String,
-    val iconID: Int,
+    val packageName: String,
+    val activityName: String,
+    val iconID: Int
 )
 
 @Dao
@@ -75,7 +76,7 @@ interface IconPackDao {
     @Query(
         "SELECT * FROM IconPack AS pack " +
                 "JOIN IconPackApplication AS apps ON pack.packageName = apps.iconPackName " +
-                "JOIN InstalledApplication AS inst ON apps.packageName = inst.packageName"
+                "JOIN InstalledApplication AS inst ON apps.packageName = inst.packageName AND apps.activityName = inst.activityName"
     )
     fun getIconPacksWithInstalledApps(): Map<IconPack, List<IconPackApplication>>
 }

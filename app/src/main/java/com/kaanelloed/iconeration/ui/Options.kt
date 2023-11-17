@@ -116,6 +116,7 @@ fun OptionColumn(iconPacks: List<IconPack>) {
 
     uploadedImage = null
     generatingOptions = null
+    iconPackageName = ""
 
     Column {
         Text(
@@ -208,6 +209,8 @@ fun OptionsCard(iconPacks: List<IconPack>) {
                         ColorButton("Background color", bgColors) { scope.launch { prefs.setBackgroundColor(it) } }
                     }
                 }
+
+                iconPackageName = iconPack
             }
         }
     }

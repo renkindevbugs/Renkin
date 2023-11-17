@@ -46,9 +46,6 @@ class MainActivity : ComponentActivity() {
         syncIconPacks()
 
         applicationList = apps.toList()
-        for (app in apps) {
-            editApplication(app, app.changeExport(genIcon = app.icon.toBitmap()))
-        }
 
         setContent {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()

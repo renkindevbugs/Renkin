@@ -12,7 +12,6 @@ class PackageInfoStruct(
     val iconID: Int,
     val versionCode: Long,
     val versionName: String,
-    val source: PackageSource,
     val exportType: ExportType = ExportType.PNG,
     val genIcon: Bitmap? = null,
     val vector: VectorHandler? = null,
@@ -36,7 +35,7 @@ class PackageInfoStruct(
         , genIcon: Bitmap? = null
         , vector: VectorHandler? = null
     ): PackageInfoStruct  {
-        return PackageInfoStruct(appName, packageName, activityName, icon, iconID, versionCode, versionName, source, exportType, genIcon, vector, internalVersion + 1)
+        return PackageInfoStruct(appName, packageName, activityName, icon, iconID, versionCode, versionName, exportType, genIcon, vector, internalVersion + 1)
     }
 
     fun getFileName(): String {
@@ -49,10 +48,6 @@ class PackageInfoStruct(
 
     private fun removeDiacritics(text: String): String {
         return Normalizer.normalize(text, Normalizer.Form.NFD).replace("\\p{Mn}+".toRegex(), "")
-    }
-
-    enum class PackageSource {
-        Device, IconPack
     }
 
     enum class ExportType {

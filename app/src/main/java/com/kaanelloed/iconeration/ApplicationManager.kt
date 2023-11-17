@@ -37,7 +37,7 @@ class ApplicationManager(private val ctx: Context) {
         val packs = mutableListOf<InstalledApplication>()
 
         for (app in apps) {
-            val pack = InstalledApplication(app.packageName, app.iconID)
+            val pack = InstalledApplication(app.packageName, app.activityName, app.iconID)
             packs.add(pack)
         }
 
@@ -60,7 +60,6 @@ class ApplicationManager(private val ctx: Context) {
                     val activityName = app.componentName.className
                     val icon = app.applicationInfo.loadIcon(pm)
                     val iconID = app.applicationInfo.icon
-                    val source = PackageInfoStruct.PackageSource.Device
 
                     val packInfo = PackageInfoStruct(
                         appName,
@@ -69,8 +68,7 @@ class ApplicationManager(private val ctx: Context) {
                         icon,
                         iconID,
                         0,
-                        "",
-                        source
+                        ""
                     )
 
                     if (!packInfoStructs.contains(packInfo))
@@ -159,9 +157,8 @@ class ApplicationManager(private val ctx: Context) {
                 val activityName = installedApp.activityName
                 val icon = installedApp.icon
                 val genIcon = packApp.icon.toBitmap()
-                val source = PackageInfoStruct.PackageSource.IconPack
 
-                val packInfo = PackageInfoStruct(appName, appPackageName, activityName, icon, 0, 0, "", source, genIcon = genIcon)
+                val packInfo = PackageInfoStruct(appName, appPackageName, activityName, icon, 0, 0, "", genIcon = genIcon)
                 missingApps.add(packInfo)
             }
         }
@@ -181,13 +178,12 @@ class ApplicationManager(private val ctx: Context) {
             val activityName = pack.activityInfo.name
             val icon = pack.activityInfo.applicationInfo.loadIcon(pm)
             val iconID = pack.activityInfo.applicationInfo.icon
-            val source = PackageInfoStruct.PackageSource.Device
 
             val pack2 = getPackage(pack.activityInfo.packageName)!!
             val versionCode = getVersionCode(pack2)
             val versionName = pack2.versionName
 
-            val packInfo = PackageInfoStruct(appName, packageName, activityName, icon, iconID, versionCode, versionName, source)
+            val packInfo = PackageInfoStruct(appName, packageName, activityName, icon, iconID, versionCode, versionName)
 
             packInfoStructs.add(packInfo)
         }
@@ -213,9 +209,8 @@ class ApplicationManager(private val ctx: Context) {
                             val appPackageName = components.packageName
                             val activityName = components.activityNane
                             val icon = getResIcon(res, iconId)!!
-                            val source = PackageInfoStruct.PackageSource.IconPack
 
-                            val packInfo = PackageInfoStruct(iconName, appPackageName, activityName, icon, iconId, 0, "", source)
+                            val packInfo = PackageInfoStruct(iconName, appPackageName, activityName, icon, iconId, 0, "")
 
                             if (!packApps.contains(packInfo))
                                 packApps.add(packInfo)
@@ -290,6 +285,18 @@ class ApplicationManager(private val ctx: Context) {
         }
 
         return null
+    }
+
+    fun getIconPackApplicationResources(packageName: String,
+                                        iconPackApps: List<IconPackApplication>
+    ): Map<IconPackApplication, Drawable> {
+        val map = mutableMapOf<IconPackApplication, Drawable>()
+        val res = pm.getResourcesForApplication(packageName)
+        for (iconPackApp in iconPackApps) {
+            map[iconPackApp] = getResIcon(res, iconPackApp.resourceID)!!
+        }
+
+        return map
     }
 
     private fun getResIcon(res: Resources, iconName: String, packageName: String): Drawable? {

@@ -1,6 +1,7 @@
 package com.kaanelloed.iconeration.ui
 
 import android.graphics.Color
+import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -41,6 +42,7 @@ import com.kaanelloed.iconeration.IconGenerator
 import com.kaanelloed.iconeration.IconPackGenerator
 import com.kaanelloed.iconeration.PackageInfoStruct
 import com.kaanelloed.iconeration.data.IconPack
+import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.data.getBackgroundColorValue
 import com.kaanelloed.iconeration.data.getExportThemedValue
 import com.kaanelloed.iconeration.data.getIconColorValue
@@ -104,10 +106,8 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
 
                     if (packApp != null) {
                         val icon = ApplicationManager(ctx).getResIcon(packApp.iconPackName, packApp.resourceID)!!
-                        val newApp = app.changeExport(genIcon = icon.toBitmap())
-                        activity.editApplication(app, newApp)
 
-                        IconGenerator(ctx, activity, generatingOptions!!).colorizeFromIconPack(newApp)
+                        IconGenerator(ctx, activity, generatingOptions!!, emptyMap()).colorizeFromIconPack(app, icon)
                         toGenerate = false
                     }
                 }
@@ -116,7 +116,7 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
                     activity.editApplication(index, app.changeExport(genIcon = uploadedImage))
                 }
                 if (generatingOptions != null && toGenerate) {
-                    IconGenerator(ctx, activity, generatingOptions!!).generateIcons(app, generatingType)
+                    IconGenerator(ctx, activity, generatingOptions!!, emptyMap()).generateIcons(app, generatingType)
                 }
             }
 
@@ -138,12 +138,15 @@ fun RefreshButton() {
 
     IconButton(onClick = {
         CoroutineScope(Dispatchers.Default).launch {
-            val opt = IconGenerator.GenerationOptions(Color.parseColor(iconColor.toHexString()), monochrome, vector)
-            IconGenerator(ctx, activity, opt).generateIcons(activity.applicationList, type)
-            TODO() //Handle icon-pack
-            /*withContext(Dispatchers.Main) {
+            var iconPackApps = emptyMap<IconPackApplication, Drawable>()
+            if (iconPackageName != "") {
+                val pack = activity.iconPackApplications.keys.find { it.packageName == iconPackageName }
+                val packApps = activity.iconPackApplications[pack]!!
+                iconPackApps = ApplicationManager(ctx).getIconPackApplicationResources(iconPackageName, packApps)
+            }
 
-            }*/
+            val opt = IconGenerator.GenerationOptions(Color.parseColor(iconColor.toHexString()), monochrome, vector)
+            IconGenerator(ctx, activity, opt, iconPackApps).generateIcons(activity.applicationList, type)
         }
     }) {
         Icon(
