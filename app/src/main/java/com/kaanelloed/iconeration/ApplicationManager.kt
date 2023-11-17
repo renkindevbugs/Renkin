@@ -26,12 +26,6 @@ import org.xmlpull.v1.XmlPullParserFactory
 class ApplicationManager(private val ctx: Context) {
     private val pm = ctx.packageManager
 
-    fun getInstalledApps(): Array<PackageInfoStruct> {
-        val mainIntent = Intent(Intent.ACTION_MAIN, null)
-        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER)
-        return getApps(mainIntent)
-    }
-
     fun getAllInstalledApplications(): List<InstalledApplication> {
         val apps = getAllInstalledApps()
         val packs = mutableListOf<InstalledApplication>()
@@ -93,7 +87,7 @@ class ApplicationManager(private val ctx: Context) {
         return packs.toList()
     }
 
-    fun getIconPackApps(): Array<PackageInfoStruct> {
+    private fun getIconPackApps(): Array<PackageInfoStruct> {
         return getApps(Intent("org.adw.launcher.THEMES", null))
     }
 
@@ -118,53 +112,6 @@ class ApplicationManager(private val ctx: Context) {
         }
 
         return emptyArray()
-    }
-
-    fun getMissingPackageApps(packageName: String, includeAvailable: Boolean = false): Array<PackageInfoStruct> {
-        return if (includeAvailable)
-            getPackageAppsWithMissing(packageName)
-        else
-            getMissingPackageAppsOnly(packageName)
-    }
-
-    private fun getMissingPackageAppsOnly(packageName: String): Array<PackageInfoStruct> {
-        val missingApps = mutableListOf<PackageInfoStruct>()
-        val packApps = getPackageApps(packageName)
-        val installedApps = getAllInstalledApps()
-
-        for (installedApp in installedApps) {
-            if (!packApps.contains(installedApp)) {
-                missingApps.add(installedApp)
-            }
-        }
-
-        return missingApps.toTypedArray()
-    }
-
-    private fun getPackageAppsWithMissing(packageName: String): Array<PackageInfoStruct> {
-        val missingApps = mutableListOf<PackageInfoStruct>()
-        val packApps = getPackageApps(packageName)
-        val installedApps = getAllInstalledApps()
-
-        for (installedApp in installedApps) {
-            if (!packApps.contains(installedApp)) {
-                missingApps.add(installedApp)
-            } else {
-                val i = packApps.indexOf(installedApp)
-                val packApp = packApps[i]
-
-                val appName = installedApp.appName
-                val appPackageName = installedApp.packageName
-                val activityName = installedApp.activityName
-                val icon = installedApp.icon
-                val genIcon = packApp.icon.toBitmap()
-
-                val packInfo = PackageInfoStruct(appName, appPackageName, activityName, icon, 0, 0, "", genIcon = genIcon)
-                missingApps.add(packInfo)
-            }
-        }
-
-        return missingApps.toTypedArray()
     }
 
     private fun getApps(intent: Intent): Array<PackageInfoStruct> {
@@ -357,7 +304,7 @@ class ApplicationManager(private val ctx: Context) {
     @Suppress("DEPRECATION")
     @SuppressWarnings("DEPRECATION")
     fun getVersionCode(pack: PackageInfo): Long {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+        return if (VERSION.SDK_INT >= VERSION_CODES.P)
             pack.longVersionCode
         else
             pack.versionCode.toLong()
