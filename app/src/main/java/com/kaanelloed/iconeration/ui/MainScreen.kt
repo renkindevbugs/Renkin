@@ -16,6 +16,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -27,6 +28,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -165,15 +167,38 @@ fun BuildPackButton() {
     val iconColor = getPreferences().getIconColorValue()
     val bgColor = getPreferences().getBackgroundColorValue()
 
+    var openBuilder by rememberSaveable { mutableStateOf(false) }
+    var text by remember { mutableStateOf("") }
+
     IconButton(onClick = {
+        openBuilder = true
         CoroutineScope(Dispatchers.Default).launch {
-            IconPackGenerator(ctx, activity.applicationList).create(themed, iconColor.toHexString(), bgColor.toHexString()) {  }
+            IconPackGenerator(ctx, activity.applicationList).create(themed, iconColor.toHexString(), bgColor.toHexString()) {
+                text += it + "\n"
+            }
+
+            openBuilder = false
+            text = ""
         }
     }) {
         Icon(
             imageVector = Icons.Filled.Build,
             contentDescription = "Create icon pack",
             tint = MaterialTheme.colorScheme.primary
+        )
+    }
+
+    if (openBuilder) {
+        AlertDialog(
+            shape = RoundedCornerShape(20.dp),
+            containerColor = MaterialTheme.colorScheme.background,
+            titleContentColor = MaterialTheme.colorScheme.outline,
+            onDismissRequest = {},
+            title = { Text("Icon pack") },
+            text = {
+                Text(text = text)
+            },
+            confirmButton = {}
         )
     }
 }

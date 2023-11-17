@@ -68,7 +68,8 @@ class ApplicationManager(private val ctx: Context) {
                         icon,
                         iconID,
                         0,
-                        ""
+                        "",
+                        genIcon = icon.toBitmap()
                     )
 
                     if (!packInfoStructs.contains(packInfo))
