@@ -290,7 +290,12 @@ class IconGenerator(
     }
 
     private fun changeIconPackColor(app: PackageInfoStruct, icon: Drawable) {
-        val oldIcon = icon.toBitmap()
+        val oldIcon = if (icon is AdaptiveIconDrawable) {
+            ForegroundIconDrawable(icon.foreground).toBitmap()
+        } else {
+            icon.toBitmap()
+        }
+
         val coloredIcon: Bitmap = oldIcon.copy(oldIcon.config, true)
         val paint = Paint()
 
