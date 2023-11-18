@@ -19,10 +19,11 @@ import com.reandroid.arsc.chunk.TableBlock
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
 import com.reandroid.arsc.chunk.xml.ResXmlElement
 import com.reandroid.arsc.coder.ValueCoder
+import com.reandroid.arsc.value.ValueType
 import java.io.ByteArrayOutputStream
 import java.io.File
 
-class IconPackGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>) {
+class IconPackGenerator(private val ctx: Context, private val apps: List<PackageInfoStruct>) {
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
@@ -30,10 +31,11 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
     private val iconPackName = "com.kaanelloed.iconerationiconpack"
     private val newVersionCode = 1
+    private val newVersionName = "0.1.0"
+    private val frameworkVersion = 33
+    private val minSdkVersion = 26
 
-    fun create(textMethod: (text: String) -> Unit) {
-        val themed = PreferencesHelper(ctx).getExportThemed()
-
+    fun create(themed: Boolean, iconColor: String, backgroundColor: String, textMethod: (text: String) -> Unit) {
         val currentVersionCode = getCurrentVersionCode()
         if (currentVersionCode != 0L) {
             if (!keyStoreFile.exists() || newVersionCode > currentVersionCode) {
@@ -51,23 +53,25 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         apkModule.setManifest(manifest)
 
         textMethod("Initializing framework ...")
-        val framework = apkModule.initializeAndroidFramework(33)
+        val framework = apkModule.initializeAndroidFramework(frameworkVersion)
         val packageBlock = tableBlock.newPackage(0x7f, iconPackName)
 
         textMethod("Generating manifest ...")
         manifest.packageName = iconPackName
         manifest.versionCode = newVersionCode
-        manifest.versionName = "0.1.0"
+        manifest.versionName = newVersionName
         manifest.compileSdkVersion = framework.versionCode
         manifest.compileSdkVersionCodename = framework.versionName
         manifest.platformBuildVersionCode = framework.versionCode
         manifest.platformBuildVersionName = framework.versionName
+
+        setSdkVersions(manifest.manifestElement, minSdkVersion, framework.versionCode)
         manifest.setApplicationLabel("Iconeration Icon Pack")
 
         createMainActivity(manifest)
 
-        createColorResource(packageBlock, "icon_color", "#FFFFFFFF")
-        createColorResource(packageBlock, "icon_background_color", "#FF000000")
+        createColorResource(packageBlock, "icon_color", iconColor)
+        createColorResource(packageBlock, "icon_background_color", backgroundColor)
 
         createRefColor31Resource(packageBlock, "icon_color", "@android:color/system_accent1_100")
         createRefColor31Resource(packageBlock, "icon_background_color", "@android:color/system_accent1_800")
@@ -85,14 +89,14 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
                 adaptive.background("@color/icon_background_color")
 
                 if (app.exportType == PackageInfoStruct.ExportType.XML)
-                    createXmlDrawableResource(apkModule, packageBlock, app.vector.toXMLFile(), appFileName + "_foreground")
+                    createXmlDrawableResource(apkModule, packageBlock, app.vector!!.toXMLFile(), appFileName + "_foreground")
                 else
-                    createPngResource(apkModule, packageBlock, app.genIcon, appFileName + "_foreground")
+                    createPngResource(apkModule, packageBlock, app.genIcon!!, appFileName + "_foreground")
 
                 createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
             }
             else
-                createPngResource(apkModule, packageBlock, app.genIcon, appFileName)
+                createPngResource(apkModule, packageBlock, app.genIcon!!, appFileName)
 
             drawableXml.item(appFileName)
             appfilterXml.item(app.packageName, app.activityName, appFileName)
@@ -115,6 +119,22 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         installApk(signedApk)
 
         textMethod("Done")
+    }
+
+    private fun setSdkVersions(manifest: ResXmlElement, minSdkVersion: Int, targetSdkVersion: Int) {
+        val useSdk = manifest.createChildElement(AndroidManifestBlock.TAG_uses_sdk)
+
+        val minSdk = useSdk.getOrCreateAndroidAttribute(
+            AndroidManifestBlock.NAME_minSdkVersion,
+            AndroidManifestBlock.ID_minSdkVersion
+        )
+        minSdk.setTypeAndData(ValueType.DEC, minSdkVersion)
+
+        val targetSdk = useSdk.getOrCreateAndroidAttribute(
+            AndroidManifestBlock.NAME_targetSdkVersion,
+            AndroidManifestBlock.ID_targetSdkVersion
+        )
+        targetSdk.setTypeAndData(ValueType.DEC, targetSdkVersion)
     }
 
     private fun createMainActivity(manifest: AndroidManifestBlock) {
@@ -141,11 +161,17 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         createIntentFilter(activity, arrayOf("jp.co.a_tm.android.launcher.icons.ACTION_PICK_ICON"), arrayOf("android.intent.category.DEFAULT")) //+HOME Icon Picker
         createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN, "com.vivid.launcher.theme"), arrayOf("android.intent.category.DEFAULT")) //V Launcher
 
-        val attribute = activity.getOrCreateAndroidAttribute(
+        val activityName = activity.getOrCreateAndroidAttribute(
             AndroidManifestBlock.NAME_name,
             AndroidManifestBlock.ID_name
         )
-        attribute.valueAsString = "com.kaanelloed.iconerationiconpack.MainActivity"
+        activityName.valueAsString = "com.kaanelloed.iconerationiconpack.MainActivity"
+
+        val exported = activity.getOrCreateAndroidAttribute(
+            NAME_exported,
+            ID_exported
+        )
+        exported.valueAsBoolean = true
     }
 
     private fun createIntentFilter(activity: ResXmlElement, actions: Array<String>, categories: Array<String>) {
@@ -222,13 +248,12 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
 
     @SuppressWarnings("deprecation")
     private fun getCurrentVersionCode(): Long {
-        val iconPack = ApplicationManager(ctx).getPackage(iconPackName)
+        val appMan = ApplicationManager(ctx)
+
+        val iconPack = appMan.getPackage(iconPackName)
             ?: return 0L
 
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
-            iconPack.longVersionCode
-        else
-            iconPack.versionCode.toLong()
+        return appMan.getVersionCode(iconPack)
     }
 
     private fun signApk(file: File, outFile: File) {
@@ -251,4 +276,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: Array<Packag
         ctx.startActivity(intent)
         //TODO: use PackageInstaller instead
     }
+
+    private val NAME_exported = "exported"
+    private val ID_exported = 0x01010010
 }

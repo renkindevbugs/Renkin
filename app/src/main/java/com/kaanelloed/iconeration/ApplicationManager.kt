@@ -16,16 +16,25 @@ import android.os.Build.VERSION_CODES
 import android.os.UserManager
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toBitmap
+import com.kaanelloed.iconeration.data.IconPack
+import com.kaanelloed.iconeration.data.IconPackApplication
+import com.kaanelloed.iconeration.data.InstalledApplication
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
 class ApplicationManager(private val ctx: Context) {
     private val pm = ctx.packageManager
 
-    fun getInstalledApps(): Array<PackageInfoStruct> {
-        val mainIntent = Intent(Intent.ACTION_MAIN, null)
-        mainIntent.addCategory(Intent.CATEGORY_LAUNCHER)
-        return getApps(mainIntent)
+    fun getAllInstalledApplications(): List<InstalledApplication> {
+        val apps = getAllInstalledApps()
+        val packs = mutableListOf<InstalledApplication>()
+
+        for (app in apps) {
+            val pack = InstalledApplication(app.packageName, app.activityName, app.iconID)
+            packs.add(pack)
+        }
+
+        return packs.toList()
     }
 
     fun getAllInstalledApps(): Array<PackageInfoStruct> {
@@ -39,13 +48,22 @@ class ApplicationManager(private val ctx: Context) {
 
             if (usrApps.isNotEmpty()) {
                 for (app in usrApps) {
-                    val packInfo = PackageInfoStruct()
-                    packInfo.appName = app.applicationInfo.loadLabel(pm).toString()
-                    packInfo.packageName = app.componentName.packageName
-                    packInfo.activityName = app.componentName.className
-                    packInfo.icon = app.applicationInfo.loadIcon(pm)
-                    packInfo.iconID = app.applicationInfo.icon
-                    packInfo.source = PackageInfoStruct.PackageSource.Device
+                    val appName = app.applicationInfo.loadLabel(pm).toString()
+                    val packageName = app.componentName.packageName
+                    val activityName = app.componentName.className
+                    val icon = app.applicationInfo.loadIcon(pm)
+                    val iconID = app.applicationInfo.icon
+
+                    val packInfo = PackageInfoStruct(
+                        appName,
+                        packageName,
+                        activityName,
+                        icon,
+                        iconID,
+                        0,
+                        "",
+                        genIcon = icon.toBitmap()
+                    )
 
                     if (!packInfoStructs.contains(packInfo))
                         packInfoStructs.add(packInfo)
@@ -56,92 +74,43 @@ class ApplicationManager(private val ctx: Context) {
         return packInfoStructs.toTypedArray()
     }
 
-    fun getIconPackApps(): Array<PackageInfoStruct> {
-        return getApps(Intent("org.adw.launcher.THEMES", null))
+    fun getIconPacks(): List<IconPack> {
+        return getIconPacks(Intent("org.adw.launcher.THEMES", null))
     }
 
-    fun getPackageApps(packageName: String): Array<PackageInfoStruct> {
-        val res = pm.getResourcesForApplication(packageName)
-        val xmlParser = getAppfilter(res, packageName)
+    fun getIconPackApplications(iconPackName: String): List<IconPackApplication> {
+        val res = pm.getResourcesForApplication(iconPackName)
+        val xmlParser = getAppfilter(res, iconPackName)
 
         if (xmlParser != null) {
-            return getAppsFromAppfilter(res, xmlParser, packageName)
+            return getAppsFromAppFilter(res, xmlParser, iconPackName)
         }
 
-        return emptyArray()
+        return emptyList()
     }
 
-    fun getMissingPackageApps(packageName: String, includeAvailable: Boolean = false): Array<PackageInfoStruct> {
-        return if (includeAvailable)
-            getPackageAppsWithMissing(packageName)
-        else
-            getMissingPackageAppsOnly(packageName)
-    }
-
-    private fun getMissingPackageAppsOnly(packageName: String): Array<PackageInfoStruct> {
-        val missingApps = mutableListOf<PackageInfoStruct>()
-        val packApps = getPackageApps(packageName)
-        val installedApps = getAllInstalledApps()
-
-        for (installedApp in installedApps) {
-            if (!packApps.contains(installedApp)) {
-                missingApps.add(installedApp)
-            }
-        }
-
-        return missingApps.toTypedArray()
-    }
-
-    private fun getPackageAppsWithMissing(packageName: String): Array<PackageInfoStruct> {
-        val missingApps = mutableListOf<PackageInfoStruct>()
-        val packApps = getPackageApps(packageName)
-        val installedApps = getAllInstalledApps()
-
-        for (installedApp in installedApps) {
-            if (!packApps.contains(installedApp)) {
-                missingApps.add(installedApp)
-            } else {
-                val i = packApps.indexOf(installedApp)
-                val packApp = packApps[i]
-
-                val packInfo = PackageInfoStruct()
-                packInfo.appName = installedApp.appName
-                packInfo.packageName = installedApp.packageName
-                packInfo.activityName = installedApp.activityName
-                packInfo.icon = installedApp.icon
-                packInfo.genIcon = packApp.icon.toBitmap()
-                packInfo.source = PackageInfoStruct.PackageSource.IconPack
-
-                missingApps.add(packInfo)
-            }
-        }
-
-        return missingApps.toTypedArray()
-    }
-
-    private fun getApps(intent: Intent): Array<PackageInfoStruct> {
+    private fun getIconPacks(intent: Intent): List<IconPack> {
         val resolves = getResolves(intent)
-        val packInfoStructs = mutableListOf<PackageInfoStruct>()
+        val iconPacks = mutableListOf<IconPack>()
 
-        for (pack in resolves) {
-            //val res = pm.getResourcesForApplication(pack.activityInfo.applicationInfo)
+        for (resolve in resolves) {
+            val appName = resolve.activityInfo.applicationInfo.loadLabel(pm).toString()
+            val packageName = resolve.activityInfo.packageName
+            val iconID = resolve.activityInfo.applicationInfo.icon
 
-            val packInfo = PackageInfoStruct()
-            packInfo.appName = pack.activityInfo.applicationInfo.loadLabel(pm).toString()
-            packInfo.packageName = pack.activityInfo.packageName
-            packInfo.activityName = pack.activityInfo.name
-            packInfo.icon = pack.activityInfo.applicationInfo.loadIcon(pm)
-            packInfo.iconID = pack.activityInfo.applicationInfo.icon
-            packInfo.source = PackageInfoStruct.PackageSource.Device
+            val pack = getPackage(resolve.activityInfo.packageName)!!
+            val versionCode = getVersionCode(pack)
+            val versionName = pack.versionName
 
-            packInfoStructs.add(packInfo)
+            val iconPack = IconPack(packageName, appName, versionCode, versionName, iconID)
+            iconPacks.add(iconPack)
         }
 
-        return packInfoStructs.toTypedArray()
+        return iconPacks
     }
 
-    private fun getAppsFromAppfilter(res: Resources, xmlParser: XmlPullParser, packageName: String): Array<PackageInfoStruct> {
-        val packApps = mutableListOf<PackageInfoStruct>()
+    private fun getAppsFromAppFilter(res: Resources, xmlParser: XmlPullParser, packageName: String): List<IconPackApplication> {
+        val packApps = mutableListOf<IconPackApplication>()
         var type = xmlParser.eventType
 
         while (type != XmlPullParser.END_DOCUMENT) {
@@ -152,17 +121,16 @@ class ApplicationManager(private val ctx: Context) {
 
                     val components = ComponentInfo()
                     if (iconName != null && componentInfo != null && components.parse(componentInfo)) {
-                        val icon = getResIcon(res, iconName, packageName)
+                        val iconId = getIdentifier(res, iconName, packageName)
 
-                        if (icon != null) {
-                            val packInfo = PackageInfoStruct()
-                            packInfo.appName = iconName
-                            packInfo.packageName = components.packageName
-                            packInfo.activityName = components.activityNane
-                            packInfo.icon = icon
-                            packInfo.source = PackageInfoStruct.PackageSource.IconPack
+                        if (iconId > 0) {
+                            val appPackageName = components.packageName
+                            val activityName = components.activityNane
 
-                            packApps.add(packInfo)
+                            val packApp = IconPackApplication(packageName, appPackageName, activityName, iconName, iconId)
+
+                            if (!packApps.any { it.packageName == appPackageName && it.activityName == activityName})
+                                packApps.add(packApp)
                         }
                     }
                 }
@@ -171,7 +139,7 @@ class ApplicationManager(private val ctx: Context) {
             type = xmlParser.next()
         }
 
-        return packApps.toTypedArray()
+        return packApps
     }
 
     fun checkAppFilter(xmlParser: XmlPullParser): Array<String> {
@@ -236,12 +204,36 @@ class ApplicationManager(private val ctx: Context) {
         return null
     }
 
-    @SuppressLint("DiscouragedApi")
-    private fun getResIcon(res: Resources, iconName: String, packageName: String): Drawable? {
-        val id = res.getIdentifier(iconName, "drawable", packageName)
-        if (id > 0) return ResourcesCompat.getDrawable(res, id, null)
+    fun getIconPackApplicationResources(packageName: String,
+                                        iconPackApps: List<IconPackApplication>
+    ): Map<IconPackApplication, Drawable> {
+        val map = mutableMapOf<IconPackApplication, Drawable>()
+        val res = pm.getResourcesForApplication(packageName)
+        for (iconPackApp in iconPackApps) {
+            map[iconPackApp] = getResIcon(res, iconPackApp.resourceID)!!
+        }
 
+        return map
+    }
+
+    private fun getResIcon(res: Resources, iconName: String, packageName: String): Drawable? {
+        val id = getIdentifier(res, iconName, packageName)
+        return getResIcon(res, id)
+    }
+
+    private fun getResIcon(res: Resources, resourceId: Int): Drawable? {
+        if (resourceId > 0) return ResourcesCompat.getDrawable(res, resourceId, null)
         return null
+    }
+
+    fun getResIcon(packageName: String, resourceId: Int): Drawable? {
+        val res = pm.getResourcesForApplication(packageName)
+        return getResIcon(res, resourceId)
+    }
+
+    @SuppressLint("DiscouragedApi")
+    private fun getIdentifier(res: Resources, iconName: String, packageName: String): Int {
+        return res.getIdentifier(iconName, "drawable", packageName)
     }
     
     fun getApp(packageName: String): ApplicationInfo? {
@@ -260,9 +252,31 @@ class ApplicationManager(private val ctx: Context) {
         }
     }
 
+    fun getPackageResourceType(packageName: String, resourceId: Int): String? {
+        val res = pm.getResourcesForApplication(packageName)
+        return try {
+            res.getResourceTypeName(resourceId)
+        } catch (e: Resources.NotFoundException) {
+            null
+        }
+    }
+
     fun getPackageResourceXml(packageName: String, resourceId: Int): XmlPullParser? {
         val res = pm.getResourcesForApplication(packageName)
-        return res.getXml(resourceId)
+        return try {
+            res.getXml(resourceId)
+        } catch (e: Resources.NotFoundException) {
+            null
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    @SuppressWarnings("DEPRECATION")
+    fun getVersionCode(pack: PackageInfo): Long {
+        return if (VERSION.SDK_INT >= VERSION_CODES.P)
+            pack.longVersionCode
+        else
+            pack.versionCode.toLong()
     }
 
     inner class ComponentInfo {

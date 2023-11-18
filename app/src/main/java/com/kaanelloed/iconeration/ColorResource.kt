@@ -38,6 +38,12 @@ class ColorResource {
         return hex
     }
 
+    fun toHexRBGString(): String {
+        return String.format(
+            "#%02x%02x%02x", (currentColor.red() * 255).toInt(), (currentColor.green() * 255).toInt(), (currentColor.blue() * 255).toInt()
+        )
+    }
+
     fun toRGBString(): String{
         return "rgb(${currentColor.red()}, ${currentColor.green()}, ${currentColor.blue()})"
     }

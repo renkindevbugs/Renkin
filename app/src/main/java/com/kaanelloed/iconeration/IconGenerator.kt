@@ -14,37 +14,52 @@ import android.graphics.drawable.VectorDrawable
 import android.os.Build
 import androidx.core.graphics.drawable.toBitmap
 import com.caverock.androidsvg.SVG
+import com.kaanelloed.iconeration.data.GenerationType
+import com.kaanelloed.iconeration.data.IconPackApplication
 import jankovicsandras.imagetracerandroid.ImageTracerAndroid
 import org.xmlpull.v1.XmlPullParser
 
-class IconGenerator(private val ctx: Context, private val apps: Array<PackageInfoStruct>, private val color: Int) {
-    private var applyColorOnAvailable = false
-    private val useMonochrome = PreferencesHelper(ctx).getUseMonochrome()
-    private val includeVector = PreferencesHelper(ctx).getIncludeVector()
+class IconGenerator(
+    private val ctx: Context,
+    private val activity: MainActivity,
+    private val options: GenerationOptions,
+    private val iconPackApplications: Map<IconPackApplication, Drawable>
+) {
+    private lateinit var apps: List<PackageInfoStruct>
 
-    fun generateIcons(type: GenerationType) {
-        applyColorOnAvailable = PreferencesHelper(ctx).getApplyColorAvailableIcon()
+    fun generateIcons(application: PackageInfoStruct, type: GenerationType) {
+        generateIcons(listOf(application), type)
+    }
+
+    fun generateIcons(applications: List<PackageInfoStruct>, type: GenerationType) {
+        apps = applications
 
         when (type) {
-            GenerationType.PathDetection -> generatePathDetection()
-            GenerationType.EdgeDetection -> generateCannyEdgeDetection()
-            GenerationType.FirstLetter -> generateFirstLetter()
-            GenerationType.TwoLetters -> generateTwoLetter()
-            GenerationType.AppName -> generateAppName()
+            GenerationType.PATH -> generatePathDetection()
+            GenerationType.EDGE -> generateCannyEdgeDetection()
+            GenerationType.ONE_LETTER -> generateFirstLetter()
+            GenerationType.TWO_LETTERS -> generateTwoLetter()
+            GenerationType.APP_NAME -> generateAppName()
         }
+    }
+
+    fun colorizeFromIconPack(application: PackageInfoStruct, icon: Drawable) {
+        changeIconPackColor(application, icon)
     }
 
     private fun generateCannyEdgeDetection() {
         var edgeDetector: CannyEdgeDetector
         for (app in apps) {
-            if (app.source == PackageInfoStruct.PackageSource.Device) {
+            val iconPack = iconPackApplicationIcon(app.packageName)
+
+            if (iconPack == null) {
                 edgeDetector = CannyEdgeDetector()
                 edgeDetector.process(
                     getAppIconBitmap(app),
-                    color
+                    options.color
                 )
-                app.genIcon = edgeDetector.edgesImage
-            } else changeIconPackColor(app)
+                activity.editApplication(app, app.changeExport(genIcon = edgeDetector.edgesImage))
+            } else changeIconPackColor(app, iconPack)
         }
     }
 
@@ -52,28 +67,35 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         val appMan = ApplicationManager(ctx)
 
         for (app in apps) {
-            if (app.source == PackageInfoStruct.PackageSource.Device) {
-                app.exportType = PackageInfoStruct.ExportType.XML
+            val iconPack = iconPackApplicationIcon(app.packageName)
 
-                if (isVectorDrawable(app.icon) && includeVector) {
+            if (iconPack == null) {
+                if (isVectorDrawable(app.icon) && options.vector) {
                     generatePathFromXML(appMan, app)
                 } else {
                     generateColorQuantizationDetection(app)
                 }
-            } else changeIconPackColor(app)
+            } else changeIconPackColor(app, iconPack)
         }
     }
 
     private fun generatePathFromXML(appMan: ApplicationManager, app: PackageInfoStruct) {
-        var parser = appMan.getPackageResourceXml(app.packageName, app.iconID)!!
+        var parser = appMan.getPackageResourceXml(app.packageName, app.iconID)
 
-        if (app.icon is AdaptiveIconDrawable) {
+        if (app.icon is AdaptiveIconDrawable && parser != null) {
             val adaptiveIcon = app.icon as AdaptiveIconDrawable
 
-            parser = if (monochromeExits(adaptiveIcon) && useMonochrome)
-                appMan.getPackageResourceXml(app.packageName, getMonochromeXMLID(parser))!!
-            else
-                appMan.getPackageResourceXml(app.packageName, getForegroundXMLID(parser))!!
+            val monoParser = if (monochromeExits(adaptiveIcon) && options.monochrome) {
+                appMan.getPackageResourceXml(app.packageName, getMonochromeXMLID(parser))
+            }
+            else { null }
+
+            parser = monoParser ?: appMan.getPackageResourceXml(app.packageName, getForegroundXMLID(parser))
+        }
+
+        if (parser == null) {
+            generateColorQuantizationDetection(app)
+            return
         }
 
         val vec = VectorHandler()
@@ -85,7 +107,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         fillColor.fromInt(Color.TRANSPARENT)
 
         val strokeColor = ColorResource()
-        strokeColor.fromInt(color)
+        strokeColor.fromInt(options.color)
 
         for (grp in vec.vector.groups) {
             for (path in grp.paths) {
@@ -107,15 +129,16 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         val offset = vec.vector.viewportHeight / 6
         svg.setDocumentViewBox(offset, offset, offset * 4, offset * 4)
 
-        app.genIcon = SVGDrawable(svg).toBitmap(198, 198)
-        app.vector = vec
+        val exportType = PackageInfoStruct.ExportType.XML
+        val newIcon = SVGDrawable(svg).toBitmap(198, 198)
+        activity.editApplication(app, app.changeExport(exportType, newIcon, vec))
     }
 
     private fun generateColorQuantizationDetection(app: PackageInfoStruct) {
-        val options = HashMap<String, Float>()
+        val traceOptions = HashMap<String, Float>()
         //options["numberofcolors"] = 64f
-        options["colorsampling"] = 0f
-        val svgString = ImageTracerAndroid.imageToSVG(getAppIconBitmap(app), options, null)!!
+        traceOptions["colorsampling"] = 0f
+        val svgString = ImageTracerAndroid.imageToSVG(getAppIconBitmap(app), traceOptions, null)!!
 
         val vector = VectorHandler()
         vector.parseSvg(svgString)
@@ -130,7 +153,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         fillColor.fromInt(Color.TRANSPARENT)
 
         val strokeColor = ColorResource()
-        strokeColor.fromInt(color)
+        strokeColor.fromInt(options.color)
 
         for (path in vector.vector.paths) {
             path.strokeWidth = 2F
@@ -146,8 +169,8 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
 
         svg.renderToCanvas(canvas)
 
-        app.genIcon = bmp
-        app.vector = vector
+        val exportType = PackageInfoStruct.ExportType.XML
+        activity.editApplication(app, app.changeExport(exportType, bmp, vector))
     }
 
     private fun getAppIconBitmap(app: PackageInfoStruct): Bitmap {
@@ -172,7 +195,7 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
             if (image.foreground is VectorDrawable)
                 return true
 
-            return monochromeExits(image) && useMonochrome
+            return monochromeExits(image) && options.monochrome
         }
 
         return false
@@ -227,11 +250,14 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         val gen = LetterGenerator(ctx)
 
         for (app in apps) {
-            if (app.source == PackageInfoStruct.PackageSource.Device) {
+            val iconPack = iconPackApplicationIcon(app.packageName)
+
+            if (iconPack == null) {
                 val draw = gen.generateFirstLetter(app.normalizeName())
-                draw.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
-                app.genIcon = draw.toBitmap(256, 256)
-            } else changeIconPackColor(app)
+                draw.colorFilter = PorterDuffColorFilter(options.color, PorterDuff.Mode.SRC_IN)
+                val newIcon = draw.toBitmap(256, 256)
+                activity.editApplication(app, app.changeExport(genIcon = newIcon))
+            } else changeIconPackColor(app, iconPack)
         }
     }
 
@@ -239,10 +265,13 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         val gen = LetterGenerator(ctx)
 
         for (app in apps) {
-            if (app.source == PackageInfoStruct.PackageSource.Device) {
-                val draw = gen.generateTwoLetters(app.appName, color)
-                app.genIcon = draw.toBitmap(256, 256)
-            } else changeIconPackColor(app)
+            val iconPack = iconPackApplicationIcon(app.packageName)
+
+            if (iconPack == null) {
+                val draw = gen.generateTwoLetters(app.appName, options.color)
+                val newIcon = draw.toBitmap(256, 256)
+                activity.editApplication(app, app.changeExport(genIcon = newIcon))
+            } else changeIconPackColor(app, iconPack)
         }
     }
 
@@ -250,30 +279,41 @@ class IconGenerator(private val ctx: Context, private val apps: Array<PackageInf
         val gen = LetterGenerator(ctx)
 
         for (app in apps) {
-            if (app.source == PackageInfoStruct.PackageSource.Device) {
-                val draw = gen.generateAppName(app.appName, color)
-                app.genIcon = draw.toBitmap(256, 256)
-            } else changeIconPackColor(app)
+            val iconPack = iconPackApplicationIcon(app.packageName)
+
+            if (iconPack == null) {
+                val draw = gen.generateAppName(app.appName, options.color)
+                val newIcon = draw.toBitmap(256, 256)
+                activity.editApplication(app, app.changeExport(genIcon = newIcon))
+            } else changeIconPackColor(app, iconPack)
         }
     }
 
-    private fun changeIconPackColor(app: PackageInfoStruct) {
-        if (applyColorOnAvailable) {
-            val coloredIcon: Bitmap = app.genIcon.copy(app.genIcon.config, true)
-            val paint = Paint()
-
-            paint.colorFilter = PorterDuffColorFilter(color, PorterDuff.Mode.SRC_IN)
-            Canvas(coloredIcon).drawBitmap(coloredIcon, 0F, 0F, paint)
-
-            app.genIcon = coloredIcon
+    private fun changeIconPackColor(app: PackageInfoStruct, icon: Drawable) {
+        val oldIcon = if (icon is AdaptiveIconDrawable) {
+            ForegroundIconDrawable(icon.foreground).toBitmap()
+        } else {
+            icon.toBitmap()
         }
+
+        val coloredIcon: Bitmap = oldIcon.copy(oldIcon.config, true)
+        val paint = Paint()
+
+        paint.colorFilter = PorterDuffColorFilter(options.color, PorterDuff.Mode.SRC_IN)
+        Canvas(coloredIcon).drawBitmap(coloredIcon, 0F, 0F, paint)
+
+        activity.editApplication(app, app.changeExport(genIcon = coloredIcon))
     }
 
-    enum class GenerationType {
-        PathDetection,
-        EdgeDetection,
-        FirstLetter,
-        TwoLetters,
-        AppName
+    private fun iconPackApplicationIcon(packageName: String): Drawable? {
+        val app = iconPackApplications.keys.find { it.packageName == packageName }
+
+        if (app != null) {
+            return iconPackApplications[app]
+        }
+
+        return null
     }
+
+    class GenerationOptions(val color: Int, val monochrome: Boolean, val vector: Boolean) { }
 }

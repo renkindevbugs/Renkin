@@ -1,103 +1,122 @@
 package com.kaanelloed.iconeration
 
-import android.content.ComponentName
-import android.content.Intent
-import android.content.SharedPreferences
+import android.content.Context
 import android.os.Bundle
-import androidx.appcompat.app.AppCompatActivity
-import androidx.core.view.WindowCompat
-import androidx.navigation.findNavController
-import androidx.navigation.ui.AppBarConfiguration
-import androidx.navigation.ui.navigateUp
-import androidx.navigation.ui.setupActionBarWithNavController
-import android.view.Menu
-import android.view.MenuItem
-import androidx.appcompat.app.AppCompatDelegate
-import androidx.fragment.app.Fragment
-import androidx.preference.PreferenceManager
-import com.kaanelloed.iconeration.databinding.ActivityMainBinding
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
+import androidx.core.graphics.drawable.toBitmap
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.preferencesDataStore
+import androidx.room.Room
+import com.kaanelloed.iconeration.data.AppDatabase
+import com.kaanelloed.iconeration.data.IconPack
+import com.kaanelloed.iconeration.data.IconPackApplication
+import com.kaanelloed.iconeration.data.isDarkModeEnabled
+import com.kaanelloed.iconeration.ui.*
+import com.kaanelloed.iconeration.ui.theme.IconerationTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
-class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceChangeListener {
-    var apps: Array<PackageInfoStruct>? = null
-    var packs: Array<PackageInfoStruct>? = null
-    var currentPack: String? = null
-    var lastPack: String? = null
+val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
-    private lateinit var appBarConfiguration: AppBarConfiguration
-    private lateinit var binding: ActivityMainBinding
+class MainActivity : ComponentActivity() {
+    var applicationList: List<PackageInfoStruct> by mutableStateOf(listOf())
+        private set
+
+    var iconPackApplications: Map<IconPack, List<IconPackApplication>> = emptyMap()
+        private set
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        WindowCompat.setDecorFitsSystemWindows(window, false)
         super.onCreate(savedInstanceState)
 
-        setDarkMode()
+        val apps = ApplicationManager(applicationContext).getAllInstalledApps()
+        apps.sort()
 
-        binding = ActivityMainBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        val iconPacks = ApplicationManager(applicationContext).getIconPacks()
+        syncIconPacks()
 
-        setSupportActionBar(binding.toolbar)
+        applicationList = apps.toList()
 
-        val navController = findNavController(R.id.nav_host_fragment_content_main)
-        appBarConfiguration = AppBarConfiguration(navController.graph)
-        setupActionBarWithNavController(navController, appBarConfiguration)
+        setContent {
+            val darkMode = applicationContext.dataStore.isDarkModeEnabled()
 
-        PreferenceManager.getDefaultSharedPreferences(this)
-            .registerOnSharedPreferenceChangeListener(this)
-    }
-
-    override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        // Inflate the menu; this adds items to the action bar if it is present.
-        menuInflater.inflate(R.menu.menu_main, menu)
-        return true
-    }
-
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        // Handle action bar item clicks here. The action bar will
-        // automatically handle clicks on the Home/Up button, so long
-        // as you specify a parent activity in AndroidManifest.xml.
-        return when (item.itemId) {
-            R.id.action_settings -> {
-                val intent = Intent(Intent.ACTION_MAIN)
-                intent.component = ComponentName(packageName, "$packageName.SettingsActivity")
-                startActivity(intent)
-                true
-            }
-            else -> super.onOptionsItemSelected(item)
-        }
-    }
-
-    override fun onSupportNavigateUp(): Boolean {
-        val navController = findNavController(R.id.nav_host_fragment_content_main)
-        return navController.navigateUp(appBarConfiguration)
-                || super.onSupportNavigateUp()
-    }
-
-    override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
-        key?.let {
-            when (it) {
-                getString(R.string.settings_iconColor_key) -> apps = null
-                getString(R.string.settings_genType_key) -> apps = null
-                getString(R.string.settings_includeAvailable_key) -> apps = null
-                getString(R.string.settings_applyColorAvailable_key) -> apps = null
-                getString(R.string.settings_useMonochrome_key) -> apps = null
-                getString(R.string.settings_includeVector_key) -> apps = null
+            IconerationTheme(darkMode) {
+                Surface(
+                    modifier = Modifier.fillMaxSize(),
+                    color = MaterialTheme.colorScheme.background
+                ) {
+                    Column {
+                        TitleBar()
+                        OptionsCard(iconPacks)
+                        ApplicationList(iconPacks)
+                    }
+                }
             }
         }
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        PreferenceManager.getDefaultSharedPreferences(this)
-            .unregisterOnSharedPreferenceChangeListener(this)
+    private fun syncIconPacks() {
+        CoroutineScope(Dispatchers.Default).launch {
+            val appMan = ApplicationManager(applicationContext)
+            val iconPacks = appMan.getIconPacks()
+
+            val db = Room.databaseBuilder(
+                applicationContext,
+                AppDatabase::class.java, "iconPackApps"
+            ).build()
+
+            val packDao = db.iconPackDao()
+            val packList = packDao.getAll()
+
+            packDao.deleteInstalledApplications()
+            packDao.insertAll(appMan.getAllInstalledApplications())
+
+            //Remove uninstalled icon packs
+            for (dbApp in packList) {
+                if (!iconPacks.any { it.packageName == dbApp.packageName }) {
+                    packDao.delete(dbApp)
+                    packDao.deleteApplicationByIconPackage(dbApp.packageName)
+                }
+            }
+
+            for (iconPack in iconPacks) {
+                val dbApp = packList.find { it.packageName == iconPack.packageName }
+                val sameVersion = if (dbApp != null) { dbApp.versionCode == iconPack.versionCode } else false
+
+                if (!sameVersion) {
+                    if (dbApp != null) {
+                        packDao.delete(dbApp)
+                        packDao.deleteApplicationByIconPackage(iconPack.packageName)
+                    }
+
+                    val packApps = appMan.getIconPackApplications(iconPack.packageName)
+                    packDao.insertIconPackWithApplications(iconPack, packApps)
+                }
+            }
+
+            iconPackApplications = packDao.getIconPacksWithInstalledApps()
+        }
     }
 
-    private fun currentFragment(): Fragment {
-        val nav = supportFragmentManager.findFragmentById(R.id.nav_host_fragment_content_main)!!
-        return nav.childFragmentManager.primaryNavigationFragment!!
+    fun editApplication(oldApp: PackageInfoStruct, newApp: PackageInfoStruct) {
+        val index = applicationList.indexOf(oldApp)
+        if (index >= 0)
+            editApplication(index, newApp)
     }
 
-    private fun setDarkMode() {
-        val mode = PreferencesHelper(this).getNightMode()
-        AppCompatDelegate.setDefaultNightMode(mode)
+    fun editApplication(index: Int, newApp: PackageInfoStruct) {
+        applicationList = applicationList.toMutableList().also {
+            it[index] = newApp
+        }
     }
 }
