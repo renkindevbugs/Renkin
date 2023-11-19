@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
@@ -168,17 +169,22 @@ fun BuildPackButton() {
     val bgColor = getPreferences().getBackgroundColorValue()
 
     var openBuilder by rememberSaveable { mutableStateOf(false) }
+    var error by rememberSaveable { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
 
     IconButton(onClick = {
+        text = ""
+        error = false
         openBuilder = true
         CoroutineScope(Dispatchers.Default).launch {
-            IconPackGenerator(ctx, activity.applicationList).create(themed, iconColor.toHexString(), bgColor.toHexString()) {
+            val success = IconPackGenerator(ctx, activity.applicationList).create(themed, iconColor.toHexString(), bgColor.toHexString()) {
                 text += it + "\n"
             }
 
-            openBuilder = false
-            text = ""
+            if (success)
+                openBuilder = false
+            else
+                error = true
         }
     }) {
         Icon(
@@ -198,7 +204,17 @@ fun BuildPackButton() {
             text = {
                 Text(text = text)
             },
-            confirmButton = {}
+            confirmButton = {
+                if (error) {
+                    IconButton(onClick = { openBuilder = false }) {
+                        Icon(
+                            imageVector = Icons.Filled.CheckCircle,
+                            contentDescription = "Ok",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
         )
     }
 }

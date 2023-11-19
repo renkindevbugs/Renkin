@@ -35,13 +35,13 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
     private val frameworkVersion = 33
     private val minSdkVersion = 26
 
-    fun create(themed: Boolean, iconColor: String, backgroundColor: String, textMethod: (text: String) -> Unit) {
+    fun create(themed: Boolean, iconColor: String, backgroundColor: String, textMethod: (text: String) -> Unit): Boolean {
         val currentVersionCode = getCurrentVersionCode()
         if (currentVersionCode != 0L) {
             if (!keyStoreFile.exists() || newVersionCode > currentVersionCode) {
                 textMethod("Old and new icon pack are not compatible")
                 textMethod("Please uninstall it and try again ...")
-                return
+                return false
             }
         }
 
@@ -119,6 +119,8 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
         installApk(signedApk)
 
         textMethod("Done")
+
+        return true
     }
 
     private fun setSdkVersions(manifest: ResXmlElement, minSdkVersion: Int, targetSdkVersion: Int) {
