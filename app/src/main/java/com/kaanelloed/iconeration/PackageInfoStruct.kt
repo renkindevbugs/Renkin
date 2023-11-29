@@ -10,11 +10,7 @@ class PackageInfoStruct(
     val activityName: String,
     val icon: Drawable,
     val iconID: Int,
-    val versionCode: Long,
-    val versionName: String,
-    val exportType: ExportType = ExportType.PNG,
-    val genIcon: Bitmap? = null,
-    val vector: VectorHandler? = null,
+    val export: Export? = null,
     val internalVersion: Int = 0
 ) : Comparable<PackageInfoStruct> {
     override fun equals(other: Any?): Boolean {
@@ -31,11 +27,9 @@ class PackageInfoStruct(
     }
 
     fun changeExport(
-        exportType: ExportType = ExportType.PNG
-        , genIcon: Bitmap? = null
-        , vector: VectorHandler? = null
+        export: Export
     ): PackageInfoStruct  {
-        return PackageInfoStruct(appName, packageName, activityName, icon, iconID, versionCode, versionName, exportType, genIcon, vector, internalVersion + 1)
+        return PackageInfoStruct(appName, packageName, activityName, icon, iconID, export, internalVersion + 1)
     }
 
     fun getFileName(): String {
@@ -52,5 +46,14 @@ class PackageInfoStruct(
 
     enum class ExportType {
         PNG, XML
+    }
+
+    class Export(
+        val type: ExportType
+        , val bitmap: Bitmap?
+        , val vector: VectorHandler?
+    ) {
+        constructor(bitmap: Bitmap) : this(ExportType.PNG, bitmap, null)
+        constructor(bitmap: Bitmap, vector: VectorHandler) : this(ExportType.XML, bitmap, vector)
     }
 }

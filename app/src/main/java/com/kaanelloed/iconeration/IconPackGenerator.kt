@@ -81,25 +81,27 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
         val appfilterXml = AppFilterXml()
 
         for (app in apps) {
-            val appFileName = app.getFileName()
+            if (app.export != null) {
+                val appFileName = app.getFileName()
 
-            if (themed) {
-                val adaptive = AdaptiveIconXml()
-                adaptive.foreground(appFileName)
-                adaptive.background("@color/icon_background_color")
+                if (themed) {
+                    val adaptive = AdaptiveIconXml()
+                    adaptive.foreground(appFileName)
+                    adaptive.background("@color/icon_background_color")
 
-                if (app.exportType == PackageInfoStruct.ExportType.XML)
-                    createXmlDrawableResource(apkModule, packageBlock, app.vector!!.toXMLFile(), appFileName + "_foreground")
+                    if (app.export.type == PackageInfoStruct.ExportType.XML)
+                        createXmlDrawableResource(apkModule, packageBlock, app.export.vector!!.toXMLFile(), appFileName + "_foreground")
+                    else
+                        createPngResource(apkModule, packageBlock, app.export.bitmap!!, appFileName + "_foreground")
+
+                    createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
+                }
                 else
-                    createPngResource(apkModule, packageBlock, app.genIcon!!, appFileName + "_foreground")
+                    createPngResource(apkModule, packageBlock, app.export.bitmap!!, appFileName)
 
-                createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
+                drawableXml.item(appFileName)
+                appfilterXml.item(app.packageName, app.activityName, appFileName)
             }
-            else
-                createPngResource(apkModule, packageBlock, app.genIcon!!, appFileName)
-
-            drawableXml.item(appFileName)
-            appfilterXml.item(app.packageName, app.activityName, appFileName)
         }
 
         apkModule.add(ByteInputSource(drawableXml.getBytes(), "assets/drawable.xml"))

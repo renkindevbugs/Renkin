@@ -15,7 +15,6 @@ import android.os.Build.VERSION
 import android.os.Build.VERSION_CODES
 import android.os.UserManager
 import androidx.core.content.res.ResourcesCompat
-import androidx.core.graphics.drawable.toBitmap
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.data.InstalledApplication
@@ -59,10 +58,7 @@ class ApplicationManager(private val ctx: Context) {
                         packageName,
                         activityName,
                         icon,
-                        iconID,
-                        0,
-                        "",
-                        genIcon = icon.toBitmap()
+                        iconID
                     )
 
                     if (!packInfoStructs.contains(packInfo))

@@ -1,12 +1,15 @@
 package com.kaanelloed.iconeration.ui
 
+import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,7 +42,6 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.drawable.toBitmap
-import androidx.core.graphics.scale
 import com.kaanelloed.iconeration.ApplicationManager
 import com.kaanelloed.iconeration.IconGenerator
 import com.kaanelloed.iconeration.IconPackGenerator
@@ -73,25 +75,26 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
 
     Row(modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically) {
-        Image(painter = BitmapPainter(app.icon.toBitmap(198, 198).asImageBitmap())
+        Image(painter = BitmapPainter(app.icon.toBitmap().asImageBitmap())
             , contentDescription = null
-            , modifier = Modifier.padding(2.dp))
+            , modifier = Modifier.padding(2.dp).size(78.dp, 78.dp))
 
-        if (app.genIcon != null)
-            Image(painter = BitmapPainter(app.genIcon.scale(198, 198).asImageBitmap())
+        if (app.export?.bitmap != null)
+            Image(painter = BitmapPainter(app.export.bitmap.asImageBitmap())
                 , contentDescription = null
-                , modifier = Modifier.padding(2.dp))
+                , modifier = Modifier.padding(2.dp).size(78.dp, 78.dp).clickable { openAppOptions = true })
+        else
+            IconButton(onClick = { openAppOptions = true }
+            , modifier = Modifier.padding(2.dp).size(78.dp, 78.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.Edit,
+                    contentDescription = "Edit",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
 
         Column() {
             Text(app.appName)
-        }
-
-        IconButton(onClick = { openAppOptions = true }) {
-            Icon(
-                imageVector = Icons.Filled.Edit,
-                contentDescription = "Edit",
-                tint = MaterialTheme.colorScheme.primary
-            )
         }
     }
 
@@ -116,11 +119,15 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
                 }
 
                 if (uploadedImage != null) {
-                    activity.editApplication(index, app.changeExport(genIcon = uploadedImage))
+                    activity.editApplication(index, app.changeExport(PackageInfoStruct.Export(uploadedImage as Bitmap)))
                 }
                 if (generatingOptions != null && toGenerate) {
                     IconGenerator(ctx, activity, generatingOptions!!, emptyMap()).generateIcons(app, generatingType)
                 }
+
+                uploadedImage = null
+                generatingOptions = null
+                iconPackageName = ""
             }
 
             openAppOptions = false
