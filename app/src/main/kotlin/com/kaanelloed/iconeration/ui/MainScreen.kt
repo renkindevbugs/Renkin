@@ -46,6 +46,7 @@ import com.kaanelloed.iconeration.ApplicationManager
 import com.kaanelloed.iconeration.IconGenerator
 import com.kaanelloed.iconeration.IconPackGenerator
 import com.kaanelloed.iconeration.PackageInfoStruct
+import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.data.getBackgroundColorValue
@@ -77,15 +78,22 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
         verticalAlignment = Alignment.CenterVertically) {
         Image(painter = BitmapPainter(app.icon.toBitmap().asImageBitmap())
             , contentDescription = null
-            , modifier = Modifier.padding(2.dp).size(78.dp, 78.dp))
+            , modifier = Modifier
+                .padding(2.dp)
+                .size(78.dp, 78.dp))
 
         if (app.export?.bitmap != null)
             Image(painter = BitmapPainter(app.export.bitmap.asImageBitmap())
                 , contentDescription = null
-                , modifier = Modifier.padding(2.dp).size(78.dp, 78.dp).clickable { openAppOptions = true })
+                , modifier = Modifier
+                    .padding(2.dp)
+                    .size(78.dp, 78.dp)
+                    .clickable { openAppOptions = true })
         else
             IconButton(onClick = { openAppOptions = true }
-            , modifier = Modifier.padding(2.dp).size(78.dp, 78.dp)) {
+            , modifier = Modifier
+                    .padding(2.dp)
+                    .size(78.dp, 78.dp)) {
                 Icon(
                     imageVector = Icons.Filled.Edit,
                     contentDescription = "Edit",
@@ -141,21 +149,32 @@ fun RefreshButton() {
     val type = prefs.getTypeValue()
     val monochrome = prefs.getMonochromeValue()
     val vector = prefs.getIncludeVectorValue()
-    val iconColor = prefs.getIconColorValue()
+    val iconColorValue = prefs.getIconColorValue()
+    val bgColorValue = prefs.getBackgroundColorValue()
+    val themed = prefs.getExportThemedValue()
+    val dynamicColor = themed && supportDynamicColors()
 
     val ctx = getCurrentContext()
     val activity = getCurrentMainActivity()
 
     IconButton(onClick = {
         CoroutineScope(Dispatchers.Default).launch {
-            var iconPackApps = emptyMap<IconPackApplication, Drawable>()
+            var iconPackApps = emptyMap<IconPackApplication, Pair<Int, Drawable>>()
             if (iconPackageName != "") {
                 val pack = activity.iconPackApplications.keys.find { it.packageName == iconPackageName }
                 val packApps = activity.iconPackApplications[pack]!!
                 iconPackApps = ApplicationManager(ctx).getIconPackApplicationResources(iconPackageName, packApps)
             }
 
-            val opt = IconGenerator.GenerationOptions(Color.parseColor(iconColor.toHexString()), monochrome, vector)
+            var iconColor = Color.parseColor(iconColorValue.toHexString())
+            var bgColor = Color.parseColor(bgColorValue.toHexString())
+
+            if (dynamicColor) {
+                iconColor = activity.resources.getColor(R.color.icon_color, null)
+                bgColor = activity.resources.getColor(R.color.icon_background_color, null)
+            }
+
+            val opt = IconGenerator.GenerationOptions(iconColor, monochrome, vector, themed, bgColor)
             IconGenerator(ctx, activity, opt, iconPackApps).generateIcons(activity.applicationList, type)
         }
     }) {

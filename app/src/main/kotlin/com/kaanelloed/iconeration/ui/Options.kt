@@ -191,15 +191,14 @@ fun OptionsCard(iconPacks: List<IconPack>) {
                 if (showIconColor(genType, useThemed)) {
                     ColorButton("Icon color", currentColor) { scope.launch { prefs.setIconColor(it) } }
                 }
+                if (showBackgroundColor(genType, useThemed)) {
+                    ColorButton("Background color", currentBgColor) { scope.launch { prefs.setBackgroundColor(it) } }
+                }
 
                 if (genType == GenerationType.PATH) {
                     VectorSwitch(useVector) { scope.launch { prefs.setIncludeVector(it) } }
                     MonochromeSwitch(useMonochrome) { scope.launch { prefs.setMonochrome(it) } }
                     ThemedIconsSwitch(useThemed) { scope.launch { prefs.setExportThemed(it) } }
-                }
-
-                if (showBackgroundColor(genType, useThemed)) {
-                    ColorButton("Background color", currentBgColor) { scope.launch { prefs.setBackgroundColor(it) } }
                 }
 
                 iconPackageName = iconPack

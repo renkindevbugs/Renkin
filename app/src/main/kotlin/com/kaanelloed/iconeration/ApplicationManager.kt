@@ -202,11 +202,11 @@ class ApplicationManager(private val ctx: Context) {
 
     fun getIconPackApplicationResources(packageName: String,
                                         iconPackApps: List<IconPackApplication>
-    ): Map<IconPackApplication, Drawable> {
-        val map = mutableMapOf<IconPackApplication, Drawable>()
+    ): Map<IconPackApplication, Pair<Int, Drawable>> {
+        val map = mutableMapOf<IconPackApplication, Pair<Int, Drawable>>()
         val res = pm.getResourcesForApplication(packageName)
         for (iconPackApp in iconPackApps) {
-            map[iconPackApp] = getResIcon(res, iconPackApp.resourceID)!!
+            map[iconPackApp] = Pair(iconPackApp.resourceID, getResIcon(res, iconPackApp.resourceID)!!)
         }
 
         return map
