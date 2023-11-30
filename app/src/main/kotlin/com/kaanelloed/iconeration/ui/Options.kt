@@ -103,9 +103,7 @@ fun OptionColumn(iconPacks: List<IconPack>) {
     var genType by rememberSaveable { mutableStateOf(GenerationType.PATH) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
-    var useThemed by rememberSaveable { mutableStateOf(false) }
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
-    var bgColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.Black) }
 
     var iconPack by rememberSaveable { mutableStateOf("") }
 
@@ -141,11 +139,6 @@ fun OptionColumn(iconPacks: List<IconPack>) {
             if (genType == GenerationType.PATH) {
                 VectorSwitch(useVector) { useVector = it }
                 MonochromeSwitch(useMonochrome) { useMonochrome = it }
-                ThemedIconsSwitch(useThemed) { useThemed = it }
-
-                if (useThemed && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                    ColorButton("Background color", Color.Black) { bgColor = it }
-                }
             }
 
             iconPackageName = iconPack
@@ -194,22 +187,50 @@ fun OptionsCard(iconPacks: List<IconPack>) {
             if (expanded) {
                 TypeDropdown(genType) { scope.launch { prefs.setType(it) } }
                 IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
-                ColorButton("Icon color", currentColor) { scope.launch { prefs.setIconColor(it) } }
+
+                if (showIconColor(genType, useThemed)) {
+                    ColorButton("Icon color", currentColor) { scope.launch { prefs.setIconColor(it) } }
+                }
 
                 if (genType == GenerationType.PATH) {
                     VectorSwitch(useVector) { scope.launch { prefs.setIncludeVector(it) } }
                     MonochromeSwitch(useMonochrome) { scope.launch { prefs.setMonochrome(it) } }
                     ThemedIconsSwitch(useThemed) { scope.launch { prefs.setExportThemed(it) } }
+                }
 
-                    if (useThemed && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                        ColorButton("Background color", currentBgColor) { scope.launch { prefs.setBackgroundColor(it) } }
-                    }
+                if (showBackgroundColor(genType, useThemed)) {
+                    ColorButton("Background color", currentBgColor) { scope.launch { prefs.setBackgroundColor(it) } }
                 }
 
                 iconPackageName = iconPack
             }
         }
     }
+}
+
+@Composable
+fun supportDynamicColors(): Boolean {
+    return Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+}
+
+@Composable
+fun showIconColor(generationType: GenerationType, themed: Boolean): Boolean {
+    if (generationType == GenerationType.PATH && themed) {
+        if (supportDynamicColors()) {
+            return false
+        }
+    }
+    return true
+}
+
+@Composable
+fun showBackgroundColor(generationType: GenerationType, themed: Boolean): Boolean {
+    if (generationType == GenerationType.PATH && themed) {
+        if (!supportDynamicColors()) {
+            return true
+        }
+    }
+    return false
 }
 
 @Composable
