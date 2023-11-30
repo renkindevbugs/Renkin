@@ -1,4 +1,4 @@
-package com.kaanelloed.iconeration
+package com.kaanelloed.iconeration.image.edge
 
 import android.graphics.Bitmap
 import android.graphics.Color
