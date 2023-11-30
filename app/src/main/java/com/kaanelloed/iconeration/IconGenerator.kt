@@ -16,7 +16,7 @@ import androidx.core.graphics.drawable.toBitmap
 import com.caverock.androidsvg.SVG
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPackApplication
-import jankovicsandras.imagetracerandroid.ImageTracerAndroid
+import com.kaanelloed.iconeration.image.tracer.ImageTracer
 import org.xmlpull.v1.XmlPullParser
 
 class IconGenerator(
@@ -134,10 +134,7 @@ class IconGenerator(
     }
 
     private fun generateColorQuantizationDetection(app: PackageInfoStruct) {
-        val traceOptions = HashMap<String, Float>()
-        //options["numberofcolors"] = 64f
-        traceOptions["colorsampling"] = 0f
-        val svgString = ImageTracerAndroid.imageToSVG(getAppIconBitmap(app), traceOptions, null)!!
+        val svgString = ImageTracer.imageToSVG(getAppIconBitmap(app), ImageTracer.TracingOptions())
 
         val vector = VectorHandler()
         vector.parseSvg(svgString)
