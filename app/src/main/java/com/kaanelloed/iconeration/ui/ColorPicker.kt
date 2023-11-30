@@ -6,15 +6,12 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
@@ -27,15 +24,22 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.github.skydoves.colorpicker.compose.AlphaSlider
+import com.github.skydoves.colorpicker.compose.AlphaTile
+import com.github.skydoves.colorpicker.compose.BrightnessSlider
+import com.github.skydoves.colorpicker.compose.ColorEnvelope
+import com.github.skydoves.colorpicker.compose.HsvColorPicker
+import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 
 @Composable
-fun ColorButton(caption: String, colors: List<Color>, onColorSelected: (Color) -> Unit) {
+fun ColorButton(caption: String, initialColor: Color, onColorSelected: (Color) -> Unit) {
     var colorPickerOpen by rememberSaveable { mutableStateOf(false) }
-    var currentlySelected by rememberSaveable(saver = colorSaver()) { mutableStateOf(colors[0]) }
+    var currentlySelected by rememberSaveable(saver = colorSaver()) { mutableStateOf(initialColor) }
 
     Box(
         modifier = Modifier
@@ -82,7 +86,6 @@ fun ColorButton(caption: String, colors: List<Color>, onColorSelected: (Color) -
 
     if (colorPickerOpen) {
         ColorDialog(
-            colorList = colors,
             onDismiss = { colorPickerOpen = false },
             currentlySelected = currentlySelected,
             onColorSelected = {
@@ -95,12 +98,11 @@ fun ColorButton(caption: String, colors: List<Color>, onColorSelected: (Color) -
 
 @Composable
 private fun ColorDialog(
-    colorList: List<Color>,
     onDismiss: (() -> Unit),
     currentlySelected: Color,
     onColorSelected: ((Color) -> Unit) // when a colour is picked
 ) {
-    val gridState = rememberLazyGridState()
+    val controller = rememberColorPickerController()
 
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
@@ -108,34 +110,42 @@ private fun ColorDialog(
         titleContentColor = MaterialTheme.colorScheme.outline,
         onDismissRequest = onDismiss,
         text = {
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(3),
-                state = gridState
-            ) {
-                items(colorList) { color ->
-                    // Add a border around the selected colour only
-                    var borderWidth = 0.dp
-                    if (currentlySelected == color) {
-                        borderWidth = 2.dp
+            Column {
+                HsvColorPicker(modifier = Modifier.height(200.dp)
+                    , controller = controller
+                    , onColorChanged = {
+                            colorEnvelope: ColorEnvelope ->
+                        if (colorEnvelope.fromUser)
+                            onColorSelected(colorEnvelope.color)
                     }
+                    , initialColor = currentlySelected
+                )
 
-                    Canvas(modifier = Modifier
-                        .padding(16.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .border(
-                            borderWidth,
-                            MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-                            RoundedCornerShape(20.dp)
-                        )
-                        .background(color)
-                        .requiredSize(70.dp)
-                        .clickable {
-                            onColorSelected(color)
-                            onDismiss()
-                        }
-                    ) {
-                    }
-                }
+                AlphaSlider(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(10.dp)
+                        .height(35.dp),
+                    controller = controller,
+                    initialColor = currentlySelected
+                )
+
+                BrightnessSlider(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(10.dp)
+                        .height(35.dp),
+                    controller = controller,
+                    initialColor = currentlySelected
+                )
+
+                AlphaTile(
+                    modifier = Modifier
+                        .size(50.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .align(CenterHorizontally),
+                    controller = controller
+                )
             }
         },
         confirmButton = {}

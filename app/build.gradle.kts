@@ -58,8 +58,9 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling:1.5.4")
     androidTestImplementation("androidx.compose.ui:ui-test-junit4:1.5.4")
     debugImplementation("androidx.compose.ui:ui-test-manifest:1.5.4")
-    implementation("androidx.activity:activity-compose:1.8.0")
+    implementation("androidx.activity:activity-compose:1.8.1")
     implementation("io.coil-kt:coil-compose:2.5.0")
+    implementation("com.github.skydoves:colorpicker-compose:1.0.5")
 
     //Data
     implementation("androidx.room:room-ktx:2.6.0")

@@ -105,14 +105,12 @@ fun OptionColumn(iconPacks: List<IconPack>) {
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
     var useThemed by rememberSaveable { mutableStateOf(false) }
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
+    var bgColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.Black) }
 
     var iconPack by rememberSaveable { mutableStateOf("") }
 
     var upload by remember { mutableStateOf(false) }
     var imageUri by remember { mutableStateOf(Uri.EMPTY) }
-
-    val fgColors = getColors(Color.White)
-    val bgColors = getColors(Color.Black)
 
     uploadedImage = null
     generatingOptions = null
@@ -138,7 +136,7 @@ fun OptionColumn(iconPacks: List<IconPack>) {
         } else {
             TypeDropdown(genType) { genType = it }
             IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
-            ColorButton("Icon color", fgColors) { iconColor = it }
+            ColorButton("Icon color", Color.White) { iconColor = it }
 
             if (genType == GenerationType.PATH) {
                 VectorSwitch(useVector) { useVector = it }
@@ -146,7 +144,7 @@ fun OptionColumn(iconPacks: List<IconPack>) {
                 ThemedIconsSwitch(useThemed) { useThemed = it }
 
                 if (useThemed && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                    ColorButton("Background color", bgColors) { }
+                    ColorButton("Background color", Color.Black) { bgColor = it }
                 }
             }
 
@@ -176,8 +174,6 @@ fun OptionsCard(iconPacks: List<IconPack>) {
     useMonochrome = prefs.getMonochromeValue()
     useThemed = prefs.getExportThemedValue()
 
-    val fgColors = getColors(currentColor)
-    val bgColors = getColors(currentBgColor)
     val scope = rememberCoroutineScope()
 
     Card(
@@ -198,7 +194,7 @@ fun OptionsCard(iconPacks: List<IconPack>) {
             if (expanded) {
                 TypeDropdown(genType) { scope.launch { prefs.setType(it) } }
                 IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
-                ColorButton("Icon color", fgColors) { scope.launch { prefs.setIconColor(it) } }
+                ColorButton("Icon color", currentColor) { scope.launch { prefs.setIconColor(it) } }
 
                 if (genType == GenerationType.PATH) {
                     VectorSwitch(useVector) { scope.launch { prefs.setIncludeVector(it) } }
@@ -206,7 +202,7 @@ fun OptionsCard(iconPacks: List<IconPack>) {
                     ThemedIconsSwitch(useThemed) { scope.launch { prefs.setExportThemed(it) } }
 
                     if (useThemed && Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-                        ColorButton("Background color", bgColors) { scope.launch { prefs.setBackgroundColor(it) } }
+                        ColorButton("Background color", currentBgColor) { scope.launch { prefs.setBackgroundColor(it) } }
                     }
                 }
 
@@ -417,28 +413,4 @@ fun UploadButton(onChange: ((newValue: Uri) -> Unit)) {
     }) {
         Text("Upload image")
     }
-}
-
-fun getColors(currentColor: Color): List<Color> {
-    val baseColors = mutableListOf(
-        Color(0xFFFFFFFF),
-        Color(0xFF000000),
-        Color(0xFF80CBC4),
-        Color(0xFFA5D6A7),
-        Color(0xFFFFCC80),
-        Color(0xFFFFAB91),
-        Color(0xFF81D4FA),
-        Color(0xFFCE93D8),
-        Color(0xFFB39DDB)
-    )
-
-    if (baseColors.contains(currentColor)) {
-        baseColors.remove(currentColor)
-        baseColors.add(0, currentColor)
-    } else {
-        baseColors.removeLast()
-        baseColors.add(0, currentColor)
-    }
-
-    return baseColors.toList()
 }
