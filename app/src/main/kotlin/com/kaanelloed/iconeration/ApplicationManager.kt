@@ -117,7 +117,7 @@ class ApplicationManager(private val ctx: Context) {
 
                     val components = ComponentInfo()
                     if (iconName != null && componentInfo != null && components.parse(componentInfo)) {
-                        val iconId = getIdentifier(res, iconName, packageName)
+                        val iconId = res.getIdentifierByName(iconName, "drawable", packageName)
 
                         if (iconId > 0) {
                             val appPackageName = components.packageName
@@ -178,9 +178,8 @@ class ApplicationManager(private val ctx: Context) {
         return getAssetAppfilter(res)
     }
 
-    @SuppressLint("DiscouragedApi")
     private fun getResAppfilter(res: Resources, packageName: String): XmlPullParser? {
-        val id = res.getIdentifier("appfilter", "xml", packageName)
+        val id = res.getIdentifierByName("appfilter", "xml", packageName)
         if (id > 0) return res.getXml(id)
 
         return null
@@ -213,7 +212,7 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     private fun getResIcon(res: Resources, iconName: String, packageName: String): Drawable? {
-        val id = getIdentifier(res, iconName, packageName)
+        val id = res.getIdentifierByName(iconName, "drawable", packageName)
         return getResIcon(res, id)
     }
 
@@ -228,8 +227,8 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     @SuppressLint("DiscouragedApi")
-    private fun getIdentifier(res: Resources, iconName: String, packageName: String): Int {
-        return res.getIdentifier(iconName, "drawable", packageName)
+    private fun Resources.getIdentifierByName(name: String, defType: String, defPackage: String): Int {
+        return getIdentifier(name, defType, defPackage)
     }
     
     fun getApp(packageName: String): ApplicationInfo? {
