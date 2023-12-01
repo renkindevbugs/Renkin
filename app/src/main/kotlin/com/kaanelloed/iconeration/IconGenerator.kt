@@ -17,6 +17,8 @@ import androidx.core.graphics.drawable.toBitmap
 import com.caverock.androidsvg.SVG
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPackApplication
+import com.kaanelloed.iconeration.drawable.ForegroundIconDrawable
+import com.kaanelloed.iconeration.drawable.SVGDrawable
 import com.kaanelloed.iconeration.image.edge.CannyEdgeDetector
 import com.kaanelloed.iconeration.image.tracer.ImageTracer
 import org.xmlpull.v1.XmlPullParser

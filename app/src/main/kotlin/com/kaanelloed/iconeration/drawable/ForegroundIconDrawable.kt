@@ -1,4 +1,4 @@
-package com.kaanelloed.iconeration
+package com.kaanelloed.iconeration.drawable
 
 import android.graphics.Canvas
 import android.graphics.drawable.AdaptiveIconDrawable

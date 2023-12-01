@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.drawable.Drawable
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
+import com.kaanelloed.iconeration.drawable.TextDrawable
 
 class LetterGenerator(private val ctx: Context) {
     private val font = ResourcesCompat.getFont(ctx, R.font.arcticons_regular)!!
