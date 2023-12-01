@@ -176,7 +176,7 @@ class IconGenerator(
         activity.editApplication(app, app.changeExport(PackageInfoStruct.Export(addBackground(bmp), vector)))
     }
 
-    private fun getAppIconBitmap(app: PackageInfoStruct): Bitmap {
+    private fun getAppIconBitmap(app: PackageInfoStruct, maxSize: Int = 1000): Bitmap {
         var newIcon = app.icon
 
         if (newIcon is AdaptiveIconDrawable) {
@@ -185,6 +185,15 @@ class IconGenerator(
 
             //if (VERSION.SDK_INT >= VERSION_CODES.TIRAMISU && adapIcon.monochrome != null)
             //    newIcon = ForegroundIconDrawable(adapIcon.monochrome!!)
+        }
+
+        val maxWidthOrHeight = kotlin.math.max(newIcon.intrinsicWidth, newIcon.intrinsicHeight)
+        if (maxWidthOrHeight > maxSize) {
+            val multi = maxSize / maxWidthOrHeight.toFloat()
+            val newWidth = (newIcon.intrinsicWidth * multi).toInt()
+            val newHeight = (newIcon.intrinsicHeight * multi).toInt()
+
+            return newIcon.toBitmap(newWidth, newHeight)
         }
 
         return newIcon.toBitmap()
