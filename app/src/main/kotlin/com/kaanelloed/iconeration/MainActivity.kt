@@ -36,6 +36,10 @@ class MainActivity : ComponentActivity() {
     var iconPackApplications: Map<IconPack, List<IconPackApplication>> = emptyMap()
         private set
 
+    init {
+        instance = this
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -117,6 +121,18 @@ class MainActivity : ComponentActivity() {
     fun editApplication(index: Int, newApp: PackageInfoStruct) {
         applicationList = applicationList.toMutableList().also {
             it[index] = newApp
+        }
+    }
+
+    companion object {
+        private var instance: MainActivity? = null
+
+        fun baseContext(): Context? {
+            return instance?.baseContext
+        }
+
+        fun current(): MainActivity? {
+            return instance
         }
     }
 }

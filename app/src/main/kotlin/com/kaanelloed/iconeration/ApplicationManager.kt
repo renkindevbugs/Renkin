@@ -226,6 +226,11 @@ class ApplicationManager(private val ctx: Context) {
         return getResIcon(res, resourceId)
     }
 
+    fun getResources(packageName: String): Resources {
+        return pm.getResourcesForApplication(packageName)
+    }
+
+
     @SuppressLint("DiscouragedApi")
     private fun Resources.getIdentifierByName(name: String, defType: String, defPackage: String): Int {
         return getIdentifier(name, defType, defPackage)
