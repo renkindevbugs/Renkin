@@ -3,14 +3,13 @@ package com.kaanelloed.iconeration
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
-import android.os.Build
 import androidx.core.content.FileProvider
 import app.revanced.manager.compose.util.signing.Signer
 import app.revanced.manager.compose.util.signing.SigningOptions
 import com.kaanelloed.iconeration.xml.AdaptiveIconXml
 import com.kaanelloed.iconeration.xml.AppFilterXml
 import com.kaanelloed.iconeration.xml.DrawableXml
-import com.kaanelloed.iconeration.xml.XMLEncoder
+import com.kaanelloed.iconeration.xml.XmlEncoder
 import com.kaanelloed.iconeration.xml.XmlMemoryFile
 import com.reandroid.apk.ApkModule
 import com.reandroid.archive.ByteInputSource
@@ -202,7 +201,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
 
     private fun createXmlResource(apkModule: ApkModule, packageBlock: PackageBlock, xmlFile: XmlMemoryFile, name: String) {
         val resPath = "res/${name}.xml"
-        val xmlEncoder = XMLEncoder(packageBlock)
+        val xmlEncoder = XmlEncoder(packageBlock)
 
         val res = packageBlock.getOrCreate("", "xml", name)
         res.setValueAsString(resPath)
@@ -212,7 +211,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
 
     private fun createXmlDrawableResource(apkModule: ApkModule, packageBlock: PackageBlock, xmlFile: XmlMemoryFile, name: String) {
         val resPath = "res/${name}.xml"
-        val xmlEncoder = XMLEncoder(packageBlock)
+        val xmlEncoder = XmlEncoder(packageBlock)
 
         val res = packageBlock.getOrCreate("", "drawable", name)
         res.setValueAsString(resPath)
