@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -283,6 +284,7 @@ fun showBackgroundColor(generationType: GenerationType, themed: Boolean): Boolea
 @Composable
 fun VectorSwitch(useVector: Boolean, onChange: ((newValue: Boolean) -> Unit)) {
     var checked by rememberSaveable { mutableStateOf(false) }
+    var openInfo by rememberSaveable { mutableStateOf(false) }
 
     checked = useVector
 
@@ -299,12 +301,36 @@ fun VectorSwitch(useVector: Boolean, onChange: ((newValue: Boolean) -> Unit)) {
             },
             modifier = Modifier.padding(start = 8.dp)
         )
+
+        IconButton(onClick = { openInfo = true }) {
+            Icon(
+                imageVector = Icons.Filled.Info,
+                contentDescription = "Option info",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+
+    if (openInfo) {
+        AlertDialog(
+            shape = RoundedCornerShape(20.dp),
+            containerColor = MaterialTheme.colorScheme.background,
+            titleContentColor = MaterialTheme.colorScheme.outline,
+            onDismissRequest = { openInfo = false },
+            title = { },
+            text = {
+                Text("If the application use a vector as an icon, edit the vector.")
+            },
+            confirmButton = { },
+            dismissButton = { }
+        )
     }
 }
 
 @Composable
 fun MonochromeSwitch(useMonochrome: Boolean, onChange: ((newValue: Boolean) -> Unit)) {
     var checked by rememberSaveable { mutableStateOf(false) }
+    var openInfo by rememberSaveable { mutableStateOf(false) }
 
     checked = useMonochrome
 
@@ -321,12 +347,36 @@ fun MonochromeSwitch(useMonochrome: Boolean, onChange: ((newValue: Boolean) -> U
             },
             modifier = Modifier.padding(start = 8.dp)
         )
+
+        IconButton(onClick = { openInfo = true }) {
+            Icon(
+                imageVector = Icons.Filled.Info,
+                contentDescription = "Option info",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+
+    if (openInfo) {
+        AlertDialog(
+            shape = RoundedCornerShape(20.dp),
+            containerColor = MaterialTheme.colorScheme.background,
+            titleContentColor = MaterialTheme.colorScheme.outline,
+            onDismissRequest = { openInfo = false },
+            title = { },
+            text = {
+                Text("If the application have a monochrome icon, use it.")
+            },
+            confirmButton = { },
+            dismissButton = { }
+        )
     }
 }
 
 @Composable
 fun ThemedIconsSwitch(useThemed: Boolean, onChange: ((newValue: Boolean) -> Unit)) {
     var checked by rememberSaveable { mutableStateOf(false) }
+    var openInfo by rememberSaveable { mutableStateOf(false) }
 
     checked = useThemed
 
@@ -342,6 +392,29 @@ fun ThemedIconsSwitch(useThemed: Boolean, onChange: ((newValue: Boolean) -> Unit
                 onChange(it)
             },
             modifier = Modifier.padding(start = 8.dp)
+        )
+
+        IconButton(onClick = { openInfo = true }) {
+            Icon(
+                imageVector = Icons.Filled.Info,
+                contentDescription = "Option info",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+
+    if (openInfo) {
+        AlertDialog(
+            shape = RoundedCornerShape(20.dp),
+            containerColor = MaterialTheme.colorScheme.background,
+            titleContentColor = MaterialTheme.colorScheme.outline,
+            onDismissRequest = { openInfo = false },
+            title = { },
+            text = {
+                Text("Export icons as themed icons.")
+            },
+            confirmButton = { },
+            dismissButton = { }
         )
     }
 }
