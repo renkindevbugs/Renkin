@@ -139,7 +139,10 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
             }
 
             openAppOptions = false
-        }) { openAppOptions = false }
+        }, { openAppOptions = false }) {
+            openAppOptions = false
+            activity.editApplication(index, app.changeExport(null))
+        }
     }
 }
 

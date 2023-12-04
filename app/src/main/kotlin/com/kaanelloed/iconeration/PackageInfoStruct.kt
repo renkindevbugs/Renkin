@@ -27,7 +27,7 @@ class PackageInfoStruct(
     }
 
     fun changeExport(
-        export: Export
+        export: Export?
     ): PackageInfoStruct  {
         return PackageInfoStruct(appName, packageName, activityName, icon, iconID, export, internalVersion + 1)
     }

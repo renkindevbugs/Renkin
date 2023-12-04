@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -20,6 +22,8 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -61,12 +65,12 @@ var generatingType = GenerationType.PATH
 var iconPackageName = ""
 
 @Composable
-fun AppOptions(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit)) {
-    OptionsDialog(iconPacks, app, onConfirmation, onDismiss)
+fun AppOptions(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit), onIconClear: (() -> Unit)) {
+    OptionsDialog(iconPacks, app, onConfirmation, onDismiss, onIconClear)
 }
 
 @Composable
-fun OptionsDialog(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit)) {
+fun OptionsDialog(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit), onIconClear: (() -> Unit)) {
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.background,
@@ -74,7 +78,7 @@ fun OptionsDialog(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmat
         onDismissRequest = onDismiss,
         title = { Text(app.appName) },
         text = {
-            OptionColumn(iconPacks)
+            OptionColumn(iconPacks, onIconClear)
         },
         confirmButton = {
             Button(
@@ -99,7 +103,7 @@ fun OptionsDialog(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmat
 }
 
 @Composable
-fun OptionColumn(iconPacks: List<IconPack>) {
+fun OptionColumn(iconPacks: List<IconPack>, onIconClear: (() -> Unit)) {
     var genType by rememberSaveable { mutableStateOf(GenerationType.PATH) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
@@ -108,6 +112,7 @@ fun OptionColumn(iconPacks: List<IconPack>) {
     var iconPack by rememberSaveable { mutableStateOf("") }
 
     var upload by remember { mutableStateOf(false) }
+    var confirmClearIcon by remember { mutableStateOf(false) }
     var imageUri by remember { mutableStateOf(Uri.EMPTY) }
 
     uploadedImage = null
@@ -144,6 +149,49 @@ fun OptionColumn(iconPacks: List<IconPack>) {
             iconPackageName = iconPack
             generatingType = genType
             generatingOptions = IconGenerator.GenerationOptions(android.graphics.Color.parseColor(iconColor.toHexString()), useMonochrome, useVector)
+        }
+
+        IconButton(onClick = {
+            confirmClearIcon = true
+        }) {
+            Icon(
+                imageVector = Icons.Filled.Delete,
+                contentDescription = "Clear",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+
+        if (confirmClearIcon) {
+            AlertDialog(
+                shape = RoundedCornerShape(20.dp),
+                containerColor = MaterialTheme.colorScheme.background,
+                titleContentColor = MaterialTheme.colorScheme.outline,
+                onDismissRequest = { confirmClearIcon = false },
+                title = { Text("Confirm clear") },
+                text = {
+                    Text("Are you sure to clear the icon ?")
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            confirmClearIcon = false
+                            onIconClear()
+                        }
+                    ) {
+                        Text("Confirm")
+                    }
+                },
+                dismissButton = {
+                    Button(
+                        onClick = {
+                            confirmClearIcon = false
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("Dismiss")
+                    }
+                }
+            )
         }
     }
 }
