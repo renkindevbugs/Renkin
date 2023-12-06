@@ -145,17 +145,12 @@ class IconGenerator(
         val imageVector = ImageTracer.imageToVector(getAppIconBitmap(app), ImageTracer.TracingOptions())
 
         val vector = imageVector.toMutableImageVector()
-        vector.viewportWidth = app.icon.intrinsicWidth.toFloat()
-        vector.viewportHeight = app.icon.intrinsicHeight.toFloat()
-
-        vector.defaultWidth = app.icon.intrinsicWidth.toFloat().dp
-        vector.defaultHeight = app.icon.intrinsicHeight.toFloat().dp
 
         editVectorGroup(vector.root, 2F, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
         activity.editApplication(app, app.changeExport(VectorIcon(vector.toImageVector(), VectorIcon.RendererOption.Svg)))
     }
 
-    private fun getAppIconBitmap(app: PackageInfoStruct, maxSize: Int = 1000): Bitmap {
+    private fun getAppIconBitmap(app: PackageInfoStruct, maxSize: Int = 500): Bitmap {
         var newIcon = app.icon
 
         if (newIcon is AdaptiveIconDrawable) {
