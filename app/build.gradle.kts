@@ -56,7 +56,7 @@ dependencies {
     implementation("com.google.android.material:material:1.10.0")
     implementation("io.github.reandroid:ARSCLib:1.2.4")
     implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
-    implementation("com.android.tools.build:apksig:8.1.4")
+    implementation("com.android.tools.build:apksig:8.2.0")
     implementation("com.caverock:androidsvg:1.4")
 
     //compose
@@ -70,11 +70,11 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest:1.5.4")
     implementation("androidx.activity:activity-compose:1.8.1")
     implementation("io.coil-kt:coil-compose:2.5.0")
-    implementation("com.github.skydoves:colorpicker-compose:1.0.5")
+    implementation("com.github.skydoves:colorpicker-compose:1.0.6")
 
     //Data
-    implementation("androidx.room:room-ktx:2.6.0")
-    ksp("androidx.room:room-compiler:2.6.0")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
     //Test
