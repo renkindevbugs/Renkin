@@ -104,15 +104,15 @@ class VectorHandler {
         xml.vectorSize(vector.width, vector.height, vector.viewportWidth, vector.viewportHeight)
 
         for (grp in vector.groups) {
-            xml.startGroup(grp.scaleX, grp.scaleY, grp.translateX, grp.translateY)
+            xml.startGroup(grp.scaleX, grp.scaleY, grp.translateX, grp.translateY, grp.rotation, grp.pivotX, grp.pivotY)
             for (path in grp.paths) {
-                xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillColor.toString(), "@color/icon_color", path.fillType, path.strokeLineCap)
+                xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillColor.toString(), "@color/icon_color", path.fillType, path.strokeLineCap, 1F, 1F)
             }
             xml.endGroup()
         }
 
         for (path in vector.paths) {
-            xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillColor.toString(), "@color/icon_color", path.fillType, path.strokeLineCap)
+            xml.path(path.pathDataRaw, path.strokeLineJoin, path.strokeWidth, path.fillColor.toString(), "@color/icon_color", path.fillType, path.strokeLineCap, 1F, 1F)
         }
 
         return xml

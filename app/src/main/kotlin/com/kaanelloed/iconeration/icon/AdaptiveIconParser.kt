@@ -3,6 +3,8 @@ package com.kaanelloed.iconeration.icon
 import android.content.res.Resources
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.VectorDrawable
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import androidx.core.content.res.ResourcesCompat
 import com.kaanelloed.iconeration.vector.VectorParser
 import com.kaanelloed.iconeration.xml.XmlNode
@@ -44,7 +46,8 @@ class AdaptiveIconParser(private val resources: Resources) {
                 val drawable = ResourcesCompat.getDrawable(resources, id, null)!!
 
                 if (drawable is VectorDrawable) {
-                    return parseVector(resources.getXml(id).toXmlNode())
+                    return VectorIcon(ImageVector.vectorResource(null, resources, id))
+                    //return parseVector(resources.getXml(id).toXmlNode())
                 }
 
                 if (drawable is BitmapDrawable) {

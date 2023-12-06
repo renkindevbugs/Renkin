@@ -1,6 +1,5 @@
 package com.kaanelloed.iconeration.ui
 
-import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
@@ -55,6 +54,8 @@ import com.kaanelloed.iconeration.data.getIconColorValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
 import com.kaanelloed.iconeration.data.getMonochromeValue
 import com.kaanelloed.iconeration.data.getTypeValue
+import com.kaanelloed.iconeration.icon.BitmapIcon
+import com.kaanelloed.iconeration.icon.EmptyIcon
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -82,8 +83,8 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
                 .padding(2.dp)
                 .size(78.dp, 78.dp))
 
-        if (app.export?.bitmap != null)
-            Image(painter = BitmapPainter(app.export.bitmap.asImageBitmap())
+        if (app.createdIcon !is EmptyIcon)
+            Image(painter = app.createdIcon.getPainter()
                 , contentDescription = null
                 , modifier = Modifier
                     .padding(2.dp)
@@ -127,7 +128,7 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
                 }
 
                 if (uploadedImage != null) {
-                    activity.editApplication(index, app.changeExport(PackageInfoStruct.Export(uploadedImage as Bitmap)))
+                    activity.editApplication(index, app.changeExport(BitmapIcon(uploadedImage!!)))
                 }
                 if (generatingOptions != null && toGenerate) {
                     IconGenerator(ctx, activity, generatingOptions!!, emptyMap()).generateIcons(app, generatingType)
@@ -141,7 +142,7 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
             openAppOptions = false
         }, { openAppOptions = false }) {
             openAppOptions = false
-            activity.editApplication(index, app.changeExport(null))
+            activity.editApplication(index, app.changeExport(EmptyIcon()))
         }
     }
 }

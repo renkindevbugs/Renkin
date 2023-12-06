@@ -229,12 +229,6 @@ class ApplicationManager(private val ctx: Context) {
     fun getResources(packageName: String): Resources {
         return pm.getResourcesForApplication(packageName)
     }
-
-
-    @SuppressLint("DiscouragedApi")
-    private fun Resources.getIdentifierByName(name: String, defType: String, defPackage: String): Int {
-        return getIdentifier(name, defType, defPackage)
-    }
     
     fun getApp(packageName: String): ApplicationInfo? {
         return try {
@@ -263,11 +257,7 @@ class ApplicationManager(private val ctx: Context) {
 
     fun getPackageResourceXml(packageName: String, resourceId: Int): XmlPullParser? {
         val res = pm.getResourcesForApplication(packageName)
-        return try {
-            res.getXml(resourceId)
-        } catch (e: Resources.NotFoundException) {
-            null
-        }
+        return res.getXmlOrNull(resourceId)
     }
 
     @Suppress("DEPRECATION")
@@ -311,6 +301,21 @@ class ApplicationManager(private val ctx: Context) {
             activityNane = thirdSplit[1]
 
             return true
+        }
+    }
+
+    companion object {
+        @SuppressLint("DiscouragedApi")
+        fun Resources.getIdentifierByName(name: String, defType: String, defPackage: String): Int {
+            return getIdentifier(name, defType, defPackage)
+        }
+
+        fun Resources.getXmlOrNull(resourceId: Int): XmlPullParser? {
+            return try {
+                this.getXml(resourceId)
+            } catch (e: Resources.NotFoundException) {
+                null
+            }
         }
     }
 }

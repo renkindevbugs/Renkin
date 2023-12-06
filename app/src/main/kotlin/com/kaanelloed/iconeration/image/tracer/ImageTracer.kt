@@ -2,6 +2,7 @@ package com.kaanelloed.iconeration.image.tracer
 
 import android.graphics.Bitmap
 import android.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import java.nio.IntBuffer
 import kotlin.math.floor
 import kotlin.math.pow
@@ -19,6 +20,18 @@ class ImageTracer {
         private fun imageDataToSVG(imageData: ImageData, options: TracingOptions, palette: Array<ByteArray>): String {
             val indexedImage = imageDataToTraceData(imageData, options, palette)
             return SVGUtils.getSVGString(indexedImage, options)
+        }
+
+        fun imageToVector(image: Bitmap, options: TracingOptions): ImageVector {
+            val imageData = loadImageData(image)
+            val palette = generatePalette(options)
+
+            return imageDataToVector(imageData, options, palette)
+        }
+
+        private fun imageDataToVector(imageData: ImageData, options: TracingOptions, palette: Array<ByteArray>): ImageVector {
+            val indexedImage = imageDataToTraceData(imageData, options, palette)
+            return VectorUtils.getVector(indexedImage, options)
         }
 
         // Tracing ImageData, then returning IndexedImage with tracedata in layers

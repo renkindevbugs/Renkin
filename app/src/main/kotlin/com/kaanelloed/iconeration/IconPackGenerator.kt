@@ -6,6 +6,10 @@ import android.graphics.Bitmap
 import androidx.core.content.FileProvider
 import app.revanced.manager.compose.util.signing.Signer
 import app.revanced.manager.compose.util.signing.SigningOptions
+import com.kaanelloed.iconeration.icon.EmptyIcon
+import com.kaanelloed.iconeration.icon.VectorIcon
+import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXml
+import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXmlFile
 import com.kaanelloed.iconeration.xml.AdaptiveIconXml
 import com.kaanelloed.iconeration.xml.AppFilterXml
 import com.kaanelloed.iconeration.xml.DrawableXml
@@ -80,7 +84,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
         val appfilterXml = AppFilterXml()
 
         for (app in apps) {
-            if (app.export != null) {
+            if (app.createdIcon !is EmptyIcon) {
                 val appFileName = app.getFileName()
 
                 if (themed) {
@@ -88,15 +92,15 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
                     adaptive.foreground(appFileName)
                     adaptive.background("@color/icon_background_color")
 
-                    if (app.export.type == PackageInfoStruct.ExportType.XML)
-                        createXmlDrawableResource(apkModule, packageBlock, app.export.vector!!.toXMLFile(), appFileName + "_foreground")
+                    if (app.createdIcon is VectorIcon)
+                        createXmlDrawableResource(apkModule, packageBlock, app.createdIcon.vector.toXmlFile(), appFileName + "_foreground")
                     else
-                        createPngResource(apkModule, packageBlock, app.export.bitmap!!, appFileName + "_foreground")
+                        createPngResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground")
 
                     createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
                 }
                 else
-                    createPngResource(apkModule, packageBlock, app.export.bitmap!!, appFileName)
+                    createPngResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName)
 
                 drawableXml.item(appFileName)
                 appfilterXml.item(app.packageName, app.activityName, appFileName)

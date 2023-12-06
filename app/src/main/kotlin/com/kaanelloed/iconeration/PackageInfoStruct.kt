@@ -2,6 +2,9 @@ package com.kaanelloed.iconeration
 
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
+import com.kaanelloed.iconeration.icon.BaseIcon
+import com.kaanelloed.iconeration.icon.EmptyIcon
+import com.kaanelloed.iconeration.icon.ExportableIcon
 import java.text.Normalizer
 
 class PackageInfoStruct(
@@ -10,7 +13,7 @@ class PackageInfoStruct(
     val activityName: String,
     val icon: Drawable,
     val iconID: Int,
-    val export: Export? = null,
+    val createdIcon: ExportableIcon = EmptyIcon(),
     val internalVersion: Int = 0
 ) : Comparable<PackageInfoStruct> {
     override fun equals(other: Any?): Boolean {
@@ -27,9 +30,9 @@ class PackageInfoStruct(
     }
 
     fun changeExport(
-        export: Export?
+        createdIcon: ExportableIcon
     ): PackageInfoStruct  {
-        return PackageInfoStruct(appName, packageName, activityName, icon, iconID, export, internalVersion + 1)
+        return PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1)
     }
 
     fun getFileName(): String {
@@ -42,18 +45,5 @@ class PackageInfoStruct(
 
     private fun removeDiacritics(text: String): String {
         return Normalizer.normalize(text, Normalizer.Form.NFD).replace("\\p{Mn}+".toRegex(), "")
-    }
-
-    enum class ExportType {
-        PNG, XML
-    }
-
-    class Export(
-        val type: ExportType
-        , val bitmap: Bitmap?
-        , val vector: VectorHandler?
-    ) {
-        constructor(bitmap: Bitmap) : this(ExportType.PNG, bitmap, null)
-        constructor(bitmap: Bitmap, vector: VectorHandler) : this(ExportType.XML, bitmap, vector)
     }
 }

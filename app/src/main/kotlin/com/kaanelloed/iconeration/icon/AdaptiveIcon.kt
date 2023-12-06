@@ -1,16 +1,9 @@
 package com.kaanelloed.iconeration.icon
 
+import android.graphics.Bitmap
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.os.Build
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.painter.Painter
 
-class AdaptiveIcon(val foreground: BaseIcon, val background: BaseIcon, val monochrome: BaseIcon?): BaseIcon() {
-    fun toDrawable(): AdaptiveIconDrawable {
-        //TODO()
-
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            AdaptiveIconDrawable(null, null, null)
-        } else {
-            AdaptiveIconDrawable(null, null)
-        }
-    }
-}
+class AdaptiveIcon(val foreground: BaseIcon, val background: BaseIcon, val monochrome: BaseIcon?): BaseIcon()

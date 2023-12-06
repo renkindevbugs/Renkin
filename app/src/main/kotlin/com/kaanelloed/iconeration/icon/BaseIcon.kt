@@ -1,4 +1,3 @@
 package com.kaanelloed.iconeration.icon
 
-abstract class BaseIcon {
-}
+abstract class BaseIcon

@@ -20,19 +20,40 @@ class VectorXml: XmlMemoryFile() {
         attribute("viewportHeight", viewportHeight.toString(), androidNamespace)
     }
 
-    fun startGroup(scaleX: Float, scaleY: Float, translateX: Float, translateY: Float) {
+    fun startGroup(
+        scaleX: Float,
+        scaleY: Float,
+        translateX: Float,
+        translateY: Float,
+        rotation: Float,
+        pivotX: Float,
+        pivotY: Float
+    ) {
         startTag("group")
         attribute("scaleX", scaleX.toString(), androidNamespace)
         attribute("scaleY", scaleY.toString(), androidNamespace)
         attribute("translateX", translateX.toString(), androidNamespace)
         attribute("translateY", translateY.toString(), androidNamespace)
+        attribute("rotation", rotation.toString(), androidNamespace)
+        attribute("pivotX", pivotX.toString(), androidNamespace)
+        attribute("pivotY", pivotY.toString(), androidNamespace)
     }
 
     fun endGroup() {
         endTag("group")
     }
 
-    fun path(pathData: String, strokeLineJoin: String, strokeWidth: Float, fillColor: String, strokeColor: String, fillType: String, strokeLineCap: String) {
+    fun path(
+        pathData: String,
+        strokeLineJoin: String,
+        strokeWidth: Float,
+        fillColor: String,
+        strokeColor: String,
+        fillType: String,
+        strokeLineCap: String,
+        fillAlpha: Float,
+        strokeAlpha: Float
+    ) {
         startTag("path")
         attribute("pathData", pathData, androidNamespace)
         attribute("strokeLineJoin", strokeLineJoin, androidNamespace)
@@ -41,6 +62,8 @@ class VectorXml: XmlMemoryFile() {
         attribute("strokeColor", strokeColor, androidNamespace)
         attribute("fillType", fillType, androidNamespace)
         attribute("strokeLineCap", strokeLineCap, androidNamespace)
+        attribute("fillAlpha", fillAlpha.toString(), androidNamespace)
+        attribute("strokeAlpha", strokeAlpha.toString(), androidNamespace)
         endTag("path")
     }
 

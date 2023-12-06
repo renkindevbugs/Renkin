@@ -35,6 +35,10 @@ abstract class XmlMemoryFile {
         xmlSerializer.setPrefix(prefix, namespace)
     }
 
+    protected fun namespace(namespace: String) {
+        attribute("xmlns", namespace)
+    }
+
     open fun readAndClose():ByteArray {
         xmlSerializer.endDocument()
         bytes = stream.toByteArray()
