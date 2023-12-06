@@ -35,6 +35,9 @@ class MainActivity : ComponentActivity() {
     var iconPackApplications: Map<IconPack, List<IconPackApplication>> = emptyMap()
         private set
 
+    var iconPackLoaded: Boolean = false
+        private set
+
     init {
         instance = this
     }
@@ -108,6 +111,7 @@ class MainActivity : ComponentActivity() {
             }
 
             iconPackApplications = packDao.getIconPacksWithInstalledApps()
+            iconPackLoaded = true
         }
     }
 

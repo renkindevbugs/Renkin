@@ -113,6 +113,10 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
 
         AppOptions(iconPacks, app, {
             CoroutineScope(Dispatchers.Default).launch {
+                if (!activity.iconPackLoaded) {
+                    return@launch
+                }
+
                 var toGenerate = true
                 if (iconPackageName != "") {
                     val key = activity.iconPackApplications.keys.find { it.packageName == iconPackageName }
@@ -163,6 +167,10 @@ fun RefreshButton() {
 
     IconButton(onClick = {
         CoroutineScope(Dispatchers.Default).launch {
+            if (!activity.iconPackLoaded) {
+                return@launch
+            }
+
             var iconPackApps = emptyMap<IconPackApplication, Pair<Int, Drawable>>()
             if (iconPackageName != "") {
                 val pack = activity.iconPackApplications.keys.find { it.packageName == iconPackageName }
