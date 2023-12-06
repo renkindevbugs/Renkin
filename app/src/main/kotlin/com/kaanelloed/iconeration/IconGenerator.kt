@@ -15,10 +15,8 @@ import android.os.Build
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
-import com.caverock.androidsvg.SVG
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.drawable.ForegroundIconDrawable
@@ -35,9 +33,6 @@ import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableI
 import com.kaanelloed.iconeration.vector.MutableVectorGroup
 import com.kaanelloed.iconeration.vector.MutableVectorPath
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.scale
-import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toSvg
-import com.kaanelloed.iconeration.vector.VectorRenderer
-import com.kaanelloed.iconeration.vector.VectorRenderer.Companion.renderToCanvas
 import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
 import org.xmlpull.v1.XmlPullParser
 
@@ -129,19 +124,7 @@ class IconGenerator(
         val stroke = mutableVector.viewportHeight / 108 //1F at 108
         editVectorGroup(mutableVector.root, stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
 
-        //Test, to delete
-        val bmp = Bitmap.createBitmap(app.icon.intrinsicWidth, app.icon.intrinsicHeight, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bmp)
-
-        //mutableVector.toImageVector().renderToCanvas(canvas)
-        val svg = SVG.getFromString(mutableVector.toImageVector().toSvg())
-        val offset = mutableVector.viewportHeight / 6
-        svg.setDocumentViewBox(offset, offset, offset * 4, offset * 4)
-        svg.renderToCanvas(canvas)
-        activity.editApplication(app, app.changeExport(BitmapIcon(bmp)))
-
-        //To uncomment
-        //activity.editApplication(app, app.changeExport(VectorIcon(mutableVector.toImageVector())))
+        activity.editApplication(app, app.changeExport(VectorIcon(mutableVector.toImageVector(), VectorIcon.RendererOption.SvgDynamic)))
     }
 
     private fun editVectorGroup(vectorGroup: MutableVectorGroup, stroke: Float, fillColor: Brush, strokeColor: Brush) {
@@ -169,16 +152,7 @@ class IconGenerator(
         vector.defaultHeight = app.icon.intrinsicHeight.toFloat().dp
 
         editVectorGroup(vector.root, 2F, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
-
-        val bmp = Bitmap.createBitmap(app.icon.intrinsicWidth, app.icon.intrinsicHeight, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bmp)
-
-        //vector.toImageVector().renderToCanvas(canvas)
-
-        val svg = SVG.getFromString(vector.toImageVector().toSvg())
-        svg.renderToCanvas(canvas)
-
-        activity.editApplication(app, app.changeExport(BitmapIcon(addBackground(bmp))))
+        activity.editApplication(app, app.changeExport(VectorIcon(vector.toImageVector(), VectorIcon.RendererOption.Svg)))
     }
 
     private fun getAppIconBitmap(app: PackageInfoStruct, maxSize: Int = 1000): Bitmap {

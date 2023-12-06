@@ -19,6 +19,11 @@ class SvgXml: XmlMemoryFile() {
         attribute("height", height)
     }
 
+    fun svgViewBox(width: Float, height: Float) {
+        val viewBox = "0 0 $width $height"
+        attribute("viewBox", viewBox)
+    }
+
     fun startGroup(
         scaleX: Float,
         scaleY: Float,

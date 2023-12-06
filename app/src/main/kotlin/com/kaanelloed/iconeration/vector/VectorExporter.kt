@@ -107,10 +107,7 @@ class VectorExporter(val vector: ImageVector) {
 
     fun toSvgFile(): SvgXml {
         val svgFile = SvgXml()
-        svgFile.svgSize(
-            vector.defaultWidth.value.toString(),
-            vector.defaultHeight.value.toString()
-        )
+        svgFile.svgViewBox(vector.viewportWidth, vector.viewportHeight)
 
         setSvgGroup(svgFile, vector.root)
 
@@ -178,6 +175,10 @@ class VectorExporter(val vector: ImageVector) {
             brush.value
         } else {
             Color.Unspecified
+        }
+
+        if (color == Color.Unspecified) {
+            return "none"
         }
 
         return "rgb(${color.red * 255},${color.green * 255},${color.blue * 255})"
