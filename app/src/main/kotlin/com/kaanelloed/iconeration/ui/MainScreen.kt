@@ -165,9 +165,12 @@ fun RefreshButton() {
     val ctx = getCurrentContext()
     val activity = getCurrentMainActivity()
 
+    var openWarning by rememberSaveable { mutableStateOf(false) }
+
     IconButton(onClick = {
         CoroutineScope(Dispatchers.Default).launch {
             if (!activity.iconPackLoaded) {
+                openWarning = true
                 return@launch
             }
 
@@ -194,6 +197,20 @@ fun RefreshButton() {
             imageVector = Icons.Filled.Refresh,
             contentDescription = "Refresh icons",
             tint = MaterialTheme.colorScheme.primary
+        )
+    }
+
+    if (openWarning) {
+        AlertDialog(
+            shape = RoundedCornerShape(20.dp),
+            containerColor = MaterialTheme.colorScheme.background,
+            titleContentColor = MaterialTheme.colorScheme.outline,
+            onDismissRequest = { openWarning = false },
+            title = { Text("Sync") },
+            text = {
+                Text(text = "Icon packs data syncing, please wait and try again")
+            },
+            confirmButton = { }
         )
     }
 }
