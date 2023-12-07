@@ -1,6 +1,7 @@
 package com.kaanelloed.iconeration.xml
 
 import android.util.Xml
+import com.kaanelloed.iconeration.xml.file.XmlMemoryFile
 import com.reandroid.archive.ByteInputSource
 import com.reandroid.arsc.chunk.PackageBlock
 import com.reandroid.arsc.chunk.xml.ResXmlDocument

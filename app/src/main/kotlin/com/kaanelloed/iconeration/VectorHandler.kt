@@ -1,7 +1,7 @@
 package com.kaanelloed.iconeration
 
 import android.graphics.Color
-import com.kaanelloed.iconeration.xml.VectorXml
+import com.kaanelloed.iconeration.xml.file.VectorXml
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 import java.io.ByteArrayInputStream

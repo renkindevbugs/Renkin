@@ -11,8 +11,8 @@ import androidx.compose.ui.graphics.vector.VectorGroup
 import androidx.compose.ui.graphics.vector.VectorPath
 import com.kaanelloed.iconeration.ui.toHexString
 import com.kaanelloed.iconeration.vector.PathExporter.Companion.toStringPath
-import com.kaanelloed.iconeration.xml.SvgXml
-import com.kaanelloed.iconeration.xml.VectorXml
+import com.kaanelloed.iconeration.xml.file.SvgXml
+import com.kaanelloed.iconeration.xml.file.VectorXml
 
 class VectorExporter(val vector: ImageVector) {
     private val lineCapButt = 0

@@ -1,4 +1,4 @@
-package com.kaanelloed.iconeration.xml
+package com.kaanelloed.iconeration.xml.file
 
 import android.util.Xml
 import java.io.ByteArrayOutputStream

@@ -1,4 +1,4 @@
-package com.kaanelloed.iconeration.xml
+package com.kaanelloed.iconeration.xml.file
 
 class SvgXml: XmlMemoryFile() {
     private val svgNamespace = "http://www.w3.org/2000/svg"

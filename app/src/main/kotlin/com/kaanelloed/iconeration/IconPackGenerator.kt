@@ -8,13 +8,12 @@ import app.revanced.manager.compose.util.signing.Signer
 import app.revanced.manager.compose.util.signing.SigningOptions
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
-import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXml
 import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXmlFile
-import com.kaanelloed.iconeration.xml.AdaptiveIconXml
-import com.kaanelloed.iconeration.xml.AppFilterXml
-import com.kaanelloed.iconeration.xml.DrawableXml
+import com.kaanelloed.iconeration.xml.file.AdaptiveIconXml
+import com.kaanelloed.iconeration.xml.file.AppFilterXml
+import com.kaanelloed.iconeration.xml.file.DrawableXml
 import com.kaanelloed.iconeration.xml.XmlEncoder
-import com.kaanelloed.iconeration.xml.XmlMemoryFile
+import com.kaanelloed.iconeration.xml.file.XmlMemoryFile
 import com.reandroid.apk.ApkModule
 import com.reandroid.archive.ByteInputSource
 import com.reandroid.arsc.chunk.PackageBlock

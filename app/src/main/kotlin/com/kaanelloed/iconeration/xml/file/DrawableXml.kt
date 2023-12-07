@@ -1,4 +1,4 @@
-package com.kaanelloed.iconeration.xml
+package com.kaanelloed.iconeration.xml.file
 
 class DrawableXml: XmlMemoryFile() {
     init {
