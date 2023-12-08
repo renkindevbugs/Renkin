@@ -125,6 +125,7 @@ class IconGenerator(
         val stroke = mutableVector.viewportHeight / 108 //1F at 108
         editVectorGroup(mutableVector.root, stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
         mutableVector.resizeAndCenter().applyAndRemoveGroup().scaleAtCenter(6F / 4F)
+        mutableVector.tintColor = Color.Unspecified
 
         if (options.themed) {
             mutableVector.scaleAtCenter(0.5F)
@@ -319,6 +320,7 @@ class IconGenerator(
 
         val stroke = mutableVector.viewportHeight / 108 //1F at 108
         editVectorGroup(mutableVector.root, stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+        mutableVector.tintColor = Color.Unspecified
 
         activity.editApplication(app, app.changeExport(VectorIcon(mutableVector)))
     }
