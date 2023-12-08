@@ -9,6 +9,7 @@ import androidx.core.content.res.ResourcesCompat
 import com.kaanelloed.iconeration.vector.VectorParser
 import com.kaanelloed.iconeration.xml.XmlNode
 import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
+import org.xmlpull.v1.XmlPullParserException
 
 class AdaptiveIconParser(private val resources: Resources) {
     private fun parse(node: XmlNode): AdaptiveIcon? {
@@ -46,7 +47,9 @@ class AdaptiveIconParser(private val resources: Resources) {
                 val drawable = ResourcesCompat.getDrawable(resources, id, null)!!
 
                 if (drawable is VectorDrawable) {
-                    return VectorIcon(ImageVector.vectorResource(null, resources, id))
+                    val vector = getVectorResource(resources, id) ?: return EmptyIcon()
+
+                    return VectorIcon(vector)
                     //return parseVector(resources.getXml(id).toXmlNode())
                 }
 
@@ -72,6 +75,14 @@ class AdaptiveIconParser(private val resources: Resources) {
 
     private fun parseVector(node: XmlNode): VectorIcon {
         return VectorIcon(VectorParser.parse(resources, node)!!)
+    }
+
+    private fun getVectorResource(resources: Resources, id: Int): ImageVector? {
+        return try {
+            return ImageVector.vectorResource(null, resources, id)
+        } catch (e: XmlPullParserException) {
+            null
+        }
     }
 
     companion object {

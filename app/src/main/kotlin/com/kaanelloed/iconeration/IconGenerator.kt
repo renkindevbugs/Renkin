@@ -102,7 +102,9 @@ class IconGenerator(
     }
 
     private fun generatePathFromXML(appMan: ApplicationManager, app: PackageInfoStruct) {
-        val appIcon = IconParser.parseDrawable(appMan.getResources(app.packageName), app.icon, app.iconID)
+        val res = appMan.getResources(app.packageName) ?: return
+
+        val appIcon = IconParser.parseDrawable(res, app.icon, app.iconID)
         var vectorIcon: BaseIcon = appIcon
 
         if (appIcon is AdaptiveIcon) {
@@ -295,10 +297,13 @@ class IconGenerator(
 
     private fun getIconPackXML(app: PackageInfoStruct) {
         val iconPackApp = iconPackApplication(app.packageName)!!
+
+        val res = ApplicationManager(ctx).getResources(iconPackApp.iconPackName) ?: return
+
         val iconID = iconPackApplicationIconID(app.packageName)
         val parser = ApplicationManager(ctx).getPackageResourceXml(iconPackApp.iconPackName, iconID)!!
 
-        val adaptiveIcon = AdaptiveIconParser.parse(ApplicationManager(ctx).getResources(iconPackApp.iconPackName), parser.toXmlNode())!!
+        val adaptiveIcon = AdaptiveIconParser.parse(res, parser.toXmlNode())!!
         var vectorIcon: VectorIcon? = null
 
         if (adaptiveIcon.foreground is InsetIcon) {

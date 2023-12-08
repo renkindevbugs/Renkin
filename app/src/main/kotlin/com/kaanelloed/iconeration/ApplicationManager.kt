@@ -226,8 +226,12 @@ class ApplicationManager(private val ctx: Context) {
         return getResIcon(res, resourceId)
     }
 
-    fun getResources(packageName: String): Resources {
-        return pm.getResourcesForApplication(packageName)
+    fun getResources(packageName: String): Resources? {
+        return try {
+            return pm.getResourcesForApplication(packageName)
+        } catch (e: PackageManager.NameNotFoundException) {
+            null
+        }
     }
     
     fun getApp(packageName: String): ApplicationInfo? {
