@@ -1,7 +1,5 @@
 package com.kaanelloed.iconeration.vector
 
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
@@ -11,7 +9,6 @@ import androidx.compose.ui.graphics.vector.VectorGroup
 import androidx.compose.ui.graphics.vector.VectorPath
 import com.kaanelloed.iconeration.ui.toHexString
 import com.kaanelloed.iconeration.vector.PathExporter.Companion.toStringPath
-import com.kaanelloed.iconeration.xml.file.SvgXml
 import com.kaanelloed.iconeration.xml.file.VectorXml
 
 class VectorExporter(val vector: ImageVector) {
@@ -101,89 +98,6 @@ class VectorExporter(val vector: ImageVector) {
         return if (fill == PathFillType.NonZero) 0 else 1
     }
 
-    fun toSvg(): ByteArray {
-        return toSvgFile().readAndClose()
-    }
-
-    fun toSvgFile(): SvgXml {
-        val svgFile = SvgXml()
-        svgFile.svgViewBox(vector.viewportWidth, vector.viewportHeight)
-
-        setSvgGroup(svgFile, vector.root)
-
-        return svgFile
-    }
-
-    private fun setSvgGroup(file : SvgXml, group: VectorGroup) {
-        file.startGroup(
-            group.scaleX,
-            group.scaleY,
-            group.translationX,
-            group.translationY,
-            group.rotation,
-            group.pivotX,
-            group.pivotY
-        )
-
-        for (child in group) {
-            if (child is VectorGroup) {
-                setSvgGroup(file, child)
-            }
-
-            if (child is VectorPath) {
-                setSvgPath(file, child)
-            }
-        }
-
-        file.endGroup()
-    }
-
-    private fun setSvgPath(file : SvgXml, path: VectorPath) {
-        file.path(
-            path.pathData.toStringPath(),
-            setSvgJoin(path.strokeLineJoin),
-            path.strokeLineWidth,
-            setSvgColor(path.fill),
-            setSvgColor(path.stroke),
-            "",
-            setSvgCap(path.strokeLineCap),
-            path.fillAlpha,
-            path.strokeAlpha
-        )
-    }
-
-    private fun setSvgCap(cap: StrokeCap): String {
-        return when (cap) {
-            StrokeCap.Butt -> "butt"
-            StrokeCap.Round -> "round"
-            StrokeCap.Square -> "square"
-            else -> "butt"
-        }
-    }
-
-    private fun setSvgJoin(join: StrokeJoin): String {
-        return when (join) {
-            StrokeJoin.Miter -> "miter"
-            StrokeJoin.Round -> "round"
-            StrokeJoin.Bevel -> "bevel"
-            else -> "bevel"
-        }
-    }
-
-    private fun setSvgColor(brush: Brush?): String {
-        val color: Color = if (brush is SolidColor) {
-            brush.value
-        } else {
-            Color.Unspecified
-        }
-
-        if (color == Color.Unspecified) {
-            return "none"
-        }
-
-        return "rgb(${color.red * 255},${color.green * 255},${color.blue * 255})"
-    }
-
     companion object {
         fun ImageVector.toXml(): ByteArray {
             val exporter = VectorExporter(this)
@@ -193,11 +107,6 @@ class VectorExporter(val vector: ImageVector) {
         fun ImageVector.toXmlFile(): VectorXml {
             val exporter = VectorExporter(this)
             return exporter.toXmlFile()
-        }
-
-        fun ImageVector.toSvg(): String {
-            val exporter = VectorExporter(this)
-            return exporter.toSvg().decodeToString()
         }
     }
 }

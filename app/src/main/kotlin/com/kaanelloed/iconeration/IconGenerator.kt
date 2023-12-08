@@ -32,13 +32,8 @@ import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableI
 import com.kaanelloed.iconeration.vector.MutableVectorGroup
 import com.kaanelloed.iconeration.vector.MutableVectorPath
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.applyAndRemoveGroup
-import com.kaanelloed.iconeration.vector.VectorEditor.Companion.center
-import com.kaanelloed.iconeration.vector.VectorEditor.Companion.changeViewPort
-import com.kaanelloed.iconeration.vector.VectorEditor.Companion.getBounds
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeAndCenter
-import com.kaanelloed.iconeration.vector.VectorEditor.Companion.roundAlpha
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.scaleAtCenter
-import com.kaanelloed.iconeration.vector.VectorRenderer.Companion.renderToCanvas
 import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
 import org.xmlpull.v1.XmlPullParser
 
@@ -214,23 +209,6 @@ class IconGenerator(
             return icon.monochrome != null
 
         return false
-    }
-
-    private fun getAdaptiveDrawableID(adaptiveParser: XmlPullParser, type: String): Int {
-        var id = 0
-
-        while (adaptiveParser.eventType != XmlPullParser.END_DOCUMENT) {
-            if (adaptiveParser.eventType == XmlPullParser.START_TAG) {
-                if (adaptiveParser.name == type) {
-                    val drawable = getAttributeValueByName(adaptiveParser, "drawable")!!
-                    id = drawable.substring(1).toInt()
-                }
-            }
-
-            adaptiveParser.next()
-        }
-
-        return id
     }
 
     private fun getAttributeValueByName(parser: XmlPullParser, attributeName: String): String? {

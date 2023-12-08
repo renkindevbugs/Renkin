@@ -57,7 +57,6 @@ dependencies {
     implementation("io.github.reandroid:ARSCLib:1.2.4")
     implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
     implementation("com.android.tools.build:apksig:8.2.0")
-    implementation("com.caverock:androidsvg:1.4")
 
     //compose
     val composeBom = platform("androidx.compose:compose-bom:2023.10.01")

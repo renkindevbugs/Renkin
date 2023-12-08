@@ -10,18 +10,6 @@ import kotlin.math.roundToInt
 
 class ImageTracer {
     companion object {
-        fun imageToSVG(image: Bitmap, options: TracingOptions): String {
-            val imageData = loadImageData(image)
-            val palette = generatePalette(options)
-
-            return imageDataToSVG(imageData, options, palette)
-        }
-
-        private fun imageDataToSVG(imageData: ImageData, options: TracingOptions, palette: Array<ByteArray>): String {
-            val indexedImage = imageDataToTraceData(imageData, options, palette)
-            return SVGUtils.getSVGString(indexedImage, options)
-        }
-
         fun imageToVector(image: Bitmap, options: TracingOptions): ImageVector {
             val imageData = loadImageData(image)
             val palette = generatePalette(options)

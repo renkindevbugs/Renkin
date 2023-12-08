@@ -1,7 +1,3 @@
 package com.kaanelloed.iconeration.icon
 
-import android.graphics.Bitmap
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.painter.Painter
-
 class InsetIcon(val inset: Float, val innerIcon: BaseIcon): BaseIcon()
