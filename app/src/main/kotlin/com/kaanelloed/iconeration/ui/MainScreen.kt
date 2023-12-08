@@ -1,8 +1,8 @@
 package com.kaanelloed.iconeration.ui
 
-import android.graphics.Color
 import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,8 +36,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.drawable.toBitmap
@@ -73,6 +75,11 @@ fun ApplicationList(iconPacks: List<IconPack>) {
 
 @Composable
 fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: Int) {
+    val prefs = getPreferences()
+    val bgColorValue = prefs.getBackgroundColorValue()
+    val themed = prefs.getExportThemedValue()
+    val dynamicColor = themed && supportDynamicColors()
+
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
 
     Row(modifier = Modifier.fillMaxWidth(),
@@ -83,13 +90,24 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
                 .padding(2.dp)
                 .size(78.dp, 78.dp))
 
+        val bgColor = if (themed) {
+            if (dynamicColor) {
+                colorResource(R.color.icon_background_color)
+            } else {
+                bgColorValue
+            }
+        } else {
+            Color.Unspecified
+        }
+
         if (app.createdIcon !is EmptyIcon)
             Image(painter = app.createdIcon.getPainter()
                 , contentDescription = null
                 , modifier = Modifier
                     .padding(2.dp)
                     .size(78.dp, 78.dp)
-                    .clickable { openAppOptions = true })
+                    .clickable { openAppOptions = true }
+                    .background(bgColor))
         else
             IconButton(onClick = { openAppOptions = true }
             , modifier = Modifier
@@ -102,7 +120,7 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
                 )
             }
 
-        Column() {
+        Column {
             Text(app.appName)
         }
     }
@@ -181,8 +199,8 @@ fun RefreshButton() {
                 iconPackApps = ApplicationManager(ctx).getIconPackApplicationResources(iconPackageName, packApps)
             }
 
-            var iconColor = Color.parseColor(iconColorValue.toHexString())
-            var bgColor = Color.parseColor(bgColorValue.toHexString())
+            var iconColor = android.graphics.Color.parseColor(iconColorValue.toHexString())
+            var bgColor = android.graphics.Color.parseColor(bgColorValue.toHexString())
 
             if (dynamicColor) {
                 iconColor = activity.resources.getColor(R.color.icon_color, null)
