@@ -1,123 +1,305 @@
 package com.kaanelloed.iconeration.vector
 
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.PathNode
-import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.vector.toPath
+import androidx.compose.ui.unit.dp
+import com.kaanelloed.iconeration.vector.NodeEditor.Companion.rotate
+import com.kaanelloed.iconeration.vector.NodeEditor.Companion.scale
+import com.kaanelloed.iconeration.vector.NodeEditor.Companion.translate
+import com.kaanelloed.iconeration.vector.PathConverter.Companion.isRelative
+import com.kaanelloed.iconeration.vector.PathConverter.Companion.toAbsolute
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.center
+import kotlin.math.max
+import kotlin.math.min
+import kotlin.math.round
 
 class VectorEditor internal constructor(private val mutableVector: MutableImageVector) {
-    private fun scale(factor: Float): MutableImageVector {
-        var move = factor * mutableVector.viewportWidth / 2
-        if (factor > 1) {
-            move *= -1
-        }
+    private fun resizeTo(width: Float, height: Float): MutableImageVector {
+        val scaleX = width / mutableVector.viewportWidth
+        val scaleY = height / mutableVector.viewportHeight
 
-        scaleGroup(mutableVector.root, factor, move)
+        mutableVector.viewportWidth = width
+        mutableVector.viewportHeight = height
+
+        mutableVector.defaultWidth = width.dp
+        mutableVector.defaultHeight = height.dp
+
+        resizeGroup(mutableVector.root, scaleX, scaleY, 0F, 0F)
 
         return mutableVector
     }
 
-    private fun scaleGroup(group: MutableVectorGroup, factor: Float, move: Float) {
+    private fun resizeGroup(group: MutableVectorGroup, scaleX: Float, scaleY: Float, translateX: Float, translateY: Float) {
+        group.translationX *= scaleX
+        group.translationY *= scaleY
+
         for (child in group.children) {
             if (child is MutableVectorGroup) {
-                scaleGroup(child, factor, move)
+                resizeGroup(child, scaleX, scaleY, translateX, translateY)
             }
 
             if (child is MutableVectorPath) {
-                scalePath(child, factor, move)
+                scalePath(child, scaleX, scaleY, translateX, translateY)
             }
         }
     }
 
-    private fun scalePath(path: MutableVectorPath, factor: Float, move: Float) {
-        for (i in path.pathData.indices) {
-            val node = path.pathData[i]
-            path.pathData[i] = scaleNode(node, factor, move)
+    private fun scaleAtCenter(scale: Float): MutableImageVector {
+        return scaleAtCenter(scale, scale)
+    }
+
+    private fun scaleAtCenter(scaleX: Float, scaleY: Float): MutableImageVector {
+        val pivotX = mutableVector.viewportWidth / 2
+        val pivotY = mutableVector.viewportHeight / 2
+
+        scaleGroup(mutableVector.root, scaleX, scaleY, pivotX, pivotY)
+        center()
+
+        return mutableVector
+    }
+
+    private fun scaleGroup(group: MutableVectorGroup, scaleX: Float, scaleY: Float, pivotX: Float, pivotY: Float) {
+        for (child in group.children) {
+            if (child is MutableVectorGroup) {
+                scaleGroup(child, scaleX, scaleY, pivotX, pivotY)
+            }
+
+            if (child is MutableVectorPath) {
+                scalePath(child, scaleX, scaleY, pivotX, pivotY)
+            }
         }
     }
 
-    private fun scaleNode(node: PathNode, factor: Float, move: Float): PathNode {
-        return when (node) {
-            is PathNode.Close -> node
-            is PathNode.RelativeMoveTo -> PathNode.RelativeMoveTo(node.dx * factor + move, node.dy * factor + move)
-            is PathNode.MoveTo -> PathNode.MoveTo(node.x * factor + move, node.y * factor + move)
-            is PathNode.RelativeLineTo -> PathNode.RelativeLineTo(node.dx * factor + move, node.dy * factor + move)
-            is PathNode.LineTo -> PathNode.LineTo(node.x * factor + move, node.y * factor + move)
-            is PathNode.RelativeHorizontalTo -> PathNode.RelativeHorizontalTo(node.dx * factor + move)
-            is PathNode.HorizontalTo -> PathNode.HorizontalTo(node.x * factor + move)
-            is PathNode.RelativeVerticalTo -> PathNode.RelativeVerticalTo(node.dy * factor + move)
-            is PathNode.VerticalTo -> PathNode.VerticalTo(node.y * factor + move)
-            is PathNode.RelativeCurveTo -> PathNode.RelativeCurveTo(
-                node.dx1 * factor + move,
-                node.dy1 * factor + move,
-                node.dx2 * factor + move,
-                node.dy2 * factor + move,
-                node.dx3 * factor + move,
-                node.dy3 * factor + move
-            )
-            is PathNode.CurveTo -> PathNode.CurveTo(
-                node.x1 * factor + move,
-                node.y1 * factor + move,
-                node.x2 * factor + move,
-                node.y2 * factor + move,
-                node.x3 * factor + move,
-                node.y3 * factor + move
-            )
-            is PathNode.RelativeReflectiveCurveTo -> PathNode.RelativeReflectiveCurveTo(
-                node.dx1 * factor + move,
-                node.dy1 * factor + move,
-                node.dx2 * factor + move,
-                node.dy2 * factor + move
-            )
-            is PathNode.ReflectiveCurveTo -> PathNode.ReflectiveCurveTo(
-                node.x1 * factor + move,
-                node.y1 * factor + move,
-                node.x2 * factor + move,
-                node.y2 * factor + move
-            )
-            is PathNode.RelativeQuadTo -> PathNode.RelativeQuadTo(
-                node.dx1 * factor + move,
-                node.dy1 * factor + move,
-                node.dx2 * factor + move,
-                node.dy2 * factor + move
-            )
-            is PathNode.QuadTo -> PathNode.QuadTo(
-                node.x1 * factor + move,
-                node.y1 * factor + move,
-                node.x2 * factor + move,
-                node.y2 * factor + move
-            )
-            is PathNode.RelativeReflectiveQuadTo -> PathNode.RelativeReflectiveQuadTo(node.dx * factor + move, node.dy * factor + move)
-            is PathNode.ReflectiveQuadTo -> PathNode.ReflectiveQuadTo(node.x * factor + move, node.y * factor + move)
-            is PathNode.RelativeArcTo -> PathNode.RelativeArcTo(
-                node.horizontalEllipseRadius * factor,
-                node.verticalEllipseRadius * factor,
-                node.theta,
-                node.isMoreThanHalf,
-                node.isPositiveArc,
-                node.arcStartDx * factor + move,
-                node.arcStartDy * factor + move
-            )
-            is PathNode.ArcTo -> PathNode.ArcTo(
-                node.horizontalEllipseRadius * factor,
-                node.verticalEllipseRadius * factor,
-                node.theta,
-                node.isMoreThanHalf,
-                node.isPositiveArc,
-                node.arcStartX * factor + move,
-                node.arcStartY * factor + move
-            )
+    private fun scalePath(path: MutableVectorPath, scaleX: Float, scaleY: Float, pivotX: Float, pivotY: Float) {
+        for (i in path.pathData.indices) {
+            var node = path.pathData[i]
+
+            if (i == 0 && node.isRelative()) {
+                node = node.toAbsolute()
+            }
+
+            path.pathData[i] = node.scale(scaleX, scaleY, pivotX, pivotY)
         }
+    }
+
+    private fun translateGroup(group: MutableVectorGroup, translateX: Float, translateY: Float) {
+        for (child in group.children) {
+            if (child is MutableVectorGroup) {
+                translateGroup(child, translateX, translateY)
+            }
+
+            if (child is MutableVectorPath) {
+                translatePath(child, translateX, translateY)
+            }
+        }
+    }
+
+    private fun translatePath(path: MutableVectorPath, translateX: Float, translateY: Float) {
+        for (i in path.pathData.indices) {
+            var node = path.pathData[i]
+
+            if (i == 0 && node.isRelative()) {
+                node = node.toAbsolute()
+            }
+
+            path.pathData[i] = node.translate(translateX, translateY)
+        }
+    }
+
+    private fun rotatePath(path: MutableVectorPath, rotation: Float, pivotX: Float, pivotY: Float) {
+        for (i in path.pathData.indices) {
+            var node = path.pathData[i]
+
+            if (i == 0 && node.isRelative()) {
+                node = node.toAbsolute()
+            }
+
+            path.pathData[i] = node.rotate(rotation, pivotX, pivotY)
+        }
+    }
+
+    private fun roundAlpha(): MutableImageVector {
+        roundGroupAlpha(mutableVector.root)
+        return mutableVector
+    }
+
+    private fun roundGroupAlpha(group: MutableVectorGroup) {
+        for (child in group.children) {
+            if (child is MutableVectorGroup) {
+                roundGroupAlpha(child)
+            }
+
+            if (child is MutableVectorPath) {
+                roundPathAlpha(child)
+            }
+        }
+    }
+
+    private fun roundPathAlpha(path: MutableVectorPath) {
+        path.fillAlpha = round(path.fillAlpha)
+        path.strokeAlpha = round(path.strokeAlpha)
+    }
+
+    private fun resizeAndCenter(): MutableImageVector {
+        if (mutableVector.viewportWidth == mutableVector.viewportHeight) {
+            return mutableVector
+        }
+
+        return if (mutableVector.viewportWidth > mutableVector.viewportHeight) {
+            resizeAndCenter(mutableVector.viewportWidth, mutableVector.viewportWidth)
+        } else {
+            resizeAndCenter(mutableVector.viewportHeight, mutableVector.viewportHeight)
+        }
+    }
+
+    private fun resizeAndCenter(width: Float, height: Float): MutableImageVector {
+        val translateX = (width - mutableVector.viewportWidth) / 2
+        val translateY = (height - mutableVector.viewportHeight) / 2
+
+        mutableVector.viewportWidth = width
+        mutableVector.viewportHeight = height
+
+        mutableVector.defaultWidth = width.dp
+        mutableVector.defaultHeight = height.dp
+
+        translateGroup(mutableVector.root, translateX, translateY)
+
+        return mutableVector
+    }
+
+    private fun changeViewPort(width: Float, height: Float): MutableImageVector {
+        val translateX = (width - mutableVector.viewportWidth) / 2
+        val translateY = (height - mutableVector.viewportHeight) / 2
+
+        mutableVector.viewportWidth = width
+        mutableVector.viewportHeight = height
+
+        translateGroup(mutableVector.root, translateX, translateY)
+
+        return mutableVector
+    }
+
+    private fun applyAndRemoveGroup(): MutableImageVector {
+        val paths = applyGroup(mutableVector.root)
+        mutableVector.root.children.clear()
+        mutableVector.root.children.addAll(paths)
+
+        return mutableVector
+    }
+
+    private fun applyGroup(group: MutableVectorGroup): MutableList<MutableVectorPath> {
+        val newChildren = mutableListOf<MutableVectorPath>()
+
+        for (child in group.children) {
+            if (child is MutableVectorGroup) {
+                val paths = applyGroup(child)
+
+                for (path in paths) {
+                    applyGroup(group, path)
+                    newChildren.add(path)
+                }
+            }
+
+            if (child is MutableVectorPath) {
+                applyGroup(group, child)
+                newChildren.add(child)
+            }
+        }
+
+        return newChildren
+    }
+
+    private fun applyGroup(group: MutableVectorGroup, path: MutableVectorPath) {
+        translatePath(path, group.translationX, group.translationY)
+        rotatePath(path, group.rotation, group.pivotX, group.pivotY)
+        scalePath(path, group.scaleX, group.scaleY, group.pivotX, group.pivotY)
+    }
+
+    private fun center(): MutableImageVector {
+        val bounds = getBounds()
+        val width = bounds.right - bounds.left
+        val height = bounds.bottom - bounds.top
+
+        val translateX = (mutableVector.viewportWidth - width) / 2 - bounds.left
+        val translateY = (mutableVector.viewportHeight - height) / 2 - bounds.top
+
+        translateGroup(mutableVector.root, translateX, translateY)
+
+        return mutableVector
+    }
+
+    private fun getBounds(): Rect {
+        return getGroupBounds(mutableVector.root)
+    }
+
+    private fun getGroupBounds(group: MutableVectorGroup): Rect {
+        var rect = Rect(Float.MAX_VALUE, Float.MAX_VALUE, Float.MIN_VALUE , Float.MIN_VALUE)
+
+        for (child in group.children) {
+            if (child is MutableVectorGroup) {
+                rect = unionRect(rect, getGroupBounds(child))
+            }
+
+            if (child is MutableVectorPath) {
+                rect = unionRect(rect, getPathBounds(child))
+            }
+        }
+
+        return rect
+    }
+
+    private fun getPathBounds(path: MutableVectorPath): Rect {
+        return path.pathData.toPath().getBounds()
+    }
+
+    private fun unionRect(rect1: Rect, rect2: Rect): Rect {
+        val left = min(rect1.left, rect2.left)
+        val top = min(rect1.top, rect2.top)
+        val right = max(rect1.right, rect2.right)
+        val bottom = max(rect1.bottom, rect2.bottom)
+
+        return Rect(left, top, right, bottom)
     }
 
     companion object {
-        fun ImageVector.scale(factor: Float): ImageVector {
-            val mutableVector = this.toMutableImageVector()
-            return mutableVector.scale(factor).toImageVector()
+        fun MutableImageVector.scaleAtCenter(scale: Float): MutableImageVector {
+            val editor = VectorEditor(this)
+            return editor.scaleAtCenter(scale)
         }
 
-        fun MutableImageVector.scale(factor: Float): MutableImageVector {
+        fun MutableImageVector.resizeTo(width: Float, height: Float): MutableImageVector {
             val editor = VectorEditor(this)
-            return editor.scale(factor)
+            return editor.resizeTo(width, height)
+        }
+
+        fun MutableImageVector.roundAlpha(): MutableImageVector {
+            val editor = VectorEditor(this)
+            return editor.roundAlpha()
+        }
+
+        fun MutableImageVector.resizeAndCenter(): MutableImageVector {
+            val editor = VectorEditor(this)
+            return editor.resizeAndCenter()
+        }
+
+        fun MutableImageVector.changeViewPort(width: Float, height: Float): MutableImageVector {
+            val editor = VectorEditor(this)
+            return editor.changeViewPort(width, height)
+        }
+
+        fun MutableImageVector.applyAndRemoveGroup(): MutableImageVector {
+            val editor = VectorEditor(this)
+            return editor.applyAndRemoveGroup()
+        }
+
+        fun MutableImageVector.getBounds(): Rect {
+            val editor = VectorEditor(this)
+            return editor.getBounds()
+        }
+
+        fun MutableImageVector.center(): MutableImageVector {
+            val editor = VectorEditor(this)
+            return editor.center()
         }
     }
 }

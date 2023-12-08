@@ -15,7 +15,6 @@ import android.os.Build
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPackApplication
@@ -32,7 +31,14 @@ import com.kaanelloed.iconeration.image.tracer.ImageTracer
 import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
 import com.kaanelloed.iconeration.vector.MutableVectorGroup
 import com.kaanelloed.iconeration.vector.MutableVectorPath
-import com.kaanelloed.iconeration.vector.VectorEditor.Companion.scale
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.applyAndRemoveGroup
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.center
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.changeViewPort
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.getBounds
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeAndCenter
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.roundAlpha
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.scaleAtCenter
+import com.kaanelloed.iconeration.vector.VectorRenderer.Companion.renderToCanvas
 import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
 import org.xmlpull.v1.XmlPullParser
 
@@ -123,8 +129,13 @@ class IconGenerator(
 
         val stroke = mutableVector.viewportHeight / 108 //1F at 108
         editVectorGroup(mutableVector.root, stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+        mutableVector.resizeAndCenter().applyAndRemoveGroup().scaleAtCenter(6F / 4F)
 
-        activity.editApplication(app, app.changeExport(VectorIcon(mutableVector.toImageVector(), VectorIcon.RendererOption.SvgDynamic)))
+        if (options.themed) {
+            mutableVector.scaleAtCenter(0.5F)
+        }
+
+        activity.editApplication(app, app.changeExport(VectorIcon(mutableVector)))
     }
 
     private fun editVectorGroup(vectorGroup: MutableVectorGroup, stroke: Float, fillColor: Brush, strokeColor: Brush) {
@@ -145,9 +156,14 @@ class IconGenerator(
         val imageVector = ImageTracer.imageToVector(getAppIconBitmap(app), ImageTracer.TracingOptions())
 
         val vector = imageVector.toMutableImageVector()
+        editVectorGroup(vector.root, 1F, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+        vector.resizeAndCenter()
 
-        editVectorGroup(vector.root, 2F, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
-        activity.editApplication(app, app.changeExport(VectorIcon(vector.toImageVector(), VectorIcon.RendererOption.Svg)))
+        if (options.themed) {
+            vector.scaleAtCenter(0.5F)
+        }
+
+        activity.editApplication(app, app.changeExport(VectorIcon(vector)))
     }
 
     private fun getAppIconBitmap(app: PackageInfoStruct, maxSize: Int = 500): Bitmap {
@@ -301,7 +317,6 @@ class IconGenerator(
     private fun getIconPackXML(app: PackageInfoStruct) {
         val iconPackApp = iconPackApplication(app.packageName)!!
         val iconID = iconPackApplicationIconID(app.packageName)
-        val icon = iconPackApplicationIcon(app.packageName)
         val parser = ApplicationManager(ctx).getPackageResourceXml(iconPackApp.iconPackName, iconID)!!
 
         val adaptiveIcon = AdaptiveIconParser.parse(ApplicationManager(ctx).getResources(iconPackApp.iconPackName), parser.toXmlNode())!!
@@ -322,12 +337,12 @@ class IconGenerator(
             TODO()
         }
 
-        val mutableVector = vectorIcon.vector.scale(0.5f).toMutableImageVector()
+        val mutableVector = vectorIcon.vector.toMutableImageVector().resizeAndCenter().scaleAtCenter(0.5f)
 
         val stroke = mutableVector.viewportHeight / 108 //1F at 108
         editVectorGroup(mutableVector.root, stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
 
-        activity.editApplication(app, app.changeExport(VectorIcon(mutableVector.toImageVector())))
+        activity.editApplication(app, app.changeExport(VectorIcon(mutableVector)))
     }
 
     private fun iconPackApplication(packageName: String): IconPackApplication? {

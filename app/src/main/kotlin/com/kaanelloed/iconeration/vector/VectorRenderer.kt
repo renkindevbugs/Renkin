@@ -3,6 +3,7 @@ package com.kaanelloed.iconeration.vector
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Path
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -16,9 +17,22 @@ import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.toPath
 
 class VectorRenderer(private val imageVector: ImageVector) {
-    fun renderToCanvas(canvas: Canvas) {
+    private val matrixStack = ArrayDeque<Matrix>()
+    private var currentMatrix = Matrix()
+    fun renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true) {
+        if (nonScalingStroke) {
+            renderNonScalingStroke(canvas)
+        } else {
+            render(canvas)
+        }
+    }
+
+    private fun render(canvas: Canvas) {
         val matrix = Matrix()
-        matrix.preScale(canvas.height / imageVector.viewportHeight, canvas.height / imageVector.viewportHeight)
+        matrix.preScale(
+            canvas.width / imageVector.viewportWidth,
+            canvas.height / imageVector.viewportHeight
+        )
 
         canvas.concat(matrix)
 
@@ -26,9 +40,10 @@ class VectorRenderer(private val imageVector: ImageVector) {
     }
 
     private fun renderGroup(canvas: Canvas, group: VectorGroup) {
-        canvas.scale(group.scaleX, group.scaleY)
+        canvas.save()
         canvas.translate(group.translationX, group.translationY)
-        canvas.rotate(group.rotation)
+        canvas.rotate(group.rotation, group.pivotX, group.pivotY)
+        canvas.scale(group.scaleX, group.scaleY, -group.pivotX, -group.pivotY)
 
         for (child in group) {
             if (child is VectorGroup) {
@@ -40,10 +55,57 @@ class VectorRenderer(private val imageVector: ImageVector) {
             }
         }
 
-        canvas.save()
+        canvas.restore()
     }
 
     private fun renderPath(canvas: Canvas, path: VectorPath) {
+        canvas.drawPath(path.pathData.toPath().asAndroidPath(), getPaint(path))
+    }
+
+    private fun renderNonScalingStroke(canvas: Canvas) {
+        currentMatrix.preScale(
+            canvas.width / imageVector.viewportWidth,
+            canvas.height / imageVector.viewportHeight
+        )
+        matrixStack.addLast(currentMatrix)
+
+        renderNonScalingStrokeInGroup(canvas, imageVector.root)
+    }
+
+    private fun renderNonScalingStrokeInGroup(canvas: Canvas, group: VectorGroup) {
+        val groupMatrix = Matrix()
+        groupMatrix.postConcat(currentMatrix)
+        groupMatrix.preTranslate(group.translationX, group.translationY)
+        groupMatrix.preRotate(group.rotation, group.pivotX, group.pivotY)
+        groupMatrix.preScale(group.scaleX, group.scaleY, group.pivotX, group.pivotY)
+
+        matrixStack.addLast(groupMatrix)
+        currentMatrix = groupMatrix
+
+        for (child in group) {
+            if (child is VectorGroup) {
+                renderNonScalingStrokeInGroup(canvas, child)
+            }
+
+            if (child is VectorPath) {
+                renderNonScalingStrokeInPath(canvas, child)
+            }
+        }
+
+        matrixStack.removeLast()
+        currentMatrix = matrixStack.last()
+    }
+
+    private fun renderNonScalingStrokeInPath(canvas: Canvas, path: VectorPath) {
+        val androidPath = path.pathData.toPath().asAndroidPath()
+        val newPath = Path()
+
+        androidPath.transform(currentMatrix, newPath)
+
+        canvas.drawPath(newPath, getPaint(path))
+    }
+
+    private fun getPaint(path: VectorPath): Paint {
         val paint = Paint()
         paint.color = convertColor(path.stroke)
         paint.alpha = (path.strokeAlpha * 255).toInt()
@@ -54,7 +116,7 @@ class VectorRenderer(private val imageVector: ImageVector) {
         paint.style = Paint.Style.STROKE
         paint.flags = Paint.ANTI_ALIAS_FLAG or Paint.LINEAR_TEXT_FLAG or Paint.SUBPIXEL_TEXT_FLAG
 
-        canvas.drawPath(path.pathData.toPath().asAndroidPath(), paint)
+        return paint
     }
 
     private fun convertColor(brush: Brush?): Int {
@@ -86,6 +148,10 @@ class VectorRenderer(private val imageVector: ImageVector) {
     }
 
     companion object {
+        fun MutableImageVector.renderToCanvas(canvas: Canvas) {
+            this.toImageVector().renderToCanvas(canvas)
+        }
+
         fun ImageVector.renderToCanvas(canvas: Canvas) {
             val renderer = VectorRenderer(this)
             renderer.renderToCanvas(canvas)
