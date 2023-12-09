@@ -44,13 +44,16 @@ import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPack
 
-var uploadedImage: Bitmap? = null
-var generatingOptions: IconGenerator.GenerationOptions? = null
-var generatingType = GenerationType.PATH
-var iconPackageName = ""
-
 @Composable
-fun OptionsDialog(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit), onIconClear: (() -> Unit)) {
+fun OptionsDialog(
+    iconPacks: List<IconPack>,
+    app: PackageInfoStruct,
+    onConfirmation: (options: IndividualOptions) -> Unit,
+    onDismiss: () -> Unit,
+    onIconClear: () -> Unit
+) {
+    var options: IndividualOptions = EmptyOptions()
+
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.background,
@@ -58,11 +61,13 @@ fun OptionsDialog(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmat
         onDismissRequest = onDismiss,
         title = { DialogTitle(app = app, onIconClear) },
         text = {
-            TabOptions(iconPacks)
+            TabOptions(iconPacks) {
+                options = it
+            }
         },
         confirmButton = {
             IconButton(onClick = {
-                onConfirmation()
+                onConfirmation(options)
             }) {
                 Icon(
                     imageVector = Icons.Filled.Done,
@@ -86,7 +91,7 @@ fun OptionsDialog(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmat
 }
 
 @Composable
-fun DialogTitle(app: PackageInfoStruct, onIconClear: (() -> Unit)) {
+fun DialogTitle(app: PackageInfoStruct, onIconClear: () -> Unit) {
     var confirmClearIcon by remember { mutableStateOf(false) }
 
     Row(
@@ -111,7 +116,7 @@ fun DialogTitle(app: PackageInfoStruct, onIconClear: (() -> Unit)) {
 }
 
 @Composable
-fun ConfirmClearDialog(onDismiss: (() -> Unit), onIconClear: (() -> Unit)) {
+fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.background,
@@ -148,7 +153,10 @@ fun ConfirmClearDialog(onDismiss: (() -> Unit), onIconClear: (() -> Unit)) {
 }
 
 @Composable
-fun TabOptions(iconPacks: List<IconPack>) {
+fun TabOptions(
+    iconPacks: List<IconPack>,
+    onChange: (options: IndividualOptions) -> Unit
+) {
     var tabIndex by remember { mutableIntStateOf(0) }
 
     val tabs = listOf(
@@ -174,25 +182,24 @@ fun TabOptions(iconPacks: List<IconPack>) {
             }
         }
         when (tabIndex) {
-            0 -> CreateColumn(iconPacks)
-            1 -> UploadColumn()
-            2 -> EditVectorColumn()
+            0 -> CreateColumn(iconPacks, onChange)
+            1 -> UploadColumn(onChange)
+            2 -> EditVectorColumn(onChange)
         }
     }
 }
 
 @Composable
-fun CreateColumn(iconPacks: List<IconPack>) {
+fun CreateColumn(
+    iconPacks: List<IconPack>,
+    onChange: (options: IndividualOptions) -> Unit
+) {
     var genType by rememberSaveable { mutableStateOf(GenerationType.PATH) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
 
     var iconPack by rememberSaveable { mutableStateOf("") }
-
-    uploadedImage = null
-    generatingOptions = null
-    iconPackageName = ""
 
     Column {
         TypeDropdown(genType) { genType = it }
@@ -204,14 +211,13 @@ fun CreateColumn(iconPacks: List<IconPack>) {
             MonochromeSwitch(useMonochrome) { useMonochrome = it }
         }
 
-        iconPackageName = iconPack
-        generatingType = genType
-        generatingOptions = IconGenerator.GenerationOptions(android.graphics.Color.parseColor(iconColor.toHexString()), useMonochrome, useVector)
+        val generatingOptions = IconGenerator.GenerationOptions(android.graphics.Color.parseColor(iconColor.toHexString()), useMonochrome, useVector)
+        onChange(CreatedOptions(generatingOptions, genType, iconPack))
     }
 }
 
 @Composable
-fun UploadColumn() {
+fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
     var imageUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
 
     Column(
@@ -223,20 +229,22 @@ fun UploadColumn() {
             AsyncImage(imageUri, contentDescription = null)
 
             val contentResolver = getCurrentContext().contentResolver
-            uploadedImage = contentResolver.openInputStream(imageUri).use { BitmapFactory.decodeStream(it) }
+            val uploadedImage = contentResolver.openInputStream(imageUri).use { BitmapFactory.decodeStream(it) }
+
+            onChange(UploadedOptions(uploadedImage))
         }
     }
 }
 
 @Composable
-fun EditVectorColumn() {
+fun EditVectorColumn(onChange: (options: IndividualOptions) -> Unit) {
     Column {
 
     }
 }
 
 @Composable
-fun UploadButton(onChange: ((newValue: Uri) -> Unit)) {
+fun UploadButton(onChange: (newValue: Uri) -> Unit) {
     val launcher = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { imageUri ->
@@ -251,3 +259,17 @@ fun UploadButton(onChange: ((newValue: Uri) -> Unit)) {
         Text(stringResource(R.string.uploadImage))
     }
 }
+
+interface IndividualOptions
+
+class EmptyOptions: IndividualOptions
+
+data class CreatedOptions(
+    val generatingOptions: IconGenerator.GenerationOptions,
+    val generatingType: GenerationType,
+    val iconPackageName: String
+): IndividualOptions
+
+data class UploadedOptions(
+    val uploadedImage: Bitmap
+): IndividualOptions

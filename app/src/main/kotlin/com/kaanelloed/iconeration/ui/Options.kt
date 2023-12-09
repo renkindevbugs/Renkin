@@ -52,12 +52,21 @@ import com.kaanelloed.iconeration.packages.PackageVersion
 import kotlinx.coroutines.launch
 
 @Composable
-fun AppOptions(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmation: (() -> Unit), onDismiss: (() -> Unit), onIconClear: (() -> Unit)) {
+fun AppOptions(
+    iconPacks: List<IconPack>,
+    app: PackageInfoStruct,
+    onConfirmation: (options: IndividualOptions) -> Unit,
+    onDismiss: () -> Unit,
+    onIconClear: () -> Unit
+) {
     OptionsDialog(iconPacks, app, onConfirmation, onDismiss, onIconClear)
 }
 
 @Composable
-fun OptionsCard(iconPacks: List<IconPack>) {
+fun OptionsCard(
+    iconPacks: List<IconPack>,
+    onIconPackChange: (iconPackageName: String) -> Unit
+) {
     val prefs = getPreferences()
 
     var expanded by remember { mutableStateOf(false) }
@@ -109,7 +118,7 @@ fun OptionsCard(iconPacks: List<IconPack>) {
                     ThemedIconsSwitch(useThemed) { scope.launch { prefs.setExportThemed(it) } }
                 }
 
-                iconPackageName = iconPack
+                onIconPackChange(iconPack)
             }
         }
     }
@@ -141,7 +150,7 @@ fun showBackgroundColor(generationType: GenerationType, themed: Boolean): Boolea
 }
 
 @Composable
-fun VectorSwitch(useVector: Boolean, onChange: ((newValue: Boolean) -> Unit)) {
+fun VectorSwitch(useVector: Boolean, onChange: (newValue: Boolean) -> Unit) {
     var checked by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
 
@@ -178,7 +187,7 @@ fun VectorSwitch(useVector: Boolean, onChange: ((newValue: Boolean) -> Unit)) {
 }
 
 @Composable
-fun MonochromeSwitch(useMonochrome: Boolean, onChange: ((newValue: Boolean) -> Unit)) {
+fun MonochromeSwitch(useMonochrome: Boolean, onChange: (newValue: Boolean) -> Unit) {
     var checked by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
 
@@ -215,7 +224,7 @@ fun MonochromeSwitch(useMonochrome: Boolean, onChange: ((newValue: Boolean) -> U
 }
 
 @Composable
-fun ThemedIconsSwitch(useThemed: Boolean, onChange: ((newValue: Boolean) -> Unit)) {
+fun ThemedIconsSwitch(useThemed: Boolean, onChange: (newValue: Boolean) -> Unit) {
     var checked by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
 
@@ -253,7 +262,7 @@ fun ThemedIconsSwitch(useThemed: Boolean, onChange: ((newValue: Boolean) -> Unit
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TypeDropdown(type: GenerationType, onChange: ((newValue: GenerationType) -> Unit)) {
+fun TypeDropdown(type: GenerationType, onChange: (newValue: GenerationType) -> Unit) {
     val typeLabels = getTypeLabels()
 
     var expanded by remember { mutableStateOf(false) }
@@ -304,7 +313,11 @@ fun TypeDropdown(type: GenerationType, onChange: ((newValue: GenerationType) -> 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun IconPackDropdown(iconPacks: List<IconPack>, packageName: String, onChange: ((newValue: IconPack) -> Unit)) {
+fun IconPackDropdown(
+    iconPacks: List<IconPack>,
+    packageName: String,
+    onChange: (newValue: IconPack) -> Unit
+) {
     val emptyPack = IconPack("", stringResource(R.string.none), 0, "", 0)
     val newList = listOf(emptyPack) + iconPacks
 
@@ -353,7 +366,7 @@ fun IconPackDropdown(iconPacks: List<IconPack>, packageName: String, onChange: (
 }
 
 @Composable
-fun OptionInfoDialog(text: String, onDismiss: (() -> Unit)) {
+fun OptionInfoDialog(text: String, onDismiss: () -> Unit) {
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.background,

@@ -65,6 +65,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
+fun MainColumn(iconPacks: List<IconPack>) {
+    var iconPackageName = ""
+
+    Column {
+        TitleBar { iconPackageName }
+        OptionsCard(iconPacks) { iconPackageName = it }
+        ApplicationList(iconPacks)
+    }
+}
+
+@Composable
 fun ApplicationList(iconPacks: List<IconPack>) {
     val activity = getCurrentMainActivity()
 
@@ -128,51 +139,63 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
     }
 
     if (openAppOptions) {
-        val ctx = getCurrentContext()
-        val activity = getCurrentMainActivity()
-
-        AppOptions(iconPacks, app, {
-            CoroutineScope(Dispatchers.Default).launch {
-                if (!activity.iconPackLoaded) {
-                    return@launch
-                }
-
-                var toGenerate = true
-                if (iconPackageName != "") {
-                    val key = activity.iconPackApplications.keys.find { it.packageName == iconPackageName }
-                    val apps = activity.iconPackApplications[key]!!
-                    val packApp = apps.find { it.packageName == app.packageName }
-
-                    if (packApp != null) {
-                        val icon = ApplicationManager(ctx).getResIcon(packApp.iconPackName, packApp.resourceID)!!
-
-                        IconGenerator(ctx, activity, generatingOptions!!, emptyMap()).colorizeFromIconPack(app, icon)
-                        toGenerate = false
-                    }
-                }
-
-                if (uploadedImage != null) {
-                    activity.editApplication(index, app.changeExport(BitmapIcon(uploadedImage!!)))
-                }
-                if (generatingOptions != null && toGenerate) {
-                    IconGenerator(ctx, activity, generatingOptions!!, emptyMap()).generateIcons(app, generatingType)
-                }
-
-                uploadedImage = null
-                generatingOptions = null
-                iconPackageName = ""
-            }
-
+        OpenAppOptions(iconPacks, app, index) {
             openAppOptions = false
-        }, { openAppOptions = false }) {
-            openAppOptions = false
-            activity.editApplication(index, app.changeExport(EmptyIcon()))
         }
     }
 }
 
 @Composable
-fun RefreshButton() {
+fun OpenAppOptions(
+    iconPacks: List<IconPack>,
+    app: PackageInfoStruct,
+    index: Int,
+    onDismiss: () -> Unit
+) {
+    val ctx = getCurrentContext()
+    val activity = getCurrentMainActivity()
+
+    AppOptions(iconPacks, app, { options ->
+        CoroutineScope(Dispatchers.Default).launch {
+            if (!activity.iconPackLoaded) {
+                return@launch
+            }
+
+            when (options) {
+                is CreatedOptions -> {
+                    val iconBuilder = IconGenerator(ctx, activity, options.generatingOptions, emptyMap())
+
+                    if (options.iconPackageName != "") {
+                        val key = activity.iconPackApplications.keys.find { it.packageName == options.iconPackageName }
+                        val apps = activity.iconPackApplications[key]!!
+                        val packApp = apps.find { it.packageName == app.packageName }
+
+                        if (packApp != null) {
+                            val icon = ApplicationManager(ctx).getResIcon(packApp.iconPackName, packApp.resourceID)!!
+                            iconBuilder.colorizeFromIconPack(app, icon)
+                        } else {
+                            iconBuilder.generateIcons(app, options.generatingType)
+                        }
+                    } else {
+                        iconBuilder.generateIcons(app, options.generatingType)
+                    }
+                }
+
+                is UploadedOptions -> {
+                    activity.editApplication(index, app.changeExport(BitmapIcon(options.uploadedImage)))
+                }
+            }
+        }
+
+        onDismiss()
+    }, { onDismiss() }) {
+        onDismiss()
+        activity.editApplication(index, app.changeExport(EmptyIcon()))
+    }
+}
+
+@Composable
+fun RefreshButton(getIconPackageName: () -> String) {
     val prefs = getPreferences()
     val type = prefs.getTypeValue()
     val monochrome = prefs.getMonochromeValue()
@@ -193,6 +216,8 @@ fun RefreshButton() {
                 openWarning = true
                 return@launch
             }
+
+            val iconPackageName = getIconPackageName()
 
             var iconPackApps = emptyMap<IconPackApplication, Pair<Int, Drawable>>()
             if (iconPackageName != "") {
@@ -307,7 +332,7 @@ fun BuildPackButton() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TitleBar() {
+fun TitleBar(getIconPackageName: () -> String) {
     val prefs = getPreferences()
     var openSettings by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
@@ -321,7 +346,7 @@ fun TitleBar() {
             Text(stringResource(id = R.string.app_name))
         },
         actions = {
-            RefreshButton()
+            RefreshButton(getIconPackageName)
             BuildPackButton()
             IconButton(onClick = { openInfo = true }) {
                 Icon(
