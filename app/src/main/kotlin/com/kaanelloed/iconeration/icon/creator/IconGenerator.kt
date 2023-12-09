@@ -21,10 +21,10 @@ import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.drawable.ForegroundIconDrawable
 import com.kaanelloed.iconeration.icon.AdaptiveIcon
-import com.kaanelloed.iconeration.icon.AdaptiveIconParser
+import com.kaanelloed.iconeration.icon.parser.AdaptiveIconParser
 import com.kaanelloed.iconeration.icon.BaseIcon
 import com.kaanelloed.iconeration.icon.BitmapIcon
-import com.kaanelloed.iconeration.icon.IconParser
+import com.kaanelloed.iconeration.icon.parser.IconParser
 import com.kaanelloed.iconeration.icon.InsetIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.image.edge.CannyEdgeDetector
@@ -38,7 +38,6 @@ import com.kaanelloed.iconeration.vector.VectorEditor.Companion.applyAndRemoveGr
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeAndCenter
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.scaleAtCenter
 import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
-import org.xmlpull.v1.XmlPullParser
 
 class IconGenerator(
     private val ctx: Context,
@@ -105,7 +104,12 @@ class IconGenerator(
     }
 
     private fun generatePathFromXML(appMan: ApplicationManager, app: PackageInfoStruct) {
-        val res = appMan.getResources(app.packageName) ?: return
+        val res = appMan.getResources(app.packageName)
+
+        if (res == null) {
+            generateColorQuantizationDetection(app)
+            return
+        }
 
         val appIcon = IconParser.parseDrawable(res, app.icon, app.iconID)
         var vectorIcon: BaseIcon = appIcon
@@ -215,19 +219,6 @@ class IconGenerator(
             return icon.monochrome != null
 
         return false
-    }
-
-    private fun getAttributeValueByName(parser: XmlPullParser, attributeName: String): String? {
-        for (i in 0 until parser.attributeCount) {
-            //val namespace = parser.getAttributeNamespace(i)
-            val name = parser.getAttributeName(i)
-            val value = parser.getAttributeValue(i)
-
-            if (name == attributeName)
-                return value
-        }
-
-        return null
     }
 
     private fun generateFirstLetter() {

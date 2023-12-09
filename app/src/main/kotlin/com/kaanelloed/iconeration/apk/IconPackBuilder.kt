@@ -259,7 +259,6 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         res.setValueAsRaw(coder.valueType, coder.value)
     }
 
-    @SuppressWarnings("deprecation")
     private fun getCurrentVersionCode(): Long {
         val appMan = ApplicationManager(ctx)
 

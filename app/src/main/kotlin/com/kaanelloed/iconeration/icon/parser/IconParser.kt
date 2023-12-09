@@ -1,10 +1,15 @@
-package com.kaanelloed.iconeration.icon
+package com.kaanelloed.iconeration.icon.parser
 
 import android.content.res.Resources
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.VectorDrawable
+import com.kaanelloed.iconeration.icon.AdaptiveIcon
+import com.kaanelloed.iconeration.icon.BaseIcon
+import com.kaanelloed.iconeration.icon.BitmapIcon
+import com.kaanelloed.iconeration.icon.EmptyIcon
+import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager.Companion.getXmlOrNull
 import com.kaanelloed.iconeration.vector.VectorParser
 import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
