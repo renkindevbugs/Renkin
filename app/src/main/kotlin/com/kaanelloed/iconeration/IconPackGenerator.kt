@@ -285,8 +285,12 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
 
         CoroutineScope(Dispatchers.Default).launch {
             val packageInstaller = PackageInstaller.getInstance(ctx)
+            val session = packageInstaller.createSession(apkUri) {
+                confirmation = Confirmation.IMMEDIATE
+            }
+
             try {
-                when (val result = packageInstaller.createSession(apkUri).await()) {
+                when (val result = session.await()) {
                     is SessionResult.Success -> println("Success")
                     is SessionResult.Error -> println(result.cause.message)
                 }
