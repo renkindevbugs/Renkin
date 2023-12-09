@@ -54,9 +54,13 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.appcompat:appcompat:1.6.1")
     implementation("com.google.android.material:material:1.10.0")
+
+    //Apk related
     implementation("io.github.reandroid:ARSCLib:1.2.4")
     implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
     implementation("com.android.tools.build:apksig:8.2.0")
+    implementation("ru.solrudev.ackpine:ackpine-core:0.3.2")
+    implementation("ru.solrudev.ackpine:ackpine-ktx:0.3.2")
 
     //compose
     val composeBom = platform("androidx.compose:compose-bom:2023.10.01")

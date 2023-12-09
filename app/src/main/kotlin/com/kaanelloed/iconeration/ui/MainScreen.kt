@@ -1,6 +1,8 @@
 package com.kaanelloed.iconeration.ui
 
 import android.graphics.drawable.Drawable
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -43,6 +45,7 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
 import androidx.core.graphics.drawable.toBitmap
 import com.kaanelloed.iconeration.ApplicationManager
 import com.kaanelloed.iconeration.IconGenerator
@@ -62,6 +65,9 @@ import com.kaanelloed.iconeration.icon.EmptyIcon
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import android.Manifest.permission.POST_NOTIFICATIONS
+import android.content.pm.PackageManager
+import android.os.Build
 
 @Composable
 fun ApplicationList(iconPacks: List<IconPack>) {
@@ -242,23 +248,40 @@ fun BuildPackButton() {
     val iconColor = getPreferences().getIconColorValue()
     val bgColor = getPreferences().getBackgroundColorValue()
 
+    var canInstall by rememberSaveable { mutableStateOf(false) }
     var openBuilder by rememberSaveable { mutableStateOf(false) }
     var error by rememberSaveable { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
 
-    IconButton(onClick = {
-        text = ""
-        error = false
-        openBuilder = true
-        CoroutineScope(Dispatchers.Default).launch {
-            val success = IconPackGenerator(ctx, activity.applicationList).create(themed, iconColor.toHexString(), bgColor.toHexString()) {
-                text += it + "\n"
-            }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted: Boolean ->
+        run { canInstall = isGranted }
+    }
 
-            if (success)
-                openBuilder = false
-            else
-                error = true
+    IconButton(onClick = {
+        if (ContextCompat.checkSelfPermission(ctx, POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                permissionLauncher.launch(POST_NOTIFICATIONS)
+            }
+        } else {
+            canInstall = true
+        }
+
+        if (canInstall) {
+            text = ""
+            error = false
+            openBuilder = true
+            CoroutineScope(Dispatchers.Default).launch {
+                val success = IconPackGenerator(ctx, activity.applicationList).create(themed, iconColor.toHexString(), bgColor.toHexString()) {
+                    text += it + "\n"
+                }
+
+                if (success)
+                    openBuilder = false
+                else
+                    error = true
+            }
         }
     }) {
         Icon(

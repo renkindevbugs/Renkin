@@ -1,9 +1,8 @@
 package com.kaanelloed.iconeration
 
 import android.content.Context
-import android.content.Intent
 import android.graphics.Bitmap
-import androidx.core.content.FileProvider
+import androidx.core.net.toUri
 import app.revanced.manager.compose.util.signing.Signer
 import app.revanced.manager.compose.util.signing.SigningOptions
 import com.kaanelloed.iconeration.icon.EmptyIcon
@@ -22,6 +21,17 @@ import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
 import com.reandroid.arsc.chunk.xml.ResXmlElement
 import com.reandroid.arsc.coder.ValueCoder
 import com.reandroid.arsc.value.ValueType
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import ru.solrudev.ackpine.installer.PackageInstaller
+import ru.solrudev.ackpine.installer.createSession
+import ru.solrudev.ackpine.session.SessionResult
+import ru.solrudev.ackpine.session.await
+import ru.solrudev.ackpine.session.parameters.Confirmation
+import ru.solrudev.ackpine.uninstaller.PackageUninstaller
+import ru.solrudev.ackpine.uninstaller.createSession
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -41,6 +51,8 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
         val currentVersionCode = getCurrentVersionCode()
         if (currentVersionCode != 0L) {
             if (!keyStoreFile.exists() || newVersionCode > currentVersionCode) {
+                uninstallApk(iconPackName)
+
                 textMethod(ctx.resources.getString(R.string.iconPackNotCompatible))
                 textMethod(ctx.resources.getString(R.string.pleaseUninstall))
                 return false
@@ -269,18 +281,41 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
     }
 
     private fun installApk(file: File) {
-        val intent = Intent(Intent.ACTION_INSTALL_PACKAGE)
-        intent.data = FileProvider.getUriForFile(
-            ctx,
-            "${BuildConfig.APPLICATION_ID}.fileProvider",
-            file
-        )
-        intent.flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+        val apkUri = file.toUri()
 
-        intent.putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
-        intent.putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, "com.android.vending")
-        ctx.startActivity(intent)
-        //TODO: use PackageInstaller instead
+        CoroutineScope(Dispatchers.Default).launch {
+            val packageInstaller = PackageInstaller.getInstance(ctx)
+            try {
+                when (val result = packageInstaller.createSession(apkUri).await()) {
+                    is SessionResult.Success -> println("Success")
+                    is SessionResult.Error -> println(result.cause.message)
+                }
+            } catch (_: CancellationException) {
+                println("Cancelled")
+            } catch (exception: Exception) {
+                println(exception)
+            }
+        }
+    }
+
+    private fun uninstallApk(packageName: String) {
+        CoroutineScope(Dispatchers.Default).launch {
+            val packageUninstaller = PackageUninstaller.getInstance(ctx)
+            val session = packageUninstaller.createSession(packageName) {
+                confirmation = Confirmation.IMMEDIATE
+            }
+
+            try {
+                when (val result = session.await()) {
+                    is SessionResult.Success -> println("Success")
+                    is SessionResult.Error -> println(result.cause)
+                }
+            } catch (_: CancellationException) {
+                println("Cancelled")
+            } catch (exception: Exception) {
+                println(exception)
+            }
+        }
     }
 
     private val NAME_exported = "exported"
