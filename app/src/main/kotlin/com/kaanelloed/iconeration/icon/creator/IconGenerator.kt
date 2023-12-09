@@ -175,11 +175,16 @@ class IconGenerator(
         var newIcon = app.icon
 
         if (newIcon is AdaptiveIconDrawable) {
-            if (newIcon.foreground is BitmapDrawable || newIcon.foreground is VectorDrawable)
-                newIcon = ForegroundIconDrawable(newIcon.foreground)
+            val adaptiveIcon = newIcon
+            if (adaptiveIcon.foreground is BitmapDrawable || adaptiveIcon.foreground is VectorDrawable) {
+                newIcon = ForegroundIconDrawable(adaptiveIcon.foreground)
+            }
 
-            //if (PackageVersion.is33OrMore() && adapIcon.monochrome != null)
-            //    newIcon = ForegroundIconDrawable(adapIcon.monochrome!!)
+            if (PackageVersion.is33OrMore() && adaptiveIcon.monochrome != null && options.monochrome) {
+                if (adaptiveIcon.monochrome is BitmapDrawable || adaptiveIcon.monochrome is VectorDrawable) {
+                    newIcon = ForegroundIconDrawable(adaptiveIcon.monochrome!!)
+                }
+            }
         }
 
         val maxWidthOrHeight = kotlin.math.max(newIcon.intrinsicWidth, newIcon.intrinsicHeight)
