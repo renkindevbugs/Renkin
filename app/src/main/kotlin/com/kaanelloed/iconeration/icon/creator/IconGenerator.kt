@@ -1,4 +1,4 @@
-package com.kaanelloed.iconeration
+package com.kaanelloed.iconeration.icon.creator
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -16,6 +16,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.core.graphics.drawable.toBitmap
+import com.kaanelloed.iconeration.MainActivity
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.drawable.ForegroundIconDrawable
@@ -28,6 +29,8 @@ import com.kaanelloed.iconeration.icon.InsetIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.image.edge.CannyEdgeDetector
 import com.kaanelloed.iconeration.image.tracer.ImageTracer
+import com.kaanelloed.iconeration.packages.ApplicationManager
+import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
 import com.kaanelloed.iconeration.vector.MutableVectorGroup
 import com.kaanelloed.iconeration.vector.MutableVectorPath

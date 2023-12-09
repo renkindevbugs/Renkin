@@ -43,8 +43,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.kaanelloed.iconeration.R
-import com.kaanelloed.iconeration.IconGenerator
-import com.kaanelloed.iconeration.PackageInfoStruct
+import com.kaanelloed.iconeration.icon.creator.IconGenerator
+import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.getBackgroundColorValue

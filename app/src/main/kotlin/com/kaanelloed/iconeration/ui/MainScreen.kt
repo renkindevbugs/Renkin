@@ -43,10 +43,10 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.drawable.toBitmap
-import com.kaanelloed.iconeration.ApplicationManager
-import com.kaanelloed.iconeration.IconGenerator
-import com.kaanelloed.iconeration.IconPackGenerator
-import com.kaanelloed.iconeration.PackageInfoStruct
+import com.kaanelloed.iconeration.packages.ApplicationManager
+import com.kaanelloed.iconeration.icon.creator.IconGenerator
+import com.kaanelloed.iconeration.apk.IconPackGenerator
+import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.apk.ApkInstaller
 import com.kaanelloed.iconeration.apk.ApkUninstaller

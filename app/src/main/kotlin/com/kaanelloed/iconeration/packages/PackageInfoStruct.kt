@@ -1,8 +1,6 @@
-package com.kaanelloed.iconeration
+package com.kaanelloed.iconeration.packages
 
-import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
-import com.kaanelloed.iconeration.icon.BaseIcon
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.ExportableIcon
 import java.text.Normalizer
@@ -31,7 +29,7 @@ class PackageInfoStruct(
 
     fun changeExport(
         createdIcon: ExportableIcon
-    ): PackageInfoStruct  {
+    ): PackageInfoStruct {
         return PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1)
     }
 

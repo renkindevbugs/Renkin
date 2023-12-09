@@ -1,9 +1,10 @@
-package com.kaanelloed.iconeration
+package com.kaanelloed.iconeration.icon.creator
 
 import android.content.Context
 import android.graphics.drawable.Drawable
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
+import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.drawable.TextDrawable
 
 class LetterGenerator(private val ctx: Context) {

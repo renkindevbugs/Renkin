@@ -1,4 +1,4 @@
-package com.kaanelloed.iconeration
+package com.kaanelloed.iconeration.packages
 
 import android.annotation.SuppressLint
 import android.content.Context

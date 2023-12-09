@@ -1,4 +1,4 @@
-package com.kaanelloed.iconeration
+package com.kaanelloed.iconeration.apk
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -6,6 +6,9 @@ import android.net.Uri
 import androidx.core.net.toUri
 import app.revanced.manager.compose.util.signing.Signer
 import app.revanced.manager.compose.util.signing.SigningOptions
+import com.kaanelloed.iconeration.packages.ApplicationManager
+import com.kaanelloed.iconeration.packages.PackageInfoStruct
+import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXmlFile

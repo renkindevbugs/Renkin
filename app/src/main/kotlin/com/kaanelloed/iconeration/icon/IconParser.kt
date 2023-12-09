@@ -5,7 +5,7 @@ import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.VectorDrawable
-import com.kaanelloed.iconeration.ApplicationManager.Companion.getXmlOrNull
+import com.kaanelloed.iconeration.packages.ApplicationManager.Companion.getXmlOrNull
 import com.kaanelloed.iconeration.vector.VectorParser
 import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
 

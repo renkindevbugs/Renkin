@@ -20,6 +20,8 @@ import com.kaanelloed.iconeration.data.AppDatabase
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.data.isDarkModeEnabled
+import com.kaanelloed.iconeration.packages.ApplicationManager
+import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.ui.*
 import com.kaanelloed.iconeration.ui.theme.IconerationTheme
 import kotlinx.coroutines.CoroutineScope
