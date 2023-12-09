@@ -42,8 +42,8 @@ android {
         jvmTarget = "1.8"
     }
     buildFeatures {
-        viewBinding = true
         compose = true
+        buildConfig = true
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.4"
@@ -62,7 +62,7 @@ dependencies {
     implementation("ru.solrudev.ackpine:ackpine-core:0.3.2")
     implementation("ru.solrudev.ackpine:ackpine-ktx:0.3.2")
 
-    //compose
+    //Compose
     val composeBom = platform("androidx.compose:compose-bom:2023.10.01")
     implementation(composeBom)
     androidTestImplementation(composeBom)
