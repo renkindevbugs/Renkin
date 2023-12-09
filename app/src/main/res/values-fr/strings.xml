@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="options">Options</string>
+    <string name="type">Type</string>
+    <string name="iconColor">Couleur de l\'icône</string>
+    <string name="vector">Vecteur (BÊTA)</string>
+    <string name="monochrome">Monochrome (BÊTA)</string>
+    <string name="themedIcons">Icônes thématique (BÊTA)</string>
+    <string name="backgroundColor">Couleur de fond</string>
+    <string name="iconPack">Pack d\'icônes</string>
+    <string name="confirm">Confirmer</string>
+    <string name="dismiss">Annuler</string>
+    <string name="create">Créer</string>
+    <string name="upload">Téléverser</string>
+    <string name="vectorOptionDescription">Modifier le vecteur si l\'application en utilise un comme icône.</string>
+    <string name="monochromeOptionDescription">Utiliser l\'icône monochrome si l\'application en a une.</string>
+    <string name="themedIconsOptionDescription">Exporter en icônes thématiques.</string>
+    <string name="uploadImage">Téléverser une image</string>
+    <string name="confirmClear">Confirmation</string>
+    <string name="confirmClearText">Êtes-vous sûr de supprimer l\'icône ?</string>
+    <string name="none">Aucun</string>
+    <string name="settings">Paramètres</string>
+    <string name="theme">Thème</string>
+    <string name="version">Version %s</string>
+    <string name="refreshIconDescription">Rafraîchir les icônes en fonction des options sélectionnés</string>
+    <string name="buildIconDescription">Compiler le pack d\'icônes</string>
+    <string name="sync">Synchronisation</string>
+    <string name="syncText">Les données pour les packs d\'icônes sont en synchronisation, veuillez attendre et réessayer</string>
+    <string name="iconPackNotCompatible">L\'ancien et le nouveau pack d\'icônes ne sont pas compatibles</string>
+    <string name="pleaseUninstall">Veuillez le désinstaller et réessayer</string>
+    <string name="initializeFramework">Initialision du framework ...</string>
+    <string name="generateManifest">"Génération du manifeste "</string>
+    <string name="writingElement">Écriture des icônes, drawable.xml et appfilter.xml ...</string>
+    <string name="buildingApk">Compilation du apk ...</string>
+    <string name="signApk">Signature du apk ...</string>
+    <string name="installApk">Installation du apk ...</string>
+    <string name="done">Terminé</string>
+    <string name="followSystem">Système</string>
+    <string name="darkMode">Mode Sombre</string>
+    <string name="lightMode">Mode Clair</string>
+    <string name="pathDetection">Détection des chemins</string>
+    <string name="edgeDetection">Détection des contours</string>
+    <string name="firstLetter">Première lettre</string>
+    <string name="twoLetters">Deux lettres</string>
+    <string name="applicationName">Nom de l\'application</string>
+</resources>
