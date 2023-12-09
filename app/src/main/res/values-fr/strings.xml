@@ -26,8 +26,6 @@
     <string name="buildIconDescription">Compiler le pack d\'icônes</string>
     <string name="sync">Synchronisation</string>
     <string name="syncText">Les données pour les packs d\'icônes sont en synchronisation, veuillez attendre et réessayer</string>
-    <string name="iconPackNotCompatible">L\'ancien et le nouveau pack d\'icônes ne sont pas compatibles</string>
-    <string name="pleaseUninstall">Veuillez le désinstaller et réessayer</string>
     <string name="initializeFramework">Initialision du framework ...</string>
     <string name="generateManifest">"Génération du manifeste "</string>
     <string name="writingElement">Écriture des icônes, drawable.xml et appfilter.xml ...</string>
@@ -43,4 +41,5 @@
     <string name="firstLetter">Première lettre</string>
     <string name="twoLetters">Deux lettres</string>
     <string name="applicationName">Nom de l\'application</string>
+    <string name="iconPackInstalled">Le pack d\'icônes a été installé avec succès !</string>
 </resources>

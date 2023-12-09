@@ -2,6 +2,7 @@ package com.kaanelloed.iconeration
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.net.Uri
 import androidx.core.net.toUri
 import app.revanced.manager.compose.util.signing.Signer
 import app.revanced.manager.compose.util.signing.SigningOptions
@@ -21,17 +22,6 @@ import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
 import com.reandroid.arsc.chunk.xml.ResXmlElement
 import com.reandroid.arsc.coder.ValueCoder
 import com.reandroid.arsc.value.ValueType
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import ru.solrudev.ackpine.installer.PackageInstaller
-import ru.solrudev.ackpine.installer.createSession
-import ru.solrudev.ackpine.session.SessionResult
-import ru.solrudev.ackpine.session.await
-import ru.solrudev.ackpine.session.parameters.Confirmation
-import ru.solrudev.ackpine.uninstaller.PackageUninstaller
-import ru.solrudev.ackpine.uninstaller.createSession
 import java.io.ByteArrayOutputStream
 import java.io.File
 
@@ -47,18 +37,22 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
     private val frameworkVersion = 33
     private val minSdkVersion = 26
 
-    fun create(themed: Boolean, iconColor: String, backgroundColor: String, textMethod: (text: String) -> Unit): Boolean {
+    fun canBeInstalled(): Boolean {
         val currentVersionCode = getCurrentVersionCode()
         if (currentVersionCode != 0L) {
             if (!keyStoreFile.exists() || newVersionCode > currentVersionCode) {
-                uninstallApk(iconPackName)
-
-                textMethod(ctx.resources.getString(R.string.iconPackNotCompatible))
-                textMethod(ctx.resources.getString(R.string.pleaseUninstall))
                 return false
             }
         }
 
+        return true
+    }
+
+    fun getIconPackName(): String {
+        return iconPackName
+    }
+
+    fun buildAndSign(themed: Boolean, iconColor: String, backgroundColor: String, textMethod: (text: String) -> Unit): Uri {
         val apkModule = ApkModule()
         val tableBlock = TableBlock()
         val manifest = AndroidManifestBlock()
@@ -131,12 +125,10 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
 
         textMethod(ctx.resources.getString(R.string.signApk))
         signApk(unsignedApk, signedApk)
-        textMethod(ctx.resources.getString(R.string.installApk))
-        installApk(signedApk)
 
         textMethod(ctx.resources.getString(R.string.done))
 
-        return true
+        return signedApk.toUri()
     }
 
     private fun setSdkVersions(manifest: ResXmlElement, minSdkVersion: Int, targetSdkVersion: Int) {
@@ -278,48 +270,6 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
         val opt = SigningOptions("Iconeration", "s3cur3p@ssw0rd", keyStoreFile.path)
         val signer = Signer(opt)
         signer.signApk(file, outFile)
-    }
-
-    private fun installApk(file: File) {
-        val apkUri = file.toUri()
-
-        CoroutineScope(Dispatchers.Default).launch {
-            val packageInstaller = PackageInstaller.getInstance(ctx)
-            val session = packageInstaller.createSession(apkUri) {
-                confirmation = Confirmation.IMMEDIATE
-            }
-
-            try {
-                when (val result = session.await()) {
-                    is SessionResult.Success -> println("Success")
-                    is SessionResult.Error -> println(result.cause.message)
-                }
-            } catch (_: CancellationException) {
-                println("Cancelled")
-            } catch (exception: Exception) {
-                println(exception)
-            }
-        }
-    }
-
-    private fun uninstallApk(packageName: String) {
-        CoroutineScope(Dispatchers.Default).launch {
-            val packageUninstaller = PackageUninstaller.getInstance(ctx)
-            val session = packageUninstaller.createSession(packageName) {
-                confirmation = Confirmation.IMMEDIATE
-            }
-
-            try {
-                when (val result = session.await()) {
-                    is SessionResult.Success -> println("Success")
-                    is SessionResult.Error -> println(result.cause)
-                }
-            } catch (_: CancellationException) {
-                println("Cancelled")
-            } catch (exception: Exception) {
-                println(exception)
-            }
-        }
     }
 
     private val NAME_exported = "exported"

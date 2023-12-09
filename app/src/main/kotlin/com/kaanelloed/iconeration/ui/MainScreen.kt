@@ -14,7 +14,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
@@ -49,6 +48,8 @@ import com.kaanelloed.iconeration.IconGenerator
 import com.kaanelloed.iconeration.IconPackGenerator
 import com.kaanelloed.iconeration.PackageInfoStruct
 import com.kaanelloed.iconeration.R
+import com.kaanelloed.iconeration.apk.ApkInstaller
+import com.kaanelloed.iconeration.apk.ApkUninstaller
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.data.getBackgroundColorValue
@@ -243,22 +244,29 @@ fun BuildPackButton() {
     val bgColor = getPreferences().getBackgroundColorValue()
 
     var openBuilder by rememberSaveable { mutableStateOf(false) }
-    var error by rememberSaveable { mutableStateOf(false) }
+    var openSuccess by rememberSaveable { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
 
     IconButton(onClick = {
         text = ""
-        error = false
         openBuilder = true
         CoroutineScope(Dispatchers.Default).launch {
-            val success = IconPackGenerator(ctx, activity.applicationList).create(themed, iconColor.toHexString(), bgColor.toHexString()) {
+            val iconPackGenerator = IconPackGenerator(ctx, activity.applicationList)
+            val canBeInstalled = iconPackGenerator.canBeInstalled() // must be called before build and sign
+
+            val apk = iconPackGenerator.buildAndSign(themed, iconColor.toHexString(), bgColor.toHexString()) {
                 text += it + "\n"
             }
 
-            if (success)
-                openBuilder = false
-            else
-                error = true
+            openBuilder = false
+
+            if (canBeInstalled) {
+                openSuccess = ApkInstaller(ctx).install(apk)
+            } else {
+                if (ApkUninstaller(ctx).uninstall(iconPackGenerator.getIconPackName())) {
+                    openSuccess = ApkInstaller(ctx).install(apk)
+                }
+            }
         }
     }) {
         Icon(
@@ -278,17 +286,21 @@ fun BuildPackButton() {
             text = {
                 Text(text = text)
             },
-            confirmButton = {
-                if (error) {
-                    IconButton(onClick = { openBuilder = false }) {
-                        Icon(
-                            imageVector = Icons.Filled.CheckCircle,
-                            contentDescription = "Ok",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            }
+            confirmButton = { }
+        )
+    }
+
+    if (openSuccess) {
+        AlertDialog(
+            shape = RoundedCornerShape(20.dp),
+            containerColor = MaterialTheme.colorScheme.background,
+            titleContentColor = MaterialTheme.colorScheme.outline,
+            onDismissRequest = { openSuccess = false },
+            title = { Text(stringResource(id = R.string.iconPack)) },
+            text = {
+                Text(stringResource(id = R.string.iconPackInstalled))
+            },
+            confirmButton = { }
         )
     }
 }

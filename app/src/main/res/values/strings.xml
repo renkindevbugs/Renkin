@@ -27,8 +27,6 @@
     <string name="buildIconDescription">Build the icon pack</string>
     <string name="sync">Sync</string>
     <string name="syncText">Icon packs data syncing, please wait and try again</string>
-    <string name="iconPackNotCompatible">Old and new icon pack are not compatible</string>
-    <string name="pleaseUninstall">Please uninstall it and try again ...</string>
     <string name="initializeFramework">Initializing framework ...</string>
     <string name="generateManifest">Generating manifest ...</string>
     <string name="writingElement">Writing icons, drawable.xml and appfilter.xml ...</string>
@@ -44,4 +42,5 @@
     <string name="firstLetter">First Letter</string>
     <string name="twoLetters">Two Letters</string>
     <string name="applicationName">Application Name</string>
+    <string name="iconPackInstalled">The icon pack has been successfully installed!</string>
 </resources>
