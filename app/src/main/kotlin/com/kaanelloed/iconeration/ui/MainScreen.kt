@@ -45,7 +45,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.drawable.toBitmap
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.icon.creator.IconGenerator
-import com.kaanelloed.iconeration.apk.IconPackGenerator
+import com.kaanelloed.iconeration.apk.IconPackBuilder
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.apk.ApkInstaller
@@ -251,7 +251,7 @@ fun BuildPackButton() {
         text = ""
         openBuilder = true
         CoroutineScope(Dispatchers.Default).launch {
-            val iconPackGenerator = IconPackGenerator(ctx, activity.applicationList)
+            val iconPackGenerator = IconPackBuilder(ctx, activity.applicationList)
             val canBeInstalled = iconPackGenerator.canBeInstalled() // must be called before build and sign
 
             val apk = iconPackGenerator.buildAndSign(themed, iconColor.toHexString(), bgColor.toHexString()) {

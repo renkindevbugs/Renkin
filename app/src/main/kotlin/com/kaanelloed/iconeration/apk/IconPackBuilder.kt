@@ -28,7 +28,7 @@ import com.reandroid.arsc.value.ValueType
 import java.io.ByteArrayOutputStream
 import java.io.File
 
-class IconPackGenerator(private val ctx: Context, private val apps: List<PackageInfoStruct>) {
+class IconPackBuilder(private val ctx: Context, private val apps: List<PackageInfoStruct>) {
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
