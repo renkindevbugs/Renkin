@@ -199,24 +199,23 @@ class IconGenerator(
             return true
 
         if (image is AdaptiveIconDrawable) {
-            if (image.foreground is VectorDrawable)
+            if (image.foreground is VectorDrawable) {
                 return true
+            }
 
             if (image.foreground is InsetDrawable) {
                 val inset = image.foreground as InsetDrawable
-                if (inset.drawable!! is VectorDrawable)
+                if (inset.drawable is VectorDrawable) {
                     return true
+                }
             }
 
-            return monochromeExits(image) && options.monochrome
+            if (PackageVersion.is33OrMore() && options.monochrome) {
+                if (image.monochrome is VectorDrawable) {
+                    return true
+                }
+            }
         }
-
-        return false
-    }
-
-    private fun monochromeExits(icon: AdaptiveIconDrawable): Boolean {
-        if (PackageVersion.is33OrMore())
-            return icon.monochrome != null
 
         return false
     }
