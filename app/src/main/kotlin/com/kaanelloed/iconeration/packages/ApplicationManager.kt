@@ -11,8 +11,6 @@ import android.content.pm.PackageManager.ResolveInfoFlags
 import android.content.pm.ResolveInfo
 import android.content.res.Resources
 import android.graphics.drawable.Drawable
-import android.os.Build.VERSION
-import android.os.Build.VERSION_CODES
 import android.os.UserManager
 import androidx.core.content.res.ResourcesCompat
 import com.kaanelloed.iconeration.data.IconPack
@@ -166,7 +164,7 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     private fun getResolves(intent: Intent): List<ResolveInfo> {
-        if (VERSION.SDK_INT >= VERSION_CODES.TIRAMISU)
+        if (PackageVersion.is33OrMore())
             return pm.queryIntentActivities(intent, ResolveInfoFlags.of(0))
         return pm.queryIntentActivities(intent, 0)
     }
@@ -267,7 +265,7 @@ class ApplicationManager(private val ctx: Context) {
     @Suppress("DEPRECATION")
     @SuppressWarnings("DEPRECATION")
     fun getVersionCode(pack: PackageInfo): Long {
-        return if (VERSION.SDK_INT >= VERSION_CODES.P)
+        return if (PackageVersion.is28OrMore())
             pack.longVersionCode
         else
             pack.versionCode.toLong()

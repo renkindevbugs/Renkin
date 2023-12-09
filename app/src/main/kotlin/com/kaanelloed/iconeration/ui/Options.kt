@@ -3,7 +3,6 @@ package com.kaanelloed.iconeration.ui
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
-import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -60,6 +59,7 @@ import com.kaanelloed.iconeration.data.setIconColor
 import com.kaanelloed.iconeration.data.setIncludeVector
 import com.kaanelloed.iconeration.data.setMonochrome
 import com.kaanelloed.iconeration.data.setType
+import com.kaanelloed.iconeration.packages.PackageVersion
 import kotlinx.coroutines.launch
 
 var uploadedImage: Bitmap? = null
@@ -260,7 +260,7 @@ fun OptionsCard(iconPacks: List<IconPack>) {
 
 @Composable
 fun supportDynamicColors(): Boolean {
-    return Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+    return PackageVersion.is31OrMore()
 }
 
 @Composable

@@ -11,7 +11,6 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.VectorDrawable
-import android.os.Build
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -31,6 +30,7 @@ import com.kaanelloed.iconeration.image.edge.CannyEdgeDetector
 import com.kaanelloed.iconeration.image.tracer.ImageTracer
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
+import com.kaanelloed.iconeration.packages.PackageVersion
 import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
 import com.kaanelloed.iconeration.vector.MutableVectorGroup
 import com.kaanelloed.iconeration.vector.MutableVectorPath
@@ -178,7 +178,7 @@ class IconGenerator(
             if (newIcon.foreground is BitmapDrawable || newIcon.foreground is VectorDrawable)
                 newIcon = ForegroundIconDrawable(newIcon.foreground)
 
-            //if (VERSION.SDK_INT >= VERSION_CODES.TIRAMISU && adapIcon.monochrome != null)
+            //if (PackageVersion.is33OrMore() && adapIcon.monochrome != null)
             //    newIcon = ForegroundIconDrawable(adapIcon.monochrome!!)
         }
 
@@ -215,7 +215,7 @@ class IconGenerator(
     }
 
     private fun monochromeExits(icon: AdaptiveIconDrawable): Boolean {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+        if (PackageVersion.is33OrMore())
             return icon.monochrome != null
 
         return false
