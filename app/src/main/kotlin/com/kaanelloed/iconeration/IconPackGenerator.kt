@@ -41,8 +41,8 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
         val currentVersionCode = getCurrentVersionCode()
         if (currentVersionCode != 0L) {
             if (!keyStoreFile.exists() || newVersionCode > currentVersionCode) {
-                textMethod("Old and new icon pack are not compatible")
-                textMethod("Please uninstall it and try again ...")
+                textMethod(ctx.resources.getString(R.string.iconPackNotCompatible))
+                textMethod(ctx.resources.getString(R.string.pleaseUninstall))
                 return false
             }
         }
@@ -54,11 +54,11 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
         apkModule.tableBlock = tableBlock
         apkModule.setManifest(manifest)
 
-        textMethod("Initializing framework ...")
+        textMethod(ctx.resources.getString(R.string.initializeFramework))
         val framework = apkModule.initializeAndroidFramework(frameworkVersion)
         val packageBlock = tableBlock.newPackage(0x7f, iconPackName)
 
-        textMethod("Generating manifest ...")
+        textMethod(ctx.resources.getString(R.string.generateManifest))
         manifest.packageName = iconPackName
         manifest.versionCode = newVersionCode
         manifest.versionName = newVersionName
@@ -78,7 +78,7 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
         createRefColor31Resource(packageBlock, "icon_color", "@android:color/system_accent1_100")
         createRefColor31Resource(packageBlock, "icon_background_color", "@android:color/system_accent1_800")
 
-        textMethod("Writing icons, drawable.xml and appfilter.xml ...")
+        textMethod(ctx.resources.getString(R.string.writingElement))
         val drawableXml = DrawableXml()
         val appfilterXml = AppFilterXml()
 
@@ -112,17 +112,17 @@ class IconPackGenerator(private val ctx: Context, private val apps: List<Package
         createXmlResource(apkModule, packageBlock, drawableXml, "drawable")
         createXmlResource(apkModule, packageBlock, appfilterXml, "appfilter")
 
-        textMethod("Building apk ...")
+        textMethod(ctx.resources.getString(R.string.buildingApk))
         apkModule.add(ByteInputSource(ByteArray(0), "classes.dex"))
         apkModule.uncompressedFiles.addCommonExtensions()
         apkModule.writeApk(unsignedApk)
 
-        textMethod("Signing apk ...")
+        textMethod(ctx.resources.getString(R.string.signApk))
         signApk(unsignedApk, signedApk)
-        textMethod("Installing apk ...")
+        textMethod(ctx.resources.getString(R.string.installApk))
         installApk(signedApk)
 
-        textMethod("Done")
+        textMethod(ctx.resources.getString(R.string.done))
 
         return true
     }

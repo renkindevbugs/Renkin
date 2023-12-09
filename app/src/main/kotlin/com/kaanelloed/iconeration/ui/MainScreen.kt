@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.core.graphics.drawable.toBitmap
@@ -224,9 +225,9 @@ fun RefreshButton() {
             containerColor = MaterialTheme.colorScheme.background,
             titleContentColor = MaterialTheme.colorScheme.outline,
             onDismissRequest = { openWarning = false },
-            title = { Text("Sync") },
+            title = { Text(stringResource(id = R.string.sync)) },
             text = {
-                Text(text = "Icon packs data syncing, please wait and try again")
+                Text(stringResource(id = R.string.syncText))
             },
             confirmButton = { }
         )
@@ -273,7 +274,7 @@ fun BuildPackButton() {
             containerColor = MaterialTheme.colorScheme.background,
             titleContentColor = MaterialTheme.colorScheme.outline,
             onDismissRequest = {},
-            title = { Text("Icon pack") },
+            title = { Text(stringResource(id = R.string.iconPack)) },
             text = {
                 Text(text = text)
             },
@@ -305,7 +306,7 @@ fun TitleBar() {
             titleContentColor = MaterialTheme.colorScheme.primary,
         ),
         title = {
-            Text("Iconeration")
+            Text(stringResource(id = R.string.app_name))
         },
         actions = {
             RefreshButton()
@@ -361,7 +362,7 @@ fun InfoDialog(onDismiss: () -> Unit) {
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(end = 16.dp)
                 )
-                Text(text = "Refresh icons with options provided")
+                Text(text = stringResource(id = R.string.refreshIconDescription))
             }
             Row(
                 modifier = Modifier
@@ -374,7 +375,7 @@ fun InfoDialog(onDismiss: () -> Unit) {
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.padding(end = 16.dp)
                 )
-                Text(text = "Build the icon pack")
+                Text(text = stringResource(id = R.string.buildIconDescription))
             }
         }
     }

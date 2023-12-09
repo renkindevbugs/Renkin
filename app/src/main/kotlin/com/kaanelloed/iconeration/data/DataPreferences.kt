@@ -4,12 +4,14 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.ui.toColor
 import com.kaanelloed.iconeration.ui.toHexString
 import kotlinx.coroutines.flow.Flow
@@ -40,16 +42,6 @@ val IconColorKey: Preferences.Key<String>
     get() = stringPreferencesKey(ICON_COLOR_NAME)
 val BackgroundColorKey: Preferences.Key<String>
     get() = stringPreferencesKey(BACKGROUND_COLOR_NAME)
-
-val DarkModeLabels = mapOf(DarkMode.FOLLOW_SYSTEM to "Follow System"
-    , DarkMode.DARK to "Dark Mode"
-    , DarkMode.LIGHT to "Light Mode")
-
-val TypeLabels = mapOf(GenerationType.PATH to "Path Detection"
-    , GenerationType.EDGE to "Edge Detection"
-    , GenerationType.ONE_LETTER to "First Letter"
-    , GenerationType.TWO_LETTERS to "Two Letters"
-    , GenerationType.APP_NAME to "Application Name")
 
 //Dark Mode
 fun DataStore<Preferences>.getDarkMode(): Flow<Int?> {
@@ -192,6 +184,22 @@ suspend fun <T> DataStore<Preferences>.setPrefs(key: Preferences.Key<T>, value: 
     edit { settings ->
         settings[key] = value
     }
+}
+
+@Composable
+fun getDarkModeLabels(): Map<DarkMode, String> {
+    return mapOf(DarkMode.FOLLOW_SYSTEM to stringResource(id = R.string.followSystem)
+        , DarkMode.DARK to stringResource(id = R.string.darkMode)
+        , DarkMode.LIGHT to stringResource(id = R.string.lightMode))
+}
+
+@Composable
+fun getTypeLabels(): Map<GenerationType, String> {
+    return mapOf(GenerationType.PATH to stringResource(id = R.string.pathDetection)
+        , GenerationType.EDGE to stringResource(id = R.string.edgeDetection)
+        , GenerationType.ONE_LETTER to stringResource(id = R.string.firstLetter)
+        , GenerationType.TWO_LETTERS to stringResource(id = R.string.twoLetters)
+        , GenerationType.APP_NAME to stringResource(id = R.string.applicationName))
 }
 
 @Composable

@@ -22,14 +22,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.BuildConfig
 import com.kaanelloed.iconeration.data.DarkMode
-import com.kaanelloed.iconeration.data.DarkModeLabels
+import com.kaanelloed.iconeration.data.getDarkModeLabels
 import com.kaanelloed.iconeration.data.getDarkModeValue
 import com.kaanelloed.iconeration.data.setDarkMode
 import kotlinx.coroutines.launch
@@ -41,7 +43,7 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
         containerColor = MaterialTheme.colorScheme.background,
         titleContentColor = MaterialTheme.colorScheme.outline,
         onDismissRequest = onDismiss,
-        title = { Text("Settings") },
+        title = { Text(stringResource(R.string.settings)) },
         text = {
             Column {
                 DarkModeDropdown(prefs)
@@ -55,6 +57,7 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DarkModeDropdown(prefs: DataStore<Preferences>) {
+    val darkModeLabels = getDarkModeLabels()
     var expanded by remember { mutableStateOf(false) }
     var selectedOption by remember { mutableStateOf(DarkMode.FOLLOW_SYSTEM) }
 
@@ -70,9 +73,9 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
     ) {
         TextField(
             readOnly = true,
-            value = DarkModeLabels[selectedOption]!!,
+            value = darkModeLabels[selectedOption]!!,
             onValueChange = { },
-            label = { Text("Theme") },
+            label = { Text(stringResource(R.string.theme)) },
             trailingIcon = {
                 ExposedDropdownMenuDefaults.TrailingIcon(
                     expanded = expanded
@@ -87,7 +90,7 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
                 expanded = false
             }
         ) {
-            DarkModeLabels.forEach { selectionOption ->
+            darkModeLabels.forEach { selectionOption ->
                 DropdownMenuItem(
                     text = { Text(text = selectionOption.value) },
                     onClick = {
@@ -104,11 +107,13 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
 
 @Composable
 fun AppVersion() {
-    Divider(modifier = Modifier.fillMaxWidth().padding(top = 4.dp), thickness = Dp.Hairline, color = MaterialTheme.colorScheme.outline)
+    Divider(modifier = Modifier
+        .fillMaxWidth()
+        .padding(top = 4.dp), thickness = Dp.Hairline, color = MaterialTheme.colorScheme.outline)
     Row(modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.End) {
         Text(
-            text = "Version " + BuildConfig.VERSION_NAME,
+            text = String.format(stringResource(R.string.version), BuildConfig.VERSION_NAME),
             fontSize = 12.sp
         )
     }

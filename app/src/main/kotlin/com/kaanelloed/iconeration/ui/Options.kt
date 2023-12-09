@@ -39,18 +39,20 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
+import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.IconGenerator
 import com.kaanelloed.iconeration.PackageInfoStruct
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPack
-import com.kaanelloed.iconeration.data.TypeLabels
 import com.kaanelloed.iconeration.data.getBackgroundColorValue
 import com.kaanelloed.iconeration.data.getExportThemedValue
 import com.kaanelloed.iconeration.data.getIconColorValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
 import com.kaanelloed.iconeration.data.getMonochromeValue
+import com.kaanelloed.iconeration.data.getTypeLabels
 import com.kaanelloed.iconeration.data.getTypeValue
 import com.kaanelloed.iconeration.data.setBackgroundColor
 import com.kaanelloed.iconeration.data.setExportThemed
@@ -87,7 +89,7 @@ fun OptionsDialog(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmat
                     onConfirmation()
                 }
             ) {
-                Text("Confirm")
+                Text(stringResource(R.string.confirm))
             }
         },
         dismissButton = {
@@ -97,7 +99,7 @@ fun OptionsDialog(iconPacks: List<IconPack>, app: PackageInfoStruct, onConfirmat
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
             ) {
-                Text("Dismiss")
+                Text(stringResource(R.string.dismiss))
             }
         }
     )
@@ -122,7 +124,7 @@ fun OptionColumn(iconPacks: List<IconPack>, onIconClear: (() -> Unit)) {
 
     Column {
         Text(
-            text = "Options",
+            text = stringResource(id = R.string.options), 
             style = MaterialTheme.typography.labelLarge,
             modifier = Modifier.padding(8.dp)
         )
@@ -140,7 +142,7 @@ fun OptionColumn(iconPacks: List<IconPack>, onIconClear: (() -> Unit)) {
         } else {
             TypeDropdown(genType) { genType = it }
             IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
-            ColorButton("Icon color", Color.White) { iconColor = it }
+            ColorButton(stringResource(R.string.iconColor), Color.White) { iconColor = it }
 
             if (genType == GenerationType.PATH) {
                 VectorSwitch(useVector) { useVector = it }
@@ -168,9 +170,9 @@ fun OptionColumn(iconPacks: List<IconPack>, onIconClear: (() -> Unit)) {
                 containerColor = MaterialTheme.colorScheme.background,
                 titleContentColor = MaterialTheme.colorScheme.outline,
                 onDismissRequest = { confirmClearIcon = false },
-                title = { Text("Confirm clear") },
+                title = { Text(stringResource(R.string.confirmClear)) },
                 text = {
-                    Text("Are you sure to clear the icon ?")
+                    Text(stringResource(R.string.confirmClearText))
                 },
                 confirmButton = {
                     Button(
@@ -179,7 +181,7 @@ fun OptionColumn(iconPacks: List<IconPack>, onIconClear: (() -> Unit)) {
                             onIconClear()
                         }
                     ) {
-                        Text("Confirm")
+                        Text(stringResource(R.string.confirm))
                     }
                 },
                 dismissButton = {
@@ -189,7 +191,7 @@ fun OptionColumn(iconPacks: List<IconPack>, onIconClear: (() -> Unit)) {
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                     ) {
-                        Text("Dismiss")
+                        Text(stringResource(R.string.dismiss))
                     }
                 }
             )
@@ -229,7 +231,7 @@ fun OptionsCard(iconPacks: List<IconPack>) {
     ) {
         Column {
             Text(
-                text = "Options",
+                text = stringResource(id = R.string.options),
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.padding(8.dp)
             )
@@ -238,10 +240,10 @@ fun OptionsCard(iconPacks: List<IconPack>) {
                 IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
 
                 if (showIconColor(genType, useThemed)) {
-                    ColorButton("Icon color", currentColor) { scope.launch { prefs.setIconColor(it) } }
+                    ColorButton(stringResource(R.string.iconColor), currentColor) { scope.launch { prefs.setIconColor(it) } }
                 }
                 if (showBackgroundColor(genType, useThemed)) {
-                    ColorButton("Background color", currentBgColor) { scope.launch { prefs.setBackgroundColor(it) } }
+                    ColorButton(stringResource(R.string.backgroundColor), currentBgColor) { scope.launch { prefs.setBackgroundColor(it) } }
                 }
 
                 if (genType == GenerationType.PATH) {
@@ -292,7 +294,7 @@ fun VectorSwitch(useVector: Boolean, onChange: ((newValue: Boolean) -> Unit)) {
         .fillMaxWidth()
         .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text("Vector (BETA)")
+        Text(stringResource(R.string.vector))
         Switch(
             checked = checked,
             onCheckedChange = {
@@ -319,7 +321,7 @@ fun VectorSwitch(useVector: Boolean, onChange: ((newValue: Boolean) -> Unit)) {
             onDismissRequest = { openInfo = false },
             title = { },
             text = {
-                Text("If the application use a vector as an icon, edit the vector.")
+                Text(stringResource(R.string.vectorOptionDescription))
             },
             confirmButton = { },
             dismissButton = { }
@@ -338,7 +340,7 @@ fun MonochromeSwitch(useMonochrome: Boolean, onChange: ((newValue: Boolean) -> U
         .fillMaxWidth()
         .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text("Monochrome (BETA)")
+        Text(stringResource(R.string.monochrome))
         Switch(
             checked = checked,
             onCheckedChange = {
@@ -365,7 +367,7 @@ fun MonochromeSwitch(useMonochrome: Boolean, onChange: ((newValue: Boolean) -> U
             onDismissRequest = { openInfo = false },
             title = { },
             text = {
-                Text("If the application have a monochrome icon, use it.")
+                Text(stringResource(R.string.monochromeOptionDescription))
             },
             confirmButton = { },
             dismissButton = { }
@@ -384,7 +386,7 @@ fun ThemedIconsSwitch(useThemed: Boolean, onChange: ((newValue: Boolean) -> Unit
         .fillMaxWidth()
         .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text("Themed Icons (BETA)")
+        Text(stringResource(R.string.themedIcons))
         Switch(
             checked = checked,
             onCheckedChange = {
@@ -411,7 +413,7 @@ fun ThemedIconsSwitch(useThemed: Boolean, onChange: ((newValue: Boolean) -> Unit
             onDismissRequest = { openInfo = false },
             title = { },
             text = {
-                Text("Export icons as themed icons.")
+                Text(stringResource(R.string.themedIconsOptionDescription))
             },
             confirmButton = { },
             dismissButton = { }
@@ -422,6 +424,8 @@ fun ThemedIconsSwitch(useThemed: Boolean, onChange: ((newValue: Boolean) -> Unit
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TypeDropdown(type: GenerationType, onChange: ((newValue: GenerationType) -> Unit)) {
+    val typeLabels = getTypeLabels()
+
     var expanded by remember { mutableStateOf(false) }
     var selectedOption by rememberSaveable { mutableStateOf(GenerationType.PATH) }
 
@@ -436,9 +440,9 @@ fun TypeDropdown(type: GenerationType, onChange: ((newValue: GenerationType) -> 
     ) {
         TextField(
             readOnly = true,
-            value = TypeLabels[selectedOption]!!,
+            value = typeLabels[selectedOption]!!,
             onValueChange = { },
-            label = { Text("Type") },
+            label = { Text(stringResource(R.string.type)) },
             trailingIcon = {
                 ExposedDropdownMenuDefaults.TrailingIcon(
                     expanded = expanded
@@ -453,7 +457,7 @@ fun TypeDropdown(type: GenerationType, onChange: ((newValue: GenerationType) -> 
                 expanded = false
             }
         ) {
-            TypeLabels.forEach { selectionOption ->
+            typeLabels.forEach { selectionOption ->
                 DropdownMenuItem(
                     text = { Text(text = selectionOption.value) },
                     onClick = {
@@ -471,7 +475,7 @@ fun TypeDropdown(type: GenerationType, onChange: ((newValue: GenerationType) -> 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun IconPackDropdown(iconPacks: List<IconPack>, packageName: String, onChange: ((newValue: IconPack) -> Unit)) {
-    val emptyPack = IconPack("", "None", 0, "", 0)
+    val emptyPack = IconPack("", stringResource(R.string.none), 0, "", 0)
     val newList = listOf(emptyPack) + iconPacks
 
     var expanded by remember { mutableStateOf(false) }
@@ -488,7 +492,7 @@ fun IconPackDropdown(iconPacks: List<IconPack>, packageName: String, onChange: (
             readOnly = true,
             value = selectedOption.applicationName,
             onValueChange = { },
-            label = { Text("Icon Pack") },
+            label = { Text(stringResource(R.string.iconPack)) },
             trailingIcon = {
                 ExposedDropdownMenuDefaults.TrailingIcon(
                     expanded = expanded
@@ -526,7 +530,7 @@ fun UploadSwitch(onChange: ((newValue: Boolean) -> Unit)) {
         .fillMaxWidth()
         .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text("Create")
+        Text(stringResource(R.string.create))
         Switch(
             checked = checked,
             onCheckedChange = {
@@ -535,7 +539,7 @@ fun UploadSwitch(onChange: ((newValue: Boolean) -> Unit)) {
             },
             modifier = Modifier.padding(start = 8.dp, end = 8.dp)
         )
-        Text("Upload")
+        Text(stringResource(R.string.upload))
     }
 }
 
@@ -552,6 +556,6 @@ fun UploadButton(onChange: ((newValue: Uri) -> Unit)) {
     Button(onClick = {
         launcher.launch("image/*")
     }) {
-        Text("Upload image")
+        Text(stringResource(R.string.uploadImage))
     }
 }
