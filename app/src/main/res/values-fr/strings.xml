@@ -42,4 +42,5 @@
     <string name="twoLetters">Deux lettres</string>
     <string name="applicationName">Nom de l\'application</string>
     <string name="iconPackInstalled">Le pack d\'icônes a été installé avec succès !</string>
+    <string name="editVector">Vecteur</string>
 </resources>

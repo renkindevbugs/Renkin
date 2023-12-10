@@ -60,6 +60,7 @@ import com.kaanelloed.iconeration.data.getMonochromeValue
 import com.kaanelloed.iconeration.data.getTypeValue
 import com.kaanelloed.iconeration.icon.BitmapIcon
 import com.kaanelloed.iconeration.icon.EmptyIcon
+import com.kaanelloed.iconeration.icon.VectorIcon
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -183,6 +184,10 @@ fun OpenAppOptions(
 
                 is UploadedOptions -> {
                     activity.editApplication(index, app.changeExport(BitmapIcon(options.uploadedImage)))
+                }
+
+                is EditedVectorOptions -> {
+                    activity.editApplication(index, app.changeExport(VectorIcon(options.editedVector)))
                 }
             }
         }
