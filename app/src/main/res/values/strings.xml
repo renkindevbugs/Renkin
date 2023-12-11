@@ -44,4 +44,6 @@
     <string name="applicationName">Application Name</string>
     <string name="iconPackInstalled">The icon pack has been successfully installed!</string>
     <string name="editVector">Vector</string>
+    <string name="badPathFormat">Incorrect path format</string>
+    <string name="emptyPath">Empty path created</string>
 </resources>

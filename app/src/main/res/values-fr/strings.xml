@@ -43,4 +43,6 @@
     <string name="applicationName">Nom de l\'application</string>
     <string name="iconPackInstalled">Le pack d\'icônes a été installé avec succès !</string>
     <string name="editVector">Vecteur</string>
+    <string name="badPathFormat">Le format du chemin est incorrect</string>
+    <string name="emptyPath">Chemin vide créé</string>
 </resources>

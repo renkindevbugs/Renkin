@@ -1,6 +1,5 @@
 package com.kaanelloed.iconeration.ui
 
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -16,10 +15,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
@@ -30,6 +31,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -39,8 +41,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.EmptyPath
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -51,8 +58,8 @@ import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.icon.VectorIcon
-import com.kaanelloed.iconeration.vector.EmptyVector.Companion.createEmptyVector
-import com.kaanelloed.iconeration.vector.MutableImageVector
+import com.kaanelloed.iconeration.vector.ImageVectorExtension.Companion.createEmptyVector
+import com.kaanelloed.iconeration.vector.ImageVectorExtension.Companion.getBuilder
 import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
 import com.kaanelloed.iconeration.vector.MutableVectorPath
 import com.kaanelloed.iconeration.vector.PathExporter.Companion.toStringPath
@@ -273,26 +280,26 @@ fun UploadButton(onChange: (newValue: Uri) -> Unit) {
 @Composable
 fun PrepareEditVector(app: PackageInfoStruct, onChange: (options: IndividualOptions) -> Unit) {
     val editedVector = if (app.createdIcon is VectorIcon) {
-        app.createdIcon.vector.toMutableImageVector().applyAndRemoveGroup()
+        app.createdIcon.vector.toMutableImageVector().applyAndRemoveGroup().toImageVector()
     } else {
-        createEmptyVector().toMutableImageVector()
+        createEmptyVector()
     }
 
     EditVectorColumn(editedVector, onChange)
 }
 
 @Composable
-fun EditVectorColumn(editedVector: MutableImageVector, onChange: (options: IndividualOptions) -> Unit) {
+fun EditVectorColumn(vector: ImageVector, onChange: (options: IndividualOptions) -> Unit) {
     Column(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        var paths: List<MutableVectorPath> by rememberSaveable { mutableStateOf(listOf()) }
+        var paths: List<VectorPath> by rememberSaveable { mutableStateOf(listOf()) }
         var firstLoad by rememberSaveable { mutableStateOf(true) }
 
         if (firstLoad) {
-            for (path in editedVector.root.children) {
-                if (path is MutableVectorPath) {
+            for (path in vector.root) {
+                if (path is VectorPath && path.pathData != EmptyPath) {
                     val mutableList = paths.toMutableList()
                     mutableList.add(path)
                     paths = mutableList.toList()
@@ -302,37 +309,90 @@ fun EditVectorColumn(editedVector: MutableImageVector, onChange: (options: Indiv
             firstLoad = false
         }
 
+        val editedVector = vector.toMutableImageVector()
+
         editedVector.root.children.clear()
-        editedVector.root.children.addAll(paths)
+        for (path in paths) {
+            editedVector.root.children.add(MutableVectorPath(path))
+        }
         editedVector.center()
 
         val painter = rememberVectorPainter(editedVector.toImageVector())
-        Image(painter, null, Modifier
-            .padding(2.dp)
-            .size(78.dp, 78.dp))
+        Row {
+            Image(painter, null, Modifier
+                .padding(2.dp)
+                .size(78.dp, 78.dp))
+        }
+
+        NewPath {
+            if (it.trim() == "") {
+                return@NewPath
+            }
+
+            var stroke = SolidColor(Color.White) as Brush?
+            var strokeWidth = 1F
+
+            val lastPath = editedVector.root.children.lastOrNull() as MutableVectorPath?
+            if (lastPath != null) {
+                stroke = lastPath.stroke
+                strokeWidth = lastPath.strokeLineWidth
+            }
+
+            val parser = PathParser().parsePathString(it)
+
+            val builder = editedVector.toImageVector().getBuilder()
+            builder.addPath(parser.toNodes(), stroke = stroke, strokeLineWidth = strokeWidth)
+            val newVector = builder.build()
+
+            val newPath = newVector.root.last() as VectorPath
+
+            val mutableList = paths.toMutableList()
+            mutableList.add(newPath)
+            paths = mutableList.toList()
+        }
 
         LazyColumn {
             itemsIndexed(paths) { index, path ->
-                VectorPathItem(editedVector.toImageVector(), path, index) {
+                VectorPathItem(editedVector.toImageVector(), path, {
                     val mutableList = paths.toMutableList()
                     mutableList.removeAt(index)
+                    paths = mutableList.toList()
+                }) {
+                    val parser = PathParser().parsePathString(it)
+
+                    val mutablePath = editedVector.root.children[index] as MutableVectorPath
+                    mutablePath.pathData.clear()
+                    mutablePath.pathData.addAll(parser.toNodes())
+
+                    val newPath = editedVector.toImageVector().root[index] as VectorPath
+
+                    val mutableList = paths.toMutableList()
+                    mutableList[index] = newPath
                     paths = mutableList.toList()
                 }
             }
         }
-        
+
         onChange(EditedVectorOptions(editedVector.toImageVector()))
     }
 }
 
 @Composable
-fun VectorPathItem(vector: ImageVector, path: MutableVectorPath, index: Int, onDelete: () -> Unit) {
+fun VectorPathItem(
+    vector: ImageVector,
+    path: VectorPath,
+    onDelete: () -> Unit,
+    onChange: (newPath: String) -> Unit
+) {
+    var showPathEditor by remember { mutableStateOf(false) }
+
     val newVector = vector.toMutableImageVector()
     newVector.root.children.clear()
-    newVector.root.children.add(path)
+    newVector.root.children.add(MutableVectorPath(path))
 
     Row(modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically) {
+        verticalAlignment = Alignment.CenterVertically
+    ) {
         IconButton(onClick = {
             onDelete()
         }) {
@@ -342,10 +402,118 @@ fun VectorPathItem(vector: ImageVector, path: MutableVectorPath, index: Int, onD
                 tint = MaterialTheme.colorScheme.primary
             )
         }
+
+        IconButton(onClick = {
+            showPathEditor = true
+        }) {
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                contentDescription = "Edit",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+
         val painter = rememberVectorPainter(newVector.toImageVector())
         Image(painter, null, Modifier
             .padding(2.dp)
             .size(78.dp, 78.dp))
-        //Text(text = path.pathData.toStringPath())
     }
+
+    if (showPathEditor) {
+        EditPathDialog(path.pathData.toStringPath(), { showPathEditor = false }) {
+            onChange(it)
+            showPathEditor = false
+        }
+    }
+}
+
+@Composable
+fun NewPath(onChange: (newPath: String) -> Unit) {
+    var showPathEditor by remember { mutableStateOf(false) }
+
+    Row {
+        IconButton(onClick = {
+            showPathEditor = true
+        }) {
+            Icon(
+                imageVector = Icons.Filled.Add,
+                contentDescription = "Add",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+
+    if (showPathEditor) {
+        EditPathDialog("", { showPathEditor = false }) {
+            onChange(it)
+            showPathEditor = false
+        }
+    }
+}
+
+@Composable
+fun EditPathDialog(path: String, onDismiss: () -> Unit, onChange: (newPath: String) -> Unit) {
+    var newPath by rememberSaveable { mutableStateOf(path) }
+    var badFormatting by rememberSaveable { mutableStateOf(false) }
+    var formatError by rememberSaveable { mutableStateOf("") }
+
+    AlertDialog(
+        shape = RoundedCornerShape(20.dp),
+        containerColor = MaterialTheme.colorScheme.background,
+        titleContentColor = MaterialTheme.colorScheme.outline,
+        onDismissRequest = { onDismiss() },
+        title = { },
+        text = {
+            Column {
+                TextField(newPath, onValueChange = {
+                    newPath = it
+                    badFormatting = false
+                })
+
+                if (badFormatting) {
+                    Text(stringResource(id = R.string.badPathFormat),
+                        color = MaterialTheme.colorScheme.error)
+                    Text(formatError,
+                        color = MaterialTheme.colorScheme.error)
+                }
+            }
+        },
+        confirmButton = {
+            val emptyPathText = stringResource(id = R.string.emptyPath)
+            IconButton(onClick = {
+                try {
+                    val nodes = PathParser().parsePathString(newPath).toNodes()
+
+                    if (nodes == EmptyPath) {
+                        badFormatting = true
+                        formatError = emptyPathText
+                    }
+                } catch (e: IllegalArgumentException) {
+                    badFormatting = true
+                    formatError = e.localizedMessage!!
+                }
+
+                if (!badFormatting) {
+                    onChange(newPath)
+                }
+            }) {
+                Icon(
+                    imageVector = Icons.Filled.Done,
+                    contentDescription = stringResource(R.string.confirm),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        dismissButton = {
+            IconButton(onClick = {
+                onDismiss()
+            }) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.dismiss),
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    )
 }
