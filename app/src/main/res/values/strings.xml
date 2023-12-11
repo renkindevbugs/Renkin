@@ -13,7 +13,7 @@
     <string name="dismiss">Dismiss</string>
     <string name="create">Create</string>
     <string name="upload">Upload</string>
-    <string name="vectorOptionDescription">If the application use a vector as an icon, edit the vector.\"</string>
+    <string name="vectorOptionDescription">If the application use a vector as an icon, edit the vector.\n\nThis will not work if Iconeration is installed on the main profile and the application is installed on the work profile.</string>
     <string name="monochromeOptionDescription">If the application have a monochrome icon, use it.</string>
     <string name="themedIconsOptionDescription">Export icons as themed icons.</string>
     <string name="uploadImage">Upload image</string>
@@ -27,12 +27,12 @@
     <string name="buildIconDescription">Build the icon pack</string>
     <string name="sync">Sync</string>
     <string name="syncText">Icon packs data syncing, please wait and try again</string>
-    <string name="initializeFramework">Initializing framework ...</string>
-    <string name="generateManifest">Generating manifest ...</string>
-    <string name="writingElement">Writing icons, drawable.xml and appfilter.xml ...</string>
-    <string name="buildingApk">Building apk ...</string>
-    <string name="signApk">Signing apk ...</string>
-    <string name="installApk">Installing apk ...</string>
+    <string name="initializeFramework">Initializing framework …</string>
+    <string name="generateManifest">Generating manifest …</string>
+    <string name="writingElement">Writing icons, drawable.xml and appfilter.xml …</string>
+    <string name="buildingApk">Building apk …</string>
+    <string name="signApk">Signing apk …</string>
+    <string name="installApk">Installing apk …</string>
     <string name="done">Done</string>
     <string name="followSystem">Follow System</string>
     <string name="darkMode">Dark Mode</string>

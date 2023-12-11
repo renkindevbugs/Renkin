@@ -12,7 +12,7 @@
     <string name="dismiss">Annuler</string>
     <string name="create">Créer</string>
     <string name="upload">Téléverser</string>
-    <string name="vectorOptionDescription">Modifier le vecteur si l\'application en utilise un comme icône.</string>
+    <string name="vectorOptionDescription">Modifier le vecteur si l\'application en utilise un comme icône.\n\nCela ne fonctionnera pas si Iconeration est installé sur le profil principal et que l\'application est installée sur le profil de travail.</string>
     <string name="monochromeOptionDescription">Utiliser l\'icône monochrome si l\'application en a une.</string>
     <string name="themedIconsOptionDescription">Exporter en icônes thématiques.</string>
     <string name="uploadImage">Téléverser une image</string>
@@ -26,12 +26,12 @@
     <string name="buildIconDescription">Compiler le pack d\'icônes</string>
     <string name="sync">Synchronisation</string>
     <string name="syncText">Les données pour les packs d\'icônes sont en synchronisation, veuillez attendre et réessayer</string>
-    <string name="initializeFramework">Initialision du framework ...</string>
-    <string name="generateManifest">"Génération du manifeste "</string>
-    <string name="writingElement">Écriture des icônes, drawable.xml et appfilter.xml ...</string>
-    <string name="buildingApk">Compilation du apk ...</string>
-    <string name="signApk">Signature du apk ...</string>
-    <string name="installApk">Installation du apk ...</string>
+    <string name="initializeFramework">Initialision du framework …</string>
+    <string name="generateManifest">"Génération du manifeste …"</string>
+    <string name="writingElement">Écriture des icônes, drawable.xml et appfilter.xml …</string>
+    <string name="buildingApk">Compilation de l\'apk …</string>
+    <string name="signApk">Signature de l\'apk …</string>
+    <string name="installApk">Installation de l\'apk …</string>
     <string name="done">Terminé</string>
     <string name="followSystem">Système</string>
     <string name="darkMode">Mode Sombre</string>
