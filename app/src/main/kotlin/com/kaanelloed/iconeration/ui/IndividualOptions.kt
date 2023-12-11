@@ -349,21 +349,3 @@ fun VectorPathItem(vector: ImageVector, path: MutableVectorPath, index: Int, onD
         //Text(text = path.pathData.toStringPath())
     }
 }
-
-interface IndividualOptions
-
-class EmptyOptions: IndividualOptions
-
-data class CreatedOptions(
-    val generatingOptions: IconGenerator.GenerationOptions,
-    val generatingType: GenerationType,
-    val iconPackageName: String
-): IndividualOptions
-
-data class UploadedOptions(
-    val uploadedImage: Bitmap
-): IndividualOptions
-
-data class EditedVectorOptions(
-    val editedVector: ImageVector
-): IndividualOptions
