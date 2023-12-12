@@ -8,6 +8,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import com.kaanelloed.iconeration.vector.MutableImageVector
 import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.center
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeTo
 import com.kaanelloed.iconeration.vector.VectorRenderer.Companion.renderToCanvas
 
 class VectorIcon(val vector: ImageVector): ExportableIcon() {
@@ -26,6 +28,7 @@ class VectorIcon(val vector: ImageVector): ExportableIcon() {
         val mutableVector = vector.toMutableImageVector()
         val bmp = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
+        mutableVector.resizeTo(256F, 256F).center()
         mutableVector.renderToCanvas(canvas)
         return bmp
     }

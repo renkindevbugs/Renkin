@@ -148,11 +148,11 @@ class VectorRenderer(private val imageVector: ImageVector) {
     }
 
     companion object {
-        fun MutableImageVector.renderToCanvas(canvas: Canvas) {
+        fun MutableImageVector.renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true) {
             this.toImageVector().renderToCanvas(canvas)
         }
 
-        fun ImageVector.renderToCanvas(canvas: Canvas) {
+        fun ImageVector.renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true) {
             val renderer = VectorRenderer(this)
             renderer.renderToCanvas(canvas)
         }

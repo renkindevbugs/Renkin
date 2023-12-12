@@ -11,7 +11,6 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.VectorDrawable
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.core.graphics.drawable.toBitmap
@@ -32,9 +31,8 @@ import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.packages.PackageVersion
 import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
-import com.kaanelloed.iconeration.vector.MutableVectorGroup
-import com.kaanelloed.iconeration.vector.MutableVectorPath
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.applyAndRemoveGroup
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPaths
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeAndCenter
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.scaleAtCenter
 import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
@@ -131,8 +129,8 @@ class IconGenerator(
 
         val mutableVector = vectorIcon.vector.toMutableImageVector()
 
-        val stroke = mutableVector.viewportHeight / 108 //1F at 108
-        editVectorGroup(mutableVector.root, stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+        val stroke = mutableVector.viewportHeight / 48 //1F at 48
+        mutableVector.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
         mutableVector.resizeAndCenter().applyAndRemoveGroup().scaleAtCenter(6F / 4F)
         mutableVector.tintColor = Color.Unspecified
 
@@ -143,25 +141,12 @@ class IconGenerator(
         activity.editApplication(app, app.changeExport(VectorIcon(mutableVector)))
     }
 
-    private fun editVectorGroup(vectorGroup: MutableVectorGroup, stroke: Float, fillColor: Brush, strokeColor: Brush) {
-        for (child in vectorGroup.children) {
-            if (child is MutableVectorGroup) {
-                editVectorGroup(child, stroke, fillColor, strokeColor)
-            }
-
-            if (child is MutableVectorPath) {
-                child.strokeLineWidth = stroke
-                child.fill = fillColor
-                child.stroke = strokeColor
-            }
-        }
-    }
-
     private fun generateColorQuantizationDetection(app: PackageInfoStruct) {
         val imageVector = ImageTracer.imageToVector(getAppIconBitmap(app), ImageTracer.TracingOptions())
 
         val vector = imageVector.toMutableImageVector()
-        editVectorGroup(vector.root, 1F, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+        val stroke = imageVector.viewportHeight / 48 //1F at 48
+        vector.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
         vector.resizeAndCenter()
 
         if (options.themed) {
@@ -321,8 +306,8 @@ class IconGenerator(
 
         val mutableVector = vectorIcon.vector.toMutableImageVector().resizeAndCenter().scaleAtCenter(0.5f)
 
-        val stroke = mutableVector.viewportHeight / 108 //1F at 108
-        editVectorGroup(mutableVector.root, stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+        val stroke = mutableVector.viewportHeight / 48 //1F at 48
+        mutableVector.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
         mutableVector.tintColor = Color.Unspecified
 
         activity.editApplication(app, app.changeExport(VectorIcon(mutableVector)))

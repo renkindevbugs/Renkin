@@ -1,6 +1,7 @@
 package com.kaanelloed.iconeration.vector
 
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.toPath
 import androidx.compose.ui.unit.dp
 import com.kaanelloed.iconeration.vector.NodeEditor.Companion.rotate
@@ -8,7 +9,6 @@ import com.kaanelloed.iconeration.vector.NodeEditor.Companion.scale
 import com.kaanelloed.iconeration.vector.NodeEditor.Companion.translate
 import com.kaanelloed.iconeration.vector.PathConverter.Companion.isRelative
 import com.kaanelloed.iconeration.vector.PathConverter.Companion.toAbsolute
-import com.kaanelloed.iconeration.vector.VectorEditor.Companion.center
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
@@ -39,6 +39,7 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
             }
 
             if (child is MutableVectorPath) {
+                child.strokeLineWidth *= scaleX
                 scalePath(child, scaleX, scaleY, translateX, translateY)
             }
         }
@@ -300,6 +301,20 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
         fun MutableImageVector.center(): MutableImageVector {
             val editor = VectorEditor(this)
             return editor.center()
+        }
+
+        fun MutableVectorGroup.editPaths(stroke: Float, fillColor: Brush, strokeColor: Brush) {
+            for (child in this.children) {
+                if (child is MutableVectorGroup) {
+                    child.editPaths(stroke, fillColor, strokeColor)
+                }
+
+                if (child is MutableVectorPath) {
+                    child.strokeLineWidth = stroke
+                    child.fill = fillColor
+                    child.stroke = strokeColor
+                }
+            }
         }
     }
 }
