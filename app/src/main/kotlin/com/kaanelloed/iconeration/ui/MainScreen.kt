@@ -1,6 +1,7 @@
 package com.kaanelloed.iconeration.ui
 
 import android.graphics.drawable.Drawable
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -19,11 +21,14 @@ import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -38,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -69,10 +75,13 @@ import kotlinx.coroutines.launch
 fun MainColumn(iconPacks: List<IconPack>) {
     var iconPackageName = ""
 
-    Column {
-        TitleBar { iconPackageName }
-        OptionsCard(iconPacks) { iconPackageName = it }
-        ApplicationList(iconPacks)
+    Scaffold(topBar = { TitleBar { iconPackageName } },
+        bottomBar = { BottomBar() }
+    ) { innerPadding ->
+        Column(modifier = Modifier.padding(innerPadding)) {
+            OptionsCard(iconPacks) { iconPackageName = it }
+            ApplicationList(iconPacks)
+        }
     }
 }
 
@@ -217,12 +226,12 @@ fun RefreshButton(getIconPackageName: () -> String) {
 
     IconButton(onClick = {
         CoroutineScope(Dispatchers.Default).launch {
-            if (!activity.iconPackLoaded) {
+            val iconPackageName = getIconPackageName()
+
+            if (!activity.iconPackLoaded && iconPackageName != "") {
                 openWarning = true
                 return@launch
             }
-
-            val iconPackageName = getIconPackageName()
 
             var iconPackApps = emptyMap<IconPackApplication, Pair<Int, Drawable>>()
             if (iconPackageName != "") {
@@ -251,17 +260,8 @@ fun RefreshButton(getIconPackageName: () -> String) {
     }
 
     if (openWarning) {
-        AlertDialog(
-            shape = RoundedCornerShape(20.dp),
-            containerColor = MaterialTheme.colorScheme.background,
-            titleContentColor = MaterialTheme.colorScheme.outline,
-            onDismissRequest = { openWarning = false },
-            title = { Text(stringResource(id = R.string.sync)) },
-            text = {
-                Text(stringResource(id = R.string.syncText))
-            },
-            confirmButton = { }
-        )
+        Toast.makeText(LocalContext.current, stringResource(id = R.string.syncText), Toast.LENGTH_LONG).show()
+        openWarning = false
     }
 }
 
@@ -274,7 +274,7 @@ fun BuildPackButton() {
     val bgColor = getPreferences().getBackgroundColorValue()
 
     var openBuilder by rememberSaveable { mutableStateOf(false) }
-    var openSuccess by rememberSaveable { mutableStateOf(false) }
+    var openSuccess by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
 
     IconButton(onClick = {
@@ -321,17 +321,8 @@ fun BuildPackButton() {
     }
 
     if (openSuccess) {
-        AlertDialog(
-            shape = RoundedCornerShape(20.dp),
-            containerColor = MaterialTheme.colorScheme.background,
-            titleContentColor = MaterialTheme.colorScheme.outline,
-            onDismissRequest = { openSuccess = false },
-            title = { Text(stringResource(id = R.string.iconPack)) },
-            text = {
-                Text(stringResource(id = R.string.iconPackInstalled))
-            },
-            confirmButton = { }
-        )
+        Toast.makeText(LocalContext.current, stringResource(id = R.string.iconPackInstalled), Toast.LENGTH_LONG).show()
+        openSuccess = false
     }
 }
 
@@ -419,6 +410,25 @@ fun InfoDialog(onDismiss: () -> Unit) {
                 )
                 Text(text = stringResource(id = R.string.buildIconDescription))
             }
+        }
+    }
+}
+
+@Composable
+fun BottomBar() {
+    if (!getCurrentMainActivity().iconPackLoaded) {
+        BottomAppBar(containerColor = MaterialTheme.colorScheme.background,
+            contentColor = MaterialTheme.colorScheme.primary
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(id = R.string.syncIconPack), Modifier.padding(4.dp))
+                CircularProgressIndicator(
+                    modifier = Modifier.width(40.dp).padding(4.dp),
+                    color = MaterialTheme.colorScheme.secondary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant,
+                )
+            }
+
         }
     }
 }

@@ -36,7 +36,7 @@ class MainActivity : ComponentActivity() {
     var iconPackApplications: Map<IconPack, List<IconPackApplication>> = emptyMap()
         private set
 
-    var iconPackLoaded: Boolean = false
+    var iconPackLoaded: Boolean by mutableStateOf(false)
         private set
 
     override fun onCreate(savedInstanceState: Bundle?) {

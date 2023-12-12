@@ -25,8 +25,8 @@
     <string name="version">Version %s</string>
     <string name="refreshIconDescription">Refresh icons with options provided</string>
     <string name="buildIconDescription">Build the icon pack</string>
-    <string name="sync">Sync</string>
-    <string name="syncText">Icon packs data syncing, please wait and try again</string>
+    <string name="sync">Synchronization</string>
+    <string name="syncText">Icon pack data synchronization, please wait and try again</string>
     <string name="initializeFramework">Initializing framework …</string>
     <string name="generateManifest">Generating manifest …</string>
     <string name="writingElement">Writing icons, drawable.xml and appfilter.xml …</string>
@@ -46,4 +46,5 @@
     <string name="editVector">Vector</string>
     <string name="badPathFormat">Incorrect path format</string>
     <string name="emptyPath">Empty path created</string>
+    <string name="syncIconPack">Icon pack synchronization</string>
 </resources>
