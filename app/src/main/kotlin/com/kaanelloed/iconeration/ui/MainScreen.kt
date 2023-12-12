@@ -165,9 +165,14 @@ fun OpenAppOptions(
     val ctx = getCurrentContext()
     val activity = getCurrentMainActivity()
 
+    val currentContext = LocalContext.current
+    val syncText = stringResource(id = R.string.syncText)
+    var openWarning by rememberSaveable { mutableStateOf(false) }
+
     AppOptions(iconPacks, app, { options ->
         CoroutineScope(Dispatchers.Default).launch {
-            if (!activity.iconPackLoaded) {
+            if (!activity.iconPackLoaded && options is CreatedOptions && options.iconPackageName != "") {
+                openWarning = true
                 return@launch
             }
 
@@ -199,6 +204,11 @@ fun OpenAppOptions(
                     activity.editApplication(index, app.changeExport(VectorIcon(options.editedVector)))
                 }
             }
+        }
+
+        if (openWarning) {
+            Toast.makeText(currentContext, syncText, Toast.LENGTH_LONG).show()
+            openWarning = false
         }
 
         onDismiss()
@@ -428,7 +438,6 @@ fun BottomBar() {
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
             }
-
         }
     }
 }
