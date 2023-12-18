@@ -8,7 +8,7 @@ import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.drawable.TextDrawable
 
 class LetterGenerator(private val ctx: Context) {
-    private val font = ResourcesCompat.getFont(ctx, R.font.arcticons_regular)!!
+    private val font = ResourcesCompat.getFont(ctx, R.font.arcticonssans_regular)!!
 
     fun generateFirstLetter(appName: String): Drawable {
         val resID = getResIDOfLetter(appName[0])
