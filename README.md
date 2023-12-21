@@ -1,6 +1,6 @@
-[<img alt="Izzy" src="https://img.shields.io/endpoint?url=https://apt.izzysoft.de/fdroid/api/v1/shield/com.kaanelloed.iconeration">](https://apt.izzysoft.de/packages/com.kaanelloed.iconeration)
+[<img alt="F-Droid" src="https://img.shields.io/f-droid/v/com.kaanelloed.iconeration">](https://f-droid.org/packages/com.kaanelloed.iconeration)
 
-[<img src="https://gitlab.com/IzzyOnDroid/repo/-/raw/master/assets/IzzyOnDroid.png" alt="Get it on IzzyOnDroid" height="90">](https://apt.izzysoft.de/packages/com.kaanelloed.iconeration)
+[<img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="90">](https://f-droid.org/packages/com.kaanelloed.iconeration)
 
 Icon pack generator for Android. For now, this project is intended to be a temporary solution for [Arcticons](https://github.com/Donnnno/Arcticons) when icons are not yet available.
 
