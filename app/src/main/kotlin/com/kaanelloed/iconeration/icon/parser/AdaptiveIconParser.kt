@@ -38,7 +38,7 @@ class AdaptiveIconParser(private val resources: Resources) {
         return null
     }
 
-    private fun parseChild(node: XmlNode): BaseIcon {
+    private fun parseChild(node: XmlNode): BaseIcon? {
         if (node.containsChildTag("inset")) {
             return parseInset(node.findFirstChildTag("inset")!!)
         }
@@ -49,10 +49,10 @@ class AdaptiveIconParser(private val resources: Resources) {
 
             if (drawableValue != null) {
                 val id = drawableValue.substring(1).toInt()
-                val drawable = ResourcesCompat.getDrawable(resources, id, null)!!
+                val drawable = ResourcesCompat.getDrawable(resources, id, null) ?: return null
 
                 if (drawable is VectorDrawable) {
-                    val vector = getVectorResource(resources, id) ?: return EmptyIcon()
+                    val vector = getVectorResource(resources, id) ?: return null
 
                     return VectorIcon(vector)
                     //return parseVector(resources.getXml(id).toXmlNode())
@@ -69,17 +69,18 @@ class AdaptiveIconParser(private val resources: Resources) {
             return parseVector(node.findFirstChildTag("vector")!!)
         }
 
-        return EmptyIcon()
+        return null
     }
 
-    private fun parseInset(node: XmlNode): InsetIcon {
+    private fun parseInset(node: XmlNode): InsetIcon? {
         val inset = 0F //TODO
-
-        return InsetIcon(inset, parseChild(node))
+        val icon = parseChild(node) ?: return null
+        return InsetIcon(inset, icon)
     }
 
-    private fun parseVector(node: XmlNode): VectorIcon {
-        return VectorIcon(VectorParser.parse(resources, node)!!)
+    private fun parseVector(node: XmlNode): VectorIcon? {
+        val vector = VectorParser.parse(resources, node) ?: return null
+        return VectorIcon(vector)
     }
 
     private fun getVectorResource(resources: Resources, id: Int): ImageVector? {

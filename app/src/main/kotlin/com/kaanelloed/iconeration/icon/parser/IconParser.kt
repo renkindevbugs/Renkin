@@ -17,21 +17,21 @@ import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
 class IconParser(private val resources: Resources) {
     private fun parseDrawable(drawable: Drawable, drawableId: Int): BaseIcon {
         return when (drawable) {
-            is AdaptiveIconDrawable -> parseAdaptiveIcon(drawableId)
+            is AdaptiveIconDrawable -> parseAdaptiveIcon(drawableId) ?: EmptyIcon()
             is BitmapDrawable -> BitmapIcon(drawable.bitmap)
-            is VectorDrawable -> parseVectorIcon(drawableId)
+            is VectorDrawable -> parseVectorIcon(drawableId) ?: EmptyIcon()
             else -> EmptyIcon()
         }
     }
 
-    private fun parseAdaptiveIcon(drawableId: Int): AdaptiveIcon {
-        val parser = resources.getXmlOrNull(drawableId)!!
-        return AdaptiveIconParser.parse(resources, parser.toXmlNode())!!
+    private fun parseAdaptiveIcon(drawableId: Int): AdaptiveIcon? {
+        val parser = resources.getXmlOrNull(drawableId) ?: return null
+        return AdaptiveIconParser.parse(resources, parser.toXmlNode())
     }
 
-    private fun parseVectorIcon(drawableId: Int): VectorIcon {
-        val parser = resources.getXmlOrNull(drawableId)!!
-        val vector = VectorParser.parse(resources, parser.toXmlNode())!!
+    private fun parseVectorIcon(drawableId: Int): VectorIcon? {
+        val parser = resources.getXmlOrNull(drawableId) ?: return null
+        val vector = VectorParser.parse(resources, parser.toXmlNode()) ?: return null
         return VectorIcon(vector)
     }
 

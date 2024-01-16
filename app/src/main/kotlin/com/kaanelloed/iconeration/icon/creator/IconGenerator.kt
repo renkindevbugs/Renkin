@@ -63,7 +63,9 @@ class IconGenerator(
 
     fun colorizeFromIconPack(application: PackageInfoStruct, icon: Drawable) {
         if (isVectorDrawable(icon)) {
-            getIconPackXML(application)
+            if (!exportIconPackXML(application)) {
+                changeIconPackColor(application, icon)
+            }
         } else {
             changeIconPackColor(application, icon)
         }
@@ -278,15 +280,15 @@ class IconGenerator(
         return if (options.themed) image.changeBackgroundColor(options.bgColor) else image
     }
 
-    private fun getIconPackXML(app: PackageInfoStruct) {
+    private fun exportIconPackXML(app: PackageInfoStruct): Boolean {
         val iconPackApp = iconPackApplication(app.packageName)!!
 
-        val res = ApplicationManager(ctx).getResources(iconPackApp.iconPackName) ?: return
+        val res = ApplicationManager(ctx).getResources(iconPackApp.iconPackName) ?: return false
 
         val iconID = iconPackApplicationIconID(app.packageName)
-        val parser = ApplicationManager(ctx).getPackageResourceXml(iconPackApp.iconPackName, iconID)!!
+        val parser = ApplicationManager(ctx).getPackageResourceXml(iconPackApp.iconPackName, iconID) ?: return false
 
-        val adaptiveIcon = AdaptiveIconParser.parse(res, parser.toXmlNode())!!
+        val adaptiveIcon = AdaptiveIconParser.parse(res, parser.toXmlNode()) ?: return false
         var vectorIcon: VectorIcon? = null
 
         if (adaptiveIcon.foreground is InsetIcon) {
@@ -301,7 +303,7 @@ class IconGenerator(
         }
 
         if (vectorIcon == null) {
-            TODO()
+            return false
         }
 
         val mutableVector = vectorIcon.vector.toMutableImageVector().resizeAndCenter().scaleAtCenter(0.5f)
@@ -311,6 +313,7 @@ class IconGenerator(
         mutableVector.tintColor = Color.Unspecified
 
         activity.editApplication(app, app.changeExport(VectorIcon(mutableVector)))
+        return true
     }
 
     private fun iconPackApplication(packageName: String): IconPackApplication? {
