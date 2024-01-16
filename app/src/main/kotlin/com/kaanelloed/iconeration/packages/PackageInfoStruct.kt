@@ -37,7 +37,7 @@ class PackageInfoStruct(
         return packageName.replace('.', '_')
     }
 
-    fun normalizeName(): String {
+    private fun normalizeName(): String {
         return removeDiacritics(appName)
     }
 

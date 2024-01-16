@@ -219,8 +219,7 @@ class IconGenerator(
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack == null) {
-                val draw = gen.generateFirstLetter(app.normalizeName())
-                draw.colorFilter = PorterDuffColorFilter(options.color, PorterDuff.Mode.SRC_IN)
+                val draw = gen.generateFirstLetter(app.appName, options.color)
                 val newIcon = draw.toBitmap(256, 256)
                 activity.editApplication(app, app.changeExport(BitmapIcon(addBackground(newIcon))))
             } else changeIconPackColor(app, iconPack)
