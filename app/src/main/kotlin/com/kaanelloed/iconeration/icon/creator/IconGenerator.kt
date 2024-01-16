@@ -213,34 +213,39 @@ class IconGenerator(
     }
 
     private fun generateFirstLetter() {
+        val size = 256
+        val strokeWidth = size / 48F
         val gen = LetterGenerator(ctx)
 
         for (app in apps) {
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack == null) {
-                val draw = gen.generateFirstLetter(app.appName, options.color)
-                val newIcon = draw.toBitmap(256, 256)
+                val draw = gen.generateFirstLetter(app.appName, options.color, strokeWidth)
+                val newIcon = draw.toBitmap(size, size)
                 activity.editApplication(app, app.changeExport(BitmapIcon(addBackground(newIcon))))
             } else changeIconPackColor(app, iconPack)
         }
     }
 
     private fun generateTwoLetter() {
+        val size = 256
+        val strokeWidth = size / 48F
         val gen = LetterGenerator(ctx)
 
         for (app in apps) {
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack == null) {
-                val draw = gen.generateTwoLetters(app.appName, options.color)
-                val newIcon = draw.toBitmap(256, 256)
+                val draw = gen.generateTwoLetters(app.appName, options.color, strokeWidth)
+                val newIcon = draw.toBitmap(size, size)
                 activity.editApplication(app, app.changeExport(BitmapIcon(addBackground(newIcon))))
             } else changeIconPackColor(app, iconPack)
         }
     }
 
     private fun generateAppName() {
+        val size = 256
         val gen = LetterGenerator(ctx)
 
         for (app in apps) {
@@ -248,7 +253,7 @@ class IconGenerator(
 
             if (iconPack == null) {
                 val draw = gen.generateAppName(app.appName, options.color)
-                val newIcon = draw.toBitmap(256, 256)
+                val newIcon = draw.toBitmap(size, size)
                 activity.editApplication(app, app.changeExport(BitmapIcon(addBackground(newIcon))))
             } else changeIconPackColor(app, iconPack)
         }
