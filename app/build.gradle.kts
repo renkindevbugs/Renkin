@@ -100,3 +100,12 @@ class RoomSchemaArgProvider(
         return listOf("room.schemaLocation=${schemaDir.path}")
     }
 }
+
+//Pre build
+task("arcticons-font") {
+    println("Copy Arcticons Sans font")
+
+    val gitFont = File(rootDir, "Arcticons-Font/ArcticonsSans-Regular.otf")
+    val resFont = File(projectDir, "src/main/res/font/arcticonssans_regular.otf")
+    gitFont.copyTo(resFont, true)
+}
