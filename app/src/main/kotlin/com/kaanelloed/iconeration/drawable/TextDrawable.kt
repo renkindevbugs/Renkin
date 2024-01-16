@@ -7,7 +7,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 
 //https://android.googlesource.com/platform/packages/apps/Camera/+/master/src/com/android/camera/drawable/TextDrawable.java
-class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize: Float, color: Int, strokeWidth: Float = 0F): Drawable() {
+class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize: Float, color: Int, strokeWidth: Float = 0F, adjustToSize: Int = 0): Drawable() {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val _intrinsicWidth: Int
     private val _intrinsicHeight: Int
@@ -21,8 +21,22 @@ class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize:
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = strokeWidth
         }
-        _intrinsicWidth = (paint.measureText(text, 0, text.length) + 0.5).toInt()
+        if (adjustToSize > 0) {
+            adjustTextSize(adjustToSize)
+        }
+
+        _intrinsicWidth = calculateIntrinsicWidth()
         _intrinsicHeight = Paint.FontMetricsInt().ascent
+    }
+
+    private fun adjustTextSize(maxWidth: Int) {
+        while (calculateIntrinsicWidth() > maxWidth) {
+            paint.textSize = paint.textSize - 1
+        }
+    }
+
+    private fun calculateIntrinsicWidth(): Int {
+        return (paint.measureText(text, 0, text.length) + 0.5).toInt()
     }
 
     @Deprecated("Deprecated in Java")

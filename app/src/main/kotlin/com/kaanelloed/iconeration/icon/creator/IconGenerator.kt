@@ -221,7 +221,7 @@ class IconGenerator(
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack == null) {
-                val draw = gen.generateFirstLetter(app.appName, options.color, strokeWidth)
+                val draw = gen.generateFirstLetter(app.appName, options.color, strokeWidth, size)
                 val newIcon = draw.toBitmap(size, size)
                 activity.editApplication(app, app.changeExport(BitmapIcon(addBackground(newIcon))))
             } else changeIconPackColor(app, iconPack)
@@ -237,7 +237,7 @@ class IconGenerator(
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack == null) {
-                val draw = gen.generateTwoLetters(app.appName, options.color, strokeWidth)
+                val draw = gen.generateTwoLetters(app.appName, options.color, strokeWidth, size)
                 val newIcon = draw.toBitmap(size, size)
                 activity.editApplication(app, app.changeExport(BitmapIcon(addBackground(newIcon))))
             } else changeIconPackColor(app, iconPack)
@@ -252,7 +252,7 @@ class IconGenerator(
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack == null) {
-                val draw = gen.generateAppName(app.appName, options.color)
+                val draw = gen.generateAppName(app.appName, options.color, size)
                 val newIcon = draw.toBitmap(size, size)
                 activity.editApplication(app, app.changeExport(BitmapIcon(addBackground(newIcon))))
             } else changeIconPackColor(app, iconPack)
