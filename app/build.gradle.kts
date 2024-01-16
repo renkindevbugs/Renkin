@@ -12,8 +12,8 @@ android {
         applicationId = "com.kaanelloed.iconeration"
         minSdk = 26
         targetSdk = 34
-        versionCode = 20
-        versionName = "1.2.1"
+        versionCode = 21
+        versionName = "1.2.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
