@@ -17,6 +17,7 @@ import androidx.core.graphics.drawable.toBitmap
 import com.kaanelloed.iconeration.MainActivity
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPackApplication
+import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
 import com.kaanelloed.iconeration.drawable.ForegroundIconDrawable
 import com.kaanelloed.iconeration.icon.AdaptiveIcon
 import com.kaanelloed.iconeration.icon.parser.AdaptiveIconParser
@@ -174,16 +175,7 @@ class IconGenerator(
             }
         }
 
-        val maxWidthOrHeight = kotlin.math.max(newIcon.intrinsicWidth, newIcon.intrinsicHeight)
-        if (maxWidthOrHeight > maxSize) {
-            val multi = maxSize / maxWidthOrHeight.toFloat()
-            val newWidth = (newIcon.intrinsicWidth * multi).toInt()
-            val newHeight = (newIcon.intrinsicHeight * multi).toInt()
-
-            return newIcon.toBitmap(newWidth, newHeight)
-        }
-
-        return newIcon.toBitmap()
+        return newIcon.shrinkIfBiggerThan(maxSize)
     }
 
     private fun isVectorDrawable(image: Drawable): Boolean {

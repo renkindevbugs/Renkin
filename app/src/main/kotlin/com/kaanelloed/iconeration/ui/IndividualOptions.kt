@@ -1,6 +1,8 @@
 package com.kaanelloed.iconeration.ui
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -51,12 +53,15 @@ import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.drawable.toDrawable
 import coil.compose.AsyncImage
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.icon.creator.IconGenerator
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPack
+import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
+import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.toDrawable
 import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.vector.ImageVectorExtension.Companion.createEmptyVector
 import com.kaanelloed.iconeration.vector.ImageVectorExtension.Companion.getBuilder
@@ -243,6 +248,7 @@ fun CreateColumn(
 @Composable
 fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
     var imageUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
+    val maxSize = 500
 
     Column(
         Modifier.fillMaxWidth(),
@@ -255,7 +261,7 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
             val contentResolver = getCurrentContext().contentResolver
             val uploadedImage = contentResolver.openInputStream(imageUri).use { BitmapFactory.decodeStream(it) }
 
-            onChange(UploadedOptions(uploadedImage))
+            onChange(UploadedOptions(uploadedImage.toDrawable().shrinkIfBiggerThan(maxSize)))
         }
     }
 }
