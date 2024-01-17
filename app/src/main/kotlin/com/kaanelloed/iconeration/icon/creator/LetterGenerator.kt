@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.drawable.Drawable
 import androidx.core.content.res.ResourcesCompat
 import com.kaanelloed.iconeration.R
+import com.kaanelloed.iconeration.drawable.MultiLineTextDrawable
 import com.kaanelloed.iconeration.drawable.TextDrawable
 
 class LetterGenerator(ctx: Context) {
@@ -31,6 +32,6 @@ class LetterGenerator(ctx: Context) {
     }
 
     fun generateAppName(appName: String, color: Int, maxSize: Int): Drawable {
-        return TextDrawable(appName, font, 50F, color, adjustToSize = maxSize)
+        return MultiLineTextDrawable(appName, font, 50F, 30F, color, maxSize, 3)
     }
 }
