@@ -6,7 +6,6 @@ Icon pack generator for Android. For now, this project is intended to be a tempo
 
 Generation type:
 - Path detection on the application icon using Color Quantization *(experimental)*
-- Edge detection on the application icon using Canny Edge Detection *(experimental)*
 - Canny Edge detection on the application icon *(experimental)*
 - First Letter or Two Letters of the application name with Arcticons OTF font *(experimental)*
 - Application name with Arcticons OTF font *(experimental)*
