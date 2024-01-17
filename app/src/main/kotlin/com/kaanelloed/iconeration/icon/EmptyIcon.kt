@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
 
-class EmptyIcon: ExportableIcon() {
+class EmptyIcon: ExportableIcon(false) {
     @Composable
     override fun getPainter(): Painter {
         TODO("Not yet implemented")

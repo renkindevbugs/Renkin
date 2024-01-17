@@ -12,7 +12,7 @@ import com.kaanelloed.iconeration.vector.VectorEditor.Companion.center
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeTo
 import com.kaanelloed.iconeration.vector.VectorRenderer.Companion.renderToCanvas
 
-class VectorIcon(val vector: ImageVector): ExportableIcon() {
+class VectorIcon(val vector: ImageVector, exportAsAdaptiveIcon: Boolean = false): ExportableIcon(exportAsAdaptiveIcon) {
     constructor(mutableVector: MutableImageVector) : this(mutableVector.toImageVector())
 
     @Composable

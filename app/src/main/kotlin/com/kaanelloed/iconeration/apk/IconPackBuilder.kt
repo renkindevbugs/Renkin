@@ -95,7 +95,7 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
             if (app.createdIcon !is EmptyIcon) {
                 val appFileName = app.getFileName()
 
-                if (themed) {
+                if (themed || app.createdIcon.exportAsAdaptiveIcon) {
                     val adaptive = AdaptiveIconXml()
                     adaptive.foreground(appFileName)
                     adaptive.background("@color/icon_background_color")

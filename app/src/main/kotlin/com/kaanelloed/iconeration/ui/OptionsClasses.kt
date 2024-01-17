@@ -16,7 +16,8 @@ data class CreatedOptions(
 ): IndividualOptions
 
 data class UploadedOptions(
-    val uploadedImage: Bitmap
+    val uploadedImage: Bitmap,
+    val asAdaptiveIcon: Boolean
 ): IndividualOptions
 
 data class EditedVectorOptions(

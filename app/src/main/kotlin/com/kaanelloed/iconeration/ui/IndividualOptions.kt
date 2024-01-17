@@ -1,8 +1,6 @@
 package com.kaanelloed.iconeration.ui
 
-import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -30,6 +28,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
@@ -53,7 +52,6 @@ import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toDrawable
 import coil.compose.AsyncImage
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.icon.creator.IconGenerator
@@ -248,6 +246,7 @@ fun CreateColumn(
 @Composable
 fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
     var imageUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
+    var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
     val maxSize = 500
 
     Column(
@@ -257,11 +256,12 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
         UploadButton { imageUri = it }
         if (imageUri != Uri.EMPTY) {
             AsyncImage(imageUri, contentDescription = null)
+            AdaptiveIconSwitch(asAdaptiveIcon, onChange = { asAdaptiveIcon = it })
 
             val contentResolver = getCurrentContext().contentResolver
             val uploadedImage = contentResolver.openInputStream(imageUri).use { BitmapFactory.decodeStream(it) }
 
-            onChange(UploadedOptions(uploadedImage.toDrawable().shrinkIfBiggerThan(maxSize)))
+            onChange(UploadedOptions(uploadedImage.toDrawable().shrinkIfBiggerThan(maxSize), asAdaptiveIcon))
         }
     }
 }
@@ -280,6 +280,28 @@ fun UploadButton(onChange: (newValue: Uri) -> Unit) {
         launcher.launch("image/*")
     }) {
         Text(stringResource(R.string.uploadImage))
+    }
+}
+
+@Composable
+fun AdaptiveIconSwitch(asAdaptiveIcon: Boolean, onChange: (newValue: Boolean) -> Unit) {
+    var checked by rememberSaveable { mutableStateOf(false) }
+
+    checked = asAdaptiveIcon
+
+    Row(modifier = Modifier
+        .fillMaxWidth()
+        .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.asAdaptiveIcon))
+        Switch(
+            checked = checked,
+            onCheckedChange = {
+                checked = it
+                onChange(it)
+            },
+            modifier = Modifier.padding(start = 8.dp)
+        )
     }
 }
 

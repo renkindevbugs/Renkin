@@ -6,7 +6,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 
-class BitmapIcon(val bitmap: Bitmap): ExportableIcon() {
+class BitmapIcon(val bitmap: Bitmap, exportAsAdaptiveIcon: Boolean = false): ExportableIcon(exportAsAdaptiveIcon) {
     @Composable
     override fun getPainter(): Painter {
         return BitmapPainter(bitmap.asImageBitmap())

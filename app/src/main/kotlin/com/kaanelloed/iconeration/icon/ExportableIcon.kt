@@ -4,7 +4,7 @@ import android.graphics.Bitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
 
-abstract class ExportableIcon: BaseIcon() {
+abstract class ExportableIcon(val exportAsAdaptiveIcon: Boolean): BaseIcon() {
     @Composable
     abstract fun getPainter(): Painter
 
