@@ -47,5 +47,5 @@
     <string name="badPathFormat">Incorrect path format</string>
     <string name="emptyPath">Empty path created</string>
     <string name="syncIconPack">Icon pack synchronization</string>
-    <string name="asAdaptiveIcon">Export as a adaptive icon</string>
+    <string name="asAdaptiveIcon">Export as an adaptive icon</string>
 </resources>
