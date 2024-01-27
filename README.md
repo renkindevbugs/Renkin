@@ -1,4 +1,5 @@
-[<img alt="F-Droid" src="https://img.shields.io/f-droid/v/com.kaanelloed.iconeration">](https://f-droid.org/packages/com.kaanelloed.iconeration)
+[<img alt="F-Droid" src="https://img.shields.io/f-droid/v/com.kaanelloed.iconeration">](https://f-droid.org/packages/com.kaanelloed.iconeration) [<img alt="Release" src="https://img.shields.io/gitea/v/release/kaanelloed/Iconeration?gitea_url=https%3A%2F%2Fcodeberg.org%2F
+">](https://codeberg.org/kaanelloed/Iconeration/releases)
 
 [<img src="https://f-droid.org/badge/get-it-on.png" alt="Get it on F-Droid" height="90">](https://f-droid.org/packages/com.kaanelloed.iconeration)
 
