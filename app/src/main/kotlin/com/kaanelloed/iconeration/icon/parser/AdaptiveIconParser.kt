@@ -2,10 +2,12 @@ package com.kaanelloed.iconeration.icon.parser
 
 import android.content.res.Resources
 import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.VectorDrawable
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.core.content.res.ResourcesCompat
+import androidx.core.graphics.drawable.toBitmap
 import com.kaanelloed.iconeration.icon.AdaptiveIcon
 import com.kaanelloed.iconeration.icon.BaseIcon
 import com.kaanelloed.iconeration.icon.BitmapIcon
@@ -60,6 +62,10 @@ class AdaptiveIconParser(private val resources: Resources) {
 
                 if (drawable is BitmapDrawable) {
                     return BitmapIcon(drawable.bitmap)
+                }
+
+                if (drawable is ColorDrawable) {
+                    return BitmapIcon(drawable.toBitmap(108, 108))
                 }
             }
         }
