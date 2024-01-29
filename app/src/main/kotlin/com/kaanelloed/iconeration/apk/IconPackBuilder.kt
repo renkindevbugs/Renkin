@@ -35,15 +35,14 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
     private val keyStoreFile = ctx.dataDir.resolve("iconeration.keystore")
 
     private val iconPackName = "com.kaanelloed.iconerationiconpack"
-    private val newVersionCode = 1
-    private val newVersionName = "0.1.0"
+    private val newInternalVersionCode = 0
     private val frameworkVersion = 33
     private val minSdkVersion = 26
 
     fun canBeInstalled(): Boolean {
-        val currentVersionCode = getCurrentVersionCode()
-        if (currentVersionCode != 0L) {
-            if (!keyStoreFile.exists() || newVersionCode > currentVersionCode) {
+        val installedVersion = getInstalledVersion()
+        if (installedVersion != null) {
+            if (!keyStoreFile.exists() || newInternalVersionCode > installedVersion.internalVersionCode) {
                 return false
             }
         }
@@ -67,10 +66,15 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         val framework = apkModule.initializeAndroidFramework(frameworkVersion)
         val packageBlock = tableBlock.newPackage(0x7f, iconPackName)
 
+        val installedVersion = getInstalledVersion()
+        val installedVersionCode = installedVersion?.versionCode ?: 0L
+
+        val newVersion = Version(installedVersionCode + 1, newInternalVersionCode)
+
         textMethod(ctx.resources.getString(R.string.generateManifest))
         manifest.packageName = iconPackName
-        manifest.versionCode = newVersionCode
-        manifest.versionName = newVersionName
+        manifest.versionCode = newVersion.versionCode.toInt()
+        manifest.versionName = newVersion.versionName
         manifest.compileSdkVersion = framework.versionCode
         manifest.compileSdkVersionCodename = framework.versionName
         manifest.platformBuildVersionCode = framework.versionCode
@@ -266,6 +270,18 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
             ?: return 0L
 
         return appMan.getVersionCode(iconPack)
+    }
+
+    private fun getInstalledVersion(): Version? {
+        val appMan = ApplicationManager(ctx)
+
+        val iconPack = appMan.getPackage(iconPackName)
+            ?: return null
+
+        val versionCode = appMan.getVersionCode(iconPack)
+        val versionName = iconPack.versionName
+
+        return Version(versionCode, versionName)
     }
 
     private fun signApk(file: File, outFile: File) {
