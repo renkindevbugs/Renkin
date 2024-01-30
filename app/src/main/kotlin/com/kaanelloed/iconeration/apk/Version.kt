@@ -24,10 +24,10 @@ class Version {
             val elements = versionName.split('.')
 
             if (elements.isEmpty())
-                return 0
+                return -1
 
             if (!elements[0].isDigitsOnly())
-                return 0
+                return -1
 
             return elements[0].toInt()
         }
