@@ -324,6 +324,7 @@ fun EditVectorColumn(vector: ImageVector, onChange: (options: IndividualOptions)
     ) {
         var paths: List<VectorPath> by rememberSaveable { mutableStateOf(listOf()) }
         var firstLoad by rememberSaveable { mutableStateOf(true) }
+        var automaticallyCenter by rememberSaveable { mutableStateOf(true) }
 
         if (firstLoad) {
             for (path in vector.root) {
@@ -343,13 +344,18 @@ fun EditVectorColumn(vector: ImageVector, onChange: (options: IndividualOptions)
         for (path in paths) {
             editedVector.root.children.add(MutableVectorPath(path))
         }
-        editedVector.center()
+        if (automaticallyCenter)
+            editedVector.center()
 
         val painter = rememberVectorPainter(editedVector.toImageVector())
         Row {
             Image(painter, null, Modifier
                 .padding(2.dp)
                 .size(78.dp, 78.dp))
+        }
+
+        CenterSwitch {
+            automaticallyCenter = it
         }
 
         NewPath {
@@ -544,4 +550,24 @@ fun EditPathDialog(path: String, onDismiss: () -> Unit, onChange: (newPath: Stri
             }
         }
     )
+}
+
+@Composable
+fun CenterSwitch(onChange: (newValue: Boolean) -> Unit) {
+    var checked by rememberSaveable { mutableStateOf(true) }
+
+    Row(modifier = Modifier
+        .fillMaxWidth()
+        .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.automaticallyCenter))
+        Switch(
+            checked = checked,
+            onCheckedChange = {
+                checked = it
+                onChange(it)
+            },
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
 }
