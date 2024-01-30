@@ -33,7 +33,10 @@ class AdaptiveIconParser(private val resources: Resources) {
             }
         }
 
-        if (foreground != null && background != null) {
+        if (background == null)
+            background = EmptyIcon()
+
+        if (foreground != null) {
             return AdaptiveIcon(foreground, background, monochrome)
         }
 
