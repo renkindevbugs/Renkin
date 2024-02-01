@@ -3,11 +3,12 @@ package com.kaanelloed.iconeration.drawable
 import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 
 //https://android.googlesource.com/platform/packages/apps/Camera/+/master/src/com/android/camera/drawable/TextDrawable.java
-class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize: Float, color: Int, strokeWidth: Float = 0F, adjustToSize: Int = 0): Drawable() {
+class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize: Float, color: Int, strokeWidth: Float = 0F, adjustToSize: Int = 0): BaseTextDrawable() {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val _intrinsicWidth: Int
     private val _intrinsicHeight: Int
@@ -39,6 +40,20 @@ class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize:
         return (paint.measureText(text, 0, text.length) + 0.5).toInt()
     }
 
+    private fun calculateX(): Float {
+        return bounds.centerX().toFloat()
+    }
+
+    private fun calculateY(): Float {
+        /*return if (text.toString().uppercase() == text.toString()) {
+            bounds.centerY().toFloat() - paint.ascent() / 2
+        } else {
+            bounds.centerY().toFloat() - ((paint.descent() + paint.ascent()) / 2)
+        }*/
+
+        return bounds.centerY().toFloat() - paint.ascent() / 2
+    }
+
     @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int {
         return paint.alpha
@@ -52,17 +67,16 @@ class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize:
         return _intrinsicHeight
     }
 
+    override fun getPaths(): List<Path> {
+        val path = Path()
+        paint.getTextPath(text.toString(), 0, text.length, calculateX(), calculateY(), path)
+        return listOf(path)
+    }
+
     override fun draw(canvas: Canvas) {
         //canvas.drawText(text, 0, text.length, bounds.exactCenterX(), bounds.exactCenterY(), paint)
 
-        /*val y: Float = if (text.toString().uppercase() == text.toString()) {
-            bounds.centerY().toFloat() - paint.ascent() / 2
-        } else {
-            bounds.centerY().toFloat() - ((paint.descent() + paint.ascent()) / 2)
-        }*/
-
-        canvas.drawText(text, 0, text.length,
-            bounds.centerX().toFloat(), bounds.centerY().toFloat() - paint.ascent() / 2, paint)
+        canvas.drawText(text, 0, text.length, calculateX(), calculateY(), paint)
     }
 
     override fun setAlpha(alpha: Int) {

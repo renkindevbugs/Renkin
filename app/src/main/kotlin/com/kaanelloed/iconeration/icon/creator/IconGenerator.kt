@@ -11,12 +11,18 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.VectorDrawable
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.kaanelloed.iconeration.MainActivity
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPackApplication
+import com.kaanelloed.iconeration.drawable.BaseTextDrawable
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
 import com.kaanelloed.iconeration.drawable.ForegroundIconDrawable
 import com.kaanelloed.iconeration.icon.AdaptiveIcon
@@ -32,6 +38,7 @@ import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.packages.PackageVersion
 import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
+import com.kaanelloed.iconeration.vector.PathConverter.Companion.toNodes
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.applyAndRemoveGroup
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPaths
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeAndCenter
@@ -249,6 +256,19 @@ class IconGenerator(
                 activity.editApplication(app, app.changeExport(BitmapIcon(addBackground(newIcon))))
             } else changeIconPackColor(app, iconPack)
         }
+    }
+
+    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+    private fun createVectorForText(drawable: BaseTextDrawable): ImageVector {
+        val builder = ImageVector.Builder(defaultWidth = 256.dp, defaultHeight = 256.dp, viewportWidth = 256F, viewportHeight = 256F)
+
+        val paths = drawable.getPaths()
+        for (path in paths) {
+            val cPath = path.asComposePath()
+            builder.addPath(cPath.toNodes())
+        }
+
+        return builder.build()
     }
 
     private fun changeIconPackColor(app: PackageInfoStruct, icon: Drawable) {

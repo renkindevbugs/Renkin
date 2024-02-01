@@ -3,15 +3,15 @@ package com.kaanelloed.iconeration.drawable
 import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.Paint
+import android.graphics.Path
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.TextUtils
 import androidx.core.graphics.withTranslation
 
-class MultiLineTextDrawable(text: CharSequence, typeFace: Typeface, defaultTextSize: Float, minTextSize: Float, color: Int, width: Int, maxLines: Int): Drawable() {
+class MultiLineTextDrawable(text: CharSequence, typeFace: Typeface, defaultTextSize: Float, minTextSize: Float, color: Int, width: Int, maxLines: Int): BaseTextDrawable() {
     private val paint = TextPaint(Paint.ANTI_ALIAS_FLAG)
     private val staticLayout: StaticLayout
 
@@ -58,6 +58,14 @@ class MultiLineTextDrawable(text: CharSequence, typeFace: Typeface, defaultTextS
         return (paint.measureText(text, 0, text.length) + 0.5).toInt()
     }
 
+    private fun calculateX(): Float {
+        return (bounds.width() - staticLayout.width) / 2F
+    }
+
+    private fun calculateY(): Float {
+        return (bounds.height() - staticLayout.height) / 2F
+    }
+
     @Deprecated("Deprecated in Java")
     override fun getOpacity(): Int {
         return paint.alpha
@@ -71,11 +79,28 @@ class MultiLineTextDrawable(text: CharSequence, typeFace: Typeface, defaultTextS
         return staticLayout.height
     }
 
-    override fun draw(canvas: Canvas) {
-        val x = (bounds.width() - staticLayout.width) / 2F
-        val y = (bounds.height() - staticLayout.height) / 2F
+    override fun getPaths(): List<Path> {
+        val paths = mutableListOf<Path>()
+        val baseX = calculateX()
+        val baseY = calculateY()
 
-        canvas.withTranslation(x, y) {
+        for (line in 0 until staticLayout.lineCount) {
+            val start = staticLayout.getLineStart(line)
+            val end = staticLayout.getLineVisibleEnd(line)
+            val x = staticLayout.getLineLeft(line) + baseX
+            val y = staticLayout.getLineBaseline(line).toFloat() + baseY
+
+            val path = Path()
+            paint.getTextPath(staticLayout.text.toString(), start, end, x, y, path)
+
+            paths.add(path)
+        }
+
+        return paths
+    }
+
+    override fun draw(canvas: Canvas) {
+        canvas.withTranslation(calculateX(), calculateY()) {
             staticLayout.draw(this)
         }
     }

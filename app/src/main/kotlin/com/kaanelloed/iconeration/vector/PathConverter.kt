@@ -1,5 +1,10 @@
 package com.kaanelloed.iconeration.vector
 
+import android.graphics.PathIterator
+import android.os.Build
+import androidx.annotation.RequiresApi
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.vector.PathNode
 
 class PathConverter {
@@ -114,6 +119,52 @@ class PathConverter {
                 is PathNode.RelativeVerticalTo -> false
                 is PathNode.VerticalTo -> true
             }
+        }
+
+        @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
+        fun Path.toNodes(): List<PathNode> {
+            val nodes = mutableListOf<PathNode>()
+            val androidPath = this.asAndroidPath()
+
+            val iterator = androidPath.pathIterator
+
+            while (iterator.hasNext()) {
+                val segment = iterator.next()
+                val points = segment.points
+
+                when (segment.verb) {
+                    PathIterator.VERB_MOVE -> {
+                        nodes.add(PathNode.MoveTo(points[0], points[1]))
+                    }
+
+                    PathIterator.VERB_CLOSE -> {
+                        nodes.add(PathNode.Close)
+                    }
+
+                    PathIterator.VERB_CONIC -> {
+                        val weight = segment.conicWeight
+                        TODO()
+                    }
+
+                    PathIterator.VERB_CUBIC -> {
+                        nodes.add(PathNode.CurveTo(points[2], points[3], points[4], points[5], points[6], points[7]))
+                    }
+
+                    PathIterator.VERB_DONE -> {
+                        nodes.add(PathNode.Close)
+                    }
+
+                    PathIterator.VERB_LINE -> {
+                        nodes.add(PathNode.LineTo(points[2], points[3]))
+                    }
+
+                    PathIterator.VERB_QUAD -> {
+                        nodes.add(PathNode.QuadTo(points[2], points[3], points[4], points[5]))
+                    }
+                }
+            }
+
+            return nodes.toList()
         }
     }
 }
