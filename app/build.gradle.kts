@@ -63,11 +63,11 @@ dependencies {
     implementation("ru.solrudev.ackpine:ackpine-ktx:0.5.0")
 
     //Compose
-    val composeBom = platform("androidx.compose:compose-bom:2024.01.00")
+    val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
     implementation(composeBom)
     debugImplementation(composeBom)
     androidTestImplementation(composeBom)
-    implementation("androidx.compose.material3:material3:1.2.0-rc01") //Fix bottom bar bug
+    implementation("androidx.compose.material3:material3-android:1.2.0")
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation("io.coil-kt:coil-compose:2.5.0")
     implementation("com.github.skydoves:colorpicker-compose:1.0.7")
