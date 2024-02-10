@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
@@ -96,11 +98,21 @@ fun OptionsCard(
             )
     ) {
         Column {
-            Text(
-                text = stringResource(id = R.string.options),
-                style = MaterialTheme.typography.labelLarge,
-                modifier = Modifier.padding(8.dp)
-            )
+            Row(modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(id = R.string.options),
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(8.dp)
+                )
+
+                val optionIcon = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
+                Icon(
+                    imageVector = optionIcon,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
             if (expanded) {
                 TypeDropdown(genType) { scope.launch { prefs.setType(it) } }
                 IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
