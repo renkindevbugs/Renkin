@@ -16,9 +16,11 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BottomAppBar
@@ -30,6 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -73,6 +76,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun MainColumn(iconPacks: List<IconPack>) {
+    var packageFilter by remember { mutableStateOf("") }
     var iconPackageName = ""
 
     Scaffold(topBar = { TitleBar { iconPackageName } },
@@ -80,18 +84,21 @@ fun MainColumn(iconPacks: List<IconPack>) {
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
             OptionsCard(iconPacks) { iconPackageName = it }
-            ApplicationList(iconPacks)
+            SearchBar { packageFilter = it }
+            ApplicationList(iconPacks, packageFilter)
         }
     }
 }
 
 @Composable
-fun ApplicationList(iconPacks: List<IconPack>) {
+fun ApplicationList(iconPacks: List<IconPack>, filter: String) {
     val activity = getCurrentMainActivity()
 
     LazyColumn {
         itemsIndexed(activity.applicationList) { index, app ->
-            ApplicationItem(iconPacks, app, index)
+            if (app.appName.contains(filter, true)) {
+                ApplicationItem(iconPacks, app, index)
+            }
         }
     }
 }
@@ -433,11 +440,45 @@ fun BottomBar() {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(id = R.string.syncIconPack), Modifier.padding(4.dp))
                 CircularProgressIndicator(
-                    modifier = Modifier.width(40.dp).padding(4.dp),
+                    modifier = Modifier
+                        .width(40.dp)
+                        .padding(4.dp),
                     color = MaterialTheme.colorScheme.secondary,
                     trackColor = MaterialTheme.colorScheme.surfaceVariant,
                 )
             }
         }
+    }
+}
+
+@Composable
+fun SearchBar(onSearch: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+
+    Row(modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically) {
+        TextField(value = text,
+            onValueChange = {
+                text = it
+                onSearch(it)
+            },
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Filled.Search,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )},
+            trailingIcon = {
+                IconButton(onClick = {
+                    text = ""
+                    onSearch(text)
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = "Clear",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }},
+            modifier = Modifier.fillMaxWidth().padding(16.dp, 0.dp, 16.dp, 8.dp))
     }
 }
