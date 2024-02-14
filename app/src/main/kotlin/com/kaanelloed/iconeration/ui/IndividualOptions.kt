@@ -1,10 +1,15 @@
 package com.kaanelloed.iconeration.ui
 
+import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Matrix
+import android.graphics.Paint
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,6 +21,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Delete
@@ -28,6 +34,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
@@ -35,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,6 +54,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.vector.EmptyPath
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
@@ -247,6 +258,8 @@ fun CreateColumn(
 fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
     var imageUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
     var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
+    var zoomLevel by remember { mutableFloatStateOf(1f) }
+    var uploadedImage by rememberSaveable { mutableStateOf(null as Bitmap?) }
     val maxSize = 500
 
     Column(
@@ -255,13 +268,49 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
     ) {
         UploadButton { imageUri = it }
         if (imageUri != Uri.EMPTY) {
-            AsyncImage(imageUri, contentDescription = null)
+            if (uploadedImage == null) {
+                val contentResolver = getCurrentContext().contentResolver
+                uploadedImage = contentResolver.openInputStream(imageUri).use { BitmapFactory.decodeStream(it) }
+            }
+
+            val adjustedImage = uploadedImage!!.toDrawable().shrinkIfBiggerThan(maxSize)
+
+            val x = (adjustedImage.width - (adjustedImage.width * zoomLevel)) / 2
+            val y = (adjustedImage.height - (adjustedImage.height * zoomLevel)) / 2
+
+            val d = Bitmap.createBitmap(adjustedImage.width, adjustedImage.height, Bitmap.Config.ARGB_8888)
+            val mtx = Matrix()
+            mtx.postScale(zoomLevel, zoomLevel)
+            mtx.postTranslate(x, y)
+
+            val canvas = Canvas(d)
+            canvas.drawBitmap(adjustedImage, mtx, Paint())
+
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                AsyncImage(
+                    imageUri, contentDescription = null, modifier = Modifier
+                        .padding(2.dp)
+                        .size(108.dp, 108.dp)
+                )
+                
+                if (asAdaptiveIcon) {
+                    Image(
+                        painter = BitmapPainter(d.asImageBitmap()),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .padding(2.dp)
+                            .size(108.dp, 108.dp)
+                    )
+                }
+            }
+
             AdaptiveIconSwitch(asAdaptiveIcon, onChange = { asAdaptiveIcon = it })
+            
+            if (asAdaptiveIcon) {
+                ZoomSlider(zoomLevel, onChange = { zoomLevel = it })
+            }
 
-            val contentResolver = getCurrentContext().contentResolver
-            val uploadedImage = contentResolver.openInputStream(imageUri).use { BitmapFactory.decodeStream(it) }
-
-            onChange(UploadedOptions(uploadedImage.toDrawable().shrinkIfBiggerThan(maxSize), asAdaptiveIcon))
+            onChange(UploadedOptions(uploadedImage!!.toDrawable().shrinkIfBiggerThan(maxSize), asAdaptiveIcon))
         }
     }
 }
@@ -280,6 +329,38 @@ fun UploadButton(onChange: (newValue: Uri) -> Unit) {
         launcher.launch("image/*")
     }) {
         Text(stringResource(R.string.uploadImage))
+    }
+}
+
+@Composable
+fun ZoomSlider(value: Float, onChange: (newValue: Float) -> Unit) {
+    var sliderPosition by remember { mutableFloatStateOf(value) }
+
+    Slider(
+        value = sliderPosition,
+        onValueChange = {
+            sliderPosition = it
+            onChange(it)},
+        colors = SliderDefaults.colors(
+            thumbColor = MaterialTheme.colorScheme.secondary,
+            activeTrackColor = MaterialTheme.colorScheme.secondary,
+            inactiveTrackColor = MaterialTheme.colorScheme.secondaryContainer,
+        ),
+        steps = 0,
+        valueRange = 0f..2f
+    )
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(text = (sliderPosition * 100).toInt().toString() + "%")
+        IconButton(onClick = {
+            sliderPosition = 1f
+            onChange(sliderPosition)
+        }) {
+            Icon(
+                imageVector = Icons.Filled.Clear,
+                contentDescription = "Clear",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 }
 
