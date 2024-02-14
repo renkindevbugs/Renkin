@@ -51,17 +51,24 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Color.Companion.Red
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.EmptyPath
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.icon.creator.IconGenerator
@@ -282,16 +289,8 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
 
             val image = uploadedImage!!
 
-            val x = (image.width - (image.width * zoomLevel)) / 2
-            val y = (image.height - (image.height * zoomLevel)) / 2
-
-            val zoomedImage = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888)
-            val mtx = Matrix()
-            mtx.postScale(zoomLevel, zoomLevel)
-            mtx.postTranslate(x, y)
-
-            val canvas = Canvas(zoomedImage)
-            canvas.drawBitmap(image, mtx, Paint())
+            val zoomedImage = zoomBitmap(image, zoomLevel)
+            val mask = createMask(image)
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 Image(
@@ -309,6 +308,18 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
                         modifier = Modifier
                             .padding(2.dp)
                             .size(108.dp, 108.dp)
+                            .drawWithContent {
+                                drawContent()
+                                drawImage(
+                                    mask.asImageBitmap(),
+                                    srcSize = IntSize(mask.width, mask.height),
+                                    dstSize = IntSize(
+                                        this.size.width.toInt(),
+                                        this.size.height.toInt()
+                                    ),
+                                    blendMode = BlendMode.Overlay
+                                )
+                            }
                     )
                 }
             }
@@ -322,6 +333,53 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
             onChange(UploadedOptions(zoomedImage, asAdaptiveIcon))
         }
     }
+}
+
+@Composable
+private fun zoomBitmap(image: Bitmap, zoomLevel: Float): Bitmap {
+    val x = (image.width - (image.width * zoomLevel)) / 2
+    val y = (image.height - (image.height * zoomLevel)) / 2
+
+    val zoomedImage = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888)
+    val mtx = Matrix()
+    mtx.postScale(zoomLevel, zoomLevel)
+    mtx.postTranslate(x, y)
+
+    val canvas = Canvas(zoomedImage)
+    canvas.drawBitmap(image, mtx, Paint())
+
+    return zoomedImage
+}
+
+@Composable
+private fun createMask(image: Bitmap): Bitmap {
+    val startActiveZone = image.width / 6f
+    val topActiveZone = image.height / 6f
+    val endActiveZone = image.width - startActiveZone
+    val bottomActiveZone = image.height - topActiveZone
+
+    val path = Path()
+    path.moveTo(0f, 0f)
+    path.lineTo(image.width.toFloat(), 0f)
+    path.lineTo(image.width.toFloat(), image.height.toFloat())
+    path.lineTo(0f, image.height.toFloat())
+    path.close()
+
+    path.moveTo(startActiveZone, topActiveZone)
+    path.lineTo(startActiveZone, bottomActiveZone)
+    path.lineTo(endActiveZone, bottomActiveZone)
+    path.lineTo(endActiveZone, topActiveZone)
+    path.close()
+
+    val paint = Paint()
+    paint.color = Red.toArgb()
+    paint.style = Paint.Style.FILL
+
+    val mask = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888)
+    val maskCanvas = Canvas(mask)
+    maskCanvas.drawPath(path.asAndroidPath(), paint)
+
+    return mask
 }
 
 @Composable
