@@ -278,12 +278,12 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
             val x = (adjustedImage.width - (adjustedImage.width * zoomLevel)) / 2
             val y = (adjustedImage.height - (adjustedImage.height * zoomLevel)) / 2
 
-            val d = Bitmap.createBitmap(adjustedImage.width, adjustedImage.height, Bitmap.Config.ARGB_8888)
+            val zoomedImage = Bitmap.createBitmap(adjustedImage.width, adjustedImage.height, Bitmap.Config.ARGB_8888)
             val mtx = Matrix()
             mtx.postScale(zoomLevel, zoomLevel)
             mtx.postTranslate(x, y)
 
-            val canvas = Canvas(d)
+            val canvas = Canvas(zoomedImage)
             canvas.drawBitmap(adjustedImage, mtx, Paint())
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
@@ -295,7 +295,7 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
                 
                 if (asAdaptiveIcon) {
                     Image(
-                        painter = BitmapPainter(d.asImageBitmap()),
+                        painter = BitmapPainter(zoomedImage.asImageBitmap()),
                         contentDescription = null,
                         modifier = Modifier
                             .padding(2.dp)
@@ -310,7 +310,7 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
                 ZoomSlider(zoomLevel, onChange = { zoomLevel = it })
             }
 
-            onChange(UploadedOptions(uploadedImage!!.toDrawable().shrinkIfBiggerThan(maxSize), asAdaptiveIcon))
+            onChange(UploadedOptions(zoomedImage, asAdaptiveIcon))
         }
     }
 }
