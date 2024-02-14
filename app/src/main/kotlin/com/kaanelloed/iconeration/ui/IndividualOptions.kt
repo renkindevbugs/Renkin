@@ -63,7 +63,6 @@ import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.icon.creator.IconGenerator
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
@@ -257,6 +256,7 @@ fun CreateColumn(
 @Composable
 fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
     var imageUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
+    var currentUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
     var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
     var zoomLevel by remember { mutableFloatStateOf(1f) }
     var uploadedImage by rememberSaveable { mutableStateOf(null as Bitmap?) }
@@ -268,27 +268,36 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
     ) {
         UploadButton { imageUri = it }
         if (imageUri != Uri.EMPTY) {
-            if (uploadedImage == null) {
-                val contentResolver = getCurrentContext().contentResolver
-                uploadedImage = contentResolver.openInputStream(imageUri).use { BitmapFactory.decodeStream(it) }
+            if (imageUri != currentUri) {
+                uploadedImage = null
+                currentUri = imageUri
             }
 
-            val adjustedImage = uploadedImage!!.toDrawable().shrinkIfBiggerThan(maxSize)
+            if (uploadedImage == null) {
+                val contentResolver = getCurrentContext().contentResolver
+                uploadedImage =
+                    contentResolver.openInputStream(imageUri).use { BitmapFactory.decodeStream(it) }
+                        .toDrawable().shrinkIfBiggerThan(maxSize)
+            }
 
-            val x = (adjustedImage.width - (adjustedImage.width * zoomLevel)) / 2
-            val y = (adjustedImage.height - (adjustedImage.height * zoomLevel)) / 2
+            val image = uploadedImage!!
 
-            val zoomedImage = Bitmap.createBitmap(adjustedImage.width, adjustedImage.height, Bitmap.Config.ARGB_8888)
+            val x = (image.width - (image.width * zoomLevel)) / 2
+            val y = (image.height - (image.height * zoomLevel)) / 2
+
+            val zoomedImage = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888)
             val mtx = Matrix()
             mtx.postScale(zoomLevel, zoomLevel)
             mtx.postTranslate(x, y)
 
             val canvas = Canvas(zoomedImage)
-            canvas.drawBitmap(adjustedImage, mtx, Paint())
+            canvas.drawBitmap(image, mtx, Paint())
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                AsyncImage(
-                    imageUri, contentDescription = null, modifier = Modifier
+                Image(
+                    painter = BitmapPainter(image.asImageBitmap()),
+                    contentDescription = null,
+                    modifier = Modifier
                         .padding(2.dp)
                         .size(108.dp, 108.dp)
                 )
