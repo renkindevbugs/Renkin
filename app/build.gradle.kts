@@ -69,7 +69,6 @@ dependencies {
     androidTestImplementation(composeBom)
     implementation("androidx.compose.material3:material3-android:1.2.0")
     implementation("androidx.activity:activity-compose:1.8.2")
-    implementation("io.coil-kt:coil-compose:2.5.0")
     implementation("com.github.skydoves:colorpicker-compose:1.0.7")
 
     //Data
