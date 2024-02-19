@@ -324,6 +324,10 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
                 }
             }
 
+            if (asAdaptiveIcon) {
+                Text(stringResource(R.string.deadZone), color = Red)
+            }
+
             AdaptiveIconSwitch(asAdaptiveIcon, onChange = { asAdaptiveIcon = it })
             
             if (asAdaptiveIcon) {
