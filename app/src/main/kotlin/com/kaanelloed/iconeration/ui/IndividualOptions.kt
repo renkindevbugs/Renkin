@@ -267,6 +267,7 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
     var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
     var zoomLevel by remember { mutableFloatStateOf(1f) }
     var uploadedImage by rememberSaveable { mutableStateOf(null as Bitmap?) }
+    var mask by rememberSaveable { mutableStateOf(null as Bitmap?) }
     val maxSize = 500
 
     Column(
@@ -278,6 +279,7 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
             if (imageUri != currentUri) {
                 uploadedImage = null
                 currentUri = imageUri
+                mask = null
             }
 
             if (uploadedImage == null) {
@@ -285,16 +287,15 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
                 uploadedImage =
                     contentResolver.openInputStream(imageUri).use { BitmapFactory.decodeStream(it) }
                         .toDrawable().shrinkIfBiggerThan(maxSize)
+
+                mask = createMask(uploadedImage!!)
             }
 
-            val image = uploadedImage!!
-
-            val zoomedImage = zoomBitmap(image, zoomLevel)
-            val mask = createMask(image)
+            val zoomedImage = zoomBitmap(uploadedImage!!, zoomLevel)
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 Image(
-                    painter = BitmapPainter(image.asImageBitmap()),
+                    painter = BitmapPainter(uploadedImage!!.asImageBitmap()),
                     contentDescription = null,
                     modifier = Modifier
                         .padding(2.dp)
@@ -311,8 +312,8 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
                             .drawWithContent {
                                 drawContent()
                                 drawImage(
-                                    mask.asImageBitmap(),
-                                    srcSize = IntSize(mask.width, mask.height),
+                                    mask!!.asImageBitmap(),
+                                    srcSize = IntSize(mask!!.width, mask!!.height),
                                     dstSize = IntSize(
                                         this.size.width.toInt(),
                                         this.size.height.toInt()
