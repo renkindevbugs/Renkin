@@ -59,8 +59,8 @@ dependencies {
     implementation("io.github.reandroid:ARSCLib:1.2.4")
     implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
     implementation("com.android.tools.build:apksig:8.2.2")
-    implementation("ru.solrudev.ackpine:ackpine-core:0.5.0")
-    implementation("ru.solrudev.ackpine:ackpine-ktx:0.5.0")
+    implementation("ru.solrudev.ackpine:ackpine-core:0.5.1")
+    implementation("ru.solrudev.ackpine:ackpine-ktx:0.5.1")
 
     //Compose
     val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
