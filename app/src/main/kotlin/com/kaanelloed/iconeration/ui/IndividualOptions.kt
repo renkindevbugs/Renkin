@@ -265,9 +265,9 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
     var imageUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
     var currentUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
     var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
-    var zoomLevel by remember { mutableFloatStateOf(1f) }
-    var uploadedImage by rememberSaveable { mutableStateOf(null as Bitmap?) }
-    var mask by rememberSaveable { mutableStateOf(null as Bitmap?) }
+    var zoomLevel by rememberSaveable { mutableFloatStateOf(1f) }
+    var uploadedImage by remember { mutableStateOf(null as Bitmap?) }
+    var mask by remember { mutableStateOf(null as Bitmap?) }
     val maxSize = 500
 
     Column(
@@ -475,8 +475,8 @@ fun EditVectorColumn(vector: ImageVector, onChange: (options: IndividualOptions)
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        var paths: List<VectorPath> by rememberSaveable { mutableStateOf(listOf()) }
-        var firstLoad by rememberSaveable { mutableStateOf(true) }
+        var paths: List<VectorPath> by remember { mutableStateOf(listOf()) }
+        var firstLoad by remember { mutableStateOf(true) }
         var automaticallyCenter by rememberSaveable { mutableStateOf(true) }
 
         if (firstLoad) {
