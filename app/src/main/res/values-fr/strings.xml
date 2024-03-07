@@ -49,4 +49,5 @@
     <string name="asAdaptiveIcon">Exporter comme une icône adaptative</string>
     <string name="automaticallyCenter">Centrer automatiquement</string>
     <string name="deadZone">Zone morte</string>
+    <string name="colorizeIconPack">Appliquer la couleur au pack d\'îcones</string>
 </resources>

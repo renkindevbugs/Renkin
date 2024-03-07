@@ -241,6 +241,8 @@ fun CreateColumn(
     var genType by rememberSaveable { mutableStateOf(GenerationType.PATH) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
+    var colorizeIconPack by rememberSaveable { mutableStateOf(false) }
+
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
 
     var iconPack by rememberSaveable { mutableStateOf("") }
@@ -248,6 +250,10 @@ fun CreateColumn(
     Column {
         TypeDropdown(genType) { genType = it }
         IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
+        if (iconPack != "") {
+            ColorizeIconPackSwitch(colorizeIconPack) { colorizeIconPack = it }
+        }
+
         ColorButton(stringResource(R.string.iconColor), Color.White) { iconColor = it }
 
         if (genType == GenerationType.PATH) {
@@ -255,7 +261,7 @@ fun CreateColumn(
             MonochromeSwitch(useMonochrome) { useMonochrome = it }
         }
 
-        val generatingOptions = IconGenerator.GenerationOptions(android.graphics.Color.parseColor(iconColor.toHexString()), useMonochrome, useVector)
+        val generatingOptions = IconGenerator.GenerationOptions(iconColor.toInt(), useMonochrome, useVector, colorizeIconPack = colorizeIconPack)
         onChange(CreatedOptions(generatingOptions, genType, iconPack))
     }
 }

@@ -38,6 +38,7 @@ import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.getBackgroundColorValue
+import com.kaanelloed.iconeration.data.getColorizeIconPackValue
 import com.kaanelloed.iconeration.data.getExportThemedValue
 import com.kaanelloed.iconeration.data.getIconColorValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
@@ -45,6 +46,7 @@ import com.kaanelloed.iconeration.data.getMonochromeValue
 import com.kaanelloed.iconeration.data.getTypeLabels
 import com.kaanelloed.iconeration.data.getTypeValue
 import com.kaanelloed.iconeration.data.setBackgroundColor
+import com.kaanelloed.iconeration.data.setColorizeIconPack
 import com.kaanelloed.iconeration.data.setExportThemed
 import com.kaanelloed.iconeration.data.setIconColor
 import com.kaanelloed.iconeration.data.setIncludeVector
@@ -76,6 +78,7 @@ fun OptionsCard(
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
     var useThemed by rememberSaveable { mutableStateOf(false) }
+    var colorizeIconPack by rememberSaveable { mutableStateOf(false) }
 
     var iconPack by rememberSaveable { mutableStateOf("") }
 
@@ -85,6 +88,7 @@ fun OptionsCard(
     useVector = prefs.getIncludeVectorValue()
     useMonochrome = prefs.getMonochromeValue()
     useThemed = prefs.getExportThemedValue()
+    colorizeIconPack = prefs.getColorizeIconPackValue()
 
     val scope = rememberCoroutineScope()
 
@@ -116,6 +120,10 @@ fun OptionsCard(
             if (expanded) {
                 TypeDropdown(genType) { scope.launch { prefs.setType(it) } }
                 IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
+
+                if (iconPack != "") {
+                    ColorizeIconPackSwitch(colorizeIconPack) { scope.launch { prefs.setColorizeIconPack(it) } }
+                }
 
                 if (showIconColor(genType, useThemed)) {
                     ColorButton(stringResource(R.string.iconColor), currentColor) { scope.launch { prefs.setIconColor(it) } }
@@ -391,4 +399,26 @@ fun OptionInfoDialog(text: String, onDismiss: () -> Unit) {
         confirmButton = { },
         dismissButton = { }
     )
+}
+
+@Composable
+fun ColorizeIconPackSwitch(colorize: Boolean, onChange: (newValue: Boolean) -> Unit) {
+    var checked by rememberSaveable { mutableStateOf(false) }
+
+    checked = colorize
+
+    Row(modifier = Modifier
+        .fillMaxWidth()
+        .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.colorizeIconPack))
+        Switch(
+            checked = checked,
+            onCheckedChange = {
+                checked = it
+                onChange(it)
+            },
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
 }

@@ -303,6 +303,18 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
             return editor.center()
         }
 
+        fun MutableVectorGroup.editPaths(stroke: Float) {
+            for (child in this.children) {
+                if (child is MutableVectorGroup) {
+                    child.editPaths(stroke)
+                }
+
+                if (child is MutableVectorPath) {
+                    child.strokeLineWidth = stroke
+                }
+            }
+        }
+
         fun MutableVectorGroup.editPaths(stroke: Float, fillColor: Brush, strokeColor: Brush) {
             for (child in this.children) {
                 if (child is MutableVectorGroup) {

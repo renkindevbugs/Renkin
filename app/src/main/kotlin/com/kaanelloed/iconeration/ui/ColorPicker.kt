@@ -1,5 +1,6 @@
 package com.kaanelloed.iconeration.ui
 
+import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -166,5 +167,9 @@ fun Color.toHexString(): String {
 }
 
 fun String.toColor(): Color {
-    return Color(android.graphics.Color.parseColor(this))
+    return Color(AndroidColor.parseColor(this))
+}
+
+fun Color.toInt(): Int {
+    return AndroidColor.parseColor(this.toHexString())
 }

@@ -62,6 +62,7 @@ import com.kaanelloed.iconeration.apk.ApkUninstaller
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.data.getBackgroundColorValue
+import com.kaanelloed.iconeration.data.getColorizeIconPackValue
 import com.kaanelloed.iconeration.data.getExportThemedValue
 import com.kaanelloed.iconeration.data.getIconColorValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
@@ -233,6 +234,7 @@ fun RefreshButton(getIconPackageName: () -> String) {
     val vector = prefs.getIncludeVectorValue()
     val iconColorValue = prefs.getIconColorValue()
     val bgColorValue = prefs.getBackgroundColorValue()
+    val colorizeIconPack = prefs.getColorizeIconPackValue()
     val themed = prefs.getExportThemedValue()
     val dynamicColor = themed && supportDynamicColors()
 
@@ -257,15 +259,15 @@ fun RefreshButton(getIconPackageName: () -> String) {
                 iconPackApps = ApplicationManager(ctx).getIconPackApplicationResources(iconPackageName, packApps)
             }
 
-            var iconColor = android.graphics.Color.parseColor(iconColorValue.toHexString())
-            var bgColor = android.graphics.Color.parseColor(bgColorValue.toHexString())
+            var iconColor = iconColorValue.toInt()
+            var bgColor = bgColorValue.toInt()
 
             if (dynamicColor) {
                 iconColor = activity.resources.getColor(R.color.icon_color, null)
                 bgColor = activity.resources.getColor(R.color.icon_background_color, null)
             }
 
-            val opt = IconGenerator.GenerationOptions(iconColor, monochrome, vector, themed, bgColor)
+            val opt = IconGenerator.GenerationOptions(iconColor, monochrome, vector, themed, bgColor, colorizeIconPack)
             IconGenerator(ctx, activity, opt, iconPackApps).generateIcons(activity.applicationList, type)
         }
     }) {
@@ -479,6 +481,8 @@ fun SearchBar(onSearch: (String) -> Unit) {
                         tint = MaterialTheme.colorScheme.primary
                     )
                 }},
-            modifier = Modifier.fillMaxWidth().padding(16.dp, 0.dp, 16.dp, 8.dp))
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp, 0.dp, 16.dp, 8.dp))
     }
 }

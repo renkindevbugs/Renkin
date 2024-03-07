@@ -272,16 +272,26 @@ class IconGenerator(
     }
 
     private fun changeIconPackColor(app: PackageInfoStruct, icon: Drawable) {
-        val coloredIcon = colorIcon(icon)
-        activity.editApplication(app, app.changeExport(BitmapIcon(coloredIcon)))
+        if (options.colorizeIconPack) {
+            val coloredIcon = colorIcon(icon)
+            activity.editApplication(app, app.changeExport(BitmapIcon(coloredIcon)))
+        }
+        else {
+            val iconToShow = getIconBitmap(icon)
+            activity.editApplication(app, app.changeExport(BitmapIcon(iconToShow)))
+        }
     }
 
-    private fun colorIcon(icon: Drawable): Bitmap {
-        val oldIcon = if (icon is AdaptiveIconDrawable) {
+    private fun getIconBitmap(icon: Drawable): Bitmap {
+        return if (icon is AdaptiveIconDrawable) {
             ForegroundIconDrawable(icon.foreground).toBitmap()
         } else {
             icon.toBitmap()
         }
+    }
+
+    private fun colorIcon(icon: Drawable): Bitmap {
+        val oldIcon = getIconBitmap(icon)
 
         val coloredIcon = oldIcon.copy(oldIcon.config, true)
         val paint = Paint()
@@ -325,8 +335,13 @@ class IconGenerator(
         val mutableVector = vectorIcon.vector.toMutableImageVector().resizeAndCenter().scaleAtCenter(0.5f)
 
         val stroke = mutableVector.viewportHeight / 48 //1F at 48
-        mutableVector.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
-        mutableVector.tintColor = Color.Unspecified
+        if (options.colorizeIconPack) {
+            mutableVector.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+            mutableVector.tintColor = Color.Unspecified
+        }
+        else {
+            mutableVector.root.editPaths(stroke)
+        }
 
         activity.editApplication(app, app.changeExport(VectorIcon(mutableVector)))
         return true
@@ -361,7 +376,8 @@ class IconGenerator(
         val monochrome: Boolean,
         val vector: Boolean,
         val themed: Boolean = false,
-        val bgColor: Int = 0
+        val bgColor: Int = 0,
+        val colorizeIconPack: Boolean = false
     )
 
     private fun Bitmap.changeBackgroundColor(color: Int): Bitmap {
