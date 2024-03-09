@@ -186,12 +186,16 @@ fun OpenAppOptions(
 
             when (options) {
                 is CreatedOptions -> {
-                    val iconBuilder = IconGenerator(ctx, activity, options.generatingOptions, emptyMap())
-
                     if (options.iconPackageName != "") {
                         val key = activity.iconPackApplications.keys.find { it.packageName == options.iconPackageName }
                         val apps = activity.iconPackApplications[key]!!
                         val packApp = apps.find { it.packageName == app.packageName }
+
+                        val iconPackApps = ApplicationManager(ctx).getIconPackApplicationResources(
+                            options.iconPackageName,
+                            apps
+                        )
+                        val iconBuilder = IconGenerator(ctx, activity, options.generatingOptions, iconPackApps)
 
                         if (packApp != null) {
                             val icon = ApplicationManager(ctx).getResIcon(packApp.iconPackName, packApp.resourceID)!!
@@ -200,6 +204,7 @@ fun OpenAppOptions(
                             iconBuilder.generateIcons(app, options.generatingType)
                         }
                     } else {
+                        val iconBuilder = IconGenerator(ctx, activity, options.generatingOptions, emptyMap())
                         iconBuilder.generateIcons(app, options.generatingType)
                     }
                 }
@@ -387,7 +392,7 @@ fun TitleBar(getIconPackageName: () -> String) {
     }
 
     if (openInfo) {
-        InfoDialog() {
+        InfoDialog {
             openInfo = false
         }
     }

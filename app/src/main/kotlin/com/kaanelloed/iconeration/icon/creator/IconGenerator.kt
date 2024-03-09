@@ -307,7 +307,7 @@ class IconGenerator(
     }
 
     private fun exportIconPackXML(app: PackageInfoStruct): Boolean {
-        val iconPackApp = iconPackApplication(app.packageName)!!
+        val iconPackApp = iconPackApplication(app.packageName) ?: return false
 
         val res = ApplicationManager(ctx).getResources(iconPackApp.iconPackName) ?: return false
 
