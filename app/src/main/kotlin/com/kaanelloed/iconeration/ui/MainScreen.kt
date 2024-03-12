@@ -1,7 +1,6 @@
 package com.kaanelloed.iconeration.ui
 
 import android.graphics.drawable.Drawable
-import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -46,7 +45,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -112,6 +110,7 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
     val dynamicColor = themed && supportDynamicColors()
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
+    var openWarning by rememberSaveable { mutableStateOf(false) }
 
     Row(modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically) {
@@ -159,7 +158,13 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
     if (openAppOptions) {
         OpenAppOptions(iconPacks, app, index) {
             openAppOptions = false
+            openWarning = it
         }
+    }
+    
+    if (openWarning) {
+        ShowToast(stringResource(id = R.string.syncText))
+        openWarning = false
     }
 }
 
@@ -168,19 +173,15 @@ fun OpenAppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     index: Int,
-    onDismiss: () -> Unit
+    onDismiss: (Boolean) -> Unit
 ) {
     val ctx = getCurrentContext()
     val activity = getCurrentMainActivity()
 
-    val currentContext = LocalContext.current
-    val syncText = stringResource(id = R.string.syncText)
-    var openWarning by rememberSaveable { mutableStateOf(false) }
-
     AppOptions(iconPacks, app, { options ->
         CoroutineScope(Dispatchers.Default).launch {
             if (!activity.iconPackLoaded && options is CreatedOptions && options.iconPackageName != "") {
-                openWarning = true
+                onDismiss(true)
                 return@launch
             }
 
@@ -217,16 +218,13 @@ fun OpenAppOptions(
                     activity.editApplication(index, app.changeExport(VectorIcon(options.editedVector)))
                 }
             }
-        }
 
-        if (openWarning) {
-            Toast.makeText(currentContext, syncText, Toast.LENGTH_LONG).show()
-            openWarning = false
+            onDismiss(false)
         }
-
-        onDismiss()
-    }, { onDismiss() }) {
-        onDismiss()
+    }, {
+        onDismiss(false)
+    }) {
+        onDismiss(false)
         activity.editApplication(index, app.changeExport(EmptyIcon()))
     }
 }
@@ -284,7 +282,7 @@ fun RefreshButton(getIconPackageName: () -> String) {
     }
 
     if (openWarning) {
-        Toast.makeText(LocalContext.current, stringResource(id = R.string.syncText), Toast.LENGTH_LONG).show()
+        ShowToast(stringResource(id = R.string.syncText))
         openWarning = false
     }
 }
@@ -345,7 +343,7 @@ fun BuildPackButton() {
     }
 
     if (openSuccess) {
-        Toast.makeText(LocalContext.current, stringResource(id = R.string.iconPackInstalled), Toast.LENGTH_LONG).show()
+        ShowToast(stringResource(id = R.string.iconPackInstalled))
         openSuccess = false
     }
 }

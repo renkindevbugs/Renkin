@@ -39,6 +39,6 @@ fun getPreferences(): DataStore<Preferences> {
 }
 
 @Composable
-fun Toast(text: String) {
+fun ShowToast(text: String) {
     Toast.makeText(LocalContext.current, text, Toast.LENGTH_LONG).show()
 }

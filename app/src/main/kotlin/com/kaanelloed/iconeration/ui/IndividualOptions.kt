@@ -298,7 +298,7 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
             }
 
             if (uploadedImage == null) {
-                Toast(stringResource(R.string.uploadImageError))
+                ShowToast(stringResource(R.string.uploadImageError))
                 return
             }
 
