@@ -50,4 +50,5 @@
     <string name="automaticallyCenter">Centrer automatiquement</string>
     <string name="deadZone">Zone morte</string>
     <string name="colorizeIconPack">Appliquer la couleur au pack d\'îcones</string>
+    <string name="uploadImageError">L\'image ne peut pas être téléversé</string>
 </resources>

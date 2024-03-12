@@ -7,6 +7,7 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -289,12 +290,16 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
             }
 
             if (uploadedImage == null) {
-                val contentResolver = getCurrentContext().contentResolver
-                uploadedImage =
-                    contentResolver.openInputStream(imageUri).use { BitmapFactory.decodeStream(it) }
-                        .toDrawable().shrinkIfBiggerThan(maxSize)
+                uploadedImage = getBitmapFromURI(imageUri)?.toDrawable()?.shrinkIfBiggerThan(maxSize)
 
-                mask = createMask(uploadedImage!!)
+                if (uploadedImage != null) {
+                    mask = createMask(uploadedImage!!)
+                }
+            }
+
+            if (uploadedImage == null) {
+                Toast(stringResource(R.string.uploadImageError))
+                return
             }
 
             val zoomedImage = zoomBitmap(uploadedImage!!, zoomLevel)
@@ -347,6 +352,12 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
 }
 
 @Composable
+private fun getBitmapFromURI(uri: Uri): Bitmap? {
+    val contentResolver = getCurrentContext().contentResolver
+    return contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it) } ?: null
+}
+
+@Composable
 private fun zoomBitmap(image: Bitmap, zoomLevel: Float): Bitmap {
     val x = (image.width - (image.width * zoomLevel)) / 2
     val y = (image.height - (image.height * zoomLevel)) / 2
@@ -396,7 +407,7 @@ private fun createMask(image: Bitmap): Bitmap {
 @Composable
 fun UploadButton(onChange: (newValue: Uri) -> Unit) {
     val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.PickVisualMedia()
     ) { imageUri ->
         if (imageUri != null) {
             onChange(imageUri)
@@ -404,7 +415,9 @@ fun UploadButton(onChange: (newValue: Uri) -> Unit) {
     }
 
     Button(onClick = {
-        launcher.launch("image/*")
+        launcher.launch(
+            PickVisualMediaRequest(mediaType = ActivityResultContracts.PickVisualMedia.ImageOnly)
+        )
     }) {
         Text(stringResource(R.string.uploadImage))
     }

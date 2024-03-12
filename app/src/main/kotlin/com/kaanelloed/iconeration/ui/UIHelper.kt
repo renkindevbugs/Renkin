@@ -3,6 +3,7 @@ package com.kaanelloed.iconeration.ui
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 import androidx.datastore.core.DataStore
@@ -35,4 +36,9 @@ fun getCurrentMainActivity(): MainActivity {
 @Composable
 fun getPreferences(): DataStore<Preferences> {
     return getCurrentContext().dataStore
+}
+
+@Composable
+fun Toast(text: String) {
+    Toast.makeText(LocalContext.current, text, Toast.LENGTH_LONG).show()
 }
