@@ -58,16 +58,16 @@ dependencies {
     //Apk related
     implementation("io.github.reandroid:ARSCLib:1.2.4")
     implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
-    implementation("com.android.tools.build:apksig:8.2.2")
+    implementation("com.android.tools.build:apksig:8.3.0")
     implementation("ru.solrudev.ackpine:ackpine-core:0.5.1")
     implementation("ru.solrudev.ackpine:ackpine-ktx:0.5.1")
 
     //Compose
-    val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
+    val composeBom = platform("androidx.compose:compose-bom:2024.02.02")
     implementation(composeBom)
     debugImplementation(composeBom)
     androidTestImplementation(composeBom)
-    implementation("androidx.compose.material3:material3-android:1.2.0")
+    implementation("androidx.compose.material3:material3-android:1.2.1")
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation("com.github.skydoves:colorpicker-compose:1.0.7")
 
