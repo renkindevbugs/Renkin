@@ -361,6 +361,10 @@ private fun getBitmapFromURI(uri: Uri): Bitmap? {
 
 @Composable
 private fun zoomBitmap(image: Bitmap, zoomLevel: Float): Bitmap {
+    if (zoomLevel == 1f) {
+        return image
+    }
+
     val x = (image.width - (image.width * zoomLevel)) / 2
     val y = (image.height - (image.height * zoomLevel)) / 2
 
