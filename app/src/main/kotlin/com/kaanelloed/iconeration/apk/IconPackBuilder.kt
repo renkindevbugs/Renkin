@@ -185,8 +185,8 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         activityName.valueAsString = "com.kaanelloed.iconerationiconpack.MainActivity"
 
         val exported = activity.getOrCreateAndroidAttribute(
-            NAME_exported,
-            ID_exported
+            AndroidManifestBlock.NAME_exported,
+            AndroidManifestBlock.ID_exported
         )
         exported.valueAsBoolean = true
     }
@@ -289,7 +289,4 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         val signer = Signer(opt)
         signer.signApk(file, outFile)
     }
-
-    private val NAME_exported = "exported"
-    private val ID_exported = 0x01010010
 }
