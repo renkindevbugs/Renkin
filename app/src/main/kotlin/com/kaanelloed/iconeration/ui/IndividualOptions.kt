@@ -86,6 +86,7 @@ import com.kaanelloed.iconeration.vector.MutableVectorPath
 import com.kaanelloed.iconeration.vector.PathExporter.Companion.toStringPath
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.applyAndRemoveGroup
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.center
+import kotlin.math.max
 
 @Composable
 fun OptionsDialog(
@@ -293,6 +294,7 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
                 uploadedImage = getBitmapFromURI(imageUri)?.toDrawable()?.shrinkIfBiggerThan(maxSize)
 
                 if (uploadedImage != null) {
+                    uploadedImage = squareBitmap(uploadedImage!!)
                     mask = createMask(uploadedImage!!)
                 }
             }
@@ -371,6 +373,27 @@ private fun zoomBitmap(image: Bitmap, zoomLevel: Float): Bitmap {
     canvas.drawBitmap(image, mtx, Paint())
 
     return zoomedImage
+}
+
+@Composable
+private fun squareBitmap(image: Bitmap): Bitmap {
+    if (image.width == image.height) {
+        return image
+    }
+
+    val size = max(image.width, image.height)
+    val squaredImage = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+
+    val x = (size - image.width) / 2f
+    val y = (size - image.height) / 2f
+
+    val mtx = Matrix()
+    mtx.postTranslate(x, y)
+
+    val canvas = Canvas(squaredImage)
+    canvas.drawBitmap(image, mtx, Paint())
+
+    return squaredImage
 }
 
 @Composable
