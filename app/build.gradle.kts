@@ -1,7 +1,7 @@
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-    id("com.google.devtools.ksp")
+    alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)
+    alias(libs.plugins.kotlin.ksp)
 }
 
 android {
@@ -10,8 +10,8 @@ android {
 
     defaultConfig {
         applicationId = "com.kaanelloed.iconeration"
-        minSdk = 26
-        targetSdk = 34
+        minSdk = libs.versions.android.minSdk.get().toInt()
+        targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 28
         versionName = "1.4.3"
 
@@ -46,40 +46,40 @@ android {
         buildConfig = true
     }
     composeOptions {
-        kotlinCompilerExtensionVersion = "1.5.10"
+        kotlinCompilerExtensionVersion = libs.versions.kotlin.compiler.get()
     }
 }
 
 dependencies {
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.appcompat:appcompat:1.6.1")
-    implementation("com.google.android.material:material:1.11.0")
+    implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.appcompat)
+    implementation(libs.androidx.material)
 
     //Apk related
-    implementation("io.github.reandroid:ARSCLib:1.2.4")
-    implementation("org.bouncycastle:bcpkix-jdk15on:1.70")
-    implementation("com.android.tools.build:apksig:8.3.0")
-    implementation("ru.solrudev.ackpine:ackpine-core:0.5.1")
-    implementation("ru.solrudev.ackpine:ackpine-ktx:0.5.1")
+    implementation(libs.arscLib)
+    implementation(libs.bcpkix.jdk15on)
+    implementation(libs.apksig)
+    implementation(libs.ackpine.core)
+    implementation(libs.ackpine.ktx)
 
     //Compose
-    val composeBom = platform("androidx.compose:compose-bom:2024.02.02")
+    val composeBom = platform(libs.androidx.compose.bom)
     implementation(composeBom)
     debugImplementation(composeBom)
     androidTestImplementation(composeBom)
-    implementation("androidx.compose.material3:material3-android:1.2.1")
-    implementation("androidx.activity:activity-compose:1.8.2")
-    implementation("com.github.skydoves:colorpicker-compose:1.0.7")
+    implementation(libs.androidx.material3.android)
+    implementation(libs.androidx.activity.compose)
+    implementation(libs.colorpicker.compose)
 
     //Data
-    implementation("androidx.room:room-ktx:2.6.1")
-    ksp("androidx.room:room-compiler:2.6.1")
-    implementation("androidx.datastore:datastore-preferences:1.0.0")
+    implementation(libs.androidx.room.ktx)
+    ksp(libs.androidx.room.compiler)
+    implementation(libs.androidx.datastore.preferences)
 
     //Test
-    testImplementation("junit:junit:4.13.2")
-    androidTestImplementation("androidx.test.ext:junit:1.1.5")
-    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    testImplementation(libs.junit)
+    androidTestImplementation(libs.androidx.test.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
 }
 
 ksp {

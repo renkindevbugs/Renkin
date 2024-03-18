@@ -1,0 +1,52 @@
+[versions]
+ackpineCore = "0.5.1"
+agp = "8.3.0"
+androidx-activityCompose = "1.8.2"
+androidx-appcompat = "1.6.1"
+androidx-core-ktx = "1.12.0"
+androidx-espresso-core = "3.5.1"
+androidx-material = "1.11.0"
+androidx-test-junit = "1.1.5"
+apksig = "8.3.0"
+arsclib = "1.2.4"
+bcpkixJdk15on = "1.70"
+bom = "2024.02.02"
+colorpickerCompose = "1.0.7"
+datastorePreferences = "1.0.0"
+junit = "4.13.2"
+kotlin = "1.9.22"
+ksp = "1.9.22-1.0.17"
+material3Android = "1.2.1"
+roomKtx = "2.6.1"
+
+android-compileSdk = "34"
+android-minSdk = "26"
+android-targetSdk = "34"
+kotlin-compiler = "1.5.10"
+
+[libraries]
+ackpine-core = { module = "ru.solrudev.ackpine:ackpine-core", version.ref = "ackpineCore" }
+ackpine-ktx = { module = "ru.solrudev.ackpine:ackpine-ktx", version.ref = "ackpineCore" }
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "androidx-core-ktx" }
+androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activityCompose" }
+androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "androidx-appcompat" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "bom" }
+androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastorePreferences" }
+androidx-material = { group = "com.google.android.material", name = "material", version.ref = "androidx-material" }
+androidx-material3-android = { module = "androidx.compose.material3:material3-android", version.ref = "material3Android" }
+androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "roomKtx" }
+androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "roomKtx" }
+apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
+arscLib = { module = "io.github.reandroid:ARSCLib", version.ref = "arsclib" }
+bcpkix-jdk15on = { module = "org.bouncycastle:bcpkix-jdk15on", version.ref = "bcpkixJdk15on" }
+colorpicker-compose = { module = "com.github.skydoves:colorpicker-compose", version.ref = "colorpickerCompose" }
+
+junit = { group = "junit", name = "junit", version.ref = "junit" }
+androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-junit" }
+androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "androidx-espresso-core" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
+kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
