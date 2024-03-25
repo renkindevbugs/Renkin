@@ -14,15 +14,15 @@ bom = "2024.03.00"
 colorpickerCompose = "1.0.7"
 datastorePreferences = "1.0.0"
 junit = "4.13.2"
-kotlin = "1.9.22"
-ksp = "1.9.22-1.0.17"
+kotlin = "1.9.23"
+ksp = "1.9.23-1.0.19"
 material3Android = "1.2.1"
 roomKtx = "2.6.1"
 
 android-compileSdk = "34"
 android-minSdk = "26"
 android-targetSdk = "34"
-kotlin-compiler = "1.5.10"
+kotlin-compiler = "1.5.11"
 
 [libraries]
 ackpine-core = { module = "ru.solrudev.ackpine:ackpine-core", version.ref = "ackpineCore" }
