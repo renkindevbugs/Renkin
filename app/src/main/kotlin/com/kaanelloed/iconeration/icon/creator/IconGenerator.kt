@@ -30,6 +30,7 @@ import com.kaanelloed.iconeration.icon.parser.AdaptiveIconParser
 import com.kaanelloed.iconeration.icon.BaseIcon
 import com.kaanelloed.iconeration.icon.BitmapIcon
 import com.kaanelloed.iconeration.icon.EmptyIcon
+import com.kaanelloed.iconeration.icon.ExportableIcon
 import com.kaanelloed.iconeration.icon.parser.IconParser
 import com.kaanelloed.iconeration.icon.InsetIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
@@ -104,7 +105,7 @@ class IconGenerator(
                     getAppIconBitmap(app),
                     options.color
                 )
-                activity.editApplication(app, app.changeExport(BitmapIcon(edgeDetector.edgesImage)))
+                updateApplication(app, BitmapIcon(edgeDetector.edgesImage))
             } else changeIconPackColor(app, iconPack)
         }
     }
@@ -162,7 +163,7 @@ class IconGenerator(
             mutableVector.scaleAtCenter(0.5F)
         }
 
-        activity.editApplication(app, app.changeExport(VectorIcon(mutableVector)))
+        updateApplication(app, VectorIcon(mutableVector))
     }
 
     private fun generateColorQuantizationDetection(app: PackageInfoStruct) {
@@ -177,7 +178,7 @@ class IconGenerator(
             vector.scaleAtCenter(0.5F)
         }
 
-        activity.editApplication(app, app.changeExport(VectorIcon(vector)))
+        updateApplication(app, VectorIcon(vector))
     }
 
     private fun getAppIconBitmap(app: PackageInfoStruct, maxSize: Int = 500): Bitmap {
@@ -236,7 +237,7 @@ class IconGenerator(
             if (iconPack == null) {
                 val draw = gen.generateFirstLetter(app.appName, options.color, strokeWidth, size)
                 val newIcon = draw.toBitmap(size, size)
-                activity.editApplication(app, app.changeExport(BitmapIcon(addBackground(newIcon))))
+                updateApplication(app, BitmapIcon(addBackground(newIcon)))
             } else changeIconPackColor(app, iconPack)
         }
     }
@@ -252,7 +253,7 @@ class IconGenerator(
             if (iconPack == null) {
                 val draw = gen.generateTwoLetters(app.appName, options.color, strokeWidth, size)
                 val newIcon = draw.toBitmap(size, size)
-                activity.editApplication(app, app.changeExport(BitmapIcon(addBackground(newIcon))))
+                updateApplication(app, BitmapIcon(addBackground(newIcon)))
             } else changeIconPackColor(app, iconPack)
         }
     }
@@ -267,7 +268,7 @@ class IconGenerator(
             if (iconPack == null) {
                 val draw = gen.generateAppName(app.appName, options.color, size)
                 val newIcon = draw.toBitmap(size, size)
-                activity.editApplication(app, app.changeExport(BitmapIcon(addBackground(newIcon))))
+                updateApplication(app, BitmapIcon(addBackground(newIcon)))
             } else changeIconPackColor(app, iconPack)
         }
     }
@@ -288,11 +289,11 @@ class IconGenerator(
     private fun changeIconPackColor(app: PackageInfoStruct, icon: Drawable) {
         if (options.colorizeIconPack) {
             val coloredIcon = colorIcon(icon)
-            activity.editApplication(app, app.changeExport(BitmapIcon(coloredIcon)))
+            updateApplication(app, BitmapIcon(coloredIcon))
         }
         else {
             val iconToShow = getIconBitmap(icon)
-            activity.editApplication(app, app.changeExport(BitmapIcon(iconToShow)))
+            updateApplication(app, BitmapIcon(iconToShow))
         }
     }
 
@@ -357,7 +358,7 @@ class IconGenerator(
             mutableVector.root.editPaths(stroke)
         }
 
-        activity.editApplication(app, app.changeExport(VectorIcon(mutableVector)))
+        updateApplication(app, VectorIcon(mutableVector))
         return true
     }
 
@@ -385,8 +386,12 @@ class IconGenerator(
         return -1
     }
 
+    private fun updateApplication(application: PackageInfoStruct, icon: ExportableIcon) {
+        activity.editApplication(application, application.changeExport(icon))
+    }
+
     private fun emptyApplication(application: PackageInfoStruct) {
-        activity.editApplication(application, application.changeExport(EmptyIcon()))
+        updateApplication(application, EmptyIcon())
     }
 
     class GenerationOptions(
