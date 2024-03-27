@@ -29,6 +29,7 @@ import com.kaanelloed.iconeration.icon.AdaptiveIcon
 import com.kaanelloed.iconeration.icon.parser.AdaptiveIconParser
 import com.kaanelloed.iconeration.icon.BaseIcon
 import com.kaanelloed.iconeration.icon.BitmapIcon
+import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.parser.IconParser
 import com.kaanelloed.iconeration.icon.InsetIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
@@ -85,7 +86,9 @@ class IconGenerator(
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack != null) {
-                changeIconPackColor(app, iconPack)
+                colorizeFromIconPack(app, iconPack)
+            } else {
+                emptyApplication(app)
             }
         }
     }
@@ -380,6 +383,10 @@ class IconGenerator(
         }
 
         return -1
+    }
+
+    private fun emptyApplication(application: PackageInfoStruct) {
+        activity.editApplication(application, application.changeExport(EmptyIcon()))
     }
 
     class GenerationOptions(
