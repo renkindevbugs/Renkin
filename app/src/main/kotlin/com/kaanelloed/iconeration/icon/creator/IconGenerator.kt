@@ -66,6 +66,7 @@ class IconGenerator(
             GenerationType.ONE_LETTER -> generateFirstLetter()
             GenerationType.TWO_LETTERS -> generateTwoLetter()
             GenerationType.APP_NAME -> generateAppName()
+            GenerationType.ICON_PACK_ONLY -> generateOnlyIconPack()
         }
     }
 
@@ -76,6 +77,16 @@ class IconGenerator(
             }
         } else {
             changeIconPackColor(application, icon)
+        }
+    }
+
+    private fun generateOnlyIconPack() {
+        for (app in apps) {
+            val iconPack = iconPackApplicationIcon(app.packageName)
+
+            if (iconPack != null) {
+                changeIconPackColor(app, iconPack)
+            }
         }
     }
 

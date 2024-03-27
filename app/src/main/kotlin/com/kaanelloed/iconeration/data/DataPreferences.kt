@@ -216,7 +216,8 @@ fun getTypeLabels(): Map<GenerationType, String> {
         , GenerationType.EDGE to stringResource(id = R.string.edgeDetection)
         , GenerationType.ONE_LETTER to stringResource(id = R.string.firstLetter)
         , GenerationType.TWO_LETTERS to stringResource(id = R.string.twoLetters)
-        , GenerationType.APP_NAME to stringResource(id = R.string.applicationName))
+        , GenerationType.APP_NAME to stringResource(id = R.string.applicationName)
+        , GenerationType.ICON_PACK_ONLY to stringResource(id = R.string.iconPackOnly))
 }
 
 @Composable
@@ -233,5 +234,5 @@ enum class DarkMode {
 }
 
 enum class GenerationType {
-    PATH, EDGE, ONE_LETTER, TWO_LETTERS, APP_NAME
+    PATH, EDGE, ONE_LETTER, TWO_LETTERS, APP_NAME, ICON_PACK_ONLY
 }
