@@ -71,6 +71,8 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import com.caverock.androidsvg.SVG
+import com.caverock.androidsvg.SVGParseException
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.icon.creator.IconGenerator
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
@@ -86,6 +88,7 @@ import com.kaanelloed.iconeration.vector.MutableVectorPath
 import com.kaanelloed.iconeration.vector.PathExporter.Companion.toStringPath
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.applyAndRemoveGroup
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.center
+import java.io.InputStream
 import kotlin.math.max
 
 @Composable
@@ -356,7 +359,33 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
 @Composable
 private fun getBitmapFromURI(uri: Uri): Bitmap? {
     val contentResolver = getCurrentContext().contentResolver
-    return contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it) } ?: null
+
+    var bitmap = contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it) }
+
+    if (bitmap == null) {
+        val svg = contentResolver.openInputStream(uri).use { decodeSVGSteam(it) }
+
+        if (svg != null) {
+            if (svg.documentWidth > 0 && svg.documentHeight > 0) {
+                bitmap = Bitmap.createBitmap(svg.documentWidth.toInt(), svg.documentHeight.toInt(), Bitmap.Config.ARGB_8888)
+                val canvas = Canvas(bitmap)
+                svg.renderToCanvas(canvas)
+            }
+        }
+    }
+
+    return bitmap ?: null
+}
+
+private fun decodeSVGSteam(stream: InputStream?): SVG? {
+    if (stream == null)
+        return null
+
+    return try {
+        SVG.getFromInputStream(stream)
+    } catch (_: SVGParseException) {
+        null
+    }
 }
 
 @Composable

@@ -18,6 +18,7 @@ kotlin = "1.9.23"
 ksp = "1.9.23-1.0.19"
 material3Android = "1.2.1"
 roomKtx = "2.6.1"
+androidSvg = "1.4"
 
 android-compileSdk = "34"
 android-minSdk = "26"
@@ -40,6 +41,7 @@ apksig = { module = "com.android.tools.build:apksig", version.ref = "apksig" }
 arscLib = { module = "io.github.reandroid:ARSCLib", version.ref = "arsclib" }
 bcpkix-jdk15on = { module = "org.bouncycastle:bcpkix-jdk15on", version.ref = "bcpkixJdk15on" }
 colorpicker-compose = { module = "com.github.skydoves:colorpicker-compose", version.ref = "colorpickerCompose" }
+android-svg = { module = "com.caverock:androidsvg", version.ref = "androidSvg" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-junit" }

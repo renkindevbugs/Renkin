@@ -76,6 +76,9 @@ dependencies {
     ksp(libs.androidx.room.compiler)
     implementation(libs.androidx.datastore.preferences)
 
+    //Svg
+    implementation(libs.android.svg)
+
     //Test
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.junit)
