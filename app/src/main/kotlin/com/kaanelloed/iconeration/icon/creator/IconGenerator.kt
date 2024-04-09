@@ -287,19 +287,21 @@ class IconGenerator(
     }
 
     private fun changeIconPackColor(app: PackageInfoStruct, icon: Drawable) {
+        val isAdaptiveIcon = icon is AdaptiveIconDrawable
+
         if (options.colorizeIconPack) {
             val coloredIcon = colorIcon(icon)
-            updateApplication(app, BitmapIcon(coloredIcon))
+            updateApplication(app, BitmapIcon(coloredIcon, isAdaptiveIcon))
         }
         else {
             val iconToShow = getIconBitmap(icon)
-            updateApplication(app, BitmapIcon(iconToShow))
+            updateApplication(app, BitmapIcon(iconToShow, isAdaptiveIcon))
         }
     }
 
     private fun getIconBitmap(icon: Drawable): Bitmap {
         return if (icon is AdaptiveIconDrawable) {
-            ForegroundIconDrawable(icon.foreground).toBitmap()
+            icon.foreground.toBitmap()
         } else {
             icon.toBitmap()
         }
