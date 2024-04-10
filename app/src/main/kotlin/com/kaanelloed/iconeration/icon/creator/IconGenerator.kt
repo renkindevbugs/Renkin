@@ -299,11 +299,11 @@ class IconGenerator(
         }
     }
 
-    private fun getIconBitmap(icon: Drawable): Bitmap {
+    private fun getIconBitmap(icon: Drawable, maxSize: Int = 500): Bitmap {
         return if (icon is AdaptiveIconDrawable) {
-            icon.foreground.toBitmap()
+            icon.foreground.shrinkIfBiggerThan(maxSize)
         } else {
-            icon.toBitmap()
+            icon.shrinkIfBiggerThan(maxSize)
         }
     }
 
