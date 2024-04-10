@@ -203,6 +203,7 @@ class ApplicationManager(private val ctx: Context) {
         val map = mutableMapOf<IconPackApplication, Pair<Int, Drawable>>()
         val res = pm.getResourcesForApplication(packageName)
         for (iconPackApp in iconPackApps) {
+            //TODO: fix icon bigger than real size
             map[iconPackApp] = Pair(iconPackApp.resourceID, getResIcon(res, iconPackApp.resourceID)!!)
         }
 
