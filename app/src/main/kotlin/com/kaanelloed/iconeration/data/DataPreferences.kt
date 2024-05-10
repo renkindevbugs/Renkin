@@ -25,6 +25,7 @@ const val EXPORT_THEMED_NAME = "EXPORT_THEMED"
 const val ICON_COLOR_NAME = "ICON_COLOR"
 const val BACKGROUND_COLOR_NAME = "BACKGROUND_COLOR"
 const val COLORIZE_ICON_PACK_NAME = "COLORIZE_ICON_PACK"
+const val ICON_PACK_NAME = "ICON_PACK"
 
 val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
 val TYPE_DEFAULT = GenerationType.PATH
@@ -45,6 +46,8 @@ val BackgroundColorKey: Preferences.Key<String>
     get() = stringPreferencesKey(BACKGROUND_COLOR_NAME)
 val ColorizeIconPackKey: Preferences.Key<Boolean>
     get() = booleanPreferencesKey(COLORIZE_ICON_PACK_NAME)
+val IconPackKey: Preferences.Key<String>
+    get() = stringPreferencesKey(ICON_PACK_NAME)
 
 //Dark Mode
 fun DataStore<Preferences>.getDarkMode(): Flow<Int?> {
@@ -191,6 +194,21 @@ suspend fun DataStore<Preferences>.setColorizeIconPack(value: Boolean) {
     setPrefs(ColorizeIconPackKey, value)
 }
 
+//Icon pack
+fun DataStore<Preferences>.getIconPack(): Flow<String?> {
+    return getPrefs(IconPackKey)
+}
+
+@Composable
+fun DataStore<Preferences>.getIconPackValue(): String {
+    return getIconPack().collectAsState(initial = "").value ?: ""
+}
+
+suspend fun DataStore<Preferences>.setIconPack(value: String) {
+    setPrefs(IconPackKey, value)
+}
+
+//Common
 fun <T : Any> DataStore<Preferences>.getPrefs(key: Preferences.Key<T>): Flow<T?> {
     return data.map { settings ->
         settings[key]

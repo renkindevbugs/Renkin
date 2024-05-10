@@ -41,6 +41,7 @@ import com.kaanelloed.iconeration.data.getBackgroundColorValue
 import com.kaanelloed.iconeration.data.getColorizeIconPackValue
 import com.kaanelloed.iconeration.data.getExportThemedValue
 import com.kaanelloed.iconeration.data.getIconColorValue
+import com.kaanelloed.iconeration.data.getIconPackValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
 import com.kaanelloed.iconeration.data.getMonochromeValue
 import com.kaanelloed.iconeration.data.getTypeLabels
@@ -49,6 +50,7 @@ import com.kaanelloed.iconeration.data.setBackgroundColor
 import com.kaanelloed.iconeration.data.setColorizeIconPack
 import com.kaanelloed.iconeration.data.setExportThemed
 import com.kaanelloed.iconeration.data.setIconColor
+import com.kaanelloed.iconeration.data.setIconPack
 import com.kaanelloed.iconeration.data.setIncludeVector
 import com.kaanelloed.iconeration.data.setMonochrome
 import com.kaanelloed.iconeration.data.setType
@@ -68,8 +70,7 @@ fun AppOptions(
 
 @Composable
 fun OptionsCard(
-    iconPacks: List<IconPack>,
-    onIconPackChange: (iconPackageName: String) -> Unit
+    iconPacks: List<IconPack>
 ) {
     val prefs = getPreferences()
 
@@ -79,7 +80,6 @@ fun OptionsCard(
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
     var useThemed by rememberSaveable { mutableStateOf(false) }
     var colorizeIconPack by rememberSaveable { mutableStateOf(false) }
-
     var iconPack by rememberSaveable { mutableStateOf("") }
 
     val currentColor = prefs.getIconColorValue()
@@ -89,6 +89,7 @@ fun OptionsCard(
     useMonochrome = prefs.getMonochromeValue()
     useThemed = prefs.getExportThemedValue()
     colorizeIconPack = prefs.getColorizeIconPackValue()
+    iconPack = prefs.getIconPackValue()
 
     val scope = rememberCoroutineScope()
 
@@ -119,7 +120,7 @@ fun OptionsCard(
             }
             if (expanded) {
                 TypeDropdown(genType) { scope.launch { prefs.setType(it) } }
-                IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
+                IconPackDropdown(iconPacks, iconPack) { scope.launch { prefs.setIconPack(it.packageName) } }
 
                 if (iconPack != "") {
                     ColorizeIconPackSwitch(colorizeIconPack) { scope.launch { prefs.setColorizeIconPack(it) } }
@@ -137,8 +138,6 @@ fun OptionsCard(
                     MonochromeSwitch(useMonochrome) { scope.launch { prefs.setMonochrome(it) } }
                     ThemedIconsSwitch(useThemed) { scope.launch { prefs.setExportThemed(it) } }
                 }
-
-                onIconPackChange(iconPack)
             }
         }
     }
@@ -340,9 +339,10 @@ fun IconPackDropdown(
 ) {
     val emptyPack = IconPack("", stringResource(R.string.none), 0, "", 0)
     val newList = listOf(emptyPack) + iconPacks
+    val defaultPack = newList.find { it.packageName == packageName }
 
     var expanded by remember { mutableStateOf(false) }
-    var selectedOption by remember { mutableStateOf(newList.find { it.packageName == packageName }!!) }
+    var selectedOption by remember { mutableStateOf(defaultPack ?: emptyPack) }
 
     ExposedDropdownMenuBox(
         expanded = expanded,

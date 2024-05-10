@@ -63,6 +63,7 @@ import com.kaanelloed.iconeration.data.getBackgroundColorValue
 import com.kaanelloed.iconeration.data.getColorizeIconPackValue
 import com.kaanelloed.iconeration.data.getExportThemedValue
 import com.kaanelloed.iconeration.data.getIconColorValue
+import com.kaanelloed.iconeration.data.getIconPackValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
 import com.kaanelloed.iconeration.data.getMonochromeValue
 import com.kaanelloed.iconeration.data.getTypeValue
@@ -76,13 +77,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun MainColumn(iconPacks: List<IconPack>) {
     var packageFilter by remember { mutableStateOf("") }
-    var iconPackageName = ""
 
-    Scaffold(topBar = { TitleBar { iconPackageName } },
+    Scaffold(topBar = { TitleBar() },
         bottomBar = { BottomBar() }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
-            OptionsCard(iconPacks) { iconPackageName = it }
+            OptionsCard(iconPacks)
             SearchBar { packageFilter = it }
             ApplicationList(iconPacks, packageFilter)
         }
@@ -230,7 +230,7 @@ fun OpenAppOptions(
 }
 
 @Composable
-fun RefreshButton(getIconPackageName: () -> String) {
+fun RefreshButton() {
     val prefs = getPreferences()
     val type = prefs.getTypeValue()
     val monochrome = prefs.getMonochromeValue()
@@ -240,6 +240,7 @@ fun RefreshButton(getIconPackageName: () -> String) {
     val colorizeIconPack = prefs.getColorizeIconPackValue()
     val themed = prefs.getExportThemedValue()
     val dynamicColor = themed && supportDynamicColors()
+    val iconPackageName = prefs.getIconPackValue()
 
     val ctx = getCurrentContext()
     val activity = getCurrentMainActivity()
@@ -248,8 +249,6 @@ fun RefreshButton(getIconPackageName: () -> String) {
 
     IconButton(onClick = {
         CoroutineScope(Dispatchers.Default).launch {
-            val iconPackageName = getIconPackageName()
-
             if (!activity.iconPackLoaded && iconPackageName != "") {
                 openWarning = true
                 return@launch
@@ -350,7 +349,7 @@ fun BuildPackButton() {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun TitleBar(getIconPackageName: () -> String) {
+fun TitleBar() {
     val prefs = getPreferences()
     var openSettings by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
@@ -364,7 +363,7 @@ fun TitleBar(getIconPackageName: () -> String) {
             Text(stringResource(id = R.string.app_name))
         },
         actions = {
-            RefreshButton(getIconPackageName)
+            RefreshButton()
             BuildPackButton()
             IconButton(onClick = { openInfo = true }) {
                 Icon(
