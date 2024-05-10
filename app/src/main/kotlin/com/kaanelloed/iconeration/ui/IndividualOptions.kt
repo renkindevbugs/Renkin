@@ -7,7 +7,6 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -90,6 +89,8 @@ import com.kaanelloed.iconeration.vector.VectorEditor.Companion.applyAndRemoveGr
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.center
 import java.io.InputStream
 import kotlin.math.max
+
+const val MIME_TYPE_IMAGE = "image/*"
 
 @Composable
 fun OptionsDialog(
@@ -463,7 +464,7 @@ private fun createMask(image: Bitmap): Bitmap {
 @Composable
 fun UploadButton(onChange: (newValue: Uri) -> Unit) {
     val launcher = rememberLauncherForActivityResult(
-        ActivityResultContracts.PickVisualMedia()
+        ActivityResultContracts.GetContent()
     ) { imageUri ->
         if (imageUri != null) {
             onChange(imageUri)
@@ -471,9 +472,7 @@ fun UploadButton(onChange: (newValue: Uri) -> Unit) {
     }
 
     Button(onClick = {
-        launcher.launch(
-            PickVisualMediaRequest(mediaType = ActivityResultContracts.PickVisualMedia.ImageOnly)
-        )
+        launcher.launch(MIME_TYPE_IMAGE)
     }) {
         Text(stringResource(R.string.uploadImage))
     }
