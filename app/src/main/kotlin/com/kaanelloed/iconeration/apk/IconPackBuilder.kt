@@ -3,6 +3,8 @@ package com.kaanelloed.iconeration.apk
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.core.content.res.ResourcesCompat
+import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import app.revanced.manager.compose.util.signing.Signer
 import app.revanced.manager.compose.util.signing.SigningOptions
@@ -82,6 +84,9 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
 
         setSdkVersions(manifest.manifestElement, minSdkVersion, framework.versionCode)
         manifest.setApplicationLabel("Iconeration Icon Pack")
+
+        manifest.iconResourceId = createIcon(apkModule, packageBlock, "ic_launcher", R.mipmap.ic_launcher)
+        manifest.roundIconResourceId = createIcon(apkModule, packageBlock, "ic_launcher_round", R.mipmap.ic_launcher_round)
 
         createMainActivity(manifest)
 
@@ -233,13 +238,15 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         apkModule.add(xmlEncoder.encodeToSource(xmlFile, resPath))
     }
 
-    private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String) {
+    private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String): Int {
         val resPath = "res/${name}.png"
 
         val icon = packageBlock.getOrCreate("", "drawable", name)
         icon.setValueAsString(resPath)
 
         apkModule.add(generatePng(bitmap, resPath))
+
+        return icon.resourceId
     }
 
     private fun generatePng(image: Bitmap, name: String): ByteInputSource {
@@ -261,6 +268,11 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         val res = packageBlock.getOrCreate("v31", "color", name)
         val coder = ValueCoder.encodeReference(packageBlock, reference)
         res.setValueAsRaw(coder.valueType, coder.value)
+    }
+
+    private fun createIcon(apkModule: ApkModule, packageBlock: PackageBlock, name: String, resourceId: Int): Int {
+        val drawable = ResourcesCompat.getDrawable(ctx.resources, resourceId, null)
+        return createPngResource(apkModule, packageBlock, drawable!!.toBitmap(), name)
     }
 
     private fun getCurrentVersionCode(): Long {
