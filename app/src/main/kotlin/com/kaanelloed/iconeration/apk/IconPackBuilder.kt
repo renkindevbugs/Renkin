@@ -164,7 +164,7 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         val application = manifest.orCreateApplicationElement
         val activity = application.createChildElement(AndroidManifestBlock.TAG_activity)
 
-        createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN), emptyArray("android.intent.category.LAUNCHER"))
+        createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN), arrayOf("android.intent.category.LAUNCHER"))
         createIntentFilter(activity, arrayOf("org.adw.launcher.THEMES"), arrayOf("android.intent.category.DEFAULT")) //ADW Launcher
         createIntentFilter(activity, arrayOf("org.adw.launcher.icons.ACTION_PICK_ICON"), arrayOf("android.intent.category.DEFAULT")) //ADW Launcher Custom Icon Picker
         createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN), arrayOf("com.anddoes.launcher.THEME")) //Apex Launcher
@@ -181,7 +181,7 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         createIntentFilter(activity, arrayOf("com.tsf.shell.themes"), arrayOf("android.intent.category.DEFAULT")) //TSF Shell
         createIntentFilter(activity, arrayOf("ginlemon.smartlauncher.THEMES"), arrayOf("android.intent.category.DEFAULT")) //Smart Launcher
         createIntentFilter(activity, arrayOf("com.sonymobile.home.ICON_PACK"), arrayOf("android.intent.category.DEFAULT")) //Sony Launcher
-        createIntentFilter(activity, arrayOf("com.gau.go.launcherex.theme", "com.zeroteam.zerolauncher.theme", AndroidManifestBlock.VALUE_android_intent_action_MAIN)) //GO Launcher & Zero Launcher
+        createIntentFilter(activity, arrayOf("com.gau.go.launcherex.theme", "com.zeroteam.zerolauncher.theme", AndroidManifestBlock.VALUE_android_intent_action_MAIN), emptyArray()) //GO Launcher & Zero Launcher
         createIntentFilter(activity, arrayOf("jp.co.a_tm.android.launcher.icons.ACTION_PICK_ICON"), arrayOf("android.intent.category.DEFAULT")) //+HOME Icon Picker
         createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN, "com.vivid.launcher.theme"), arrayOf("android.intent.category.DEFAULT")) //V Launcher
 
