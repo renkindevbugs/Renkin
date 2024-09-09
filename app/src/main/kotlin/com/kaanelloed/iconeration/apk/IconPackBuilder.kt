@@ -26,6 +26,7 @@ import com.reandroid.arsc.chunk.TableBlock
 import com.reandroid.arsc.chunk.xml.AndroidManifestBlock
 import com.reandroid.arsc.chunk.xml.ResXmlElement
 import com.reandroid.arsc.coder.ValueCoder
+import com.reandroid.arsc.value.Entry
 import com.reandroid.arsc.value.ValueType
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -238,15 +239,14 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         apkModule.add(xmlEncoder.encodeToSource(xmlFile, resPath))
     }
 
-    private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String): Int {
+    private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String): Entry {
         val resPath = "res/${name}.png"
 
         val icon = packageBlock.getOrCreate("", "drawable", name)
         icon.setValueAsString(resPath)
 
         apkModule.add(generatePng(bitmap, resPath))
-
-        return icon.resourceId
+        return icon
     }
 
     private fun generatePng(image: Bitmap, name: String): ByteInputSource {
@@ -272,7 +272,7 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
 
     private fun createIcon(apkModule: ApkModule, packageBlock: PackageBlock, name: String, resourceId: Int): Int {
         val drawable = ResourcesCompat.getDrawable(ctx.resources, resourceId, null)
-        return createPngResource(apkModule, packageBlock, drawable!!.toBitmap(), name)
+        return createPngResource(apkModule, packageBlock, drawable!!.toBitmap(), name).resourceId
     }
 
     private fun getCurrentVersionCode(): Long {
