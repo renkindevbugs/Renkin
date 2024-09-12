@@ -2,6 +2,7 @@ package com.kaanelloed.iconeration.vector
 
 import android.content.res.Resources
 import androidx.compose.ui.graphics.Color
+import androidx.core.content.res.ResourcesCompat
 import androidx.core.text.isDigitsOnly
 import com.kaanelloed.iconeration.ui.toColor
 
@@ -49,7 +50,7 @@ class ColorDecoder(val resources: Resources) {
         val id = value.substring(1)
 
         if (id.isDigitsOnly()) {
-            return Color(resources.getColor(id.toInt(), null))
+            return Color(ResourcesCompat.getColor(resources, id.toInt(), null))
         }
 
         return Color.Unspecified
