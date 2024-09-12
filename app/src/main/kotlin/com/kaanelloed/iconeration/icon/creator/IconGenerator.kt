@@ -273,7 +273,6 @@ class IconGenerator(
         }
     }
 
-    @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
     private fun createVectorForText(drawable: BaseTextDrawable): ImageVector {
         val builder = ImageVector.Builder(defaultWidth = 256.dp, defaultHeight = 256.dp, viewportWidth = 256F, viewportHeight = 256F)
 

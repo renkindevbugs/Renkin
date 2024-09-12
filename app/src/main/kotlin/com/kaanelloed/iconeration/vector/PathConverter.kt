@@ -1,10 +1,8 @@
 package com.kaanelloed.iconeration.vector
 
-import android.graphics.PathIterator
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.asAndroidPath
+import androidx.compose.ui.graphics.PathSegment
+import androidx.compose.ui.graphics.vector.PathBuilder
 import androidx.compose.ui.graphics.vector.PathNode
 
 class PathConverter {
@@ -121,50 +119,26 @@ class PathConverter {
             }
         }
 
-        @RequiresApi(Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
         fun Path.toNodes(): List<PathNode> {
-            val nodes = mutableListOf<PathNode>()
-            val androidPath = this.asAndroidPath()
-
-            val iterator = androidPath.pathIterator
+            val builder = PathBuilder()
+            val iterator = this.iterator()
 
             while (iterator.hasNext()) {
                 val segment = iterator.next()
                 val points = segment.points
 
-                when (segment.verb) {
-                    PathIterator.VERB_MOVE -> {
-                        nodes.add(PathNode.MoveTo(points[0], points[1]))
-                    }
-
-                    PathIterator.VERB_CLOSE -> {
-                        nodes.add(PathNode.Close)
-                    }
-
-                    PathIterator.VERB_CONIC -> {
-                        val weight = segment.conicWeight
-                        TODO()
-                    }
-
-                    PathIterator.VERB_CUBIC -> {
-                        nodes.add(PathNode.CurveTo(points[2], points[3], points[4], points[5], points[6], points[7]))
-                    }
-
-                    PathIterator.VERB_DONE -> {
-                        nodes.add(PathNode.Close)
-                    }
-
-                    PathIterator.VERB_LINE -> {
-                        nodes.add(PathNode.LineTo(points[2], points[3]))
-                    }
-
-                    PathIterator.VERB_QUAD -> {
-                        nodes.add(PathNode.QuadTo(points[2], points[3], points[4], points[5]))
-                    }
+                when (segment.type) {
+                    PathSegment.Type.Move -> builder.moveTo(points[0], points[1])
+                    PathSegment.Type.Line -> builder.lineTo(points[2], points[3])
+                    PathSegment.Type.Cubic -> builder.curveTo(points[2], points[3], points[4], points[5], points[6], points[7])
+                    PathSegment.Type.Quadratic -> builder.quadTo(points[2], points[3], points[4], points[5])
+                    PathSegment.Type.Close -> builder.close()
+                    PathSegment.Type.Done -> { } //Nothing to do
+                    PathSegment.Type.Conic -> { } //Should never enter, by default they are evaluated as a quadratic
                 }
             }
 
-            return nodes.toList()
+            return builder.nodes
         }
     }
 }
