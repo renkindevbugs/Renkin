@@ -1,7 +1,7 @@
 package com.kaanelloed.iconeration.image.tracer
 
 import android.graphics.Bitmap
-import android.graphics.Color
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import java.nio.IntBuffer
 import kotlin.math.floor
@@ -86,10 +86,10 @@ class ImageTracer {
             }
 
             for (i in palette.indices) {
-                val c = Color.valueOf(palette[i])
-                bytePalette[i][0] = c.red().toInt().toByte()
-                bytePalette[i][1] = c.green().toInt().toByte()
-                bytePalette[i][2] = c.blue().toInt().toByte()
+                val c = Color(palette[i])
+                bytePalette[i][0] = c.red.toInt().toByte()
+                bytePalette[i][1] = c.green.toInt().toByte()
+                bytePalette[i][2] = c.blue.toInt().toByte()
                 bytePalette[i][3] = 0
             }
 
