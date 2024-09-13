@@ -36,6 +36,7 @@ android {
         }
     }
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_1_8
         targetCompatibility = JavaVersion.VERSION_1_8
     }
@@ -76,6 +77,9 @@ dependencies {
 
     //Svg
     implementation(libs.android.svg)
+
+    //Compat
+    coreLibraryDesugaring(libs.android.tools.desugar.jdk.libs.nio)
 
     //Test
     testImplementation(libs.junit)
