@@ -35,7 +35,7 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
-    private val keyStoreFile = ctx.dataDir.resolve("iconeration.keystore")
+    private val keyStoreFile = ctx.filesDir.resolve("iconeration.keystore")
 
     private val iconPackName = "com.kaanelloed.iconerationiconpack"
     private val newInternalVersionCode = 0
