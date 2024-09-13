@@ -81,6 +81,10 @@ dependencies {
     //Compat
     coreLibraryDesugaring(libs.android.tools.desugar.jdk.libs.nio)
 
+    //Smali
+    implementation(libs.android.tools.smali)
+    implementation(libs.android.tools.smali.dexlib2)
+
     //Test
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.junit)
