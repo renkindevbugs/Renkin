@@ -39,8 +39,8 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
 
     private val iconPackName = "com.kaanelloed.iconerationiconpack"
     private val newInternalVersionCode = 0
-    private val frameworkVersion = 33
-    private val minSdkVersion = 26
+    private val frameworkVersion = 34
+    private val minSdkVersion = 21
 
     fun canBeInstalled(): Boolean {
         val installedVersion = getInstalledVersion()
