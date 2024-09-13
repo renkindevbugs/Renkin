@@ -21,7 +21,7 @@ roomKtx = "2.6.1"
 androidSvg = "1.4"
 
 android-compileSdk = "34"
-android-minSdk = "26"
+android-minSdk = "21"
 android-targetSdk = "34"
 
 [libraries]
