@@ -57,7 +57,7 @@ dependencies {
     //Apk related
     implementation(libs.arscLib)
     implementation(libs.bcpkix.jdk15on)
-    implementation(libs.apksig)
+    implementation(libs.apksig.android)
     implementation(libs.ackpine.core)
     implementation(libs.ackpine.ktx)
 
