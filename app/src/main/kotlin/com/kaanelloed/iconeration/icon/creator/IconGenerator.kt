@@ -11,8 +11,6 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.VectorDrawable
-import android.os.Build
-import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asComposePath
@@ -23,6 +21,7 @@ import com.kaanelloed.iconeration.MainActivity
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.drawable.BaseTextDrawable
+import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.isAdaptiveIconDrawable
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
 import com.kaanelloed.iconeration.drawable.ForegroundIconDrawable
 import com.kaanelloed.iconeration.icon.AdaptiveIcon
@@ -184,8 +183,8 @@ class IconGenerator(
     private fun getAppIconBitmap(app: PackageInfoStruct, maxSize: Int = 500): Bitmap {
         var newIcon = app.icon
 
-        if (newIcon is AdaptiveIconDrawable) {
-            val adaptiveIcon = newIcon
+        if (newIcon.isAdaptiveIconDrawable()) {
+            val adaptiveIcon = newIcon as AdaptiveIconDrawable
             if (adaptiveIcon.foreground is BitmapDrawable || adaptiveIcon.foreground is VectorDrawable) {
                 newIcon = ForegroundIconDrawable(adaptiveIcon.foreground)
             }
@@ -204,7 +203,8 @@ class IconGenerator(
         if (image is VectorDrawable)
             return true
 
-        if (image is AdaptiveIconDrawable) {
+        if (image.isAdaptiveIconDrawable()) {
+            image as AdaptiveIconDrawable
             if (image.foreground is VectorDrawable) {
                 return true
             }
@@ -286,7 +286,7 @@ class IconGenerator(
     }
 
     private fun changeIconPackColor(app: PackageInfoStruct, icon: Drawable) {
-        val isAdaptiveIcon = icon is AdaptiveIconDrawable
+        val isAdaptiveIcon = icon.isAdaptiveIconDrawable()
 
         if (options.colorizeIconPack) {
             val coloredIcon = colorIcon(icon)
@@ -299,7 +299,8 @@ class IconGenerator(
     }
 
     private fun getIconBitmap(icon: Drawable, maxSize: Int = 500): Bitmap {
-        return if (icon is AdaptiveIconDrawable) {
+        return if (icon.isAdaptiveIconDrawable()) {
+            icon as AdaptiveIconDrawable
             icon.foreground.shrinkIfBiggerThan(maxSize)
         } else {
             icon.shrinkIfBiggerThan(maxSize)

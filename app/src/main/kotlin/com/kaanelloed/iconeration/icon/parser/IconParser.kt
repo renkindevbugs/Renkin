@@ -5,6 +5,7 @@ import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.VectorDrawable
+import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.isAdaptiveIconDrawable
 import com.kaanelloed.iconeration.icon.AdaptiveIcon
 import com.kaanelloed.iconeration.icon.BaseIcon
 import com.kaanelloed.iconeration.icon.BitmapIcon
@@ -16,8 +17,11 @@ import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
 
 class IconParser(private val resources: Resources) {
     private fun parseDrawable(drawable: Drawable, drawableId: Int): BaseIcon {
+        if (drawable.isAdaptiveIconDrawable()) {
+            return parseAdaptiveIcon(drawableId) ?: EmptyIcon()
+        }
+
         return when (drawable) {
-            is AdaptiveIconDrawable -> parseAdaptiveIcon(drawableId) ?: EmptyIcon()
             is BitmapDrawable -> BitmapIcon(drawable.bitmap)
             is VectorDrawable -> parseVectorIcon(drawableId) ?: EmptyIcon()
             else -> EmptyIcon()
