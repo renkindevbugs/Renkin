@@ -1,7 +1,3 @@
-Open-source icon pack creator, mainly for icons missing from existing icon packs, especially Arcticons icon pack.
+Open-source icon pack creator and Arcticons companion application.
 
-Create
-
-* from application icon
-* with the first letter of the application name
-* by uploading an image
+Create from the application icon, the application name or import your own image.
