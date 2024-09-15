@@ -96,7 +96,7 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         manifest.platformBuildVersionName = framework.versionName
 
         setSdkVersions(manifest.manifestElement, minSdkVersion, framework.versionCode)
-        manifest.setApplicationLabel("Alchemicons Pack")
+        manifest.setApplicationLabel("Alchemicon Pack")
 
         //Must be the first resource to match with R$layout.smali
         //TODO: manually set drawable id in smali
