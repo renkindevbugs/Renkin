@@ -13,8 +13,8 @@ android {
         applicationId = "com.kaanelloed.iconeration"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 34
-        versionName = "2024.09.00"
+        versionCode = 35
+        versionName = "2024.09.01"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
