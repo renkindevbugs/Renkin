@@ -4,16 +4,19 @@ import android.content.res.Resources
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.VectorDrawable
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toBitmap
+import androidx.core.text.isDigitsOnly
 import com.kaanelloed.iconeration.icon.AdaptiveIcon
 import com.kaanelloed.iconeration.icon.BaseIcon
 import com.kaanelloed.iconeration.icon.BitmapIcon
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.InsetIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
+import com.kaanelloed.iconeration.ui.toColor
 import com.kaanelloed.iconeration.vector.VectorParser
 import com.kaanelloed.iconeration.xml.XmlNode
 import org.xmlpull.v1.XmlPullParserException
@@ -53,7 +56,18 @@ class AdaptiveIconParser(private val resources: Resources) {
             val drawableValue = node.getAttributeValue("drawable")
 
             if (drawableValue != null) {
-                val id = drawableValue.substring(1).toInt()
+                val valueStart = drawableValue.first()
+                val valueRest = drawableValue.substring(1)
+                if (valueStart == '#') {
+                    val colorDrawable = ColorDrawable(drawableValue.toColor().toArgb())
+                    return BitmapIcon(colorDrawable.toBitmap(108, 108))
+                }
+
+                if (valueStart != '@' || !valueRest.isDigitsOnly()) {
+                    return EmptyIcon()
+                }
+
+                val id = valueRest.toInt()
                 val drawable = ResourcesCompat.getDrawable(resources, id, null) ?: return null
 
                 if (drawable is VectorDrawable) {

@@ -3,10 +3,25 @@
 
 [<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="90">](https://f-droid.org/packages/com.kaanelloed.iconeration)
 
-Icon pack generator for Android. For now, this project is intended to be a temporary solution for [Arcticons](https://github.com/Donnnno/Arcticons) when icons are not yet available.
+# Alembicons
 
-Generation type:
-- Path detection on the application icon using Color Quantization *(experimental)*
-- Canny Edge detection on the application icon *(experimental)*
-- First Letter or Two Letters of the application name with Arcticons OTF font *(experimental)*
-- Application name with Arcticons OTF font *(experimental)*
+*Formerly Iconeration*. Icon pack creator for Android and [Arcticons](https://github.com/Donnnno/Arcticons) companion application. Create your own icon pack or extend Arcticons or another icon pack.
+
+## Basic features
+
+- Get icon from icon pack
+- Use path detection on the application icon using Color Quantization
+- Use canny edge detection on the application icon
+- Create text from application name using [Arcticons OTF font](https://github.com/Arcticons-Team/Arcticons-Font)
+    - First letter
+    - Two letters
+    - Full application name
+- Choose icon color
+
+## Advanced features
+
+- Use the vector version of the application icon if available
+- Use the monochrome version of the application icon if available
+- Export icons as themed icons
+- Import an image for a specific application
+- Create or edit the vector of the application icon

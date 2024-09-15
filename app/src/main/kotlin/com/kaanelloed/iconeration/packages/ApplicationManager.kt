@@ -10,12 +10,15 @@ import android.content.pm.PackageManager
 import android.content.pm.PackageManager.ResolveInfoFlags
 import android.content.pm.ResolveInfo
 import android.content.res.Resources
+import android.graphics.Bitmap
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.UserManager
 import androidx.core.content.res.ResourcesCompat
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.data.InstalledApplication
+import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.sizeIsGreaterThanZero
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
@@ -51,11 +54,16 @@ class ApplicationManager(private val ctx: Context) {
                     val icon = app.applicationInfo.loadIcon(pm)
                     val iconID = app.applicationInfo.icon
 
+                    val icon2 = if (!icon.sizeIsGreaterThanZero()) {
+                        BitmapDrawable(ctx.resources, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888))
+                    } else
+                        icon
+
                     val packInfo = PackageInfoStruct(
                         appName,
                         packageName,
                         activityName,
-                        icon,
+                        icon2,
                         iconID
                     )
 
