@@ -388,8 +388,8 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         launcher.foreground("ic_launcher")
         launcher.background("#340E7D")
 
-        createXmlDrawableResource(apkModule, packageBlock, launcher, "ic_launcher", "anydpi", "mipmap")
-        createXmlDrawableResource(apkModule, packageBlock, launcher, "ic_launcher_round", "anydpi", "mipmap")
+        createXmlDrawableResource(apkModule, packageBlock, launcher, "ic_launcher", "anydpi-v26", "mipmap")
+        createXmlDrawableResource(apkModule, packageBlock, launcher, "ic_launcher_round", "anydpi-v26", "mipmap")
 
         val appIcon = ValueCoder.encodeReference(packageBlock, "@mipmap/ic_launcher")
         val appIconRound = ValueCoder.encodeReference(packageBlock, "@mipmap/ic_launcher_round")
