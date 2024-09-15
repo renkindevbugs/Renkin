@@ -67,6 +67,7 @@ import com.kaanelloed.iconeration.data.getIconPackValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
 import com.kaanelloed.iconeration.data.getMonochromeValue
 import com.kaanelloed.iconeration.data.getTypeValue
+import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.sizeIsGreaterThanZero
 import com.kaanelloed.iconeration.icon.BitmapIcon
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
@@ -114,11 +115,13 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
 
     Row(modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically) {
-        Image(painter = BitmapPainter(app.icon.toBitmap().asImageBitmap())
-            , contentDescription = null
-            , modifier = Modifier
-                .padding(2.dp)
-                .size(78.dp, 78.dp))
+        if (app.icon.sizeIsGreaterThanZero()) {
+            Image(painter = BitmapPainter(app.icon.toBitmap().asImageBitmap())
+                , contentDescription = null
+                , modifier = Modifier
+                    .padding(2.dp)
+                    .size(78.dp, 78.dp))
+        }
 
         val bgColor = if (themed) {
             if (dynamicColor) {

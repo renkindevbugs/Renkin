@@ -3,6 +3,9 @@ package com.kaanelloed.iconeration.apk
 import android.content.Context
 import android.graphics.Bitmap
 import android.net.Uri
+import androidx.annotation.DrawableRes
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.vectorResource
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
@@ -10,17 +13,20 @@ import app.revanced.manager.compose.util.signing.Signer
 import app.revanced.manager.compose.util.signing.SigningOptions
 import com.android.tools.smali.smali.Smali
 import com.android.tools.smali.smali.SmaliOptions
-import com.kaanelloed.iconeration.packages.ApplicationManager
-import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.asset.AssetHandler
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
+import com.kaanelloed.iconeration.packages.ApplicationManager
+import com.kaanelloed.iconeration.packages.PackageInfoStruct
+import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
+import com.kaanelloed.iconeration.vector.ReferenceBrush
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPaths
 import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXmlFile
+import com.kaanelloed.iconeration.xml.XmlEncoder
 import com.kaanelloed.iconeration.xml.file.AdaptiveIconXml
 import com.kaanelloed.iconeration.xml.file.AppFilterXml
 import com.kaanelloed.iconeration.xml.file.DrawableXml
-import com.kaanelloed.iconeration.xml.XmlEncoder
 import com.kaanelloed.iconeration.xml.file.LayoutXml
 import com.kaanelloed.iconeration.xml.file.XmlMemoryFile
 import com.reandroid.apk.ApkModule
@@ -90,14 +96,13 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         manifest.platformBuildVersionName = framework.versionName
 
         setSdkVersions(manifest.manifestElement, minSdkVersion, framework.versionCode)
-        manifest.setApplicationLabel("Iconeration Icon Pack")
+        manifest.setApplicationLabel("Alchemicons Pack")
 
         //Must be the first resource to match with R$layout.smali
         //TODO: manually set drawable id in smali
         createXmlLayoutResource(apkModule, packageBlock, createLayout(), "main_activity")
 
-        manifest.iconResourceId = createIcon(apkModule, packageBlock, "ic_launcher", R.mipmap.ic_launcher)
-        manifest.roundIconResourceId = createIcon(apkModule, packageBlock, "ic_launcher_round", R.mipmap.ic_launcher_round)
+        insertIconPackAppIcons(apkModule, packageBlock, manifest)
 
         createMainActivity(manifest)
 
@@ -111,6 +116,8 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         val drawableXml = DrawableXml()
         val appfilterXml = AppFilterXml()
 
+        val vectorBrush = ReferenceBrush("@color/icon_color")
+
         for (app in apps) {
             if (app.createdIcon !is EmptyIcon) {
                 val appFileName = app.getFileName()
@@ -120,10 +127,15 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
                     adaptive.foreground(appFileName)
                     adaptive.background("@color/icon_background_color")
 
-                    if (app.createdIcon is VectorIcon)
-                        createXmlDrawableResource(apkModule, packageBlock, app.createdIcon.vector.toXmlFile(), appFileName + "_foreground")
-                    else
+                    if (app.createdIcon is VectorIcon) {
+                        val vector = app.createdIcon.vector.toMutableImageVector().also {
+                            it.root.editPaths(vectorBrush)
+                        }.toImageVector()
+                        createXmlDrawableResource(apkModule, packageBlock, vector.toXmlFile(), appFileName + "_foreground")
+                    }
+                    else {
                         createPngResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground")
+                    }
 
                     createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
                 }
@@ -252,21 +264,26 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         apkModule.add(xmlEncoder.encodeToSource(xmlFile, resPath))
     }
 
-    private fun createXmlDrawableResource(apkModule: ApkModule, packageBlock: PackageBlock, xmlFile: XmlMemoryFile, name: String): Entry {
+    private fun createXmlDrawableResource(apkModule: ApkModule, packageBlock: PackageBlock, xmlFile: XmlMemoryFile, name: String, qualifier: String = "", type: String = "drawable"): Entry {
         val resPath = "res/${name}.xml"
         val xmlEncoder = XmlEncoder(packageBlock)
 
-        val res = packageBlock.getOrCreate("", "drawable", name)
+        val res = packageBlock.getOrCreate(qualifier, type, name)
         res.setValueAsString(resPath)
 
         apkModule.add(xmlEncoder.encodeToSource(xmlFile, resPath))
         return res
     }
 
-    private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String): Entry {
-        val resPath = "res/${name}.png"
+    private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, @DrawableRes resId: Int, name: String, qualifier: String = "", type: String = "drawable"): Entry {
+        val bitmap = ResourcesCompat.getDrawable(ctx.resources, resId, null)!!.toBitmap()
+        return createPngResource(apkModule, packageBlock, bitmap, name, qualifier, type)
+    }
 
-        val icon = packageBlock.getOrCreate("", "drawable", name)
+    private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, qualifier: String = "", type: String = "drawable"): Entry {
+        val resPath = "res/${name}${qualifier}.png"
+
+        val icon = packageBlock.getOrCreate(qualifier, type, name)
         icon.setValueAsString(resPath)
 
         apkModule.add(generatePng(bitmap, resPath))
@@ -292,11 +309,6 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         val res = packageBlock.getOrCreate("v31", "color", name)
         val coder = ValueCoder.encodeReference(packageBlock, reference)
         res.setValueAsRaw(coder.valueType, coder.value)
-    }
-
-    private fun createIcon(apkModule: ApkModule, packageBlock: PackageBlock, name: String, resourceId: Int): Int {
-        val drawable = ResourcesCompat.getDrawable(ctx.resources, resourceId, null)
-        return createPngResource(apkModule, packageBlock, drawable!!.toBitmap(), name).resourceId
     }
 
     private fun getCurrentVersionCode(): Long {
@@ -354,6 +366,36 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
         xml.textView("Icon pack created: $currentDateTime")
         xml.readAndClose()
         return xml
+    }
+
+    private fun insertIconPackAppIcons(apkModule: ApkModule, packageBlock: PackageBlock, manifest: AndroidManifestBlock) {
+        createPngResource(apkModule, packageBlock, R.drawable.mdpi_ic_launcher, "ic_launcher", "mdpi", "mipmap")
+        createPngResource(apkModule, packageBlock, R.drawable.hdpi_ic_launcher, "ic_launcher", "hdpi", "mipmap")
+        createPngResource(apkModule, packageBlock, R.drawable.xhdpi_ic_launcher, "ic_launcher", "xhdpi", "mipmap")
+        createPngResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher, "ic_launcher", "xxhdpi", "mipmap")
+        createPngResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher, "ic_launcher", "xxxhdpi", "mipmap")
+
+        createPngResource(apkModule, packageBlock, R.drawable.mdpi_ic_launcher_round, "ic_launcher_round", "mdpi", "mipmap")
+        createPngResource(apkModule, packageBlock, R.drawable.hdpi_ic_launcher_round, "ic_launcher_round", "hdpi", "mipmap")
+        createPngResource(apkModule, packageBlock, R.drawable.xhdpi_ic_launcher_round, "ic_launcher_round", "xhdpi", "mipmap")
+        createPngResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher_round, "ic_launcher_round", "xxhdpi", "mipmap")
+        createPngResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher_round, "ic_launcher_round", "xxxhdpi", "mipmap")
+
+        val foreground = ImageVector.vectorResource(null, ctx.resources, R.drawable.alchemicons_ic_launcher_foreground)
+        createXmlDrawableResource(apkModule, packageBlock, foreground.toXmlFile(), "ic_launcher_foreground")
+
+        val launcher = AdaptiveIconXml()
+        launcher.foreground("ic_launcher")
+        launcher.background("#340E7D")
+
+        createXmlDrawableResource(apkModule, packageBlock, launcher, "ic_launcher", "anydpi", "mipmap")
+        createXmlDrawableResource(apkModule, packageBlock, launcher, "ic_launcher_round", "anydpi", "mipmap")
+
+        val appIcon = ValueCoder.encodeReference(packageBlock, "@mipmap/ic_launcher")
+        val appIconRound = ValueCoder.encodeReference(packageBlock, "@mipmap/ic_launcher_round")
+
+        manifest.iconResourceId = appIcon.value
+        manifest.roundIconResourceId = appIconRound.value
     }
 
     private fun getInstalledVersion(): Version? {

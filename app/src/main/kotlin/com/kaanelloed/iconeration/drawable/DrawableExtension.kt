@@ -37,5 +37,9 @@ class DrawableExtension {
 
             return false
         }
+
+        fun Drawable.sizeIsGreaterThanZero(): Boolean {
+            return intrinsicWidth > 0 && intrinsicHeight > 0
+        }
     }
 }

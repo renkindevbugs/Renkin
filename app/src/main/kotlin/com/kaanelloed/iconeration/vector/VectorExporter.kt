@@ -1,5 +1,6 @@
 package com.kaanelloed.iconeration.vector
 
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
@@ -67,8 +68,8 @@ class VectorExporter(val vector: ImageVector) {
             path.pathData.toStringPath(),
             setXmlJoin(path.strokeLineJoin).toString(),
             path.strokeLineWidth,
-            (path.fill as SolidColor).value.toHexString(),
-            "@color/icon_color",
+            setXmlColor(path.fill),
+            setXmlColor(path.stroke),
             setXmlFill(path.pathFillType).toString(),
             setXmlCap(path.strokeLineCap).toString(),
             path.fillAlpha,
@@ -96,6 +97,23 @@ class VectorExporter(val vector: ImageVector) {
 
     private fun setXmlFill(fill: PathFillType): Int {
         return if (fill == PathFillType.NonZero) 0 else 1
+    }
+
+    private fun setXmlColor(brush: Brush?): String {
+        return when (brush) {
+            null -> {
+                "#00000000"
+            }
+            is SolidColor -> {
+                brush.value.toHexString()
+            }
+            is ReferenceBrush -> {
+                return brush.reference
+            }
+            else -> {
+                "#00000000"
+            }
+        }
     }
 
     companion object {
