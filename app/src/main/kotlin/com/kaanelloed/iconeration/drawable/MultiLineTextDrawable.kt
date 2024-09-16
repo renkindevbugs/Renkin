@@ -10,6 +10,7 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.TextUtils
 import androidx.core.graphics.withTranslation
+import com.kaanelloed.iconeration.packages.PackageVersion
 
 class MultiLineTextDrawable(text: CharSequence, typeFace: Typeface, defaultTextSize: Float, minTextSize: Float, color: Int, width: Int, maxLines: Int): BaseTextDrawable() {
     private val paint = TextPaint(Paint.ANTI_ALIAS_FLAG)
@@ -21,12 +22,33 @@ class MultiLineTextDrawable(text: CharSequence, typeFace: Typeface, defaultTextS
         paint.typeface = typeFace
         adjustTextSize(text.toString(), minTextSize, width, maxLines)
 
-        staticLayout = StaticLayout.Builder
-            .obtain(text, 0, text.length, paint, width)
-            .setAlignment(Layout.Alignment.ALIGN_CENTER)
-            .setEllipsize(TextUtils.TruncateAt.END)
-            .setMaxLines(maxLines)
-            .build()
+        staticLayout = buildStaticLayout(text, width, maxLines)
+    }
+
+    private fun buildStaticLayout(text: CharSequence, width: Int, maxLines: Int): StaticLayout {
+        if (PackageVersion.is23OrMore()) {
+            return StaticLayout.Builder
+                .obtain(text, 0, text.length, paint, width)
+                .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                .setEllipsize(TextUtils.TruncateAt.END)
+                .setMaxLines(maxLines)
+                .build()
+        } else {
+            @Suppress("DEPRECATION")
+            return StaticLayout(
+                text,
+                0,
+                text.length,
+                paint,
+                width,
+                Layout.Alignment.ALIGN_CENTER,
+                1.0f,
+                0.0f,
+                true,
+                TextUtils.TruncateAt.END,
+                width
+            )
+        }
     }
 
     private fun adjustTextSize(text: String, minTextSize: Float, width: Int, maxLines: Int) {
@@ -34,7 +56,7 @@ class MultiLineTextDrawable(text: CharSequence, typeFace: Typeface, defaultTextS
         val longestWord = getLongestWord(words, maxLines)
 
         while (calculateTextWidth(longestWord) > width && paint.textSize > minTextSize) {
-            paint.textSize = paint.textSize - 1
+            paint.textSize -= 1
         }
     }
 
