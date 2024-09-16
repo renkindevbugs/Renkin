@@ -5,7 +5,6 @@ import android.graphics.ColorFilter
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
-import android.graphics.drawable.Drawable
 
 //https://android.googlesource.com/platform/packages/apps/Camera/+/master/src/com/android/camera/drawable/TextDrawable.java
 class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize: Float, color: Int, strokeWidth: Float = 0F, adjustToSize: Int = 0): BaseTextDrawable() {
@@ -32,7 +31,7 @@ class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize:
 
     private fun adjustTextSize(maxWidth: Int) {
         while (calculateIntrinsicWidth() > maxWidth) {
-            paint.textSize = paint.textSize - 1
+            paint.textSize -= 1
         }
     }
 

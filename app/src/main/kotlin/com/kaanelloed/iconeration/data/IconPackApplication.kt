@@ -10,7 +10,7 @@ import androidx.room.Query
 import androidx.room.RoomDatabase
 
 @Entity
-data class IconPack constructor(
+data class IconPack(
     @PrimaryKey val packageName: String,
     val applicationName: String,
     val versionCode: Long,
@@ -20,7 +20,7 @@ data class IconPack constructor(
 )
 
 @Entity(primaryKeys = ["iconPackName", "packageName", "activityName"])
-data class IconPackApplication constructor(
+data class IconPackApplication(
     val iconPackName: String,
     val packageName: String,
     val activityName: String,
@@ -29,7 +29,7 @@ data class IconPackApplication constructor(
 )
 
 @Entity(primaryKeys = ["packageName", "activityName"])
-data class InstalledApplication constructor(
+data class InstalledApplication(
     val packageName: String,
     val activityName: String,
     val iconID: Int

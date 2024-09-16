@@ -183,7 +183,7 @@ class VectorizingUtils {
                 }
             }
 
-            return layers;
+            return layers
         }
 
         // Lookup tables for pathscan
@@ -607,7 +607,7 @@ class VectorizingUtils {
                     errorpoint = pcnt
                     errorval = dist2
                 }
-                pcnt = (pcnt + 1) % pathlength;
+                pcnt = (pcnt + 1) % pathlength
             }
 
             // return spline if fits
