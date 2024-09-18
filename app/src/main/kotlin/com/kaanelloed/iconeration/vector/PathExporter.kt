@@ -2,7 +2,7 @@ package com.kaanelloed.iconeration.vector
 
 import androidx.compose.ui.graphics.vector.PathNode
 
-class PathExporter() {
+class PathExporter {
     private fun export(pathNodes: List<PathNode>): String {
         val builder = StringBuilder()
 

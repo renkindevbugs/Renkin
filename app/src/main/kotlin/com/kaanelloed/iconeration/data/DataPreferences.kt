@@ -26,6 +26,7 @@ const val ICON_COLOR_NAME = "ICON_COLOR"
 const val BACKGROUND_COLOR_NAME = "BACKGROUND_COLOR"
 const val COLORIZE_ICON_PACK_NAME = "COLORIZE_ICON_PACK"
 const val ICON_PACK_NAME = "ICON_PACK"
+const val RETRIEVE_CALENDAR_ICONS = "RETRIEVE_CALENDAR_ICONS"
 
 val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
 val TYPE_DEFAULT = GenerationType.PATH
@@ -48,6 +49,8 @@ val ColorizeIconPackKey: Preferences.Key<Boolean>
     get() = booleanPreferencesKey(COLORIZE_ICON_PACK_NAME)
 val IconPackKey: Preferences.Key<String>
     get() = stringPreferencesKey(ICON_PACK_NAME)
+val CalendarIconsKey: Preferences.Key<Boolean>
+    get() = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS)
 
 //Dark Mode
 fun DataStore<Preferences>.getDarkMode(): Flow<Int?> {
@@ -206,6 +209,20 @@ fun DataStore<Preferences>.getIconPackValue(): String {
 
 suspend fun DataStore<Preferences>.setIconPack(value: String) {
     setPrefs(IconPackKey, value)
+}
+
+//Retrieve calendar icons
+fun DataStore<Preferences>.getRetrieveCalendarIcon(): Flow<Boolean?> {
+    return getPrefs(CalendarIconsKey)
+}
+
+@Composable
+fun DataStore<Preferences>.getRetrieveCalendarIconValue(): Boolean {
+    return getRetrieveCalendarIcon().collectAsState(initial = false).value ?: false
+}
+
+suspend fun DataStore<Preferences>.setRetrieveCalendarIcon(value: Boolean) {
+    setPrefs(CalendarIconsKey, value)
 }
 
 //Common

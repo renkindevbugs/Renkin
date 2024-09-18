@@ -1,7 +1,6 @@
 package com.kaanelloed.iconeration.icon.parser
 
 import android.content.res.Resources
-import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.VectorDrawable

@@ -1,6 +1,7 @@
 package com.kaanelloed.iconeration
 
 import android.content.Context
+import android.graphics.drawable.Drawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -16,6 +17,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.kaanelloed.iconeration.data.AppDatabase
+import com.kaanelloed.iconeration.data.CalendarIcon
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.data.isDarkModeEnabled
@@ -35,6 +37,13 @@ class MainActivity : ComponentActivity() {
 
     var iconPackApplications: Map<IconPack, List<IconPackApplication>> = emptyMap()
         private set
+
+    var allCalendarIcons: Map<IconPack, List<CalendarIcon>> = emptyMap()
+        private set
+
+    var calendarIcon: List<CalendarIcon> = listOf()
+
+    var calendarIconsDrawable: Map<String, Drawable> = emptyMap()
 
     var iconPackLoaded: Boolean by mutableStateOf(false)
         private set
@@ -64,7 +73,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun syncIconPacks() {
+    private fun syncIconPacks(forceSync: Boolean = false) {
         CoroutineScope(Dispatchers.Default).launch {
             val appMan = ApplicationManager(applicationContext)
             val iconPacks = appMan.getIconPacks()
@@ -92,19 +101,32 @@ class MainActivity : ComponentActivity() {
                 val dbApp = packList.find { it.packageName == iconPack.packageName }
                 val sameVersion = if (dbApp != null) { dbApp.versionCode == iconPack.versionCode } else false
 
-                if (!sameVersion) {
+                if (!sameVersion || forceSync) {
                     if (dbApp != null) {
                         packDao.delete(dbApp)
                         packDao.deleteApplicationByIconPackage(iconPack.packageName)
+                        packDao.deleteCalendarByIconPackage(iconPack.packageName)
                     }
 
-                    val packApps = appMan.getIconPackApplications(iconPack.packageName)
+                    val elements = appMan.getAppFilterElements(iconPack.packageName)
+                    val packApps = elements.filterIsInstance<IconPackApplication>()
                     packDao.insertIconPackWithApplications(iconPack, packApps)
+
+                    val calIcons = elements.filterIsInstance<CalendarIcon>()
+                    packDao.insertAllCalendarIcons(calIcons)
                 }
             }
 
             iconPackApplications = packDao.getIconPacksWithInstalledApps()
+            allCalendarIcons = packDao.getCalendarIconsWithInstalledApps()
             iconPackLoaded = true
+        }
+    }
+
+    fun forceSync() {
+        if (iconPackLoaded) {
+            iconPackLoaded = false
+            syncIconPacks(true)
         }
     }
 

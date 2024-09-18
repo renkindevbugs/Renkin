@@ -52,4 +52,6 @@
     <string name="colorizeIconPack">Appliquer la couleur au pack d\'îcones</string>
     <string name="uploadImageError">L\'image ne peut pas être téléversé</string>
     <string name="iconPackOnly">Pack d\'icônes seulement</string>
+    <string name="syncPacks">Sync packs d\'icones</string>
+    <string name="retrieveCalendarIcon">Inclure icones de calendrier</string>
 </resources>

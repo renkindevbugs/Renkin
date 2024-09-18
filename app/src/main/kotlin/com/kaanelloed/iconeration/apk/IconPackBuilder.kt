@@ -2,6 +2,7 @@ package com.kaanelloed.iconeration.apk
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
 import android.net.Uri
 import androidx.annotation.DrawableRes
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -15,10 +16,12 @@ import com.android.tools.smali.smali.Smali
 import com.android.tools.smali.smali.SmaliOptions
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.asset.AssetHandler
+import com.kaanelloed.iconeration.data.CalendarIcon
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
+import com.kaanelloed.iconeration.packages.PackageVersion
 import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
 import com.kaanelloed.iconeration.vector.ReferenceBrush
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPaths
@@ -43,7 +46,12 @@ import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
-class IconPackBuilder(private val ctx: Context, private val apps: List<PackageInfoStruct>) {
+class IconPackBuilder(
+    private val ctx: Context,
+    private val apps: List<PackageInfoStruct>,
+    private val calendarIcons: List<CalendarIcon>,
+    private val calendarIconsDrawable: Map<String, Drawable>
+) {
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
@@ -122,7 +130,8 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
             if (app.createdIcon !is EmptyIcon) {
                 val appFileName = app.getFileName()
 
-                if (themed || app.createdIcon.exportAsAdaptiveIcon) {
+                val exportAsAdaptive = themed || app.createdIcon.exportAsAdaptiveIcon
+                if (exportAsAdaptive && PackageVersion.is26OrMore()) {
                     val adaptive = AdaptiveIconXml()
                     adaptive.foreground(appFileName)
                     adaptive.background("@color/icon_background_color")
@@ -145,6 +154,15 @@ class IconPackBuilder(private val ctx: Context, private val apps: List<PackageIn
                 drawableXml.item(appFileName)
                 appfilterXml.item(app.packageName, app.activityName, appFileName)
             }
+        }
+
+        for (calendarIcon in calendarIcons) {
+            appfilterXml.calendar(calendarIcon.packageName, calendarIcon.activityName, calendarIcon.prefix)
+        }
+
+        for (drawable in calendarIconsDrawable) {
+            createPngResource(apkModule, packageBlock, drawable.value.toBitmap(), drawable.key)
+            drawableXml.item(drawable.key)
         }
 
         apkModule.add(ByteInputSource(drawableXml.getBytes(), "assets/drawable.xml"))

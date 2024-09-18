@@ -17,6 +17,13 @@ class AppFilterXml: XmlMemoryFile() {
         endTag("item")
     }
 
+    fun calendar(packageName: String, activityName: String, prefix: String) {
+        startTag("calendar")
+        attribute("component", "ComponentInfo{${packageName}/${activityName}}")
+        attribute("prefix", prefix)
+        endTag("calendar")
+    }
+
     override fun readAndClose(): ByteArray {
         endTag("resources")
         return super.readAndClose()

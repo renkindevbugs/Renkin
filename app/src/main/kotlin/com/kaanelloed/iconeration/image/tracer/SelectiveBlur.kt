@@ -134,7 +134,7 @@ class SelectiveBlur {
 
                     // d is the difference between the blurred and the original pixel
                     d = abs(imgd2.data[idx] - imgd.data[idx]) + abs(imgd2.data[idx + 1] - imgd.data[idx + 1]) +
-                            abs(imgd2.data[idx + 2] - imgd.data[idx + 2]) + abs(imgd2.data[idx + 3] - imgd.data[idx + 3]);
+                            abs(imgd2.data[idx + 2] - imgd.data[idx + 2]) + abs(imgd2.data[idx + 3] - imgd.data[idx + 3])
 
                     // selective blur: if d>delta, put the original pixel back
                     if(d > delta){

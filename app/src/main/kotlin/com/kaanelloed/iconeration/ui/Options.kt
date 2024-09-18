@@ -19,6 +19,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -44,6 +45,7 @@ import com.kaanelloed.iconeration.data.getIconColorValue
 import com.kaanelloed.iconeration.data.getIconPackValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
 import com.kaanelloed.iconeration.data.getMonochromeValue
+import com.kaanelloed.iconeration.data.getRetrieveCalendarIconValue
 import com.kaanelloed.iconeration.data.getTypeLabels
 import com.kaanelloed.iconeration.data.getTypeValue
 import com.kaanelloed.iconeration.data.setBackgroundColor
@@ -53,6 +55,7 @@ import com.kaanelloed.iconeration.data.setIconColor
 import com.kaanelloed.iconeration.data.setIconPack
 import com.kaanelloed.iconeration.data.setIncludeVector
 import com.kaanelloed.iconeration.data.setMonochrome
+import com.kaanelloed.iconeration.data.setRetrieveCalendarIcon
 import com.kaanelloed.iconeration.data.setType
 import com.kaanelloed.iconeration.packages.PackageVersion
 import kotlinx.coroutines.launch
@@ -81,6 +84,7 @@ fun OptionsCard(
     var useThemed by rememberSaveable { mutableStateOf(false) }
     var colorizeIconPack by rememberSaveable { mutableStateOf(false) }
     var iconPack by rememberSaveable { mutableStateOf("") }
+    var retrieveCalenderIcons by rememberSaveable { mutableStateOf(false) }
 
     val currentColor = prefs.getIconColorValue()
     val currentBgColor = prefs.getBackgroundColorValue()
@@ -90,6 +94,7 @@ fun OptionsCard(
     useThemed = prefs.getExportThemedValue()
     colorizeIconPack = prefs.getColorizeIconPackValue()
     iconPack = prefs.getIconPackValue()
+    retrieveCalenderIcons = prefs.getRetrieveCalendarIconValue()
 
     val scope = rememberCoroutineScope()
 
@@ -124,6 +129,7 @@ fun OptionsCard(
 
                 if (iconPack != "") {
                     ColorizeIconPackSwitch(colorizeIconPack) { scope.launch { prefs.setColorizeIconPack(it) } }
+                    RetrieveCalendarIconsSwitch(retrieveCalenderIcons) { scope.launch { prefs.setRetrieveCalendarIcon(it) } }
                 }
 
                 if (showIconColor(genType, useThemed)) {
@@ -307,7 +313,7 @@ fun TypeDropdown(type: GenerationType, onChange: (newValue: GenerationType) -> U
                 )
             },
             colors = ExposedDropdownMenuDefaults.textFieldColors(),
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable)
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -362,7 +368,7 @@ fun IconPackDropdown(
                 )
             },
             colors = ExposedDropdownMenuDefaults.textFieldColors(),
-            modifier = Modifier.menuAnchor()
+            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable)
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -412,6 +418,28 @@ fun ColorizeIconPackSwitch(colorize: Boolean, onChange: (newValue: Boolean) -> U
         .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.colorizeIconPack))
+        Switch(
+            checked = checked,
+            onCheckedChange = {
+                checked = it
+                onChange(it)
+            },
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
+}
+
+@Composable
+fun RetrieveCalendarIconsSwitch(retrieve: Boolean, onChange: (newValue: Boolean) -> Unit) {
+    var checked by rememberSaveable { mutableStateOf(false) }
+
+    checked = retrieve
+
+    Row(modifier = Modifier
+        .fillMaxWidth()
+        .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.retrieveCalendarIcon))
         Switch(
             checked = checked,
             onCheckedChange = {

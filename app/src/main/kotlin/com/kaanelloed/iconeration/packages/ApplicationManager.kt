@@ -15,6 +15,8 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.UserManager
 import androidx.core.content.res.ResourcesCompat
+import com.kaanelloed.iconeration.data.AppFilterElement
+import com.kaanelloed.iconeration.data.CalendarIcon
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.data.InstalledApplication
@@ -80,7 +82,7 @@ class ApplicationManager(private val ctx: Context) {
         return getIconPacks(Intent("org.adw.launcher.THEMES", null))
     }
 
-    fun getIconPackApplications(iconPackName: String): List<IconPackApplication> {
+    fun getAppFilterElements(iconPackName: String): List<AppFilterElement> {
         val res = pm.getResourcesForApplication(iconPackName)
         val xmlParser = getAppfilter(res, iconPackName)
 
@@ -111,8 +113,8 @@ class ApplicationManager(private val ctx: Context) {
         return iconPacks
     }
 
-    private fun getAppsFromAppFilter(res: Resources, xmlParser: XmlPullParser, packageName: String): List<IconPackApplication> {
-        val packApps = mutableListOf<IconPackApplication>()
+    private fun getAppsFromAppFilter(res: Resources, xmlParser: XmlPullParser, packageName: String): List<AppFilterElement> {
+        val elements = mutableListOf<AppFilterElement>()
         var type = xmlParser.eventType
 
         while (type != XmlPullParser.END_DOCUMENT) {
@@ -131,8 +133,38 @@ class ApplicationManager(private val ctx: Context) {
 
                             val packApp = IconPackApplication(packageName, appPackageName, activityName, iconName, iconId)
 
-                            if (!packApps.any { it.packageName == appPackageName && it.activityName == activityName})
-                                packApps.add(packApp)
+                            if (!elements.any { it is IconPackApplication && it.packageName == appPackageName && it.activityName == activityName }) {
+                                elements.add(packApp)
+                            }
+                        }
+                    }
+                }
+
+                if (xmlParser.name == "calendar") {
+                    val prefix = xmlParser.getAttributeValue(null, "prefix")
+                    val componentInfo = xmlParser.getAttributeValue(null, "component")
+
+                    val components = ComponentInfo()
+                    if (prefix != null && componentInfo != null && components.parse(componentInfo)) {
+                        val appPackageName = components.packageName
+                        val activityName = components.activityNane
+
+                        val calendar = CalendarIcon(packageName, appPackageName, activityName, prefix)
+
+                        if (!elements.any { it is CalendarIcon && it.packageName == appPackageName && it.activityName == activityName }) {
+                            elements.add(calendar)
+                        }
+                    }
+                }
+
+                if (xmlParser.name == "dynamic-clock") {
+                    val iconName = xmlParser.getAttributeValue(null, "drawable")
+
+                    if (iconName != null) {
+                        val iconId = res.getIdentifierByName(iconName, "drawable", packageName)
+
+                        if (iconId > 0) {
+                            //TODO
                         }
                     }
                 }
@@ -141,7 +173,7 @@ class ApplicationManager(private val ctx: Context) {
             type = xmlParser.next()
         }
 
-        return packApps
+        return elements
     }
 
     fun checkAppFilter(xmlParser: XmlPullParser): Array<String> {
@@ -213,6 +245,24 @@ class ApplicationManager(private val ctx: Context) {
         for (iconPackApp in iconPackApps) {
             //TODO: fix icon bigger than real size
             map[iconPackApp] = Pair(iconPackApp.resourceID, getResIcon(res, iconPackApp.resourceID)!!)
+        }
+
+        return map
+    }
+
+    fun getIconPackCalendarResources(packageName: String,
+                                        calendarIcons: List<CalendarIcon>
+    ): Map<String, Drawable> {
+        val map = mutableMapOf<String, Drawable>()
+        val res = pm.getResourcesForApplication(packageName)
+        for (calendar in calendarIcons) {
+            for (i in 1 .. 31) {
+                val id = res.getIdentifierByName(calendar.prefix + i, "drawable", packageName)
+
+                if (id > 0) {
+                    map[calendar.prefix + i] = getResIcon(res, id)!!
+                }
+            }
         }
 
         return map
