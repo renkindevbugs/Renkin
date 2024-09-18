@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -48,6 +49,7 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
         text = {
             Column {
                 DarkModeDropdown(prefs)
+                SyncButton()
                 AppVersion()
             }
         },
@@ -103,6 +105,16 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
                 )
             }
         }
+    }
+}
+
+@Composable
+fun SyncButton() {
+    val mainActivity = getCurrentMainActivity()
+
+    Button( onClick = { mainActivity.forceSync() }
+        , modifier = Modifier.padding(8.dp) ) {
+        Text(stringResource(R.string.syncPacks))
     }
 }
 

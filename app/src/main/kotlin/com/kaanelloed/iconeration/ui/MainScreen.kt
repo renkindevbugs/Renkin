@@ -264,6 +264,13 @@ fun RefreshButton() {
                 iconPackApps = ApplicationManager(ctx).getIconPackApplicationResources(iconPackageName, packApps)
             }
 
+            if (iconPackageName != "") {
+                val pack = activity.allCalendarIcons.keys.find { it.packageName == iconPackageName }
+                val calIcons = activity.allCalendarIcons[pack]!!
+                activity.calendarIcon = calIcons
+                activity.calendarIconsDrawable = ApplicationManager(ctx).getIconPackCalendarResources(iconPackageName, calIcons)
+            }
+
             var iconColor = iconColorValue.toInt()
             var bgColor = bgColorValue.toInt()
 
@@ -305,7 +312,12 @@ fun BuildPackButton() {
         text = ""
         openBuilder = true
         CoroutineScope(Dispatchers.Default).launch {
-            val iconPackGenerator = IconPackBuilder(ctx, activity.applicationList)
+            val iconPackGenerator = IconPackBuilder(
+                ctx,
+                activity.applicationList,
+                activity.calendarIcon,
+                activity.calendarIconsDrawable
+            )
             val canBeInstalled = iconPackGenerator.canBeInstalled() // must be called before build and sign
 
             val apk = iconPackGenerator.buildAndSign(themed, iconColor.toHexString(), bgColor.toHexString()) {

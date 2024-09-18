@@ -53,4 +53,6 @@
     <string name="colorizeIconPack">Colorize icon pack</string>
     <string name="uploadImageError">Cannot upload image</string>
     <string name="iconPackOnly">Icon Pack Only</string>
+    <string name="syncPacks">Sync icon packs</string>
+    <string name="retrieveCalendarIcon">Retrieve calendar icons</string>
 </resources>
