@@ -133,9 +133,7 @@ class ApplicationManager(private val ctx: Context) {
 
                             val packApp = IconPackApplication(packageName, appPackageName, activityName, iconName, iconId)
 
-                            if (!elements.filterIsInstance<IconPackApplication>()
-                                    .any { it.packageName == appPackageName && it.activityName == activityName }
-                            ) {
+                            if (!elements.any { it is IconPackApplication && it.packageName == appPackageName && it.activityName == activityName }) {
                                 elements.add(packApp)
                             }
                         }
@@ -153,9 +151,7 @@ class ApplicationManager(private val ctx: Context) {
 
                         val calendar = CalendarIcon(packageName, appPackageName, activityName, prefix)
 
-                        if (!elements.filterIsInstance<CalendarIcon>()
-                                .any { it.packageName == appPackageName && it.activityName == activityName }
-                        ) {
+                        if (!elements.any { it is CalendarIcon && it.packageName == appPackageName && it.activityName == activityName }) {
                             elements.add(calendar)
                         }
                     }
