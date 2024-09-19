@@ -17,9 +17,9 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.kaanelloed.iconeration.data.AppDatabase
-import com.kaanelloed.iconeration.data.CalendarIcon
 import com.kaanelloed.iconeration.data.IconPack
-import com.kaanelloed.iconeration.data.IconPackApplication
+import com.kaanelloed.iconeration.data.InstalledApplication
+import com.kaanelloed.iconeration.data.RawElement
 import com.kaanelloed.iconeration.data.isDarkModeEnabled
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
@@ -35,13 +35,16 @@ class MainActivity : ComponentActivity() {
     var applicationList: List<PackageInfoStruct> by mutableStateOf(listOf())
         private set
 
-    var iconPackApplications: Map<IconPack, List<IconPackApplication>> = emptyMap()
+    var iconPackAppFilterElement: Map<IconPack, List<RawElement>> = emptyMap()
         private set
 
-    var allCalendarIcons: Map<IconPack, List<CalendarIcon>> = emptyMap()
+    var iconPacks: List<IconPack> = listOf()
         private set
 
-    var calendarIcon: List<CalendarIcon> = listOf()
+    var installedApplications: List<InstalledApplication> = listOf()
+        private set
+
+    var calendarIcon: Map<InstalledApplication, String> = mapOf()
 
     var calendarIconsDrawable: Map<String, Drawable> = emptyMap()
 
@@ -54,8 +57,9 @@ class MainActivity : ComponentActivity() {
         val apps = ApplicationManager(applicationContext).getAllInstalledApps()
         apps.sort()
 
-        val iconPacks = ApplicationManager(applicationContext).getIconPacks()
-        syncIconPacks()
+        iconPacks = ApplicationManager(applicationContext).getIconPacks()
+
+        getAppFilterElements()
 
         applicationList = apps.toList()
 
@@ -73,60 +77,36 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun syncIconPacks(forceSync: Boolean = false) {
+    private fun getAppFilterElements() {
         CoroutineScope(Dispatchers.Default).launch {
+            val map = mutableMapOf<IconPack, List<RawElement>>()
+
             val appMan = ApplicationManager(applicationContext)
-            val iconPacks = appMan.getIconPacks()
-
-            val db = Room.databaseBuilder(
-                applicationContext,
-                AppDatabase::class.java, "iconPackApps"
-            ).build()
-
-            val packDao = db.iconPackDao()
-            val packList = packDao.getAll()
-
-            packDao.deleteInstalledApplications()
-            packDao.insertAll(appMan.getAllInstalledApplications())
-
-            //Remove uninstalled icon packs
-            for (dbApp in packList) {
-                if (!iconPacks.any { it.packageName == dbApp.packageName }) {
-                    packDao.delete(dbApp)
-                    packDao.deleteApplicationByIconPackage(dbApp.packageName)
-                }
-            }
+            installedApplications = appMan.getAllInstalledApplications()
 
             for (iconPack in iconPacks) {
-                val dbApp = packList.find { it.packageName == iconPack.packageName }
-                val sameVersion = if (dbApp != null) { dbApp.versionCode == iconPack.versionCode } else false
-
-                if (!sameVersion || forceSync) {
-                    if (dbApp != null) {
-                        packDao.delete(dbApp)
-                        packDao.deleteApplicationByIconPackage(iconPack.packageName)
-                        packDao.deleteCalendarByIconPackage(iconPack.packageName)
-                    }
-
-                    val elements = appMan.getAppFilterElements(iconPack.packageName)
-                    val packApps = elements.filterIsInstance<IconPackApplication>()
-                    packDao.insertIconPackWithApplications(iconPack, packApps)
-
-                    val calIcons = elements.filterIsInstance<CalendarIcon>()
-                    packDao.insertAllCalendarIcons(calIcons)
-                }
+                map[iconPack] = appMan.getAppFilterRawElements(iconPack.packageName, installedApplications)
             }
 
-            iconPackApplications = packDao.getIconPacksWithInstalledApps()
-            allCalendarIcons = packDao.getCalendarIconsWithInstalledApps()
+            iconPackAppFilterElement = map
+
             iconPackLoaded = true
         }
+    }
+
+    private fun saveAlchemiconPack() {
+        val db = Room.databaseBuilder(
+            applicationContext,
+            AppDatabase::class.java, "iconPackApps"
+        ).build()
+
+        val packDao = db.iconPackDao()
     }
 
     fun forceSync() {
         if (iconPackLoaded) {
             iconPackLoaded = false
-            syncIconPacks(true)
+            getAppFilterElements()
         }
     }
 
