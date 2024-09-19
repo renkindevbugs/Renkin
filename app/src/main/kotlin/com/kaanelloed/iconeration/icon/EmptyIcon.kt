@@ -13,4 +13,8 @@ class EmptyIcon: ExportableIcon(false) {
     override fun toBitmap(): Bitmap {
         TODO("Not yet implemented")
     }
+
+    override fun toDbString(): String {
+        TODO("Not yet implemented")
+    }
 }

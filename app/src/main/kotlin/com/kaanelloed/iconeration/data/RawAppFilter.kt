@@ -1,7 +1,5 @@
 package com.kaanelloed.iconeration.data
 
-import com.kaanelloed.iconeration.packages.PackageInfoStruct
-
 abstract class RawElement
 
 data class RawItem(

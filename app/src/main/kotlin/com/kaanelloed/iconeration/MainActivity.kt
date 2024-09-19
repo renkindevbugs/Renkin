@@ -16,15 +16,22 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
-import com.kaanelloed.iconeration.data.AppDatabase
+import com.kaanelloed.iconeration.data.AlchemiconPackDatabase
+import com.kaanelloed.iconeration.data.DbApplication
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.data.RawElement
 import com.kaanelloed.iconeration.data.isDarkModeEnabled
+import com.kaanelloed.iconeration.extension.bitmapFromBase64
+import com.kaanelloed.iconeration.icon.BitmapIcon
+import com.kaanelloed.iconeration.icon.EmptyIcon
+import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.ui.*
 import com.kaanelloed.iconeration.ui.theme.IconerationTheme
+import com.kaanelloed.iconeration.vector.VectorParser
+import com.kaanelloed.iconeration.xml.XmlDecoder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -62,6 +69,7 @@ class MainActivity : ComponentActivity() {
         getAppFilterElements()
 
         applicationList = apps.toList()
+        loadAlchemiconPack()
 
         setContent {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
@@ -94,13 +102,76 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun saveAlchemiconPack() {
-        val db = Room.databaseBuilder(
-            applicationContext,
-            AppDatabase::class.java, "iconPackApps"
-        ).build()
+    private fun loadAlchemiconPack() {
+        CoroutineScope(Dispatchers.Default).launch {
+            val db = Room.databaseBuilder(
+                applicationContext,
+                AlchemiconPackDatabase::class.java, "alchemiconPack"
+            ).build()
 
-        val packDao = db.iconPackDao()
+            val dao = db.alchemiconPackDao()
+
+            val dbApps = dao.getAll()
+            val apps = applicationList.toList() //clone
+
+            val appMan = ApplicationManager(applicationContext)
+
+            for (app in apps) {
+                val dbApp = dbApps.find { it.packageName == app.packageName && it.activityName == app.activityName }
+                if (dbApp != null) {
+                    val icon = if (dbApp.isXml) {
+                        val nodes = XmlDecoder.fromBase64(dbApp.drawable)
+                        val vector = VectorParser.parse(resources, nodes)
+
+                        if (vector != null) {
+                            VectorIcon(vector)
+                        } else {
+                            EmptyIcon()
+                        }
+                    } else {
+                        BitmapIcon(bitmapFromBase64(dbApp.drawable), dbApp.isAdaptiveIcon)
+                    }
+
+                    editApplication(app, app.changeExport(icon))
+                }
+            }
+
+            db.close()
+        }
+    }
+
+    fun saveAlchemiconPack() {
+        CoroutineScope(Dispatchers.Default).launch {
+            val db = Room.databaseBuilder(
+                applicationContext,
+                AlchemiconPackDatabase::class.java, "alchemiconPack"
+            ).build()
+
+            val dbApps = mutableListOf<DbApplication>()
+
+            for (app in applicationList) {
+                if (app.createdIcon !is EmptyIcon) {
+                    val isXml = app.createdIcon is VectorIcon
+
+                    dbApps.add(
+                        DbApplication(
+                            app.packageName,
+                            app.activityName,
+                            app.createdIcon.exportAsAdaptiveIcon,
+                            isXml,
+                            app.createdIcon.toDbString()
+                        )
+                    )
+                }
+            }
+
+            val packDao = db.alchemiconPackDao()
+
+            packDao.deleteAllApplications()
+            packDao.insertAll(dbApps)
+
+            db.close()
+        }
     }
 
     fun forceSync() {

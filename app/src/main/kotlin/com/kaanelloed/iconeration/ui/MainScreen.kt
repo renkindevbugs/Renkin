@@ -347,6 +347,8 @@ fun BuildPackButton() {
                     openSuccess = ApkInstaller(ctx).install(apk)
                 }
             }
+
+            activity.saveAlchemiconPack()
         }
     }) {
         Icon(

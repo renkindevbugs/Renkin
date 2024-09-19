@@ -17,6 +17,7 @@ import com.android.tools.smali.smali.SmaliOptions
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.asset.AssetHandler
 import com.kaanelloed.iconeration.data.InstalledApplication
+import com.kaanelloed.iconeration.extension.getBytes
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager
@@ -309,12 +310,8 @@ class IconPackBuilder(
     }
 
     private fun generatePng(image: Bitmap, name: String): ByteInputSource {
-        val outStream = ByteArrayOutputStream()
-        image.compress(Bitmap.CompressFormat.PNG, 100, outStream)
-        val src = ByteInputSource(outStream.toByteArray(), name)
-        outStream.close()
-
-        return src
+        val bytes = image.getBytes(Bitmap.CompressFormat.PNG, 100)
+        return ByteInputSource(bytes, name)
     }
 
     private fun createColorResource(packageBlock: PackageBlock, name: String, color: String) {

@@ -9,4 +9,6 @@ abstract class ExportableIcon(val exportAsAdaptiveIcon: Boolean): BaseIcon() {
     abstract fun getPainter(): Painter
 
     abstract fun toBitmap(): Bitmap
+
+    abstract fun toDbString(): String
 }

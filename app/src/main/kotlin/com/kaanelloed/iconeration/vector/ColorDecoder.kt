@@ -1,6 +1,7 @@
 package com.kaanelloed.iconeration.vector
 
 import android.content.res.Resources
+import android.content.res.Resources.Theme
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.text.isDigitsOnly
@@ -50,7 +51,7 @@ class ColorDecoder(val resources: Resources) {
         val id = value.substring(1)
 
         if (id.isDigitsOnly()) {
-            return Color(ResourcesCompat.getColor(resources, id.toInt(), null))
+            return resources.getComposeColor(id.toInt(), null)
         }
 
         return Color.Unspecified
@@ -79,6 +80,24 @@ class ColorDecoder(val resources: Resources) {
         val alpha = elements[3].toFloat()
 
         return Color(red, green, blue, alpha)
+    }
+
+    private fun Resources.getComposeColor(id: Int, theme: Theme?): Color {
+        val color = this.getColorOrNull(id, theme)
+
+        return if (color == null) {
+            Color.Unspecified
+        } else {
+            Color(color)
+        }
+    }
+
+    private fun Resources.getColorOrNull(id: Int, theme: Theme?): Int? {
+        return try {
+            ResourcesCompat.getColor(this, id, theme)
+        } catch (e: Resources.NotFoundException) {
+            null
+        }
     }
 
     companion object {

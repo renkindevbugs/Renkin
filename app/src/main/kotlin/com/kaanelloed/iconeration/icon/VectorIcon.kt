@@ -2,6 +2,7 @@ package com.kaanelloed.iconeration.icon
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.util.Base64
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -10,6 +11,7 @@ import com.kaanelloed.iconeration.vector.MutableImageVector
 import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.center
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeTo
+import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXml
 import com.kaanelloed.iconeration.vector.VectorRenderer.Companion.renderToCanvas
 
 class VectorIcon(val vector: ImageVector, exportAsAdaptiveIcon: Boolean = false): ExportableIcon(exportAsAdaptiveIcon) {
@@ -24,6 +26,10 @@ class VectorIcon(val vector: ImageVector, exportAsAdaptiveIcon: Boolean = false)
         return render()
     }
 
+    override fun toDbString(): String {
+        return convertToBase64()
+    }
+
     private fun render(): Bitmap {
         val mutableVector = vector.toMutableImageVector()
         val bmp = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
@@ -31,5 +37,10 @@ class VectorIcon(val vector: ImageVector, exportAsAdaptiveIcon: Boolean = false)
         mutableVector.resizeTo(256F, 256F).center()
         mutableVector.renderToCanvas(canvas)
         return bmp
+    }
+
+    private fun convertToBase64(): String {
+        val bytes = vector.toXml()
+        return Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 }
