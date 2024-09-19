@@ -226,20 +226,17 @@ class ApplicationManager(private val ctx: Context) {
                     val xmlHourLayerIndex = xmlParser.getAttributeValue(null, "hourLayerIndex")
                     val xmlMinuteLayerIndex = xmlParser.getAttributeValue(null, "minuteLayerIndex")
 
-                    for (app in components) {
-                        if (xmlDrawable != null && xmlDefaultHour != null && xmlDefaultMinute != null
-                            && xmlHourLayerIndex != null && xmlMinuteLayerIndex != null) {
-                            list.add(
-                                RawDynamicClock(
-                                    xmlDrawable,
-                                    xmlDefaultHour,
-                                    xmlDefaultMinute,
-                                    xmlHourLayerIndex,
-                                    xmlMinuteLayerIndex
-                                )
+                    if (xmlDrawable != null && xmlDefaultHour != null && xmlDefaultMinute != null
+                        && xmlHourLayerIndex != null && xmlMinuteLayerIndex != null) {
+                        list.add(
+                            RawDynamicClock(
+                                xmlDrawable,
+                                xmlDefaultHour,
+                                xmlDefaultMinute,
+                                xmlHourLayerIndex,
+                                xmlMinuteLayerIndex
                             )
-                            break
-                        }
+                        )
                     }
                 }
             }
