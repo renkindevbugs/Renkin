@@ -238,7 +238,7 @@ fun OpenAppOptions(
 }
 
 @Composable
-fun RefreshButton() {
+fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
     val prefs = getPreferences()
     val type = prefs.getTypeValue()
     val monochrome = prefs.getMonochromeValue()
@@ -262,6 +262,7 @@ fun RefreshButton() {
                 openWarning = true
                 return@launch
             }
+            onChangeIsRefresh(true)
 
             val appMan = ApplicationManager(ctx)
 
@@ -295,6 +296,8 @@ fun RefreshButton() {
 
             val opt = IconGenerator.GenerationOptions(iconColor, monochrome, vector, themed, bgColor, colorizeIconPack)
             IconGenerator(ctx, activity, opt, iconPackageName, iconPackApps).generateIcons(activity.applicationList, type)
+
+            onChangeIsRefresh(false)
         }
     }) {
         Icon(
@@ -311,7 +314,7 @@ fun RefreshButton() {
 }
 
 @Composable
-fun BuildPackButton() {
+fun BuildPackButton(isInRefresh: Boolean) {
     val ctx = getCurrentContext()
     val activity = getCurrentMainActivity()
     val themed = getPreferences().getExportThemedValue()
@@ -320,9 +323,15 @@ fun BuildPackButton() {
 
     var openBuilder by rememberSaveable { mutableStateOf(false) }
     var openSuccess by remember { mutableStateOf(false) }
+    var openInRefresh by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
 
     IconButton(onClick = {
+        if (isInRefresh) {
+            openInRefresh = true
+            return@IconButton
+        }
+
         text = ""
         openBuilder = true
         CoroutineScope(Dispatchers.Default).launch {
@@ -376,6 +385,11 @@ fun BuildPackButton() {
         ShowToast(stringResource(id = R.string.iconPackInstalled))
         openSuccess = false
     }
+
+    if (openInRefresh) {
+        ShowToast(stringResource(id = R.string.iconsStillGenerated))
+        openInRefresh = false
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -384,6 +398,7 @@ fun TitleBar() {
     val prefs = getPreferences()
     var openSettings by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
+    var isInRefresh by rememberSaveable { mutableStateOf(false) }
 
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
@@ -394,8 +409,10 @@ fun TitleBar() {
             Text(stringResource(id = R.string.app_name))
         },
         actions = {
-            RefreshButton()
-            BuildPackButton()
+            RefreshButton {
+                isInRefresh = it
+            }
+            BuildPackButton(isInRefresh)
             IconButton(onClick = { openInfo = true }) {
                 Icon(
                     imageVector = Icons.Filled.Info,
