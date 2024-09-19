@@ -201,8 +201,10 @@ class VectorParser(val resources: Resources) {
     }
 
     private fun parseComposeColor(color: String): Color {
+        val newColor = if (color == "#0") "#00000000" else color
+
         return try {
-            color.toColor()
+            newColor.toColor()
         } catch (_: Exception) {
             Color.Unspecified
         }
