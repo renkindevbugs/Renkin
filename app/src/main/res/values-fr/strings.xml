@@ -36,7 +36,7 @@
     <string name="followSystem">Système</string>
     <string name="darkMode">Mode Sombre</string>
     <string name="lightMode">Mode Clair</string>
-    <string name="pathDetection">Détection des chemins</string>
+    <string name="pathDetection">Traçage des chemins</string>
     <string name="edgeDetection">Détection des contours</string>
     <string name="firstLetter">Première lettre</string>
     <string name="twoLetters">Deux lettres</string>

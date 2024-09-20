@@ -10,7 +10,7 @@
 ## Basic features
 
 - Get icon from icon pack
-- Use path detection on the application icon using Color Quantization
+- Use path tracing on the application icon using Color Quantization
 - Use canny edge detection on the application icon
 - Create text from application name using [Arcticons OTF font](https://github.com/Arcticons-Team/Arcticons-Font)
     - First letter

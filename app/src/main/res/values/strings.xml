@@ -37,7 +37,7 @@
     <string name="followSystem">Follow System</string>
     <string name="darkMode">Dark Mode</string>
     <string name="lightMode">Light Mode</string>
-    <string name="pathDetection">Path Detection</string>
+    <string name="pathDetection">Path Tracing</string>
     <string name="edgeDetection">Edge Detection</string>
     <string name="firstLetter">First Letter</string>
     <string name="twoLetters">Two Letters</string>
