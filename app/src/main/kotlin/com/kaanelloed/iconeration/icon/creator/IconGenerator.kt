@@ -14,6 +14,7 @@ import android.graphics.drawable.VectorDrawable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
@@ -103,7 +104,7 @@ class IconGenerator(
             if (iconPack == null) {
                 edgeDetector = CannyEdgeDetector()
                 edgeDetector.process(
-                    getAppIconBitmap(app),
+                    getAppIconBitmap(app).asImageBitmap(),
                     options.color
                 )
                 updateApplication(app, BitmapIcon(edgeDetector.edgesImage))
@@ -168,7 +169,7 @@ class IconGenerator(
     }
 
     private fun generateColorQuantizationDetection(app: PackageInfoStruct) {
-        val imageVector = ImageTracer.imageToVector(getAppIconBitmap(app), ImageTracer.TracingOptions())
+        val imageVector = ImageTracer.imageToVector(getAppIconBitmap(app).asImageBitmap(), ImageTracer.TracingOptions())
 
         val vector = imageVector.toMutableImageVector()
         val stroke = imageVector.viewportHeight / 48 //1F at 48

@@ -1,7 +1,10 @@
 package com.kaanelloed.iconeration.image.edge
 
 import android.graphics.Bitmap
-import android.graphics.Color
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.toArgb
 import kotlin.math.*
 
 class CannyEdgeDetector {
@@ -16,7 +19,7 @@ class CannyEdgeDetector {
     private lateinit var data: IntArray
     private lateinit var magnitude: IntArray
 
-    private lateinit var sourceImage: Bitmap
+    private lateinit var sourceImage: ImageBitmap
     lateinit var edgesImage: Bitmap
         private set
 
@@ -55,7 +58,7 @@ class CannyEdgeDetector {
         contrastNormalized = false
     }
 
-    fun process(image: Bitmap, edgeColor: Int) {
+    fun process(image: ImageBitmap, edgeColor: Int) {
         sourceImage = image
 
         width = sourceImage.width
@@ -282,7 +285,7 @@ class CannyEdgeDetector {
             if (data[i] > 0) {
                 data[i] = edgeColor
             } else {
-                data[i] = Color.TRANSPARENT
+                data[i] = Color.Transparent.toArgb()
             }
         }
     }
@@ -294,13 +297,13 @@ class CannyEdgeDetector {
     private fun readLuminance() {
         val pixels = IntArray(picSize)
 
-        sourceImage.getPixels(pixels, 0, width, 0, 0, width, height)
+        sourceImage.readPixels(pixels)
 
         for (i in 0 until picSize) {
-            val pixel = pixels[i]
-            val red = Color.red(pixel)
-            val green = Color.green(pixel)
-            val blue = Color.blue(pixel)
+            val color = Color(pixels[i])
+            val red = (color.red * 255).toInt()
+            val green = (color.green * 255).toInt()
+            val blue = (color.blue * 255).toInt()
             data[i] = luminance(red, green, blue)
         }
     }
@@ -335,7 +338,7 @@ class CannyEdgeDetector {
     private fun writeEdges(pixels: IntArray) {
         //edgesImage = Bitmap.createBitmap(sourceImage)
         //edgesImage.setPixels(pixels, 0, width, 0, 0, width, height)
-        edgesImage = Bitmap.createBitmap(pixels, width, height, sourceImage.config)
+        edgesImage = Bitmap.createBitmap(pixels, width, height, sourceImage.asAndroidBitmap().config)
     }
 
     private fun FloatArray.elemOrCloser(index: Int): Float {
