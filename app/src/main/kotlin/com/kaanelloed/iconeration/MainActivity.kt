@@ -16,15 +16,22 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
-import com.kaanelloed.iconeration.data.AppDatabase
-import com.kaanelloed.iconeration.data.CalendarIcon
+import com.kaanelloed.iconeration.data.AlchemiconPackDatabase
+import com.kaanelloed.iconeration.data.DbApplication
 import com.kaanelloed.iconeration.data.IconPack
-import com.kaanelloed.iconeration.data.IconPackApplication
+import com.kaanelloed.iconeration.data.InstalledApplication
+import com.kaanelloed.iconeration.data.RawElement
 import com.kaanelloed.iconeration.data.isDarkModeEnabled
+import com.kaanelloed.iconeration.extension.bitmapFromBase64
+import com.kaanelloed.iconeration.icon.BitmapIcon
+import com.kaanelloed.iconeration.icon.EmptyIcon
+import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.ui.*
 import com.kaanelloed.iconeration.ui.theme.IconerationTheme
+import com.kaanelloed.iconeration.vector.VectorParser
+import com.kaanelloed.iconeration.xml.XmlDecoder
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -35,13 +42,16 @@ class MainActivity : ComponentActivity() {
     var applicationList: List<PackageInfoStruct> by mutableStateOf(listOf())
         private set
 
-    var iconPackApplications: Map<IconPack, List<IconPackApplication>> = emptyMap()
+    var iconPackAppFilterElement: Map<IconPack, List<RawElement>> = emptyMap()
         private set
 
-    var allCalendarIcons: Map<IconPack, List<CalendarIcon>> = emptyMap()
+    var iconPacks: List<IconPack> = listOf()
         private set
 
-    var calendarIcon: List<CalendarIcon> = listOf()
+    var installedApplications: List<InstalledApplication> = listOf()
+        private set
+
+    var calendarIcon: Map<InstalledApplication, String> = mapOf()
 
     var calendarIconsDrawable: Map<String, Drawable> = emptyMap()
 
@@ -54,10 +64,12 @@ class MainActivity : ComponentActivity() {
         val apps = ApplicationManager(applicationContext).getAllInstalledApps()
         apps.sort()
 
-        val iconPacks = ApplicationManager(applicationContext).getIconPacks()
-        syncIconPacks()
+        iconPacks = ApplicationManager(applicationContext).getIconPacks()
+
+        getAppFilterElements()
 
         applicationList = apps.toList()
+        loadAlchemiconPack()
 
         setContent {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
@@ -73,60 +85,99 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun syncIconPacks(forceSync: Boolean = false) {
+    private fun getAppFilterElements() {
         CoroutineScope(Dispatchers.Default).launch {
+            val map = mutableMapOf<IconPack, List<RawElement>>()
+
             val appMan = ApplicationManager(applicationContext)
-            val iconPacks = appMan.getIconPacks()
-
-            val db = Room.databaseBuilder(
-                applicationContext,
-                AppDatabase::class.java, "iconPackApps"
-            ).build()
-
-            val packDao = db.iconPackDao()
-            val packList = packDao.getAll()
-
-            packDao.deleteInstalledApplications()
-            packDao.insertAll(appMan.getAllInstalledApplications())
-
-            //Remove uninstalled icon packs
-            for (dbApp in packList) {
-                if (!iconPacks.any { it.packageName == dbApp.packageName }) {
-                    packDao.delete(dbApp)
-                    packDao.deleteApplicationByIconPackage(dbApp.packageName)
-                }
-            }
+            installedApplications = appMan.getAllInstalledApplications()
 
             for (iconPack in iconPacks) {
-                val dbApp = packList.find { it.packageName == iconPack.packageName }
-                val sameVersion = if (dbApp != null) { dbApp.versionCode == iconPack.versionCode } else false
+                map[iconPack] = appMan.getAppFilterRawElements(iconPack.packageName, installedApplications)
+            }
 
-                if (!sameVersion || forceSync) {
-                    if (dbApp != null) {
-                        packDao.delete(dbApp)
-                        packDao.deleteApplicationByIconPackage(iconPack.packageName)
-                        packDao.deleteCalendarByIconPackage(iconPack.packageName)
+            iconPackAppFilterElement = map
+
+            iconPackLoaded = true
+        }
+    }
+
+    private fun loadAlchemiconPack() {
+        CoroutineScope(Dispatchers.Default).launch {
+            val db = Room.databaseBuilder(
+                applicationContext,
+                AlchemiconPackDatabase::class.java, "alchemiconPack"
+            ).build()
+
+            val dao = db.alchemiconPackDao()
+
+            val dbApps = dao.getAll()
+            val apps = applicationList.toList() //clone
+
+            val appMan = ApplicationManager(applicationContext)
+
+            for (app in apps) {
+                val dbApp = dbApps.find { it.packageName == app.packageName && it.activityName == app.activityName }
+                if (dbApp != null) {
+                    val icon = if (dbApp.isXml) {
+                        val nodes = XmlDecoder.fromBase64(dbApp.drawable)
+                        val vector = VectorParser.parse(resources, nodes)
+
+                        if (vector != null) {
+                            VectorIcon(vector)
+                        } else {
+                            EmptyIcon()
+                        }
+                    } else {
+                        BitmapIcon(bitmapFromBase64(dbApp.drawable), dbApp.isAdaptiveIcon)
                     }
 
-                    val elements = appMan.getAppFilterElements(iconPack.packageName)
-                    val packApps = elements.filterIsInstance<IconPackApplication>()
-                    packDao.insertIconPackWithApplications(iconPack, packApps)
-
-                    val calIcons = elements.filterIsInstance<CalendarIcon>()
-                    packDao.insertAllCalendarIcons(calIcons)
+                    editApplication(app, app.changeExport(icon))
                 }
             }
 
-            iconPackApplications = packDao.getIconPacksWithInstalledApps()
-            allCalendarIcons = packDao.getCalendarIconsWithInstalledApps()
-            iconPackLoaded = true
+            db.close()
+        }
+    }
+
+    fun saveAlchemiconPack() {
+        CoroutineScope(Dispatchers.Default).launch {
+            val db = Room.databaseBuilder(
+                applicationContext,
+                AlchemiconPackDatabase::class.java, "alchemiconPack"
+            ).build()
+
+            val dbApps = mutableListOf<DbApplication>()
+
+            for (app in applicationList) {
+                if (app.createdIcon !is EmptyIcon) {
+                    val isXml = app.createdIcon is VectorIcon
+
+                    dbApps.add(
+                        DbApplication(
+                            app.packageName,
+                            app.activityName,
+                            app.createdIcon.exportAsAdaptiveIcon,
+                            isXml,
+                            app.createdIcon.toDbString()
+                        )
+                    )
+                }
+            }
+
+            val packDao = db.alchemiconPackDao()
+
+            packDao.deleteAllApplications()
+            packDao.insertAll(dbApps)
+
+            db.close()
         }
     }
 
     fun forceSync() {
         if (iconPackLoaded) {
             iconPackLoaded = false
-            syncIconPacks(true)
+            getAppFilterElements()
         }
     }
 

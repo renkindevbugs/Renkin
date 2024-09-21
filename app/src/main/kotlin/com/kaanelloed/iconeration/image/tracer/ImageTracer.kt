@@ -1,16 +1,17 @@
 package com.kaanelloed.iconeration.image.tracer
 
-import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.graphics.vector.ImageVector
-import java.nio.IntBuffer
 import kotlin.math.floor
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
 class ImageTracer {
     companion object {
-        fun imageToVector(image: Bitmap, options: TracingOptions): ImageVector {
+        fun imageToVector(image: ImageBitmap, options: TracingOptions): ImageVector {
             val imageData = loadImageData(image)
             val palette = generatePalette(options)
 
@@ -37,14 +38,11 @@ class ImageTracer {
             return ii
         }
 
-        private fun loadImageData(image: Bitmap): ImageData {
+        private fun loadImageData(image: ImageBitmap): ImageData {
             val width = image.width
             val height = image.height
 
-            val ib = IntBuffer.allocate(width * height)
-            image.copyPixelsToBuffer(ib)
-
-            val rawData = ib.array()
+            val rawData = image.toPixelMap().buffer
             val data = ByteArray(rawData.size * 4)
 
             for (i in rawData.indices) {
@@ -68,15 +66,17 @@ class ImageTracer {
             }
         }
 
-        private fun getPalette(image: Bitmap, options: TracingOptions): Array<ByteArray> {
+        private fun getPalette(image: ImageBitmap, options: TracingOptions): Array<ByteArray> {
             val numberOfColors = options.numberOfColors
             val pixels = Array(image.width) {
                 IntArray(image.height)
             }
 
+            val pixelMap = image.toPixelMap()
+
             for (i in 0 until image.width) {
                 for (j in 0 until image.height) {
-                    pixels[i][j] = image.getPixel(i, j)
+                    pixels[i][j] = pixelMap[i, j].toArgb()
                 }
             }
 

@@ -1,6 +1,5 @@
 package com.kaanelloed.iconeration.ui
 
-import android.graphics.drawable.Drawable
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -58,7 +57,7 @@ import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.apk.ApkInstaller
 import com.kaanelloed.iconeration.apk.ApkUninstaller
 import com.kaanelloed.iconeration.data.IconPack
-import com.kaanelloed.iconeration.data.IconPackApplication
+import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.data.getBackgroundColorValue
 import com.kaanelloed.iconeration.data.getColorizeIconPackValue
 import com.kaanelloed.iconeration.data.getExportThemedValue
@@ -66,8 +65,10 @@ import com.kaanelloed.iconeration.data.getIconColorValue
 import com.kaanelloed.iconeration.data.getIconPackValue
 import com.kaanelloed.iconeration.data.getIncludeVectorValue
 import com.kaanelloed.iconeration.data.getMonochromeValue
+import com.kaanelloed.iconeration.data.getRetrieveCalendarIconValue
 import com.kaanelloed.iconeration.data.getTypeValue
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.sizeIsGreaterThanZero
+import com.kaanelloed.iconeration.drawable.ResourceDrawable
 import com.kaanelloed.iconeration.icon.BitmapIcon
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
@@ -190,25 +191,29 @@ fun OpenAppOptions(
 
             when (options) {
                 is CreatedOptions -> {
-                    if (options.iconPackageName != "") {
-                        val key = activity.iconPackApplications.keys.find { it.packageName == options.iconPackageName }
-                        val apps = activity.iconPackApplications[key]!!
-                        val packApp = apps.find { it.packageName == app.packageName }
+                    val iconPackageName = options.iconPackageName
 
-                        val iconPackApps = ApplicationManager(ctx).getIconPackApplicationResources(
-                            options.iconPackageName,
+                    if (iconPackageName != "" && activity.iconPacks.any { it.packageName == iconPackageName }) {
+                        val apps = activity.iconPackAppFilterElement.entries.find { it.key.packageName == iconPackageName }!!.value
+
+                        val iconPackApps = ApplicationManager(ctx).getDrawableFromAppFilterElements(
+                            iconPackageName,
+                            activity.installedApplications,
                             apps
                         )
-                        val iconBuilder = IconGenerator(ctx, activity, options.generatingOptions, iconPackApps)
+
+                        val iconBuilder = IconGenerator(ctx, activity, options.generatingOptions, iconPackageName, iconPackApps)
+
+                        val packApp = iconPackApps.entries.find { it.key.packageName == app.packageName }
 
                         if (packApp != null) {
-                            val icon = ApplicationManager(ctx).getResIcon(packApp.iconPackName, packApp.resourceID)!!
+                            val icon = ApplicationManager(ctx).getResIcon(iconPackageName, packApp.value.resourceId)!!
                             iconBuilder.colorizeFromIconPack(app, icon)
                         } else {
                             iconBuilder.generateIcons(app, options.generatingType)
                         }
                     } else {
-                        val iconBuilder = IconGenerator(ctx, activity, options.generatingOptions, emptyMap())
+                        val iconBuilder = IconGenerator(ctx, activity, options.generatingOptions, "", emptyMap())
                         iconBuilder.generateIcons(app, options.generatingType)
                     }
                 }
@@ -233,7 +238,7 @@ fun OpenAppOptions(
 }
 
 @Composable
-fun RefreshButton() {
+fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
     val prefs = getPreferences()
     val type = prefs.getTypeValue()
     val monochrome = prefs.getMonochromeValue()
@@ -244,6 +249,7 @@ fun RefreshButton() {
     val themed = prefs.getExportThemedValue()
     val dynamicColor = themed && supportDynamicColors()
     val iconPackageName = prefs.getIconPackValue()
+    val retrieveCalendarIcon = prefs.getRetrieveCalendarIconValue()
 
     val ctx = getCurrentContext()
     val activity = getCurrentMainActivity()
@@ -256,19 +262,28 @@ fun RefreshButton() {
                 openWarning = true
                 return@launch
             }
+            onChangeIsRefresh(true)
 
-            var iconPackApps = emptyMap<IconPackApplication, Pair<Int, Drawable>>()
+            val appMan = ApplicationManager(ctx)
+
+            var iconPackApps = emptyMap<InstalledApplication, ResourceDrawable>()
             if (iconPackageName != "") {
-                val pack = activity.iconPackApplications.keys.find { it.packageName == iconPackageName }
-                val packApps = activity.iconPackApplications[pack]!!
-                iconPackApps = ApplicationManager(ctx).getIconPackApplicationResources(iconPackageName, packApps)
+                val packApps = activity.iconPackAppFilterElement.entries.find { it.key.packageName == iconPackageName }!!.value
+                iconPackApps = appMan.getDrawableFromAppFilterElements(
+                    iconPackageName,
+                    activity.installedApplications,
+                    packApps
+                )
             }
 
-            if (iconPackageName != "") {
-                val pack = activity.allCalendarIcons.keys.find { it.packageName == iconPackageName }
-                val calIcons = activity.allCalendarIcons[pack]!!
-                activity.calendarIcon = calIcons
-                activity.calendarIconsDrawable = ApplicationManager(ctx).getIconPackCalendarResources(iconPackageName, calIcons)
+            if (iconPackageName != "" && retrieveCalendarIcon) {
+                val packApps = activity.iconPackAppFilterElement.entries.find { it.key.packageName == iconPackageName }!!.value
+                activity.calendarIcon = appMan.getCalendarApplications(activity.installedApplications, packApps)
+                activity.calendarIconsDrawable =
+                    appMan.getCalendarFromAppFilterElements(
+                        iconPackageName,
+                        packApps
+                    )
             }
 
             var iconColor = iconColorValue.toInt()
@@ -280,7 +295,9 @@ fun RefreshButton() {
             }
 
             val opt = IconGenerator.GenerationOptions(iconColor, monochrome, vector, themed, bgColor, colorizeIconPack)
-            IconGenerator(ctx, activity, opt, iconPackApps).generateIcons(activity.applicationList, type)
+            IconGenerator(ctx, activity, opt, iconPackageName, iconPackApps).generateIcons(activity.applicationList, type)
+
+            onChangeIsRefresh(false)
         }
     }) {
         Icon(
@@ -297,7 +314,7 @@ fun RefreshButton() {
 }
 
 @Composable
-fun BuildPackButton() {
+fun BuildPackButton(isInRefresh: Boolean) {
     val ctx = getCurrentContext()
     val activity = getCurrentMainActivity()
     val themed = getPreferences().getExportThemedValue()
@@ -306,9 +323,15 @@ fun BuildPackButton() {
 
     var openBuilder by rememberSaveable { mutableStateOf(false) }
     var openSuccess by remember { mutableStateOf(false) }
+    var openInRefresh by remember { mutableStateOf(false) }
     var text by remember { mutableStateOf("") }
 
     IconButton(onClick = {
+        if (isInRefresh) {
+            openInRefresh = true
+            return@IconButton
+        }
+
         text = ""
         openBuilder = true
         CoroutineScope(Dispatchers.Default).launch {
@@ -333,6 +356,8 @@ fun BuildPackButton() {
                     openSuccess = ApkInstaller(ctx).install(apk)
                 }
             }
+
+            activity.saveAlchemiconPack()
         }
     }) {
         Icon(
@@ -360,6 +385,11 @@ fun BuildPackButton() {
         ShowToast(stringResource(id = R.string.iconPackInstalled))
         openSuccess = false
     }
+
+    if (openInRefresh) {
+        ShowToast(stringResource(id = R.string.iconsStillGenerated))
+        openInRefresh = false
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -368,6 +398,7 @@ fun TitleBar() {
     val prefs = getPreferences()
     var openSettings by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
+    var isInRefresh by rememberSaveable { mutableStateOf(false) }
 
     TopAppBar(
         colors = TopAppBarDefaults.topAppBarColors(
@@ -378,8 +409,10 @@ fun TitleBar() {
             Text(stringResource(id = R.string.app_name))
         },
         actions = {
-            RefreshButton()
-            BuildPackButton()
+            RefreshButton {
+                isInRefresh = it
+            }
+            BuildPackButton(isInRefresh)
             IconButton(onClick = { openInfo = true }) {
                 Icon(
                     imageVector = Icons.Filled.Info,

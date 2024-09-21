@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.*
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.kaanelloed.iconeration.ui.toColor
 import com.kaanelloed.iconeration.xml.XmlNode
 
 class VectorParser(val resources: Resources) {
@@ -112,9 +113,9 @@ class VectorParser(val resources: Resources) {
         val rawPathData = node.getAttributeValue("pathData") ?: ""
         val fillType = parseFill(node.getAttributeValue("fillType")?.toInt() ?: 0)
         val name = node.getAttributeValue("name") ?: DefaultPathName
-        val fillColor: Brush? = SolidColor(Color.Unspecified) //TODO
+        val fillColor = parseColor(node.getAttributeValue("fillColor"))
         val fillAlpha = node.getAttributeValue("fillAlpha")?.toFloat() ?: 1F
-        val strokeColor: Brush? = SolidColor(Color.White) //TODO
+        val strokeColor = parseColor(node.getAttributeValue("strokeColor"))
         val strokeAlpha = node.getAttributeValue("strokeAlpha")?.toFloat() ?: 1F
         val strokeWidth = node.getAttributeValue("strokeWidth")?.toFloat() ?: DefaultStrokeLineWidth
         val strokeLineCap = parseCap(node.getAttributeValue("strokeLineCap")?.toInt() ?: -1)
@@ -182,6 +183,31 @@ class VectorParser(val resources: Resources) {
 
     private fun parseFill(fill: Int): PathFillType {
         return if (fill == 0) PathFillType.NonZero else PathFillType.EvenOdd
+    }
+
+    private fun parseColor(color: String?): Brush? {
+        if (color.isNullOrBlank())
+            return null
+
+        return when (color.first()) {
+            '#' -> {
+                SolidColor(parseComposeColor(color))
+            }
+            '@' -> {
+                ReferenceBrush(color)
+            }
+            else -> null
+        }
+    }
+
+    private fun parseComposeColor(color: String): Color {
+        val newColor = if (color == "#0") "#00000000" else color
+
+        return try {
+            newColor.toColor()
+        } catch (_: Exception) {
+            Color.Unspecified
+        }
     }
 
     companion object {

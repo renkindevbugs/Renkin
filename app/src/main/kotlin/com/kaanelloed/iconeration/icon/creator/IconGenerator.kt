@@ -14,16 +14,18 @@ import android.graphics.drawable.VectorDrawable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import com.kaanelloed.iconeration.MainActivity
 import com.kaanelloed.iconeration.data.GenerationType
-import com.kaanelloed.iconeration.data.IconPackApplication
+import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.drawable.BaseTextDrawable
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.isAdaptiveIconDrawable
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
 import com.kaanelloed.iconeration.drawable.ForegroundIconDrawable
+import com.kaanelloed.iconeration.drawable.ResourceDrawable
 import com.kaanelloed.iconeration.icon.AdaptiveIcon
 import com.kaanelloed.iconeration.icon.parser.AdaptiveIconParser
 import com.kaanelloed.iconeration.icon.BaseIcon
@@ -50,7 +52,8 @@ class IconGenerator(
     private val ctx: Context,
     private val activity: MainActivity,
     private val options: GenerationOptions,
-    private val iconPackApplications: Map<IconPackApplication, Pair<Int, Drawable>>
+    private val iconPackName: String,
+    private val iconPackApplications: Map<InstalledApplication, ResourceDrawable>
 ) {
     private lateinit var apps: List<PackageInfoStruct>
 
@@ -101,7 +104,7 @@ class IconGenerator(
             if (iconPack == null) {
                 edgeDetector = CannyEdgeDetector()
                 edgeDetector.process(
-                    getAppIconBitmap(app),
+                    getAppIconBitmap(app).asImageBitmap(),
                     options.color
                 )
                 updateApplication(app, BitmapIcon(edgeDetector.edgesImage))
@@ -166,7 +169,7 @@ class IconGenerator(
     }
 
     private fun generateColorQuantizationDetection(app: PackageInfoStruct) {
-        val imageVector = ImageTracer.imageToVector(getAppIconBitmap(app), ImageTracer.TracingOptions())
+        val imageVector = ImageTracer.imageToVector(getAppIconBitmap(app).asImageBitmap(), ImageTracer.TracingOptions())
 
         val vector = imageVector.toMutableImageVector()
         val stroke = imageVector.viewportHeight / 48 //1F at 48
@@ -324,12 +327,12 @@ class IconGenerator(
     }
 
     private fun exportIconPackXML(app: PackageInfoStruct): Boolean {
-        val iconPackApp = iconPackApplication(app.packageName) ?: return false
+        iconPackApplication(app.packageName) ?: return false
 
-        val res = ApplicationManager(ctx).getResources(iconPackApp.iconPackName) ?: return false
+        val res = ApplicationManager(ctx).getResources(iconPackName) ?: return false
 
         val iconID = iconPackApplicationIconID(app.packageName)
-        val parser = ApplicationManager(ctx).getPackageResourceXml(iconPackApp.iconPackName, iconID) ?: return false
+        val parser = ApplicationManager(ctx).getPackageResourceXml(iconPackName, iconID) ?: return false
 
         val adaptiveIcon = AdaptiveIconParser.parse(res, parser.toXmlNode()) ?: return false
         var vectorIcon: VectorIcon? = null
@@ -364,7 +367,7 @@ class IconGenerator(
         return true
     }
 
-    private fun iconPackApplication(packageName: String): IconPackApplication? {
+    private fun iconPackApplication(packageName: String): InstalledApplication? {
         return iconPackApplications.keys.find { it.packageName == packageName }
     }
 
@@ -372,7 +375,7 @@ class IconGenerator(
         val app = iconPackApplication(packageName)
 
         if (app != null) {
-            return iconPackApplications[app]!!.second
+            return iconPackApplications[app]!!.drawable
         }
 
         return null
@@ -382,7 +385,7 @@ class IconGenerator(
         val app = iconPackApplication(packageName)
 
         if (app != null) {
-            return iconPackApplications[app]!!.first
+            return iconPackApplications[app]!!.resourceId
         }
 
         return -1

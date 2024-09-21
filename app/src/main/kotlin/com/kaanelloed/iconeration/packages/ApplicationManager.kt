@@ -15,12 +15,15 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.UserManager
 import androidx.core.content.res.ResourcesCompat
-import com.kaanelloed.iconeration.data.AppFilterElement
-import com.kaanelloed.iconeration.data.CalendarIcon
 import com.kaanelloed.iconeration.data.IconPack
-import com.kaanelloed.iconeration.data.IconPackApplication
 import com.kaanelloed.iconeration.data.InstalledApplication
+import com.kaanelloed.iconeration.data.RawCalendar
+import com.kaanelloed.iconeration.data.RawDynamicClock
+import com.kaanelloed.iconeration.data.RawElement
+import com.kaanelloed.iconeration.data.RawItem
+import com.kaanelloed.iconeration.data.toComponentInfo
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.sizeIsGreaterThanZero
+import com.kaanelloed.iconeration.drawable.ResourceDrawable
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
@@ -82,15 +85,87 @@ class ApplicationManager(private val ctx: Context) {
         return getIconPacks(Intent("org.adw.launcher.THEMES", null))
     }
 
-    fun getAppFilterElements(iconPackName: String): List<AppFilterElement> {
+    fun getAppFilterRawElements(iconPackName: String, applications: List<InstalledApplication>): List<RawElement> {
         val res = pm.getResourcesForApplication(iconPackName)
         val xmlParser = getAppfilter(res, iconPackName)
 
+        val components = applications.map { it.toComponentInfo() }
+
         if (xmlParser != null) {
-            return getAppsFromAppFilter(res, xmlParser, iconPackName)
+            return getAppFilterRawElements(xmlParser, components)
         }
 
         return emptyList()
+    }
+
+    fun getDrawableFromAppFilterElements(iconPackName: String, applications: List<InstalledApplication>, elements: List<RawElement>): Map<InstalledApplication, ResourceDrawable> {
+        val map = mutableMapOf<InstalledApplication, ResourceDrawable>()
+
+        val drawables = getDrawableFromAppFilterElements(iconPackName, elements)
+
+        for (drawable in drawables) {
+            for (app in applications) {
+                if (drawable.key == app.toComponentInfo()) {
+                    map[app] = drawable.value
+                }
+            }
+        }
+
+        return map
+    }
+
+    private fun getDrawableFromAppFilterElements(iconPackName: String, elements: List<RawElement>): Map<String, ResourceDrawable> {
+        val res = pm.getResourcesForApplication(iconPackName)
+        val map = mutableMapOf<String, ResourceDrawable>()
+
+        for (element in elements) {
+            if (element is RawItem) {
+                val resourceId = res.getIdentifierByName(element.drawableLink, "drawable", iconPackName)
+
+                if (resourceId > 0) {
+                    val drawable = getResIcon(res, resourceId)
+                    if (drawable != null) {
+                        map[element.component] = ResourceDrawable(resourceId, drawable)
+                    }
+                }
+            }
+        }
+
+        return map
+    }
+
+    fun getCalendarApplications(applications: List<InstalledApplication>, elements: List<RawElement>): Map<InstalledApplication, String> {
+        val map = mutableMapOf<InstalledApplication, String>()
+
+        val calendarIcons = elements.filterIsInstance<RawCalendar>()
+
+        for (calendar in calendarIcons) {
+            for (app in applications) {
+                if (calendar.component == app.toComponentInfo()) {
+                    map[app] = calendar.prefix
+                }
+            }
+        }
+
+        return map
+    }
+
+    fun getCalendarFromAppFilterElements(iconPackName: String, elements: List<RawElement>): Map<String, Drawable> {
+        val res = pm.getResourcesForApplication(iconPackName)
+        val map = mutableMapOf<String, Drawable>()
+
+        val calendarIcons = elements.filterIsInstance<RawCalendar>()
+        for (calendar in calendarIcons) {
+            for (i in 1 .. 31) {
+                val resourceId = res.getIdentifierByName(calendar.prefix + i, "drawable", iconPackName)
+
+                if (resourceId > 0) {
+                    map[calendar.prefix + i] = getResIcon(res, resourceId)!!
+                }
+            }
+        }
+
+        return map
     }
 
     private fun getIconPacks(intent: Intent): List<IconPack> {
@@ -113,59 +188,55 @@ class ApplicationManager(private val ctx: Context) {
         return iconPacks
     }
 
-    private fun getAppsFromAppFilter(res: Resources, xmlParser: XmlPullParser, packageName: String): List<AppFilterElement> {
-        val elements = mutableListOf<AppFilterElement>()
+    private fun getAppFilterRawElements(xmlParser: XmlPullParser, components: List<String>): List<RawElement> {
+        val list = mutableListOf<RawElement>()
+
         var type = xmlParser.eventType
 
         while (type != XmlPullParser.END_DOCUMENT) {
             if (type == XmlPullParser.START_TAG) {
                 if (xmlParser.name == "item") {
-                    val iconName = xmlParser.getAttributeValue(null, "drawable")
-                    val componentInfo = xmlParser.getAttributeValue(null, "component")
+                    val xmlDrawable = xmlParser.getAttributeValue(null, "drawable")
+                    val xmlComponent = xmlParser.getAttributeValue(null, "component")
 
-                    val components = ComponentInfo()
-                    if (iconName != null && componentInfo != null && components.parse(componentInfo)) {
-                        val iconId = res.getIdentifierByName(iconName, "drawable", packageName)
-
-                        if (iconId > 0) {
-                            val appPackageName = components.packageName
-                            val activityName = components.activityNane
-
-                            val packApp = IconPackApplication(packageName, appPackageName, activityName, iconName, iconId)
-
-                            if (!elements.any { it is IconPackApplication && it.packageName == appPackageName && it.activityName == activityName }) {
-                                elements.add(packApp)
-                            }
+                    for (app in components) {
+                        if (xmlComponent == app && xmlDrawable != null) {
+                            list.add(RawItem(xmlComponent, xmlDrawable))
+                            break
                         }
                     }
                 }
 
                 if (xmlParser.name == "calendar") {
-                    val prefix = xmlParser.getAttributeValue(null, "prefix")
-                    val componentInfo = xmlParser.getAttributeValue(null, "component")
+                    val xmlPrefix = xmlParser.getAttributeValue(null, "prefix")
+                    val xmlComponent = xmlParser.getAttributeValue(null, "component")
 
-                    val components = ComponentInfo()
-                    if (prefix != null && componentInfo != null && components.parse(componentInfo)) {
-                        val appPackageName = components.packageName
-                        val activityName = components.activityNane
-
-                        val calendar = CalendarIcon(packageName, appPackageName, activityName, prefix)
-
-                        if (!elements.any { it is CalendarIcon && it.packageName == appPackageName && it.activityName == activityName }) {
-                            elements.add(calendar)
+                    for (app in components) {
+                        if (xmlComponent == app && xmlPrefix != null) {
+                            list.add(RawCalendar(xmlComponent, xmlPrefix))
+                            break
                         }
                     }
                 }
 
                 if (xmlParser.name == "dynamic-clock") {
-                    val iconName = xmlParser.getAttributeValue(null, "drawable")
+                    val xmlDrawable = xmlParser.getAttributeValue(null, "drawable")
+                    val xmlDefaultHour = xmlParser.getAttributeValue(null, "defaultHour")
+                    val xmlDefaultMinute = xmlParser.getAttributeValue(null, "defaultMinute")
+                    val xmlHourLayerIndex = xmlParser.getAttributeValue(null, "hourLayerIndex")
+                    val xmlMinuteLayerIndex = xmlParser.getAttributeValue(null, "minuteLayerIndex")
 
-                    if (iconName != null) {
-                        val iconId = res.getIdentifierByName(iconName, "drawable", packageName)
-
-                        if (iconId > 0) {
-                            //TODO
-                        }
+                    if (xmlDrawable != null && xmlDefaultHour != null && xmlDefaultMinute != null
+                        && xmlHourLayerIndex != null && xmlMinuteLayerIndex != null) {
+                        list.add(
+                            RawDynamicClock(
+                                xmlDrawable,
+                                xmlDefaultHour,
+                                xmlDefaultMinute,
+                                xmlHourLayerIndex,
+                                xmlMinuteLayerIndex
+                            )
+                        )
                     }
                 }
             }
@@ -173,7 +244,7 @@ class ApplicationManager(private val ctx: Context) {
             type = xmlParser.next()
         }
 
-        return elements
+        return list
     }
 
     fun checkAppFilter(xmlParser: XmlPullParser): Array<String> {
@@ -186,8 +257,7 @@ class ApplicationManager(private val ctx: Context) {
                     val iconName = xmlParser.getAttributeValue(null, "drawable")
                     val componentInfo = xmlParser.getAttributeValue(null, "component")
 
-                    val components = ComponentInfo()
-                    if (iconName == null || componentInfo == null || !components.parse(componentInfo)) {
+                    if (iconName == null || componentInfo == null || !componentIsValid(componentInfo)) {
                         var item = ""
                         for (i in 0 until  xmlParser.attributeCount) {
                             item += "${xmlParser.getAttributeName(i)}=\"${xmlParser.getAttributeValue(i)}\" "
@@ -201,6 +271,27 @@ class ApplicationManager(private val ctx: Context) {
         }
 
         return badlyFormattedComponents.toTypedArray()
+    }
+
+    private fun componentIsValid(text: String): Boolean {
+        var newText = text
+
+        if (!text.startsWith("ComponentInfo", true))
+            return false
+
+        newText = newText.replace("(", "{")
+        newText = newText.replace(")", "}")
+
+        val firstSplit = newText.split("{")
+        if (firstSplit.count() != 2)
+            return false
+
+        val secondSplit = firstSplit[1].split("}")
+        if (secondSplit.count() != 2)
+            return false
+
+        val thirdSplit = secondSplit[0].split("/")
+        return thirdSplit.count() >= 2
     }
 
     private fun getResolves(intent: Intent): List<ResolveInfo> {
@@ -235,37 +326,6 @@ class ApplicationManager(private val ctx: Context) {
         }
 
         return null
-    }
-
-    fun getIconPackApplicationResources(packageName: String,
-                                        iconPackApps: List<IconPackApplication>
-    ): Map<IconPackApplication, Pair<Int, Drawable>> {
-        val map = mutableMapOf<IconPackApplication, Pair<Int, Drawable>>()
-        val res = pm.getResourcesForApplication(packageName)
-        for (iconPackApp in iconPackApps) {
-            //TODO: fix icon bigger than real size
-            map[iconPackApp] = Pair(iconPackApp.resourceID, getResIcon(res, iconPackApp.resourceID)!!)
-        }
-
-        return map
-    }
-
-    fun getIconPackCalendarResources(packageName: String,
-                                        calendarIcons: List<CalendarIcon>
-    ): Map<String, Drawable> {
-        val map = mutableMapOf<String, Drawable>()
-        val res = pm.getResourcesForApplication(packageName)
-        for (calendar in calendarIcons) {
-            for (i in 1 .. 31) {
-                val id = res.getIdentifierByName(calendar.prefix + i, "drawable", packageName)
-
-                if (id > 0) {
-                    map[calendar.prefix + i] = getResIcon(res, id)!!
-                }
-            }
-        }
-
-        return map
     }
 
     private fun getResIcon(res: Resources, iconName: String, packageName: String): Drawable? {
@@ -322,47 +382,11 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     @Suppress("DEPRECATION")
-    @SuppressWarnings("DEPRECATION")
     fun getVersionCode(pack: PackageInfo): Long {
         return if (PackageVersion.is28OrMore())
             pack.longVersionCode
         else
             pack.versionCode.toLong()
-    }
-
-    inner class ComponentInfo {
-        private val componentPrefix = "ComponentInfo"
-        lateinit var packageName: String
-            private set
-        lateinit var activityNane: String
-            private set
-
-        fun parse(text: String): Boolean {
-            var newText = text
-
-            if (!text.startsWith(componentPrefix, true))
-                return false
-
-            newText = newText.replace("(", "{")
-            newText = newText.replace(")", "}")
-
-            val firstSplit = newText.split("{")
-            if (firstSplit.count() != 2)
-                return false
-
-            val secondSplit = firstSplit[1].split("}")
-            if (secondSplit.count() != 2)
-                return false
-
-            val thirdSplit = secondSplit[0].split("/")
-            if (thirdSplit.count() < 2)
-                return false
-
-            packageName = thirdSplit[0]
-            activityNane = thirdSplit[1]
-
-            return true
-        }
     }
 
     companion object {

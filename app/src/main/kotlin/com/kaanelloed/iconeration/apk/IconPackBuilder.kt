@@ -16,7 +16,8 @@ import com.android.tools.smali.smali.Smali
 import com.android.tools.smali.smali.SmaliOptions
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.asset.AssetHandler
-import com.kaanelloed.iconeration.data.CalendarIcon
+import com.kaanelloed.iconeration.data.InstalledApplication
+import com.kaanelloed.iconeration.extension.getBytes
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager
@@ -49,7 +50,7 @@ import java.time.format.DateTimeFormatter
 class IconPackBuilder(
     private val ctx: Context,
     private val apps: List<PackageInfoStruct>,
-    private val calendarIcons: List<CalendarIcon>,
+    private val calendarIcons: Map<InstalledApplication, String>,
     private val calendarIconsDrawable: Map<String, Drawable>
 ) {
     private val apkDir = ctx.cacheDir.resolve("apk")
@@ -157,7 +158,7 @@ class IconPackBuilder(
         }
 
         for (calendarIcon in calendarIcons) {
-            appfilterXml.calendar(calendarIcon.packageName, calendarIcon.activityName, calendarIcon.prefix)
+            appfilterXml.calendar(calendarIcon.key.packageName, calendarIcon.key.activityName, calendarIcon.value)
         }
 
         for (drawable in calendarIconsDrawable) {
@@ -309,12 +310,8 @@ class IconPackBuilder(
     }
 
     private fun generatePng(image: Bitmap, name: String): ByteInputSource {
-        val outStream = ByteArrayOutputStream()
-        image.compress(Bitmap.CompressFormat.PNG, 100, outStream)
-        val src = ByteInputSource(outStream.toByteArray(), name)
-        outStream.close()
-
-        return src
+        val bytes = image.getBytes(Bitmap.CompressFormat.PNG, 100)
+        return ByteInputSource(bytes, name)
     }
 
     private fun createColorResource(packageBlock: PackageBlock, name: String, color: String) {

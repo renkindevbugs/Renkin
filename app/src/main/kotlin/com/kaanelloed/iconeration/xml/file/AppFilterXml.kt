@@ -24,6 +24,20 @@ class AppFilterXml: XmlMemoryFile() {
         endTag("calendar")
     }
 
+    fun dynamicClock(drawableName: String
+                     , defaultHour: String
+                     , defaultMinute: String
+                     , hourLayerIndex: String
+                     , minuteLayerIndex: String) {
+        startTag("dynamic-clock")
+        attribute("drawable", drawableName)
+        attribute("defaultHour", defaultHour)
+        attribute("defaultMinute", defaultMinute)
+        attribute("hourLayerIndex", hourLayerIndex)
+        attribute("minuteLayerIndex", minuteLayerIndex)
+        endTag("dynamic-clock")
+    }
+
     override fun readAndClose(): ByteArray {
         endTag("resources")
         return super.readAndClose()

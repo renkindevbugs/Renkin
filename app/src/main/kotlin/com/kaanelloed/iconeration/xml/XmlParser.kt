@@ -52,7 +52,7 @@ class XmlParser {
     }
 
     companion object {
-        fun parse(pullParser: XmlPullParser): XmlNode {
+        private fun parse(pullParser: XmlPullParser): XmlNode {
             val parser = XmlParser()
             return parser.parse(pullParser)
         }

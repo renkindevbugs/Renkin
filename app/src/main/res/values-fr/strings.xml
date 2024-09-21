@@ -36,7 +36,7 @@
     <string name="followSystem">Système</string>
     <string name="darkMode">Mode Sombre</string>
     <string name="lightMode">Mode Clair</string>
-    <string name="pathDetection">Détection des chemins</string>
+    <string name="pathDetection">Traçage des chemins</string>
     <string name="edgeDetection">Détection des contours</string>
     <string name="firstLetter">Première lettre</string>
     <string name="twoLetters">Deux lettres</string>
@@ -54,4 +54,5 @@
     <string name="iconPackOnly">Pack d\'icônes seulement</string>
     <string name="syncPacks">Sync packs d\'icones</string>
     <string name="retrieveCalendarIcon">Inclure icones de calendrier</string>
+    <string name="iconsStillGenerated">Les icones sont encore en train de se faire générées</string>
 </resources>
