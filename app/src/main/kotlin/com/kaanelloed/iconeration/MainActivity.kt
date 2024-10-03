@@ -1,6 +1,7 @@
 package com.kaanelloed.iconeration
 
 import android.content.Context
+import android.content.Intent
 import android.graphics.drawable.Drawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -21,6 +22,7 @@ import com.kaanelloed.iconeration.data.DbApplication
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.data.RawElement
+import com.kaanelloed.iconeration.data.getPackageAddedNotificationValue
 import com.kaanelloed.iconeration.data.isDarkModeEnabled
 import com.kaanelloed.iconeration.extension.bitmapFromBase64
 import com.kaanelloed.iconeration.icon.BitmapIcon
@@ -28,6 +30,8 @@ import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
+import com.kaanelloed.iconeration.service.BootCompletedReceiver
+import com.kaanelloed.iconeration.service.PackageAddedService
 import com.kaanelloed.iconeration.ui.*
 import com.kaanelloed.iconeration.ui.theme.IconerationTheme
 import com.kaanelloed.iconeration.vector.VectorParser
@@ -73,6 +77,11 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
+            val packageAddedNotification = applicationContext.dataStore.getPackageAddedNotificationValue()
+
+            if (packageAddedNotification) {
+                startPackageAddedService()
+            }
 
             IconerationTheme(darkMode) {
                 Surface(
@@ -83,6 +92,27 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    fun startPackageAddedService() {
+        togglePackageAddedService(true)
+    }
+
+    fun stopPackageAddedService() {
+        togglePackageAddedService(false)
+    }
+
+    private fun togglePackageAddedService(enabled: Boolean) {
+        val intent = Intent(this, PackageAddedService::class.java)
+
+        if (enabled) {
+            startService(intent)
+        } else {
+            stopService(intent)
+        }
+
+        ApplicationManager(this)
+            .changeManifestEnabledState(BootCompletedReceiver::class.java, enabled)
     }
 
     private fun getAppFilterElements() {

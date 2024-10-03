@@ -15,6 +15,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
@@ -22,7 +23,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -35,11 +38,18 @@ import com.kaanelloed.iconeration.BuildConfig
 import com.kaanelloed.iconeration.data.DarkMode
 import com.kaanelloed.iconeration.data.getDarkModeLabels
 import com.kaanelloed.iconeration.data.getDarkModeValue
+import com.kaanelloed.iconeration.data.getPackageAddedNotificationValue
 import com.kaanelloed.iconeration.data.setDarkMode
+import com.kaanelloed.iconeration.data.setPackageAddedNotification
+import com.kaanelloed.iconeration.packages.PermissionManager
 import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
+    var notificationPermissionWarning by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val activity = getCurrentMainActivity()
+
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.background,
@@ -49,12 +59,36 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
         text = {
             Column {
                 DarkModeDropdown(prefs)
+                PackageAddedNotificationSwitch(prefs.getPackageAddedNotificationValue()) {
+                    if (it) {
+                        val permissionManager = PermissionManager(activity)
+                        if (!permissionManager.isPostNotificationEnabled()) {
+                            permissionManager.askForPostNotification()
+                        }
+
+                        if (!permissionManager.isPostNotificationEnabled()) {
+                            notificationPermissionWarning = true
+                            return@PackageAddedNotificationSwitch
+                        }
+
+                        activity.startPackageAddedService()
+                    } else {
+                        activity.stopPackageAddedService()
+                    }
+
+                    scope.launch { prefs.setPackageAddedNotification(it) }
+                }
                 SyncButton()
                 AppVersion()
             }
         },
         confirmButton = {}
     )
+
+    if (notificationPermissionWarning) {
+        ShowToast(stringResource(R.string.notifPermissionWarning))
+        notificationPermissionWarning = false
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -115,6 +149,28 @@ fun SyncButton() {
     Button( onClick = { mainActivity.forceSync() }
         , modifier = Modifier.padding(8.dp) ) {
         Text(stringResource(R.string.syncPacks))
+    }
+}
+
+@Composable
+fun PackageAddedNotificationSwitch(notification: Boolean, onChange: (newValue: Boolean) -> Unit) {
+    var checked by rememberSaveable { mutableStateOf(false) }
+
+    checked = notification
+
+    Row(modifier = Modifier
+        .fillMaxWidth()
+        .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.packageAddedNotification))
+        Switch(
+            checked = checked,
+            onCheckedChange = {
+                checked = it
+                onChange(it)
+            },
+            modifier = Modifier.padding(start = 8.dp)
+        )
     }
 }
 

@@ -56,4 +56,10 @@
     <string name="syncPacks">Sync icon packs</string>
     <string name="retrieveCalendarIcon">Retrieve calendar icons</string>
     <string name="iconsStillGenerated">Icons are still being generated</string>
+    <string name="packageAddedNotification">New application notification</string>
+    <string name="channelName">Application added</string>
+    <string name="channelDesc">Get a notification when an application is installed</string>
+    <string name="notifText">Update Alchemicon Pack</string>
+    <string name="notifLongText">An application has been installed, you can update your icon pack</string>
+    <string name="notifPermissionWarning">You must enable notification permission</string>
 </resources>
