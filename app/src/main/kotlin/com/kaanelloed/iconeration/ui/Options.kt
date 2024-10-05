@@ -142,8 +142,9 @@ fun OptionsCard(
                 if (genType == GenerationType.PATH) {
                     VectorSwitch(useVector) { scope.launch { prefs.setIncludeVector(it) } }
                     MonochromeSwitch(useMonochrome) { scope.launch { prefs.setMonochrome(it) } }
-                    ThemedIconsSwitch(useThemed) { scope.launch { prefs.setExportThemed(it) } }
                 }
+
+                ThemedIconsSwitch(useThemed) { scope.launch { prefs.setExportThemed(it) } }
             }
         }
     }
