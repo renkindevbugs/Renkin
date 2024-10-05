@@ -12,7 +12,16 @@ import android.text.TextUtils
 import androidx.core.graphics.withTranslation
 import com.kaanelloed.iconeration.packages.PackageVersion
 
-class MultiLineTextDrawable(text: CharSequence, typeFace: Typeface, defaultTextSize: Float, minTextSize: Float, color: Int, width: Int, maxLines: Int): BaseTextDrawable() {
+class MultiLineTextDrawable(
+    text: CharSequence
+    , typeFace: Typeface
+    , defaultTextSize: Float
+    , minTextSize: Float
+    , color: Int
+    , private val width: Int
+    , maxLines: Int
+    , private val height: Int = 0
+): BaseTextDrawable() {
     private val paint = TextPaint(Paint.ANTI_ALIAS_FLAG)
     private val staticLayout: StaticLayout
 
@@ -81,10 +90,18 @@ class MultiLineTextDrawable(text: CharSequence, typeFace: Typeface, defaultTextS
     }
 
     private fun calculateX(): Float {
+        if (width > 0) {
+            return (width - staticLayout.width) / 2F
+        }
+
         return (bounds.width() - staticLayout.width) / 2F
     }
 
     private fun calculateY(): Float {
+        if (height > 0) {
+            return (height - staticLayout.height) / 2F
+        }
+
         return (bounds.height() - staticLayout.height) / 2F
     }
 

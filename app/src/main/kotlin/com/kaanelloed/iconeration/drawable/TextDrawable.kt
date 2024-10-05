@@ -7,7 +7,16 @@ import android.graphics.Path
 import android.graphics.Typeface
 
 //https://android.googlesource.com/platform/packages/apps/Camera/+/master/src/com/android/camera/drawable/TextDrawable.java
-class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize: Float, color: Int, strokeWidth: Float = 0F, adjustToSize: Int = 0): BaseTextDrawable() {
+class TextDrawable(
+    private val text: CharSequence
+    , typeFace: Typeface
+    , textSize: Float
+    , color: Int
+    , strokeWidth: Float = 0F
+    , private val canvasWidth: Int = 0
+    , private val canvasHeight: Int = 0
+    , private val ignoreLowercase: Boolean = false
+): BaseTextDrawable() {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val _intrinsicWidth: Int
     private val _intrinsicHeight: Int
@@ -21,8 +30,8 @@ class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize:
             paint.style = Paint.Style.STROKE
             paint.strokeWidth = strokeWidth
         }
-        if (adjustToSize > 0) {
-            adjustTextSize(adjustToSize)
+        if (canvasWidth > 0) {
+            adjustTextSize(canvasWidth)
         }
 
         _intrinsicWidth = calculateIntrinsicWidth()
@@ -40,17 +49,26 @@ class TextDrawable(private val text: CharSequence, typeFace: Typeface, textSize:
     }
 
     private fun calculateX(): Float {
+        if (canvasWidth > 0) {
+            return canvasWidth / 2f
+        }
+
         return bounds.centerX().toFloat()
     }
 
     private fun calculateY(): Float {
-        /*return if (text.toString().uppercase() == text.toString()) {
-            bounds.centerY().toFloat() - paint.ascent() / 2
+        val isUppercase = text.toString().uppercase() == text.toString()
+        val heightModifier = if (!ignoreLowercase && !isUppercase) {
+            (paint.descent() + paint.ascent()) / 2
         } else {
-            bounds.centerY().toFloat() - ((paint.descent() + paint.ascent()) / 2)
-        }*/
+            paint.ascent() / 2
+        }
 
-        return bounds.centerY().toFloat() - paint.ascent() / 2
+        if (canvasHeight > 0) {
+            return canvasHeight / 2f - heightModifier
+        }
+
+        return bounds.centerY().toFloat() - heightModifier
     }
 
     @Deprecated("Deprecated in Java")

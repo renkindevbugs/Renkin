@@ -16,7 +16,7 @@ class LetterGenerator(ctx: Context) {
             text = text.substring(0, 1)
         }
 
-        return TextDrawable(text, font, 200F, color, strokeWidth, maxSize)
+        return TextDrawable(text, font, 200F, color, strokeWidth, maxSize, maxSize, true)
     }
 
     fun generateTwoLetters(appName: String, color: Int, strokeWidth: Float, maxSize: Int): Drawable {
@@ -28,10 +28,10 @@ class LetterGenerator(ctx: Context) {
             if (text.length > 2) text.substring(0, 2) else text
         }
 
-        return TextDrawable(text, font, 150F, color, strokeWidth, maxSize)
+        return TextDrawable(text, font, 150F, color, strokeWidth, maxSize, maxSize, true)
     }
 
     fun generateAppName(appName: String, color: Int, maxSize: Int): Drawable {
-        return MultiLineTextDrawable(appName, font, 50F, 30F, color, maxSize, 3)
+        return MultiLineTextDrawable(appName, font, 50F, 30F, color, maxSize, 3, maxSize)
     }
 }

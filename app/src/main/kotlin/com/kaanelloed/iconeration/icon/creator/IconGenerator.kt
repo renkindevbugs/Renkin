@@ -239,8 +239,8 @@ class IconGenerator(
 
             if (iconPack == null) {
                 val draw = gen.generateFirstLetter(app.appName, options.color, strokeWidth, size)
-                val newIcon = draw.toBitmap(size, size)
-                updateApplication(app, BitmapIcon(addBackground(newIcon)))
+                val newIcon = createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
+                updateApplication(app, VectorIcon(newIcon))
             } else changeIconPackColor(app, iconPack)
         }
     }
@@ -255,8 +255,8 @@ class IconGenerator(
 
             if (iconPack == null) {
                 val draw = gen.generateTwoLetters(app.appName, options.color, strokeWidth, size)
-                val newIcon = draw.toBitmap(size, size)
-                updateApplication(app, BitmapIcon(addBackground(newIcon)))
+                val newIcon = createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
+                updateApplication(app, VectorIcon(newIcon))
             } else changeIconPackColor(app, iconPack)
         }
     }
@@ -270,19 +270,36 @@ class IconGenerator(
 
             if (iconPack == null) {
                 val draw = gen.generateAppName(app.appName, options.color, size)
-                val newIcon = draw.toBitmap(size, size)
-                updateApplication(app, BitmapIcon(addBackground(newIcon)))
+                val newIcon = createVectorForMultiLineText(draw as BaseTextDrawable, options.color, size)
+                updateApplication(app, VectorIcon(newIcon))
             } else changeIconPackColor(app, iconPack)
         }
     }
 
-    private fun createVectorForText(drawable: BaseTextDrawable): ImageVector {
-        val builder = ImageVector.Builder(defaultWidth = 256.dp, defaultHeight = 256.dp, viewportWidth = 256F, viewportHeight = 256F)
+    private fun createVectorForText(drawable: BaseTextDrawable, color: Int, strokeWidth: Float, size: Int): ImageVector {
+        val builder = ImageVector.Builder(defaultWidth = size.dp
+            , defaultHeight = size.dp, viewportWidth = size.toFloat(), viewportHeight = size.toFloat())
 
         val paths = drawable.getPaths()
         for (path in paths) {
             val cPath = path.asComposePath()
-            builder.addPath(cPath.toNodes())
+            builder.addPath(cPath.toNodes()
+                , stroke = SolidColor(Color(color))
+                , strokeLineWidth = strokeWidth)
+        }
+
+        return builder.build()
+    }
+
+    private fun createVectorForMultiLineText(drawable: BaseTextDrawable, color: Int, size: Int): ImageVector {
+        val builder = ImageVector.Builder(defaultWidth = size.dp
+            , defaultHeight = size.dp, viewportWidth = size.toFloat(), viewportHeight = size.toFloat())
+
+        val paths = drawable.getPaths()
+        for (path in paths) {
+            val cPath = path.asComposePath()
+            builder.addPath(cPath.toNodes()
+                , fill = SolidColor(Color(color)))
         }
 
         return builder.build()
