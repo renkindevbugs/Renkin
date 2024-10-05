@@ -27,6 +27,7 @@ const val BACKGROUND_COLOR_NAME = "BACKGROUND_COLOR"
 const val COLORIZE_ICON_PACK_NAME = "COLORIZE_ICON_PACK"
 const val ICON_PACK_NAME = "ICON_PACK"
 const val RETRIEVE_CALENDAR_ICONS = "RETRIEVE_CALENDAR_ICONS"
+const val PACKAGE_ADDED_NOTIFICATION = "PACKAGE_ADDED_NOTIFICATION"
 
 val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
 val TYPE_DEFAULT = GenerationType.PATH
@@ -51,6 +52,8 @@ val IconPackKey: Preferences.Key<String>
     get() = stringPreferencesKey(ICON_PACK_NAME)
 val CalendarIconsKey: Preferences.Key<Boolean>
     get() = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS)
+val PackageAddedNotificationKey: Preferences.Key<Boolean>
+    get() = booleanPreferencesKey(PACKAGE_ADDED_NOTIFICATION)
 
 //Dark Mode
 fun DataStore<Preferences>.getDarkMode(): Flow<Int?> {
@@ -223,6 +226,20 @@ fun DataStore<Preferences>.getRetrieveCalendarIconValue(): Boolean {
 
 suspend fun DataStore<Preferences>.setRetrieveCalendarIcon(value: Boolean) {
     setPrefs(CalendarIconsKey, value)
+}
+
+//Package added notification
+fun DataStore<Preferences>.getPackageAddedNotification(): Flow<Boolean?> {
+    return getPrefs(PackageAddedNotificationKey)
+}
+
+@Composable
+fun DataStore<Preferences>.getPackageAddedNotificationValue(): Boolean {
+    return getPackageAddedNotification().collectAsState(initial = false).value ?: false
+}
+
+suspend fun DataStore<Preferences>.setPackageAddedNotification(value: Boolean) {
+    setPrefs(PackageAddedNotificationKey, value)
 }
 
 //Common
