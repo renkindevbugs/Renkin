@@ -17,7 +17,6 @@ import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import com.kaanelloed.iconeration.MainActivity
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.InstalledApplication
@@ -53,7 +52,8 @@ class IconGenerator(
     private val activity: MainActivity,
     private val options: GenerationOptions,
     private val iconPackName: String,
-    private val iconPackApplications: Map<InstalledApplication, ResourceDrawable>
+    private val iconPackApplications: Map<InstalledApplication, ResourceDrawable>,
+    private val override: Boolean
 ) {
     private lateinit var apps: List<PackageInfoStruct>
 
@@ -86,6 +86,10 @@ class IconGenerator(
 
     private fun generateOnlyIconPack() {
         for (app in apps) {
+            if (applicationShouldBeSkipped(app)) {
+                continue
+            }
+
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack != null) {
@@ -99,6 +103,10 @@ class IconGenerator(
     private fun generateCannyEdgeDetection() {
         var edgeDetector: CannyEdgeDetector
         for (app in apps) {
+            if (applicationShouldBeSkipped(app)) {
+                continue
+            }
+
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack == null) {
@@ -116,6 +124,10 @@ class IconGenerator(
         val appMan = ApplicationManager(ctx)
 
         for (app in apps) {
+            if (applicationShouldBeSkipped(app)) {
+                continue
+            }
+
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack == null) {
@@ -235,6 +247,10 @@ class IconGenerator(
         val gen = LetterGenerator(ctx)
 
         for (app in apps) {
+            if (applicationShouldBeSkipped(app)) {
+                continue
+            }
+
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack == null) {
@@ -251,6 +267,10 @@ class IconGenerator(
         val gen = LetterGenerator(ctx)
 
         for (app in apps) {
+            if (applicationShouldBeSkipped(app)) {
+                continue
+            }
+
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack == null) {
@@ -266,6 +286,10 @@ class IconGenerator(
         val gen = LetterGenerator(ctx)
 
         for (app in apps) {
+            if (applicationShouldBeSkipped(app)) {
+                continue
+            }
+
             val iconPack = iconPackApplicationIcon(app.packageName)
 
             if (iconPack == null) {
@@ -406,6 +430,10 @@ class IconGenerator(
         }
 
         return -1
+    }
+
+    private fun applicationShouldBeSkipped(app: PackageInfoStruct): Boolean {
+        return !override && app.createdIcon !is EmptyIcon
     }
 
     private fun updateApplication(application: PackageInfoStruct, icon: ExportableIcon) {

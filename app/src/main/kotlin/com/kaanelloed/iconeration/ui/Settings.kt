@@ -35,12 +35,15 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.BuildConfig
+import com.kaanelloed.iconeration.data.DARK_MODE_DEFAULT
 import com.kaanelloed.iconeration.data.DarkMode
+import com.kaanelloed.iconeration.data.DarkModeKey
+import com.kaanelloed.iconeration.data.PackageAddedNotificationKey
+import com.kaanelloed.iconeration.data.getBooleanValue
 import com.kaanelloed.iconeration.data.getDarkModeLabels
-import com.kaanelloed.iconeration.data.getDarkModeValue
-import com.kaanelloed.iconeration.data.getPackageAddedNotificationValue
-import com.kaanelloed.iconeration.data.setDarkMode
-import com.kaanelloed.iconeration.data.setPackageAddedNotification
+import com.kaanelloed.iconeration.data.getEnumValue
+import com.kaanelloed.iconeration.data.setBooleanValue
+import com.kaanelloed.iconeration.data.setEnumValue
 import com.kaanelloed.iconeration.packages.PermissionManager
 import kotlinx.coroutines.launch
 
@@ -59,7 +62,7 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
         text = {
             Column {
                 DarkModeDropdown(prefs)
-                PackageAddedNotificationSwitch(prefs.getPackageAddedNotificationValue()) {
+                PackageAddedNotificationSwitch(prefs.getBooleanValue(PackageAddedNotificationKey)) {
                     if (it) {
                         val permissionManager = PermissionManager(activity)
                         if (!permissionManager.isPostNotificationEnabled()) {
@@ -76,7 +79,7 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
                         activity.stopPackageAddedService()
                     }
 
-                    scope.launch { prefs.setPackageAddedNotification(it) }
+                    scope.launch { prefs.setBooleanValue(PackageAddedNotificationKey, it) }
                 }
                 SyncButton()
                 AppVersion()
@@ -98,7 +101,7 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
     var expanded by remember { mutableStateOf(false) }
     var selectedOption by remember { mutableStateOf(DarkMode.FOLLOW_SYSTEM) }
 
-    selectedOption = prefs.getDarkModeValue()
+    selectedOption = prefs.getEnumValue(DarkModeKey, DARK_MODE_DEFAULT)
     val scope = rememberCoroutineScope()
 
     ExposedDropdownMenuBox(
@@ -134,7 +137,7 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
                         selectedOption = selectionOption.key
                         expanded = false
 
-                        scope.launch { prefs.setDarkMode(selectionOption.key) }
+                        scope.launch { prefs.setEnumValue(DarkModeKey, selectionOption.key) }
                     }
                 )
             }

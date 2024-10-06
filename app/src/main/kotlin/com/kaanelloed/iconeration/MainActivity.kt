@@ -21,8 +21,9 @@ import com.kaanelloed.iconeration.data.AlchemiconPackDatabase
 import com.kaanelloed.iconeration.data.DbApplication
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.InstalledApplication
+import com.kaanelloed.iconeration.data.PackageAddedNotificationKey
 import com.kaanelloed.iconeration.data.RawElement
-import com.kaanelloed.iconeration.data.getPackageAddedNotificationValue
+import com.kaanelloed.iconeration.data.getBooleanValue
 import com.kaanelloed.iconeration.data.isDarkModeEnabled
 import com.kaanelloed.iconeration.extension.bitmapFromBase64
 import com.kaanelloed.iconeration.icon.BitmapIcon
@@ -77,7 +78,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
-            val packageAddedNotification = applicationContext.dataStore.getPackageAddedNotificationValue()
+            val packageAddedNotification = applicationContext.dataStore.getBooleanValue(
+                PackageAddedNotificationKey)
 
             if (packageAddedNotification) {
                 startPackageAddedService()

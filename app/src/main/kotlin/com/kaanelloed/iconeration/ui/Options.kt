@@ -35,28 +35,31 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kaanelloed.iconeration.R
+import com.kaanelloed.iconeration.data.BackgroundColorKey
+import com.kaanelloed.iconeration.data.CalendarIconsKey
+import com.kaanelloed.iconeration.data.ColorizeIconPackKey
+import com.kaanelloed.iconeration.data.ExportThemedKey
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.data.GenerationType
+import com.kaanelloed.iconeration.data.IconColorKey
 import com.kaanelloed.iconeration.data.IconPack
-import com.kaanelloed.iconeration.data.getBackgroundColorValue
-import com.kaanelloed.iconeration.data.getColorizeIconPackValue
-import com.kaanelloed.iconeration.data.getExportThemedValue
-import com.kaanelloed.iconeration.data.getIconColorValue
-import com.kaanelloed.iconeration.data.getIconPackValue
-import com.kaanelloed.iconeration.data.getIncludeVectorValue
-import com.kaanelloed.iconeration.data.getMonochromeValue
-import com.kaanelloed.iconeration.data.getRetrieveCalendarIconValue
+import com.kaanelloed.iconeration.data.IconPackKey
+import com.kaanelloed.iconeration.data.IncludeVectorKey
+import com.kaanelloed.iconeration.data.MonochromeKey
+import com.kaanelloed.iconeration.data.OverrideIconKey
+import com.kaanelloed.iconeration.data.TYPE_DEFAULT
+import com.kaanelloed.iconeration.data.TypeKey
+import com.kaanelloed.iconeration.data.getBooleanValue
+import com.kaanelloed.iconeration.data.getColorValue
+import com.kaanelloed.iconeration.data.getDefaultBackgroundColor
+import com.kaanelloed.iconeration.data.getDefaultIconColor
+import com.kaanelloed.iconeration.data.getEnumValue
+import com.kaanelloed.iconeration.data.getStringValue
 import com.kaanelloed.iconeration.data.getTypeLabels
-import com.kaanelloed.iconeration.data.getTypeValue
-import com.kaanelloed.iconeration.data.setBackgroundColor
-import com.kaanelloed.iconeration.data.setColorizeIconPack
-import com.kaanelloed.iconeration.data.setExportThemed
-import com.kaanelloed.iconeration.data.setIconColor
-import com.kaanelloed.iconeration.data.setIconPack
-import com.kaanelloed.iconeration.data.setIncludeVector
-import com.kaanelloed.iconeration.data.setMonochrome
-import com.kaanelloed.iconeration.data.setRetrieveCalendarIcon
-import com.kaanelloed.iconeration.data.setType
+import com.kaanelloed.iconeration.data.setBooleanValue
+import com.kaanelloed.iconeration.data.setColorValue
+import com.kaanelloed.iconeration.data.setEnumValue
+import com.kaanelloed.iconeration.data.setStringValue
 import com.kaanelloed.iconeration.packages.PackageVersion
 import kotlinx.coroutines.launch
 
@@ -85,16 +88,18 @@ fun OptionsCard(
     var colorizeIconPack by rememberSaveable { mutableStateOf(false) }
     var iconPack by rememberSaveable { mutableStateOf("") }
     var retrieveCalenderIcons by rememberSaveable { mutableStateOf(false) }
+    var overrideIcon by rememberSaveable { mutableStateOf(false) }
 
-    val currentColor = prefs.getIconColorValue()
-    val currentBgColor = prefs.getBackgroundColorValue()
-    genType = prefs.getTypeValue()
-    useVector = prefs.getIncludeVectorValue()
-    useMonochrome = prefs.getMonochromeValue()
-    useThemed = prefs.getExportThemedValue()
-    colorizeIconPack = prefs.getColorizeIconPackValue()
-    iconPack = prefs.getIconPackValue()
-    retrieveCalenderIcons = prefs.getRetrieveCalendarIconValue()
+    val currentColor = prefs.getColorValue(IconColorKey, prefs.getDefaultIconColor())
+    val currentBgColor = prefs.getColorValue(BackgroundColorKey, prefs.getDefaultBackgroundColor())
+    genType = prefs.getEnumValue(TypeKey, TYPE_DEFAULT)
+    useVector = prefs.getBooleanValue(IncludeVectorKey)
+    useMonochrome = prefs.getBooleanValue(MonochromeKey)
+    useThemed = prefs.getBooleanValue(ExportThemedKey)
+    colorizeIconPack = prefs.getBooleanValue(ColorizeIconPackKey)
+    iconPack = prefs.getStringValue(IconPackKey)
+    retrieveCalenderIcons = prefs.getBooleanValue(CalendarIconsKey)
+    overrideIcon = prefs.getBooleanValue(OverrideIconKey)
 
     val scope = rememberCoroutineScope()
 
@@ -124,27 +129,36 @@ fun OptionsCard(
                 )
             }
             if (expanded) {
-                TypeDropdown(genType) { scope.launch { prefs.setType(it) } }
-                IconPackDropdown(iconPacks, iconPack) { scope.launch { prefs.setIconPack(it.packageName) } }
+                TypeDropdown(genType) { scope.launch { prefs.setEnumValue(TypeKey, it) } }
+                IconPackDropdown(iconPacks, iconPack) { scope.launch { prefs.setStringValue(
+                    IconPackKey, it.packageName) } }
 
                 if (iconPack != "") {
-                    ColorizeIconPackSwitch(colorizeIconPack) { scope.launch { prefs.setColorizeIconPack(it) } }
-                    RetrieveCalendarIconsSwitch(retrieveCalenderIcons) { scope.launch { prefs.setRetrieveCalendarIcon(it) } }
+                    ColorizeIconPackSwitch(colorizeIconPack) { scope.launch { prefs.setBooleanValue(
+                        ColorizeIconPackKey, it) } }
+                    RetrieveCalendarIconsSwitch(retrieveCalenderIcons) { scope.launch { prefs.setBooleanValue(
+                        CalendarIconsKey, it) } }
                 }
 
                 if (showIconColor(genType, useThemed)) {
-                    ColorButton(stringResource(R.string.iconColor), currentColor) { scope.launch { prefs.setIconColor(it) } }
+                    ColorButton(stringResource(R.string.iconColor), currentColor) { scope.launch { prefs.setColorValue(
+                        IconColorKey, it) } }
                 }
                 if (showBackgroundColor(genType, useThemed)) {
-                    ColorButton(stringResource(R.string.backgroundColor), currentBgColor) { scope.launch { prefs.setBackgroundColor(it) } }
+                    ColorButton(stringResource(R.string.backgroundColor), currentBgColor) { scope.launch { prefs.setColorValue(
+                        BackgroundColorKey, it) } }
                 }
+
+                OverrideIconSwitch(overrideIcon) { scope.launch { prefs.setBooleanValue(
+                    OverrideIconKey, it) } }
 
                 if (genType == GenerationType.PATH) {
-                    VectorSwitch(useVector) { scope.launch { prefs.setIncludeVector(it) } }
-                    MonochromeSwitch(useMonochrome) { scope.launch { prefs.setMonochrome(it) } }
+                    VectorSwitch(useVector) { scope.launch { prefs.setBooleanValue(IncludeVectorKey, it) } }
+                    MonochromeSwitch(useMonochrome) { scope.launch { prefs.setBooleanValue(
+                        MonochromeKey, it) } }
                 }
 
-                ThemedIconsSwitch(useThemed) { scope.launch { prefs.setExportThemed(it) } }
+                ThemedIconsSwitch(useThemed) { scope.launch { prefs.setBooleanValue(ExportThemedKey, it) } }
             }
         }
     }
@@ -441,6 +455,28 @@ fun RetrieveCalendarIconsSwitch(retrieve: Boolean, onChange: (newValue: Boolean)
         .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.retrieveCalendarIcon))
+        Switch(
+            checked = checked,
+            onCheckedChange = {
+                checked = it
+                onChange(it)
+            },
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
+}
+
+@Composable
+fun OverrideIconSwitch(override: Boolean, onChange: (newValue: Boolean) -> Unit) {
+    var checked by rememberSaveable { mutableStateOf(false) }
+
+    checked = override
+
+    Row(modifier = Modifier
+        .fillMaxWidth()
+        .padding(8.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.overrideIcon))
         Switch(
             checked = checked,
             onCheckedChange = {

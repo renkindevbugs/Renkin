@@ -61,4 +61,5 @@
     <string name="notifText">Mettre à jour Alchemicon Pack</string>
     <string name="notifLongText">Une nouvelle application a été installée, vous pouvez mettre à jour le pack d\'îcones</string>
     <string name="notifPermissionWarning">Vous devez activer la permission pour les notifications</string>
+    <string name="overrideIcon">Remplacer icône</string>
 </resources>

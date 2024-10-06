@@ -56,17 +56,25 @@ import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.apk.ApkInstaller
 import com.kaanelloed.iconeration.apk.ApkUninstaller
+import com.kaanelloed.iconeration.data.BackgroundColorKey
+import com.kaanelloed.iconeration.data.CalendarIconsKey
+import com.kaanelloed.iconeration.data.ColorizeIconPackKey
+import com.kaanelloed.iconeration.data.ExportThemedKey
+import com.kaanelloed.iconeration.data.IconColorKey
 import com.kaanelloed.iconeration.data.IconPack
+import com.kaanelloed.iconeration.data.IconPackKey
+import com.kaanelloed.iconeration.data.IncludeVectorKey
 import com.kaanelloed.iconeration.data.InstalledApplication
-import com.kaanelloed.iconeration.data.getBackgroundColorValue
-import com.kaanelloed.iconeration.data.getColorizeIconPackValue
-import com.kaanelloed.iconeration.data.getExportThemedValue
-import com.kaanelloed.iconeration.data.getIconColorValue
-import com.kaanelloed.iconeration.data.getIconPackValue
-import com.kaanelloed.iconeration.data.getIncludeVectorValue
-import com.kaanelloed.iconeration.data.getMonochromeValue
-import com.kaanelloed.iconeration.data.getRetrieveCalendarIconValue
-import com.kaanelloed.iconeration.data.getTypeValue
+import com.kaanelloed.iconeration.data.MonochromeKey
+import com.kaanelloed.iconeration.data.OverrideIconKey
+import com.kaanelloed.iconeration.data.TYPE_DEFAULT
+import com.kaanelloed.iconeration.data.TypeKey
+import com.kaanelloed.iconeration.data.getBooleanValue
+import com.kaanelloed.iconeration.data.getColorValue
+import com.kaanelloed.iconeration.data.getDefaultBackgroundColor
+import com.kaanelloed.iconeration.data.getDefaultIconColor
+import com.kaanelloed.iconeration.data.getEnumValue
+import com.kaanelloed.iconeration.data.getStringValue
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.sizeIsGreaterThanZero
 import com.kaanelloed.iconeration.drawable.ResourceDrawable
 import com.kaanelloed.iconeration.icon.BitmapIcon
@@ -107,8 +115,8 @@ fun ApplicationList(iconPacks: List<IconPack>, filter: String) {
 @Composable
 fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: Int) {
     val prefs = getPreferences()
-    val bgColorValue = prefs.getBackgroundColorValue()
-    val themed = prefs.getExportThemedValue()
+    val bgColorValue = prefs.getColorValue(BackgroundColorKey, prefs.getDefaultBackgroundColor())
+    val themed = prefs.getBooleanValue(ExportThemedKey)
     val dynamicColor = themed && supportDynamicColors()
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
@@ -202,7 +210,7 @@ fun OpenAppOptions(
                             apps
                         )
 
-                        val iconBuilder = IconGenerator(ctx, activity, options.generatingOptions, iconPackageName, iconPackApps)
+                        val iconBuilder = IconGenerator(ctx, activity, options.generatingOptions, iconPackageName, iconPackApps, true)
 
                         val packApp = iconPackApps.entries.find { it.key.packageName == app.packageName }
 
@@ -213,7 +221,7 @@ fun OpenAppOptions(
                             iconBuilder.generateIcons(app, options.generatingType)
                         }
                     } else {
-                        val iconBuilder = IconGenerator(ctx, activity, options.generatingOptions, "", emptyMap())
+                        val iconBuilder = IconGenerator(ctx, activity, options.generatingOptions, "", emptyMap(), true)
                         iconBuilder.generateIcons(app, options.generatingType)
                     }
                 }
@@ -240,16 +248,17 @@ fun OpenAppOptions(
 @Composable
 fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
     val prefs = getPreferences()
-    val type = prefs.getTypeValue()
-    val monochrome = prefs.getMonochromeValue()
-    val vector = prefs.getIncludeVectorValue()
-    val iconColorValue = prefs.getIconColorValue()
-    val bgColorValue = prefs.getBackgroundColorValue()
-    val colorizeIconPack = prefs.getColorizeIconPackValue()
-    val themed = prefs.getExportThemedValue()
+    val type = prefs.getEnumValue(TypeKey, TYPE_DEFAULT)
+    val monochrome = prefs.getBooleanValue(MonochromeKey)
+    val vector = prefs.getBooleanValue(IncludeVectorKey)
+    val iconColorValue = prefs.getColorValue(IconColorKey, prefs.getDefaultIconColor())
+    val bgColorValue = prefs.getColorValue(BackgroundColorKey, prefs.getDefaultBackgroundColor())
+    val colorizeIconPack = prefs.getBooleanValue(ColorizeIconPackKey)
+    val themed = prefs.getBooleanValue(ExportThemedKey)
     val dynamicColor = themed && supportDynamicColors()
-    val iconPackageName = prefs.getIconPackValue()
-    val retrieveCalendarIcon = prefs.getRetrieveCalendarIconValue()
+    val iconPackageName = prefs.getStringValue(IconPackKey)
+    val retrieveCalendarIcon = prefs.getBooleanValue(CalendarIconsKey)
+    val overrideIcon = prefs.getBooleanValue(OverrideIconKey)
 
     val ctx = getCurrentContext()
     val activity = getCurrentMainActivity()
@@ -295,7 +304,7 @@ fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
             }
 
             val opt = IconGenerator.GenerationOptions(iconColor, monochrome, vector, themed, bgColor, colorizeIconPack)
-            IconGenerator(ctx, activity, opt, iconPackageName, iconPackApps).generateIcons(activity.applicationList, type)
+            IconGenerator(ctx, activity, opt, iconPackageName, iconPackApps, overrideIcon).generateIcons(activity.applicationList, type)
 
             onChangeIsRefresh(false)
         }
@@ -317,9 +326,10 @@ fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
 fun BuildPackButton(isInRefresh: Boolean) {
     val ctx = getCurrentContext()
     val activity = getCurrentMainActivity()
-    val themed = getPreferences().getExportThemedValue()
-    val iconColor = getPreferences().getIconColorValue()
-    val bgColor = getPreferences().getBackgroundColorValue()
+    val prefs = getPreferences()
+    val themed = prefs.getBooleanValue(ExportThemedKey)
+    val iconColor = prefs.getColorValue(IconColorKey, prefs.getDefaultIconColor())
+    val bgColor = prefs.getColorValue(BackgroundColorKey, prefs.getDefaultBackgroundColor())
 
     var openBuilder by rememberSaveable { mutableStateOf(false) }
     var openSuccess by remember { mutableStateOf(false) }

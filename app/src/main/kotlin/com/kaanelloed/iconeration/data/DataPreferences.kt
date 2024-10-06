@@ -16,6 +16,7 @@ import com.kaanelloed.iconeration.ui.toColor
 import com.kaanelloed.iconeration.ui.toHexString
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlin.enums.enumEntries
 
 const val DARK_MODE_NAME = "NIGHT_THEME"
 const val TYPE_NAME = "GENERATION_TYPE"
@@ -28,6 +29,7 @@ const val COLORIZE_ICON_PACK_NAME = "COLORIZE_ICON_PACK"
 const val ICON_PACK_NAME = "ICON_PACK"
 const val RETRIEVE_CALENDAR_ICONS = "RETRIEVE_CALENDAR_ICONS"
 const val PACKAGE_ADDED_NOTIFICATION = "PACKAGE_ADDED_NOTIFICATION"
+const val OVERRIDE_ICON = "OVERRIDE_ICON"
 
 val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
 val TYPE_DEFAULT = GenerationType.PATH
@@ -54,207 +56,115 @@ val CalendarIconsKey: Preferences.Key<Boolean>
     get() = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS)
 val PackageAddedNotificationKey: Preferences.Key<Boolean>
     get() = booleanPreferencesKey(PACKAGE_ADDED_NOTIFICATION)
+val OverrideIconKey: Preferences.Key<Boolean>
+    get() = booleanPreferencesKey(OVERRIDE_ICON)
 
-//Dark Mode
-fun DataStore<Preferences>.getDarkMode(): Flow<Int?> {
-    return getPrefs(DarkModeKey)
-}
-
-@Composable
-fun DataStore<Preferences>.getDarkModeValue(): DarkMode {
-    val index = getDarkMode().collectAsState(initial = 0).value ?: DARK_MODE_DEFAULT.ordinal
-    return DarkMode.entries[index]
-}
-
-suspend fun DataStore<Preferences>.setDarkMode(value: Int) {
-    setPrefs(DarkModeKey, value)
-}
-
-suspend fun DataStore<Preferences>.setDarkMode(value: DarkMode) {
-    setDarkMode(value.ordinal)
-}
-
-//Generation Type
-fun DataStore<Preferences>.getType(): Flow<Int?> {
-    return getPrefs(TypeKey)
-}
-
-@Composable
-fun DataStore<Preferences>.getTypeValue(): GenerationType {
-    val index = getType().collectAsState(initial = 0).value ?: TYPE_DEFAULT.ordinal
-    return GenerationType.entries[index]
-}
-
-
-suspend fun DataStore<Preferences>.setType(value: Int) {
-    setPrefs(TypeKey, value)
-}
-
-suspend fun DataStore<Preferences>.setType(value: GenerationType) {
-    setType(value.ordinal)
-}
-
-//Vector
-fun DataStore<Preferences>.getIncludeVector(): Flow<Boolean?> {
-    return getPrefs(IncludeVectorKey)
-}
-
-@Composable
-fun DataStore<Preferences>.getIncludeVectorValue(): Boolean {
-    return getIncludeVector().collectAsState(initial = false).value ?: false
-}
-
-suspend fun DataStore<Preferences>.setIncludeVector(value: Boolean) {
-    setPrefs(IncludeVectorKey, value)
-}
-
-//Monochrome
-fun DataStore<Preferences>.getMonochrome(): Flow<Boolean?> {
-    return getPrefs(MonochromeKey)
-}
-
-@Composable
-fun DataStore<Preferences>.getMonochromeValue(): Boolean {
-    return getMonochrome().collectAsState(initial = false).value ?: false
-}
-
-suspend fun DataStore<Preferences>.setMonochrome(value: Boolean) {
-    setPrefs(MonochromeKey, value)
-}
-
-//Themed
-fun DataStore<Preferences>.getExportThemed(): Flow<Boolean?> {
-    return getPrefs(ExportThemedKey)
-}
-
-@Composable
-fun DataStore<Preferences>.getExportThemedValue(): Boolean {
-    return getExportThemed().collectAsState(initial = false).value ?: false
-}
-
-suspend fun DataStore<Preferences>.setExportThemed(value: Boolean) {
-    setPrefs(ExportThemedKey, value)
-}
-
-//Icon Color
 @Composable
 fun DataStore<Preferences>.getDefaultIconColor(): Color {
     return if (isDarkModeEnabled()) Color.White else Color.Black
 }
 
-fun DataStore<Preferences>.getIconColor(): Flow<String?> {
-    return getPrefs(IconColorKey)
-}
-
-@Composable
-fun DataStore<Preferences>.getIconColorValue(): Color {
-    val default = getDefaultIconColor()
-    val hex = getIconColor().collectAsState(initial = getDefaultIconColor().toHexString()).value
-    return hex?.toColor() ?: default
-}
-
-suspend fun DataStore<Preferences>.setIconColor(value: String) {
-    setPrefs(IconColorKey, value)
-}
-
-suspend fun DataStore<Preferences>.setIconColor(value: Color) {
-    setPrefs(IconColorKey, value.toHexString())
-}
-
-//Background Color
 @Composable
 fun DataStore<Preferences>.getDefaultBackgroundColor(): Color {
     return if (isDarkModeEnabled()) Color.Black else Color.White
 }
 
-fun DataStore<Preferences>.getBackgroundColor(): Flow<String?> {
-    return getPrefs(BackgroundColorKey)
+//Preference type
+fun DataStore<Preferences>.getBooleanState(key: Preferences.Key<Boolean>): Flow<Boolean?> {
+    return getPreferenceState(key)
 }
 
 @Composable
-fun DataStore<Preferences>.getBackgroundColorValue(): Color {
-    val default = getDefaultBackgroundColor()
-    val hex = getBackgroundColor().collectAsState(initial = default.toHexString()).value
-    return hex?.toColor() ?: default
+fun DataStore<Preferences>.getBooleanValue(
+    key: Preferences.Key<Boolean>
+    , default: Boolean = false
+): Boolean {
+    return getPreferenceValue(key, default)
 }
 
-suspend fun DataStore<Preferences>.setBackgroundColor(value: String) {
-    setPrefs(BackgroundColorKey, value)
+suspend fun DataStore<Preferences>.setBooleanValue(key: Preferences.Key<Boolean>, value: Boolean) {
+    setPreferenceValue(key, value)
 }
 
-suspend fun DataStore<Preferences>.setBackgroundColor(value: Color) {
-    setPrefs(BackgroundColorKey, value.toHexString())
-}
-
-//Colorize Icon Pack
-fun DataStore<Preferences>.getColorizeIconPack(): Flow<Boolean?> {
-    return getPrefs(ColorizeIconPackKey)
+fun DataStore<Preferences>.getStringState(key: Preferences.Key<String>): Flow<String?> {
+    return getPreferenceState(key)
 }
 
 @Composable
-fun DataStore<Preferences>.getColorizeIconPackValue(): Boolean {
-    return getColorizeIconPack().collectAsState(initial = false).value ?: false
+fun DataStore<Preferences>.getStringValue(
+    key: Preferences.Key<String>
+    , default: String = ""
+): String {
+    return getPreferenceValue(key, default)
 }
 
-suspend fun DataStore<Preferences>.setColorizeIconPack(value: Boolean) {
-    setPrefs(ColorizeIconPackKey, value)
+suspend fun DataStore<Preferences>.setStringValue(key: Preferences.Key<String>, value: String) {
+    setPreferenceValue(key, value)
 }
 
-//Icon pack
-fun DataStore<Preferences>.getIconPack(): Flow<String?> {
-    return getPrefs(IconPackKey)
-}
-
-@Composable
-fun DataStore<Preferences>.getIconPackValue(): String {
-    return getIconPack().collectAsState(initial = "").value ?: ""
-}
-
-suspend fun DataStore<Preferences>.setIconPack(value: String) {
-    setPrefs(IconPackKey, value)
-}
-
-//Retrieve calendar icons
-fun DataStore<Preferences>.getRetrieveCalendarIcon(): Flow<Boolean?> {
-    return getPrefs(CalendarIconsKey)
+fun DataStore<Preferences>.getIntState(key: Preferences.Key<Int>): Flow<Int?> {
+    return getPreferenceState(key)
 }
 
 @Composable
-fun DataStore<Preferences>.getRetrieveCalendarIconValue(): Boolean {
-    return getRetrieveCalendarIcon().collectAsState(initial = false).value ?: false
+fun DataStore<Preferences>.getIntValue(
+    key: Preferences.Key<Int>
+    , default: Int = 0
+): Int {
+    return getPreferenceValue(key, default)
 }
 
-suspend fun DataStore<Preferences>.setRetrieveCalendarIcon(value: Boolean) {
-    setPrefs(CalendarIconsKey, value)
+suspend fun DataStore<Preferences>.setIntValue(key: Preferences.Key<Int>, value: Int) {
+    setPreferenceValue(key, value)
 }
 
-//Package added notification
-fun DataStore<Preferences>.getPackageAddedNotification(): Flow<Boolean?> {
-    return getPrefs(PackageAddedNotificationKey)
-}
-
+//Color
 @Composable
-fun DataStore<Preferences>.getPackageAddedNotificationValue(): Boolean {
-    return getPackageAddedNotification().collectAsState(initial = false).value ?: false
+fun DataStore<Preferences>.getColorValue(key: Preferences.Key<String>, default: Color): Color {
+    val hex = getPreferenceValue(key, default.toHexString())
+    return hex.toColor() ?: default
 }
 
-suspend fun DataStore<Preferences>.setPackageAddedNotification(value: Boolean) {
-    setPrefs(PackageAddedNotificationKey, value)
+suspend fun DataStore<Preferences>.setColorValue(key: Preferences.Key<String>, value: Color) {
+    setPreferenceValue(key, value.toHexString())
+}
+
+//Enum
+@Composable
+inline fun <reified T: Enum<T>> DataStore<Preferences>.getEnumValue(
+    key: Preferences.Key<Int>
+    , default: T
+): T {
+    val ordinal = getPreferenceValue(key, default.ordinal)
+    return enumEntries<T>()[ordinal]
+}
+
+suspend inline fun <reified T: Enum<T>> DataStore<Preferences>.setEnumValue(
+    key: Preferences.Key<Int>
+    , value: T
+) {
+    setPreferenceValue(key, value.ordinal)
 }
 
 //Common
-fun <T : Any> DataStore<Preferences>.getPrefs(key: Preferences.Key<T>): Flow<T?> {
+fun <T : Any> DataStore<Preferences>.getPreferenceState(key: Preferences.Key<T>): Flow<T?> {
     return data.map { settings ->
         settings[key]
     }
 }
 
-suspend fun <T> DataStore<Preferences>.setPrefs(key: Preferences.Key<T>, value: T) {
+@Composable
+fun <T : Any> DataStore<Preferences>.getPreferenceValue(key: Preferences.Key<T>, default: T): T {
+    return getPreferenceState(key).collectAsState(initial = default).value ?: default
+}
+
+suspend fun <T> DataStore<Preferences>.setPreferenceValue(key: Preferences.Key<T>, value: T) {
     edit { settings ->
         settings[key] = value
     }
 }
 
+//Labels
 @Composable
 fun getDarkModeLabels(): Map<DarkMode, String> {
     return mapOf(DarkMode.FOLLOW_SYSTEM to stringResource(id = R.string.followSystem)
@@ -274,7 +184,7 @@ fun getTypeLabels(): Map<GenerationType, String> {
 
 @Composable
 fun DataStore<Preferences>.isDarkModeEnabled(): Boolean {
-    return when (getDarkModeValue()) {
+    return when (getEnumValue(DarkModeKey, DARK_MODE_DEFAULT)) {
         DarkMode.FOLLOW_SYSTEM -> isSystemInDarkTheme()
         DarkMode.DARK -> true
         DarkMode.LIGHT -> false
