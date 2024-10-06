@@ -1,5 +1,6 @@
 package com.kaanelloed.iconeration.ui
 
+import androidx.annotation.StringRes
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -191,113 +192,17 @@ fun showBackgroundColor(generationType: GenerationType, themed: Boolean): Boolea
 
 @Composable
 fun VectorSwitch(useVector: Boolean, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(false) }
-    var openInfo by rememberSaveable { mutableStateOf(false) }
-
-    checked = useVector
-
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.vector))
-        Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
-            },
-            modifier = Modifier.padding(start = 8.dp)
-        )
-
-        IconButton(onClick = { openInfo = true }) {
-            Icon(
-                imageVector = Icons.Filled.Info,
-                contentDescription = "Option info",
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-
-    if (openInfo) {
-        OptionInfoDialog(text = stringResource(R.string.vectorOptionDescription)) {
-            openInfo = false
-        }
-    }
+    DefaultSwitchLayoutWithInfo(useVector, R.string.vector, R.string.vectorOptionDescription) { onChange(it) }
 }
 
 @Composable
 fun MonochromeSwitch(useMonochrome: Boolean, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(false) }
-    var openInfo by rememberSaveable { mutableStateOf(false) }
-
-    checked = useMonochrome
-
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.monochrome))
-        Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
-            },
-            modifier = Modifier.padding(start = 8.dp)
-        )
-
-        IconButton(onClick = { openInfo = true }) {
-            Icon(
-                imageVector = Icons.Filled.Info,
-                contentDescription = "Option info",
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-
-    if (openInfo) {
-        OptionInfoDialog(stringResource(R.string.monochromeOptionDescription)) {
-            openInfo = false
-        }
-    }
+    DefaultSwitchLayoutWithInfo(useMonochrome, R.string.monochrome, R.string.monochromeOptionDescription) { onChange(it) }
 }
 
 @Composable
 fun ThemedIconsSwitch(useThemed: Boolean, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(false) }
-    var openInfo by rememberSaveable { mutableStateOf(false) }
-
-    checked = useThemed
-
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.themedIcons))
-        Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
-            },
-            modifier = Modifier.padding(start = 8.dp)
-        )
-
-        IconButton(onClick = { openInfo = true }) {
-            Icon(
-                imageVector = Icons.Filled.Info,
-                contentDescription = "Option info",
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-
-    if (openInfo) {
-        OptionInfoDialog(stringResource(R.string.themedIconsOptionDescription)) {
-            openInfo = false
-        }
-    }
+    DefaultSwitchLayoutWithInfo(useThemed, R.string.themedIcons, R.string.themedIconsOptionDescription) { onChange(it) }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -424,37 +329,28 @@ fun OptionInfoDialog(text: String, onDismiss: () -> Unit) {
 
 @Composable
 fun ColorizeIconPackSwitch(colorize: Boolean, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(false) }
-
-    checked = colorize
-
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.colorizeIconPack))
-        Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
-            },
-            modifier = Modifier.padding(start = 8.dp)
-        )
-    }
+    DefaultSwitchLayout(colorize, R.string.colorizeIconPack) { onChange(it) }
 }
 
 @Composable
 fun RetrieveCalendarIconsSwitch(retrieve: Boolean, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(false) }
+    DefaultSwitchLayout(retrieve, R.string.retrieveCalendarIcon) { onChange(it) }
+}
 
-    checked = retrieve
+@Composable
+fun OverrideIconSwitch(override: Boolean, onChange: (newValue: Boolean) -> Unit) {
+    DefaultSwitchLayout(override, R.string.overrideIcon) { onChange(it) }
+}
+
+@Composable
+fun DefaultSwitchLayout(isChecked: Boolean, @StringRes label: Int, onChange: (newValue: Boolean) -> Unit) {
+    var checked by rememberSaveable { mutableStateOf(isChecked) }
 
     Row(modifier = Modifier
         .fillMaxWidth()
         .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.retrieveCalendarIcon))
+        Text(stringResource(label))
         Switch(
             checked = checked,
             onCheckedChange = {
@@ -467,16 +363,15 @@ fun RetrieveCalendarIconsSwitch(retrieve: Boolean, onChange: (newValue: Boolean)
 }
 
 @Composable
-fun OverrideIconSwitch(override: Boolean, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(false) }
-
-    checked = override
+fun DefaultSwitchLayoutWithInfo(isChecked: Boolean, @StringRes label: Int, @StringRes infoDesc: Int, onChange: (newValue: Boolean) -> Unit) {
+    var checked by rememberSaveable { mutableStateOf(isChecked) }
+    var openInfo by rememberSaveable { mutableStateOf(false) }
 
     Row(modifier = Modifier
         .fillMaxWidth()
         .padding(8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.overrideIcon))
+        Text(stringResource(label))
         Switch(
             checked = checked,
             onCheckedChange = {
@@ -485,5 +380,19 @@ fun OverrideIconSwitch(override: Boolean, onChange: (newValue: Boolean) -> Unit)
             },
             modifier = Modifier.padding(start = 8.dp)
         )
+
+        IconButton(onClick = { openInfo = true }) {
+            Icon(
+                imageVector = Icons.Filled.Info,
+                contentDescription = "Option info",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+
+    if (openInfo) {
+        OptionInfoDialog(stringResource(infoDesc)) {
+            openInfo = false
+        }
     }
 }
