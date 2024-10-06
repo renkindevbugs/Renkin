@@ -63,4 +63,5 @@
     <string name="notifLongText">An application has been installed, you can update your icon pack</string>
     <string name="notifPermissionWarning">You must enable notification permission</string>
     <string name="overrideIcon">Override icon</string>
+    <string name="deleteIconPack">Delete icon pack</string>
 </resources>

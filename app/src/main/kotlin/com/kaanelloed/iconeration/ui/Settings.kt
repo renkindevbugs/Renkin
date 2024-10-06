@@ -35,6 +35,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.BuildConfig
+import com.kaanelloed.iconeration.apk.ApkUninstaller
 import com.kaanelloed.iconeration.data.DARK_MODE_DEFAULT
 import com.kaanelloed.iconeration.data.DarkMode
 import com.kaanelloed.iconeration.data.DarkModeKey
@@ -82,6 +83,7 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
                     scope.launch { prefs.setBooleanValue(PackageAddedNotificationKey, it) }
                 }
                 SyncButton()
+                DeleteIconPackButton()
                 AppVersion()
             }
         },
@@ -152,6 +154,20 @@ fun SyncButton() {
     Button( onClick = { mainActivity.forceSync() }
         , modifier = Modifier.padding(8.dp) ) {
         Text(stringResource(R.string.syncPacks))
+    }
+}
+
+@Composable
+fun DeleteIconPackButton() {
+    val context = getCurrentContext()
+    val scope = rememberCoroutineScope()
+
+    Button( onClick = {
+        scope.launch {
+            ApkUninstaller(context).uninstall("com.kaanelloed.iconerationiconpack")
+        }}
+        , modifier = Modifier.padding(8.dp) ) {
+        Text(stringResource(R.string.deleteIconPack))
     }
 }
 
