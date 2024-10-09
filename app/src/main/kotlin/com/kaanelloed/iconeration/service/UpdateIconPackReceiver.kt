@@ -4,12 +4,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 
-class BootCompletedReceiver: BroadcastReceiver() {
+class UpdateIconPackReceiver: BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         if (context == null) return
 
-        if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
-            NotificationManager().startNewApplicationService(context)
-        }
+        val notificationManager = NotificationManager()
+        notificationManager.stopNewApplicationNotification(context)
+        notificationManager.startUpdatePackService(context, intent)
     }
 }

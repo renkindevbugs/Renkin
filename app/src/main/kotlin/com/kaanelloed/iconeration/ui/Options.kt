@@ -165,12 +165,10 @@ fun OptionsCard(
     }
 }
 
-@Composable
 fun supportDynamicColors(): Boolean {
     return PackageVersion.is31OrMore()
 }
 
-@Composable
 fun showIconColor(generationType: GenerationType, themed: Boolean): Boolean {
     if (generationType == GenerationType.PATH && themed) {
         if (supportDynamicColors()) {

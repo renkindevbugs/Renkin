@@ -25,7 +25,7 @@ class PackageAddedService: Service() {
             addDataScheme("package")
         }
 
-        intent.priority = 999
+        intent.priority = IntentFilter.SYSTEM_HIGH_PRIORITY - 1
 
         registerReceiver(PackageAddedReceiver(), intent)
     }

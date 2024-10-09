@@ -17,7 +17,7 @@ import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import com.kaanelloed.iconeration.MainActivity
+import com.kaanelloed.iconeration.apk.ApplicationProvider
 import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.drawable.BaseTextDrawable
@@ -49,7 +49,7 @@ import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
 
 class IconGenerator(
     private val ctx: Context,
-    private val activity: MainActivity,
+    private val appProvider: ApplicationProvider,
     private val options: GenerationOptions,
     private val iconPackName: String,
     private val iconPackApplications: Map<InstalledApplication, ResourceDrawable>,
@@ -437,7 +437,7 @@ class IconGenerator(
     }
 
     private fun updateApplication(application: PackageInfoStruct, icon: ExportableIcon) {
-        activity.editApplication(application, application.changeExport(icon))
+        appProvider.editApplication(application, application.changeExport(icon))
     }
 
     private fun emptyApplication(application: PackageInfoStruct) {

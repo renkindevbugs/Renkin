@@ -1,5 +1,7 @@
 package com.kaanelloed.iconeration.data
 
+import android.content.Context
+import android.content.res.Configuration
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -9,6 +11,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.kaanelloed.iconeration.R
@@ -30,6 +33,7 @@ const val ICON_PACK_NAME = "ICON_PACK"
 const val RETRIEVE_CALENDAR_ICONS = "RETRIEVE_CALENDAR_ICONS"
 const val PACKAGE_ADDED_NOTIFICATION = "PACKAGE_ADDED_NOTIFICATION"
 const val OVERRIDE_ICON = "OVERRIDE_ICON"
+const val AUTOMATICALLY_UPDATE_PACK = "AUTOMATICALLY_UPDATE_PACK"
 
 val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
 val TYPE_DEFAULT = GenerationType.PATH
@@ -58,10 +62,21 @@ val PackageAddedNotificationKey: Preferences.Key<Boolean>
     get() = booleanPreferencesKey(PACKAGE_ADDED_NOTIFICATION)
 val OverrideIconKey: Preferences.Key<Boolean>
     get() = booleanPreferencesKey(OVERRIDE_ICON)
+val AutomaticallyUpdateKey: Preferences.Key<Boolean>
+    get() = booleanPreferencesKey(AUTOMATICALLY_UPDATE_PACK)
+
+@Composable
+fun DataStore<Preferences>.getPreferencesValue(): Preferences {
+    return data.collectAsState(initial = emptyPreferences()).value
+}
 
 @Composable
 fun DataStore<Preferences>.getDefaultIconColor(): Color {
     return if (isDarkModeEnabled()) Color.White else Color.Black
+}
+
+fun Preferences.getDefaultIconColor(context: Context): Color {
+    return if (isDarkModeEnabled(context)) Color.White else Color.Black
 }
 
 @Composable
@@ -69,9 +84,13 @@ fun DataStore<Preferences>.getDefaultBackgroundColor(): Color {
     return if (isDarkModeEnabled()) Color.Black else Color.White
 }
 
+fun Preferences.getDefaultBackgroundColor(context: Context): Color {
+    return if (isDarkModeEnabled(context)) Color.Black else Color.White
+}
+
 //Preference type
 fun DataStore<Preferences>.getBooleanState(key: Preferences.Key<Boolean>): Flow<Boolean?> {
-    return getPreferenceState(key)
+    return getPreferenceFlow(key)
 }
 
 @Composable
@@ -86,8 +105,12 @@ suspend fun DataStore<Preferences>.setBooleanValue(key: Preferences.Key<Boolean>
     setPreferenceValue(key, value)
 }
 
+fun Preferences.getBooleanValue(key: Preferences.Key<Boolean>, default: Boolean = false): Boolean {
+    return this[key] ?: default
+}
+
 fun DataStore<Preferences>.getStringState(key: Preferences.Key<String>): Flow<String?> {
-    return getPreferenceState(key)
+    return getPreferenceFlow(key)
 }
 
 @Composable
@@ -102,8 +125,12 @@ suspend fun DataStore<Preferences>.setStringValue(key: Preferences.Key<String>, 
     setPreferenceValue(key, value)
 }
 
+fun Preferences.getStringValue(key: Preferences.Key<String>, default: String = ""): String {
+    return this[key] ?: default
+}
+
 fun DataStore<Preferences>.getIntState(key: Preferences.Key<Int>): Flow<Int?> {
-    return getPreferenceState(key)
+    return getPreferenceFlow(key)
 }
 
 @Composable
@@ -118,15 +145,24 @@ suspend fun DataStore<Preferences>.setIntValue(key: Preferences.Key<Int>, value:
     setPreferenceValue(key, value)
 }
 
+fun Preferences.getIntValue(key: Preferences.Key<Int>, default: Int = 0): Int {
+    return this[key] ?: default
+}
+
 //Color
 @Composable
 fun DataStore<Preferences>.getColorValue(key: Preferences.Key<String>, default: Color): Color {
     val hex = getPreferenceValue(key, default.toHexString())
-    return hex.toColor() ?: default
+    return hex.toColor()
 }
 
 suspend fun DataStore<Preferences>.setColorValue(key: Preferences.Key<String>, value: Color) {
     setPreferenceValue(key, value.toHexString())
+}
+
+fun Preferences.getColorValue(key: Preferences.Key<String>, default: Color): Color {
+    val hex = this[key] ?: default.toHexString()
+    return hex.toColor()
 }
 
 //Enum
@@ -146,8 +182,16 @@ suspend inline fun <reified T: Enum<T>> DataStore<Preferences>.setEnumValue(
     setPreferenceValue(key, value.ordinal)
 }
 
+inline fun <reified T: Enum<T>> Preferences.getEnumValue(
+    key: Preferences.Key<Int>
+    , default: T
+): T {
+    val ordinal = this[key] ?: default.ordinal
+    return enumEntries<T>()[ordinal]
+}
+
 //Common
-fun <T : Any> DataStore<Preferences>.getPreferenceState(key: Preferences.Key<T>): Flow<T?> {
+fun <T : Any> DataStore<Preferences>.getPreferenceFlow(key: Preferences.Key<T>): Flow<T?> {
     return data.map { settings ->
         settings[key]
     }
@@ -155,7 +199,7 @@ fun <T : Any> DataStore<Preferences>.getPreferenceState(key: Preferences.Key<T>)
 
 @Composable
 fun <T : Any> DataStore<Preferences>.getPreferenceValue(key: Preferences.Key<T>, default: T): T {
-    return getPreferenceState(key).collectAsState(initial = default).value ?: default
+    return getPreferenceFlow(key).collectAsState(initial = default).value ?: default
 }
 
 suspend fun <T> DataStore<Preferences>.setPreferenceValue(key: Preferences.Key<T>, value: T) {
@@ -184,8 +228,21 @@ fun getTypeLabels(): Map<GenerationType, String> {
 
 @Composable
 fun DataStore<Preferences>.isDarkModeEnabled(): Boolean {
-    return when (getEnumValue(DarkModeKey, DARK_MODE_DEFAULT)) {
-        DarkMode.FOLLOW_SYSTEM -> isSystemInDarkTheme()
+    return isDarkModeEnabled(getEnumValue(DarkModeKey, DARK_MODE_DEFAULT), isSystemInDarkTheme())
+}
+
+fun Preferences.isDarkModeEnabled(context: Context): Boolean {
+    return isDarkModeEnabled(getEnumValue(DarkModeKey, DARK_MODE_DEFAULT), context.isSystemInDarkTheme())
+}
+
+fun Context.isSystemInDarkTheme(): Boolean {
+    val uiMode = this.resources.configuration.uiMode
+    return (uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+}
+
+fun isDarkModeEnabled(darkMode: DarkMode, system: Boolean): Boolean {
+    return when (darkMode) {
+        DarkMode.FOLLOW_SYSTEM -> system
         DarkMode.DARK -> true
         DarkMode.LIGHT -> false
     }

@@ -36,6 +36,7 @@ import androidx.datastore.preferences.core.Preferences
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.BuildConfig
 import com.kaanelloed.iconeration.apk.ApkUninstaller
+import com.kaanelloed.iconeration.data.AutomaticallyUpdateKey
 import com.kaanelloed.iconeration.data.DARK_MODE_DEFAULT
 import com.kaanelloed.iconeration.data.DarkMode
 import com.kaanelloed.iconeration.data.DarkModeKey
@@ -46,13 +47,18 @@ import com.kaanelloed.iconeration.data.getEnumValue
 import com.kaanelloed.iconeration.data.setBooleanValue
 import com.kaanelloed.iconeration.data.setEnumValue
 import com.kaanelloed.iconeration.packages.PermissionManager
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
     var notificationPermissionWarning by remember { mutableStateOf(false) }
+
     val scope = rememberCoroutineScope()
     val activity = getCurrentMainActivity()
+    val notification = prefs.getBooleanValue(PackageAddedNotificationKey)
+    val automaticallyUpdate = prefs.getBooleanValue(AutomaticallyUpdateKey)
 
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
@@ -63,7 +69,7 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
         text = {
             Column {
                 DarkModeDropdown(prefs)
-                PackageAddedNotificationSwitch(prefs.getBooleanValue(PackageAddedNotificationKey)) {
+                PackageAddedNotificationSwitch(notification) {
                     if (it) {
                         val permissionManager = PermissionManager(activity)
                         if (!permissionManager.isPostNotificationEnabled()) {
@@ -82,7 +88,15 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
 
                     scope.launch { prefs.setBooleanValue(PackageAddedNotificationKey, it) }
                 }
+
+                if (notification) {
+                    AutomaticallyUpdateSwitch(automaticallyUpdate) {
+                        scope.launch { prefs.setBooleanValue(AutomaticallyUpdateKey, it) }
+                    }
+                }
+
                 SyncButton()
+                RefreshApplicationListButton()
                 DeleteIconPackButton()
                 AppVersion()
             }
@@ -111,7 +125,7 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
         onExpandedChange = {
             expanded = !expanded
         },
-        modifier = Modifier.padding(8.dp)
+        modifier = Modifier.padding(8.dp, 4.dp)
     ) {
         TextField(
             readOnly = true,
@@ -151,9 +165,21 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
 fun SyncButton() {
     val mainActivity = getCurrentMainActivity()
 
-    Button( onClick = { mainActivity.forceSync() }
-        , modifier = Modifier.padding(8.dp) ) {
+    Button( onClick = { mainActivity.appProvider.forceSync() }
+        , modifier = Modifier.padding(8.dp, 4.dp) ) {
         Text(stringResource(R.string.syncPacks))
+    }
+}
+
+@Composable
+fun RefreshApplicationListButton() {
+    val mainActivity = getCurrentMainActivity()
+
+    Button( onClick = { CoroutineScope(Dispatchers.Default).launch {
+        mainActivity.appProvider.initialize()
+    }}
+        , modifier = Modifier.padding(8.dp, 4.dp) ) {
+        Text(stringResource(R.string.refreshApplicationList))
     }
 }
 
@@ -162,12 +188,19 @@ fun DeleteIconPackButton() {
     val context = getCurrentContext()
     val scope = rememberCoroutineScope()
 
+    var openSuccess by rememberSaveable { mutableStateOf(false) }
+
     Button( onClick = {
         scope.launch {
-            ApkUninstaller(context).uninstall("com.kaanelloed.iconerationiconpack")
+            openSuccess = ApkUninstaller(context).uninstall("com.kaanelloed.iconerationiconpack")
         }}
-        , modifier = Modifier.padding(8.dp) ) {
+        , modifier = Modifier.padding(8.dp, 4.dp) ) {
         Text(stringResource(R.string.deleteIconPack))
+    }
+
+    if (openSuccess) {
+        ShowToast(context.getString(R.string.iconPackUninstalled))
+        openSuccess = false
     }
 }
 
@@ -179,9 +212,31 @@ fun PackageAddedNotificationSwitch(notification: Boolean, onChange: (newValue: B
 
     Row(modifier = Modifier
         .fillMaxWidth()
-        .padding(8.dp),
+        .padding(8.dp, 4.dp),
         verticalAlignment = Alignment.CenterVertically) {
         Text(stringResource(R.string.packageAddedNotification))
+        Switch(
+            checked = checked,
+            onCheckedChange = {
+                checked = it
+                onChange(it)
+            },
+            modifier = Modifier.padding(start = 8.dp)
+        )
+    }
+}
+
+@Composable
+fun AutomaticallyUpdateSwitch(automaticallyUpdate: Boolean, onChange: (newValue: Boolean) -> Unit) {
+    var checked by rememberSaveable { mutableStateOf(false) }
+
+    checked = automaticallyUpdate
+
+    Row(modifier = Modifier
+        .fillMaxWidth()
+        .padding(8.dp, 4.dp),
+        verticalAlignment = Alignment.CenterVertically) {
+        Text(stringResource(R.string.automaticallyUpdate))
         Switch(
             checked = checked,
             onCheckedChange = {

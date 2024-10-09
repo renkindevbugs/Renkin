@@ -9,6 +9,8 @@
     </queries>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
 
     <application
         android:allowBackup="true"
@@ -46,6 +48,9 @@
         </provider>
 
         <service android:name=".service.PackageAddedService"/>
+        <service android:name=".service.UpdateIconPackService"
+            android:foregroundServiceType="dataSync"/>
+        <receiver android:name=".service.UpdateIconPackReceiver"/>
         <receiver android:name=".service.BootCompletedReceiver"
             android:exported="true"
             android:enabled="false">
