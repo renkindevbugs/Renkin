@@ -120,7 +120,7 @@ fun OptionsDialog(
         onDismissRequest = onDismiss,
         title = { DialogTitle(app = app, onIconClear) },
         text = {
-            TabOptions(iconPacks, app) {
+            TabOptions(iconPacks, app, confirm = { onConfirmation(options) }) {
                 options = it
             }
         },
@@ -215,6 +215,7 @@ fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
 fun TabOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
+    confirm: () -> Unit,
     onChange: (options: IndividualOptions) -> Unit
 ) {
     var tabIndex by remember { mutableIntStateOf(0) }
@@ -243,7 +244,7 @@ fun TabOptions(
         }
         onChange(EmptyOptions())
         when (tabIndex) {
-            0 -> CreateColumn(iconPacks, onChange)
+            0 -> CreateColumn(iconPacks, confirm, onChange)
             1 -> UploadColumn(onChange)
             2 -> PrepareEditVector(app, onChange)
         }
@@ -253,6 +254,7 @@ fun TabOptions(
 @Composable
 fun CreateColumn(
     iconPacks: List<IconPack>,
+    confirm: () -> Unit,
     onChange: (options: IndividualOptions) -> Unit
 ) {
     var genType by rememberSaveable { mutableStateOf(GenerationType.PATH) }
@@ -261,17 +263,19 @@ fun CreateColumn(
     var colorizeIconPack by rememberSaveable { mutableStateOf(false) }
 
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
-
     var iconPack by rememberSaveable { mutableStateOf("") }
 
     Column {
+        //TODO: Add preview image
+
         TypeDropdown(genType) { genType = it }
         IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
-        if (iconPack != "") {
-            Row {
-                SearchIconPackButton(iconPack) { onChange(UploadedOptions(it.toBitmap(), false)) }
-            }
 
+        if (iconPack != "") {
+            SearchIconPackButton(iconPack) {
+                onChange(UploadedOptions(it.toBitmap(), false))
+                confirm()
+            }
             ColorizeIconPackSwitch(colorizeIconPack) { colorizeIconPack = it }
         }
 
@@ -882,7 +886,7 @@ fun GridImageList(iconPack: IconPack, drawableNames: List<String>, onDismiss: ()
                     onSelect(it)
                 }
                 PageChanger(page
-                    ,havePreviousPage
+                    , havePreviousPage
                     , haveNextPage
                     , goToPrevious = {
                         page--
