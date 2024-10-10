@@ -124,15 +124,64 @@ class ApplicationManager(private val ctx: Context) {
                 val resourceId = res.getIdentifierByName(element.drawableLink, "drawable", iconPackName)
 
                 if (resourceId > 0) {
-                    val drawable = getResIcon(res, resourceId)
-                    if (drawable != null) {
-                        map[element.component] = ResourceDrawable(resourceId, drawable)
-                    }
+                    val drawable = getResIcon(res, resourceId)!!
+                    map[element.component] = ResourceDrawable(resourceId, drawable)
                 }
             }
         }
 
         return map
+    }
+
+    fun getIconPackDrawableNames(iconPackName: String): List<String> {
+        val res = pm.getResourcesForApplication(iconPackName)
+        val xmlParser = getDrawable(res, iconPackName) ?: return emptyList()
+
+        val list = mutableListOf<String>()
+        var type = xmlParser.eventType
+
+        while (type != XmlPullParser.END_DOCUMENT) {
+            if (type == XmlPullParser.START_TAG) {
+                if (xmlParser.name == "item") {
+                    val xmlDrawable = xmlParser.getAttributeValue(null, "drawable")
+
+                    if (xmlDrawable != null) {
+                        list.add(xmlDrawable)
+                    }
+                }
+            }
+
+            type = xmlParser.next()
+        }
+
+        return list
+    }
+
+    fun getIconPackDrawableIds(iconPackName: String, drawableNames: List<String>): List<Int> {
+        val res = pm.getResourcesForApplication(iconPackName)
+        val list = mutableListOf<Int>()
+
+        for (name in drawableNames) {
+            val resourceId = res.getIdentifierByName(name, "drawable", iconPackName)
+
+            if (resourceId > 0) {
+                list.add(resourceId)
+            }
+        }
+
+        return list
+    }
+
+    fun getIconPackDrawables(iconPackName: String, drawableIds: List<Int>): List<Drawable> {
+        val res = pm.getResourcesForApplication(iconPackName)
+        val list = mutableListOf<Drawable>()
+
+        for (id in drawableIds) {
+            val drawable = getResIcon(res, id)!!
+            list.add(drawable)
+        }
+
+        return list
     }
 
     fun getCalendarApplications(applications: List<InstalledApplication>, elements: List<RawElement>): Map<InstalledApplication, String> {
@@ -158,10 +207,10 @@ class ApplicationManager(private val ctx: Context) {
         val calendarIcons = elements.filterIsInstance<RawCalendar>()
         for (calendar in calendarIcons) {
             for (i in 1 .. 31) {
-                val resourceId = res.getIdentifierByName(calendar.prefix + i, "drawable", iconPackName)
+                val resource = getResIcon(res, calendar.prefix + i, iconPackName)
 
-                if (resourceId > 0) {
-                    map[calendar.prefix + i] = getResIcon(res, resourceId)!!
+                if (resource != null) {
+                    map[calendar.prefix + i] = resource
                 }
             }
         }
@@ -309,17 +358,40 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     private fun getResAppfilter(res: Resources, packageName: String): XmlPullParser? {
-        val id = res.getIdentifierByName("appfilter", "xml", packageName)
+        return getResXml(res, packageName, "appfilter")
+    }
+
+    private fun getAssetAppfilter(res: Resources): XmlPullParser? {
+        return getAssetXml(res, "appfilter.xml")
+    }
+
+    private fun getDrawable(res: Resources, packageName: String): XmlPullParser? {
+        val xmlParser = getResDrawable(res, packageName)
+
+        if (xmlParser != null) return xmlParser
+        return getAssetDrawable(res)
+    }
+
+    private fun getResDrawable(res: Resources, packageName: String): XmlPullParser? {
+        return getResXml(res, packageName, "drawable")
+    }
+
+    private fun getAssetDrawable(res: Resources): XmlPullParser? {
+        return getAssetXml(res, "drawable.xml")
+    }
+
+    private fun getResXml(res: Resources, packageName: String, name: String): XmlPullParser? {
+        val id = res.getIdentifierByName(name, "xml", packageName)
         if (id > 0) return res.getXml(id)
 
         return null
     }
 
-    private fun getAssetAppfilter(res: Resources): XmlPullParser? {
+    private fun getAssetXml(res: Resources, name: String): XmlPullParser? {
         val assets = res.assets.list("")
 
-        if (assets != null && assets.contains("appfilter.xml")) {
-            val xmlInStream = res.assets.open("appfilter.xml")
+        if (assets != null && assets.contains(name)) {
+            val xmlInStream = res.assets.open(name)
             val xmlParser = XmlPullParserFactory.newInstance().newPullParser()
             xmlParser.setInput(xmlInStream, "utf-8")
 
@@ -329,8 +401,8 @@ class ApplicationManager(private val ctx: Context) {
         return null
     }
 
-    private fun getResIcon(res: Resources, iconName: String, packageName: String): Drawable? {
-        val id = res.getIdentifierByName(iconName, "drawable", packageName)
+    private fun getResIcon(res: Resources, iconName: String, packageName: String, type: String = "drawable"): Drawable? {
+        val id = res.getIdentifierByName(iconName, type, packageName)
         return getResIcon(res, id)
     }
 
