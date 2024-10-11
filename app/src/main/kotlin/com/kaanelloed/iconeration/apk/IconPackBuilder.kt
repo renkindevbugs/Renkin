@@ -12,8 +12,6 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import app.revanced.manager.compose.util.signing.Signer
 import app.revanced.manager.compose.util.signing.SigningOptions
-import com.android.tools.smali.smali.Smali
-import com.android.tools.smali.smali.SmaliOptions
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.asset.AssetHandler
 import com.kaanelloed.iconeration.data.InstalledApplication
@@ -42,7 +40,10 @@ import com.reandroid.arsc.chunk.xml.ResXmlElement
 import com.reandroid.arsc.coder.ValueCoder
 import com.reandroid.arsc.value.Entry
 import com.reandroid.arsc.value.ValueType
-import java.io.ByteArrayOutputStream
+import com.reandroid.dex.model.DexFile
+import com.reandroid.dex.sections.SectionType
+import com.reandroid.dex.smali.SmaliReader
+import com.reandroid.utils.io.FileIterator
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -340,29 +341,50 @@ class IconPackBuilder(
         val smaliDir = ctx.cacheDir.resolve("smali")
         smaliDir.deleteRecursively()
 
-        compileSmali(apkModule, listOf("R.smali", "R\$layout.smali"), smaliDir, "classes.dex")
-        compileSmali(apkModule, listOf("MainActivity.smali", "BuildConfig.smali"), smaliDir, "classes2.dex")
+        compileSmali(apkModule, listOf("R.smali", "R\$layout.smali"), smaliDir, "classes")
+        compileSmali(apkModule, listOf("MainActivity.smali", "BuildConfig.smali"), smaliDir, "classes2")
     }
 
     private fun compileSmali(apkModule: ApkModule, assets: List<String>, smaliDir: File, dexFileName: String) {
-        val dexFile = ctx.cacheDir.resolve(dexFileName)
-        val filesDir = smaliDir.resolve(dexFile.nameWithoutExtension)
+        val filesDir = smaliDir.resolve(dexFileName)
         filesDir.mkdirs()
 
         copySmaliFiles(filesDir, assets)
 
-        apkModule.add(ByteInputSource(compileSmali(filesDir, dexFile), dexFileName))
+        apkModule.add(ByteInputSource(compileSmali(filesDir), "$dexFileName.dex"))
     }
 
-    private fun compileSmali(smaliDir: File, dexFile: File): ByteArray {
-        val opt = SmaliOptions()
-        opt.outputDexFile = dexFile.absolutePath
-        Smali.assemble(opt, smaliDir.absolutePath)
+    private fun compileSmali(smaliDir: File): ByteArray {
+        val dex = DexFile.createDefault()
 
-        val data = dexFile.readBytes()
-        dexFile.delete()
+        val fileIterator = FileIterator(smaliDir, FileIterator.getExtensionFilter(".smali"))
+        while (fileIterator.hasNext()) {
+            val file = fileIterator.next()
+            dex.fromSmali(SmaliReader.of(file))
+        }
 
-        return data
+        dex.refresh()
+        dex.version = apiToDexVersion(minSdkVersion)
+        dex.clearEmptySections()
+        dex.sortSection(SectionType.getR8Order())
+        dex.shrink()
+        dex.refreshFull()
+        val bytes = dex.bytes
+        dex.close()
+
+        return bytes
+    }
+
+    private fun apiToDexVersion(api: Int): Int {
+        return when {
+            api <= 23 -> 35
+            api in 24 .. 25 -> 37
+            api in 26 .. 27 -> 38
+            api in 29 .. 34 -> 40
+            api == 35 -> 41
+
+            else -> 39
+        }
     }
 
     private fun copySmaliFiles(smaliDir: File, assets: List<String>) {
