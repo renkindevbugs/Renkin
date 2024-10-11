@@ -21,9 +21,7 @@ import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.packages.PackageVersion
-import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
 import com.kaanelloed.iconeration.vector.ReferenceBrush
-import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPaths
 import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXmlFile
 import com.kaanelloed.iconeration.xml.XmlEncoder
 import com.kaanelloed.iconeration.xml.file.AdaptiveIconXml
@@ -109,7 +107,7 @@ class IconPackBuilder(
         manifest.setApplicationLabel("Alchemicon Pack")
 
         //Must be the first resource to match with R$layout.smali
-        //TODO: manually set drawable id in smali
+        //TODO: manually set layout id in smali
         createXmlLayoutResource(apkModule, packageBlock, createLayout(), "main_activity")
 
         insertIconPackAppIcons(apkModule, packageBlock, manifest)
@@ -139,9 +137,7 @@ class IconPackBuilder(
                     adaptive.background("@color/icon_background_color")
 
                     if (app.createdIcon is VectorIcon) {
-                        val vector = app.createdIcon.vector.toMutableImageVector().also {
-                            it.root.editPaths(vectorBrush)
-                        }.toImageVector()
+                        val vector = app.createdIcon.formatVector(vectorBrush)
                         createXmlDrawableResource(apkModule, packageBlock, vector.toXmlFile(), appFileName + "_foreground")
                     }
                     else {
@@ -263,6 +259,7 @@ class IconPackBuilder(
         }
     }
 
+    @Suppress("SameParameterValue")
     private fun createXmlLayoutResource(apkModule: ApkModule, packageBlock: PackageBlock, xmlFile: XmlMemoryFile, name: String): Entry {
         val resPath = "res/${name}.xml"
         val xmlEncoder = XmlEncoder(packageBlock)
@@ -295,6 +292,7 @@ class IconPackBuilder(
         return res
     }
 
+    @Suppress("SameParameterValue")
     private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, @DrawableRes resId: Int, name: String, qualifier: String = "", type: String = "drawable"): Entry {
         val bitmap = ResourcesCompat.getDrawable(ctx.resources, resId, null)!!.toBitmap()
         return createPngResource(apkModule, packageBlock, bitmap, name, qualifier, type)
@@ -336,7 +334,6 @@ class IconPackBuilder(
         return appMan.getVersionCode(iconPack)
     }
 
-    //TODO: Use ARSCLib smali instead
     private fun compileSmali(apkModule: ApkModule) {
         val smaliDir = ctx.cacheDir.resolve("smali")
         smaliDir.deleteRecursively()
@@ -375,6 +372,7 @@ class IconPackBuilder(
         return bytes
     }
 
+    @Suppress("SameParameterValue")
     private fun apiToDexVersion(api: Int): Int {
         return when {
             api <= 23 -> 35

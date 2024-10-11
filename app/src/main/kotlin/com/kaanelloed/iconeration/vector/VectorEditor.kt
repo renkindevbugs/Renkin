@@ -303,10 +303,10 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
             return editor.center()
         }
 
-        fun MutableVectorGroup.editPaths(stroke: Float) {
+        fun MutableVectorGroup.editStrokePaths(stroke: Float) {
             for (child in this.children) {
                 if (child is MutableVectorGroup) {
-                    child.editPaths(stroke)
+                    child.editStrokePaths(stroke)
                 }
 
                 if (child is MutableVectorPath) {
@@ -329,14 +329,26 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
             }
         }
 
-        fun MutableVectorGroup.editPaths(strokeColor: Brush) {
+        fun MutableVectorGroup.editStrokePaths(strokeColor: Brush) {
             for (child in this.children) {
                 if (child is MutableVectorGroup) {
-                    child.editPaths(strokeColor)
+                    child.editStrokePaths(strokeColor)
                 }
 
                 if (child is MutableVectorPath) {
                     child.stroke = strokeColor
+                }
+            }
+        }
+
+        fun MutableVectorGroup.editFillPaths(fillColor: Brush) {
+            for (child in this.children) {
+                if (child is MutableVectorGroup) {
+                    child.editFillPaths(fillColor)
+                }
+
+                if (child is MutableVectorPath) {
+                    child.fill = fillColor
                 }
             }
         }

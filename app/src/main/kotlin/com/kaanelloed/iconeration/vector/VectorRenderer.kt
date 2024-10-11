@@ -19,7 +19,12 @@ import androidx.compose.ui.graphics.vector.toPath
 class VectorRenderer(private val imageVector: ImageVector) {
     private val matrixStack = ArrayDeque<Matrix>()
     private var currentMatrix = Matrix()
-    fun renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true) {
+
+    private var fillVector: Boolean = false
+
+    fun renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true, fillVector: Boolean = false) {
+        this.fillVector = fillVector
+
         if (nonScalingStroke) {
             renderNonScalingStroke(canvas)
         } else {
@@ -106,6 +111,14 @@ class VectorRenderer(private val imageVector: ImageVector) {
     }
 
     private fun getPaint(path: VectorPath): Paint {
+        return if (fillVector) {
+            getFillPaint(path)
+        } else {
+            getStrokePaint(path)
+        }
+    }
+
+    private fun getStrokePaint(path: VectorPath): Paint {
         val paint = Paint()
         paint.color = convertColor(path.stroke)
         paint.alpha = (path.strokeAlpha * 255).toInt()
@@ -114,6 +127,20 @@ class VectorRenderer(private val imageVector: ImageVector) {
         paint.strokeWidth = path.strokeLineWidth
         paint.strokeMiter = path.strokeLineMiter
         paint.style = Paint.Style.STROKE
+        paint.flags = Paint.ANTI_ALIAS_FLAG or Paint.LINEAR_TEXT_FLAG or Paint.SUBPIXEL_TEXT_FLAG
+
+        return paint
+    }
+
+    private fun getFillPaint(path: VectorPath): Paint {
+        val paint = Paint()
+        paint.color = convertColor(path.fill)
+        paint.alpha = (path.fillAlpha * 255).toInt()
+        paint.strokeCap = convertCap(path.strokeLineCap)
+        paint.strokeJoin = convertJoin(path.strokeLineJoin)
+        paint.strokeWidth = path.strokeLineWidth
+        paint.strokeMiter = path.strokeLineMiter
+        paint.style = Paint.Style.FILL_AND_STROKE
         paint.flags = Paint.ANTI_ALIAS_FLAG or Paint.LINEAR_TEXT_FLAG or Paint.SUBPIXEL_TEXT_FLAG
 
         return paint
@@ -148,13 +175,17 @@ class VectorRenderer(private val imageVector: ImageVector) {
     }
 
     companion object {
-        fun MutableImageVector.renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true) {
-            this.toImageVector().renderToCanvas(canvas)
+        fun MutableImageVector.renderToCanvas(canvas: Canvas
+                                              , nonScalingStroke: Boolean = true
+                                              , fillVector: Boolean = false) {
+            this.toImageVector().renderToCanvas(canvas, nonScalingStroke, fillVector)
         }
 
-        fun ImageVector.renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true) {
+        fun ImageVector.renderToCanvas(canvas: Canvas
+                                       , nonScalingStroke: Boolean = true
+                                       , fillVector: Boolean = false) {
             val renderer = VectorRenderer(this)
-            renderer.renderToCanvas(canvas)
+            renderer.renderToCanvas(canvas, nonScalingStroke, fillVector)
         }
     }
 }

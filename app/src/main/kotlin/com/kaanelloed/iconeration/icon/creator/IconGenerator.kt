@@ -42,6 +42,7 @@ import com.kaanelloed.iconeration.packages.PackageVersion
 import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
 import com.kaanelloed.iconeration.vector.PathConverter.Companion.toNodes
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.applyAndRemoveGroup
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editStrokePaths
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPaths
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeAndCenter
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.scaleAtCenter
@@ -317,7 +318,7 @@ class IconGenerator(
             val icon = if (iconPack == null) {
                 val draw = gen.generateAppName(app.appName, options.color, size)
                 val newIcon = createVectorForMultiLineText(draw as BaseTextDrawable, options.color, size)
-                VectorIcon(newIcon)
+                VectorIcon(newIcon, useFillColor = true)
             } else {
                 changeIconPackColor(iconPack)
             }
@@ -430,7 +431,7 @@ class IconGenerator(
             mutableVector.tintColor = Color.Unspecified
         }
         else {
-            mutableVector.root.editPaths(stroke)
+            mutableVector.root.editStrokePaths(stroke)
         }
 
         return VectorIcon(mutableVector)
