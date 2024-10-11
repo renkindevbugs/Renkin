@@ -354,12 +354,8 @@ class IconPackBuilder(
     private fun compileSmali(smaliDir: File): ByteArray {
         val dex = DexFile.createDefault()
 
-        val fileIterator = FileIterator(smaliDir, FileIterator.getExtensionFilter(".smali"))
-        while (fileIterator.hasNext()) {
-            val file = fileIterator.next()
-            dex.fromSmali(SmaliReader.of(file))
-        }
-
+        //TODO: Write dex directly instead of using smali files
+        dex.parseSmaliDirectory(smaliDir)
         dex.refresh()
         dex.version = apiToDexVersion(minSdkVersion)
         dex.clearEmptySections()
