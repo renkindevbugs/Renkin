@@ -191,22 +191,12 @@ class VectorParser(val resources: Resources) {
 
         return when (color.first()) {
             '#' -> {
-                SolidColor(parseComposeColor(color))
+                SolidColor(ColorDecoder.decode(resources, color))
             }
             '@' -> {
-                ReferenceBrush(color)
+                ReferenceBrush(color, ColorDecoder.decode(resources, color))
             }
             else -> null
-        }
-    }
-
-    private fun parseComposeColor(color: String): Color {
-        val newColor = if (color == "#0") "#00000000" else color
-
-        return try {
-            newColor.toColor()
-        } catch (_: Exception) {
-            Color.Unspecified
         }
     }
 

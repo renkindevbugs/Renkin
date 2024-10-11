@@ -7,9 +7,9 @@ import androidx.compose.ui.graphics.Shader
 import androidx.compose.ui.graphics.ShaderBrush
 import androidx.compose.ui.graphics.SweepGradientShader
 
-class ReferenceBrush(val reference: String): ShaderBrush() {
+class ReferenceBrush(val reference: String, val color: Color = Color.White): ShaderBrush() {
     override fun createShader(size: Size): Shader {
         //Dummy shader
-        return SweepGradientShader(Offset(0f, 0f), listOf(Color.Unspecified))
+        return SweepGradientShader(Offset(0f, 0f), listOf(color, color))
     }
 }
