@@ -172,13 +172,13 @@ class ApplicationManager(private val ctx: Context) {
         return list
     }
 
-    fun getIconPackDrawables(iconPackName: String, drawableIds: List<Int>): List<Drawable> {
+    fun getIconPackDrawables(iconPackName: String, drawableIds: List<Int>): List<ResourceDrawable> {
         val res = pm.getResourcesForApplication(iconPackName)
-        val list = mutableListOf<Drawable>()
+        val list = mutableListOf<ResourceDrawable>()
 
         for (id in drawableIds) {
             val drawable = getResIcon(res, id)!!
-            list.add(drawable)
+            list.add(ResourceDrawable(id, drawable))
         }
 
         return list

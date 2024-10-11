@@ -7,7 +7,7 @@ import androidx.core.content.res.ResourcesCompat
 import androidx.core.text.isDigitsOnly
 import com.kaanelloed.iconeration.ui.toColor
 
-class ColorDecoder(val resources: Resources) {
+class ColorDecoder(val resources: Resources, private val defaultColor: Color = Color.Unspecified) {
     private fun decode(value: String): Color {
         if (value.startsWith("#")) {
             return parseRaw(value)
@@ -25,7 +25,7 @@ class ColorDecoder(val resources: Resources) {
             return parseRBGA(value)
         }
 
-        return Color.Unspecified
+        return defaultColor
     }
 
     private fun parseRaw(value: String): Color {
@@ -54,7 +54,7 @@ class ColorDecoder(val resources: Resources) {
             return resources.getComposeColor(id.toInt(), null)
         }
 
-        return Color.Unspecified
+        return defaultColor
     }
 
     private fun parseRGB(value: String): Color {
@@ -86,7 +86,7 @@ class ColorDecoder(val resources: Resources) {
         val color = this.getColorOrNull(id, theme)
 
         return if (color == null) {
-            Color.Unspecified
+            defaultColor
         } else {
             Color(color)
         }
@@ -101,8 +101,8 @@ class ColorDecoder(val resources: Resources) {
     }
 
     companion object {
-        fun decode(resources: Resources, value: String): Color {
-            val decoder = ColorDecoder(resources)
+        fun decode(resources: Resources, value: String, defaultColor: Color = Color.Unspecified): Color {
+            val decoder = ColorDecoder(resources, defaultColor)
             return decoder.decode(value)
         }
     }

@@ -88,6 +88,9 @@ import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.toDrawable
+import com.kaanelloed.iconeration.drawable.ResourceDrawable
+import com.kaanelloed.iconeration.icon.BitmapIcon
+import com.kaanelloed.iconeration.icon.ExportableIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.vector.ImageVectorExtension.Companion.createEmptyVector
@@ -265,6 +268,9 @@ fun CreateColumn(
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
     var iconPack by rememberSaveable { mutableStateOf("") }
 
+    val generatingOptions = IconGenerator.GenerationOptions(iconColor.toInt(), useMonochrome, useVector, colorizeIconPack = colorizeIconPack)
+    val options = CreatedOptions(generatingOptions, genType, iconPack)
+
     Column {
         //TODO: Add preview image
 
@@ -272,8 +278,8 @@ fun CreateColumn(
         IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
 
         if (iconPack != "") {
-            SearchIconPackButton(iconPack) {
-                onChange(UploadedOptions(it.toBitmap(), false))
+            SearchIconPackButton(iconPack, options) {
+                onChange(UploadedOptions(it))
                 confirm()
             }
             ColorizeIconPackSwitch(colorizeIconPack) { colorizeIconPack = it }
@@ -286,8 +292,7 @@ fun CreateColumn(
             MonochromeSwitch(useMonochrome) { useMonochrome = it }
         }
 
-        val generatingOptions = IconGenerator.GenerationOptions(iconColor.toInt(), useMonochrome, useVector, colorizeIconPack = colorizeIconPack)
-        onChange(CreatedOptions(generatingOptions, genType, iconPack))
+        onChange(options)
     }
 }
 
@@ -371,7 +376,7 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
                 ZoomSlider(zoomLevel, onChange = { zoomLevel = it })
             }
 
-            onChange(UploadedOptions(zoomedImage, asAdaptiveIcon))
+            onChange(UploadedOptions(BitmapIcon(zoomedImage, asAdaptiveIcon)))
         }
     }
 }
@@ -653,7 +658,7 @@ fun EditVectorColumn(vector: ImageVector, onChange: (options: IndividualOptions)
             }
         }
 
-        onChange(EditedVectorOptions(editedVector.toImageVector()))
+        onChange(EditedVectorOptions(VectorIcon(editedVector.toImageVector())))
     }
 }
 
@@ -819,7 +824,7 @@ fun CenterSwitch(onChange: (newValue: Boolean) -> Unit) {
 }
 
 @Composable
-fun SearchIconPackButton(iconPackageName: String, onSelect: (Drawable) -> Unit) {
+fun SearchIconPackButton(iconPackageName: String, options: CreatedOptions , onSelect: (ExportableIcon) -> Unit) {
     var showPackDrawables by rememberSaveable { mutableStateOf(false) }
 
     val context = getCurrentContext()
@@ -839,7 +844,7 @@ fun SearchIconPackButton(iconPackageName: String, onSelect: (Drawable) -> Unit) 
         val iconPack = activity.appProvider.iconPacks.find { it.packageName == iconPackageName }!!
         val drawNames = ApplicationManager(context).getIconPackDrawableNames(iconPackageName)
 
-        GridImageList(iconPack, drawNames, onDismiss = {
+        GridImageList(iconPack, options, drawNames, onDismiss = {
             showPackDrawables = false
         }) {
             showPackDrawables = false
@@ -849,8 +854,13 @@ fun SearchIconPackButton(iconPackageName: String, onSelect: (Drawable) -> Unit) 
 }
 
 @Composable
-fun GridImageList(iconPack: IconPack, drawableNames: List<String>, onDismiss: () -> Unit, onSelect: (Drawable) -> Unit) {
+fun GridImageList(iconPack: IconPack
+                  , options: CreatedOptions
+                  , drawableNames: List<String>
+                  , onDismiss: () -> Unit
+                  , onSelect: (ExportableIcon) -> Unit) {
     val context = getCurrentContext()
+    val activity = getCurrentMainActivity()
     val appMan = ApplicationManager(context)
     val maxItems = 9
 
@@ -866,6 +876,12 @@ fun GridImageList(iconPack: IconPack, drawableNames: List<String>, onDismiss: ()
 
     val ids = appMan.getIconPackDrawableIds(iconPack.packageName, names)
     val drawables = appMan.getIconPackDrawables(iconPack.packageName, ids.subList(0, min(maxItems, ids.size)))
+    val exportDrawables = mutableListOf<ExportableIcon>()
+
+    val builder = activity.appProvider.getIconBuilder(options, true)
+    for (drawable in drawables) {
+        exportDrawables.add(builder.colorizeFromIconPack(drawable))
+    }
 
     val havePreviousPage = page > 1
     val haveNextPage = ids.count() > maxItems
@@ -882,7 +898,7 @@ fun GridImageList(iconPack: IconPack, drawableNames: List<String>, onDismiss: ()
                     nameFilter = it
                     page = 1
                 }
-                GridImageList(drawables) {
+                GridImageList(exportDrawables) {
                     onSelect(it)
                 }
                 PageChanger(page
@@ -901,12 +917,12 @@ fun GridImageList(iconPack: IconPack, drawableNames: List<String>, onDismiss: ()
 }
 
 @Composable
-fun GridImageList(drawables: List<Drawable>, onSelect: (Drawable) -> Unit) {
+fun GridImageList(drawables: List<ExportableIcon>, onSelect: (ExportableIcon) -> Unit) {
     LazyVerticalGrid(
         columns = GridCells.Fixed(3)
     ) {
         items(drawables) { image ->
-            Image(image.toBitmap().asImageBitmap()
+            Image(painter = image.getPainter()
                 , ""
                 , Modifier.clickable { onSelect(image) })
         }

@@ -186,11 +186,11 @@ fun OpenAppOptions(
                 }
 
                 is UploadedOptions -> {
-                    activity.appProvider.editApplication(index, app.changeExport(BitmapIcon(options.uploadedImage, options.asAdaptiveIcon)))
+                    activity.appProvider.editApplication(index, app.changeExport(options.uploadedImage))
                 }
 
                 is EditedVectorOptions -> {
-                    activity.appProvider.editApplication(index, app.changeExport(VectorIcon(options.editedVector)))
+                    activity.appProvider.editApplication(index, app.changeExport(options.editedVector))
                 }
             }
 

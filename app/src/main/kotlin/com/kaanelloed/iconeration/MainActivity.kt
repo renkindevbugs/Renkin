@@ -8,16 +8,16 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.kaanelloed.iconeration.apk.ApplicationProvider
 import com.kaanelloed.iconeration.data.PackageAddedNotificationKey
-import com.kaanelloed.iconeration.data.getBooleanValue
 import com.kaanelloed.iconeration.data.getPreferenceFlow
 import com.kaanelloed.iconeration.data.isDarkModeEnabled
+import com.kaanelloed.iconeration.data.isSystemInDarkTheme
 import com.kaanelloed.iconeration.data.setBooleanValue
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PermissionManager
@@ -36,6 +36,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        appProvider.defaultColor = if (this.isSystemInDarkTheme()) Color.White else Color.Black
 
         appProvider.initializeApplications()
         CoroutineScope(Dispatchers.Default).launch {
