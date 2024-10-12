@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.vector.VectorGroup
 import androidx.compose.ui.graphics.vector.VectorPath
 import com.kaanelloed.iconeration.ui.toHexString
 import com.kaanelloed.iconeration.vector.PathExporter.Companion.toStringPath
+import com.kaanelloed.iconeration.vector.brush.ReferenceBrush
 import com.kaanelloed.iconeration.xml.file.VectorXml
 
 class VectorExporter(val vector: ImageVector) {

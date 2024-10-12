@@ -21,7 +21,7 @@ import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.packages.PackageVersion
-import com.kaanelloed.iconeration.vector.ReferenceBrush
+import com.kaanelloed.iconeration.vector.brush.ReferenceBrush
 import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXmlFile
 import com.kaanelloed.iconeration.xml.XmlEncoder
 import com.kaanelloed.iconeration.xml.file.AdaptiveIconXml
@@ -40,8 +40,6 @@ import com.reandroid.arsc.value.Entry
 import com.reandroid.arsc.value.ValueType
 import com.reandroid.dex.model.DexFile
 import com.reandroid.dex.sections.SectionType
-import com.reandroid.dex.smali.SmaliReader
-import com.reandroid.utils.io.FileIterator
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
