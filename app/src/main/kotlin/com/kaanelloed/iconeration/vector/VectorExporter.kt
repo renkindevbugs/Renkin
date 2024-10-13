@@ -65,6 +65,7 @@ class VectorExporter(val vector: ImageVector) {
     }
 
     private fun setXmlPath(file : VectorXml, path: VectorPath) {
+        //TODO: save reference default color in custom attribute
         file.path(
             path.pathData.toStringPath(),
             setXmlJoin(path.strokeLineJoin).toString(),

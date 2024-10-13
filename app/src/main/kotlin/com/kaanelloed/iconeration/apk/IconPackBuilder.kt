@@ -13,7 +13,6 @@ import androidx.core.net.toUri
 import app.revanced.manager.compose.util.signing.Signer
 import app.revanced.manager.compose.util.signing.SigningOptions
 import com.kaanelloed.iconeration.R
-import com.kaanelloed.iconeration.asset.AssetHandler
 import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.extension.getBytes
 import com.kaanelloed.iconeration.icon.EmptyIcon
@@ -104,13 +103,9 @@ class IconPackBuilder(
         setSdkVersions(manifest.manifestElement, minSdkVersion, framework.versionCode)
         manifest.setApplicationLabel("Alchemicon Pack")
 
-        //Must be the first resource to match with R$layout.smali
-        //TODO: manually set layout id in smali
-        createXmlLayoutResource(apkModule, packageBlock, createLayout(), "main_activity")
+        createMainActivity(manifest)
 
         insertIconPackAppIcons(apkModule, packageBlock, manifest)
-
-        createMainActivity(manifest)
 
         createColorResource(packageBlock, "icon_color", iconColor)
         createColorResource(packageBlock, "icon_background_color", backgroundColor)
@@ -167,8 +162,10 @@ class IconPackBuilder(
         createXmlResource(apkModule, packageBlock, drawableXml, "drawable")
         createXmlResource(apkModule, packageBlock, appfilterXml, "appfilter")
 
+        val layout = createXmlLayoutResource(apkModule, packageBlock, createLayout(), "main_activity")
+
         textMethod(ctx.resources.getString(R.string.buildingApk))
-        compileSmali(apkModule)
+        buildDex(apkModule, layout.resourceId)
         apkModule.uncompressedFiles.addCommonExtensions()
         apkModule.writeApk(unsignedApk)
 
@@ -332,28 +329,45 @@ class IconPackBuilder(
         return appMan.getVersionCode(iconPack)
     }
 
-    private fun compileSmali(apkModule: ApkModule) {
-        val smaliDir = ctx.cacheDir.resolve("smali")
-        smaliDir.deleteRecursively()
-
-        compileSmali(apkModule, listOf("R.smali", "R\$layout.smali"), smaliDir, "classes")
-        compileSmali(apkModule, listOf("MainActivity.smali", "BuildConfig.smali"), smaliDir, "classes2")
+    private fun buildDex(apkModule: ApkModule, resourceId: Int) {
+        buildClasses(apkModule, resourceId)
+        buildClasses2(apkModule, resourceId)
     }
 
-    private fun compileSmali(apkModule: ApkModule, assets: List<String>, smaliDir: File, dexFileName: String) {
-        val filesDir = smaliDir.resolve(dexFileName)
-        filesDir.mkdirs()
-
-        copySmaliFiles(filesDir, assets)
-
-        apkModule.add(ByteInputSource(compileSmali(filesDir), "$dexFileName.dex"))
+    private fun buildClasses(apkModule: ApkModule, resourceId: Int) {
+        apkModule.add(ByteInputSource(buildClasses(resourceId), "classes.dex"))
     }
 
-    private fun compileSmali(smaliDir: File): ByteArray {
+    private fun buildClasses(resourceId: Int): ByteArray {
         val dex = DexFile.createDefault()
 
-        //TODO: Write dex directly instead of using smali files
-        dex.parseSmaliDirectory(smaliDir)
+        val dexBuilder = DexClassBuilder(dex.dexLayout.sectionList)
+
+        dexBuilder.buildRClass()
+        dexBuilder.buildRLayoutClass(resourceId)
+        dex.refresh()
+        dex.version = apiToDexVersion(minSdkVersion)
+        dex.clearEmptySections()
+        dex.sortSection(SectionType.getR8Order())
+        dex.shrink()
+        dex.refreshFull()
+        val bytes = dex.bytes
+        dex.close()
+
+        return bytes
+    }
+
+    private fun buildClasses2(apkModule: ApkModule, resourceId: Int) {
+        apkModule.add(ByteInputSource(buildClasses2(resourceId), "classes2.dex"))
+    }
+
+    private fun buildClasses2(resourceId: Int): ByteArray {
+        val dex = DexFile.createDefault()
+
+        val dexBuilder = DexClassBuilder(dex.dexLayout.sectionList)
+
+        dexBuilder.buildMainActivityClass(resourceId)
+        dexBuilder.buildBuildConfig()
         dex.refresh()
         dex.version = apiToDexVersion(minSdkVersion)
         dex.clearEmptySections()
@@ -376,14 +390,6 @@ class IconPackBuilder(
             api == 35 -> 41
 
             else -> 39
-        }
-    }
-
-    private fun copySmaliFiles(smaliDir: File, assets: List<String>) {
-        val assetHandler = AssetHandler(ctx)
-
-        for (asset in assets) {
-            assetHandler.assetToFile(smaliDir.resolve(asset))
         }
     }
 
