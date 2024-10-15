@@ -35,7 +35,6 @@ import com.kaanelloed.iconeration.icon.parser.IconParser
 import com.kaanelloed.iconeration.icon.InsetIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.image.edge.CannyEdgeDetector
-import com.kaanelloed.iconeration.image.tracer.ImageTracer
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.packages.PackageVersion
@@ -47,6 +46,7 @@ import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPaths
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeAndCenter
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.scaleAtCenter
 import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
+import dev.adevium.imagetracer.ImageTracer
 
 class IconGenerator(
     private val ctx: Context,
