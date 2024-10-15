@@ -54,6 +54,7 @@ dependencies {
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.material)
     implementation(libs.imagetracer.compose)
+    implementation(libs.cannyedge.compose)
 
     //Apk related
     implementation(libs.arscLib)

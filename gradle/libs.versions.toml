@@ -20,6 +20,7 @@ material3Android = "1.3.0"
 roomKtx = "2.6.1"
 androidSvg = "1.4"
 imageTracer = "1.0.2"
+cannyEdge = "1.0.1"
 
 apksig-android = "4.4.0"
 desugar-jdk-libs-nio = "2.1.2"
@@ -46,6 +47,7 @@ bcpkix-jdk15on = { module = "org.bouncycastle:bcpkix-jdk15on", version.ref = "bc
 colorpicker-compose = { module = "com.github.skydoves:colorpicker-compose", version.ref = "colorpickerCompose" }
 android-svg = { module = "com.caverock:androidsvg", version.ref = "androidSvg" }
 imagetracer-compose = { group = "com.github.Adevium", name = "ImageTracerCompose", version.ref = "imageTracer" }
+cannyedge-compose = { group = "com.github.Adevium", name = "TGCannyEdgeCompose", version.ref = "cannyEdge" }
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-junit" }
