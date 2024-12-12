@@ -440,7 +440,7 @@ class IconPackBuilder(
             ?: return null
 
         val versionCode = appMan.getVersionCode(iconPack)
-        val versionName = iconPack.versionName
+        val versionName = iconPack.versionName!!
 
         return Version(versionCode, versionName)
     }

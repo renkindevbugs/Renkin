@@ -229,7 +229,7 @@ class ApplicationManager(private val ctx: Context) {
 
             val pack = getPackage(resolve.activityInfo.packageName)!!
             val versionCode = getVersionCode(pack)
-            val versionName = pack.versionName
+            val versionName = pack.versionName!!
 
             val iconPack = IconPack(packageName, appName, versionCode, versionName, iconID)
             iconPacks.add(iconPack)

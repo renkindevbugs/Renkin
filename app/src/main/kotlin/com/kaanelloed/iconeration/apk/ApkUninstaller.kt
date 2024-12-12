@@ -2,7 +2,7 @@ package com.kaanelloed.iconeration.apk
 
 import android.content.Context
 import kotlinx.coroutines.CancellationException
-import ru.solrudev.ackpine.session.SessionResult
+import ru.solrudev.ackpine.session.Session
 import ru.solrudev.ackpine.session.await
 import ru.solrudev.ackpine.session.parameters.Confirmation
 import ru.solrudev.ackpine.uninstaller.PackageUninstaller
@@ -18,12 +18,12 @@ class ApkUninstaller(context: Context) {
 
         return try {
             when (val result = session.await()) {
-                is SessionResult.Success -> {
+                is Session.State.Succeeded -> {
                     println("Success")
                     true
                 }
-                is SessionResult.Error -> {
-                    println(result.cause)
+                is Session.State.Failed -> {
+                    println(result.failure)
                     false
                 }
             }

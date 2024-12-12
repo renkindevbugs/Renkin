@@ -381,7 +381,7 @@ class IconGenerator(
     private fun colorIcon(icon: Drawable): Bitmap {
         val oldIcon = getIconBitmap(icon)
 
-        val coloredIcon = oldIcon.copy(oldIcon.config, true)
+        val coloredIcon = oldIcon.copy(oldIcon.config!!, true)
         val paint = Paint()
 
         paint.colorFilter = PorterDuffColorFilter(options.color, PorterDuff.Mode.SRC_IN)
@@ -479,7 +479,7 @@ class IconGenerator(
     )
 
     private fun Bitmap.changeBackgroundColor(color: Int): Bitmap {
-        val newBitmap = Bitmap.createBitmap(width, height, config)
+        val newBitmap = Bitmap.createBitmap(width, height, config!!)
         val canvas = Canvas(newBitmap)
         canvas.drawColor(color)
         canvas.drawBitmap(this, 0F, 0F, null)
