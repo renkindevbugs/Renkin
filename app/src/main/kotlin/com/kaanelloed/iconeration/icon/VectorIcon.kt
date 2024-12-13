@@ -5,6 +5,8 @@ import android.graphics.Canvas
 import android.util.Base64
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -38,11 +40,15 @@ class VectorIcon(
     }
 
     fun formatVector(brush: Brush): ImageVector {
+        val transparent = SolidColor(Color.Transparent)
+
         return vector.toMutableImageVector().also {
             if (useFillColor) {
                 it.root.editFillPaths(brush)
+                it.root.editStrokePaths(transparent)
             } else {
                 it.root.editStrokePaths(brush)
+                it.root.editFillPaths(transparent)
             }
         }.toImageVector()
     }
