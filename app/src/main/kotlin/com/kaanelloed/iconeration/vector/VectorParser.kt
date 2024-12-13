@@ -11,10 +11,10 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.*
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import com.kaanelloed.iconeration.ui.toColor
+import com.kaanelloed.iconeration.vector.brush.ReferenceBrush
 import com.kaanelloed.iconeration.xml.XmlNode
 
-class VectorParser(val resources: Resources) {
+class VectorParser(val resources: Resources, private val defaultColor: Color = Color.Unspecified) {
     private val lineCapButt = 0
     private val lineCapRound = 1
     private val lineCapSquare = 2
@@ -191,28 +191,22 @@ class VectorParser(val resources: Resources) {
 
         return when (color.first()) {
             '#' -> {
-                SolidColor(parseComposeColor(color))
+                SolidColor(decodeColor(color))
             }
             '@' -> {
-                ReferenceBrush(color)
+                ReferenceBrush(color, decodeColor(color))
             }
             else -> null
         }
     }
 
-    private fun parseComposeColor(color: String): Color {
-        val newColor = if (color == "#0") "#00000000" else color
-
-        return try {
-            newColor.toColor()
-        } catch (_: Exception) {
-            Color.Unspecified
-        }
+    private fun decodeColor(color: String): Color {
+        return ColorDecoder.decode(resources, color, defaultColor)
     }
 
     companion object {
-        fun parse(resources: Resources, node: XmlNode): ImageVector? {
-            val vectorParser = VectorParser(resources)
+        fun parse(resources: Resources, node: XmlNode, defaultColor: Color = Color.Unspecified): ImageVector? {
+            val vectorParser = VectorParser(resources, defaultColor)
             return vectorParser.parse(node)
         }
     }

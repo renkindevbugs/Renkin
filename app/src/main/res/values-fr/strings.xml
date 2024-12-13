@@ -52,7 +52,22 @@
     <string name="colorizeIconPack">Appliquer la couleur au pack d\'îcones</string>
     <string name="uploadImageError">L\'image ne peut pas être téléversé</string>
     <string name="iconPackOnly">Pack d\'icônes seulement</string>
-    <string name="syncPacks">Sync packs d\'icones</string>
+    <string name="syncPacks">Sync les packs d\'icônes</string>
     <string name="retrieveCalendarIcon">Inclure icones de calendrier</string>
     <string name="iconsStillGenerated">Les icones sont encore en train de se faire générées</string>
+    <string name="packageAddedNotification">Notification de l\'ajout d\'une nouvelle application</string>
+    <string name="newApplicationChannelName">Application ajoutée</string>
+    <string name="newApplicationChannelDescription">Recevoir une notification quand une application est installée</string>
+    <string name="newApplicationNotificationText">Mettre à jour Alchemicon Pack</string>
+    <string name="newApplicationNotificationLongText">Une nouvelle application a été installée, vous pouvez mettre à jour le pack d\'îcones</string>
+    <string name="notifPermissionWarning">Vous devez activer la permission pour les notifications</string>
+    <string name="overrideIcon">Remplacer icône</string>
+    <string name="deleteIconPack">Désinstaller le pack d\'icônes</string>
+    <string name="update">Mettre à jour</string>
+    <string name="updatePackChannelName">Mettre à jour Alchemicon Pack</string>
+    <string name="updatePackChannelDescription">Mettre à jour Alchemicon Pack avec l\'application récemment installée</string>
+    <string name="updatePackNotificationText">Mise à jour d\'Alchemicon Pack</string>
+    <string name="automaticallyUpdate">Mettre à jour automatiquement</string>
+    <string name="iconPackUninstalled">Alchemicon Pack désinstallé</string>
+    <string name="refreshApplicationList">Rafraîchir la liste d\'application</string>
 </resources>

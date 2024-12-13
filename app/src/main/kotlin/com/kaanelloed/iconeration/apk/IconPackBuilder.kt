@@ -10,12 +10,8 @@ import androidx.compose.ui.res.vectorResource
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
-import app.revanced.manager.compose.util.signing.Signer
-import app.revanced.manager.compose.util.signing.SigningOptions
-import com.android.tools.smali.smali.Smali
-import com.android.tools.smali.smali.SmaliOptions
+import app.revanced.library.ApkUtils
 import com.kaanelloed.iconeration.R
-import com.kaanelloed.iconeration.asset.AssetHandler
 import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.extension.getBytes
 import com.kaanelloed.iconeration.icon.EmptyIcon
@@ -23,9 +19,7 @@ import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.packages.PackageVersion
-import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
-import com.kaanelloed.iconeration.vector.ReferenceBrush
-import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPaths
+import com.kaanelloed.iconeration.vector.brush.ReferenceBrush
 import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXmlFile
 import com.kaanelloed.iconeration.xml.XmlEncoder
 import com.kaanelloed.iconeration.xml.file.AdaptiveIconXml
@@ -42,7 +36,8 @@ import com.reandroid.arsc.chunk.xml.ResXmlElement
 import com.reandroid.arsc.coder.ValueCoder
 import com.reandroid.arsc.value.Entry
 import com.reandroid.arsc.value.ValueType
-import java.io.ByteArrayOutputStream
+import com.reandroid.dex.model.DexFile
+import com.reandroid.dex.sections.SectionType
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -107,13 +102,9 @@ class IconPackBuilder(
         setSdkVersions(manifest.manifestElement, minSdkVersion, framework.versionCode)
         manifest.setApplicationLabel("Alchemicon Pack")
 
-        //Must be the first resource to match with R$layout.smali
-        //TODO: manually set drawable id in smali
-        createXmlLayoutResource(apkModule, packageBlock, createLayout(), "main_activity")
+        createMainActivity(manifest)
 
         insertIconPackAppIcons(apkModule, packageBlock, manifest)
-
-        createMainActivity(manifest)
 
         createColorResource(packageBlock, "icon_color", iconColor)
         createColorResource(packageBlock, "icon_background_color", backgroundColor)
@@ -137,10 +128,9 @@ class IconPackBuilder(
                     adaptive.foreground(appFileName)
                     adaptive.background("@color/icon_background_color")
 
+                    //TODO Better handling of foreground icon size
                     if (app.createdIcon is VectorIcon) {
-                        val vector = app.createdIcon.vector.toMutableImageVector().also {
-                            it.root.editPaths(vectorBrush)
-                        }.toImageVector()
+                        val vector = app.createdIcon.formatVector(vectorBrush)
                         createXmlDrawableResource(apkModule, packageBlock, vector.toXmlFile(), appFileName + "_foreground")
                     }
                     else {
@@ -172,8 +162,10 @@ class IconPackBuilder(
         createXmlResource(apkModule, packageBlock, drawableXml, "drawable")
         createXmlResource(apkModule, packageBlock, appfilterXml, "appfilter")
 
+        val layout = createXmlLayoutResource(apkModule, packageBlock, createLayout(), "main_activity")
+
         textMethod(ctx.resources.getString(R.string.buildingApk))
-        compileSmali(apkModule)
+        buildDex(apkModule, layout.resourceId)
         apkModule.uncompressedFiles.addCommonExtensions()
         apkModule.writeApk(unsignedApk)
 
@@ -262,6 +254,7 @@ class IconPackBuilder(
         }
     }
 
+    @Suppress("SameParameterValue")
     private fun createXmlLayoutResource(apkModule: ApkModule, packageBlock: PackageBlock, xmlFile: XmlMemoryFile, name: String): Entry {
         val resPath = "res/${name}.xml"
         val xmlEncoder = XmlEncoder(packageBlock)
@@ -294,6 +287,7 @@ class IconPackBuilder(
         return res
     }
 
+    @Suppress("SameParameterValue")
     private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, @DrawableRes resId: Int, name: String, qualifier: String = "", type: String = "drawable"): Entry {
         val bitmap = ResourcesCompat.getDrawable(ctx.resources, resId, null)!!.toBitmap()
         return createPngResource(apkModule, packageBlock, bitmap, name, qualifier, type)
@@ -335,41 +329,67 @@ class IconPackBuilder(
         return appMan.getVersionCode(iconPack)
     }
 
-    //TODO: Use ARSCLib smali instead
-    private fun compileSmali(apkModule: ApkModule) {
-        val smaliDir = ctx.cacheDir.resolve("smali")
-        smaliDir.deleteRecursively()
-
-        compileSmali(apkModule, listOf("R.smali", "R\$layout.smali"), smaliDir, "classes.dex")
-        compileSmali(apkModule, listOf("MainActivity.smali", "BuildConfig.smali"), smaliDir, "classes2.dex")
+    private fun buildDex(apkModule: ApkModule, resourceId: Int) {
+        buildClasses(apkModule, resourceId)
+        buildClasses2(apkModule, resourceId)
     }
 
-    private fun compileSmali(apkModule: ApkModule, assets: List<String>, smaliDir: File, dexFileName: String) {
-        val dexFile = ctx.cacheDir.resolve(dexFileName)
-        val filesDir = smaliDir.resolve(dexFile.nameWithoutExtension)
-        filesDir.mkdirs()
-
-        copySmaliFiles(filesDir, assets)
-
-        apkModule.add(ByteInputSource(compileSmali(filesDir, dexFile), dexFileName))
+    private fun buildClasses(apkModule: ApkModule, resourceId: Int) {
+        apkModule.add(ByteInputSource(buildClasses(resourceId), "classes.dex"))
     }
 
-    private fun compileSmali(smaliDir: File, dexFile: File): ByteArray {
-        val opt = SmaliOptions()
-        opt.outputDexFile = dexFile.absolutePath
-        Smali.assemble(opt, smaliDir.absolutePath)
+    private fun buildClasses(resourceId: Int): ByteArray {
+        val dex = DexFile.createDefault()
 
-        val data = dexFile.readBytes()
-        dexFile.delete()
+        val dexBuilder = DexClassBuilder(dex.dexLayout.sectionList)
 
-        return data
+        dexBuilder.buildRClass()
+        dexBuilder.buildRLayoutClass(resourceId)
+        dex.refresh()
+        dex.version = apiToDexVersion(minSdkVersion)
+        dex.clearEmptySections()
+        dex.sortSection(SectionType.getR8Order())
+        dex.shrink()
+        dex.refreshFull()
+        val bytes = dex.bytes
+        dex.close()
+
+        return bytes
     }
 
-    private fun copySmaliFiles(smaliDir: File, assets: List<String>) {
-        val assetHandler = AssetHandler(ctx)
+    private fun buildClasses2(apkModule: ApkModule, resourceId: Int) {
+        apkModule.add(ByteInputSource(buildClasses2(resourceId), "classes2.dex"))
+    }
 
-        for (asset in assets) {
-            assetHandler.assetToFile(smaliDir.resolve(asset))
+    private fun buildClasses2(resourceId: Int): ByteArray {
+        val dex = DexFile.createDefault()
+
+        val dexBuilder = DexClassBuilder(dex.dexLayout.sectionList)
+
+        dexBuilder.buildMainActivityClass(resourceId)
+        dexBuilder.buildBuildConfig()
+        dex.refresh()
+        dex.version = apiToDexVersion(minSdkVersion)
+        dex.clearEmptySections()
+        dex.sortSection(SectionType.getR8Order())
+        dex.shrink()
+        dex.refreshFull()
+        val bytes = dex.bytes
+        dex.close()
+
+        return bytes
+    }
+
+    @Suppress("SameParameterValue")
+    private fun apiToDexVersion(api: Int): Int {
+        return when {
+            api <= 23 -> 35
+            api in 24 .. 25 -> 37
+            api in 26 .. 27 -> 38
+            api in 29 .. 34 -> 40
+            api == 35 -> 41
+
+            else -> 39
         }
     }
 
@@ -420,14 +440,15 @@ class IconPackBuilder(
             ?: return null
 
         val versionCode = appMan.getVersionCode(iconPack)
-        val versionName = iconPack.versionName
+        val versionName = iconPack.versionName!!
 
         return Version(versionCode, versionName)
     }
 
     private fun signApk(file: File, outFile: File) {
-        val opt = SigningOptions("Iconeration", "s3cur3p@ssw0rd", keyStoreFile.path)
-        val signer = Signer(opt)
-        signer.signApk(file, outFile)
+        val pwd = "s3cur3p@ssw0rd"
+
+        val dtl = ApkUtils.KeyStoreDetails(keyStoreFile, pwd, "alias", pwd)
+        ApkUtils.signApk(file, outFile, "Iconeration", dtl)
     }
 }

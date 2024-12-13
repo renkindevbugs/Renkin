@@ -2,6 +2,8 @@ package com.kaanelloed.iconeration.vector
 
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.toPath
 import androidx.compose.ui.unit.dp
 import com.kaanelloed.iconeration.vector.NodeEditor.Companion.rotate
@@ -9,6 +11,8 @@ import com.kaanelloed.iconeration.vector.NodeEditor.Companion.scale
 import com.kaanelloed.iconeration.vector.NodeEditor.Companion.translate
 import com.kaanelloed.iconeration.vector.PathConverter.Companion.isRelative
 import com.kaanelloed.iconeration.vector.PathConverter.Companion.toAbsolute
+import com.kaanelloed.iconeration.vector.brush.ReferenceBrush
+import com.kaanelloed.iconeration.vector.brush.SolidColorShader
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
@@ -303,10 +307,10 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
             return editor.center()
         }
 
-        fun MutableVectorGroup.editPaths(stroke: Float) {
+        fun MutableVectorGroup.editStrokePaths(stroke: Float) {
             for (child in this.children) {
                 if (child is MutableVectorGroup) {
-                    child.editPaths(stroke)
+                    child.editStrokePaths(stroke)
                 }
 
                 if (child is MutableVectorPath) {
@@ -329,14 +333,81 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
             }
         }
 
-        fun MutableVectorGroup.editPaths(strokeColor: Brush) {
+        fun MutableVectorGroup.editStrokePaths(strokeColor: Brush) {
             for (child in this.children) {
                 if (child is MutableVectorGroup) {
-                    child.editPaths(strokeColor)
+                    child.editStrokePaths(strokeColor)
                 }
 
                 if (child is MutableVectorPath) {
                     child.stroke = strokeColor
+                }
+            }
+        }
+
+        fun MutableVectorGroup.setReferenceColorPaths(color: Brush) {
+            for (child in this.children) {
+                if (child is MutableVectorGroup) {
+                    child.setReferenceColorPaths(color)
+                }
+
+                if (child is MutableVectorPath) {
+                    if (child.strokeLineWidth == 0f) {
+                        child.stroke = null
+                        child.fill = color
+                    } else {
+                        child.stroke = color
+                        child.fill = null
+                    }
+
+                }
+            }
+        }
+
+        fun MutableVectorGroup.editFillPaths(fillColor: Brush) {
+            for (child in this.children) {
+                if (child is MutableVectorGroup) {
+                    child.editFillPaths(fillColor)
+                }
+
+                if (child is MutableVectorPath) {
+                    child.fill = fillColor
+                }
+            }
+        }
+
+        fun MutableVectorGroup.removeFillReference() {
+            for (child in this.children) {
+                if (child is MutableVectorGroup) {
+                    child.removeFillReference()
+                }
+
+                if (child is MutableVectorPath) {
+                    if (child.fill is ReferenceBrush) {
+                        val ref = child.fill as ReferenceBrush
+                        if (ref.shaderBrush is SolidColorShader)
+                            child.fill = SolidColor(ref.shaderBrush.color)
+                        else
+                            child.fill = SolidColor(Color.Unspecified)
+                    }
+                }
+            }
+        }
+
+        fun MutableVectorGroup.removeStrokeReference() {
+            for (child in this.children) {
+                if (child is MutableVectorGroup) {
+                    child.removeStrokeReference()
+                }
+
+                if (child is MutableVectorPath) {
+                    if (child.stroke is ReferenceBrush) {
+                        val ref = child.stroke as ReferenceBrush
+                        if (ref.shaderBrush is SolidColorShader)
+                            child.stroke = SolidColor(ref.shaderBrush.color)
+                        else
+                            child.stroke = SolidColor(Color.Unspecified)
+                    }
                 }
             }
         }

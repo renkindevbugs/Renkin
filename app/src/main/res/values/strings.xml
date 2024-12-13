@@ -56,4 +56,19 @@
     <string name="syncPacks">Sync icon packs</string>
     <string name="retrieveCalendarIcon">Retrieve calendar icons</string>
     <string name="iconsStillGenerated">Icons are still being generated</string>
+    <string name="packageAddedNotification">New application notification</string>
+    <string name="newApplicationChannelName">Application added</string>
+    <string name="newApplicationChannelDescription">Get a notification when an application is installed</string>
+    <string name="newApplicationNotificationText">Update Alchemicon Pack</string>
+    <string name="newApplicationNotificationLongText">An application has been installed, you can update your icon pack</string>
+    <string name="notifPermissionWarning">You must enable notification permission</string>
+    <string name="overrideIcon">Override icon</string>
+    <string name="deleteIconPack">Uninstall icon pack</string>
+    <string name="update">Update</string>
+    <string name="updatePackChannelName">Update Alchemicon Pack</string>
+    <string name="updatePackChannelDescription">Update Alchemicon Pack with the newly installed application</string>
+    <string name="updatePackNotificationText">Updating Alchemicon Pack</string>
+    <string name="automaticallyUpdate">Automatically update</string>
+    <string name="iconPackUninstalled">Alchemicon Pack uninstalled</string>
+    <string name="refreshApplicationList">Refresh application list</string>
 </resources>

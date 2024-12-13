@@ -14,12 +14,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -29,11 +32,15 @@ import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.github.skydoves.colorpicker.compose.AlphaSlider
 import com.github.skydoves.colorpicker.compose.AlphaTile
 import com.github.skydoves.colorpicker.compose.BrightnessSlider
 import com.github.skydoves.colorpicker.compose.ColorEnvelope
+import com.github.skydoves.colorpicker.compose.ColorPickerController
 import com.github.skydoves.colorpicker.compose.HsvColorPicker
 import com.github.skydoves.colorpicker.compose.rememberColorPickerController
 
@@ -134,7 +141,7 @@ private fun ColorDialog(
                 BrightnessSlider(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(10.dp)
+                        .padding(10.dp, 0.dp, 10.dp, 10.dp)
                         .height(35.dp),
                     controller = controller,
                     initialColor = currentlySelected
@@ -147,12 +154,119 @@ private fun ColorDialog(
                         .align(CenterHorizontally),
                     controller = controller
                 )
+
+                RGBFields(
+                    modifier = Modifier.padding(10.dp, 10.dp, 10.dp, 0.dp)
+                    , controller = controller
+                )
+
+                HexField(
+                    modifier = Modifier.padding(10.dp)
+                    , controller = controller
+                )
             }
         },
         confirmButton = {}
     )
 }
 
+@Composable
+fun RGBFields(controller: ColorPickerController
+              , modifier: Modifier = Modifier
+              , internalModifier: Modifier = Modifier) {
+    val alpha = controller.selectedColor.value.alphaInt
+    val red = controller.selectedColor.value.redInt
+    val green = controller.selectedColor.value.greenInt
+    val blue = controller.selectedColor.value.blueInt
+
+    Row(modifier.fillMaxWidth()) {
+        RGBField(modifier = internalModifier.fillMaxWidth(0.33f)
+            , value = red
+            , prefix = { Text("R") }
+            , onValueChange = {
+                val newColor = Color(it, green, blue, alpha)
+                controller.selectByColor(newColor, true)
+        })
+
+        RGBField(modifier = internalModifier.fillMaxWidth(0.5f)
+            , value = green
+            , prefix = { Text("G") }
+            , onValueChange = {
+                val newColor = Color(red, it, blue, alpha)
+                controller.selectByColor(newColor, true)
+            })
+
+        RGBField(modifier = internalModifier.fillMaxWidth()
+            , value = blue
+            , prefix = { Text("B") }
+            , onValueChange = {
+                val newColor = Color(red, green, it, alpha)
+                controller.selectByColor(newColor, true)
+            })
+    }
+}
+
+@Composable
+fun RGBField(modifier: Modifier
+             , value: Int
+             , onValueChange: (Int) -> Unit
+             , prefix: @Composable (() -> Unit)? = null) {
+    val keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+    val style = TextStyle.Default.copy(textAlign = TextAlign.Center)
+
+    var lastValue by rememberSaveable { mutableIntStateOf(value) }
+    var currentValue by rememberSaveable { mutableIntStateOf(value) }
+    var textValue by rememberSaveable { mutableStateOf(value.toString()) }
+
+    if (value != lastValue) {
+        textValue = value.toString()
+        currentValue = value
+        lastValue = value
+    }
+
+    OutlinedTextField(modifier = modifier
+        , value = textValue
+        , isError = currentValue !in 0 .. 255
+        , singleLine = true
+        , keyboardOptions = keyboardOptions
+        , prefix = prefix
+        , textStyle = style
+        , onValueChange = {
+            textValue = it.getDigitsOnly().left(3)
+            currentValue = textValue.ifEmpty { "-1" }.toInt()
+
+            if (currentValue in 0 .. 255) {
+                onValueChange(currentValue)
+            }
+        })
+}
+
+@Composable
+fun HexField(modifier: Modifier
+             , controller: ColorPickerController) {
+    val controllerValue = controller.selectedColor.value.toHexString().trim('#')
+    var lastControllerValue by rememberSaveable { mutableStateOf(controllerValue) }
+    var value by rememberSaveable { mutableStateOf(controllerValue) }
+
+    if (controllerValue != lastControllerValue) {
+        value = controllerValue
+        lastControllerValue = controllerValue
+    }
+
+    OutlinedTextField(modifier = modifier
+        , value = value
+        , isError = ("#$value").toNullableColor() == null
+        , prefix = { Text("#") }
+        , singleLine = true
+        , onValueChange = {
+            value = it.trim('#').left(8)
+
+            val color = ("#$value").toNullableColor()
+            if (color != null && value.length == 8) {
+                controller.selectByColor(color, true)
+            }
+    })
+}
 
 fun colorSaver() = Saver<MutableState<Color>, String>(
     save = { state -> state.value.toHexString() },
@@ -161,15 +275,62 @@ fun colorSaver() = Saver<MutableState<Color>, String>(
 
 fun Color.toHexString(): String {
     return String.format(
-        "#%02x%02x%02x%02x", (this.alpha * 255).toInt(),
-        (this.red * 255).toInt(), (this.green * 255).toInt(), (this.blue * 255).toInt()
+        "#%02x%02x%02x%02x", this.alphaInt, this.redInt, this.greenInt, this.blueInt
     )
+}
+
+val Color.alphaInt: Int
+    get() = floatTo255Component(this.alpha)
+
+val Color.redInt: Int
+    get() = floatTo255Component(this.red)
+
+val Color.greenInt: Int
+    get() = floatTo255Component(this.green)
+
+val Color.blueInt: Int
+    get() = floatTo255Component(this.blue)
+
+private fun floatTo255Component(component: Float): Int {
+    return (component * 255).toInt()
 }
 
 fun String.toColor(): Color {
     return Color(AndroidColor.parseColor(this))
 }
 
+fun String.toNullableColor(): Color? {
+    return try {
+        this.toColor()
+    } catch (ex: IllegalArgumentException) {
+        null
+    }
+}
+
 fun Color.toInt(): Int {
     return AndroidColor.parseColor(this.toHexString())
+}
+
+fun String.left(length: Int): String {
+    if (this.isEmpty() || length < 0) {
+        return ""
+    }
+
+    if (length > this.length) {
+        return this
+    }
+
+    return this.substring(0 until length)
+}
+
+fun String.getDigitsOnly(): String {
+    val builder = StringBuilder()
+
+    for (c in this) {
+        if (c.isDigit()) {
+            builder.append(c)
+        }
+    }
+
+    return builder.toString()
 }

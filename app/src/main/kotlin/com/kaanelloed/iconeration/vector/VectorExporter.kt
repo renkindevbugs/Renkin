@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.vector.VectorGroup
 import androidx.compose.ui.graphics.vector.VectorPath
 import com.kaanelloed.iconeration.ui.toHexString
 import com.kaanelloed.iconeration.vector.PathExporter.Companion.toStringPath
+import com.kaanelloed.iconeration.vector.brush.ReferenceBrush
 import com.kaanelloed.iconeration.xml.file.VectorXml
 
 class VectorExporter(val vector: ImageVector) {
@@ -64,6 +65,7 @@ class VectorExporter(val vector: ImageVector) {
     }
 
     private fun setXmlPath(file : VectorXml, path: VectorPath) {
+        //TODO: save reference default color in custom attribute
         file.path(
             path.pathData.toStringPath(),
             setXmlJoin(path.strokeLineJoin).toString(),

@@ -1,8 +1,8 @@
 package com.kaanelloed.iconeration.ui
 
-import android.graphics.Bitmap
-import androidx.compose.ui.graphics.vector.ImageVector
 import com.kaanelloed.iconeration.data.GenerationType
+import com.kaanelloed.iconeration.icon.ExportableIcon
+import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.icon.creator.IconGenerator
 
 interface IndividualOptions
@@ -16,10 +16,9 @@ data class CreatedOptions(
 ): IndividualOptions
 
 data class UploadedOptions(
-    val uploadedImage: Bitmap,
-    val asAdaptiveIcon: Boolean
+    val uploadedImage: ExportableIcon
 ): IndividualOptions
 
 data class EditedVectorOptions(
-    val editedVector: ImageVector
+    val editedVector: VectorIcon
 ): IndividualOptions

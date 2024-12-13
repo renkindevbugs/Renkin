@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.util.Base64
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -11,10 +12,14 @@ import com.kaanelloed.iconeration.vector.MutableImageVector
 import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.center
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeTo
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.setReferenceColorPaths
 import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXml
 import com.kaanelloed.iconeration.vector.VectorRenderer.Companion.renderToCanvas
 
-class VectorIcon(val vector: ImageVector, exportAsAdaptiveIcon: Boolean = false): ExportableIcon(exportAsAdaptiveIcon) {
+class VectorIcon(
+    val vector: ImageVector
+    , exportAsAdaptiveIcon: Boolean = false
+): ExportableIcon(exportAsAdaptiveIcon) {
     constructor(mutableVector: MutableImageVector) : this(mutableVector.toImageVector())
 
     @Composable
@@ -28,6 +33,12 @@ class VectorIcon(val vector: ImageVector, exportAsAdaptiveIcon: Boolean = false)
 
     override fun toDbString(): String {
         return convertToBase64()
+    }
+
+    fun formatVector(brush: Brush): ImageVector {
+        return vector.toMutableImageVector().also {
+            it.root.setReferenceColorPaths(brush)
+        }.toImageVector()
     }
 
     private fun render(): Bitmap {

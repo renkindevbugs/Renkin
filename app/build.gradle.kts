@@ -7,14 +7,14 @@ plugins {
 
 android {
     namespace = "com.kaanelloed.iconeration"
-    compileSdk = 34
+    compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
         applicationId = "com.kaanelloed.iconeration"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 37
-        versionName = "2024.09.03"
+        versionCode = 38
+        versionName = "2024.12.00"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -53,13 +53,14 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.material)
+    implementation(libs.imagetracer.compose)
+    implementation(libs.cannyedge.compose)
 
     //Apk related
     implementation(libs.arscLib)
-    implementation(libs.bcpkix.jdk15on)
-    implementation(libs.apksig.android)
     implementation(libs.ackpine.core)
     implementation(libs.ackpine.ktx)
+    implementation(libs.apksigner.compat)
 
     //Compose
     val composeBom = platform(libs.androidx.compose.bom)
@@ -80,10 +81,6 @@ dependencies {
 
     //Compat
     coreLibraryDesugaring(libs.android.tools.desugar.jdk.libs.nio)
-
-    //Smali
-    implementation(libs.android.tools.smali)
-    implementation(libs.android.tools.smali.dexlib2)
 
     //Test
     testImplementation(libs.junit)

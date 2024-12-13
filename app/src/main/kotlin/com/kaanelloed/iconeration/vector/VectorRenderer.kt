@@ -15,10 +15,13 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.VectorGroup
 import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.toPath
+import com.kaanelloed.iconeration.vector.brush.ReferenceBrush
+import com.kaanelloed.iconeration.vector.brush.SolidColorShader
 
 class VectorRenderer(private val imageVector: ImageVector) {
     private val matrixStack = ArrayDeque<Matrix>()
     private var currentMatrix = Matrix()
+
     fun renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true) {
         if (nonScalingStroke) {
             renderNonScalingStroke(canvas)
@@ -106,6 +109,14 @@ class VectorRenderer(private val imageVector: ImageVector) {
     }
 
     private fun getPaint(path: VectorPath): Paint {
+        return if (path.strokeLineWidth == 0f) {
+            getFillPaint(path)
+        } else {
+            getStrokePaint(path)
+        }
+    }
+
+    private fun getStrokePaint(path: VectorPath): Paint {
         val paint = Paint()
         paint.color = convertColor(path.stroke)
         paint.alpha = (path.strokeAlpha * 255).toInt()
@@ -119,9 +130,29 @@ class VectorRenderer(private val imageVector: ImageVector) {
         return paint
     }
 
+    private fun getFillPaint(path: VectorPath): Paint {
+        val paint = Paint()
+        paint.color = convertColor(path.fill)
+        paint.alpha = (path.fillAlpha * 255).toInt()
+        paint.strokeCap = convertCap(path.strokeLineCap)
+        paint.strokeJoin = convertJoin(path.strokeLineJoin)
+        paint.strokeWidth = path.strokeLineWidth
+        paint.strokeMiter = path.strokeLineMiter
+        paint.style = Paint.Style.FILL_AND_STROKE
+        paint.flags = Paint.ANTI_ALIAS_FLAG or Paint.LINEAR_TEXT_FLAG or Paint.SUBPIXEL_TEXT_FLAG
+
+        return paint
+    }
+
     private fun convertColor(brush: Brush?): Int {
         if (brush == null)
             return Color.Unspecified.toArgb()
+
+        if (brush is ReferenceBrush) {
+            if (brush.shaderBrush is SolidColorShader) {
+                return brush.shaderBrush.color.toArgb()
+            }
+        }
 
         if (brush !is SolidColor)
             return Color.Unspecified.toArgb()
@@ -148,13 +179,15 @@ class VectorRenderer(private val imageVector: ImageVector) {
     }
 
     companion object {
-        fun MutableImageVector.renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true) {
-            this.toImageVector().renderToCanvas(canvas)
+        fun MutableImageVector.renderToCanvas(canvas: Canvas
+                                              , nonScalingStroke: Boolean = true) {
+            this.toImageVector().renderToCanvas(canvas, nonScalingStroke)
         }
 
-        fun ImageVector.renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true) {
+        fun ImageVector.renderToCanvas(canvas: Canvas
+                                       , nonScalingStroke: Boolean = true) {
             val renderer = VectorRenderer(this)
-            renderer.renderToCanvas(canvas)
+            renderer.renderToCanvas(canvas, nonScalingStroke)
         }
     }
 }
