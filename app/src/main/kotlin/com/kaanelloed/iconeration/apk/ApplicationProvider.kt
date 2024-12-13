@@ -77,6 +77,7 @@ class ApplicationProvider(private val context: Context) {
 
     @Suppress("RedundantSuspendModifier")
     suspend fun initializeIconPacks() {
+        iconPackLoaded = false
         iconPacks = ApplicationManager(context).getIconPacks()
         getAppFilterElements()
     }
@@ -209,8 +210,9 @@ class ApplicationProvider(private val context: Context) {
 
     private fun retrieveCalendarIcons(iconPackageName: String) {
         val appMan = ApplicationManager(context)
+        val entry = iconPackAppFilterElement.entries.find { it.key.packageName == iconPackageName } ?: return
 
-        val packApps = iconPackAppFilterElement.entries.find { it.key.packageName == iconPackageName }!!.value
+        val packApps = entry.value
         calendarIcon = appMan.getCalendarApplications(installedApplications, packApps)
         calendarIconsDrawable =
             appMan.getCalendarFromAppFilterElements(
@@ -301,10 +303,9 @@ class ApplicationProvider(private val context: Context) {
         iconPackLoaded = true
     }
 
-    fun forceSync() {
+    suspend fun forceSync() {
         if (iconPackLoaded) {
-            iconPackLoaded = false
-            getAppFilterElements()
+            initializeIconPacks()
         }
     }
 
@@ -337,8 +338,9 @@ class ApplicationProvider(private val context: Context) {
 
     private fun getIconPackAppDrawables(iconPack: String): Map<InstalledApplication, ResourceDrawable> {
         if (iconPack == "") return emptyMap()
+        val entry = iconPackAppFilterElement.entries.find { it.key.packageName == iconPack } ?: return emptyMap()
 
-        val apps = iconPackAppFilterElement.entries.find { it.key.packageName == iconPack }!!.value
+        val apps = entry.value
 
         return ApplicationManager(context).getDrawableFromAppFilterElements(
             iconPack,

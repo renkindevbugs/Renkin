@@ -165,7 +165,10 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
 fun SyncButton() {
     val mainActivity = getCurrentMainActivity()
 
-    Button( onClick = { mainActivity.appProvider.forceSync() }
+    Button( onClick = {
+        CoroutineScope(Dispatchers.Default).launch {
+            mainActivity.appProvider.forceSync()
+        }}
         , modifier = Modifier.padding(8.dp, 4.dp) ) {
         Text(stringResource(R.string.syncPacks))
     }
