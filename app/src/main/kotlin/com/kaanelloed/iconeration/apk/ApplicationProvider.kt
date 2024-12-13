@@ -210,9 +210,9 @@ class ApplicationProvider(private val context: Context) {
 
     private fun retrieveCalendarIcons(iconPackageName: String) {
         val appMan = ApplicationManager(context)
-        val entry = iconPackAppFilterElement.entries.find { it.key.packageName == iconPackageName } ?: return
+        val entry = iconPackAppFilterElement.entries.find { it.key.packageName == iconPackageName }
 
-        val packApps = entry.value
+        val packApps = entry?.value ?: listOf()
         calendarIcon = appMan.getCalendarApplications(installedApplications, packApps)
         calendarIconsDrawable =
             appMan.getCalendarFromAppFilterElements(

@@ -128,6 +128,7 @@ class IconPackBuilder(
                     adaptive.foreground(appFileName)
                     adaptive.background("@color/icon_background_color")
 
+                    //TODO Better handling of foreground icon size
                     if (app.createdIcon is VectorIcon) {
                         val vector = app.createdIcon.formatVector(vectorBrush)
                         createXmlDrawableResource(apkModule, packageBlock, vector.toXmlFile(), appFileName + "_foreground")
