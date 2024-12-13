@@ -87,7 +87,7 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     fun getAppFilterRawElements(iconPackName: String, applications: List<InstalledApplication>): List<RawElement> {
-        val res = pm.getResourcesForApplication(iconPackName)
+        val res = getResources(iconPackName) ?: return emptyList()
         val xmlParser = getAppfilter(res, iconPackName)
 
         val components = applications.map { it.toComponentInfo() }
@@ -116,8 +116,8 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     private fun getDrawableFromAppFilterElements(iconPackName: String, elements: List<RawElement>): Map<String, ResourceDrawable> {
-        val res = pm.getResourcesForApplication(iconPackName)
         val map = mutableMapOf<String, ResourceDrawable>()
+        val res = getResources(iconPackName) ?: return map
 
         for (element in elements) {
             if (element is RawItem) {
@@ -134,7 +134,7 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     fun getIconPackDrawableNames(iconPackName: String): List<String> {
-        val res = pm.getResourcesForApplication(iconPackName)
+        val res = getResources(iconPackName) ?: return emptyList()
         val xmlParser = getDrawable(res, iconPackName) ?: return emptyList()
 
         val list = mutableListOf<String>()
@@ -158,8 +158,8 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     fun getIconPackDrawableIds(iconPackName: String, drawableNames: List<String>): List<Int> {
-        val res = pm.getResourcesForApplication(iconPackName)
         val list = mutableListOf<Int>()
+        val res = getResources(iconPackName) ?: return list
 
         for (name in drawableNames) {
             val resourceId = res.getIdentifierByName(name, "drawable", iconPackName)
@@ -173,8 +173,8 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     fun getIconPackDrawables(iconPackName: String, drawableIds: List<Int>): List<ResourceDrawable> {
-        val res = pm.getResourcesForApplication(iconPackName)
         val list = mutableListOf<ResourceDrawable>()
+        val res = getResources(iconPackName) ?: return list
 
         for (id in drawableIds) {
             val drawable = getResIcon(res, id)!!
@@ -201,8 +201,8 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     fun getCalendarFromAppFilterElements(iconPackName: String, elements: List<RawElement>): Map<String, Drawable> {
-        val res = pm.getResourcesForApplication(iconPackName)
         val map = mutableMapOf<String, Drawable>()
+        val res = getResources(iconPackName) ?: return map
 
         val calendarIcons = elements.filterIsInstance<RawCalendar>()
         for (calendar in calendarIcons) {
@@ -412,7 +412,7 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     fun getResIcon(packageName: String, resourceId: Int): Drawable? {
-        val res = pm.getResourcesForApplication(packageName)
+        val res = getResources(packageName) ?: return null
         return getResIcon(res, resourceId)
     }
 
@@ -441,8 +441,8 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     fun getPackageResourceType(packageName: String, resourceId: Int): String? {
-        val res = pm.getResourcesForApplication(packageName)
         return try {
+            val res = pm.getResourcesForApplication(packageName)
             res.getResourceTypeName(resourceId)
         } catch (e: Resources.NotFoundException) {
             null
@@ -450,8 +450,8 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     fun getPackageResourceXml(packageName: String, resourceId: Int): XmlPullParser? {
-        val res = pm.getResourcesForApplication(packageName)
-        return res.getXmlOrNull(resourceId)
+        val res = getResources(packageName)
+        return res?.getXmlOrNull(resourceId)
     }
 
     fun <T> changeManifestEnabledState(cls: Class<T>, enabled: Boolean) {
