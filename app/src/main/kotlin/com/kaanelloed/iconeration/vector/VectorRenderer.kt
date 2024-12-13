@@ -15,6 +15,8 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.VectorGroup
 import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.toPath
+import com.kaanelloed.iconeration.vector.brush.ReferenceBrush
+import com.kaanelloed.iconeration.vector.brush.SolidColorShader
 
 class VectorRenderer(private val imageVector: ImageVector) {
     private val matrixStack = ArrayDeque<Matrix>()
@@ -149,6 +151,12 @@ class VectorRenderer(private val imageVector: ImageVector) {
     private fun convertColor(brush: Brush?): Int {
         if (brush == null)
             return Color.Unspecified.toArgb()
+
+        if (brush is ReferenceBrush) {
+            if (brush.shaderBrush is SolidColorShader) {
+                return brush.shaderBrush.color.toArgb()
+            }
+        }
 
         if (brush !is SolidColor)
             return Color.Unspecified.toArgb()
