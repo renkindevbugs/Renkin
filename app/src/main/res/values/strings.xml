@@ -63,7 +63,7 @@
     <string name="newApplicationNotificationLongText">An application has been installed, you can update your icon pack</string>
     <string name="notifPermissionWarning">You must enable notification permission</string>
     <string name="overrideIcon">Override icon</string>
-    <string name="deleteIconPack">Delete icon pack</string>
+    <string name="deleteIconPack">Uninstall icon pack</string>
     <string name="update">Update</string>
     <string name="updatePackChannelName">Update Alchemicon Pack</string>
     <string name="updatePackChannelDescription">Update Alchemicon Pack with the newly installed application</string>

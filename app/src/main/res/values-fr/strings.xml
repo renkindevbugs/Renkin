@@ -62,7 +62,7 @@
     <string name="newApplicationNotificationLongText">Une nouvelle application a été installée, vous pouvez mettre à jour le pack d\'îcones</string>
     <string name="notifPermissionWarning">Vous devez activer la permission pour les notifications</string>
     <string name="overrideIcon">Remplacer icône</string>
-    <string name="deleteIconPack">Supprimer le pack d\'icônes</string>
+    <string name="deleteIconPack">Désinstaller le pack d\'icônes</string>
     <string name="update">Mettre à jour</string>
     <string name="updatePackChannelName">Mettre à jour Alchemicon Pack</string>
     <string name="updatePackChannelDescription">Mettre à jour Alchemicon Pack avec l\'application récemment installée</string>
