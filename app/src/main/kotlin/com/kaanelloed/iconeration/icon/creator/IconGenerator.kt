@@ -318,7 +318,7 @@ class IconGenerator(
             val icon = if (iconPack == null) {
                 val draw = gen.generateAppName(app.appName, options.color, size)
                 val newIcon = createVectorForMultiLineText(draw as BaseTextDrawable, options.color, size)
-                VectorIcon(newIcon, useFillColor = true)
+                VectorIcon(newIcon)
             } else {
                 changeIconPackColor(iconPack)
             }

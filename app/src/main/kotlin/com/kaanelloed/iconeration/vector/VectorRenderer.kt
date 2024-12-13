@@ -22,11 +22,7 @@ class VectorRenderer(private val imageVector: ImageVector) {
     private val matrixStack = ArrayDeque<Matrix>()
     private var currentMatrix = Matrix()
 
-    private var fillVector: Boolean = false
-
-    fun renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true, fillVector: Boolean = false) {
-        this.fillVector = fillVector
-
+    fun renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true) {
         if (nonScalingStroke) {
             renderNonScalingStroke(canvas)
         } else {
@@ -113,7 +109,7 @@ class VectorRenderer(private val imageVector: ImageVector) {
     }
 
     private fun getPaint(path: VectorPath): Paint {
-        return if (fillVector) {
+        return if (path.strokeLineWidth == 0f) {
             getFillPaint(path)
         } else {
             getStrokePaint(path)
@@ -184,16 +180,14 @@ class VectorRenderer(private val imageVector: ImageVector) {
 
     companion object {
         fun MutableImageVector.renderToCanvas(canvas: Canvas
-                                              , nonScalingStroke: Boolean = true
-                                              , fillVector: Boolean = false) {
-            this.toImageVector().renderToCanvas(canvas, nonScalingStroke, fillVector)
+                                              , nonScalingStroke: Boolean = true) {
+            this.toImageVector().renderToCanvas(canvas, nonScalingStroke)
         }
 
         fun ImageVector.renderToCanvas(canvas: Canvas
-                                       , nonScalingStroke: Boolean = true
-                                       , fillVector: Boolean = false) {
+                                       , nonScalingStroke: Boolean = true) {
             val renderer = VectorRenderer(this)
-            renderer.renderToCanvas(canvas, nonScalingStroke, fillVector)
+            renderer.renderToCanvas(canvas, nonScalingStroke)
         }
     }
 }
