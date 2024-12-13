@@ -10,8 +10,7 @@ import androidx.compose.ui.res.vectorResource
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
-import app.revanced.manager.compose.util.signing.Signer
-import app.revanced.manager.compose.util.signing.SigningOptions
+import app.revanced.library.ApkUtils
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.extension.getBytes
@@ -446,8 +445,9 @@ class IconPackBuilder(
     }
 
     private fun signApk(file: File, outFile: File) {
-        val opt = SigningOptions("Iconeration", "s3cur3p@ssw0rd", keyStoreFile.path)
-        val signer = Signer(opt)
-        signer.signApk(file, outFile)
+        val pwd = "s3cur3p@ssw0rd"
+
+        val dtl = ApkUtils.KeyStoreDetails(keyStoreFile, pwd, "alias", pwd)
+        ApkUtils.signApk(file, outFile, "Iconeration", dtl)
     }
 }

@@ -58,10 +58,9 @@ dependencies {
 
     //Apk related
     implementation(libs.arscLib)
-    implementation(libs.bcpkix.jdk15on)
-    implementation(libs.apksig.android)
     implementation(libs.ackpine.core)
     implementation(libs.ackpine.ktx)
+    implementation(libs.apksigner.compat)
 
     //Compose
     val composeBom = platform(libs.androidx.compose.bom)
