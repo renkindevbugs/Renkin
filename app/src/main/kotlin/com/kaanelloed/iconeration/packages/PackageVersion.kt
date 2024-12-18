@@ -55,5 +55,9 @@ class PackageVersion {
         fun is34OrMore(): Boolean {
             return Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE
         }
+
+        fun is35OrMore(): Boolean {
+            return Build.VERSION.SDK_INT >= Build.VERSION_CODES.VANILLA_ICE_CREAM
+        }
     }
 }
