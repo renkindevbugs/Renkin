@@ -8,6 +8,7 @@ plugins {
 android {
     namespace = "com.kaanelloed.iconeration"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
+    buildToolsVersion = "34.0.0"
 
     defaultConfig {
         applicationId = "com.kaanelloed.iconeration"
