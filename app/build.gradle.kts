@@ -8,13 +8,14 @@ plugins {
 android {
     namespace = "com.kaanelloed.iconeration"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
+    buildToolsVersion = "34.0.0"
 
     defaultConfig {
         applicationId = "com.kaanelloed.iconeration"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 39
-        versionName = "2024.12.01"
+        versionCode = 40
+        versionName = "2024.12.02"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -56,6 +57,12 @@ android {
         includeInApk = false
         // Disables dependency metadata when building Android App Bundles.
         includeInBundle = false
+    }
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
     }
 }
 

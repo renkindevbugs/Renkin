@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -308,7 +309,7 @@ fun String.toNullableColor(): Color? {
 }
 
 fun Color.toInt(): Int {
-    return AndroidColor.parseColor(this.toHexString())
+    return this.toArgb()
 }
 
 fun String.left(length: Int): String {
