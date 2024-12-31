@@ -16,6 +16,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.UserManager
 import androidx.core.content.res.ResourcesCompat
+import com.kaanelloed.iconeration.constants.SuppressDeprecation
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.data.RawCalendar
@@ -465,7 +466,7 @@ class ApplicationManager(private val ctx: Context) {
         pm.setComponentEnabledSetting(componentName, state, PackageManager.DONT_KILL_APP)
     }
 
-    @Suppress("DEPRECATION")
+    @Suppress(SuppressDeprecation)
     fun getVersionCode(pack: PackageInfo): Long {
         return if (PackageVersion.is28OrMore())
             pack.longVersionCode

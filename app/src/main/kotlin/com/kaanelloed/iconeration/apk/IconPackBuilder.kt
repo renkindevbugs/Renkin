@@ -15,6 +15,8 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import app.revanced.library.ApkUtils
 import com.kaanelloed.iconeration.R
+import com.kaanelloed.iconeration.constants.SuppressDeprecation
+import com.kaanelloed.iconeration.constants.SuppressSameParameterValue
 import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.extension.getBytes
 import com.kaanelloed.iconeration.icon.EmptyIcon
@@ -180,7 +182,7 @@ class IconPackBuilder(
         return signedApk.toUri()
     }
 
-    @Suppress("SameParameterValue")
+    @Suppress(SuppressSameParameterValue)
     private fun setSdkVersions(manifest: ResXmlElement, minSdkVersion: Int, targetSdkVersion: Int) {
         val useSdk = manifest.createChildElement(AndroidManifestBlock.TAG_uses_sdk)
 
@@ -257,7 +259,7 @@ class IconPackBuilder(
         }
     }
 
-    @Suppress("SameParameterValue")
+    @Suppress(SuppressSameParameterValue)
     private fun createXmlLayoutResource(apkModule: ApkModule, packageBlock: PackageBlock, xmlFile: XmlMemoryFile, name: String): Entry {
         val resPath = "res/${name}.xml"
         val xmlEncoder = XmlEncoder(packageBlock)
@@ -290,7 +292,7 @@ class IconPackBuilder(
         return res
     }
 
-    @Suppress("SameParameterValue")
+    @Suppress(SuppressSameParameterValue)
     private fun createBitmapResource(apkModule: ApkModule, packageBlock: PackageBlock, @DrawableRes resId: Int, name: String, qualifier: String = "", type: String = "drawable"): Entry {
         val bitmap = ResourcesCompat.getDrawable(ctx.resources, resId, null)!!.toBitmap()
         return createBitmapResource(apkModule, packageBlock, bitmap, name, qualifier, type)
@@ -321,7 +323,7 @@ class IconPackBuilder(
         return compressBitmap(image, name, CompressFormat.PNG)
     }
 
-    @Suppress("DEPRECATION")
+    @Suppress(SuppressDeprecation)
     private fun generateWebp(image: Bitmap, name: String): ByteInputSource {
         return compressBitmap(image, name, CompressFormat.WEBP) //Since sdk 29 webp with quality of 100 is lossless
     }
@@ -408,7 +410,7 @@ class IconPackBuilder(
         return bytes
     }
 
-    @Suppress("SameParameterValue")
+    @Suppress(SuppressSameParameterValue)
     private fun apiToDexVersion(api: Int): Int {
         return when {
             api <= 23 -> 35

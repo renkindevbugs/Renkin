@@ -10,6 +10,7 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.TextUtils
 import androidx.core.graphics.withTranslation
+import com.kaanelloed.iconeration.constants.SuppressDeprecation
 import com.kaanelloed.iconeration.packages.PackageVersion
 
 class MultiLineTextDrawable(
@@ -43,7 +44,7 @@ class MultiLineTextDrawable(
                 .setMaxLines(maxLines)
                 .build()
         } else {
-            @Suppress("DEPRECATION")
+            @Suppress(SuppressDeprecation)
             return StaticLayout(
                 text,
                 0,

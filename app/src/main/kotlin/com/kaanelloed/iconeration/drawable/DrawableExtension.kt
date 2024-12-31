@@ -7,6 +7,7 @@ import android.graphics.drawable.Drawable
 import android.os.Build
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.core.graphics.drawable.toBitmap
+import com.kaanelloed.iconeration.constants.SuppressDeprecation
 import com.kaanelloed.iconeration.packages.PackageVersion
 
 class DrawableExtension {
@@ -24,7 +25,7 @@ class DrawableExtension {
             return this.toBitmap()
         }
 
-        @Suppress("DEPRECATION")
+        @Suppress(SuppressDeprecation)
         fun Bitmap.toDrawable(): Drawable {
             return BitmapDrawable(this)
         }
