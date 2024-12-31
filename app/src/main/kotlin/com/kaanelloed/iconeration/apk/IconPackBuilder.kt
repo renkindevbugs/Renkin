@@ -444,7 +444,7 @@ class IconPackBuilder(
         createBitmapResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher_round, "ic_launcher_round", "xxhdpi", "mipmap")
         createBitmapResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher_round, "ic_launcher_round", "xxxhdpi", "mipmap")
 
-        val foreground = ImageVector.vectorResource(null, ctx.resources, R.drawable.alchemicons_ic_launcher_foreground)
+        val foreground = ImageVector.vectorResource(null, ctx.resources, R.drawable.alchemiconpack_ic_launcher_foreground)
         createXmlDrawableResource(apkModule, packageBlock, foreground.toXmlFile(), "ic_launcher_foreground")
 
         val launcher = AdaptiveIconXml()
