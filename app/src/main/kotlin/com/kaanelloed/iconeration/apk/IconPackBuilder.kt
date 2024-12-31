@@ -2,9 +2,12 @@ package com.kaanelloed.iconeration.apk
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Bitmap.CompressFormat
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
 import androidx.annotation.DrawableRes
+import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.core.content.res.ResourcesCompat
@@ -134,13 +137,13 @@ class IconPackBuilder(
                         createXmlDrawableResource(apkModule, packageBlock, vector.toXmlFile(), appFileName + "_foreground")
                     }
                     else {
-                        createPngResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground")
+                        createBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground")
                     }
 
                     createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
                 }
                 else
-                    createPngResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName)
+                    createBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName)
 
                 drawableXml.item(appFileName)
                 appfilterXml.item(app.packageName, app.activityName, appFileName)
@@ -152,7 +155,7 @@ class IconPackBuilder(
         }
 
         for (drawable in calendarIconsDrawable) {
-            createPngResource(apkModule, packageBlock, drawable.value.toBitmap(), drawable.key)
+            createBitmapResource(apkModule, packageBlock, drawable.value.toBitmap(), drawable.key)
             drawableXml.item(drawable.key)
         }
 
@@ -288,23 +291,48 @@ class IconPackBuilder(
     }
 
     @Suppress("SameParameterValue")
-    private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, @DrawableRes resId: Int, name: String, qualifier: String = "", type: String = "drawable"): Entry {
+    private fun createBitmapResource(apkModule: ApkModule, packageBlock: PackageBlock, @DrawableRes resId: Int, name: String, qualifier: String = "", type: String = "drawable"): Entry {
         val bitmap = ResourcesCompat.getDrawable(ctx.resources, resId, null)!!.toBitmap()
-        return createPngResource(apkModule, packageBlock, bitmap, name, qualifier, type)
+        return createBitmapResource(apkModule, packageBlock, bitmap, name, qualifier, type)
     }
 
-    private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, qualifier: String = "", type: String = "drawable"): Entry {
-        val resPath = "res/${name}${qualifier}.png"
+    private fun createBitmapResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, qualifier: String = "", type: String = "drawable"): Entry {
+        val extension = if (PackageVersion.is29OrMore()) "webp" else "png" //Lossless webp since sdk 29
+        val resPath = "res/$name$qualifier.$extension"
 
         val icon = packageBlock.getOrCreate(qualifier, type, name)
         icon.setValueAsString(resPath)
 
-        apkModule.add(generatePng(bitmap, resPath))
+        apkModule.add(generateBitmap(bitmap, resPath))
         return icon
     }
 
+    private fun generateBitmap(image: Bitmap, name: String): ByteInputSource {
+        return if (PackageVersion.is30OrMore()) {
+            generateLosslessWebp(image, name)
+        } else if (PackageVersion.is29OrMore()) {
+            generateWebp(image, name)
+        } else {
+            generatePng(image, name)
+        }
+    }
+
     private fun generatePng(image: Bitmap, name: String): ByteInputSource {
-        val bytes = image.getBytes(Bitmap.CompressFormat.PNG, 100)
+        return compressBitmap(image, name, CompressFormat.PNG)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun generateWebp(image: Bitmap, name: String): ByteInputSource {
+        return compressBitmap(image, name, CompressFormat.WEBP) //Since sdk 29 webp with quality of 100 is lossless
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun generateLosslessWebp(image: Bitmap, name: String): ByteInputSource {
+        return compressBitmap(image, name, CompressFormat.WEBP_LOSSLESS)
+    }
+
+    private fun compressBitmap(image: Bitmap, name: String, format: CompressFormat, quality: Int = 100): ByteInputSource {
+        val bytes = image.getBytes(format, quality)
         return ByteInputSource(bytes, name)
     }
 
@@ -404,17 +432,17 @@ class IconPackBuilder(
     }
 
     private fun insertIconPackAppIcons(apkModule: ApkModule, packageBlock: PackageBlock, manifest: AndroidManifestBlock) {
-        createPngResource(apkModule, packageBlock, R.drawable.mdpi_ic_launcher, "ic_launcher", "mdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.hdpi_ic_launcher, "ic_launcher", "hdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.xhdpi_ic_launcher, "ic_launcher", "xhdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher, "ic_launcher", "xxhdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher, "ic_launcher", "xxxhdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.mdpi_ic_launcher, "ic_launcher", "mdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.hdpi_ic_launcher, "ic_launcher", "hdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.xhdpi_ic_launcher, "ic_launcher", "xhdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher, "ic_launcher", "xxhdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher, "ic_launcher", "xxxhdpi", "mipmap")
 
-        createPngResource(apkModule, packageBlock, R.drawable.mdpi_ic_launcher_round, "ic_launcher_round", "mdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.hdpi_ic_launcher_round, "ic_launcher_round", "hdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.xhdpi_ic_launcher_round, "ic_launcher_round", "xhdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher_round, "ic_launcher_round", "xxhdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher_round, "ic_launcher_round", "xxxhdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.mdpi_ic_launcher_round, "ic_launcher_round", "mdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.hdpi_ic_launcher_round, "ic_launcher_round", "hdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.xhdpi_ic_launcher_round, "ic_launcher_round", "xhdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher_round, "ic_launcher_round", "xxhdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher_round, "ic_launcher_round", "xxxhdpi", "mipmap")
 
         val foreground = ImageVector.vectorResource(null, ctx.resources, R.drawable.alchemicons_ic_launcher_foreground)
         createXmlDrawableResource(apkModule, packageBlock, foreground.toXmlFile(), "ic_launcher_foreground")
