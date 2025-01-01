@@ -11,7 +11,7 @@
         android:pathData="m8.52,88c7,12 33,12 40,0 7,-12 -13,-23 -16,-34 -3,-11 0,-26 0,-26h-8c0,0 3,15 0,26 -3,11 -23,22 -16,34z"
         android:strokeLineJoin="round"
         android:strokeWidth="3"
-        android:fillColor="#999999"
+        android:fillColor="#00000000"
         android:strokeColor="#ffffff"
         android:strokeLineCap="round"/>
     <path
@@ -25,7 +25,7 @@
         android:pathData="m57.55,56.59 l43.38,0.05c0,0 0.2,27.33 -9.27,34.6 -6.57,5.04 -18.26,5.04 -24.83,0C57.35,83.95 57.55,56.59 57.55,56.59Z"
         android:strokeLineJoin="round"
         android:strokeWidth="3"
-        android:fillColor="#aa8800"
+        android:fillColor="#00000000"
         android:strokeColor="#ffffff"
         android:strokeLineCap="round"/>
     <path
