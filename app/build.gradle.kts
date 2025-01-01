@@ -25,7 +25,7 @@ android {
         variant.outputs
             .map { it as com.android.build.gradle.internal.api.BaseVariantOutputImpl }
             .forEach { output ->
-                val outputFileName = "Iconeration-v${variant.versionName}.apk"
+                val outputFileName = "Alembicons-v${variant.versionName}.apk"
                 output.outputFileName = outputFileName
             }
     }
