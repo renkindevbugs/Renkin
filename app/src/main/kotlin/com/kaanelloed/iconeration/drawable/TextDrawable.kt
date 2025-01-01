@@ -15,7 +15,6 @@ class TextDrawable(
     , strokeWidth: Float = 0F
     , private val canvasWidth: Int = 0
     , private val canvasHeight: Int = 0
-    , private val ignoreLowercase: Boolean = false
 ): BaseTextDrawable() {
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val _intrinsicWidth: Int
@@ -53,22 +52,17 @@ class TextDrawable(
             return canvasWidth / 2f
         }
 
-        return bounds.centerX().toFloat()
+        return bounds.exactCenterX()
     }
 
     private fun calculateY(): Float {
-        val isUppercase = text.toString().uppercase() == text.toString()
-        val heightModifier = if (!ignoreLowercase && !isUppercase) {
-            (paint.descent() + paint.ascent()) / 2
-        } else {
-            paint.ascent() / 2
-        }
+        val heightModifier = (paint.descent() + paint.ascent()) / 2f
 
         if (canvasHeight > 0) {
             return canvasHeight / 2f - heightModifier
         }
 
-        return bounds.centerY().toFloat() - heightModifier
+        return bounds.exactCenterY() - heightModifier
     }
 
     @Deprecated("Deprecated in Java")
@@ -91,8 +85,6 @@ class TextDrawable(
     }
 
     override fun draw(canvas: Canvas) {
-        //canvas.drawText(text, 0, text.length, bounds.exactCenterX(), bounds.exactCenterY(), paint)
-
         canvas.drawText(text, 0, text.length, calculateX(), calculateY(), paint)
     }
 
