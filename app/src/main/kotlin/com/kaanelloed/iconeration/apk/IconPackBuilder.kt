@@ -2,9 +2,12 @@ package com.kaanelloed.iconeration.apk
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Bitmap.CompressFormat
 import android.graphics.drawable.Drawable
 import android.net.Uri
+import android.os.Build
 import androidx.annotation.DrawableRes
+import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
 import androidx.core.content.res.ResourcesCompat
@@ -12,6 +15,8 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import app.revanced.library.ApkUtils
 import com.kaanelloed.iconeration.R
+import com.kaanelloed.iconeration.constants.SuppressDeprecation
+import com.kaanelloed.iconeration.constants.SuppressSameParameterValue
 import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.extension.getBytes
 import com.kaanelloed.iconeration.icon.EmptyIcon
@@ -134,13 +139,13 @@ class IconPackBuilder(
                         createXmlDrawableResource(apkModule, packageBlock, vector.toXmlFile(), appFileName + "_foreground")
                     }
                     else {
-                        createPngResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground")
+                        createBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground")
                     }
 
                     createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
                 }
                 else
-                    createPngResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName)
+                    createBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName)
 
                 drawableXml.item(appFileName)
                 appfilterXml.item(app.packageName, app.activityName, appFileName)
@@ -152,7 +157,7 @@ class IconPackBuilder(
         }
 
         for (drawable in calendarIconsDrawable) {
-            createPngResource(apkModule, packageBlock, drawable.value.toBitmap(), drawable.key)
+            createBitmapResource(apkModule, packageBlock, drawable.value.toBitmap(), drawable.key)
             drawableXml.item(drawable.key)
         }
 
@@ -177,7 +182,7 @@ class IconPackBuilder(
         return signedApk.toUri()
     }
 
-    @Suppress("SameParameterValue")
+    @Suppress(SuppressSameParameterValue)
     private fun setSdkVersions(manifest: ResXmlElement, minSdkVersion: Int, targetSdkVersion: Int) {
         val useSdk = manifest.createChildElement(AndroidManifestBlock.TAG_uses_sdk)
 
@@ -212,6 +217,7 @@ class IconPackBuilder(
         createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN, "home.solo.launcher.free.THEMES", "home.solo.launcher.free.ACTION_ICON"), emptyArray()) //Solo Launcher
         createIntentFilter(activity, arrayOf(AndroidManifestBlock.VALUE_android_intent_action_MAIN, "com.lge.launcher2.THEME"), arrayOf("android.intent.category.DEFAULT")) //LG Home
         createIntentFilter(activity, arrayOf("net.oneplus.launcher.icons.ACTION_PICK_ICON"), arrayOf("android.intent.category.DEFAULT")) //OnePlus Launcher
+        createIntentFilter(activity, arrayOf("com.spocky.projengmenu.icons.ACTION_PICK_ICON"), arrayOf("android.intent.category.DEFAULT")) //Projectivy Launcher
         createIntentFilter(activity, arrayOf("com.tsf.shell.themes"), arrayOf("android.intent.category.DEFAULT")) //TSF Shell
         createIntentFilter(activity, arrayOf("ginlemon.smartlauncher.THEMES"), arrayOf("android.intent.category.DEFAULT")) //Smart Launcher
         createIntentFilter(activity, arrayOf("com.sonymobile.home.ICON_PACK"), arrayOf("android.intent.category.DEFAULT")) //Sony Launcher
@@ -254,7 +260,7 @@ class IconPackBuilder(
         }
     }
 
-    @Suppress("SameParameterValue")
+    @Suppress(SuppressSameParameterValue)
     private fun createXmlLayoutResource(apkModule: ApkModule, packageBlock: PackageBlock, xmlFile: XmlMemoryFile, name: String): Entry {
         val resPath = "res/${name}.xml"
         val xmlEncoder = XmlEncoder(packageBlock)
@@ -287,24 +293,49 @@ class IconPackBuilder(
         return res
     }
 
-    @Suppress("SameParameterValue")
-    private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, @DrawableRes resId: Int, name: String, qualifier: String = "", type: String = "drawable"): Entry {
+    @Suppress(SuppressSameParameterValue)
+    private fun createBitmapResource(apkModule: ApkModule, packageBlock: PackageBlock, @DrawableRes resId: Int, name: String, qualifier: String = "", type: String = "drawable"): Entry {
         val bitmap = ResourcesCompat.getDrawable(ctx.resources, resId, null)!!.toBitmap()
-        return createPngResource(apkModule, packageBlock, bitmap, name, qualifier, type)
+        return createBitmapResource(apkModule, packageBlock, bitmap, name, qualifier, type)
     }
 
-    private fun createPngResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, qualifier: String = "", type: String = "drawable"): Entry {
-        val resPath = "res/${name}${qualifier}.png"
+    private fun createBitmapResource(apkModule: ApkModule, packageBlock: PackageBlock, bitmap: Bitmap, name: String, qualifier: String = "", type: String = "drawable"): Entry {
+        val extension = if (PackageVersion.is29OrMore()) "webp" else "png" //Lossless webp since sdk 29
+        val resPath = "res/$name$qualifier.$extension"
 
         val icon = packageBlock.getOrCreate(qualifier, type, name)
         icon.setValueAsString(resPath)
 
-        apkModule.add(generatePng(bitmap, resPath))
+        apkModule.add(generateBitmap(bitmap, resPath))
         return icon
     }
 
+    private fun generateBitmap(image: Bitmap, name: String): ByteInputSource {
+        return if (PackageVersion.is30OrMore()) {
+            generateLosslessWebp(image, name)
+        } else if (PackageVersion.is29OrMore()) {
+            generateWebp(image, name)
+        } else {
+            generatePng(image, name)
+        }
+    }
+
     private fun generatePng(image: Bitmap, name: String): ByteInputSource {
-        val bytes = image.getBytes(Bitmap.CompressFormat.PNG, 100)
+        return compressBitmap(image, name, CompressFormat.PNG)
+    }
+
+    @Suppress(SuppressDeprecation)
+    private fun generateWebp(image: Bitmap, name: String): ByteInputSource {
+        return compressBitmap(image, name, CompressFormat.WEBP) //Since sdk 29 webp with quality of 100 is lossless
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun generateLosslessWebp(image: Bitmap, name: String): ByteInputSource {
+        return compressBitmap(image, name, CompressFormat.WEBP_LOSSLESS)
+    }
+
+    private fun compressBitmap(image: Bitmap, name: String, format: CompressFormat, quality: Int = 100): ByteInputSource {
+        val bytes = image.getBytes(format, quality)
         return ByteInputSource(bytes, name)
     }
 
@@ -380,7 +411,7 @@ class IconPackBuilder(
         return bytes
     }
 
-    @Suppress("SameParameterValue")
+    @Suppress(SuppressSameParameterValue)
     private fun apiToDexVersion(api: Int): Int {
         return when {
             api <= 23 -> 35
@@ -404,19 +435,19 @@ class IconPackBuilder(
     }
 
     private fun insertIconPackAppIcons(apkModule: ApkModule, packageBlock: PackageBlock, manifest: AndroidManifestBlock) {
-        createPngResource(apkModule, packageBlock, R.drawable.mdpi_ic_launcher, "ic_launcher", "mdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.hdpi_ic_launcher, "ic_launcher", "hdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.xhdpi_ic_launcher, "ic_launcher", "xhdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher, "ic_launcher", "xxhdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher, "ic_launcher", "xxxhdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.mdpi_ic_launcher, "ic_launcher", "mdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.hdpi_ic_launcher, "ic_launcher", "hdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.xhdpi_ic_launcher, "ic_launcher", "xhdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher, "ic_launcher", "xxhdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher, "ic_launcher", "xxxhdpi", "mipmap")
 
-        createPngResource(apkModule, packageBlock, R.drawable.mdpi_ic_launcher_round, "ic_launcher_round", "mdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.hdpi_ic_launcher_round, "ic_launcher_round", "hdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.xhdpi_ic_launcher_round, "ic_launcher_round", "xhdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher_round, "ic_launcher_round", "xxhdpi", "mipmap")
-        createPngResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher_round, "ic_launcher_round", "xxxhdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.mdpi_ic_launcher_round, "ic_launcher_round", "mdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.hdpi_ic_launcher_round, "ic_launcher_round", "hdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.xhdpi_ic_launcher_round, "ic_launcher_round", "xhdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher_round, "ic_launcher_round", "xxhdpi", "mipmap")
+        createBitmapResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher_round, "ic_launcher_round", "xxxhdpi", "mipmap")
 
-        val foreground = ImageVector.vectorResource(null, ctx.resources, R.drawable.alchemicons_ic_launcher_foreground)
+        val foreground = ImageVector.vectorResource(null, ctx.resources, R.drawable.alchemiconpack_ic_launcher_foreground)
         createXmlDrawableResource(apkModule, packageBlock, foreground.toXmlFile(), "ic_launcher_foreground")
 
         val launcher = AdaptiveIconXml()

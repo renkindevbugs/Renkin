@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.Preferences
 import androidx.room.Room
 import com.kaanelloed.iconeration.R
+import com.kaanelloed.iconeration.constants.SuppressRedundantSuspendModifier
 import com.kaanelloed.iconeration.data.AlchemiconPackDatabase
 import com.kaanelloed.iconeration.data.BackgroundColorKey
 import com.kaanelloed.iconeration.data.CalendarIconsKey
@@ -75,7 +76,7 @@ class ApplicationProvider(private val context: Context) {
         applicationList = apps.toList()
     }
 
-    @Suppress("RedundantSuspendModifier")
+    @Suppress(SuppressRedundantSuspendModifier)
     suspend fun initializeIconPacks() {
         iconPackLoaded = false
         iconPacks = ApplicationManager(context).getIconPacks()
@@ -221,7 +222,7 @@ class ApplicationProvider(private val context: Context) {
             )
     }
 
-    @Suppress("RedundantSuspendModifier")
+    @Suppress(SuppressRedundantSuspendModifier)
     private suspend fun loadAlchemiconPack() {
         val db = Room.databaseBuilder(
             context,

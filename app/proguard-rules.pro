@@ -19,3 +19,26 @@
 # If you keep the line number information, uncomment this to
 # hide the original source file name.
 #-renamesourcefileattribute SourceFile
+
+# General options
+#-dontshrink
+#-dontoptimize
+#-dontobfuscate
+
+# Keep XmlParser, fix obfuscate errors
+-dontwarn org.xmlpull.v1.**
+-dontnote org.xmlpull.v1.**
+-keep class org.xmlpull.** { *; }
+
+# Shrink and obfuscate only Android libraries
+-keep class com.kaanelloed.iconeration** { * ; }
+
+# Fix resource errors
+-keep class android.content.res** { * ; }
+
+# Fix signing errors
+-keep class com.android.apksig.internal** { * ; }
+
+# For shrinking troubleshooting, check these files in "app/build/outputs/mapping/release/"
+#   - "usage.txt" lists what ProGuard considers as dead code
+#   - "seeds.txt" exhaustively lists classes and classes members matched by "keep" rules
