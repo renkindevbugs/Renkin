@@ -25,6 +25,7 @@ import com.kaanelloed.iconeration.data.RawElement
 import com.kaanelloed.iconeration.data.RawItem
 import com.kaanelloed.iconeration.data.toComponentInfo
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.sizeIsGreaterThanZero
+import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.toDrawable
 import com.kaanelloed.iconeration.drawable.ResourceDrawable
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
@@ -62,7 +63,7 @@ class ApplicationManager(private val ctx: Context) {
                     val iconID = app.applicationInfo.icon
 
                     val icon2 = if (!icon.sizeIsGreaterThanZero()) {
-                        BitmapDrawable(ctx.resources, Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888))
+                        Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).toDrawable(ctx.resources)
                     } else
                         icon
 

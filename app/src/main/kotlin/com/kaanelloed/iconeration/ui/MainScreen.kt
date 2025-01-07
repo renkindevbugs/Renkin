@@ -44,6 +44,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -111,6 +112,7 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
         if (app.icon.sizeIsGreaterThanZero()) {
             Image(painter = BitmapPainter(app.icon.toBitmap().asImageBitmap())
                 , contentDescription = null
+                //, contentScale = ContentScale.Inside
                 , modifier = Modifier
                     .padding(2.dp)
                     .size(78.dp, 78.dp))
@@ -129,6 +131,7 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
         if (app.createdIcon !is EmptyIcon)
             Image(painter = app.createdIcon.getPainter()
                 , contentDescription = null
+                //, contentScale = ContentScale.Inside
                 , modifier = Modifier
                     .padding(2.dp)
                     .size(78.dp, 78.dp)
