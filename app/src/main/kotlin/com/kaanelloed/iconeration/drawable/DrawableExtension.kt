@@ -1,5 +1,6 @@
 package com.kaanelloed.iconeration.drawable
 
+import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
@@ -28,6 +29,10 @@ class DrawableExtension {
         @Suppress(SuppressDeprecation)
         fun Bitmap.toDrawable(): Drawable {
             return BitmapDrawable(this)
+        }
+
+        fun Bitmap.toDrawable(res: Resources): Drawable {
+            return BitmapDrawable(res, this)
         }
 
         @ChecksSdkIntAtLeast(Build.VERSION_CODES.O)

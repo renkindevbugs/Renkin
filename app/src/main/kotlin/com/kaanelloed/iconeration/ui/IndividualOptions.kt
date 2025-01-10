@@ -75,6 +75,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -306,6 +307,8 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
     var mask by remember { mutableStateOf(null as Bitmap?) }
     val maxSize = 500
 
+    val res = getCurrentContext().resources
+
     Column(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -319,7 +322,7 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
             }
 
             if (uploadedImage == null) {
-                uploadedImage = getBitmapFromURI(imageUri)?.toDrawable()?.shrinkIfBiggerThan(maxSize)
+                uploadedImage = getBitmapFromURI(imageUri)?.toDrawable(res)?.shrinkIfBiggerThan(maxSize)
 
                 if (uploadedImage != null) {
                     uploadedImage = squareBitmap(uploadedImage!!)
@@ -338,6 +341,7 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
                 Image(
                     painter = BitmapPainter(uploadedImage!!.asImageBitmap()),
                     contentDescription = null,
+                    //contentScale = ContentScale.Inside,
                     modifier = Modifier
                         .padding(2.dp)
                         .size(108.dp, 108.dp)

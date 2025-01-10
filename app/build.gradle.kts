@@ -14,8 +14,8 @@ android {
         applicationId = "com.kaanelloed.iconeration"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 41
-        versionName = "2025.01.00"
+        versionCode = 42
+        versionName = "2025.01.01"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -128,4 +128,11 @@ task("arcticons-font") {
     val gitFont = File(rootDir, "Arcticons-Font/ArcticonsSans-Regular.otf")
     val resFont = File(projectDir, "src/main/res/font/arcticonssans_regular.otf")
     gitFont.copyTo(resFont, true)
+}
+
+//Disable baseline profile (https://gist.github.com/obfusk/61046e09cee352ae6dd109911534b12e#fix-proposed-by-linsui-disable-baseline-profiles)
+tasks.whenTaskAdded {
+    if (name.contains("ArtProfile")) {
+        enabled = false
+    }
 }
