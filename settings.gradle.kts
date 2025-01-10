@@ -17,5 +17,5 @@ dependencyResolutionManagement {
         }
     }
 }
-rootProject.name = "Iconeration"
+rootProject.name = "Alembicons"
 include(":app")
