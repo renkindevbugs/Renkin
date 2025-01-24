@@ -75,6 +75,7 @@ import com.kaanelloed.iconeration.data.setBooleanValue
 import com.kaanelloed.iconeration.data.setColorValue
 import com.kaanelloed.iconeration.data.setEnumValue
 import com.kaanelloed.iconeration.data.setStringValue
+import com.kaanelloed.iconeration.icon.ExportableIcon
 import com.kaanelloed.iconeration.packages.PackageVersion
 import kotlinx.coroutines.launch
 
@@ -82,11 +83,11 @@ import kotlinx.coroutines.launch
 fun AppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
-    onConfirmation: (options: IndividualOptions) -> Unit,
+    onConfirm: (icon: ExportableIcon) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
-    OptionsDialog(iconPacks, app, onConfirmation, onDismiss, onIconClear)
+    OptionsDialog(iconPacks, app, onConfirm, onDismiss, onIconClear)
 }
 
 @Composable

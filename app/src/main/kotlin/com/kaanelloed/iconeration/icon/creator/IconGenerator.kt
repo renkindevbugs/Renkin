@@ -105,7 +105,10 @@ class IconGenerator(
         val bitmapIcon = getIconBitmap(icon.drawable)
         val parsedIcon = exportIconPackXML(iconPackName, icon) ?: EmptyIcon()
 
-        return colorizeImage(bitmapIcon, parsedIcon, PorterDuff.Mode.SRC_IN)
+        return if (options.primaryImageEdit == ImageEdit.COLORIZE)
+            colorizeImage(bitmapIcon, parsedIcon, PorterDuff.Mode.SRC_IN)
+        else
+            getDefaultIcon(bitmapIcon, parsedIcon)
     }
 
     private fun generateIcon(
@@ -150,11 +153,7 @@ class IconGenerator(
         parsedIcon: BaseIcon,
         imageEdit: ImageEdit,
         mode: PorterDuff.Mode): ExportableIcon {
-        val defaultIcon = if (parsedIcon is VectorIcon) {
-            parsedIcon
-        } else {
-            BitmapIcon(bitmapIcon)
-        }
+        val defaultIcon = getDefaultIcon(bitmapIcon, parsedIcon)
 
         return when (imageEdit) {
             ImageEdit.NONE -> defaultIcon
@@ -281,6 +280,14 @@ class IconGenerator(
         }
 
         return newIcon.shrinkIfBiggerThan(maxSize)
+    }
+
+    private fun getDefaultIcon(bitmapIcon: Bitmap, parsedIcon: BaseIcon): ExportableIcon {
+        return if (parsedIcon is VectorIcon) {
+            parsedIcon
+        } else {
+            BitmapIcon(bitmapIcon)
+        }
     }
 
     private fun isVectorDrawable(image: Drawable): Boolean {

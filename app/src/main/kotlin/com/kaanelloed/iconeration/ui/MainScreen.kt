@@ -96,6 +96,7 @@ fun ApplicationList(iconPacks: List<IconPack>, filter: String) {
 
 @Composable
 fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: Int) {
+    val activity = getCurrentMainActivity()
     val prefs = getPreferences()
     val bgColorValue = prefs.getColorValue(BackgroundColorKey, prefs.getDefaultBackgroundColor())
     val themed = prefs.getBooleanValue(ExportThemedKey)
@@ -132,10 +133,22 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
                 , modifier = Modifier
                     .padding(2.dp)
                     .size(78.dp, 78.dp)
-                    .clickable { openAppOptions = true }
+                    .clickable {
+                        if (activity.appProvider.iconPackLoaded) {
+                            openAppOptions = true
+                        } else {
+                            openWarning = true
+                        }
+                    }
                     .background(bgColor))
         else
-            IconButton(onClick = { openAppOptions = true }
+            IconButton(onClick = {
+                if (activity.appProvider.iconPackLoaded) {
+                    openAppOptions = true
+                } else {
+                    openWarning = true
+                }
+            }
             , modifier = Modifier
                     .padding(2.dp)
                     .size(78.dp, 78.dp)) {
@@ -154,7 +167,6 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
     if (openAppOptions) {
         OpenAppOptions(iconPacks, app, index) {
             openAppOptions = false
-            openWarning = it
         }
     }
     
@@ -169,37 +181,19 @@ fun OpenAppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     index: Int,
-    onDismiss: (Boolean) -> Unit
+    onDismiss: () -> Unit
 ) {
     val activity = getCurrentMainActivity()
 
-    AppOptions(iconPacks, app, { options ->
+    AppOptions(iconPacks, app, { icon ->
         CoroutineScope(Dispatchers.Default).launch {
-            if (!activity.appProvider.iconPackLoaded && options is CreatedOptions && options.generatingOptions.primaryIconPack != "") {
-                onDismiss(true)
-                return@launch
-            }
-
-            when (options) {
-                is CreatedOptions -> {
-                    activity.appProvider.refreshIcon(app, options.generatingOptions)
-                }
-
-                is UploadedOptions -> {
-                    activity.appProvider.editApplication(index, app.changeExport(options.uploadedImage))
-                }
-
-                is EditedVectorOptions -> {
-                    activity.appProvider.editApplication(index, app.changeExport(options.editedVector))
-                }
-            }
-
-            onDismiss(false)
+            activity.appProvider.editApplication(index, app.changeExport(icon))
+            onDismiss()
         }
     }, {
-        onDismiss(false)
+        onDismiss()
     }) {
-        onDismiss(false)
+        onDismiss()
         activity.appProvider.editApplication(index, app.changeExport(EmptyIcon()))
     }
 }

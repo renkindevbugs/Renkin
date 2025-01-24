@@ -144,7 +144,7 @@ class ApplicationProvider(private val context: Context) {
         refreshIcon(application, genOptions)
     }
 
-    fun refreshIcon(application: PackageInfoStruct, options: GenerationOptions) {
+    private fun refreshIcon(application: PackageInfoStruct, options: GenerationOptions) {
         val primaryIconPackApps = getIconPackAppDrawables(options.primaryIconPack)
         val secondaryIconPackApps = getIconPackAppDrawables(options.secondaryIconPack)
 
@@ -216,6 +216,22 @@ class ApplicationProvider(private val context: Context) {
         builder.generateIcons(applicationList) { application, icon ->
             editApplication(application, application.changeExport(icon))
         }
+    }
+
+    fun getIcon(application: PackageInfoStruct, options: GenerationOptions): ExportableIcon {
+        var icon: ExportableIcon = EmptyIcon()
+
+        val primaryIconPackApps = getIconPackAppDrawables(options.primaryIconPack)
+
+        val pack1 = IconPackContainer(options.primaryIconPack, primaryIconPackApps)
+        val pack2 = IconPackContainer("", emptyMap())
+
+        val builder = IconGenerator(context, options, pack1, pack2)
+        builder.generateIcon(application) { _, newIcon ->
+            icon = newIcon
+        }
+
+        return icon
     }
 
     fun buildAndSignIconPack(preferences: Preferences, textMethod: (text: String) -> Unit): BuiltIconPack {
@@ -393,25 +409,12 @@ class ApplicationProvider(private val context: Context) {
         )
     }
 
-    fun getIconPackIcons(iconPackName: String, drawables: List<ResourceDrawable>): List<ExportableIcon> {
+    fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): List<ExportableIcon> {
         val exportDrawables = mutableListOf<ExportableIcon>()
-
-        val opt = GenerationOptions(
-            Source.ICON_PACK,
-            ImageEdit.NONE,
-            TextType.FULL_NAME,
-            iconPackName,
-            0,
-            0,
-            false,
-            false,
-            false,
-            true
-        )
 
         val pack = IconPackContainer("", emptyMap())
 
-        val builder = IconGenerator(context, opt, pack, pack)
+        val builder = IconGenerator(context, options, pack, pack)
         for (drawable in drawables) {
             exportDrawables.add(builder.colorizeFromIconPack(iconPackName, drawable))
         }

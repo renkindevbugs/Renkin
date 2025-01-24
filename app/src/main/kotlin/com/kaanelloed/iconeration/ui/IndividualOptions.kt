@@ -51,6 +51,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -90,6 +91,7 @@ import com.kaanelloed.iconeration.data.TextType
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
 import com.kaanelloed.iconeration.extension.toDrawable
 import com.kaanelloed.iconeration.icon.BitmapIcon
+import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.ExportableIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.icon.creator.GenerationOptions
@@ -111,11 +113,11 @@ const val MIME_TYPE_IMAGE = "image/*"
 fun OptionsDialog(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
-    onConfirmation: (options: IndividualOptions) -> Unit,
+    onConfirm: (icon: ExportableIcon) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
-    var options: IndividualOptions = EmptyOptions()
+    var icon: ExportableIcon = EmptyIcon()
 
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
@@ -124,13 +126,13 @@ fun OptionsDialog(
         onDismissRequest = onDismiss,
         title = { DialogTitle(app = app, onIconClear) },
         text = {
-            TabOptions(iconPacks, app, confirm = { onConfirmation(options) }) {
-                options = it
+            TabOptions(iconPacks, app) {
+                icon = it
             }
         },
         confirmButton = {
             IconButton(onClick = {
-                onConfirmation(options)
+                onConfirm(icon)
             }) {
                 Icon(
                     imageVector = Icons.Filled.Done,
@@ -219,8 +221,7 @@ fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
 fun TabOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
-    confirm: () -> Unit,
-    onChange: (options: IndividualOptions) -> Unit
+    onChange: (icon: ExportableIcon) -> Unit
 ) {
     var tabIndex by remember { mutableIntStateOf(0) }
 
@@ -246,9 +247,9 @@ fun TabOptions(
                 )
             }
         }
-        onChange(EmptyOptions())
+        onChange(EmptyIcon())
         when (tabIndex) {
-            0 -> CreateColumn(iconPacks, confirm, onChange)
+            0 -> CreateColumn(iconPacks, app, onChange)
             1 -> UploadColumn(onChange)
             2 -> PrepareEditVector(app, onChange)
         }
@@ -258,9 +259,11 @@ fun TabOptions(
 @Composable
 fun CreateColumn(
     iconPacks: List<IconPack>,
-    confirm: () -> Unit,
-    onChange: (options: IndividualOptions) -> Unit
+    app: PackageInfoStruct,
+    onChange: (icon: ExportableIcon) -> Unit
 ) {
+    var iconList: List<ExportableIcon> by rememberSaveable { mutableStateOf(listOf(EmptyIcon())) }
+
     var source by rememberSaveable { mutableStateOf(Source.NONE) }
     var imageEdit by rememberSaveable { mutableStateOf(ImageEdit.NONE) }
     var textType by rememberSaveable { mutableStateOf(TextType.FULL_NAME) }
@@ -271,10 +274,24 @@ fun CreateColumn(
     var iconPack by rememberSaveable { mutableStateOf("") }
 
     val generatingOptions = GenerationOptions(source, imageEdit, textType, iconPack, iconColor.toInt(), 0, useVector, useMonochrome, false, true)
-    val options = CreatedOptions(generatingOptions)
+
+    val activity = getCurrentMainActivity()
+
+    LaunchedEffect(generatingOptions) {
+        val newIcon = activity.appProvider.getIcon(app, generatingOptions)
+        iconList = iconList.toMutableList().also { it[0] = newIcon }
+    }
+
+    val icon = iconList[0]
 
     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-        //TODO: Add preview image
+        if (icon !is EmptyIcon) {
+            Image(painter = icon.getPainter()
+                , contentDescription = null
+                , modifier = Modifier
+                    .padding(2.dp)
+                    .size(78.dp, 78.dp))
+        }
 
         SourceDropdown(R.string.source, source) { source = it }
 
@@ -283,9 +300,8 @@ fun CreateColumn(
         }
 
         if (isIconPackSelected(source, iconPack)) {
-            SearchIconPackButton(iconPack) {
-                onChange(UploadedOptions(it))
-                confirm()
+            SearchIconPackButton(iconPack, generatingOptions) { newIcon ->
+                iconList = iconList.toMutableList().also { it[0] = newIcon }
             }
         }
 
@@ -304,12 +320,12 @@ fun CreateColumn(
             MonochromeSwitch(useMonochrome) { useMonochrome = it }
         }
 
-        onChange(options)
+        onChange(icon)
     }
 }
 
 @Composable
-fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
+fun UploadColumn(onChange: (icon: ExportableIcon) -> Unit) {
     var imageUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
     var currentUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
     var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
@@ -391,7 +407,7 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
                 ZoomSlider(zoomLevel, onChange = { zoomLevel = it })
             }
 
-            onChange(UploadedOptions(BitmapIcon(zoomedImage, asAdaptiveIcon)))
+            onChange(BitmapIcon(zoomedImage, asAdaptiveIcon))
         }
     }
 }
@@ -572,7 +588,7 @@ fun AdaptiveIconSwitch(asAdaptiveIcon: Boolean, onChange: (newValue: Boolean) ->
 }
 
 @Composable
-fun PrepareEditVector(app: PackageInfoStruct, onChange: (options: IndividualOptions) -> Unit) {
+fun PrepareEditVector(app: PackageInfoStruct, onChange: (icon: ExportableIcon) -> Unit) {
     val editedVector = if (app.createdIcon is VectorIcon) {
         app.createdIcon.vector.toMutableImageVector().applyAndRemoveGroup().toImageVector()
     } else {
@@ -583,7 +599,7 @@ fun PrepareEditVector(app: PackageInfoStruct, onChange: (options: IndividualOpti
 }
 
 @Composable
-fun EditVectorColumn(vector: ImageVector, onChange: (options: IndividualOptions) -> Unit) {
+fun EditVectorColumn(vector: ImageVector, onChange: (icon: ExportableIcon) -> Unit) {
     Column(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -673,7 +689,7 @@ fun EditVectorColumn(vector: ImageVector, onChange: (options: IndividualOptions)
             }
         }
 
-        onChange(EditedVectorOptions(VectorIcon(editedVector.toImageVector())))
+        onChange(VectorIcon(editedVector.toImageVector()))
     }
 }
 
@@ -839,7 +855,7 @@ fun CenterSwitch(onChange: (newValue: Boolean) -> Unit) {
 }
 
 @Composable
-fun SearchIconPackButton(iconPackageName: String, onSelect: (ExportableIcon) -> Unit) {
+fun SearchIconPackButton(iconPackageName: String, options: GenerationOptions, onSelect: (ExportableIcon) -> Unit) {
     var showPackDrawables by rememberSaveable { mutableStateOf(false) }
 
     val context = getCurrentContext()
@@ -859,7 +875,7 @@ fun SearchIconPackButton(iconPackageName: String, onSelect: (ExportableIcon) -> 
         val iconPack = activity.appProvider.iconPacks.find { it.packageName == iconPackageName }!!
         val drawNames = ApplicationManager(context).getIconPackDrawableNames(iconPackageName)
 
-        GridImageList(iconPack, drawNames, onDismiss = {
+        GridImageList(iconPack, drawNames, options, onDismiss = {
             showPackDrawables = false
         }) {
             showPackDrawables = false
@@ -871,6 +887,7 @@ fun SearchIconPackButton(iconPackageName: String, onSelect: (ExportableIcon) -> 
 @Composable
 fun GridImageList(iconPack: IconPack
                   , drawableNames: List<String>
+                  , options: GenerationOptions
                   , onDismiss: () -> Unit
                   , onSelect: (ExportableIcon) -> Unit) {
     val context = getCurrentContext()
@@ -890,7 +907,7 @@ fun GridImageList(iconPack: IconPack
 
     val ids = appMan.getIconPackDrawableIds(iconPack.packageName, names)
     val drawables = appMan.getIconPackDrawables(iconPack.packageName, ids.subList(0, min(itemsPerPage, ids.size)))
-    val exportDrawables = activity.appProvider.getIconPackIcons(iconPack.packageName, drawables)
+    val exportDrawables = activity.appProvider.getIconPackIcons(iconPack.packageName, options, drawables)
 
     val havePreviousPage = page > 1
     val haveNextPage = ids.count() > itemsPerPage
