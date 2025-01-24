@@ -14,19 +14,29 @@ import com.kaanelloed.iconeration.constants.SuppressRedundantSuspendModifier
 import com.kaanelloed.iconeration.data.AlchemiconPackDatabase
 import com.kaanelloed.iconeration.data.BackgroundColorKey
 import com.kaanelloed.iconeration.data.CalendarIconsKey
-import com.kaanelloed.iconeration.data.ColorizeIconPackKey
 import com.kaanelloed.iconeration.data.DbApplication
 import com.kaanelloed.iconeration.data.ExportThemedKey
+import com.kaanelloed.iconeration.data.IMAGE_EDIT_DEFAULT
 import com.kaanelloed.iconeration.data.IconColorKey
 import com.kaanelloed.iconeration.data.IconPack
-import com.kaanelloed.iconeration.data.IconPackKey
+import com.kaanelloed.iconeration.data.ImageEdit
 import com.kaanelloed.iconeration.data.IncludeVectorKey
 import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.data.MonochromeKey
 import com.kaanelloed.iconeration.data.OverrideIconKey
+import com.kaanelloed.iconeration.data.PrimaryIconPackKey
+import com.kaanelloed.iconeration.data.PrimaryImageEditKey
+import com.kaanelloed.iconeration.data.PrimarySourceKey
+import com.kaanelloed.iconeration.data.PrimaryTextTypeKey
 import com.kaanelloed.iconeration.data.RawElement
-import com.kaanelloed.iconeration.data.TYPE_DEFAULT
-import com.kaanelloed.iconeration.data.TypeKey
+import com.kaanelloed.iconeration.data.SOURCE_DEFAULT
+import com.kaanelloed.iconeration.data.SecondaryIconPackKey
+import com.kaanelloed.iconeration.data.SecondaryImageEditKey
+import com.kaanelloed.iconeration.data.SecondarySourceKey
+import com.kaanelloed.iconeration.data.SecondaryTextTypeKey
+import com.kaanelloed.iconeration.data.Source
+import com.kaanelloed.iconeration.data.TEXT_TYPE_DEFAULT
+import com.kaanelloed.iconeration.data.TextType
 import com.kaanelloed.iconeration.data.getBooleanValue
 import com.kaanelloed.iconeration.data.getColorValue
 import com.kaanelloed.iconeration.data.getDefaultBackgroundColor
@@ -37,11 +47,13 @@ import com.kaanelloed.iconeration.drawable.ResourceDrawable
 import com.kaanelloed.iconeration.extension.bitmapFromBase64
 import com.kaanelloed.iconeration.icon.BitmapIcon
 import com.kaanelloed.iconeration.icon.EmptyIcon
+import com.kaanelloed.iconeration.icon.ExportableIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
+import com.kaanelloed.iconeration.icon.creator.GenerationOptions
 import com.kaanelloed.iconeration.icon.creator.IconGenerator
+import com.kaanelloed.iconeration.icon.creator.IconPackContainer
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
-import com.kaanelloed.iconeration.ui.CreatedOptions
 import com.kaanelloed.iconeration.ui.supportDynamicColors
 import com.kaanelloed.iconeration.ui.toHexString
 import com.kaanelloed.iconeration.ui.toInt
@@ -88,7 +100,7 @@ class ApplicationProvider(private val context: Context) {
     }
 
     fun retrieveOtherIcons(preferences: Preferences) {
-        val iconPackageName = preferences.getStringValue(IconPackKey)
+        val iconPackageName = preferences.getStringValue(PrimaryIconPackKey)
         val retrieveCalendarIcon = preferences.getBooleanValue(CalendarIconsKey)
 
         if (iconPackageName != "" && retrieveCalendarIcon) {
@@ -97,69 +109,79 @@ class ApplicationProvider(private val context: Context) {
     }
 
     fun refreshIcon(application: PackageInfoStruct, preferences: Preferences) {
-        val type = preferences.getEnumValue(TypeKey, TYPE_DEFAULT)
+        val primarySource = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
+        val primaryImageEdit = preferences.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
+        val primaryTextType = preferences.getEnumValue(PrimaryTextTypeKey, TEXT_TYPE_DEFAULT)
+        val primaryIconPack = preferences.getStringValue(PrimaryIconPackKey)
+        val secondarySource = preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT)
+        val secondaryImageEdit = preferences.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT)
+        val secondaryTextType = preferences.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT)
+        val secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey)
         val monochrome = preferences.getBooleanValue(MonochromeKey)
         val vector = preferences.getBooleanValue(IncludeVectorKey)
         val iconColorValue = preferences.getColorValue(IconColorKey
             , preferences.getDefaultIconColor(context))
         val bgColorValue = preferences.getColorValue(BackgroundColorKey
             , preferences.getDefaultBackgroundColor(context))
-        val colorizeIconPack = preferences.getBooleanValue(ColorizeIconPackKey)
         val themed = preferences.getBooleanValue(ExportThemedKey)
-        val iconPackageName = preferences.getStringValue(IconPackKey)
 
-        val genOptions = IconGenerator.GenerationOptions(
-            iconColorValue.toInt()
-            , monochrome
-            , vector
-            , themed
+        val genOptions = GenerationOptions(
+            primarySource
+            , primaryImageEdit
+            , primaryTextType
+            , primaryIconPack
+            , secondarySource
+            , secondaryImageEdit
+            , secondaryTextType
+            , secondaryIconPack
+            , iconColorValue.toInt()
             , bgColorValue.toInt()
-            , colorizeIconPack)
-        val options = CreatedOptions(genOptions, type, iconPackageName)
+            , vector
+            , monochrome
+            , themed
+            , true)
 
-        refreshIcon(application, options)
+        refreshIcon(application, genOptions)
     }
 
-    fun refreshIcon(application: PackageInfoStruct, options: CreatedOptions) {
-        val iconPackageName = options.iconPackageName
+    fun refreshIcon(application: PackageInfoStruct, options: GenerationOptions) {
+        val primaryIconPackApps = getIconPackAppDrawables(options.primaryIconPack)
+        val secondaryIconPackApps = getIconPackAppDrawables(options.secondaryIconPack)
 
-        if (iconPackageName != "" && iconPacks.any { it.packageName == iconPackageName }) {
-            val iconPackApps = getIconPackAppDrawables(iconPackageName)
-            val iconBuilder = getIconBuilder(options, iconPackApps, true)
+        val pack1 = IconPackContainer(options.primaryIconPack, primaryIconPackApps)
+        val pack2 = IconPackContainer(options.secondaryIconPack, secondaryIconPackApps)
 
-            val packApp = iconPackApps.entries.find { it.key.packageName == application.packageName }
-
-            if (packApp != null) {
-                val icon = ApplicationManager(context).getResIcon(iconPackageName, packApp.value.resourceId)!!
-                iconBuilder.updateFromIconPack(application, icon)
-            } else {
-                iconBuilder.generateIcons(application, options.generatingType)
-            }
-        } else {
-            val iconBuilder = getIconBuilder(options, true)
-            iconBuilder.generateIcons(application, options.generatingType)
+        val builder = IconGenerator(context, options, pack1, pack2)
+        builder.generateIcon(application) { app, icon ->
+            editApplication(app, app.changeExport(icon))
         }
     }
 
     fun refreshIcons(preferences: Preferences) {
-        val type = preferences.getEnumValue(TypeKey, TYPE_DEFAULT)
+        val primarySource = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
+        val primaryImageEdit = preferences.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
+        val primaryTextType = preferences.getEnumValue(PrimaryTextTypeKey, TEXT_TYPE_DEFAULT)
+        val primaryIconPack = preferences.getStringValue(PrimaryIconPackKey)
+        val secondarySource = preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT)
+        val secondaryImageEdit = preferences.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT)
+        val secondaryTextType = preferences.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT)
+        val secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey)
         val monochrome = preferences.getBooleanValue(MonochromeKey)
         val vector = preferences.getBooleanValue(IncludeVectorKey)
         val iconColorValue = preferences.getColorValue(IconColorKey
             , preferences.getDefaultIconColor(context))
         val bgColorValue = preferences.getColorValue(BackgroundColorKey
             , preferences.getDefaultBackgroundColor(context))
-        val colorizeIconPack = preferences.getBooleanValue(ColorizeIconPackKey)
         val themed = preferences.getBooleanValue(ExportThemedKey)
         val dynamicColor = themed && supportDynamicColors()
-        val iconPackageName = preferences.getStringValue(IconPackKey)
         val retrieveCalendarIcon = preferences.getBooleanValue(CalendarIconsKey)
         val overrideIcon = preferences.getBooleanValue(OverrideIconKey)
 
-        val iconPackApps = getIconPackAppDrawables(iconPackageName)
+        val primaryIconPackApps = getIconPackAppDrawables(primaryIconPack)
+        val secondaryIconPackApps = getIconPackAppDrawables(secondaryIconPack)
 
-        if (iconPackageName != "" && retrieveCalendarIcon) {
-            retrieveCalendarIcons(iconPackageName)
+        if (primaryIconPack != "" && retrieveCalendarIcon) {
+            retrieveCalendarIcons(primaryIconPack)
         }
 
         var iconColor = iconColorValue.toInt()
@@ -170,9 +192,30 @@ class ApplicationProvider(private val context: Context) {
             bgColor = context.resources.getColor(R.color.icon_background_color, null)
         }
 
-        val opt = IconGenerator.GenerationOptions(iconColor, monochrome, vector, themed, bgColor, colorizeIconPack)
-        val createdOptions = CreatedOptions(opt, type, iconPackageName)
-        getIconBuilder(createdOptions, iconPackApps, overrideIcon).generateIcons(applicationList, type)
+        val opt = GenerationOptions(
+            primarySource,
+            primaryImageEdit,
+            primaryTextType,
+            primaryIconPack,
+            secondarySource,
+            secondaryImageEdit,
+            secondaryTextType,
+            secondaryIconPack,
+            iconColor,
+            bgColor,
+            vector,
+            monochrome,
+            themed,
+            overrideIcon
+        )
+
+        val pack1 = IconPackContainer(primaryIconPack, primaryIconPackApps)
+        val pack2 = IconPackContainer(secondaryIconPack, secondaryIconPackApps)
+
+        val builder = IconGenerator(context, opt, pack1, pack2)
+        builder.generateIcons(applicationList) { application, icon ->
+            editApplication(application, application.changeExport(icon))
+        }
     }
 
     fun buildAndSignIconPack(preferences: Preferences, textMethod: (text: String) -> Unit): BuiltIconPack {
@@ -310,7 +353,7 @@ class ApplicationProvider(private val context: Context) {
         }
     }
 
-    fun editApplication(oldApp: PackageInfoStruct, newApp: PackageInfoStruct) {
+    private fun editApplication(oldApp: PackageInfoStruct, newApp: PackageInfoStruct) {
         val index = applicationList.indexOf(oldApp)
         if (index >= 0)
             editApplication(index, newApp)
@@ -350,15 +393,30 @@ class ApplicationProvider(private val context: Context) {
         )
     }
 
-    fun getIconBuilder(options: CreatedOptions, override: Boolean): IconGenerator {
-        val appDrawables = getIconPackAppDrawables(options.iconPackageName)
-        return getIconBuilder(options, appDrawables, override)
-    }
+    fun getIconPackIcons(iconPackName: String, drawables: List<ResourceDrawable>): List<ExportableIcon> {
+        val exportDrawables = mutableListOf<ExportableIcon>()
 
-    private fun getIconBuilder(options: CreatedOptions
-                               , applicationDrawables: Map<InstalledApplication, ResourceDrawable>
-                               , override: Boolean): IconGenerator {
-        return IconGenerator(context, this, options.generatingOptions, options.iconPackageName, applicationDrawables, override)
+        val opt = GenerationOptions(
+            Source.ICON_PACK,
+            ImageEdit.NONE,
+            TextType.FULL_NAME,
+            iconPackName,
+            0,
+            0,
+            false,
+            false,
+            false,
+            true
+        )
+
+        val pack = IconPackContainer("", emptyMap())
+
+        val builder = IconGenerator(context, opt, pack, pack)
+        for (drawable in drawables) {
+            exportDrawables.add(builder.colorizeFromIconPack(iconPackName, drawable))
+        }
+
+        return exportDrawables
     }
 
     data class BuiltIconPack(

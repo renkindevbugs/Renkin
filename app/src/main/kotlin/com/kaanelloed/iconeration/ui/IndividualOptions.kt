@@ -5,7 +5,6 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
-import android.graphics.drawable.Drawable
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,7 +22,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -75,24 +76,23 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import com.caverock.androidsvg.SVG
 import com.caverock.androidsvg.SVGParseException
 import com.kaanelloed.iconeration.R
-import com.kaanelloed.iconeration.icon.creator.IconGenerator
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
-import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPack
+import com.kaanelloed.iconeration.data.ImageEdit
+import com.kaanelloed.iconeration.data.Source
+import com.kaanelloed.iconeration.data.TextType
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
-import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.toDrawable
-import com.kaanelloed.iconeration.drawable.ResourceDrawable
+import com.kaanelloed.iconeration.extension.toDrawable
 import com.kaanelloed.iconeration.icon.BitmapIcon
 import com.kaanelloed.iconeration.icon.ExportableIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
+import com.kaanelloed.iconeration.icon.creator.GenerationOptions
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.vector.ImageVectorExtension.Companion.createEmptyVector
 import com.kaanelloed.iconeration.vector.ImageVectorExtension.Companion.getBuilder
@@ -261,34 +261,45 @@ fun CreateColumn(
     confirm: () -> Unit,
     onChange: (options: IndividualOptions) -> Unit
 ) {
-    var genType by rememberSaveable { mutableStateOf(GenerationType.PATH) }
+    var source by rememberSaveable { mutableStateOf(Source.NONE) }
+    var imageEdit by rememberSaveable { mutableStateOf(ImageEdit.NONE) }
+    var textType by rememberSaveable { mutableStateOf(TextType.FULL_NAME) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
-    var colorizeIconPack by rememberSaveable { mutableStateOf(false) }
 
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
     var iconPack by rememberSaveable { mutableStateOf("") }
 
-    val generatingOptions = IconGenerator.GenerationOptions(iconColor.toInt(), useMonochrome, useVector, colorizeIconPack = colorizeIconPack)
-    val options = CreatedOptions(generatingOptions, genType, iconPack)
+    val generatingOptions = GenerationOptions(source, imageEdit, textType, iconPack, iconColor.toInt(), 0, useVector, useMonochrome, false, true)
+    val options = CreatedOptions(generatingOptions)
 
-    Column {
+    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         //TODO: Add preview image
 
-        TypeDropdown(genType) { genType = it }
-        IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
+        SourceDropdown(R.string.source, source) { source = it }
 
-        if (iconPack != "") {
-            SearchIconPackButton(iconPack, options) {
+        if (needIconPack(source)) {
+            IconPackDropdown(R.string.iconPack, iconPacks, iconPack) { iconPack = it.packageName }
+        }
+
+        if (isIconPackSelected(source, iconPack)) {
+            SearchIconPackButton(iconPack) {
                 onChange(UploadedOptions(it))
                 confirm()
             }
-            ColorizeIconPackSwitch(colorizeIconPack) { colorizeIconPack = it }
+        }
+
+        if (needImageEdit(source)) {
+            ImageEditDropdown(R.string.imageEdit, imageEdit) { imageEdit = it }
+        }
+
+        if (needTextType(source)) {
+            TextTypeDropdown(R.string.textType, textType) { textType = it }
         }
 
         ColorButton(stringResource(R.string.iconColor), Color.White) { iconColor = it }
 
-        if (genType == GenerationType.PATH) {
+        if (isPathTracingEnabled(source, imageEdit)) {
             VectorSwitch(useVector) { useVector = it }
             MonochromeSwitch(useMonochrome) { useMonochrome = it }
         }
@@ -828,7 +839,7 @@ fun CenterSwitch(onChange: (newValue: Boolean) -> Unit) {
 }
 
 @Composable
-fun SearchIconPackButton(iconPackageName: String, options: CreatedOptions , onSelect: (ExportableIcon) -> Unit) {
+fun SearchIconPackButton(iconPackageName: String, onSelect: (ExportableIcon) -> Unit) {
     var showPackDrawables by rememberSaveable { mutableStateOf(false) }
 
     val context = getCurrentContext()
@@ -848,7 +859,7 @@ fun SearchIconPackButton(iconPackageName: String, options: CreatedOptions , onSe
         val iconPack = activity.appProvider.iconPacks.find { it.packageName == iconPackageName }!!
         val drawNames = ApplicationManager(context).getIconPackDrawableNames(iconPackageName)
 
-        GridImageList(iconPack, options, drawNames, onDismiss = {
+        GridImageList(iconPack, drawNames, onDismiss = {
             showPackDrawables = false
         }) {
             showPackDrawables = false
@@ -859,14 +870,13 @@ fun SearchIconPackButton(iconPackageName: String, options: CreatedOptions , onSe
 
 @Composable
 fun GridImageList(iconPack: IconPack
-                  , options: CreatedOptions
                   , drawableNames: List<String>
                   , onDismiss: () -> Unit
                   , onSelect: (ExportableIcon) -> Unit) {
     val context = getCurrentContext()
     val activity = getCurrentMainActivity()
     val appMan = ApplicationManager(context)
-    val maxItems = 9
+    val itemsPerPage = 9
 
     var nameFilter by rememberSaveable { mutableStateOf("") }
     var page by rememberSaveable { mutableIntStateOf(1) }
@@ -874,21 +884,16 @@ fun GridImageList(iconPack: IconPack
     val formattedNameFilter = nameFilter.lowercase().trim().replace(' ', '_')
     val filteredDrawableNames = drawableNames.filter { it.contains(formattedNameFilter) }
 
-    val startIndex = (page - 1) * maxItems
-    val endIndex = min(startIndex + maxItems, filteredDrawableNames.lastIndex)
+    val startIndex = (page - 1) * itemsPerPage
+    val endIndex = min(startIndex + itemsPerPage, filteredDrawableNames.lastIndex)
     val names = filteredDrawableNames.subList(startIndex, endIndex + 1)
 
     val ids = appMan.getIconPackDrawableIds(iconPack.packageName, names)
-    val drawables = appMan.getIconPackDrawables(iconPack.packageName, ids.subList(0, min(maxItems, ids.size)))
-    val exportDrawables = mutableListOf<ExportableIcon>()
-
-    val builder = activity.appProvider.getIconBuilder(options, true)
-    for (drawable in drawables) {
-        exportDrawables.add(builder.colorizeFromIconPack(drawable))
-    }
+    val drawables = appMan.getIconPackDrawables(iconPack.packageName, ids.subList(0, min(itemsPerPage, ids.size)))
+    val exportDrawables = activity.appProvider.getIconPackIcons(iconPack.packageName, drawables)
 
     val havePreviousPage = page > 1
-    val haveNextPage = ids.count() > maxItems
+    val haveNextPage = ids.count() > itemsPerPage
 
     AlertDialog(
         shape = RoundedCornerShape(20.dp),

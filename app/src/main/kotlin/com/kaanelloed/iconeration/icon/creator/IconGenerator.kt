@@ -17,14 +17,16 @@ import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import com.kaanelloed.iconeration.apk.ApplicationProvider
-import com.kaanelloed.iconeration.data.GenerationType
-import com.kaanelloed.iconeration.data.InstalledApplication
+import com.kaanelloed.iconeration.constants.SuppressSameParameterValue
+import com.kaanelloed.iconeration.data.ImageEdit
+import com.kaanelloed.iconeration.data.Source
+import com.kaanelloed.iconeration.data.TextType
 import com.kaanelloed.iconeration.drawable.BaseTextDrawable
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.isAdaptiveIconDrawable
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
 import com.kaanelloed.iconeration.drawable.ForegroundIconDrawable
 import com.kaanelloed.iconeration.drawable.ResourceDrawable
+import com.kaanelloed.iconeration.extension.changeBackgroundColor
 import com.kaanelloed.iconeration.icon.AdaptiveIcon
 import com.kaanelloed.iconeration.icon.parser.AdaptiveIconParser
 import com.kaanelloed.iconeration.icon.BaseIcon
@@ -40,6 +42,7 @@ import com.kaanelloed.iconeration.packages.PackageVersion
 import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
 import com.kaanelloed.iconeration.vector.PathConverter.Companion.toNodes
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.applyAndRemoveGroup
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPathColors
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editStrokePaths
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPaths
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeAndCenter
@@ -50,134 +53,185 @@ import dev.adevium.tgCannyEdgeCompose.CannyEdgeDetector
 
 class IconGenerator(
     private val ctx: Context,
-    private val appProvider: ApplicationProvider,
     private val options: GenerationOptions,
-    private val iconPackName: String,
-    private val iconPackApplications: Map<InstalledApplication, ResourceDrawable>,
-    private val override: Boolean
+    private val primaryIconPackApplications: IconPackContainer,
+    private val secondaryIconPackApplications: IconPackContainer
 ) {
     private lateinit var apps: List<PackageInfoStruct>
 
-    fun generateIcons(application: PackageInfoStruct, type: GenerationType) {
-        generateIcons(listOf(application), type)
+    fun generateIcon(application: PackageInfoStruct,
+                     onUpdate: (application: PackageInfoStruct, icon: ExportableIcon) -> Unit) {
+        generateIcons(listOf(application), onUpdate)
     }
 
-    fun generateIcons(applications: List<PackageInfoStruct>, type: GenerationType) {
+    fun generateIcons(applications: List<PackageInfoStruct>
+                      , onUpdate: (application: PackageInfoStruct, icon: ExportableIcon) -> Unit) {
         apps = applications
 
-        when (type) {
-            GenerationType.PATH -> generatePathDetection()
-            GenerationType.EDGE -> generateCannyEdgeDetection()
-            GenerationType.ONE_LETTER -> generateFirstLetter()
-            GenerationType.TWO_LETTERS -> generateTwoLetter()
-            GenerationType.APP_NAME -> generateAppName()
-            GenerationType.ICON_PACK_ONLY -> generateOnlyIconPack()
+        if (options.primarySource == Source.NONE) {
+            return
         }
-    }
 
-    fun updateFromIconPack(application: PackageInfoStruct, icon: Drawable) {
-        val exportIcon = colorizeFromIconPack(application, icon)
-        updateApplication(application, exportIcon)
-    }
-
-    private fun colorizeFromIconPack(application: PackageInfoStruct, icon: Drawable): ExportableIcon {
-        return if (isVectorDrawable(icon)) {
-            exportIconPackXML(application) ?: changeIconPackColor(icon)
-        } else {
-            changeIconPackColor(icon)
-        }
-    }
-
-    fun colorizeFromIconPack(icon: ResourceDrawable): ExportableIcon {
-        return if (isVectorDrawable(icon.drawable)) {
-            exportIconPackXML(icon.resourceId) ?: changeIconPackColor(icon.drawable)
-        } else {
-            changeIconPackColor(icon.drawable)
-        }
-    }
-
-    private fun generateOnlyIconPack() {
-        for (app in apps) {
+        for (app in applications) {
             if (applicationShouldBeSkipped(app)) {
                 continue
             }
 
-            val iconPack = iconPackApplicationIcon(app.packageName)
+            val primaryIcon = generateIcon(
+                app,
+                options.primarySource,
+                options.primaryImageEdit,
+                options.primaryTextType,
+                primaryIconPackApplications
+            )
 
-            val icon = if (iconPack != null) {
-                colorizeFromIconPack(app, iconPack)
-            } else {
-                EmptyIcon()
-            }
-
-            updateApplication(app, icon)
-        }
-    }
-
-    private fun generateCannyEdgeDetection() {
-        var edgeDetector: CannyEdgeDetector
-        for (app in apps) {
-            if (applicationShouldBeSkipped(app)) {
-                continue
-            }
-
-            val iconPack = iconPackApplicationIcon(app.packageName)
-
-            val icon = if (iconPack == null) {
-                edgeDetector = CannyEdgeDetector()
-                edgeDetector.process(
-                    getAppIconBitmap(app).asImageBitmap(),
-                    options.color
+            val icon = if (primaryIcon is EmptyIcon) {
+                generateIcon(
+                    app,
+                    options.secondarySource,
+                    options.secondaryImageEdit,
+                    options.secondaryTextType,
+                    secondaryIconPackApplications
                 )
-                BitmapIcon(edgeDetector.edgesImage)
             } else {
-                changeIconPackColor(iconPack)
+                primaryIcon
             }
 
-            updateApplication(app, icon)
+            onUpdate(app, icon)
         }
     }
 
-    private fun generatePathDetection() {
+    fun colorizeFromIconPack(iconPackName: String, icon: ResourceDrawable): ExportableIcon {
+        val bitmapIcon = getIconBitmap(icon.drawable)
+        val parsedIcon = exportIconPackXML(iconPackName, icon) ?: EmptyIcon()
+
+        return colorizeImage(bitmapIcon, parsedIcon, PorterDuff.Mode.SRC_IN)
+    }
+
+    private fun generateIcon(
+        application: PackageInfoStruct,
+        source: Source,
+        imageEdit: ImageEdit,
+        textType: TextType,
+        iconPack: IconPackContainer
+    ): ExportableIcon {
+        return when (source) {
+            Source.NONE -> EmptyIcon()
+            Source.ICON_PACK -> generateImageFromIconPack(application, imageEdit, iconPack)
+            Source.APPLICATION_ICON -> generateImageFromApplication(application, imageEdit)
+            Source.APPLICATION_NAME -> generateText(application.appName, textType)
+        }
+    }
+
+    private fun generateImageFromIconPack(
+        application: PackageInfoStruct,
+        imageEdit: ImageEdit,
+        iconPack: IconPackContainer): ExportableIcon {
+        val resIcon = iconPack.getApplicationIcon(application.packageName) ?: return EmptyIcon()
+
+        val bitmapIcon = getIconBitmap(resIcon.drawable)
+        val parsedIcon = exportIconPackXML(iconPack.iconPackName, resIcon) ?: EmptyIcon()
+
+        return generateImage(bitmapIcon, parsedIcon, imageEdit, PorterDuff.Mode.MULTIPLY)
+    }
+
+    private fun generateImageFromApplication(
+        application: PackageInfoStruct,
+        imageEdit: ImageEdit): ExportableIcon {
+
+        val bitmapIcon = getAppIconBitmap(application)
+        val parsedIcon = parseApplicationIcon(application)
+
+        return generateImage(bitmapIcon, parsedIcon, imageEdit, PorterDuff.Mode.MULTIPLY)
+    }
+
+    private fun generateImage(
+        bitmapIcon: Bitmap,
+        parsedIcon: BaseIcon,
+        imageEdit: ImageEdit,
+        mode: PorterDuff.Mode): ExportableIcon {
+        val defaultIcon = if (parsedIcon is VectorIcon) {
+            parsedIcon
+        } else {
+            BitmapIcon(bitmapIcon)
+        }
+
+        return when (imageEdit) {
+            ImageEdit.NONE -> defaultIcon
+            ImageEdit.PATH -> generatePathTracing(bitmapIcon, parsedIcon)
+            ImageEdit.EDGE -> generateCannyEdgeDetection(bitmapIcon)
+            ImageEdit.COLORIZE -> colorizeImage(bitmapIcon, parsedIcon, mode)
+        }
+    }
+
+    private fun generateText(applicationName: String, textType: TextType): ExportableIcon {
+        val size = 256
+        val strokeWidth = size / 48F
+        val textGenerator = LetterGenerator(ctx)
+
+        val newIcon = when(textType) {
+            TextType.FULL_NAME -> {
+                val draw = textGenerator.generateAppName(applicationName, options.color, size)
+                createVectorForMultiLineText(draw as BaseTextDrawable, options.color, size)
+            }
+            TextType.ONE_LETTER -> {
+                val draw = textGenerator.generateFirstLetter(applicationName, options.color, strokeWidth, size)
+                createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
+            }
+            TextType.TWO_LETTERS -> {
+                val draw = textGenerator.generateTwoLetters(applicationName, options.color, strokeWidth, size)
+                createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
+            }
+        }
+
+        return VectorIcon(newIcon)
+    }
+
+    private fun parseApplicationIcon(application: PackageInfoStruct): BaseIcon {
         val appMan = ApplicationManager(ctx)
 
-        for (app in apps) {
-            if (applicationShouldBeSkipped(app)) {
-                continue
-            }
+        if (isVectorDrawable(application.icon) && options.vector) {
+            val res = appMan.getResources(application.packageName) ?: return EmptyIcon()
+            return IconParser.parseDrawable(res, application.icon, application.iconID)
+        }
 
-            val iconPack = iconPackApplicationIcon(app.packageName)
+        return EmptyIcon()
+    }
 
-            val icon = if (iconPack == null) {
-                if (isVectorDrawable(app.icon) && options.vector) {
-                    generatePathFromXML(appMan, app)
-                } else {
-                    generateColorQuantizationDetection(app)
-                }
-            } else colorizeFromIconPack(app, iconPack)
+    private fun generateCannyEdgeDetection(bitmapIcon: Bitmap): ExportableIcon {
+        val edgeDetector = CannyEdgeDetector()
 
-            updateApplication(app, icon)
+        edgeDetector.process(
+            bitmapIcon.asImageBitmap(),
+            options.color
+        )
+
+        return BitmapIcon(edgeDetector.edgesImage)
+    }
+
+    private fun generatePathTracing(bitmapIcon: Bitmap, parsedIcon: BaseIcon): ExportableIcon {
+        return if (parsedIcon !is EmptyIcon) {
+            generatePathFromXML(bitmapIcon, parsedIcon)
+        } else {
+            generateColorQuantizationDetection(bitmapIcon)
         }
     }
 
-    private fun generatePathFromXML(appMan: ApplicationManager, app: PackageInfoStruct): ExportableIcon {
-        val res = appMan.getResources(app.packageName) ?: return generateColorQuantizationDetection(app)
+    private fun generatePathFromXML(bitmapIcon: Bitmap, parsedIcon: BaseIcon): ExportableIcon {
+        var vectorIcon: BaseIcon = parsedIcon
 
-        val appIcon = IconParser.parseDrawable(res, app.icon, app.iconID)
-        var vectorIcon: BaseIcon = appIcon
-
-        if (appIcon is AdaptiveIcon) {
-            if (appIcon.foreground is VectorIcon) {
-                vectorIcon = appIcon.foreground
+        if (parsedIcon is AdaptiveIcon) {
+            if (parsedIcon.foreground is VectorIcon) {
+                vectorIcon = parsedIcon.foreground
             }
 
-            if (appIcon.monochrome is VectorIcon && options.monochrome) {
-                vectorIcon = appIcon.monochrome
+            if (parsedIcon.monochrome is VectorIcon && options.monochrome) {
+                vectorIcon = parsedIcon.monochrome
             }
         }
 
         if (vectorIcon !is VectorIcon) {
-            return generateColorQuantizationDetection(app)
+            return generateColorQuantizationDetection(bitmapIcon)
         }
 
         val mutableVector = vectorIcon.vector.toMutableImageVector()
@@ -194,8 +248,8 @@ class IconGenerator(
         return VectorIcon(mutableVector)
     }
 
-    private fun generateColorQuantizationDetection(app: PackageInfoStruct): ExportableIcon {
-        val imageVector = ImageTracer.imageToVector(getAppIconBitmap(app).asImageBitmap()
+    private fun generateColorQuantizationDetection(bitmapIcon: Bitmap): ExportableIcon {
+        val imageVector = ImageTracer.imageToVector(bitmapIcon.asImageBitmap()
             , ImageTracer.TracingOptions())
 
         val vector = imageVector.toMutableImageVector()
@@ -256,77 +310,7 @@ class IconGenerator(
         return false
     }
 
-    private fun generateFirstLetter() {
-        val size = 256
-        val strokeWidth = size / 48F
-        val gen = LetterGenerator(ctx)
-
-        for (app in apps) {
-            if (applicationShouldBeSkipped(app)) {
-                continue
-            }
-
-            val iconPack = iconPackApplicationIcon(app.packageName)
-
-            val icon = if (iconPack == null) {
-                val draw = gen.generateFirstLetter(app.appName, options.color, strokeWidth, size)
-                val newIcon = createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
-                VectorIcon(newIcon)
-            } else {
-                changeIconPackColor(iconPack)
-            }
-
-            updateApplication(app, icon)
-        }
-    }
-
-    private fun generateTwoLetter() {
-        val size = 256
-        val strokeWidth = size / 48F
-        val gen = LetterGenerator(ctx)
-
-        for (app in apps) {
-            if (applicationShouldBeSkipped(app)) {
-                continue
-            }
-
-            val iconPack = iconPackApplicationIcon(app.packageName)
-
-            val icon = if (iconPack == null) {
-                val draw = gen.generateTwoLetters(app.appName, options.color, strokeWidth, size)
-                val newIcon = createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
-                VectorIcon(newIcon)
-            } else {
-                changeIconPackColor(iconPack)
-            }
-
-            updateApplication(app, icon)
-        }
-    }
-
-    private fun generateAppName() {
-        val size = 256
-        val gen = LetterGenerator(ctx)
-
-        for (app in apps) {
-            if (applicationShouldBeSkipped(app)) {
-                continue
-            }
-
-            val iconPack = iconPackApplicationIcon(app.packageName)
-
-            val icon = if (iconPack == null) {
-                val draw = gen.generateAppName(app.appName, options.color, size)
-                val newIcon = createVectorForMultiLineText(draw as BaseTextDrawable, options.color, size)
-                VectorIcon(newIcon)
-            } else {
-                changeIconPackColor(iconPack)
-            }
-
-            updateApplication(app, icon)
-        }
-    }
-
+    @Suppress(SuppressSameParameterValue)
     private fun createVectorForText(drawable: BaseTextDrawable, color: Int, strokeWidth: Float, size: Int): ImageVector {
         val builder = ImageVector.Builder(defaultWidth = size.dp
             , defaultHeight = size.dp, viewportWidth = size.toFloat(), viewportHeight = size.toFloat())
@@ -342,6 +326,7 @@ class IconGenerator(
         return builder.build()
     }
 
+    @Suppress(SuppressSameParameterValue)
     private fun createVectorForMultiLineText(drawable: BaseTextDrawable, color: Int, size: Int): ImageVector {
         val builder = ImageVector.Builder(defaultWidth = size.dp
             , defaultHeight = size.dp, viewportWidth = size.toFloat(), viewportHeight = size.toFloat())
@@ -356,19 +341,6 @@ class IconGenerator(
         return builder.build()
     }
 
-    private fun changeIconPackColor(icon: Drawable): ExportableIcon {
-        val isAdaptiveIcon = icon.isAdaptiveIconDrawable()
-
-        return if (options.colorizeIconPack) {
-            val coloredIcon = colorIcon(icon)
-            BitmapIcon(coloredIcon, isAdaptiveIcon)
-        }
-        else {
-            val iconToShow = getIconBitmap(icon)
-            BitmapIcon(iconToShow, isAdaptiveIcon)
-        }
-    }
-
     private fun getIconBitmap(icon: Drawable, maxSize: Int = 500): Bitmap {
         return if (icon.isAdaptiveIconDrawable()) {
             icon as AdaptiveIconDrawable
@@ -378,13 +350,11 @@ class IconGenerator(
         }
     }
 
-    private fun colorIcon(icon: Drawable): Bitmap {
-        val oldIcon = getIconBitmap(icon)
-
-        val coloredIcon = oldIcon.copy(oldIcon.config!!, true)
+    private fun colorizeBitmap(icon: Bitmap, mode: PorterDuff.Mode): Bitmap {
+        val coloredIcon = icon.copy(icon.config!!, true)
         val paint = Paint()
 
-        paint.colorFilter = PorterDuffColorFilter(options.color, PorterDuff.Mode.SRC_IN)
+        paint.colorFilter = PorterDuffColorFilter(options.color, mode)
         Canvas(coloredIcon).drawBitmap(coloredIcon, 0F, 0F, paint)
 
         return addBackground(coloredIcon)
@@ -394,16 +364,11 @@ class IconGenerator(
         return if (options.themed) image.changeBackgroundColor(options.bgColor) else image
     }
 
-    private fun exportIconPackXML(app: PackageInfoStruct): ExportableIcon? {
-        iconPackApplication(app.packageName) ?: return null
-        val iconID = iconPackApplicationIconID(app.packageName)
+    private fun exportIconPackXML(iconPackName: String, iconDrawable: ResourceDrawable): ExportableIcon? {
+        if (!isVectorDrawable(iconDrawable.drawable)) return null
 
-        return exportIconPackXML(iconID)
-    }
-
-    private fun exportIconPackXML(iconID: Int): ExportableIcon? {
         val res = ApplicationManager(ctx).getResources(iconPackName) ?: return null
-        val parser = ApplicationManager(ctx).getPackageResourceXml(iconPackName, iconID) ?: return null
+        val parser = ApplicationManager(ctx).getPackageResourceXml(iconPackName, iconDrawable.resourceId) ?: return null
 
         val adaptiveIcon = AdaptiveIconParser.parse(res, parser.toXmlNode()) ?: return null
         var vectorIcon: VectorIcon? = null
@@ -426,64 +391,29 @@ class IconGenerator(
         val mutableVector = vectorIcon.vector.toMutableImageVector().resizeAndCenter().scaleAtCenter(0.5f)
 
         val stroke = mutableVector.viewportHeight / 48 //1F at 48
-        if (options.colorizeIconPack) {
-            mutableVector.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
-            mutableVector.tintColor = Color.Unspecified
-        }
-        else {
-            mutableVector.root.editStrokePaths(stroke)
-        }
+        mutableVector.root.editStrokePaths(stroke)
 
         return VectorIcon(mutableVector)
     }
 
-    private fun iconPackApplication(packageName: String): InstalledApplication? {
-        return iconPackApplications.keys.find { it.packageName == packageName }
+    private fun colorizeImage(bitmapIcon: Bitmap, parsedIcon: BaseIcon, mode: PorterDuff.Mode): ExportableIcon {
+        return if (parsedIcon is VectorIcon) {
+            colorizeVector(parsedIcon)
+        } else {
+            BitmapIcon(colorizeBitmap(bitmapIcon, mode))
+        }
     }
 
-    private fun iconPackApplicationIcon(packageName: String): Drawable? {
-        val app = iconPackApplication(packageName)
+    private fun colorizeVector(vectorIcon: VectorIcon): VectorIcon {
+        val vector = vectorIcon.vector.toMutableImageVector()
 
-        if (app != null) {
-            return iconPackApplications[app]!!.drawable
-        }
+        vector.root.editPathColors(SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+        vector.tintColor = Color.Unspecified
 
-        return null
-    }
-
-    private fun iconPackApplicationIconID(packageName: String): Int {
-        val app = iconPackApplication(packageName)
-
-        if (app != null) {
-            return iconPackApplications[app]!!.resourceId
-        }
-
-        return -1
+        return VectorIcon(vector)
     }
 
     private fun applicationShouldBeSkipped(app: PackageInfoStruct): Boolean {
-        return !override && app.createdIcon !is EmptyIcon
-    }
-
-    private fun updateApplication(application: PackageInfoStruct, icon: ExportableIcon) {
-        appProvider.editApplication(application, application.changeExport(icon))
-    }
-
-    class GenerationOptions(
-        val color: Int,
-        val monochrome: Boolean,
-        val vector: Boolean,
-        val themed: Boolean = false,
-        val bgColor: Int = 0,
-        val colorizeIconPack: Boolean = false
-    )
-
-    private fun Bitmap.changeBackgroundColor(color: Int): Bitmap {
-        val newBitmap = Bitmap.createBitmap(width, height, config!!)
-        val canvas = Canvas(newBitmap)
-        canvas.drawColor(color)
-        canvas.drawBitmap(this, 0F, 0F, null)
-        recycle()
-        return newBitmap
+        return !options.override && app.createdIcon !is EmptyIcon
     }
 }

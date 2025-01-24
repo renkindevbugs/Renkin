@@ -44,4 +44,10 @@ class PackageInfoStruct(
     private fun removeDiacritics(text: String): String {
         return Normalizer.normalize(text, Normalizer.Form.NFD).replace("\\p{Mn}+".toRegex(), "")
     }
+
+    override fun hashCode(): Int {
+        var result = packageName.hashCode()
+        result = 31 * result + activityName.hashCode()
+        return result
+    }
 }

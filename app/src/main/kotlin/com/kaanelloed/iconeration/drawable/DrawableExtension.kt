@@ -26,15 +26,6 @@ class DrawableExtension {
             return this.toBitmap()
         }
 
-        @Suppress(SuppressDeprecation)
-        fun Bitmap.toDrawable(): Drawable {
-            return BitmapDrawable(this)
-        }
-
-        fun Bitmap.toDrawable(res: Resources): Drawable {
-            return BitmapDrawable(res, this)
-        }
-
         @ChecksSdkIntAtLeast(Build.VERSION_CODES.O)
         fun Drawable.isAdaptiveIconDrawable(): Boolean {
             if (PackageVersion.is26OrMore()) {

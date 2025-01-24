@@ -44,7 +44,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
@@ -55,16 +54,14 @@ import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.data.BackgroundColorKey
 import com.kaanelloed.iconeration.data.ExportThemedKey
 import com.kaanelloed.iconeration.data.IconPack
-import com.kaanelloed.iconeration.data.IconPackKey
+import com.kaanelloed.iconeration.data.PrimaryIconPackKey
 import com.kaanelloed.iconeration.data.getBooleanValue
 import com.kaanelloed.iconeration.data.getColorValue
 import com.kaanelloed.iconeration.data.getDefaultBackgroundColor
 import com.kaanelloed.iconeration.data.getPreferencesValue
 import com.kaanelloed.iconeration.data.getStringValue
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.sizeIsGreaterThanZero
-import com.kaanelloed.iconeration.icon.BitmapIcon
 import com.kaanelloed.iconeration.icon.EmptyIcon
-import com.kaanelloed.iconeration.icon.VectorIcon
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -178,14 +175,14 @@ fun OpenAppOptions(
 
     AppOptions(iconPacks, app, { options ->
         CoroutineScope(Dispatchers.Default).launch {
-            if (!activity.appProvider.iconPackLoaded && options is CreatedOptions && options.iconPackageName != "") {
+            if (!activity.appProvider.iconPackLoaded && options is CreatedOptions && options.generatingOptions.primaryIconPack != "") {
                 onDismiss(true)
                 return@launch
             }
 
             when (options) {
                 is CreatedOptions -> {
-                    activity.appProvider.refreshIcon(app, options)
+                    activity.appProvider.refreshIcon(app, options.generatingOptions)
                 }
 
                 is UploadedOptions -> {
@@ -210,7 +207,7 @@ fun OpenAppOptions(
 @Composable
 fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
     val preferences = getPreferences().getPreferencesValue()
-    val iconPackageName = preferences.getStringValue(IconPackKey)
+    val iconPackageName = preferences.getStringValue(PrimaryIconPackKey)
 
     val activity = getCurrentMainActivity()
 

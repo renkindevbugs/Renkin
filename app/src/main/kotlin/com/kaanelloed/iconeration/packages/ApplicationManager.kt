@@ -25,8 +25,8 @@ import com.kaanelloed.iconeration.data.RawElement
 import com.kaanelloed.iconeration.data.RawItem
 import com.kaanelloed.iconeration.data.toComponentInfo
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.sizeIsGreaterThanZero
-import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.toDrawable
 import com.kaanelloed.iconeration.drawable.ResourceDrawable
+import com.kaanelloed.iconeration.extension.toDrawable
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 

@@ -1,18 +1,15 @@
 package com.kaanelloed.iconeration.ui
 
-import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.icon.ExportableIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
-import com.kaanelloed.iconeration.icon.creator.IconGenerator
+import com.kaanelloed.iconeration.icon.creator.GenerationOptions
 
 interface IndividualOptions
 
 class EmptyOptions: IndividualOptions
 
 data class CreatedOptions(
-    val generatingOptions: IconGenerator.GenerationOptions,
-    val generatingType: GenerationType,
-    val iconPackageName: String
+    val generatingOptions: GenerationOptions
 ): IndividualOptions
 
 data class UploadedOptions(

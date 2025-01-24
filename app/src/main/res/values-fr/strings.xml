@@ -70,4 +70,18 @@
     <string name="automaticallyUpdate">Mettre à jour automatiquement</string>
     <string name="iconPackUninstalled">Alchemicon Pack désinstallé</string>
     <string name="refreshApplicationList">Rafraîchir la liste d\'application</string>
+    <string name="applicationIcon">Icône de l\'application</string>
+    <string name="primarySource">Source primaire</string>
+    <string name="secondarySource">Source secondaire</string>
+    <string name="fullName">Nom complet</string>
+    <string name="primaryImageEdit">Édition d\'image primaire</string>
+    <string name="primaryTextType">Type de texte primaire</string>
+    <string name="primaryIconPack">Pack d\'icônes primaire</string>
+    <string name="secondaryImageEdit">Édition d\'image secondaire</string>
+    <string name="secondaryTextType">Type de texte secondaire</string>
+    <string name="secondaryIconPack">Pack d\'icônes secondaire</string>
+    <string name="source">Source</string>
+    <string name="imageEdit">Édition d\'image</string>
+    <string name="textType">Type de texte</string>
+    <string name="colorize">Coloriser</string>
 </resources>

@@ -71,4 +71,18 @@
     <string name="automaticallyUpdate">Automatically update</string>
     <string name="iconPackUninstalled">Alchemicon Pack uninstalled</string>
     <string name="refreshApplicationList">Refresh application list</string>
+    <string name="applicationIcon">Application Icon</string>
+    <string name="primarySource">Primary source</string>
+    <string name="secondarySource">Secondary source</string>
+    <string name="fullName">Full Name</string>
+    <string name="primaryImageEdit">Primary Image Edit</string>
+    <string name="primaryTextType">Primary Text Type</string>
+    <string name="primaryIconPack">Primary Icon Pack</string>
+    <string name="secondaryImageEdit">Secondary Image Edit</string>
+    <string name="secondaryTextType">Secondary Text Type</string>
+    <string name="secondaryIconPack">Secondary Icon Pack</string>
+    <string name="source">Source</string>
+    <string name="imageEdit">ImageEdit</string>
+    <string name="textType">Text Type</string>
+    <string name="colorize">Colorize</string>
 </resources>

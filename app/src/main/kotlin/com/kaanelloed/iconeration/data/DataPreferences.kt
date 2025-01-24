@@ -21,27 +21,32 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlin.enums.enumEntries
 
-const val DARK_MODE_NAME = "NIGHT_THEME"
-const val TYPE_NAME = "GENERATION_TYPE"
-const val INCLUDE_VECTOR_NAME = "INCLUDE_VECTOR"
-const val MONOCHROME_NAME = "MONOCHROME"
-const val EXPORT_THEMED_NAME = "EXPORT_THEMED"
-const val ICON_COLOR_NAME = "ICON_COLOR"
-const val BACKGROUND_COLOR_NAME = "BACKGROUND_COLOR"
-const val COLORIZE_ICON_PACK_NAME = "COLORIZE_ICON_PACK"
-const val ICON_PACK_NAME = "ICON_PACK"
-const val RETRIEVE_CALENDAR_ICONS = "RETRIEVE_CALENDAR_ICONS"
-const val PACKAGE_ADDED_NOTIFICATION = "PACKAGE_ADDED_NOTIFICATION"
-const val OVERRIDE_ICON = "OVERRIDE_ICON"
-const val AUTOMATICALLY_UPDATE_PACK = "AUTOMATICALLY_UPDATE_PACK"
+private const val DARK_MODE_NAME = "NIGHT_THEME"
+private const val INCLUDE_VECTOR_NAME = "INCLUDE_VECTOR"
+private const val MONOCHROME_NAME = "MONOCHROME"
+private const val EXPORT_THEMED_NAME = "EXPORT_THEMED"
+private const val ICON_COLOR_NAME = "ICON_COLOR"
+private const val BACKGROUND_COLOR_NAME = "BACKGROUND_COLOR"
+private const val RETRIEVE_CALENDAR_ICONS_NAME = "RETRIEVE_CALENDAR_ICONS"
+private const val PACKAGE_ADDED_NOTIFICATION_NAME = "PACKAGE_ADDED_NOTIFICATION"
+private const val OVERRIDE_ICON_NAME = "OVERRIDE_ICON"
+private const val AUTOMATICALLY_UPDATE_PACK_NAME = "AUTOMATICALLY_UPDATE_PACK"
+private const val PRIMARY_SOURCE_NAME = "PRIMARY_SOURCE"
+private const val PRIMARY_IMAGE_EDIT_NAME = "PRIMARY_IMAGE_EDIT"
+private const val PRIMARY_TEXT_TYPE_NAME = "PRIMARY_TEXT_TYPE"
+private const val PRIMARY_ICON_PACK_NAME = "PRIMARY_ICON_PACK"
+private const val SECONDARY_SOURCE_NAME = "SECONDARY_SOURCE"
+private const val SECONDARY_IMAGE_EDIT_NAME = "SECONDARY_IMAGE_EDIT"
+private const val SECONDARY_TEXT_TYPE_NAME = "SECONDARY_TEXT_TYPE"
+private const val SECONDARY_ICON_PACK_NAME = "SECONDARY_ICON_PACK"
 
 val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
-val TYPE_DEFAULT = GenerationType.PATH
+val SOURCE_DEFAULT = Source.NONE
+val IMAGE_EDIT_DEFAULT = ImageEdit.NONE
+val TEXT_TYPE_DEFAULT = TextType.FULL_NAME
 
 val DarkModeKey: Preferences.Key<Int>
     get() = intPreferencesKey(DARK_MODE_NAME)
-val TypeKey: Preferences.Key<Int>
-    get() = intPreferencesKey(TYPE_NAME)
 val IncludeVectorKey: Preferences.Key<Boolean>
     get() = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
 val MonochromeKey: Preferences.Key<Boolean>
@@ -52,18 +57,30 @@ val IconColorKey: Preferences.Key<String>
     get() = stringPreferencesKey(ICON_COLOR_NAME)
 val BackgroundColorKey: Preferences.Key<String>
     get() = stringPreferencesKey(BACKGROUND_COLOR_NAME)
-val ColorizeIconPackKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(COLORIZE_ICON_PACK_NAME)
-val IconPackKey: Preferences.Key<String>
-    get() = stringPreferencesKey(ICON_PACK_NAME)
 val CalendarIconsKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS)
+    get() = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS_NAME)
 val PackageAddedNotificationKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(PACKAGE_ADDED_NOTIFICATION)
+    get() = booleanPreferencesKey(PACKAGE_ADDED_NOTIFICATION_NAME)
 val OverrideIconKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(OVERRIDE_ICON)
+    get() = booleanPreferencesKey(OVERRIDE_ICON_NAME)
 val AutomaticallyUpdateKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(AUTOMATICALLY_UPDATE_PACK)
+    get() = booleanPreferencesKey(AUTOMATICALLY_UPDATE_PACK_NAME)
+val PrimarySourceKey: Preferences.Key<Int>
+    get() = intPreferencesKey(PRIMARY_SOURCE_NAME)
+val PrimaryImageEditKey: Preferences.Key<Int>
+    get() = intPreferencesKey(PRIMARY_IMAGE_EDIT_NAME)
+val PrimaryTextTypeKey: Preferences.Key<Int>
+    get() = intPreferencesKey(PRIMARY_TEXT_TYPE_NAME)
+val PrimaryIconPackKey: Preferences.Key<String>
+    get() = stringPreferencesKey(PRIMARY_ICON_PACK_NAME)
+val SecondarySourceKey: Preferences.Key<Int>
+    get() = intPreferencesKey(SECONDARY_SOURCE_NAME)
+val SecondaryImageEditKey: Preferences.Key<Int>
+    get() = intPreferencesKey(SECONDARY_IMAGE_EDIT_NAME)
+val SecondaryTextTypeKey: Preferences.Key<Int>
+    get() = intPreferencesKey(SECONDARY_TEXT_TYPE_NAME)
+val SecondaryIconPackKey: Preferences.Key<String>
+    get() = stringPreferencesKey(SECONDARY_ICON_PACK_NAME)
 
 @Composable
 fun DataStore<Preferences>.getPreferencesValue(): Preferences {
@@ -217,13 +234,26 @@ fun getDarkModeLabels(): Map<DarkMode, String> {
 }
 
 @Composable
-fun getTypeLabels(): Map<GenerationType, String> {
-    return mapOf(GenerationType.PATH to stringResource(id = R.string.pathDetection)
-        , GenerationType.EDGE to stringResource(id = R.string.edgeDetection)
-        , GenerationType.ONE_LETTER to stringResource(id = R.string.firstLetter)
-        , GenerationType.TWO_LETTERS to stringResource(id = R.string.twoLetters)
-        , GenerationType.APP_NAME to stringResource(id = R.string.applicationName)
-        , GenerationType.ICON_PACK_ONLY to stringResource(id = R.string.iconPackOnly))
+fun getSourceLabels(): Map<Source, String> {
+    return mapOf(Source.NONE to stringResource(id = R.string.none)
+        , Source.ICON_PACK to stringResource(id = R.string.iconPack)
+        , Source.APPLICATION_ICON to stringResource(id = R.string.applicationIcon)
+        , Source.APPLICATION_NAME to stringResource(id = R.string.applicationName))
+}
+
+@Composable
+fun getImageEditLabels(): Map<ImageEdit, String> {
+    return mapOf(ImageEdit.NONE to stringResource(id = R.string.none)
+        , ImageEdit.PATH to stringResource(id = R.string.pathDetection)
+        , ImageEdit.EDGE to stringResource(id = R.string.edgeDetection)
+        , ImageEdit.COLORIZE to stringResource(id = R.string.colorize))
+}
+
+@Composable
+fun getTextTypeLabels(): Map<TextType, String> {
+    return mapOf(TextType.FULL_NAME to stringResource(id = R.string.fullName)
+        , TextType.ONE_LETTER to stringResource(id = R.string.firstLetter)
+        , TextType.TWO_LETTERS to stringResource(id = R.string.twoLetters))
 }
 
 @Composable
@@ -252,6 +282,14 @@ enum class DarkMode {
     FOLLOW_SYSTEM, DARK, LIGHT
 }
 
-enum class GenerationType {
-    PATH, EDGE, ONE_LETTER, TWO_LETTERS, APP_NAME, ICON_PACK_ONLY
+enum class Source {
+    NONE, ICON_PACK, APPLICATION_ICON, APPLICATION_NAME
+}
+
+enum class ImageEdit {
+    NONE, PATH, EDGE, COLORIZE
+}
+
+enum class TextType {
+    FULL_NAME, ONE_LETTER, TWO_LETTERS
 }
