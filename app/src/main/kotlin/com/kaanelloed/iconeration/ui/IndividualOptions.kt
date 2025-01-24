@@ -286,11 +286,14 @@ fun CreateColumn(
 
     Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
         if (icon !is EmptyIcon) {
-            Image(painter = icon.getPainter()
-                , contentDescription = null
-                , modifier = Modifier
-                    .padding(2.dp)
-                    .size(78.dp, 78.dp))
+            Row(Modifier.fillMaxWidth()
+                , horizontalArrangement = Arrangement.Center) {
+                Image(painter = icon.getPainter()
+                    , contentDescription = null
+                    , modifier = Modifier
+                        .padding(2.dp)
+                        .size(78.dp, 78.dp))
+            }
         }
 
         SourceDropdown(R.string.source, source) { source = it }
@@ -861,14 +864,17 @@ fun SearchIconPackButton(iconPackageName: String, options: GenerationOptions, on
     val context = getCurrentContext()
     val activity = getCurrentMainActivity()
 
-    IconButton(onClick = {
-        showPackDrawables = true
-    }) {
-        Icon(
-            imageVector = Icons.Filled.Search,
-            contentDescription = "Search",
-            tint = MaterialTheme.colorScheme.primary
-        )
+    Row(modifier = Modifier.fillMaxWidth()
+        , horizontalArrangement = Arrangement.Center) {
+        IconButton(onClick = {
+            showPackDrawables = true
+        }) {
+            Icon(
+                imageVector = Icons.Filled.Search,
+                contentDescription = "Search",
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
     }
 
     if (showPackDrawables) {
