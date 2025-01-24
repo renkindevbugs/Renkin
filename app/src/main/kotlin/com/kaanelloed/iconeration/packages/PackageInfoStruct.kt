@@ -1,6 +1,7 @@
 package com.kaanelloed.iconeration.packages
 
 import android.graphics.drawable.Drawable
+import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.ExportableIcon
 import java.text.Normalizer
@@ -35,6 +36,10 @@ class PackageInfoStruct(
 
     fun getFileName(): String {
         return packageName.replace('.', '_')
+    }
+
+    fun toInstalledApplication(): InstalledApplication {
+        return InstalledApplication(packageName, activityName, iconID)
     }
 
     private fun normalizeName(): String {

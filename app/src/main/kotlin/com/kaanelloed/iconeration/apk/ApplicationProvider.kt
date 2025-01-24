@@ -19,7 +19,6 @@ import com.kaanelloed.iconeration.data.ExportThemedKey
 import com.kaanelloed.iconeration.data.IMAGE_EDIT_DEFAULT
 import com.kaanelloed.iconeration.data.IconColorKey
 import com.kaanelloed.iconeration.data.IconPack
-import com.kaanelloed.iconeration.data.ImageEdit
 import com.kaanelloed.iconeration.data.IncludeVectorKey
 import com.kaanelloed.iconeration.data.InstalledApplication
 import com.kaanelloed.iconeration.data.MonochromeKey
@@ -34,9 +33,7 @@ import com.kaanelloed.iconeration.data.SecondaryIconPackKey
 import com.kaanelloed.iconeration.data.SecondaryImageEditKey
 import com.kaanelloed.iconeration.data.SecondarySourceKey
 import com.kaanelloed.iconeration.data.SecondaryTextTypeKey
-import com.kaanelloed.iconeration.data.Source
 import com.kaanelloed.iconeration.data.TEXT_TYPE_DEFAULT
-import com.kaanelloed.iconeration.data.TextType
 import com.kaanelloed.iconeration.data.getBooleanValue
 import com.kaanelloed.iconeration.data.getColorValue
 import com.kaanelloed.iconeration.data.getDefaultBackgroundColor
@@ -75,6 +72,13 @@ class ApplicationProvider(private val context: Context) {
 
     var defaultColor: Color = Color.Unspecified
 
+    private var am: ApplicationManager? = null
+    private val appManager: ApplicationManager
+        get() {
+            if (am == null) am = ApplicationManager(context)
+            return am!!
+        }
+
     suspend fun initialize() {
         initializeApplications()
         initializeIconPacks()
@@ -82,7 +86,7 @@ class ApplicationProvider(private val context: Context) {
     }
 
     fun initializeApplications() {
-        val apps = ApplicationManager(context).getAllInstalledApps()
+        val apps = appManager.getAllInstalledApps()
         apps.sort()
 
         applicationList = apps.toList()
@@ -91,7 +95,7 @@ class ApplicationProvider(private val context: Context) {
     @Suppress(SuppressRedundantSuspendModifier)
     suspend fun initializeIconPacks() {
         iconPackLoaded = false
-        iconPacks = ApplicationManager(context).getIconPacks()
+        iconPacks = appManager.getIconPacks()
         getAppFilterElements()
     }
 
@@ -246,7 +250,6 @@ class ApplicationProvider(private val context: Context) {
             calendarIconsDrawable
         )
         val canBeInstalled = iconPackGenerator.canBeInstalled() // must be called before build and sign
-
         val apk = iconPackGenerator.buildAndSign(themed, iconColor.toHexString(), bgColor.toHexString(), textMethod)
 
         return BuiltIconPack(apk, iconPackGenerator.getIconPackName(), canBeInstalled)
@@ -351,11 +354,10 @@ class ApplicationProvider(private val context: Context) {
     private fun getAppFilterElements() {
         val map = mutableMapOf<IconPack, List<RawElement>>()
 
-        val appMan = ApplicationManager(context)
-        installedApplications = appMan.getAllInstalledApplications()
+        installedApplications = appManager.getAllInstalledApplications()
 
         for (iconPack in iconPacks) {
-            map[iconPack] = appMan.getAppFilterRawElements(iconPack.packageName, installedApplications)
+            map[iconPack] = appManager.getAppFilterRawElements(iconPack.packageName, installedApplications)
         }
 
         iconPackAppFilterElement = map
@@ -402,9 +404,22 @@ class ApplicationProvider(private val context: Context) {
 
         val apps = entry.value
 
-        return ApplicationManager(context).getDrawableFromAppFilterElements(
+        return appManager.getDrawableFromAppFilterElements(
             iconPack,
             installedApplications,
+            apps
+        )
+    }
+
+    private fun getIconPackAppDrawable(app: InstalledApplication, iconPack: String): Map<InstalledApplication, ResourceDrawable> {
+        if (iconPack == "") return emptyMap()
+        val entry = iconPackAppFilterElement.entries.find { it.key.packageName == iconPack } ?: return emptyMap()
+
+        val apps = entry.value
+
+        return appManager.getDrawableFromAppFilterElements(
+            iconPack,
+            listOf(app),
             apps
         )
     }
@@ -420,6 +435,28 @@ class ApplicationProvider(private val context: Context) {
         }
 
         return exportDrawables
+    }
+
+    fun getIconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> {
+        val map = mutableMapOf<String, ResourceDrawable>()
+
+        for (pack in iconPacks) {
+            if (application == null) {
+                val icon = appManager.getResIcon(pack.packageName, pack.iconID)
+
+                if (icon != null) {
+                    map[pack.packageName] = ResourceDrawable(pack.iconID, icon)
+                }
+            } else {
+                val icons = getIconPackAppDrawable(application, pack.packageName)
+
+                if (icons.isNotEmpty()) {
+                    map[pack.packageName] = icons[application]!!
+                }
+            }
+        }
+
+        return map
     }
 
     data class BuiltIconPack(

@@ -299,9 +299,10 @@ fun CreateColumn(
         SourceDropdown(R.string.source, source) { source = it }
 
         if (needIconPack(source)) {
-            IconPackDropdown(R.string.iconPack, iconPacks, iconPack) { iconPack = it.packageName }
+            IconPackDropdown(R.string.iconPack, iconPacks, iconPack, app.toInstalledApplication()) { iconPack = it.packageName }
         }
 
+        //TODO: keep icon in memory to apply image edit
         if (isIconPackSelected(source, iconPack)) {
             SearchIconPackButton(iconPack, generatingOptions) { newIcon ->
                 iconList = iconList.toMutableList().also { it[0] = newIcon }
