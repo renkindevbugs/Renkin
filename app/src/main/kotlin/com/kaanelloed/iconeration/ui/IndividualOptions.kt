@@ -89,6 +89,7 @@ import com.kaanelloed.iconeration.data.ImageEdit
 import com.kaanelloed.iconeration.data.Source
 import com.kaanelloed.iconeration.data.TextType
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
+import com.kaanelloed.iconeration.drawable.ResourceDrawable
 import com.kaanelloed.iconeration.extension.toDrawable
 import com.kaanelloed.iconeration.icon.BitmapIcon
 import com.kaanelloed.iconeration.icon.EmptyIcon
@@ -263,6 +264,7 @@ fun CreateColumn(
     onChange: (icon: ExportableIcon) -> Unit
 ) {
     var iconList: List<ExportableIcon> by rememberSaveable { mutableStateOf(listOf(EmptyIcon())) }
+    var customIconList: List<ResourceDrawable> by rememberSaveable { mutableStateOf(listOf()) }
 
     var source by rememberSaveable { mutableStateOf(Source.NONE) }
     var imageEdit by rememberSaveable { mutableStateOf(ImageEdit.NONE) }
@@ -277,8 +279,9 @@ fun CreateColumn(
 
     val activity = getCurrentMainActivity()
 
-    LaunchedEffect(generatingOptions) {
-        val newIcon = activity.appProvider.getIcon(app, generatingOptions)
+    LaunchedEffect(generatingOptions, customIconList) {
+        val custom = if (customIconList.isNotEmpty()) customIconList[0] else null
+        val newIcon = activity.appProvider.getIcon(app, generatingOptions, custom)
         iconList = iconList.toMutableList().also { it[0] = newIcon }
     }
 
@@ -304,8 +307,29 @@ fun CreateColumn(
 
         //TODO: keep icon in memory to apply image edit
         if (isIconPackSelected(source, iconPack)) {
-            SearchIconPackButton(iconPack, generatingOptions) { newIcon ->
-                iconList = iconList.toMutableList().also { it[0] = newIcon }
+            Row(modifier = Modifier.fillMaxWidth()
+                , horizontalArrangement = Arrangement.Center) {
+                SearchIconPackButton(iconPack, generatingOptions) { resource, newIcon ->
+                    customIconList = customIconList.toMutableList().also {
+                        if (it.isEmpty()) {
+                            it.add(resource)
+                        } else {
+                            it[0] = resource
+                        }
+                    }
+                }
+
+                if (customIconList.isNotEmpty()) {
+                    IconButton(onClick = {
+                        customIconList = listOf()
+                    }) {
+                        Icon(
+                            imageVector = Icons.Filled.Clear,
+                            contentDescription = "Clear",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
         }
 
@@ -859,23 +883,20 @@ fun CenterSwitch(onChange: (newValue: Boolean) -> Unit) {
 }
 
 @Composable
-fun SearchIconPackButton(iconPackageName: String, options: GenerationOptions, onSelect: (ExportableIcon) -> Unit) {
+fun SearchIconPackButton(iconPackageName: String, options: GenerationOptions, onSelect: (ResourceDrawable, ExportableIcon) -> Unit) {
     var showPackDrawables by rememberSaveable { mutableStateOf(false) }
 
     val context = getCurrentContext()
     val activity = getCurrentMainActivity()
 
-    Row(modifier = Modifier.fillMaxWidth()
-        , horizontalArrangement = Arrangement.Center) {
-        IconButton(onClick = {
-            showPackDrawables = true
-        }) {
-            Icon(
-                imageVector = Icons.Filled.Search,
-                contentDescription = "Search",
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
+    IconButton(onClick = {
+        showPackDrawables = true
+    }) {
+        Icon(
+            imageVector = Icons.Filled.Search,
+            contentDescription = "Search",
+            tint = MaterialTheme.colorScheme.primary
+        )
     }
 
     if (showPackDrawables) {
@@ -884,9 +905,9 @@ fun SearchIconPackButton(iconPackageName: String, options: GenerationOptions, on
 
         GridImageList(iconPack, drawNames, options, onDismiss = {
             showPackDrawables = false
-        }) {
+        }) { resource, icon ->
             showPackDrawables = false
-            onSelect(it)
+            onSelect(resource, icon)
         }
     }
 }
@@ -896,7 +917,7 @@ fun GridImageList(iconPack: IconPack
                   , drawableNames: List<String>
                   , options: GenerationOptions
                   , onDismiss: () -> Unit
-                  , onSelect: (ExportableIcon) -> Unit) {
+                  , onSelect: (ResourceDrawable, ExportableIcon) -> Unit) {
     val context = getCurrentContext()
     val activity = getCurrentMainActivity()
     val appMan = ApplicationManager(context)
@@ -931,8 +952,8 @@ fun GridImageList(iconPack: IconPack
                     nameFilter = it
                     page = 1
                 }
-                GridImageList(exportDrawables) {
-                    onSelect(it)
+                GridImageList(exportDrawables) { resource, icon ->
+                    onSelect(resource, icon)
                 }
                 PageChanger(page
                     , havePreviousPage
@@ -950,14 +971,16 @@ fun GridImageList(iconPack: IconPack
 }
 
 @Composable
-fun GridImageList(drawables: List<ExportableIcon>, onSelect: (ExportableIcon) -> Unit) {
+fun GridImageList(drawables: Map<ResourceDrawable, ExportableIcon>, onSelect: (ResourceDrawable, ExportableIcon) -> Unit) {
+    val list = drawables.map { Pair(it.key, it.value) }
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(3)
     ) {
-        items(drawables) { image ->
-            Image(painter = image.getPainter()
+        items(list) { image ->
+            Image(painter = image.second.getPainter()
                 , ""
-                , Modifier.clickable { onSelect(image) })
+                , Modifier.clickable { onSelect(image.first, image.second) })
         }
     }
 }

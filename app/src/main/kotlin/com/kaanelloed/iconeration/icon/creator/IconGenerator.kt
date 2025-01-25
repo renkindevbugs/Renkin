@@ -57,17 +57,36 @@ class IconGenerator(
     private val primaryIconPackApplications: IconPackContainer,
     private val secondaryIconPackApplications: IconPackContainer
 ) {
-    private lateinit var apps: List<PackageInfoStruct>
-
     fun generateIcon(application: PackageInfoStruct,
                      onUpdate: (application: PackageInfoStruct, icon: ExportableIcon) -> Unit) {
         generateIcons(listOf(application), onUpdate)
     }
 
+    fun generateIcon(application: PackageInfoStruct,
+                     customIcon: ResourceDrawable?,
+                     onUpdate: (application: PackageInfoStruct, icon: ExportableIcon) -> Unit)  {
+        if (options.primarySource == Source.NONE) {
+            return
+        }
+
+        if (applicationShouldBeSkipped(application)) {
+            return
+        }
+
+        val icon = generateIcon(
+            application,
+            options.primarySource,
+            options.primaryImageEdit,
+            options.primaryTextType,
+            primaryIconPackApplications,
+            customIcon
+        )
+
+        onUpdate(application, icon)
+    }
+
     fun generateIcons(applications: List<PackageInfoStruct>
                       , onUpdate: (application: PackageInfoStruct, icon: ExportableIcon) -> Unit) {
-        apps = applications
-
         if (options.primarySource == Source.NONE) {
             return
         }
@@ -116,11 +135,12 @@ class IconGenerator(
         source: Source,
         imageEdit: ImageEdit,
         textType: TextType,
-        iconPack: IconPackContainer
+        iconPack: IconPackContainer,
+        customIcon: ResourceDrawable? = null
     ): ExportableIcon {
         return when (source) {
             Source.NONE -> EmptyIcon()
-            Source.ICON_PACK -> generateImageFromIconPack(application, imageEdit, iconPack)
+            Source.ICON_PACK -> generateImageFromIconPack(application, imageEdit, iconPack, customIcon)
             Source.APPLICATION_ICON -> generateImageFromApplication(application, imageEdit)
             Source.APPLICATION_NAME -> generateText(application.appName, textType)
         }
@@ -129,8 +149,10 @@ class IconGenerator(
     private fun generateImageFromIconPack(
         application: PackageInfoStruct,
         imageEdit: ImageEdit,
-        iconPack: IconPackContainer): ExportableIcon {
-        val resIcon = iconPack.getApplicationIcon(application.packageName) ?: return EmptyIcon()
+        iconPack: IconPackContainer,
+        customIcon: ResourceDrawable? = null
+    ): ExportableIcon {
+        val resIcon = customIcon ?: iconPack.getApplicationIcon(application.packageName) ?: return EmptyIcon()
 
         val bitmapIcon = getIconBitmap(resIcon.drawable)
         val parsedIcon = exportIconPackXML(iconPack.iconPackName, resIcon) ?: EmptyIcon()

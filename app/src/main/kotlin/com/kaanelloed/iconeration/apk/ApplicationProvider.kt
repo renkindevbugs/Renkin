@@ -222,7 +222,7 @@ class ApplicationProvider(private val context: Context) {
         }
     }
 
-    fun getIcon(application: PackageInfoStruct, options: GenerationOptions): ExportableIcon {
+    fun getIcon(application: PackageInfoStruct, options: GenerationOptions, customIcon: ResourceDrawable? = null): ExportableIcon {
         var icon: ExportableIcon = EmptyIcon()
 
         val primaryIconPackApps = getIconPackAppDrawables(options.primaryIconPack)
@@ -231,7 +231,7 @@ class ApplicationProvider(private val context: Context) {
         val pack2 = IconPackContainer("", emptyMap())
 
         val builder = IconGenerator(context, options, pack1, pack2)
-        builder.generateIcon(application) { _, newIcon ->
+        builder.generateIcon(application, customIcon) { _, newIcon ->
             icon = newIcon
         }
 
@@ -424,14 +424,14 @@ class ApplicationProvider(private val context: Context) {
         )
     }
 
-    fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): List<ExportableIcon> {
-        val exportDrawables = mutableListOf<ExportableIcon>()
+    fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, ExportableIcon> {
+        val exportDrawables = mutableMapOf<ResourceDrawable, ExportableIcon>()
 
         val pack = IconPackContainer("", emptyMap())
 
         val builder = IconGenerator(context, options, pack, pack)
         for (drawable in drawables) {
-            exportDrawables.add(builder.colorizeFromIconPack(iconPackName, drawable))
+            exportDrawables[drawable] = builder.colorizeFromIconPack(iconPackName, drawable)
         }
 
         return exportDrawables
