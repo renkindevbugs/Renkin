@@ -39,6 +39,9 @@
 # Fix signing errors
 -keep class com.android.apksig.internal** { * ; }
 
+# Fix some antivirus trojan flag
+-keep class ru.solrudev.ackpine** { * ; }
+
 # For shrinking troubleshooting, check these files in "app/build/outputs/mapping/release/"
 #   - "usage.txt" lists what ProGuard considers as dead code
 #   - "seeds.txt" exhaustively lists classes and classes members matched by "keep" rules
