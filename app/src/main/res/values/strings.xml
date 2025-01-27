@@ -75,14 +75,14 @@
     <string name="primarySource">Primary source</string>
     <string name="secondarySource">Secondary source</string>
     <string name="fullName">Full Name</string>
-    <string name="primaryImageEdit">Primary Image Edit</string>
+    <string name="primaryImageEdit">Primary Image Modifier</string>
     <string name="primaryTextType">Primary Text Type</string>
     <string name="primaryIconPack">Primary Icon Pack</string>
-    <string name="secondaryImageEdit">Secondary Image Edit</string>
+    <string name="secondaryImageEdit">Secondary Image Modifier</string>
     <string name="secondaryTextType">Secondary Text Type</string>
     <string name="secondaryIconPack">Secondary Icon Pack</string>
     <string name="source">Source</string>
-    <string name="imageEdit">ImageEdit</string>
+    <string name="imageEdit">Image Modifier</string>
     <string name="textType">Text Type</string>
     <string name="colorize">Colorize</string>
 </resources>
