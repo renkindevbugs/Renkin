@@ -125,7 +125,7 @@ class IconGenerator(
         val parsedIcon = exportIconPackXML(iconPackName, icon) ?: EmptyIcon()
 
         return if (options.primaryImageEdit == ImageEdit.COLORIZE)
-            colorizeImage(bitmapIcon, parsedIcon, PorterDuff.Mode.SRC_IN)
+            colorizeImage(bitmapIcon, parsedIcon, PorterDuff.Mode.MULTIPLY)
         else
             getDefaultIcon(bitmapIcon, parsedIcon)
     }
