@@ -5,7 +5,6 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
-import android.graphics.drawable.Drawable
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -23,7 +22,9 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
@@ -50,6 +51,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -75,24 +77,25 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import com.caverock.androidsvg.SVG
 import com.caverock.androidsvg.SVGParseException
 import com.kaanelloed.iconeration.R
-import com.kaanelloed.iconeration.icon.creator.IconGenerator
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
-import com.kaanelloed.iconeration.data.GenerationType
 import com.kaanelloed.iconeration.data.IconPack
+import com.kaanelloed.iconeration.data.ImageEdit
+import com.kaanelloed.iconeration.data.Source
+import com.kaanelloed.iconeration.data.TextType
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
-import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.toDrawable
 import com.kaanelloed.iconeration.drawable.ResourceDrawable
+import com.kaanelloed.iconeration.extension.toDrawable
 import com.kaanelloed.iconeration.icon.BitmapIcon
+import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.ExportableIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
+import com.kaanelloed.iconeration.icon.creator.GenerationOptions
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.vector.ImageVectorExtension.Companion.createEmptyVector
 import com.kaanelloed.iconeration.vector.ImageVectorExtension.Companion.getBuilder
@@ -111,11 +114,11 @@ const val MIME_TYPE_IMAGE = "image/*"
 fun OptionsDialog(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
-    onConfirmation: (options: IndividualOptions) -> Unit,
+    onConfirm: (icon: ExportableIcon) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
-    var options: IndividualOptions = EmptyOptions()
+    var icon: ExportableIcon = EmptyIcon()
 
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
@@ -124,13 +127,13 @@ fun OptionsDialog(
         onDismissRequest = onDismiss,
         title = { DialogTitle(app = app, onIconClear) },
         text = {
-            TabOptions(iconPacks, app, confirm = { onConfirmation(options) }) {
-                options = it
+            TabOptions(iconPacks, app) {
+                icon = it
             }
         },
         confirmButton = {
             IconButton(onClick = {
-                onConfirmation(options)
+                onConfirm(icon)
             }) {
                 Icon(
                     imageVector = Icons.Filled.Done,
@@ -219,8 +222,7 @@ fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
 fun TabOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
-    confirm: () -> Unit,
-    onChange: (options: IndividualOptions) -> Unit
+    onChange: (icon: ExportableIcon) -> Unit
 ) {
     var tabIndex by remember { mutableIntStateOf(0) }
 
@@ -246,9 +248,9 @@ fun TabOptions(
                 )
             }
         }
-        onChange(EmptyOptions())
+        onChange(EmptyIcon())
         when (tabIndex) {
-            0 -> CreateColumn(iconPacks, confirm, onChange)
+            0 -> CreateColumn(iconPacks, app, onChange)
             1 -> UploadColumn(onChange)
             2 -> PrepareEditVector(app, onChange)
         }
@@ -258,47 +260,100 @@ fun TabOptions(
 @Composable
 fun CreateColumn(
     iconPacks: List<IconPack>,
-    confirm: () -> Unit,
-    onChange: (options: IndividualOptions) -> Unit
+    app: PackageInfoStruct,
+    onChange: (icon: ExportableIcon) -> Unit
 ) {
-    var genType by rememberSaveable { mutableStateOf(GenerationType.PATH) }
+    var iconList: List<ExportableIcon> by rememberSaveable { mutableStateOf(listOf(EmptyIcon())) }
+    var customIconList: List<ResourceDrawable> by rememberSaveable { mutableStateOf(listOf()) }
+
+    var source by rememberSaveable { mutableStateOf(Source.NONE) }
+    var imageEdit by rememberSaveable { mutableStateOf(ImageEdit.NONE) }
+    var textType by rememberSaveable { mutableStateOf(TextType.FULL_NAME) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
-    var colorizeIconPack by rememberSaveable { mutableStateOf(false) }
 
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
     var iconPack by rememberSaveable { mutableStateOf("") }
 
-    val generatingOptions = IconGenerator.GenerationOptions(iconColor.toInt(), useMonochrome, useVector, colorizeIconPack = colorizeIconPack)
-    val options = CreatedOptions(generatingOptions, genType, iconPack)
+    val generatingOptions = GenerationOptions(source, imageEdit, textType, iconPack, iconColor.toInt(), 0, useVector, useMonochrome, false, true)
 
-    Column {
-        //TODO: Add preview image
+    val activity = getCurrentMainActivity()
 
-        TypeDropdown(genType) { genType = it }
-        IconPackDropdown(iconPacks, iconPack) { iconPack = it.packageName }
+    LaunchedEffect(generatingOptions, customIconList) {
+        val custom = if (customIconList.isNotEmpty()) customIconList[0] else null
+        val newIcon = activity.appProvider.getIcon(app, generatingOptions, custom)
+        iconList = iconList.toMutableList().also { it[0] = newIcon }
+    }
 
-        if (iconPack != "") {
-            SearchIconPackButton(iconPack, options) {
-                onChange(UploadedOptions(it))
-                confirm()
+    val icon = iconList[0]
+
+    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+        if (icon !is EmptyIcon) {
+            Row(Modifier.fillMaxWidth()
+                , horizontalArrangement = Arrangement.Center) {
+                Image(painter = icon.getPainter()
+                    , contentDescription = null
+                    , modifier = Modifier
+                        .padding(2.dp)
+                        .size(78.dp, 78.dp))
             }
-            ColorizeIconPackSwitch(colorizeIconPack) { colorizeIconPack = it }
+        }
+
+        SourceDropdown(R.string.source, source) { source = it }
+
+        if (needIconPack(source)) {
+            IconPackDropdown(R.string.iconPack, iconPacks, iconPack, app.toInstalledApplication()) { iconPack = it.packageName }
+        }
+
+        //TODO: keep icon in memory to apply image edit
+        if (isIconPackSelected(source, iconPack)) {
+            Row(modifier = Modifier.fillMaxWidth()
+                , horizontalArrangement = Arrangement.Center) {
+                SearchIconPackButton(iconPack, generatingOptions) { resource, newIcon ->
+                    customIconList = customIconList.toMutableList().also {
+                        if (it.isEmpty()) {
+                            it.add(resource)
+                        } else {
+                            it[0] = resource
+                        }
+                    }
+                }
+
+                if (customIconList.isNotEmpty()) {
+                    IconButton(onClick = {
+                        customIconList = listOf()
+                    }) {
+                        Icon(
+                            imageVector = Icons.Filled.Clear,
+                            contentDescription = "Clear",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+
+        if (needImageEdit(source)) {
+            ImageEditDropdown(R.string.imageEdit, imageEdit) { imageEdit = it }
+        }
+
+        if (needTextType(source)) {
+            TextTypeDropdown(R.string.textType, textType) { textType = it }
         }
 
         ColorButton(stringResource(R.string.iconColor), Color.White) { iconColor = it }
 
-        if (genType == GenerationType.PATH) {
+        if (isPathTracingEnabled(source, imageEdit)) {
             VectorSwitch(useVector) { useVector = it }
             MonochromeSwitch(useMonochrome) { useMonochrome = it }
         }
 
-        onChange(options)
+        onChange(icon)
     }
 }
 
 @Composable
-fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
+fun UploadColumn(onChange: (icon: ExportableIcon) -> Unit) {
     var imageUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
     var currentUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
     var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
@@ -380,7 +435,7 @@ fun UploadColumn(onChange: (options: IndividualOptions) -> Unit) {
                 ZoomSlider(zoomLevel, onChange = { zoomLevel = it })
             }
 
-            onChange(UploadedOptions(BitmapIcon(zoomedImage, asAdaptiveIcon)))
+            onChange(BitmapIcon(zoomedImage, asAdaptiveIcon))
         }
     }
 }
@@ -561,7 +616,7 @@ fun AdaptiveIconSwitch(asAdaptiveIcon: Boolean, onChange: (newValue: Boolean) ->
 }
 
 @Composable
-fun PrepareEditVector(app: PackageInfoStruct, onChange: (options: IndividualOptions) -> Unit) {
+fun PrepareEditVector(app: PackageInfoStruct, onChange: (icon: ExportableIcon) -> Unit) {
     val editedVector = if (app.createdIcon is VectorIcon) {
         app.createdIcon.vector.toMutableImageVector().applyAndRemoveGroup().toImageVector()
     } else {
@@ -572,7 +627,7 @@ fun PrepareEditVector(app: PackageInfoStruct, onChange: (options: IndividualOpti
 }
 
 @Composable
-fun EditVectorColumn(vector: ImageVector, onChange: (options: IndividualOptions) -> Unit) {
+fun EditVectorColumn(vector: ImageVector, onChange: (icon: ExportableIcon) -> Unit) {
     Column(
         Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -662,7 +717,7 @@ fun EditVectorColumn(vector: ImageVector, onChange: (options: IndividualOptions)
             }
         }
 
-        onChange(EditedVectorOptions(VectorIcon(editedVector.toImageVector())))
+        onChange(VectorIcon(editedVector.toImageVector()))
     }
 }
 
@@ -828,7 +883,7 @@ fun CenterSwitch(onChange: (newValue: Boolean) -> Unit) {
 }
 
 @Composable
-fun SearchIconPackButton(iconPackageName: String, options: CreatedOptions , onSelect: (ExportableIcon) -> Unit) {
+fun SearchIconPackButton(iconPackageName: String, options: GenerationOptions, onSelect: (ResourceDrawable, ExportableIcon) -> Unit) {
     var showPackDrawables by rememberSaveable { mutableStateOf(false) }
 
     val context = getCurrentContext()
@@ -848,25 +903,25 @@ fun SearchIconPackButton(iconPackageName: String, options: CreatedOptions , onSe
         val iconPack = activity.appProvider.iconPacks.find { it.packageName == iconPackageName }!!
         val drawNames = ApplicationManager(context).getIconPackDrawableNames(iconPackageName)
 
-        GridImageList(iconPack, options, drawNames, onDismiss = {
+        GridImageList(iconPack, drawNames, options, onDismiss = {
             showPackDrawables = false
-        }) {
+        }) { resource, icon ->
             showPackDrawables = false
-            onSelect(it)
+            onSelect(resource, icon)
         }
     }
 }
 
 @Composable
 fun GridImageList(iconPack: IconPack
-                  , options: CreatedOptions
                   , drawableNames: List<String>
+                  , options: GenerationOptions
                   , onDismiss: () -> Unit
-                  , onSelect: (ExportableIcon) -> Unit) {
+                  , onSelect: (ResourceDrawable, ExportableIcon) -> Unit) {
     val context = getCurrentContext()
     val activity = getCurrentMainActivity()
     val appMan = ApplicationManager(context)
-    val maxItems = 9
+    val itemsPerPage = 9
 
     var nameFilter by rememberSaveable { mutableStateOf("") }
     var page by rememberSaveable { mutableIntStateOf(1) }
@@ -874,21 +929,16 @@ fun GridImageList(iconPack: IconPack
     val formattedNameFilter = nameFilter.lowercase().trim().replace(' ', '_')
     val filteredDrawableNames = drawableNames.filter { it.contains(formattedNameFilter) }
 
-    val startIndex = (page - 1) * maxItems
-    val endIndex = min(startIndex + maxItems, filteredDrawableNames.lastIndex)
+    val startIndex = (page - 1) * itemsPerPage
+    val endIndex = min(startIndex + itemsPerPage, filteredDrawableNames.lastIndex)
     val names = filteredDrawableNames.subList(startIndex, endIndex + 1)
 
     val ids = appMan.getIconPackDrawableIds(iconPack.packageName, names)
-    val drawables = appMan.getIconPackDrawables(iconPack.packageName, ids.subList(0, min(maxItems, ids.size)))
-    val exportDrawables = mutableListOf<ExportableIcon>()
-
-    val builder = activity.appProvider.getIconBuilder(options, true)
-    for (drawable in drawables) {
-        exportDrawables.add(builder.colorizeFromIconPack(drawable))
-    }
+    val drawables = appMan.getIconPackDrawables(iconPack.packageName, ids.subList(0, min(itemsPerPage, ids.size)))
+    val exportDrawables = activity.appProvider.getIconPackIcons(iconPack.packageName, options, drawables)
 
     val havePreviousPage = page > 1
-    val haveNextPage = ids.count() > maxItems
+    val haveNextPage = ids.count() > itemsPerPage
 
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
@@ -902,8 +952,8 @@ fun GridImageList(iconPack: IconPack
                     nameFilter = it
                     page = 1
                 }
-                GridImageList(exportDrawables) {
-                    onSelect(it)
+                GridImageList(exportDrawables) { resource, icon ->
+                    onSelect(resource, icon)
                 }
                 PageChanger(page
                     , havePreviousPage
@@ -921,14 +971,16 @@ fun GridImageList(iconPack: IconPack
 }
 
 @Composable
-fun GridImageList(drawables: List<ExportableIcon>, onSelect: (ExportableIcon) -> Unit) {
+fun GridImageList(drawables: Map<ResourceDrawable, ExportableIcon>, onSelect: (ResourceDrawable, ExportableIcon) -> Unit) {
+    val list = drawables.map { Pair(it.key, it.value) }
+
     LazyVerticalGrid(
         columns = GridCells.Fixed(3)
     ) {
-        items(drawables) { image ->
-            Image(painter = image.getPainter()
+        items(list) { image ->
+            Image(painter = image.second.getPainter()
                 , ""
-                , Modifier.clickable { onSelect(image) })
+                , Modifier.clickable { onSelect(image.first, image.second) })
         }
     }
 }

@@ -1,0 +1,5 @@
+- Generation type split into source and image modifier/text type
+- Options now have a primary source and a secondary source
+- In Options, the icon pack icon appears in the dropdown list
+- In the individual options, a preview image is displayed
+- In the individual options, the application icon in each icon pack is displayed in the dropdown list
