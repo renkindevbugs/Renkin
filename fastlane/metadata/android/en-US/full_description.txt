@@ -1,17 +1,14 @@
 <i>Formerly Iconeration</i>. Icon pack creator for Android and Arcticons companion application. Create your own icon pack or extend Arcticons or another icon pack.
 
-<big><b>Basic features</b></big>
+<b>Basic features</b>
 
 <ul><li>Get icon from icon pack</li>
 <li>Use path tracing on the application icon using Color Quantization</li>
 <li>Use canny edge detection on the application icon</li>
 <li>Create text from application name using Arcticons OTF font</li>
-    <ul><li>First letter</li>
-    <li>Two letters</li>
-    <li>Full application name</li></ul>
 <li>Choose icon color</li></ul>
 
-<big><b>Advanced features</b></big>
+<b>Advanced features</b>
 
 <ul><li>Use the vector version of the application icon if available</li>
 <li>Use the monochrome version of the application icon if available</li>
