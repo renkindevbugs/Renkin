@@ -1,5 +1,6 @@
 package com.kaanelloed.iconeration.ui
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -251,7 +252,7 @@ fun TabOptions(
         onChange(EmptyIcon())
         when (tabIndex) {
             0 -> CreateColumn(iconPacks, app, onChange)
-            1 -> UploadColumn(onChange)
+            1 -> UploadColumn(app, onChange)
             2 -> PrepareEditVector(app, onChange)
         }
     }
@@ -353,16 +354,39 @@ fun CreateColumn(
 }
 
 @Composable
-fun UploadColumn(onChange: (icon: ExportableIcon) -> Unit) {
+fun UploadColumn(app: PackageInfoStruct,
+                 onChange: (icon: ExportableIcon) -> Unit) {
+    var imageModifier by rememberSaveable { mutableStateOf(ImageEdit.NONE) }
     var imageUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
-    var currentUri by rememberSaveable { mutableStateOf(Uri.EMPTY) }
     var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
     var zoomLevel by rememberSaveable { mutableFloatStateOf(1f) }
     var uploadedImage by remember { mutableStateOf(null as Bitmap?) }
+    var modifiedImage by remember { mutableStateOf(null as Bitmap?) }
     var mask by remember { mutableStateOf(null as Bitmap?) }
+    var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
     val maxSize = 500
 
-    val res = getCurrentContext().resources
+    val activity = getCurrentMainActivity()
+    val context = getCurrentContext()
+    val res = context.resources
+
+    LaunchedEffect(imageUri) {
+        if (imageUri != Uri.EMPTY) {
+            uploadedImage = getBitmapFromURI(context, imageUri)?.toDrawable(res)?.shrinkIfBiggerThan(maxSize)
+
+            if (uploadedImage != null) {
+                uploadedImage = squareBitmap(uploadedImage!!)
+                mask = createMask(uploadedImage!!)
+            }
+        }
+    }
+
+    LaunchedEffect(imageUri, imageModifier, iconColor) {
+        if (uploadedImage != null) {
+            val generatingOptions = GenerationOptions(Source.ICON_PACK, imageModifier, TextType.FULL_NAME, "", iconColor.toInt(), 0, false, false, false, true)
+            modifiedImage = activity.appProvider.getIcon(app, generatingOptions, ResourceDrawable(0, uploadedImage!!.toDrawable(res))).toBitmap()
+        }
+    }
 
     Column(
         Modifier.fillMaxWidth(),
@@ -370,31 +394,20 @@ fun UploadColumn(onChange: (icon: ExportableIcon) -> Unit) {
     ) {
         UploadButton { imageUri = it }
         if (imageUri != Uri.EMPTY) {
-            if (imageUri != currentUri) {
-                uploadedImage = null
-                currentUri = imageUri
-                mask = null
-            }
-
-            if (uploadedImage == null) {
-                uploadedImage = getBitmapFromURI(imageUri)?.toDrawable(res)?.shrinkIfBiggerThan(maxSize)
-
-                if (uploadedImage != null) {
-                    uploadedImage = squareBitmap(uploadedImage!!)
-                    mask = createMask(uploadedImage!!)
-                }
-            }
-
             if (uploadedImage == null) {
                 ShowToast(stringResource(R.string.uploadImageError))
                 return
             }
 
-            val zoomedImage = zoomBitmap(uploadedImage!!, zoomLevel)
+            if (modifiedImage == null) {
+                return
+            }
+
+            val zoomedImage = zoomBitmap(modifiedImage!!, zoomLevel)
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
                 Image(
-                    painter = BitmapPainter(uploadedImage!!.asImageBitmap()),
+                    painter = BitmapPainter(modifiedImage!!.asImageBitmap()),
                     contentDescription = null,
                     //contentScale = ContentScale.Inside,
                     modifier = Modifier
@@ -429,10 +442,16 @@ fun UploadColumn(onChange: (icon: ExportableIcon) -> Unit) {
                 Text(stringResource(R.string.deadZone), color = Red)
             }
 
-            AdaptiveIconSwitch(asAdaptiveIcon, onChange = { asAdaptiveIcon = it })
+            AdaptiveIconSwitch(asAdaptiveIcon, onChange = { asAdaptiveIcon = it; zoomLevel = 1f })
             
             if (asAdaptiveIcon) {
                 ZoomSlider(zoomLevel, onChange = { zoomLevel = it })
+            }
+
+            ImageEditDropdown(R.string.imageEdit, imageModifier) { imageModifier = it }
+
+            if (imageModifier != ImageEdit.NONE) {
+                ColorButton(stringResource(R.string.iconColor), Color.White) { iconColor = it }
             }
 
             onChange(BitmapIcon(zoomedImage, asAdaptiveIcon))
@@ -440,9 +459,8 @@ fun UploadColumn(onChange: (icon: ExportableIcon) -> Unit) {
     }
 }
 
-@Composable
-private fun getBitmapFromURI(uri: Uri): Bitmap? {
-    val contentResolver = getCurrentContext().contentResolver
+private fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
+    val contentResolver = context.contentResolver
 
     var bitmap = contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it) }
 
@@ -492,7 +510,6 @@ private fun zoomBitmap(image: Bitmap, zoomLevel: Float): Bitmap {
     return zoomedImage
 }
 
-@Composable
 private fun squareBitmap(image: Bitmap): Bitmap {
     if (image.width == image.height) {
         return image
@@ -513,7 +530,6 @@ private fun squareBitmap(image: Bitmap): Bitmap {
     return squaredImage
 }
 
-@Composable
 private fun createMask(image: Bitmap): Bitmap {
     val startActiveZone = image.width / 6f
     val topActiveZone = image.height / 6f
