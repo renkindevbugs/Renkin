@@ -1,0 +1,5 @@
+New
+- Add image modifier for uploaded image
+
+Fixed
+- Icon too big in icon pack dropdown
