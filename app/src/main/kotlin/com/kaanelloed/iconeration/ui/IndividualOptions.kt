@@ -306,11 +306,10 @@ fun CreateColumn(
             IconPackDropdown(R.string.iconPack, iconPacks, iconPack, app.toInstalledApplication()) { iconPack = it.packageName }
         }
 
-        //TODO: keep icon in memory to apply image edit
         if (isIconPackSelected(source, iconPack)) {
             Row(modifier = Modifier.fillMaxWidth()
                 , horizontalArrangement = Arrangement.Center) {
-                SearchIconPackButton(iconPack, generatingOptions) { resource, newIcon ->
+                SearchIconPackButton(iconPack, generatingOptions) { resource, _ ->
                     customIconList = customIconList.toMutableList().also {
                         if (it.isEmpty()) {
                             it.add(resource)
@@ -364,6 +363,7 @@ fun UploadColumn(app: PackageInfoStruct,
     var modifiedImage by remember { mutableStateOf(null as Bitmap?) }
     var mask by remember { mutableStateOf(null as Bitmap?) }
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
+    var uploadError by remember { mutableStateOf(false) }
     val maxSize = 500
 
     val activity = getCurrentMainActivity()
@@ -377,6 +377,8 @@ fun UploadColumn(app: PackageInfoStruct,
             if (uploadedImage != null) {
                 uploadedImage = squareBitmap(uploadedImage!!)
                 mask = createMask(uploadedImage!!)
+            } else {
+                uploadError = true
             }
         }
     }
@@ -394,8 +396,9 @@ fun UploadColumn(app: PackageInfoStruct,
     ) {
         UploadButton { imageUri = it }
         if (imageUri != Uri.EMPTY) {
-            if (uploadedImage == null) {
+            if (uploadError) {
                 ShowToast(stringResource(R.string.uploadImageError))
+                uploadError = false
                 return
             }
 
