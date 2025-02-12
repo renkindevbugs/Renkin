@@ -10,7 +10,6 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
-import androidx.core.content.res.ResourcesCompat
 import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import app.revanced.library.ApkUtils
@@ -18,10 +17,12 @@ import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.constants.SuppressDeprecation
 import com.kaanelloed.iconeration.constants.SuppressSameParameterValue
 import com.kaanelloed.iconeration.data.InstalledApplication
+import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.toSafeBitmapOrNull
 import com.kaanelloed.iconeration.extension.getBytes
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager
+import com.kaanelloed.iconeration.packages.ApplicationManager.Companion.getDrawableOrNull
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.packages.PackageVersion
 import com.kaanelloed.iconeration.vector.brush.ReferenceBrush
@@ -157,8 +158,11 @@ class IconPackBuilder(
         }
 
         for (drawable in calendarIconsDrawable) {
-            createBitmapResource(apkModule, packageBlock, drawable.value.toBitmap(), drawable.key)
-            drawableXml.item(drawable.key)
+            val bitmap = drawable.value.toSafeBitmapOrNull()
+            if (bitmap != null) {
+                createBitmapResource(apkModule, packageBlock, bitmap, drawable.key)
+                drawableXml.item(drawable.key)
+            }
         }
 
         apkModule.add(ByteInputSource(drawableXml.getBytes(), "assets/drawable.xml"))
@@ -295,7 +299,9 @@ class IconPackBuilder(
 
     @Suppress(SuppressSameParameterValue)
     private fun createBitmapResource(apkModule: ApkModule, packageBlock: PackageBlock, @DrawableRes resId: Int, name: String, qualifier: String = "", type: String = "drawable"): Entry {
-        val bitmap = ResourcesCompat.getDrawable(ctx.resources, resId, null)!!.toBitmap()
+        val drawable = ctx.resources.getDrawableOrNull(resId, null)
+        val bitmap = drawable?.toSafeBitmapOrNull() ?: return Entry()
+
         return createBitmapResource(apkModule, packageBlock, bitmap, name, qualifier, type)
     }
 

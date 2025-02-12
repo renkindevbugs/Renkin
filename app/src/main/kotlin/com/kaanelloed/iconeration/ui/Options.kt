@@ -15,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.DropdownMenuItem
@@ -40,12 +39,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.graphics.vector.VectorPainter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.core.graphics.drawable.toBitmap
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.data.BackgroundColorKey
 import com.kaanelloed.iconeration.data.CalendarIconsKey
@@ -88,8 +83,6 @@ import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfB
 import com.kaanelloed.iconeration.drawable.ResourceDrawable
 import com.kaanelloed.iconeration.icon.BitmapIcon
 import com.kaanelloed.iconeration.icon.ExportableIcon
-import com.kaanelloed.iconeration.icon.VectorIcon
-import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageVersion
 import kotlinx.coroutines.launch
 
@@ -546,13 +539,14 @@ fun IconPackDropdown(
         ) {
             newList.forEach { selectionOption ->
                 val icon = icons.entries.find { it.key == selectionOption.packageName }
+                val bitmap = icon?.value?.drawable?.shrinkIfBiggerThan(500)
 
                 DropdownMenuItem(
                     text = { Text(text = selectionOption.applicationName) },
                     trailingIcon = {
-                        if (icon != null) {
+                        if (bitmap != null) {
                             Image(
-                                painter = BitmapIcon(icon.value.drawable.shrinkIfBiggerThan(500)).getPainter(),
+                                painter = BitmapIcon(bitmap).getPainter(),
                                 contentDescription = null,
                                 modifier = Modifier.size(50.dp)
                             )

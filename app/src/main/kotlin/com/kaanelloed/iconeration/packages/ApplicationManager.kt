@@ -11,6 +11,7 @@ import android.content.pm.PackageManager
 import android.content.pm.PackageManager.ResolveInfoFlags
 import android.content.pm.ResolveInfo
 import android.content.res.Resources
+import android.content.res.Resources.Theme
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.os.UserManager
@@ -408,7 +409,7 @@ class ApplicationManager(private val ctx: Context) {
     }
 
     private fun getResIcon(res: Resources, resourceId: Int): Drawable? {
-        if (resourceId > 0) return ResourcesCompat.getDrawable(res, resourceId, null)
+        if (resourceId > 0) return res.getDrawableOrNull(resourceId, null)
         return null
     }
 
@@ -483,6 +484,14 @@ class ApplicationManager(private val ctx: Context) {
         fun Resources.getXmlOrNull(resourceId: Int): XmlPullParser? {
             return try {
                 this.getXml(resourceId)
+            } catch (e: Resources.NotFoundException) {
+                null
+            }
+        }
+
+        fun Resources.getDrawableOrNull(resourceId: Int, theme: Theme? = null): Drawable? {
+            return try {
+                ResourcesCompat.getDrawable(this, resourceId, theme)
             } catch (e: Resources.NotFoundException) {
                 null
             }

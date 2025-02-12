@@ -121,7 +121,7 @@ class IconGenerator(
     }
 
     fun colorizeFromIconPack(iconPackName: String, icon: ResourceDrawable): ExportableIcon {
-        val bitmapIcon = getIconBitmap(icon.drawable)
+        val bitmapIcon = getIconBitmap(icon.drawable) ?: return EmptyIcon()
         val parsedIcon = exportIconPackXML(iconPackName, icon) ?: EmptyIcon()
 
         return if (options.primaryImageEdit == ImageEdit.COLORIZE)
@@ -154,7 +154,7 @@ class IconGenerator(
     ): ExportableIcon {
         val resIcon = customIcon ?: iconPack.getApplicationIcon(application.packageName) ?: return EmptyIcon()
 
-        val bitmapIcon = getIconBitmap(resIcon.drawable)
+        val bitmapIcon = getIconBitmap(resIcon.drawable) ?: return EmptyIcon()
         val parsedIcon = exportIconPackXML(iconPack.iconPackName, resIcon) ?: EmptyIcon()
 
         return generateImage(bitmapIcon, parsedIcon, imageEdit, PorterDuff.Mode.MULTIPLY)
@@ -164,7 +164,7 @@ class IconGenerator(
         application: PackageInfoStruct,
         imageEdit: ImageEdit): ExportableIcon {
 
-        val bitmapIcon = getAppIconBitmap(application)
+        val bitmapIcon = getAppIconBitmap(application) ?: return EmptyIcon()
         val parsedIcon = parseApplicationIcon(application)
 
         return generateImage(bitmapIcon, parsedIcon, imageEdit, PorterDuff.Mode.MULTIPLY)
@@ -285,7 +285,7 @@ class IconGenerator(
         return VectorIcon(vector)
     }
 
-    private fun getAppIconBitmap(app: PackageInfoStruct, maxSize: Int = 500): Bitmap {
+    private fun getAppIconBitmap(app: PackageInfoStruct, maxSize: Int = 500): Bitmap? {
         var newIcon = app.icon
 
         if (newIcon.isAdaptiveIconDrawable()) {
@@ -370,7 +370,7 @@ class IconGenerator(
         return builder.build()
     }
 
-    private fun getIconBitmap(icon: Drawable, maxSize: Int = 500): Bitmap {
+    private fun getIconBitmap(icon: Drawable, maxSize: Int = 500): Bitmap? {
         return if (icon.isAdaptiveIconDrawable()) {
             icon as AdaptiveIconDrawable
             icon.foreground.shrinkIfBiggerThan(maxSize)
