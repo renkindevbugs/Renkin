@@ -27,6 +27,7 @@ import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfB
 import com.kaanelloed.iconeration.drawable.ForegroundIconDrawable
 import com.kaanelloed.iconeration.drawable.ResourceDrawable
 import com.kaanelloed.iconeration.extension.changeBackgroundColor
+import com.kaanelloed.iconeration.extension.clone
 import com.kaanelloed.iconeration.icon.AdaptiveIcon
 import com.kaanelloed.iconeration.icon.parser.AdaptiveIconParser
 import com.kaanelloed.iconeration.icon.BaseIcon
@@ -227,7 +228,13 @@ class IconGenerator(
             options.color
         )
 
-        return BitmapIcon(edgeDetector.edgesImage)
+        val bitmap = if (options.themed) {
+            convertBitmapToAdaptiveForeground(edgeDetector.edgesImage)
+        } else {
+            edgeDetector.edgesImage
+        }
+
+        return BitmapIcon(bitmap)
     }
 
     private fun generatePathTracing(bitmapIcon: Bitmap, parsedIcon: BaseIcon): ExportableIcon {
@@ -306,9 +313,26 @@ class IconGenerator(
 
     private fun getDefaultIcon(bitmapIcon: Bitmap, parsedIcon: BaseIcon): ExportableIcon {
         return if (parsedIcon is VectorIcon) {
-            parsedIcon
+            getDefaultVectorIcon(parsedIcon)
         } else {
-            BitmapIcon(bitmapIcon)
+            getDefaultBitmapIcon(bitmapIcon)
+        }
+    }
+
+    private fun getDefaultBitmapIcon(bitmap: Bitmap): BitmapIcon {
+        return if (options.themed) {
+            BitmapIcon(convertBitmapToAdaptiveForeground(bitmap))
+        } else {
+            BitmapIcon(bitmap)
+        }
+    }
+
+    private fun getDefaultVectorIcon(vectorIcon: VectorIcon): VectorIcon {
+        return if (options.themed) {
+            val vector = vectorIcon.vector.toMutableImageVector().scaleAtCenter(0.5f)
+            VectorIcon(vector)
+        } else {
+            vectorIcon
         }
     }
 
@@ -380,13 +404,25 @@ class IconGenerator(
     }
 
     private fun colorizeBitmap(icon: Bitmap, mode: PorterDuff.Mode): Bitmap {
-        val coloredIcon = icon.copy(icon.config!!, true)
+        val coloredIcon = icon.clone()
         val paint = Paint()
 
         paint.colorFilter = PorterDuffColorFilter(options.color, mode)
-        Canvas(coloredIcon).drawBitmap(coloredIcon, 0F, 0F, paint)
+        val canvas = Canvas(coloredIcon)
+        if (options.themed) canvas.scale(0.5f, 0.5f, icon.width * 0.5f, icon.height * 0.5f)
+        canvas.drawBitmap(icon, 0F, 0F, paint)
 
         return addBackground(coloredIcon)
+    }
+
+    private fun convertBitmapToAdaptiveForeground(bitmap: Bitmap): Bitmap {
+        val newBitmap = bitmap.clone()
+        val canvas = Canvas(newBitmap)
+
+        canvas.scale(0.5f, 0.5f, bitmap.width * 0.5f, bitmap.height * 0.5f)
+        canvas.drawBitmap(bitmap, 0F, 0F, Paint())
+
+        return newBitmap
     }
 
     private fun addBackground(image: Bitmap): Bitmap {

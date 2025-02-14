@@ -115,6 +115,7 @@ const val MIME_TYPE_IMAGE = "image/*"
 fun OptionsDialog(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
+    themed: Boolean,
     onConfirm: (icon: ExportableIcon) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
@@ -128,7 +129,7 @@ fun OptionsDialog(
         onDismissRequest = onDismiss,
         title = { DialogTitle(app = app, onIconClear) },
         text = {
-            TabOptions(iconPacks, app) {
+            TabOptions(iconPacks, app, themed) {
                 icon = it
             }
         },
@@ -223,6 +224,7 @@ fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
 fun TabOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
+    themed: Boolean,
     onChange: (icon: ExportableIcon) -> Unit
 ) {
     var tabIndex by remember { mutableIntStateOf(0) }
@@ -251,7 +253,7 @@ fun TabOptions(
         }
         onChange(EmptyIcon())
         when (tabIndex) {
-            0 -> CreateColumn(iconPacks, app, onChange)
+            0 -> CreateColumn(iconPacks, app, themed, onChange)
             1 -> UploadColumn(app, onChange)
             2 -> PrepareEditVector(app, onChange)
         }
@@ -262,6 +264,7 @@ fun TabOptions(
 fun CreateColumn(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
+    themed: Boolean,
     onChange: (icon: ExportableIcon) -> Unit
 ) {
     var iconList: List<ExportableIcon> by rememberSaveable { mutableStateOf(listOf(EmptyIcon())) }
@@ -276,7 +279,7 @@ fun CreateColumn(
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
     var iconPack by rememberSaveable { mutableStateOf("") }
 
-    val generatingOptions = GenerationOptions(source, imageEdit, textType, iconPack, iconColor.toInt(), 0, useVector, useMonochrome, false, true)
+    val generatingOptions = GenerationOptions(source, imageEdit, textType, iconPack, iconColor.toInt(), 0, useVector, useMonochrome, themed, override = true)
 
     val activity = getCurrentMainActivity()
 

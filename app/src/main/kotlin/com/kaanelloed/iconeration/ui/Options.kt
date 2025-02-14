@@ -90,11 +90,12 @@ import kotlinx.coroutines.launch
 fun AppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
+    themed: Boolean,
     onConfirm: (icon: ExportableIcon) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
-    OptionsDialog(iconPacks, app, onConfirm, onDismiss, onIconClear)
+    OptionsDialog(iconPacks, app, themed, onConfirm, onDismiss, onIconClear)
 }
 
 @Composable

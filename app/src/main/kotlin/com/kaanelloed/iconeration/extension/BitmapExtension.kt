@@ -10,11 +10,17 @@ import android.util.Base64
 import java.io.ByteArrayOutputStream
 
 fun Bitmap.changeBackgroundColor(color: Int): Bitmap {
-    val newBitmap = Bitmap.createBitmap(width, height, config!!)
+    val newBitmap = this.clone()
     val canvas = Canvas(newBitmap)
     canvas.drawColor(color)
     canvas.drawBitmap(this, 0F, 0F, null)
     recycle()
+    return newBitmap
+}
+
+fun Bitmap.clone(): Bitmap {
+    val newBitmap = Bitmap.createBitmap(width, height, config!!)
+    newBitmap.density = density
     return newBitmap
 }
 

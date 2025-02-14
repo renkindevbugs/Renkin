@@ -168,7 +168,7 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
     }
 
     if (openAppOptions) {
-        OpenAppOptions(iconPacks, app, index) {
+        OpenAppOptions(iconPacks, app, themed, index) {
             openAppOptions = false
         }
     }
@@ -183,12 +183,13 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
 fun OpenAppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
+    themed: Boolean,
     index: Int,
     onDismiss: () -> Unit
 ) {
     val activity = getCurrentMainActivity()
 
-    AppOptions(iconPacks, app, { icon ->
+    AppOptions(iconPacks, app, themed, { icon ->
         CoroutineScope(Dispatchers.Default).launch {
             activity.appProvider.editApplication(index, app.changeExport(icon))
             onDismiss()
