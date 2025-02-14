@@ -50,6 +50,8 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
     }
 
     private fun scaleAtCenter(scale: Float): MutableImageVector {
+        if (scale == 1f) return mutableVector
+
         return scaleAtCenter(scale, scale)
     }
 

@@ -401,9 +401,11 @@ class IconGenerator(
 
         val adaptiveIcon = AdaptiveIconParser.parse(res, parser.toXmlNode()) ?: return null
         var vectorIcon: VectorIcon? = null
+        var insetModifier = 1f
 
         if (adaptiveIcon.foreground is InsetIcon) {
             val inset = adaptiveIcon.foreground
+            if (inset.inset < 1f) insetModifier = inset.inset * 2 //TODO: handle dimension
             if (inset.innerIcon is VectorIcon) {
                 vectorIcon = inset.innerIcon
             }
@@ -417,7 +419,7 @@ class IconGenerator(
             return null
         }
 
-        val mutableVector = vectorIcon.vector.toMutableImageVector().resizeAndCenter().scaleAtCenter(0.5f)
+        val mutableVector = vectorIcon.vector.toMutableImageVector().resizeAndCenter().scaleAtCenter(insetModifier)
 
         val stroke = mutableVector.viewportHeight / 48 //1F at 48
         mutableVector.root.editStrokePaths(stroke)

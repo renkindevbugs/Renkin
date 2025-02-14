@@ -96,9 +96,24 @@ class AdaptiveIconParser(private val resources: Resources) {
     }
 
     private fun parseInset(node: XmlNode): InsetIcon? {
-        val inset = 0F //TODO
+        val inset = parseInsetValue(node)
         val icon = parseChild(node) ?: return null
         return InsetIcon(inset, icon)
+    }
+
+    private fun parseInsetValue(node: XmlNode): Float {
+        val inset = node.getAttributeValue("inset")
+
+        if (inset != null) {
+            if (inset.contains("%")) {
+                val perc = inset.replace("%", "").toFloatOrNull() ?: 1f
+                return perc / 100
+            }
+
+            return 1f //TODO: handle dimension
+        }
+
+        return 1f
     }
 
     private fun parseVector(node: XmlNode): VectorIcon? {
