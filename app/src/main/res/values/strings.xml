@@ -85,4 +85,5 @@
     <string name="imageEdit">Image Modifier</string>
     <string name="textType">Text Type</string>
     <string name="colorize">Colorize</string>
+    <string name="clearIcons">Clear icons</string>
 </resources>

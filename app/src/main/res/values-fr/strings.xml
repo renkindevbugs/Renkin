@@ -84,4 +84,5 @@
     <string name="imageEdit">Édition d\'image</string>
     <string name="textType">Type de texte</string>
     <string name="colorize">Coloriser</string>
+    <string name="clearIcons">Retirer les icônes</string>
 </resources>

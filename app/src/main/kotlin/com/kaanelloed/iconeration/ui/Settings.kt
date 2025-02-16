@@ -97,6 +97,7 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
 
                 SyncButton()
                 RefreshApplicationListButton()
+                RemoveIconsButton()
                 DeleteIconPackButton()
                 AppVersion()
             }
@@ -206,6 +207,19 @@ fun DeleteIconPackButton() {
         openSuccess = false
     }
 }
+
+@Composable
+fun RemoveIconsButton() {
+    val mainActivity = getCurrentMainActivity()
+
+    Button( onClick = { CoroutineScope(Dispatchers.Default).launch {
+        mainActivity.appProvider.clearIcons()
+    }}
+        , modifier = Modifier.padding(8.dp, 4.dp) ) {
+        Text(stringResource(R.string.clearIcons))
+    }
+}
+
 
 @Composable
 fun PackageAddedNotificationSwitch(notification: Boolean, onChange: (newValue: Boolean) -> Unit) {

@@ -459,6 +459,12 @@ class ApplicationProvider(private val context: Context) {
         return map
     }
 
+    fun clearIcons() {
+        for (app in applicationList) {
+            editApplication(app, app.changeExport(EmptyIcon()))
+        }
+    }
+
     data class BuiltIconPack(
         val uri: Uri,
         val packageName: String,
