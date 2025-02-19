@@ -10,27 +10,15 @@ import androidx.compose.ui.graphics.vector.*
 import androidx.compose.ui.unit.Dp
 
 class MutableImageVector(imageVector: ImageVector) {
-    var name: String
-    var defaultWidth: Dp
-    var defaultHeight: Dp
-    var viewportWidth: Float
-    var viewportHeight: Float
-    var tintColor: Color
-    var tintBlendMode: BlendMode
-    var autoMirror: Boolean
-    var root: MutableVectorGroup
-
-    init {
-        name = imageVector.name
-        defaultWidth = imageVector.defaultWidth
-        defaultHeight = imageVector.defaultHeight
-        viewportWidth = imageVector.viewportWidth
-        viewportHeight = imageVector.viewportHeight
-        tintColor = imageVector.tintColor
-        tintBlendMode = imageVector.tintBlendMode
-        autoMirror = imageVector.autoMirror
-        root = MutableVectorGroup(imageVector.root)
-    }
+    var name: String = imageVector.name
+    var defaultWidth: Dp = imageVector.defaultWidth
+    var defaultHeight: Dp = imageVector.defaultHeight
+    var viewportWidth: Float = imageVector.viewportWidth
+    var viewportHeight: Float = imageVector.viewportHeight
+    var tintColor: Color = imageVector.tintColor
+    var tintBlendMode: BlendMode = imageVector.tintBlendMode
+    var autoMirror: Boolean = imageVector.autoMirror
+    var root: MutableVectorGroup = MutableVectorGroup(imageVector.root)
 
     fun toImageVector(): ImageVector {
         val builder = ImageVector.Builder(
@@ -112,29 +100,18 @@ class MutableImageVector(imageVector: ImageVector) {
 sealed class MutableVectorNode
 
 class MutableVectorGroup(vectorGroup: VectorGroup): MutableVectorNode() {
-    var name: String
-    var rotation: Float
-    var pivotX: Float
-    var pivotY: Float
-    var scaleX: Float
-    var scaleY: Float
-    var translationX: Float
-    var translationY: Float
-    val clipPathData: MutableList<PathNode>
-    val children: MutableList<MutableVectorNode>
+    var name: String = vectorGroup.name
+    var rotation: Float = vectorGroup.rotation
+    var pivotX: Float = vectorGroup.pivotX
+    var pivotY: Float = vectorGroup.pivotY
+    var scaleX: Float = vectorGroup.scaleX
+    var scaleY: Float = vectorGroup.scaleY
+    var translationX: Float = vectorGroup.translationX
+    var translationY: Float = vectorGroup.translationY
+    val clipPathData: MutableList<PathNode> = vectorGroup.clipPathData.toMutableList()
+    val children: MutableList<MutableVectorNode> = mutableListOf()
 
     init {
-        name = vectorGroup.name
-        rotation = vectorGroup.rotation
-        pivotX = vectorGroup.pivotX
-        pivotY = vectorGroup.pivotY
-        scaleX = vectorGroup.scaleX
-        scaleY = vectorGroup.scaleY
-        translationX = vectorGroup.translationX
-        translationY = vectorGroup.translationY
-        clipPathData = vectorGroup.clipPathData.toMutableList()
-        children = mutableListOf()
-
         for (child in vectorGroup) {
             if (child is VectorGroup) {
                 children.add(MutableVectorGroup(child))
@@ -148,35 +125,18 @@ class MutableVectorGroup(vectorGroup: VectorGroup): MutableVectorNode() {
 }
 
 class MutableVectorPath(vectorPath: VectorPath): MutableVectorNode() {
-    var name: String
-    val pathData: MutableList<PathNode>
-    var pathFillType: PathFillType
-    var fill: Brush?
-    var fillAlpha: Float
-    var stroke: Brush?
-    var strokeAlpha: Float
-    var strokeLineWidth: Float
-    var strokeLineCap: StrokeCap
-    var strokeLineJoin: StrokeJoin
-    var strokeLineMiter: Float
-    var trimPathStart: Float
-    var trimPathEnd: Float
-    var trimPathOffset: Float
-
-    init {
-        name = vectorPath.name
-        pathData = vectorPath.pathData.toMutableList()
-        pathFillType = vectorPath.pathFillType
-        fill = vectorPath.fill
-        fillAlpha = vectorPath.fillAlpha
-        stroke = vectorPath.stroke
-        strokeAlpha = vectorPath.strokeAlpha
-        strokeLineWidth = vectorPath.strokeLineWidth
-        strokeLineCap = vectorPath.strokeLineCap
-        strokeLineJoin = vectorPath.strokeLineJoin
-        strokeLineMiter = vectorPath.strokeLineMiter
-        trimPathStart = vectorPath.trimPathStart
-        trimPathEnd = vectorPath.trimPathEnd
-        trimPathOffset = vectorPath.trimPathOffset
-    }
+    var name: String = vectorPath.name
+    val pathData: MutableList<PathNode> = vectorPath.pathData.toMutableList()
+    var pathFillType: PathFillType = vectorPath.pathFillType
+    var fill: Brush? = vectorPath.fill
+    var fillAlpha: Float = vectorPath.fillAlpha
+    var stroke: Brush? = vectorPath.stroke
+    var strokeAlpha: Float = vectorPath.strokeAlpha
+    var strokeLineWidth: Float = vectorPath.strokeLineWidth
+    var strokeLineCap: StrokeCap = vectorPath.strokeLineCap
+    var strokeLineJoin: StrokeJoin = vectorPath.strokeLineJoin
+    var strokeLineMiter: Float = vectorPath.strokeLineMiter
+    var trimPathStart: Float = vectorPath.trimPathStart
+    var trimPathEnd: Float = vectorPath.trimPathEnd
+    var trimPathOffset: Float = vectorPath.trimPathOffset
 }
