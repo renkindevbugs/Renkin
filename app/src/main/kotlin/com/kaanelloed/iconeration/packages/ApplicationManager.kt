@@ -24,7 +24,7 @@ import com.kaanelloed.iconeration.data.RawDynamicClock
 import com.kaanelloed.iconeration.data.RawElement
 import com.kaanelloed.iconeration.data.RawItem
 import com.kaanelloed.iconeration.data.toComponentInfo
-import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.sizeIsGreaterThanZero
+import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.hasValidDimensions
 import com.kaanelloed.iconeration.drawable.ResourceDrawable
 import com.kaanelloed.iconeration.extension.toDrawable
 import org.xmlpull.v1.XmlPullParser
@@ -62,7 +62,7 @@ class ApplicationManager(private val ctx: Context) {
                     val icon = app.applicationInfo.loadIcon(pm)
                     val iconID = app.applicationInfo.icon
 
-                    val icon2 = if (!icon.sizeIsGreaterThanZero()) {
+                    val icon2 = if (!icon.hasValidDimensions()) {
                         Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).toDrawable(ctx.resources)
                     } else
                         icon

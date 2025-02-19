@@ -59,7 +59,6 @@ import com.kaanelloed.iconeration.data.getColorValue
 import com.kaanelloed.iconeration.data.getDefaultBackgroundColor
 import com.kaanelloed.iconeration.data.getPreferencesValue
 import com.kaanelloed.iconeration.data.getStringValue
-import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.sizeIsGreaterThanZero
 import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.toSafeBitmapOrNull
 import com.kaanelloed.iconeration.icon.EmptyIcon
 import kotlinx.coroutines.CoroutineScope
@@ -107,16 +106,14 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
 
     Row(modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically) {
-        if (app.icon.sizeIsGreaterThanZero()) {
-            val bitmap = app.icon.toSafeBitmapOrNull()
-            if (bitmap != null) {
-                Image(painter = BitmapPainter(bitmap.asImageBitmap())
-                    , contentDescription = null
-                    //, contentScale = ContentScale.Inside
-                    , modifier = Modifier
-                        .padding(2.dp)
-                        .size(78.dp, 78.dp))
-            }
+        val bitmap = app.icon.toSafeBitmapOrNull()
+        if (bitmap != null) {
+            Image(painter = BitmapPainter(bitmap.asImageBitmap())
+                , contentDescription = null
+                //, contentScale = ContentScale.Inside
+                , modifier = Modifier
+                    .padding(2.dp)
+                    .size(78.dp, 78.dp))
         }
 
         val bgColor = if (themed) {

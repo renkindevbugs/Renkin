@@ -45,7 +45,7 @@ class DrawableExtension {
             return toBitmapOrNull(width, height, config)
         }
 
-        fun Drawable.sizeIsGreaterThanZero(): Boolean {
+        fun Drawable.hasValidDimensions(): Boolean {
             return intrinsicWidth > 0 && intrinsicHeight > 0
         }
     }
