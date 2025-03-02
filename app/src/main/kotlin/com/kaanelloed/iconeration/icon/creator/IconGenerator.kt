@@ -6,11 +6,13 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.graphics.RectF
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.VectorDrawable
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asComposePath
@@ -22,25 +24,22 @@ import com.kaanelloed.iconeration.data.ImageEdit
 import com.kaanelloed.iconeration.data.Source
 import com.kaanelloed.iconeration.data.TextType
 import com.kaanelloed.iconeration.drawable.BaseTextDrawable
-import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.isAdaptiveIconDrawable
-import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
+import com.kaanelloed.iconeration.drawable.BitmapIconDrawable
 import com.kaanelloed.iconeration.drawable.ForegroundIconDrawable
+import com.kaanelloed.iconeration.drawable.IconPackDrawable
+import com.kaanelloed.iconeration.drawable.ImageVectorDrawable
+import com.kaanelloed.iconeration.drawable.InsetIconDrawable
 import com.kaanelloed.iconeration.drawable.ResourceDrawable
+import com.kaanelloed.iconeration.drawable.haveMonochrome
+import com.kaanelloed.iconeration.drawable.isAdaptiveIconDrawable
+import com.kaanelloed.iconeration.drawable.shrinkIfBiggerThan
 import com.kaanelloed.iconeration.extension.changeBackgroundColor
 import com.kaanelloed.iconeration.extension.clone
-import com.kaanelloed.iconeration.icon.AdaptiveIcon
-import com.kaanelloed.iconeration.icon.parser.AdaptiveIconParser
-import com.kaanelloed.iconeration.icon.BaseIcon
-import com.kaanelloed.iconeration.icon.BitmapIcon
-import com.kaanelloed.iconeration.icon.EmptyIcon
-import com.kaanelloed.iconeration.icon.ExportableIcon
 import com.kaanelloed.iconeration.icon.parser.IconParser
-import com.kaanelloed.iconeration.icon.InsetIcon
-import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.packages.PackageVersion
-import com.kaanelloed.iconeration.vector.MutableImageVector.Companion.toMutableImageVector
+import com.kaanelloed.iconeration.drawable.toImageVectorDrawable
 import com.kaanelloed.iconeration.vector.PathConverter.Companion.toNodes
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.applyAndRemoveGroup
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPathColors
@@ -48,7 +47,6 @@ import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editStrokePaths
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPaths
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeAndCenter
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.scaleAtCenter
-import com.kaanelloed.iconeration.xml.XmlParser.Companion.toXmlNode
 import dev.adevium.imagetracer.ImageTracer
 import dev.adevium.tgCannyEdgeCompose.CannyEdgeDetector
 
@@ -59,13 +57,13 @@ class IconGenerator(
     private val secondaryIconPackApplications: IconPackContainer
 ) {
     fun generateIcon(application: PackageInfoStruct,
-                     onUpdate: (application: PackageInfoStruct, icon: ExportableIcon) -> Unit) {
+                     onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?) -> Unit) {
         generateIcons(listOf(application), onUpdate)
     }
 
     fun generateIcon(application: PackageInfoStruct,
                      customIcon: ResourceDrawable?,
-                     onUpdate: (application: PackageInfoStruct, icon: ExportableIcon) -> Unit)  {
+                     onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?) -> Unit)  {
         if (options.primarySource == Source.NONE) {
             return
         }
@@ -87,7 +85,7 @@ class IconGenerator(
     }
 
     fun generateIcons(applications: List<PackageInfoStruct>
-                      , onUpdate: (application: PackageInfoStruct, icon: ExportableIcon) -> Unit) {
+                      , onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?) -> Unit) {
         if (options.primarySource == Source.NONE) {
             return
         }
@@ -97,33 +95,28 @@ class IconGenerator(
                 continue
             }
 
-            val primaryIcon = generateIcon(
+            val icon = generateIcon(
                 app,
                 options.primarySource,
                 options.primaryImageEdit,
                 options.primaryTextType,
                 primaryIconPackApplications
             )
-
-            val icon = if (primaryIcon is EmptyIcon) {
-                generateIcon(
+                ?: generateIcon(
                     app,
                     options.secondarySource,
                     options.secondaryImageEdit,
                     options.secondaryTextType,
                     secondaryIconPackApplications
                 )
-            } else {
-                primaryIcon
-            }
 
             onUpdate(app, icon)
         }
     }
 
-    fun colorizeFromIconPack(iconPackName: String, icon: ResourceDrawable): ExportableIcon {
-        val bitmapIcon = getIconBitmap(icon.drawable) ?: return EmptyIcon()
-        val parsedIcon = exportIconPackXML(iconPackName, icon) ?: EmptyIcon()
+    fun colorizeFromIconPack(iconPackName: String, icon: ResourceDrawable): IconPackDrawable? {
+        val bitmapIcon = getIconBitmap(icon.drawable) ?: return null
+        val parsedIcon = exportIconPackXML(iconPackName, icon)
 
         return if (options.primaryImageEdit == ImageEdit.COLORIZE)
             colorizeImage(bitmapIcon, parsedIcon, PorterDuff.Mode.MULTIPLY)
@@ -138,9 +131,9 @@ class IconGenerator(
         textType: TextType,
         iconPack: IconPackContainer,
         customIcon: ResourceDrawable? = null
-    ): ExportableIcon {
+    ): IconPackDrawable? {
         return when (source) {
-            Source.NONE -> EmptyIcon()
+            Source.NONE -> null
             Source.ICON_PACK -> generateImageFromIconPack(application, imageEdit, iconPack, customIcon)
             Source.APPLICATION_ICON -> generateImageFromApplication(application, imageEdit)
             Source.APPLICATION_NAME -> generateText(application.appName, textType)
@@ -152,20 +145,20 @@ class IconGenerator(
         imageEdit: ImageEdit,
         iconPack: IconPackContainer,
         customIcon: ResourceDrawable? = null
-    ): ExportableIcon {
-        val resIcon = customIcon ?: iconPack.getApplicationIcon(application.packageName) ?: return EmptyIcon()
+    ): IconPackDrawable? {
+        val resIcon = customIcon ?: iconPack.getApplicationIcon(application.packageName) ?: return null
 
-        val bitmapIcon = getIconBitmap(resIcon.drawable) ?: return EmptyIcon()
-        val parsedIcon = exportIconPackXML(iconPack.iconPackName, resIcon) ?: EmptyIcon()
+        val bitmapIcon = getIconBitmap(resIcon.drawable) ?: return null
+        val parsedIcon = exportIconPackXML(iconPack.iconPackName, resIcon)
 
         return generateImage(bitmapIcon, parsedIcon, imageEdit, PorterDuff.Mode.MULTIPLY)
     }
 
     private fun generateImageFromApplication(
         application: PackageInfoStruct,
-        imageEdit: ImageEdit): ExportableIcon {
+        imageEdit: ImageEdit): IconPackDrawable? {
 
-        val bitmapIcon = getAppIconBitmap(application) ?: return EmptyIcon()
+        val bitmapIcon = getAppIconBitmap(application) ?: return null
         val parsedIcon = parseApplicationIcon(application)
 
         return generateImage(bitmapIcon, parsedIcon, imageEdit, PorterDuff.Mode.MULTIPLY)
@@ -173,9 +166,9 @@ class IconGenerator(
 
     private fun generateImage(
         bitmapIcon: Bitmap,
-        parsedIcon: BaseIcon,
+        parsedIcon: Drawable?,
         imageEdit: ImageEdit,
-        mode: PorterDuff.Mode): ExportableIcon {
+        mode: PorterDuff.Mode): IconPackDrawable? {
         val defaultIcon = getDefaultIcon(bitmapIcon, parsedIcon)
 
         return when (imageEdit) {
@@ -186,7 +179,7 @@ class IconGenerator(
         }
     }
 
-    private fun generateText(applicationName: String, textType: TextType): ExportableIcon {
+    private fun generateText(applicationName: String, textType: TextType): IconPackDrawable? {
         val size = 256
         val strokeWidth = size / 48F
         val textGenerator = LetterGenerator(ctx)
@@ -206,21 +199,21 @@ class IconGenerator(
             }
         }
 
-        return VectorIcon(newIcon)
+        return newIcon.toImageVectorDrawable()
     }
 
-    private fun parseApplicationIcon(application: PackageInfoStruct): BaseIcon {
+    private fun parseApplicationIcon(application: PackageInfoStruct): Drawable? {
         val appMan = ApplicationManager(ctx)
 
         if (isVectorDrawable(application.icon) && options.vector) {
-            val res = appMan.getResources(application.packageName) ?: return EmptyIcon()
+            val res = appMan.getResources(application.packageName) ?: return null
             return IconParser.parseDrawable(res, application.icon, application.iconID)
         }
 
-        return EmptyIcon()
+        return null
     }
 
-    private fun generateCannyEdgeDetection(bitmapIcon: Bitmap): ExportableIcon {
+    private fun generateCannyEdgeDetection(bitmapIcon: Bitmap): IconPackDrawable? {
         val edgeDetector = CannyEdgeDetector()
 
         edgeDetector.process(
@@ -234,62 +227,82 @@ class IconGenerator(
             edgeDetector.edgesImage
         }
 
-        return BitmapIcon(bitmap)
+        return BitmapIconDrawable(bitmap)
     }
 
-    private fun generatePathTracing(bitmapIcon: Bitmap, parsedIcon: BaseIcon): ExportableIcon {
-        return if (parsedIcon !is EmptyIcon) {
+    private fun generatePathTracing(bitmapIcon: Bitmap, parsedIcon: Drawable?): IconPackDrawable? {
+        return if (parsedIcon != null) {
             generatePathFromXML(bitmapIcon, parsedIcon)
         } else {
             generateColorQuantizationDetection(bitmapIcon)
         }
     }
 
-    private fun generatePathFromXML(bitmapIcon: Bitmap, parsedIcon: BaseIcon): ExportableIcon {
-        var vectorIcon: BaseIcon = parsedIcon
+    private fun generatePathFromXML(bitmapIcon: Bitmap, parsedIcon: Drawable): IconPackDrawable? {
+        var vectorIcon = parsedIcon
 
-        if (parsedIcon is AdaptiveIcon) {
-            if (parsedIcon.foreground is VectorIcon) {
+        if (parsedIcon.isAdaptiveIconDrawable()) {
+            parsedIcon as AdaptiveIconDrawable
+
+            if (parsedIcon.foreground is ImageVectorDrawable) {
                 vectorIcon = parsedIcon.foreground
             }
 
-            if (parsedIcon.monochrome is VectorIcon && options.monochrome) {
-                vectorIcon = parsedIcon.monochrome
+            if (parsedIcon.haveMonochrome() && options.monochrome) {
+                vectorIcon = parsedIcon.monochrome!!
             }
         }
 
-        if (vectorIcon !is VectorIcon) {
+        if (vectorIcon !is ImageVectorDrawable) {
             return generateColorQuantizationDetection(bitmapIcon)
         }
 
-        val mutableVector = vectorIcon.vector.toMutableImageVector()
-
-        val stroke = mutableVector.viewportHeight / 48 //1F at 48
-        mutableVector.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
-        mutableVector.resizeAndCenter().applyAndRemoveGroup().scaleAtCenter(6F / 4F)
-        mutableVector.tintColor = Color.Unspecified
+        val stroke = vectorIcon.viewportHeight / 48 //1F at 48
+        vectorIcon.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+        vectorIcon.resizeAndCenter().applyAndRemoveGroup().scaleAtCenter(6F / 4F)
+        vectorIcon.tintColor = Color.Unspecified
 
         if (options.themed) {
-            mutableVector.scaleAtCenter(0.5F)
+            return vectorToInset(vectorIcon)
         }
 
-        return VectorIcon(mutableVector)
+        return vectorIcon
     }
 
-    private fun generateColorQuantizationDetection(bitmapIcon: Bitmap): ExportableIcon {
+    private fun vectorToInset(vector: ImageVectorDrawable, scale: Float = 0.25f): InsetIconDrawable {
+        val x = vector.viewportWidth * scale
+        val y = vector.viewportHeight * scale
+
+        val dims = android.graphics.Rect(x.toInt(), y.toInt(), x.toInt(), y.toInt())
+        val fractions = RectF(scale, scale, scale, scale)
+
+        return InsetIconDrawable(vector, dims, fractions)
+    }
+
+    private fun bitmapToInset(bitmap: Bitmap, scale: Float = 0.25f): InsetIconDrawable {
+        val x = bitmap.width * scale
+        val y = bitmap.height * scale
+
+        val dims = android.graphics.Rect(x.toInt(), y.toInt(), x.toInt(), y.toInt())
+        val fractions = RectF(scale, scale, scale, scale)
+
+        return InsetIconDrawable(BitmapDrawable(null, bitmap), dims, fractions)
+    }
+
+    private fun generateColorQuantizationDetection(bitmapIcon: Bitmap): IconPackDrawable? {
         val imageVector = ImageTracer.imageToVector(bitmapIcon.asImageBitmap()
             , ImageTracer.TracingOptions())
 
-        val vector = imageVector.toMutableImageVector()
+        val vector = imageVector.toImageVectorDrawable()
         val stroke = imageVector.viewportHeight / 48 //1F at 48
         vector.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
         vector.resizeAndCenter()
 
         if (options.themed) {
-            vector.scaleAtCenter(0.5F)
+            return vectorToInset(vector)
         }
 
-        return VectorIcon(vector)
+        return vector
     }
 
     private fun getAppIconBitmap(app: PackageInfoStruct, maxSize: Int = 500): Bitmap? {
@@ -311,26 +324,25 @@ class IconGenerator(
         return newIcon.shrinkIfBiggerThan(maxSize)
     }
 
-    private fun getDefaultIcon(bitmapIcon: Bitmap, parsedIcon: BaseIcon): ExportableIcon {
-        return if (parsedIcon is VectorIcon) {
+    private fun getDefaultIcon(bitmapIcon: Bitmap, parsedIcon: Drawable?): IconPackDrawable? {
+        return if (parsedIcon is ImageVectorDrawable) {
             getDefaultVectorIcon(parsedIcon)
         } else {
             getDefaultBitmapIcon(bitmapIcon)
         }
     }
 
-    private fun getDefaultBitmapIcon(bitmap: Bitmap): BitmapIcon {
+    private fun getDefaultBitmapIcon(bitmap: Bitmap): IconPackDrawable {
         return if (options.themed) {
-            BitmapIcon(convertBitmapToAdaptiveForeground(bitmap))
+            bitmapToInset(bitmap)
         } else {
-            BitmapIcon(bitmap)
+            BitmapIconDrawable(bitmap)
         }
     }
 
-    private fun getDefaultVectorIcon(vectorIcon: VectorIcon): VectorIcon {
+    private fun getDefaultVectorIcon(vectorIcon: ImageVectorDrawable): IconPackDrawable {
         return if (options.themed) {
-            val vector = vectorIcon.vector.toMutableImageVector().scaleAtCenter(0.5f)
-            VectorIcon(vector)
+            vectorToInset(vectorIcon)
         } else {
             vectorIcon
         }
@@ -429,58 +441,62 @@ class IconGenerator(
         return if (options.themed) image.changeBackgroundColor(options.bgColor) else image
     }
 
-    private fun exportIconPackXML(iconPackName: String, iconDrawable: ResourceDrawable): ExportableIcon? {
+    private fun exportIconPackXML(iconPackName: String, iconDrawable: ResourceDrawable): Drawable? {
         if (!isVectorDrawable(iconDrawable.drawable)) return null
 
         val res = ApplicationManager(ctx).getResources(iconPackName) ?: return null
-        val parser = ApplicationManager(ctx).getPackageResourceXml(iconPackName, iconDrawable.resourceId) ?: return null
 
-        val adaptiveIcon = AdaptiveIconParser.parse(res, parser.toXmlNode()) ?: return null
-        var vectorIcon: VectorIcon? = null
-        var insetModifier = 1f
+        //val adaptiveIcon = AdaptiveIconParser.parse(res, parser.toXmlNode()) ?: return null
+        val icon = IconParser.parseDrawable(res, iconDrawable.drawable, iconDrawable.resourceId)
 
-        if (adaptiveIcon.foreground is InsetIcon) {
-            val inset = adaptiveIcon.foreground
-            if (inset.inset < 1f) insetModifier = inset.inset * 2 //TODO: handle dimension
-            if (inset.innerIcon is VectorIcon) {
-                vectorIcon = inset.innerIcon
+        if (!icon.isAdaptiveIconDrawable()) return null
+
+        val adaptiveIcon = icon as AdaptiveIconDrawable
+        var vectorIcon: ImageVectorDrawable? = null
+        var inset: InsetIconDrawable? = null
+
+        if (adaptiveIcon.foreground is InsetIconDrawable) {
+            inset = adaptiveIcon.foreground as InsetIconDrawable
+            if (inset.drawable is ImageVectorDrawable) {
+                vectorIcon = inset.drawable as ImageVectorDrawable
             }
         }
 
-        if (adaptiveIcon.foreground is VectorIcon) {
-            vectorIcon = adaptiveIcon.foreground
+        if (adaptiveIcon.foreground is ImageVectorDrawable) {
+            vectorIcon = adaptiveIcon.foreground as ImageVectorDrawable
         }
 
         if (vectorIcon == null) {
             return null
         }
 
-        val mutableVector = vectorIcon.vector.toMutableImageVector().resizeAndCenter().scaleAtCenter(insetModifier)
+        val mutableVector = vectorIcon.resizeAndCenter()
 
         val stroke = mutableVector.viewportHeight / 48 //1F at 48
         mutableVector.root.editStrokePaths(stroke)
 
-        return VectorIcon(mutableVector)
+        if (inset != null)
+            return inset
+
+        return vectorIcon
     }
 
-    private fun colorizeImage(bitmapIcon: Bitmap, parsedIcon: BaseIcon, mode: PorterDuff.Mode): ExportableIcon {
-        return if (parsedIcon is VectorIcon) {
+    private fun colorizeImage(bitmapIcon: Bitmap, parsedIcon: Drawable?, mode: PorterDuff.Mode): IconPackDrawable? {
+        return if (parsedIcon is ImageVectorDrawable) {
             colorizeVector(parsedIcon)
         } else {
-            BitmapIcon(colorizeBitmap(bitmapIcon, mode))
+            BitmapIconDrawable(colorizeBitmap(bitmapIcon, mode))
         }
     }
 
-    private fun colorizeVector(vectorIcon: VectorIcon): VectorIcon {
-        val vector = vectorIcon.vector.toMutableImageVector()
+    private fun colorizeVector(vectorIcon: ImageVectorDrawable): ImageVectorDrawable {
+        vectorIcon.root.editPathColors(SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+        vectorIcon.tintColor = Color.Unspecified
 
-        vector.root.editPathColors(SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
-        vector.tintColor = Color.Unspecified
-
-        return VectorIcon(vector)
+        return vectorIcon
     }
 
     private fun applicationShouldBeSkipped(app: PackageInfoStruct): Boolean {
-        return !options.override && app.createdIcon !is EmptyIcon
+        return !options.override && app.createdIcon != null
     }
 }

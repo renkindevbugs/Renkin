@@ -15,6 +15,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.VectorGroup
 import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.toPath
+import com.kaanelloed.iconeration.drawable.ImageVectorDrawable
 import com.kaanelloed.iconeration.vector.brush.ReferenceBrush
 import com.kaanelloed.iconeration.vector.brush.SolidColorShader
 
@@ -179,8 +180,8 @@ class VectorRenderer(private val imageVector: ImageVector) {
     }
 
     companion object {
-        fun MutableImageVector.renderToCanvas(canvas: Canvas
-                                              , nonScalingStroke: Boolean = true) {
+        fun ImageVectorDrawable.renderToCanvas(canvas: Canvas
+                                               , nonScalingStroke: Boolean = true) {
             this.toImageVector().renderToCanvas(canvas, nonScalingStroke)
         }
 

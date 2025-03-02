@@ -10,21 +10,21 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.vectorResource
-import androidx.core.graphics.drawable.toBitmap
 import androidx.core.net.toUri
 import app.revanced.library.ApkUtils
 import com.kaanelloed.iconeration.R
 import com.kaanelloed.iconeration.constants.SuppressDeprecation
 import com.kaanelloed.iconeration.constants.SuppressSameParameterValue
 import com.kaanelloed.iconeration.data.InstalledApplication
-import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.toSafeBitmapOrNull
+import com.kaanelloed.iconeration.drawable.ImageVectorDrawable
+import com.kaanelloed.iconeration.drawable.InsetIconDrawable
+import com.kaanelloed.iconeration.drawable.toSafeBitmapOrNull
 import com.kaanelloed.iconeration.extension.getBytes
-import com.kaanelloed.iconeration.icon.EmptyIcon
-import com.kaanelloed.iconeration.icon.VectorIcon
+import com.kaanelloed.iconeration.extension.getDrawableOrNull
 import com.kaanelloed.iconeration.packages.ApplicationManager
-import com.kaanelloed.iconeration.packages.ApplicationManager.Companion.getDrawableOrNull
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.packages.PackageVersion
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.setReferenceColorPaths
 import com.kaanelloed.iconeration.vector.brush.ReferenceBrush
 import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXmlFile
 import com.kaanelloed.iconeration.xml.XmlEncoder
@@ -125,18 +125,21 @@ class IconPackBuilder(
         val vectorBrush = ReferenceBrush("@color/icon_color")
 
         for (app in apps) {
-            if (app.createdIcon !is EmptyIcon) {
+            if (app.createdIcon != null) {
                 val appFileName = app.getFileName()
 
-                val exportAsAdaptive = themed || app.createdIcon.exportAsAdaptiveIcon
+                val exportAsAdaptive = themed || app.createdIcon is InsetIconDrawable
                 if (exportAsAdaptive && PackageVersion.is26OrMore()) {
                     val adaptive = AdaptiveIconXml()
                     adaptive.foreground(appFileName)
                     adaptive.background("@color/icon_background_color")
 
-                    //TODO Better handling of foreground icon size
-                    if (app.createdIcon is VectorIcon) {
-                        val vector = app.createdIcon.formatVector(vectorBrush)
+                    if (app.createdIcon is InsetIconDrawable) {
+                        //val vector = app.createdIcon.formatVector(vectorBrush)
+                        //createXmlDrawableResource(apkModule, packageBlock, vector.toXmlFile(), appFileName + "_foreground")
+                    }
+                    if (app.createdIcon is ImageVectorDrawable) {
+                        val vector = app.createdIcon.also { it.root.setReferenceColorPaths(vectorBrush) }.toImageVector()
                         createXmlDrawableResource(apkModule, packageBlock, vector.toXmlFile(), appFileName + "_foreground")
                     }
                     else {

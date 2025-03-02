@@ -79,10 +79,10 @@ import com.kaanelloed.iconeration.data.setBooleanValue
 import com.kaanelloed.iconeration.data.setColorValue
 import com.kaanelloed.iconeration.data.setEnumValue
 import com.kaanelloed.iconeration.data.setStringValue
-import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.shrinkIfBiggerThan
+import com.kaanelloed.iconeration.drawable.BitmapIconDrawable
+import com.kaanelloed.iconeration.drawable.IconPackDrawable
 import com.kaanelloed.iconeration.drawable.ResourceDrawable
-import com.kaanelloed.iconeration.icon.BitmapIcon
-import com.kaanelloed.iconeration.icon.ExportableIcon
+import com.kaanelloed.iconeration.drawable.shrinkIfBiggerThan
 import com.kaanelloed.iconeration.packages.PackageVersion
 import kotlinx.coroutines.launch
 
@@ -91,7 +91,7 @@ fun AppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    onConfirm: (icon: ExportableIcon) -> Unit,
+    onConfirm: (icon: IconPackDrawable?) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
@@ -547,7 +547,7 @@ fun IconPackDropdown(
                     trailingIcon = {
                         if (bitmap != null) {
                             Image(
-                                painter = BitmapIcon(bitmap).getPainter(),
+                                painter = BitmapIconDrawable(bitmap).getPainter(),
                                 contentDescription = null,
                                 modifier = Modifier.size(50.dp)
                             )

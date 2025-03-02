@@ -1,6 +1,5 @@
 package com.kaanelloed.iconeration.packages
 
-import android.annotation.SuppressLint
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -11,11 +10,10 @@ import android.content.pm.PackageManager
 import android.content.pm.PackageManager.ResolveInfoFlags
 import android.content.pm.ResolveInfo
 import android.content.res.Resources
-import android.content.res.Resources.Theme
+import android.content.res.XmlResourceParser
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.os.UserManager
-import androidx.core.content.res.ResourcesCompat
 import com.kaanelloed.iconeration.constants.SuppressDeprecation
 import com.kaanelloed.iconeration.data.IconPack
 import com.kaanelloed.iconeration.data.InstalledApplication
@@ -24,8 +22,11 @@ import com.kaanelloed.iconeration.data.RawDynamicClock
 import com.kaanelloed.iconeration.data.RawElement
 import com.kaanelloed.iconeration.data.RawItem
 import com.kaanelloed.iconeration.data.toComponentInfo
-import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.hasValidDimensions
 import com.kaanelloed.iconeration.drawable.ResourceDrawable
+import com.kaanelloed.iconeration.drawable.hasValidDimensions
+import com.kaanelloed.iconeration.extension.getDrawableOrNull
+import com.kaanelloed.iconeration.extension.getIdentifierByName
+import com.kaanelloed.iconeration.extension.getXmlOrNull
 import com.kaanelloed.iconeration.extension.toDrawable
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
@@ -451,7 +452,7 @@ class ApplicationManager(private val ctx: Context) {
         }
     }
 
-    fun getPackageResourceXml(packageName: String, resourceId: Int): XmlPullParser? {
+    fun getPackageResourceXml(packageName: String, resourceId: Int): XmlResourceParser? {
         val res = getResources(packageName)
         return res?.getXmlOrNull(resourceId)
     }
@@ -473,28 +474,5 @@ class ApplicationManager(private val ctx: Context) {
             pack.longVersionCode
         else
             pack.versionCode.toLong()
-    }
-
-    companion object {
-        @SuppressLint("DiscouragedApi")
-        fun Resources.getIdentifierByName(name: String, defType: String, defPackage: String): Int {
-            return getIdentifier(name, defType, defPackage)
-        }
-
-        fun Resources.getXmlOrNull(resourceId: Int): XmlPullParser? {
-            return try {
-                this.getXml(resourceId)
-            } catch (e: Resources.NotFoundException) {
-                null
-            }
-        }
-
-        fun Resources.getDrawableOrNull(resourceId: Int, theme: Theme? = null): Drawable? {
-            return try {
-                ResourcesCompat.getDrawable(this, resourceId, theme)
-            } catch (e: Resources.NotFoundException) {
-                null
-            }
-        }
     }
 }

@@ -59,8 +59,7 @@ import com.kaanelloed.iconeration.data.getColorValue
 import com.kaanelloed.iconeration.data.getDefaultBackgroundColor
 import com.kaanelloed.iconeration.data.getPreferencesValue
 import com.kaanelloed.iconeration.data.getStringValue
-import com.kaanelloed.iconeration.drawable.DrawableExtension.Companion.toSafeBitmapOrNull
-import com.kaanelloed.iconeration.icon.EmptyIcon
+import com.kaanelloed.iconeration.drawable.toSafeBitmapOrNull
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -126,7 +125,7 @@ fun ApplicationItem(iconPacks: List<IconPack>, app: PackageInfoStruct, index: In
             Color.Unspecified
         }
 
-        if (app.createdIcon !is EmptyIcon)
+        if (app.createdIcon != null)
             Image(painter = app.createdIcon.getPainter()
                 , contentDescription = null
                 //, contentScale = ContentScale.Inside
@@ -195,7 +194,7 @@ fun OpenAppOptions(
         onDismiss()
     }) {
         onDismiss()
-        activity.appProvider.editApplication(index, app.changeExport(EmptyIcon()))
+        activity.appProvider.editApplication(index, app.changeExport(null))
     }
 }
 

@@ -40,12 +40,12 @@ import com.kaanelloed.iconeration.data.getDefaultBackgroundColor
 import com.kaanelloed.iconeration.data.getDefaultIconColor
 import com.kaanelloed.iconeration.data.getEnumValue
 import com.kaanelloed.iconeration.data.getStringValue
+import com.kaanelloed.iconeration.drawable.BitmapIconDrawable
+import com.kaanelloed.iconeration.drawable.IconPackDrawable
+import com.kaanelloed.iconeration.drawable.ImageVectorDrawable
+import com.kaanelloed.iconeration.drawable.InsetIconDrawable
 import com.kaanelloed.iconeration.drawable.ResourceDrawable
 import com.kaanelloed.iconeration.extension.bitmapFromBase64
-import com.kaanelloed.iconeration.icon.BitmapIcon
-import com.kaanelloed.iconeration.icon.EmptyIcon
-import com.kaanelloed.iconeration.icon.ExportableIcon
-import com.kaanelloed.iconeration.icon.VectorIcon
 import com.kaanelloed.iconeration.icon.creator.GenerationOptions
 import com.kaanelloed.iconeration.icon.creator.IconGenerator
 import com.kaanelloed.iconeration.icon.creator.IconPackContainer
@@ -222,8 +222,8 @@ class ApplicationProvider(private val context: Context) {
         }
     }
 
-    fun getIcon(application: PackageInfoStruct, options: GenerationOptions, customIcon: ResourceDrawable? = null): ExportableIcon {
-        var icon: ExportableIcon = EmptyIcon()
+    fun getIcon(application: PackageInfoStruct, options: GenerationOptions, customIcon: ResourceDrawable? = null): IconPackDrawable? {
+        var icon: IconPackDrawable? = null
 
         val primaryIconPackApps = getIconPackAppDrawables(options.primaryIconPack)
 
@@ -295,7 +295,7 @@ class ApplicationProvider(private val context: Context) {
 
         val dbApps = dao.getAll()
         val apps = applicationList.toList() //clone
-
+        return
         for (app in apps) {
             val dbApp = dbApps.find { it.packageName == app.packageName && it.activityName == app.activityName }
             if (dbApp != null) {
@@ -304,12 +304,12 @@ class ApplicationProvider(private val context: Context) {
                     val vector = VectorParser.parse(context.resources, nodes, defaultColor)
 
                     if (vector != null) {
-                        VectorIcon(vector)
+                        ImageVectorDrawable(vector)
                     } else {
-                        EmptyIcon()
+                        null
                     }
                 } else {
-                    BitmapIcon(bitmapFromBase64(dbApp.drawable), dbApp.isAdaptiveIcon)
+                    BitmapIconDrawable(bitmapFromBase64(dbApp.drawable))
                 }
 
                 editApplication(app, app.changeExport(icon))
@@ -328,14 +328,14 @@ class ApplicationProvider(private val context: Context) {
         val dbApps = mutableListOf<DbApplication>()
 
         for (app in applicationList) {
-            if (app.createdIcon !is EmptyIcon) {
-                val isXml = app.createdIcon is VectorIcon
+            if (app.createdIcon != null) {
+                val isXml = app.createdIcon is InsetIconDrawable
 
                 dbApps.add(
                     DbApplication(
                         app.packageName,
                         app.activityName,
-                        app.createdIcon.exportAsAdaptiveIcon,
+                        false,
                         isXml,
                         app.createdIcon.toDbString()
                     )
@@ -424,8 +424,8 @@ class ApplicationProvider(private val context: Context) {
         )
     }
 
-    fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, ExportableIcon> {
-        val exportDrawables = mutableMapOf<ResourceDrawable, ExportableIcon>()
+    fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, IconPackDrawable?> {
+        val exportDrawables = mutableMapOf<ResourceDrawable, IconPackDrawable?>()
 
         val pack = IconPackContainer("", emptyMap())
 
@@ -461,7 +461,7 @@ class ApplicationProvider(private val context: Context) {
 
     fun clearIcons() {
         for (app in applicationList) {
-            editApplication(app, app.changeExport(EmptyIcon()))
+            editApplication(app, app.changeExport(null))
         }
     }
 

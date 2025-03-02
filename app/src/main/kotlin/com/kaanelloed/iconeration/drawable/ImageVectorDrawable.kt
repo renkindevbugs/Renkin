@@ -1,15 +1,26 @@
-package com.kaanelloed.iconeration.vector
+package com.kaanelloed.iconeration.drawable
 
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.ColorFilter
+import android.graphics.drawable.Drawable
+import android.util.Base64
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.*
 import androidx.compose.ui.unit.Dp
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.center
+import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeTo
+import com.kaanelloed.iconeration.vector.VectorExporter.Companion.toXml
+import com.kaanelloed.iconeration.vector.VectorRenderer.Companion.renderToCanvas
 
-class MutableImageVector(imageVector: ImageVector) {
+class ImageVectorDrawable(imageVector: ImageVector): Drawable(), IconPackDrawable {
     var name: String = imageVector.name
     var defaultWidth: Dp = imageVector.defaultWidth
     var defaultHeight: Dp = imageVector.defaultHeight
@@ -90,10 +101,39 @@ class MutableImageVector(imageVector: ImageVector) {
         )
     }
 
-    companion object {
-        fun ImageVector.toMutableImageVector(): MutableImageVector {
-            return MutableImageVector(this)
-        }
+    override fun draw(canvas: Canvas) {
+        this.renderToCanvas(canvas)
+    }
+
+    override fun setAlpha(alpha: Int) {
+        TODO("Not yet implemented")
+    }
+
+    override fun setColorFilter(colorFilter: ColorFilter?) {
+        TODO("Not yet implemented")
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun getOpacity(): Int {
+        TODO("Not yet implemented")
+    }
+
+    @Composable
+    override fun getPainter(): Painter {
+        return rememberVectorPainter(toImageVector())
+    }
+
+    override fun toBitmap(): Bitmap {
+        val bmp = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bmp)
+        this.resizeTo(256F, 256F).center()
+        this.renderToCanvas(canvas)
+        return bmp
+    }
+
+    override fun toDbString(): String {
+        val bytes = toImageVector().toXml()
+        return Base64.encodeToString(bytes, Base64.NO_WRAP)
     }
 }
 
@@ -139,4 +179,8 @@ class MutableVectorPath(vectorPath: VectorPath): MutableVectorNode() {
     var trimPathStart: Float = vectorPath.trimPathStart
     var trimPathEnd: Float = vectorPath.trimPathEnd
     var trimPathOffset: Float = vectorPath.trimPathOffset
+}
+
+fun ImageVector.toImageVectorDrawable(): ImageVectorDrawable {
+    return ImageVectorDrawable(this)
 }

@@ -1,8 +1,6 @@
 package com.kaanelloed.iconeration.xml.file
 
-class AdaptiveIconXml: XmlMemoryFile() {
-    private val androidNamespace = "http://schemas.android.com/apk/res/android"
-
+class AdaptiveIconXml: BaseInsetXml() {
     init {
         initialize()
     }
@@ -23,6 +21,14 @@ class AdaptiveIconXml: XmlMemoryFile() {
         startTag("background")
         attribute("drawable", value, androidNamespace)
         endTag("background")
+    }
+
+    override fun startInset() {
+        super.startInset()
+    }
+
+    override fun endInset() {
+        super.endInset()
     }
 
     override fun readAndClose(): ByteArray {

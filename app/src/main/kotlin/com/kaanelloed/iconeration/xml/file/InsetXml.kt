@@ -1,6 +1,6 @@
 package com.kaanelloed.iconeration.xml.file
 
-class VectorXml: BaseVectorXml() {
+class InsetXml: BaseInsetXml() {
     init {
         initialize()
     }
@@ -8,11 +8,19 @@ class VectorXml: BaseVectorXml() {
     override fun initialize() {
         super.initialize()
         namespace("android", androidNamespace)
-        startVector()
+        startInset()
+    }
+
+    override fun startVector() {
+        super.startVector()
+    }
+
+    override fun endVector() {
+        super.endVector()
     }
 
     override fun readAndClose(): ByteArray {
-        endVector()
+        endInset()
         return super.readAndClose()
     }
 }

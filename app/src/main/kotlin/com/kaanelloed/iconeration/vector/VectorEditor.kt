@@ -1,11 +1,15 @@
 package com.kaanelloed.iconeration.vector
 
+import android.graphics.RectF
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.toPath
 import androidx.compose.ui.unit.dp
+import com.kaanelloed.iconeration.drawable.ImageVectorDrawable
+import com.kaanelloed.iconeration.drawable.MutableVectorGroup
+import com.kaanelloed.iconeration.drawable.MutableVectorPath
 import com.kaanelloed.iconeration.vector.NodeEditor.Companion.rotate
 import com.kaanelloed.iconeration.vector.NodeEditor.Companion.scale
 import com.kaanelloed.iconeration.vector.NodeEditor.Companion.translate
@@ -17,8 +21,8 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
 
-class VectorEditor internal constructor(private val mutableVector: MutableImageVector) {
-    private fun resizeTo(width: Float, height: Float): MutableImageVector {
+class VectorEditor internal constructor(private val mutableVector: ImageVectorDrawable) {
+    private fun resizeTo(width: Float, height: Float): ImageVectorDrawable {
         val scaleX = width / mutableVector.viewportWidth
         val scaleY = height / mutableVector.viewportHeight
 
@@ -49,13 +53,13 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
         }
     }
 
-    private fun scaleAtCenter(scale: Float): MutableImageVector {
+    private fun scaleAtCenter(scale: Float): ImageVectorDrawable {
         if (scale == 1f) return mutableVector
 
         return scaleAtCenter(scale, scale)
     }
 
-    private fun scaleAtCenter(scaleX: Float, scaleY: Float): MutableImageVector {
+    private fun scaleAtCenter(scaleX: Float, scaleY: Float): ImageVectorDrawable {
         val pivotX = mutableVector.viewportWidth / 2
         val pivotY = mutableVector.viewportHeight / 2
 
@@ -125,7 +129,7 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
         }
     }
 
-    private fun roundAlpha(): MutableImageVector {
+    private fun roundAlpha(): ImageVectorDrawable {
         roundGroupAlpha(mutableVector.root)
         return mutableVector
     }
@@ -147,7 +151,7 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
         path.strokeAlpha = round(path.strokeAlpha)
     }
 
-    private fun resizeAndCenter(): MutableImageVector {
+    private fun resizeAndCenter(): ImageVectorDrawable {
         if (mutableVector.viewportWidth == mutableVector.viewportHeight) {
             return mutableVector
         }
@@ -159,7 +163,7 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
         }
     }
 
-    private fun resizeAndCenter(width: Float, height: Float): MutableImageVector {
+    private fun resizeAndCenter(width: Float, height: Float): ImageVectorDrawable {
         val translateX = (width - mutableVector.viewportWidth) / 2
         val translateY = (height - mutableVector.viewportHeight) / 2
 
@@ -174,7 +178,7 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
         return mutableVector
     }
 
-    private fun changeViewPort(width: Float, height: Float): MutableImageVector {
+    private fun changeViewPort(width: Float, height: Float): ImageVectorDrawable {
         val translateX = (width - mutableVector.viewportWidth) / 2
         val translateY = (height - mutableVector.viewportHeight) / 2
 
@@ -186,7 +190,7 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
         return mutableVector
     }
 
-    private fun applyAndRemoveGroup(): MutableImageVector {
+    private fun applyAndRemoveGroup(): ImageVectorDrawable {
         val paths = applyGroup(mutableVector.root)
         mutableVector.root.children.clear()
         mutableVector.root.children.addAll(paths)
@@ -222,7 +226,7 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
         scalePath(path, group.scaleX, group.scaleY, group.pivotX, group.pivotY)
     }
 
-    private fun center(): MutableImageVector {
+    private fun center(): ImageVectorDrawable {
         val bounds = getBounds()
         val width = bounds.right - bounds.left
         val height = bounds.bottom - bounds.top
@@ -268,43 +272,53 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
         return Rect(left, top, right, bottom)
     }
 
+    private fun inset(rect: Rect) {
+        val scaleX = (rect.left + rect.right) / mutableVector.viewportWidth
+        val scaleY = (rect.top + rect.bottom) / mutableVector.viewportHeight
+
+        val pivotX = mutableVector.viewportWidth / 2
+        val pivotY = mutableVector.viewportHeight / 2
+
+        scaleGroup(mutableVector.root, scaleX, scaleY, pivotX, pivotY)
+    }
+
     companion object {
-        fun MutableImageVector.scaleAtCenter(scale: Float): MutableImageVector {
+        fun ImageVectorDrawable.scaleAtCenter(scale: Float): ImageVectorDrawable {
             val editor = VectorEditor(this)
             return editor.scaleAtCenter(scale)
         }
 
-        fun MutableImageVector.resizeTo(width: Float, height: Float): MutableImageVector {
+        fun ImageVectorDrawable.resizeTo(width: Float, height: Float): ImageVectorDrawable {
             val editor = VectorEditor(this)
             return editor.resizeTo(width, height)
         }
 
-        fun MutableImageVector.roundAlpha(): MutableImageVector {
+        fun ImageVectorDrawable.roundAlpha(): ImageVectorDrawable {
             val editor = VectorEditor(this)
             return editor.roundAlpha()
         }
 
-        fun MutableImageVector.resizeAndCenter(): MutableImageVector {
+        fun ImageVectorDrawable.resizeAndCenter(): ImageVectorDrawable {
             val editor = VectorEditor(this)
             return editor.resizeAndCenter()
         }
 
-        fun MutableImageVector.changeViewPort(width: Float, height: Float): MutableImageVector {
+        fun ImageVectorDrawable.changeViewPort(width: Float, height: Float): ImageVectorDrawable {
             val editor = VectorEditor(this)
             return editor.changeViewPort(width, height)
         }
 
-        fun MutableImageVector.applyAndRemoveGroup(): MutableImageVector {
+        fun ImageVectorDrawable.applyAndRemoveGroup(): ImageVectorDrawable {
             val editor = VectorEditor(this)
             return editor.applyAndRemoveGroup()
         }
 
-        fun MutableImageVector.getBounds(): Rect {
+        fun ImageVectorDrawable.getBounds(): Rect {
             val editor = VectorEditor(this)
             return editor.getBounds()
         }
 
-        fun MutableImageVector.center(): MutableImageVector {
+        fun ImageVectorDrawable.center(): ImageVectorDrawable {
             val editor = VectorEditor(this)
             return editor.center()
         }
@@ -425,6 +439,21 @@ class VectorEditor internal constructor(private val mutableVector: MutableImageV
                     }
                 }
             }
+        }
+
+        fun ImageVectorDrawable.inset(rect: Rect) {
+            val editor = VectorEditor(this)
+            editor.inset(rect)
+        }
+
+        fun ImageVectorDrawable.inset(rect: RectF) {
+            val left = rect.left * viewportWidth
+            val right = rect.right * viewportWidth
+            val top = rect.top * viewportHeight
+            val bottom = rect.bottom * viewportHeight
+
+            val dim = Rect(left, top, right, bottom)
+            this.inset(dim)
         }
     }
 }

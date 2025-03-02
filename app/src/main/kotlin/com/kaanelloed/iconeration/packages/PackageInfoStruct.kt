@@ -2,8 +2,7 @@ package com.kaanelloed.iconeration.packages
 
 import android.graphics.drawable.Drawable
 import com.kaanelloed.iconeration.data.InstalledApplication
-import com.kaanelloed.iconeration.icon.EmptyIcon
-import com.kaanelloed.iconeration.icon.ExportableIcon
+import com.kaanelloed.iconeration.drawable.IconPackDrawable
 import java.text.Normalizer
 
 class PackageInfoStruct(
@@ -12,7 +11,7 @@ class PackageInfoStruct(
     val activityName: String,
     val icon: Drawable,
     val iconID: Int,
-    val createdIcon: ExportableIcon = EmptyIcon(),
+    val createdIcon: IconPackDrawable? = null,
     val internalVersion: Int = 0
 ) : Comparable<PackageInfoStruct> {
     override fun equals(other: Any?): Boolean {
@@ -29,7 +28,7 @@ class PackageInfoStruct(
     }
 
     fun changeExport(
-        createdIcon: ExportableIcon
+        createdIcon: IconPackDrawable?
     ): PackageInfoStruct {
         return PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1)
     }
