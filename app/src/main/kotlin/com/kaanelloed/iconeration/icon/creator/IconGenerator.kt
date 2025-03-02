@@ -12,7 +12,6 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.VectorDrawable
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asComposePath
@@ -47,8 +46,9 @@ import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editStrokePaths
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.editPaths
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.resizeAndCenter
 import com.kaanelloed.iconeration.vector.VectorEditor.Companion.scaleAtCenter
-import dev.adevium.imagetracer.ImageTracer
-import dev.adevium.tgCannyEdgeCompose.CannyEdgeDetector
+import dev.alembiconsProject.imagetracer.ImageTracer
+import dev.alembiconsProject.tgCannyEdgeCompose.CannyEdgeDetector
+import dev.alembiconsProject.tgCannyEdgeCompose.DetectionOptions
 
 class IconGenerator(
     private val ctx: Context,
@@ -168,7 +168,7 @@ class IconGenerator(
         bitmapIcon: Bitmap,
         parsedIcon: Drawable?,
         imageEdit: ImageEdit,
-        mode: PorterDuff.Mode): IconPackDrawable? {
+        mode: PorterDuff.Mode): IconPackDrawable {
         val defaultIcon = getDefaultIcon(bitmapIcon, parsedIcon)
 
         return when (imageEdit) {
@@ -179,7 +179,7 @@ class IconGenerator(
         }
     }
 
-    private fun generateText(applicationName: String, textType: TextType): IconPackDrawable? {
+    private fun generateText(applicationName: String, textType: TextType): IconPackDrawable {
         val size = 256
         val strokeWidth = size / 48F
         val textGenerator = LetterGenerator(ctx)
@@ -213,12 +213,13 @@ class IconGenerator(
         return null
     }
 
-    private fun generateCannyEdgeDetection(bitmapIcon: Bitmap): IconPackDrawable? {
+    private fun generateCannyEdgeDetection(bitmapIcon: Bitmap): IconPackDrawable {
         val edgeDetector = CannyEdgeDetector()
 
         edgeDetector.process(
             bitmapIcon.asImageBitmap(),
-            options.color
+            options.color,
+            DetectionOptions()
         )
 
         val bitmap = if (options.themed) {
@@ -230,7 +231,7 @@ class IconGenerator(
         return BitmapIconDrawable(bitmap)
     }
 
-    private fun generatePathTracing(bitmapIcon: Bitmap, parsedIcon: Drawable?): IconPackDrawable? {
+    private fun generatePathTracing(bitmapIcon: Bitmap, parsedIcon: Drawable?): IconPackDrawable {
         return if (parsedIcon != null) {
             generatePathFromXML(bitmapIcon, parsedIcon)
         } else {
@@ -238,7 +239,7 @@ class IconGenerator(
         }
     }
 
-    private fun generatePathFromXML(bitmapIcon: Bitmap, parsedIcon: Drawable): IconPackDrawable? {
+    private fun generatePathFromXML(bitmapIcon: Bitmap, parsedIcon: Drawable): IconPackDrawable {
         var vectorIcon = parsedIcon
 
         if (parsedIcon.isAdaptiveIconDrawable()) {
@@ -289,7 +290,7 @@ class IconGenerator(
         return InsetIconDrawable(BitmapDrawable(null, bitmap), dims, fractions)
     }
 
-    private fun generateColorQuantizationDetection(bitmapIcon: Bitmap): IconPackDrawable? {
+    private fun generateColorQuantizationDetection(bitmapIcon: Bitmap): IconPackDrawable {
         val imageVector = ImageTracer.imageToVector(bitmapIcon.asImageBitmap()
             , ImageTracer.TracingOptions())
 
@@ -324,7 +325,7 @@ class IconGenerator(
         return newIcon.shrinkIfBiggerThan(maxSize)
     }
 
-    private fun getDefaultIcon(bitmapIcon: Bitmap, parsedIcon: Drawable?): IconPackDrawable? {
+    private fun getDefaultIcon(bitmapIcon: Bitmap, parsedIcon: Drawable?): IconPackDrawable {
         return if (parsedIcon is ImageVectorDrawable) {
             getDefaultVectorIcon(parsedIcon)
         } else {
@@ -481,7 +482,7 @@ class IconGenerator(
         return vectorIcon
     }
 
-    private fun colorizeImage(bitmapIcon: Bitmap, parsedIcon: Drawable?, mode: PorterDuff.Mode): IconPackDrawable? {
+    private fun colorizeImage(bitmapIcon: Bitmap, parsedIcon: Drawable?, mode: PorterDuff.Mode): IconPackDrawable {
         return if (parsedIcon is ImageVectorDrawable) {
             colorizeVector(parsedIcon)
         } else {
