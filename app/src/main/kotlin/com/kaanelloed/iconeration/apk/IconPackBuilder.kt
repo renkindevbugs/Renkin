@@ -21,6 +21,8 @@ import com.kaanelloed.iconeration.drawable.InsetIconDrawable
 import com.kaanelloed.iconeration.drawable.toSafeBitmapOrNull
 import com.kaanelloed.iconeration.extension.getBytes
 import com.kaanelloed.iconeration.extension.getDrawableOrNull
+import com.kaanelloed.iconeration.extension.toByteArray
+import com.kaanelloed.iconeration.extension.toString
 import com.kaanelloed.iconeration.packages.ApplicationManager
 import com.kaanelloed.iconeration.packages.PackageInfoStruct
 import com.kaanelloed.iconeration.packages.PackageVersion
@@ -44,6 +46,7 @@ import com.reandroid.arsc.value.Entry
 import com.reandroid.arsc.value.ValueType
 import com.reandroid.dex.model.DexFile
 import com.reandroid.dex.sections.SectionType
+import com.reandroid.dex.smali.SmaliReader
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -378,36 +381,39 @@ class IconPackBuilder(
         apkModule.add(ByteInputSource(buildClasses(resourceId), "classes.dex"))
     }
 
+    @OptIn(ExperimentalStdlibApi::class)
     private fun buildClasses(resourceId: Int): ByteArray {
         val dex = DexFile.createDefault()
 
-        val dexBuilder = DexClassBuilder(dex.dexLayout.sectionList)
+        val r = ctx.assets.toByteArray("R")
+        dex.fromSmali(SmaliReader(r))
 
-        dexBuilder.buildRClass()
-        dexBuilder.buildRLayoutClass(resourceId)
-        dex.refresh()
-        dex.version = apiToDexVersion(minSdkVersion)
-        dex.clearEmptySections()
-        dex.sortSection(SectionType.getR8Order())
-        dex.shrink()
-        dex.refreshFull()
-        val bytes = dex.bytes
-        dex.close()
+        val layout = ctx.assets.toString("RLayout")
+            .replace("0x7f010000", "0x" + resourceId.toHexString())
+        dex.fromSmali(SmaliReader(layout.encodeToByteArray()))
 
-        return bytes
+        return getBytesFromDex(dex)
     }
 
     private fun buildClasses2(apkModule: ApkModule, resourceId: Int) {
         apkModule.add(ByteInputSource(buildClasses2(resourceId), "classes2.dex"))
     }
 
+    @OptIn(ExperimentalStdlibApi::class)
     private fun buildClasses2(resourceId: Int): ByteArray {
         val dex = DexFile.createDefault()
 
-        val dexBuilder = DexClassBuilder(dex.dexLayout.sectionList)
+        val mainActivity = ctx.assets.toString("MainActivity")
+            .replace("0x7f010000", "0x" + resourceId.toHexString())
+        dex.fromSmali(SmaliReader(mainActivity.encodeToByteArray()))
 
-        dexBuilder.buildMainActivityClass(resourceId)
-        dexBuilder.buildBuildConfig()
+        val config = ctx.assets.toByteArray("BuildConfig")
+        dex.fromSmali(SmaliReader(config))
+
+        return getBytesFromDex(dex)
+    }
+
+    private fun getBytesFromDex(dex: DexFile): ByteArray {
         dex.refresh()
         dex.version = apiToDexVersion(minSdkVersion)
         dex.clearEmptySections()
