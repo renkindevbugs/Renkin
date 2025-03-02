@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.kaanelloed.iconeration"
+    namespace = "dev.alembiconsProject.alembicons"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
     buildToolsVersion = "34.0.0"
 
