@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package androidx.compose.ui.graphics.vector.compat
+package androidx.compose.ui.graphics.vector.compat2
 
 /** Constants used to resolve VectorDrawable attributes during xml inflation */
 internal object AndroidVectorResources {

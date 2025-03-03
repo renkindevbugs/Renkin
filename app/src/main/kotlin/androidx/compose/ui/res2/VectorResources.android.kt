@@ -22,11 +22,11 @@ import android.content.res.XmlResourceParser
 import android.util.TypedValue
 import android.util.Xml
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.vector.compat.AndroidVectorParser
-import androidx.compose.ui.graphics.vector.compat.createVectorImageBuilder
-import androidx.compose.ui.graphics.vector.compat.isAtEnd
-import androidx.compose.ui.graphics.vector.compat.parseCurrentVectorNode
-import androidx.compose.ui.graphics.vector.compat.seekToStartTag
+import androidx.compose.ui.graphics.vector.compat2.AndroidVectorParser
+import androidx.compose.ui.graphics.vector.compat2.createVectorImageBuilder
+import androidx.compose.ui.graphics.vector.compat2.isAtEnd
+import androidx.compose.ui.graphics.vector.compat2.parseCurrentVectorNode
+import androidx.compose.ui.graphics.vector.compat2.seekToStartTag
 import java.lang.ref.WeakReference
 import org.xmlpull.v1.XmlPullParserException
 
