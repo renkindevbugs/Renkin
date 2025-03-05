@@ -127,8 +127,9 @@ class ApplicationManager(private val ctx: Context) {
                 val resourceId = res.getIdentifierByName(element.drawableLink, "drawable", iconPackName)
 
                 if (resourceId > 0) {
-                    val drawable = getResIcon(res, resourceId)!!
-                    map[element.component] = ResourceDrawable(resourceId, drawable)
+                    val drawable = getResIcon(res, resourceId)
+                    if (drawable != null)
+                        map[element.component] = ResourceDrawable(resourceId, drawable)
                 }
             }
         }
@@ -180,8 +181,9 @@ class ApplicationManager(private val ctx: Context) {
         val res = getResources(iconPackName) ?: return list
 
         for (id in drawableIds) {
-            val drawable = getResIcon(res, id)!!
-            list.add(ResourceDrawable(id, drawable))
+            val drawable = getResIcon(res, id)
+            if (drawable != null)
+                list.add(ResourceDrawable(id, drawable))
         }
 
         return list
@@ -230,12 +232,15 @@ class ApplicationManager(private val ctx: Context) {
             val packageName = resolve.activityInfo.packageName
             val iconID = resolve.activityInfo.applicationInfo.icon
 
-            val pack = getPackage(resolve.activityInfo.packageName)!!
-            val versionCode = getVersionCode(pack)
-            val versionName = pack.versionName!!
+            val pack = getPackage(resolve.activityInfo.packageName)
 
-            val iconPack = IconPack(packageName, appName, versionCode, versionName, iconID)
-            iconPacks.add(iconPack)
+            if (pack != null) {
+                val versionCode = getVersionCode(pack)
+                val versionName = pack.versionName ?: ""
+
+                val iconPack = IconPack(packageName, appName, versionCode, versionName, iconID)
+                iconPacks.add(iconPack)
+            }
         }
 
         return iconPacks

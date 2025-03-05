@@ -49,6 +49,7 @@ import dev.alembiconsProject.alembicons.extension.bitmapFromBase64
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.icon.creator.IconGenerator
 import dev.alembiconsProject.alembicons.icon.creator.IconPackContainer
+import dev.alembiconsProject.alembicons.icon.parser.XmlNodeParser
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.ui.supportDynamicColors
@@ -295,19 +296,13 @@ class ApplicationProvider(private val context: Context) {
 
         val dbApps = dao.getAll()
         val apps = applicationList.toList() //clone
-        return
+
         for (app in apps) {
             val dbApp = dbApps.find { it.packageName == app.packageName && it.activityName == app.activityName }
             if (dbApp != null) {
                 val icon = if (dbApp.isXml) {
                     val nodes = XmlDecoder.fromBase64(dbApp.drawable)
-                    val vector = VectorParser.parse(context.resources, nodes, defaultColor)
-
-                    if (vector != null) {
-                        ImageVectorDrawable(vector)
-                    } else {
-                        null
-                    }
+                    XmlNodeParser.parse(context.resources, nodes, defaultColor)
                 } else {
                     BitmapIconDrawable(bitmapFromBase64(dbApp.drawable))
                 }
@@ -329,7 +324,7 @@ class ApplicationProvider(private val context: Context) {
 
         for (app in applicationList) {
             if (app.createdIcon != null) {
-                val isXml = app.createdIcon is InsetIconDrawable
+                val isXml = app.createdIcon !is BitmapIconDrawable
 
                 dbApps.add(
                     DbApplication(
@@ -361,7 +356,6 @@ class ApplicationProvider(private val context: Context) {
         }
 
         iconPackAppFilterElement = map
-
         iconPackLoaded = true
     }
 

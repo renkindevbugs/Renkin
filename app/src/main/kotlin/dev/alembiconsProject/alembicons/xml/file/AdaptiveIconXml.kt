@@ -12,23 +12,47 @@ class AdaptiveIconXml: BaseInsetXml() {
     }
 
     fun foreground(drawableName: String) {
-        startTag("foreground")
+        startForeground()
         attribute("drawable", "@drawable/${drawableName}_foreground", androidNamespace)
-        endTag("foreground")
+        endForeground()
     }
 
     fun background(value: String) {
-        startTag("background")
+        startBackground()
         attribute("drawable", value, androidNamespace)
+        endBackground()
+    }
+
+    fun startForeground() {
+        startTag("foreground")
+    }
+
+    fun endForeground() {
+        endTag("foreground")
+    }
+
+    fun startBackground() {
+        startTag("background")
+    }
+
+    fun endBackground() {
         endTag("background")
     }
 
-    override fun startInset() {
+    public override fun startInset() {
         super.startInset()
     }
 
-    override fun endInset() {
+    public override fun endInset() {
         super.endInset()
+    }
+
+    public override fun startVector() {
+        super.startVector()
+    }
+
+    public override fun endVector() {
+        super.endVector()
     }
 
     override fun readAndClose(): ByteArray {

@@ -11,6 +11,7 @@ import androidx.compose.ui.graphics.vector.VectorPath
 import dev.alembiconsProject.alembicons.ui.toHexString
 import dev.alembiconsProject.alembicons.vector.PathExporter.Companion.toStringPath
 import dev.alembiconsProject.alembicons.vector.brush.ReferenceBrush
+import dev.alembiconsProject.alembicons.xml.file.BaseVectorXml
 import dev.alembiconsProject.alembicons.xml.file.VectorXml
 
 class VectorExporter(val vector: ImageVector) {
@@ -26,21 +27,32 @@ class VectorExporter(val vector: ImageVector) {
         return toXmlFile().readAndClose()
     }
 
+    fun toXmlFile(parent: BaseVectorXml): BaseVectorXml {
+        setSize(parent)
+        setXmlGroup(parent, vector.root)
+
+        return parent
+    }
+
     fun toXmlFile(): VectorXml {
         val vectorFile = VectorXml()
-        vectorFile.vectorSize(
-            vector.defaultWidth.value.toString() + "dp",
-            vector.defaultHeight.value.toString() + "dp",
-            vector.viewportWidth,
-            vector.viewportHeight
-        )
 
+        setSize(vectorFile)
         setXmlGroup(vectorFile, vector.root)
 
         return vectorFile
     }
 
-    private fun setXmlGroup(file : VectorXml, group: VectorGroup) {
+    private fun setSize(file : BaseVectorXml) {
+        file.vectorSize(
+            vector.defaultWidth.value.toString() + "dp",
+            vector.defaultHeight.value.toString() + "dp",
+            vector.viewportWidth,
+            vector.viewportHeight
+        )
+    }
+
+    private fun setXmlGroup(file : BaseVectorXml, group: VectorGroup) {
         file.startGroup(
             group.scaleX,
             group.scaleY,
@@ -64,7 +76,7 @@ class VectorExporter(val vector: ImageVector) {
         file.endGroup()
     }
 
-    private fun setXmlPath(file : VectorXml, path: VectorPath) {
+    private fun setXmlPath(file : BaseVectorXml, path: VectorPath) {
         //TODO: save reference default color in custom attribute
         file.path(
             path.pathData.toStringPath(),
@@ -127,6 +139,11 @@ class VectorExporter(val vector: ImageVector) {
         fun ImageVector.toXmlFile(): VectorXml {
             val exporter = VectorExporter(this)
             return exporter.toXmlFile()
+        }
+
+        fun ImageVector.toXmlFile(parent: BaseVectorXml): BaseVectorXml {
+            val exporter = VectorExporter(this)
+            return exporter.toXmlFile(parent)
         }
     }
 }

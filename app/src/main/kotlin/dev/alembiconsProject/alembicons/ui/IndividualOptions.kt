@@ -93,6 +93,7 @@ import dev.alembiconsProject.alembicons.data.TextType
 import dev.alembiconsProject.alembicons.drawable.BitmapIconDrawable
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ImageVectorDrawable
+import dev.alembiconsProject.alembicons.drawable.InsetIconDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
 import dev.alembiconsProject.alembicons.extension.toDrawable
@@ -639,10 +640,15 @@ fun AdaptiveIconSwitch(asAdaptiveIcon: Boolean, onChange: (newValue: Boolean) ->
 
 @Composable
 fun PrepareEditVector(app: PackageInfoStruct, onChange: (icon: IconPackDrawable?) -> Unit) {
-    val editedVector = if (app.createdIcon is ImageVectorDrawable) {
-        app.createdIcon.applyAndRemoveGroup().toImageVector()
-    } else {
-        ImageVector.createEmptyVector()
+    val editedVector = when (app.createdIcon) {
+        is ImageVectorDrawable -> app.createdIcon.applyAndRemoveGroup().toImageVector()
+        is InsetIconDrawable -> {
+            if (app.createdIcon.drawable is ImageVectorDrawable)
+                app.createdIcon.drawable.applyAndRemoveGroup().toImageVector()
+            else
+                ImageVector.createEmptyVector()
+        }
+        else -> ImageVector.createEmptyVector()
     }
 
     EditVectorColumn(editedVector, onChange)

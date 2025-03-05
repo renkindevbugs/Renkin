@@ -4,14 +4,13 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.Drawable
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import dev.alembiconsProject.alembicons.extension.toBase64
 
-class BitmapIconDrawable(val drawable: BitmapDrawable): Drawable(), IconPackDrawable {
+class BitmapIconDrawable(val drawable: BitmapDrawable): IconPackDrawable() {
     constructor(bitmap: Bitmap): this(BitmapDrawable(null, bitmap))
 
     override fun draw(canvas: Canvas) {

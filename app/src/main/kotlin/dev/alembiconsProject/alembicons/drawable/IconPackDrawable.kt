@@ -1,14 +1,15 @@
 package dev.alembiconsProject.alembicons.drawable
 
 import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
 
-interface IconPackDrawable {
+abstract class IconPackDrawable: Drawable() {
     @Composable
-    fun getPainter(): Painter
+    abstract fun getPainter(): Painter
 
-    fun toBitmap(): Bitmap
+    abstract fun toBitmap(): Bitmap
 
-    fun toDbString(): String
+    abstract fun toDbString(): String
 }

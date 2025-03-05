@@ -9,15 +9,14 @@ abstract class BaseInsetXml: BaseVectorXml() {
         endTag("inset")
     }
 
-    fun inset(insetBottom: Float, insetLeft: Float, insetRight: Float, insetTop: Float) {
-        attribute("insetBottom", insetBottom.toString(), androidNamespace)
-        attribute("insetLeft", insetLeft.toString(), androidNamespace)
-        attribute("insetRight", insetRight.toString(), androidNamespace)
-        attribute("insetTop", insetTop.toString(), androidNamespace)
+    fun inset(insetBottom: String, insetLeft: String, insetRight: String, insetTop: String) {
+        attribute("insetBottom", insetBottom, androidNamespace)
+        attribute("insetLeft", insetLeft, androidNamespace)
+        attribute("insetRight", insetRight, androidNamespace)
+        attribute("insetTop", insetTop, androidNamespace)
     }
 
-    fun bitmap(drawable: String, insetBottom: Float, insetLeft: Float, insetRight: Float, insetTop: Float) {
+    fun insetDrawable(drawable: String) {
         attribute("drawable", drawable, androidNamespace)
-        inset(insetBottom, insetLeft, insetRight, insetTop)
     }
 }

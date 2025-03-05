@@ -3,7 +3,6 @@ package dev.alembiconsProject.alembicons.drawable
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.ColorFilter
-import android.graphics.drawable.Drawable
 import android.util.Base64
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.BlendMode
@@ -20,7 +19,7 @@ import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.resizeTo
 import dev.alembiconsProject.alembicons.vector.VectorExporter.Companion.toXml
 import dev.alembiconsProject.alembicons.vector.VectorRenderer.Companion.renderToCanvas
 
-class ImageVectorDrawable(imageVector: ImageVector): Drawable(), IconPackDrawable {
+class ImageVectorDrawable(imageVector: ImageVector): IconPackDrawable() {
     var name: String = imageVector.name
     var defaultWidth: Dp = imageVector.defaultWidth
     var defaultHeight: Dp = imageVector.defaultHeight

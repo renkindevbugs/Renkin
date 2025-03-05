@@ -10,6 +10,7 @@ import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.InsetDrawable
 import android.os.Build
+import android.util.Base64
 import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
@@ -17,10 +18,12 @@ import androidx.compose.ui.graphics.toComposeRect
 import androidx.core.graphics.drawable.toBitmap
 import dev.alembiconsProject.alembicons.packages.PackageVersion
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.inset
+import dev.alembiconsProject.alembicons.vector.VectorExporter.Companion.toXmlFile
+import dev.alembiconsProject.alembicons.xml.file.InsetXml
 
-class InsetIconDrawable(val drawable: Drawable, val dimensions: Rect, val fractions: RectF): Drawable(), IconPackDrawable {
+class InsetIconDrawable(val drawable: Drawable, val dimensions: Rect, val fractions: RectF): IconPackDrawable() {
     private val insetDrawable: InsetDrawable
-    private val isFractionsNotEmpty = isFractions()
+    val isFractionsNotEmpty = isFractions()
 
     init {
         insetDrawable = if (isFractionsNotEmpty) {
@@ -69,7 +72,28 @@ class InsetIconDrawable(val drawable: Drawable, val dimensions: Rect, val fracti
     }
 
     override fun toDbString(): String {
-        TODO("Not yet implemented")
+        val file = InsetXml()
+        if (isFractionsNotEmpty) {
+            file.inset((fractions.bottom * 100).toString() + "%"
+                , (fractions.left * 100).toString() + "%"
+                , (fractions.right * 100).toString() + "%"
+                , (fractions.top * 100).toString() + "%")
+        } else {
+            file.inset(dimensions.bottom.toString() + "dp"
+                , dimensions.left.toString() + "dp"
+                , dimensions.right.toString() + "dp"
+                , dimensions.top.toString() + "dp")
+        }
+
+        if (drawable is ImageVectorDrawable) {
+            file.startVector()
+            drawable.toImageVector().toXmlFile(file)
+            file.endVector()
+        }
+        if (drawable is BitmapIconDrawable) {
+            file.insetDrawable(drawable.toDbString())
+        }
+        return Base64.encodeToString(file.readAndClose(), Base64.NO_WRAP)
     }
 
     @ChecksSdkIntAtLeast(Build.VERSION_CODES.O)

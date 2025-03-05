@@ -11,11 +11,11 @@ class InsetXml: BaseInsetXml() {
         startInset()
     }
 
-    override fun startVector() {
+    public override fun startVector() {
         super.startVector()
     }
 
-    override fun endVector() {
+    public override fun endVector() {
         super.endVector()
     }
 

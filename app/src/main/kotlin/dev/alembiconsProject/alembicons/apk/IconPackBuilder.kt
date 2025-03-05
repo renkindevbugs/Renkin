@@ -46,6 +46,7 @@ import com.reandroid.arsc.value.ValueType
 import com.reandroid.dex.model.DexFile
 import com.reandroid.dex.sections.SectionType
 import com.reandroid.dex.smali.SmaliReader
+import dev.alembiconsProject.alembicons.drawable.BitmapIconDrawable
 import dev.alembiconsProject.alembicons.extension.toString
 import dev.alembiconsProject.alembicons.packages.PackageVersion
 import java.io.File
@@ -135,19 +136,38 @@ class IconPackBuilder(
                 val exportAsAdaptive = themed || app.createdIcon is InsetIconDrawable
                 if (exportAsAdaptive && PackageVersion.is26OrMore()) {
                     val adaptive = AdaptiveIconXml()
-                    adaptive.foreground(appFileName)
                     adaptive.background("@color/icon_background_color")
 
-                    if (app.createdIcon is InsetIconDrawable) {
-                        //val vector = app.createdIcon.formatVector(vectorBrush)
-                        //createXmlDrawableResource(apkModule, packageBlock, vector.toXmlFile(), appFileName + "_foreground")
-                    }
-                    if (app.createdIcon is ImageVectorDrawable) {
-                        val vector = app.createdIcon.also { it.root.setReferenceColorPaths(vectorBrush) }.toImageVector()
-                        createXmlDrawableResource(apkModule, packageBlock, vector.toXmlFile(), appFileName + "_foreground")
-                    }
-                    else {
-                        createBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground")
+                    when (app.createdIcon) {
+                        is InsetIconDrawable -> {
+                            adaptive.startForeground()
+                            adaptive.startInset()
+                            exportInsetIcon(adaptive, app.createdIcon)
+
+                            val insetDrawable = app.createdIcon.drawable
+                            if (insetDrawable is ImageVectorDrawable) {
+                                exportVectorIcon(adaptive, insetDrawable, vectorBrush)
+                            } else {
+                                if (insetDrawable is BitmapIconDrawable) {
+                                    adaptive.insetDrawable(appFileName + "_foreground")
+                                    createBitmapResource(apkModule, packageBlock, insetDrawable.toBitmap(), appFileName + "_foreground")
+                                }
+                            }
+
+                            adaptive.endInset()
+                            adaptive.endForeground()
+                        }
+
+                        is ImageVectorDrawable -> {
+                            adaptive.startForeground()
+                            exportVectorIcon(adaptive, app.createdIcon, vectorBrush)
+                            adaptive.endForeground()
+                        }
+
+                        else -> {
+                            adaptive.foreground(appFileName)
+                            createBitmapResource(apkModule, packageBlock, app.createdIcon.toBitmap(), appFileName + "_foreground")
+                        }
                     }
 
                     createXmlDrawableResource(apkModule, packageBlock, adaptive, appFileName)
@@ -191,6 +211,27 @@ class IconPackBuilder(
         textMethod(ctx.resources.getString(R.string.done))
 
         return signedApk.toUri()
+    }
+
+    private fun exportVectorIcon(adaptive: AdaptiveIconXml, icon: ImageVectorDrawable, brush: ReferenceBrush) {
+        adaptive.startVector()
+        val vector = icon.also { it.root.setReferenceColorPaths(brush) }.toImageVector()
+        vector.toXmlFile(adaptive)
+        adaptive.endVector()
+    }
+
+    private fun exportInsetIcon(adaptive: AdaptiveIconXml, icon: InsetIconDrawable) {
+        if (icon.isFractionsNotEmpty) {
+            adaptive.inset((icon.fractions.bottom * 100).toString() + "%"
+                , (icon.fractions.left * 100).toString() + "%"
+                , (icon.fractions.right * 100).toString() + "%"
+                , (icon.fractions.top * 100).toString() + "%")
+        } else {
+            adaptive.inset(icon.dimensions.bottom.toString() + "dp"
+                , icon.dimensions.left.toString() + "dp"
+                , icon.dimensions.right.toString() + "dp"
+                , icon.dimensions.top.toString() + "dp")
+        }
     }
 
     @Suppress(SuppressSameParameterValue)
