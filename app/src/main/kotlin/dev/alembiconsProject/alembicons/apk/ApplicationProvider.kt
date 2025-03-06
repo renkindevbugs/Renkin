@@ -304,7 +304,7 @@ class ApplicationProvider(private val context: Context) {
                     val nodes = XmlDecoder.fromBase64(dbApp.drawable)
                     XmlNodeParser.parse(context.resources, nodes, defaultColor)
                 } else {
-                    BitmapIconDrawable(bitmapFromBase64(dbApp.drawable))
+                    BitmapIconDrawable(bitmapFromBase64(dbApp.drawable), dbApp.isAdaptiveIcon)
                 }
 
                 editApplication(app, app.changeExport(icon))
@@ -330,7 +330,7 @@ class ApplicationProvider(private val context: Context) {
                     DbApplication(
                         app.packageName,
                         app.activityName,
-                        false,
+                        app.createdIcon.isAdaptiveIcon(),
                         isXml,
                         app.createdIcon.toDbString()
                     )

@@ -10,8 +10,14 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import dev.alembiconsProject.alembicons.extension.toBase64
 
-class BitmapIconDrawable(val drawable: BitmapDrawable): IconPackDrawable() {
-    constructor(bitmap: Bitmap): this(BitmapDrawable(null, bitmap))
+class BitmapIconDrawable(val drawable: BitmapDrawable, private val exportAsAdaptiveIcon: Boolean = false) :
+    IconPackDrawable() {
+    constructor(bitmap: Bitmap, exportAsAdaptiveIcon: Boolean = false) : this(
+        BitmapDrawable(
+            null,
+            bitmap
+        ), exportAsAdaptiveIcon
+    )
 
     override fun draw(canvas: Canvas) {
         drawable.draw(canvas)
@@ -43,4 +49,7 @@ class BitmapIconDrawable(val drawable: BitmapDrawable): IconPackDrawable() {
         return drawable.bitmap.toBase64(Bitmap.CompressFormat.PNG, 100)
     }
 
+    override fun isAdaptiveIcon(): Boolean {
+        return exportAsAdaptiveIcon
+    }
 }

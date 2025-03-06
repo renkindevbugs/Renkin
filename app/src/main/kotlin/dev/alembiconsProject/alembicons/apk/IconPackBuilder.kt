@@ -133,7 +133,7 @@ class IconPackBuilder(
             if (app.createdIcon != null) {
                 val appFileName = app.getFileName()
 
-                val exportAsAdaptive = themed || app.createdIcon is InsetIconDrawable
+                val exportAsAdaptive = themed || app.createdIcon is InsetIconDrawable || app.createdIcon.isAdaptiveIcon()
                 if (exportAsAdaptive && PackageVersion.is26OrMore()) {
                     val adaptive = AdaptiveIconXml()
                     adaptive.background("@color/icon_background_color")

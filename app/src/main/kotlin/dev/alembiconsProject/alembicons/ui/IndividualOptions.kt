@@ -461,7 +461,7 @@ fun UploadColumn(app: PackageInfoStruct,
                 ColorButton(stringResource(R.string.iconColor), Color.White) { iconColor = it }
             }
 
-            onChange(BitmapIconDrawable(BitmapDrawable(null, zoomedImage)))
+            onChange(BitmapIconDrawable(zoomedImage, asAdaptiveIcon))
         }
     }
 }

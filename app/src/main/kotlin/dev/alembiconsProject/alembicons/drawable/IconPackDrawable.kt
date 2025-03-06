@@ -12,4 +12,8 @@ abstract class IconPackDrawable: Drawable() {
     abstract fun toBitmap(): Bitmap
 
     abstract fun toDbString(): String
+
+    open fun isAdaptiveIcon(): Boolean {
+        return false
+    }
 }
