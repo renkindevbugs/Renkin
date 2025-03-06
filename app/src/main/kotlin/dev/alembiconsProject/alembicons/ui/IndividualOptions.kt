@@ -651,7 +651,13 @@ fun PrepareEditVector(app: PackageInfoStruct, onChange: (icon: IconPackDrawable?
         else -> ImageVector.createEmptyVector()
     }
 
-    EditVectorColumn(editedVector, onChange)
+    EditVectorColumn(editedVector) {
+        if (app.createdIcon is InsetIconDrawable && it != null) {
+            onChange(InsetIconDrawable(it, app.createdIcon.dimensions, app.createdIcon.fractions))
+        } else {
+            onChange(it)
+        }
+    }
 }
 
 @Composable
@@ -661,10 +667,9 @@ fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) ->
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         var paths: List<VectorPath> by remember { mutableStateOf(listOf()) }
-        var firstLoad by remember { mutableStateOf(true) }
         var automaticallyCenter by rememberSaveable { mutableStateOf(true) }
 
-        if (firstLoad) {
+        LaunchedEffect(Unit) {
             for (path in vector.root) {
                 if (path is VectorPath && path.pathData != EmptyPath) {
                     val mutableList = paths.toMutableList()
@@ -672,8 +677,6 @@ fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) ->
                     paths = mutableList.toList()
                 }
             }
-
-            firstLoad = false
         }
 
         val editedVector = vector.toImageVectorDrawable()
