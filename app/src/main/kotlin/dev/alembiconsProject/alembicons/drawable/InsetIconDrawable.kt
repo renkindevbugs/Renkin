@@ -52,23 +52,25 @@ class InsetIconDrawable(val drawable: Drawable, val dimensions: Rect, val fracti
 
     @Composable
     override fun getPainter(): Painter {
-        when (drawable) {
+        return when (drawable) {
             is ImageVectorDrawable -> {
                 val newVector = ImageVectorDrawable(drawable.toImageVector())
-                newVector.inset(dimensions.toComposeRect())
-                return newVector.getPainter()
-            }
-            is BitmapDrawable -> {
-                return BitmapIconDrawable(insetDrawable.toBitmap()).getPainter()
+                if (isFractionsNotEmpty) {
+                    newVector.inset(fractions)
+                } else {
+                    newVector.inset(dimensions.toComposeRect())
+                }
+                newVector.getPainter()
             }
             else -> {
-                return BitmapIconDrawable(ColorDrawable().toBitmap(108, 108)).getPainter()
+                BitmapIconDrawable(toBitmap()).getPainter()
             }
         }
     }
 
     override fun toBitmap(): Bitmap {
-        return insetDrawable.toBitmap()
+        return insetDrawable.toSafeBitmapOrNull()
+            ?: ColorDrawable().toBitmap(108, 108)
     }
 
     override fun toDbString(): String {
@@ -91,7 +93,7 @@ class InsetIconDrawable(val drawable: Drawable, val dimensions: Rect, val fracti
             file.endVector()
         }
         if (drawable is BitmapIconDrawable) {
-            file.insetDrawable(drawable.toDbString())
+            file.base64Drawable(drawable.toDbString())
         }
         return Base64.encodeToString(file.readAndClose(), Base64.NO_WRAP)
     }
@@ -102,13 +104,21 @@ class InsetIconDrawable(val drawable: Drawable, val dimensions: Rect, val fracti
         return PackageVersion.is26OrMore() && emptyFraction
     }
 
+    fun newDrawable(drawable: Drawable): InsetIconDrawable {
+        return InsetIconDrawable(drawable, dimensions, fractions)
+    }
+
     companion object {
         fun from(insetDrawable: InsetDrawable): InsetIconDrawable {
+            return from(insetDrawable, insetDrawable.drawable!!)
+        }
+
+        fun from(insetDrawable: InsetDrawable, drawable: Drawable): InsetIconDrawable {
             val dimensions = Rect()
             val fractions = RectF()
             insetDrawable.getInsetValues(dimensions, fractions)
 
-            return InsetIconDrawable(insetDrawable.drawable!!, dimensions, fractions)
+            return InsetIconDrawable(drawable, dimensions, fractions)
         }
     }
 }

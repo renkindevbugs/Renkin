@@ -174,7 +174,7 @@ class IconGenerator(
         return when (imageEdit) {
             ImageEdit.NONE -> defaultIcon
             ImageEdit.PATH -> generatePathTracing(bitmapIcon, parsedIcon)
-            ImageEdit.EDGE -> generateCannyEdgeDetection(bitmapIcon)
+            ImageEdit.EDGE -> generateCannyEdgeDetection(bitmapIcon, parsedIcon)
             ImageEdit.COLORIZE -> colorizeImage(bitmapIcon, parsedIcon, mode)
         }
     }
@@ -199,6 +199,9 @@ class IconGenerator(
             }
         }
 
+        if (options.themed)
+            return vectorToInset(newIcon.toImageVectorDrawable())
+
         return newIcon.toImageVectorDrawable()
     }
 
@@ -213,7 +216,7 @@ class IconGenerator(
         return null
     }
 
-    private fun generateCannyEdgeDetection(bitmapIcon: Bitmap): IconPackDrawable {
+    private fun generateCannyEdgeDetection(bitmapIcon: Bitmap, parsedIcon: Drawable?): IconPackDrawable {
         val edgeDetector = CannyEdgeDetector()
 
         edgeDetector.process(
@@ -222,13 +225,25 @@ class IconGenerator(
             DetectionOptions()
         )
 
-        val bitmap = if (options.themed) {
-            convertBitmapToAdaptiveForeground(edgeDetector.edgesImage)
-        } else {
-            edgeDetector.edgesImage
+        if (parsedIcon != null) {
+            if (parsedIcon.isAdaptiveIconDrawable()) {
+                parsedIcon as AdaptiveIconDrawable
+                if (parsedIcon.foreground is InsetIconDrawable) {
+                    val foreground = parsedIcon.foreground as InsetIconDrawable
+                    return foreground.newDrawable(BitmapIconDrawable(ctx.resources, edgeDetector.edgesImage))
+                }
+            }
+
+            if (parsedIcon is InsetIconDrawable) {
+                return parsedIcon.newDrawable(BitmapIconDrawable(ctx.resources, edgeDetector.edgesImage))
+            }
         }
 
-        return BitmapIconDrawable(bitmap)
+        return if (options.themed) {
+            bitmapToInset(edgeDetector.edgesImage)
+        } else {
+            BitmapIconDrawable(ctx.resources, edgeDetector.edgesImage)
+        }
     }
 
     private fun generatePathTracing(bitmapIcon: Bitmap, parsedIcon: Drawable?): IconPackDrawable {
@@ -249,8 +264,28 @@ class IconGenerator(
                 vectorIcon = parsedIcon.foreground
             }
 
+            if (parsedIcon.foreground is InsetIconDrawable) {
+                val inset = parsedIcon.foreground as InsetIconDrawable
+                if (inset.drawable is ImageVectorDrawable) {
+                    vectorIcon = inset.drawable
+                }
+            }
+
             if (parsedIcon.haveMonochrome() && options.monochrome) {
                 vectorIcon = parsedIcon.monochrome!!
+            }
+        }
+
+        if (parsedIcon is InsetIconDrawable) {
+            if (parsedIcon.drawable is ImageVectorDrawable) {
+                vectorIcon = parsedIcon.drawable
+
+                val stroke = vectorIcon.viewportHeight / 48 //1F at 48
+                vectorIcon.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+                vectorIcon.resizeAndCenter().applyAndRemoveGroup()
+                vectorIcon.tintColor = Color.Unspecified
+
+                return parsedIcon
             }
         }
 
@@ -287,7 +322,7 @@ class IconGenerator(
         val dims = android.graphics.Rect(x.toInt(), y.toInt(), x.toInt(), y.toInt())
         val fractions = RectF(scale, scale, scale, scale)
 
-        return InsetIconDrawable(BitmapDrawable(null, bitmap), dims, fractions)
+        return InsetIconDrawable(BitmapIconDrawable(ctx.resources, bitmap), dims, fractions)
     }
 
     private fun generateColorQuantizationDetection(bitmapIcon: Bitmap): IconPackDrawable {
@@ -326,10 +361,10 @@ class IconGenerator(
     }
 
     private fun getDefaultIcon(bitmapIcon: Bitmap, parsedIcon: Drawable?): IconPackDrawable {
-        return if (parsedIcon is ImageVectorDrawable) {
-            getDefaultVectorIcon(parsedIcon)
-        } else {
-            getDefaultBitmapIcon(bitmapIcon)
+        return when (parsedIcon) {
+            is InsetIconDrawable -> parsedIcon
+            is ImageVectorDrawable -> getDefaultVectorIcon(parsedIcon)
+            else -> getDefaultBitmapIcon(bitmapIcon)
         }
     }
 
@@ -337,7 +372,7 @@ class IconGenerator(
         return if (options.themed) {
             bitmapToInset(bitmap)
         } else {
-            BitmapIconDrawable(bitmap)
+            BitmapIconDrawable(ctx.resources, bitmap)
         }
     }
 
@@ -410,9 +445,18 @@ class IconGenerator(
     private fun getIconBitmap(icon: Drawable, maxSize: Int = 500): Bitmap? {
         return if (icon.isAdaptiveIconDrawable()) {
             icon as AdaptiveIconDrawable
-            icon.foreground.shrinkIfBiggerThan(maxSize)
+            if (icon.foreground is InsetDrawable) {
+                val inset = icon.foreground as InsetDrawable
+                inset.drawable?.shrinkIfBiggerThan(maxSize)
+            } else {
+                icon.foreground.shrinkIfBiggerThan(maxSize)
+            }
         } else {
-            icon.shrinkIfBiggerThan(maxSize)
+            if (icon is InsetDrawable) {
+                icon.drawable?.shrinkIfBiggerThan(maxSize)
+            } else {
+                icon.shrinkIfBiggerThan(maxSize)
+            }
         }
     }
 
@@ -428,16 +472,6 @@ class IconGenerator(
         return addBackground(coloredIcon)
     }
 
-    private fun convertBitmapToAdaptiveForeground(bitmap: Bitmap): Bitmap {
-        val newBitmap = bitmap.clone()
-        val canvas = Canvas(newBitmap)
-
-        canvas.scale(0.5f, 0.5f, bitmap.width * 0.5f, bitmap.height * 0.5f)
-        canvas.drawBitmap(bitmap, 0F, 0F, Paint())
-
-        return newBitmap
-    }
-
     private fun addBackground(image: Bitmap): Bitmap {
         return if (options.themed) image.changeBackgroundColor(options.bgColor) else image
     }
@@ -446,8 +480,6 @@ class IconGenerator(
         if (!isVectorDrawable(iconDrawable.drawable)) return null
 
         val res = ApplicationManager(ctx).getResources(iconPackName) ?: return null
-
-        //val adaptiveIcon = AdaptiveIconParser.parse(res, parser.toXmlNode()) ?: return null
         val icon = IconParser.parseDrawable(res, iconDrawable.drawable, iconDrawable.resourceId)
 
         if (!icon.isAdaptiveIconDrawable()) return null
@@ -471,10 +503,9 @@ class IconGenerator(
             return null
         }
 
-        val mutableVector = vectorIcon.resizeAndCenter()
-
-        val stroke = mutableVector.viewportHeight / 48 //1F at 48
-        mutableVector.root.editStrokePaths(stroke)
+        vectorIcon.resizeAndCenter()
+        val stroke = vectorIcon.viewportHeight / 48 //1F at 48
+        vectorIcon.root.editStrokePaths(stroke)
 
         if (inset != null)
             return inset
@@ -483,10 +514,12 @@ class IconGenerator(
     }
 
     private fun colorizeImage(bitmapIcon: Bitmap, parsedIcon: Drawable?, mode: PorterDuff.Mode): IconPackDrawable {
-        return if (parsedIcon is ImageVectorDrawable) {
-            colorizeVector(parsedIcon)
-        } else {
-            BitmapIconDrawable(colorizeBitmap(bitmapIcon, mode))
+        return when (parsedIcon) {
+            is InsetIconDrawable -> {
+                parsedIcon.newDrawable(colorizeImage(bitmapIcon, parsedIcon.drawable, mode))
+            }
+            is ImageVectorDrawable -> colorizeVector(parsedIcon)
+            else -> BitmapIconDrawable(ctx.resources, colorizeBitmap(bitmapIcon, mode))
         }
     }
 

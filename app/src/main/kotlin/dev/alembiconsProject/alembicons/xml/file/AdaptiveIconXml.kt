@@ -1,6 +1,6 @@
 package dev.alembiconsProject.alembicons.xml.file
 
-class AdaptiveIconXml: BaseInsetXml() {
+class AdaptiveIconXml: InsetWrapperXml() {
     init {
         initialize()
     }
@@ -37,22 +37,6 @@ class AdaptiveIconXml: BaseInsetXml() {
 
     fun endBackground() {
         endTag("background")
-    }
-
-    public override fun startInset() {
-        super.startInset()
-    }
-
-    public override fun endInset() {
-        super.endInset()
-    }
-
-    public override fun startVector() {
-        super.startVector()
-    }
-
-    public override fun endVector() {
-        super.endVector()
     }
 
     override fun readAndClose(): ByteArray {

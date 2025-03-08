@@ -1,6 +1,6 @@
 package dev.alembiconsProject.alembicons.xml.file
 
-abstract class BaseInsetXml: BaseVectorXml() {
+abstract class BaseInsetXml: VectorWrapperXml() {
     protected open fun startInset() {
         startTag("inset")
     }
@@ -17,6 +17,6 @@ abstract class BaseInsetXml: BaseVectorXml() {
     }
 
     fun insetDrawable(drawable: String) {
-        attribute("drawable", drawable, androidNamespace)
+        attribute("drawable", "@drawable/${drawable}", androidNamespace)
     }
 }

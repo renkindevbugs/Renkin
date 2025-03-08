@@ -11,12 +11,8 @@ class InsetXml: BaseInsetXml() {
         startInset()
     }
 
-    public override fun startVector() {
-        super.startVector()
-    }
-
-    public override fun endVector() {
-        super.endVector()
+    fun base64Drawable(drawable: String) {
+        attribute("drawable", drawable, androidNamespace)
     }
 
     override fun readAndClose(): ByteArray {

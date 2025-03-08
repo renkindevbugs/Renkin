@@ -41,7 +41,7 @@ class IconParser(private val resources: Resources) {
         }
 
         return when (drawable) {
-            is BitmapDrawable -> drawable
+            is BitmapDrawable -> BitmapIconDrawable(drawable)
             is VectorDrawable -> parseVector(drawableId, parser) ?: drawable
             is InsetDrawable -> parseInset(drawable, parser) ?: drawable
             is ColorDrawable -> drawable
@@ -85,16 +85,17 @@ class IconParser(private val resources: Resources) {
         return null
     }
 
-    private fun parseInset(drawable: InsetDrawable, parser: XmlResourceParser?): Drawable? {
-        if (drawable.drawable == null) return null
+    private fun parseInset(insetDrawable: InsetDrawable, parser: XmlResourceParser?): Drawable? {
+        if (insetDrawable.drawable == null) return null
 
-        InsetIconDrawable.from(drawable)
-        if (parser != null) {
+        val drawable = if (parser != null) {
             if (!parser.parseUntil("inset")) return null
-            return parseReferenceOrInnerDrawable(drawable.drawable!!, parser)
+            parseReferenceOrInnerDrawable(insetDrawable.drawable!!, parser)
+        } else {
+            parseDrawable(insetDrawable.drawable!!)
         }
 
-        return parseDrawable(drawable.drawable!!)
+        return InsetIconDrawable.from(insetDrawable, drawable)
     }
 
     private fun parseVector(drawableId: Int, parser: XmlResourceParser?): ImageVectorDrawable? {
