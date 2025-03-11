@@ -49,6 +49,7 @@ import com.reandroid.dex.smali.SmaliReader
 import dev.alembiconsProject.alembicons.drawable.BitmapIconDrawable
 import dev.alembiconsProject.alembicons.extension.toString
 import dev.alembiconsProject.alembicons.packages.PackageVersion
+import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.scaleAtCenter
 import dev.alembiconsProject.alembicons.xml.file.BaseInsetXml
 import dev.alembiconsProject.alembicons.xml.file.InsetXml
 import dev.alembiconsProject.alembicons.xml.file.VectorWrapperXml
@@ -178,13 +179,13 @@ class IconPackBuilder(
                 else {
                     if (app.createdIcon is InsetIconDrawable) {
                         val insetXml = InsetXml()
-                        exportInsetIcon(insetXml, app.createdIcon)
+                        exportInsetIcon(insetXml, app.createdIcon, 0.666f)
 
                         val insetDrawable = app.createdIcon
                         when (insetDrawable.drawable) {
-                            is ImageVectorDrawable -> {//exportVectorIcon(insetXml, insetDrawable.drawable)
-                                insetXml.insetDrawable(appFileName + "_foreground")
-                                createBitmapResource(apkModule, packageBlock, insetDrawable.drawable.toBitmap(), appFileName + "_foreground")
+                            is ImageVectorDrawable -> {
+                                insetDrawable.drawable.scaleAtCenter(0.666f)
+                                exportVectorIcon(insetXml, insetDrawable.drawable)
                             }
 
                             is BitmapIconDrawable -> {
@@ -250,17 +251,17 @@ class IconPackBuilder(
         file.endVector()
     }
 
-    private fun exportInsetIcon(file: BaseInsetXml, icon: InsetIconDrawable) {
+    private fun exportInsetIcon(file: BaseInsetXml, icon: InsetIconDrawable, scale: Float = 1f) {
         if (icon.isFractionsNotEmpty) {
-            file.inset((icon.fractions.bottom * 100).toString() + "%"
-                , (icon.fractions.left * 100).toString() + "%"
-                , (icon.fractions.right * 100).toString() + "%"
-                , (icon.fractions.top * 100).toString() + "%")
+            file.inset((icon.fractions.bottom * 100 * scale).toString() + "%"
+                , (icon.fractions.left * 100 * scale).toString() + "%"
+                , (icon.fractions.right * 100 * scale).toString() + "%"
+                , (icon.fractions.top * 100 * scale).toString() + "%")
         } else {
-            file.inset(icon.dimensions.bottom.toString() + "dp"
-                , icon.dimensions.left.toString() + "dp"
-                , icon.dimensions.right.toString() + "dp"
-                , icon.dimensions.top.toString() + "dp")
+            file.inset((icon.dimensions.bottom * scale).toString() + "dp"
+                , (icon.dimensions.left * scale).toString() + "dp"
+                , (icon.dimensions.right * scale).toString() + "dp"
+                , (icon.dimensions.top * scale).toString() + "dp")
         }
     }
 

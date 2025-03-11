@@ -12,6 +12,8 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.VectorDrawable
+import android.os.Build
+import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.asComposePath
@@ -56,6 +58,8 @@ class IconGenerator(
     private val primaryIconPackApplications: IconPackContainer,
     private val secondaryIconPackApplications: IconPackContainer
 ) {
+    private val adaptiveIconScale = 1.5f // 108dp / 72dp
+
     fun generateIcon(application: PackageInfoStruct,
                      onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?) -> Unit) {
         generateIcons(listOf(application), onUpdate)
@@ -169,6 +173,12 @@ class IconGenerator(
         parsedIcon: Drawable?,
         imageEdit: ImageEdit,
         mode: PorterDuff.Mode): IconPackDrawable {
+        if (parsedIcon != null) {
+            if (parsedIcon.isAdaptiveIconDrawable()) {
+                fixAdaptiveIconSize(parsedIcon as AdaptiveIconDrawable)
+            }
+        }
+
         val defaultIcon = getDefaultIcon(bitmapIcon, parsedIcon)
 
         return when (imageEdit) {
@@ -268,6 +278,12 @@ class IconGenerator(
                 val inset = parsedIcon.foreground as InsetIconDrawable
                 if (inset.drawable is ImageVectorDrawable) {
                     vectorIcon = inset.drawable
+
+                    val stroke = vectorIcon.viewportHeight / 48 //1F at 48
+                    vectorIcon.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+                    vectorIcon.tintColor = Color.Unspecified
+
+                    return inset
                 }
             }
 
@@ -282,7 +298,6 @@ class IconGenerator(
 
                 val stroke = vectorIcon.viewportHeight / 48 //1F at 48
                 vectorIcon.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
-                vectorIcon.resizeAndCenter().applyAndRemoveGroup()
                 vectorIcon.tintColor = Color.Unspecified
 
                 return parsedIcon
@@ -295,7 +310,6 @@ class IconGenerator(
 
         val stroke = vectorIcon.viewportHeight / 48 //1F at 48
         vectorIcon.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
-        vectorIcon.resizeAndCenter().applyAndRemoveGroup().scaleAtCenter(6F / 4F)
         vectorIcon.tintColor = Color.Unspecified
 
         if (options.themed) {
@@ -361,6 +375,13 @@ class IconGenerator(
     }
 
     private fun getDefaultIcon(bitmapIcon: Bitmap, parsedIcon: Drawable?): IconPackDrawable {
+        if (parsedIcon != null) {
+            if (parsedIcon.isAdaptiveIconDrawable()) {
+                parsedIcon as AdaptiveIconDrawable
+                return getDefaultIcon(bitmapIcon, parsedIcon.foreground)
+            }
+        }
+
         return when (parsedIcon) {
             is InsetIconDrawable -> parsedIcon
             is ImageVectorDrawable -> getDefaultVectorIcon(parsedIcon)
@@ -486,12 +507,11 @@ class IconGenerator(
 
         val adaptiveIcon = icon as AdaptiveIconDrawable
         var vectorIcon: ImageVectorDrawable? = null
-        var inset: InsetIconDrawable? = null
 
         if (adaptiveIcon.foreground is InsetIconDrawable) {
-            inset = adaptiveIcon.foreground as InsetIconDrawable
+            val inset = adaptiveIcon.foreground as InsetIconDrawable
             if (inset.drawable is ImageVectorDrawable) {
-                vectorIcon = inset.drawable as ImageVectorDrawable
+                vectorIcon = inset.drawable
             }
         }
 
@@ -503,14 +523,10 @@ class IconGenerator(
             return null
         }
 
-        vectorIcon.resizeAndCenter()
         val stroke = vectorIcon.viewportHeight / 48 //1F at 48
         vectorIcon.root.editStrokePaths(stroke)
 
-        if (inset != null)
-            return inset
-
-        return vectorIcon
+        return icon
     }
 
     private fun colorizeImage(bitmapIcon: Bitmap, parsedIcon: Drawable?, mode: PorterDuff.Mode): IconPackDrawable {
@@ -532,5 +548,19 @@ class IconGenerator(
 
     private fun applicationShouldBeSkipped(app: PackageInfoStruct): Boolean {
         return !options.override && app.createdIcon != null
+    }
+
+    @RequiresApi(Build.VERSION_CODES.O)
+    private fun fixAdaptiveIconSize(adaptiveIconDrawable: AdaptiveIconDrawable) {
+        val vector = if (adaptiveIconDrawable.foreground is InsetIconDrawable) {
+            val inset = adaptiveIconDrawable.foreground as InsetIconDrawable
+            if (inset.drawable is ImageVectorDrawable) {
+                inset.drawable
+            } else null
+        } else if (adaptiveIconDrawable.foreground is ImageVectorDrawable) {
+            adaptiveIconDrawable.foreground as ImageVectorDrawable
+        } else null
+
+        vector?.resizeAndCenter()?.applyAndRemoveGroup()?.scaleAtCenter(adaptiveIconScale)
     }
 }
