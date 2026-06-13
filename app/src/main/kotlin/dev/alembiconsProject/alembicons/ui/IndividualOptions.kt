@@ -826,16 +826,12 @@ fun CreateTab(
     var showSortMenu by remember { mutableStateOf(false) }
     var expandedPack by remember { mutableStateOf<IconPack?>(null) }
     var collapsed by remember { mutableStateOf(false) }
-    // packageName -> whether the pack has icons matching the current query.
-    // Packs with matches float to the top, packs without sink to the bottom.
+    val distinctPacks = remember(iconPacks) { iconPacks.distinctBy { it.packageName } }
+    // packageName -> whether the pack has icons matching the current query
     var packMatches by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
-
-    val orderedPacks = remember(iconPacks, packMatches) {
-        // Stable sort keeps original order within each group; not-yet-loaded packs
-        // count as matches so they don't jump before their result is known
-        iconPacks.distinctBy { it.packageName }
-            .sortedByDescending { packMatches[it.packageName] != false }
-    }
+    // The order actually shown. Updated only once the results settle so the list
+    // doesn't shuffle on every pack that finishes loading.
+    var orderedPacks by remember(iconPacks) { mutableStateOf(distinctPacks) }
 
     val listState = rememberLazyListState()
     val listScrolled by remember {
@@ -849,9 +845,24 @@ fun CreateTab(
         }
     }
 
-    // Forget previous results when the query changes so the order recomputes
+    // Forget previous results and restore the default order when the query changes
     LaunchedEffect(debouncedQuery) {
         packMatches = emptyMap()
+        orderedPacks = distinctPacks
+    }
+
+    // Reorder once the match results settle (not on every pack) and pin the user
+    // to the top so packs floating up don't push them down
+    LaunchedEffect(packMatches) {
+        if (packMatches.isEmpty()) return@LaunchedEffect
+        delay(450)
+        val newOrder = distinctPacks.sortedByDescending { packMatches[it.packageName] != false }
+        if (newOrder.map { it.packageName } != orderedPacks.map { it.packageName }) {
+            val atTop = listState.firstVisibleItemIndex == 0 &&
+                listState.firstVisibleItemScrollOffset == 0
+            orderedPacks = newOrder
+            if (atTop) listState.scrollToItem(0)
+        }
     }
 
     LaunchedEffect(listScrolled, expandedPack) {
