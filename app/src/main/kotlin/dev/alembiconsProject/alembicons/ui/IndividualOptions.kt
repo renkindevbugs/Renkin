@@ -826,6 +826,16 @@ fun CreateTab(
     var showSortMenu by remember { mutableStateOf(false) }
     var expandedPack by remember { mutableStateOf<IconPack?>(null) }
     var collapsed by remember { mutableStateOf(false) }
+    // packageName -> whether the pack has icons matching the current query.
+    // Packs with matches float to the top, packs without sink to the bottom.
+    var packMatches by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+
+    val orderedPacks = remember(iconPacks, packMatches) {
+        // Stable sort keeps original order within each group; not-yet-loaded packs
+        // count as matches so they don't jump before their result is known
+        iconPacks.distinctBy { it.packageName }
+            .sortedByDescending { packMatches[it.packageName] != false }
+    }
 
     val listState = rememberLazyListState()
     val listScrolled by remember {
@@ -837,6 +847,11 @@ fun CreateTab(
             delay(300)
             debouncedQuery = searchQuery
         }
+    }
+
+    // Forget previous results when the query changes so the order recomputes
+    LaunchedEffect(debouncedQuery) {
+        packMatches = emptyMap()
     }
 
     LaunchedEffect(listScrolled, expandedPack) {
@@ -928,19 +943,26 @@ fun CreateTab(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
-                        iconPacks.distinctBy { it.packageName }.forEach { pack ->
+                        orderedPacks.forEach { pack ->
                             item(key = "${pack.packageName}_header") {
-                                PackSectionHeader(pack) { expandedPack = pack }
+                                Box(Modifier.animateItem()) {
+                                    PackSectionHeader(pack) { expandedPack = pack }
+                                }
                             }
                             item(key = "${pack.packageName}_icons") {
-                                PackIconsRow(
-                                    iconPack = pack,
-                                    options = options,
-                                    sortOrder = sortOrder,
-                                    query = debouncedQuery,
-                                    onMore = { expandedPack = pack }
-                                ) { resource, _ ->
-                                    onIconSelect(resource, pack)
+                                Box(Modifier.animateItem()) {
+                                    PackIconsRow(
+                                        iconPack = pack,
+                                        options = options,
+                                        sortOrder = sortOrder,
+                                        query = debouncedQuery,
+                                        onMore = { expandedPack = pack },
+                                        onResult = { hasMatches ->
+                                            packMatches = packMatches + (pack.packageName to hasMatches)
+                                        }
+                                    ) { resource, _ ->
+                                        onIconSelect(resource, pack)
+                                    }
                                 }
                             }
                         }
