@@ -36,7 +36,7 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -238,8 +238,10 @@ fun OptionsCard(
                 }
 
                 if (needSecondarySource(primarySource)) {
-                    HorizontalDivider(modifier = Modifier.padding(8.dp, 0.dp)
-                        , color = MaterialTheme.colorScheme.primary)
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        color = MaterialTheme.colorScheme.outlineVariant
+                    )
 
                     SourceDropdown(R.string.secondarySource, secondarySource) { scope.launch { prefs.setEnumValue(
                         SecondarySourceKey, it) } }
@@ -404,9 +406,11 @@ fun SourceDropdown(@StringRes labelId: Int, source: Source, onChange: (newValue:
         onExpandedChange = {
             expanded = !expanded
         },
-        modifier = Modifier.padding(8.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
-        TextField(
+        OutlinedTextField(
             readOnly = true,
             value = typeLabels[selectedOption]!!,
             onValueChange = { },
@@ -416,8 +420,11 @@ fun SourceDropdown(@StringRes labelId: Int, source: Source, onChange: (newValue:
                     expanded = expanded
                 )
             },
-            colors = ExposedDropdownMenuDefaults.textFieldColors(),
-            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable)
+            shape = RoundedCornerShape(16.dp),
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -455,9 +462,11 @@ fun ImageEditDropdown(@StringRes labelId: Int, type: ImageEdit, onChange: (newVa
         onExpandedChange = {
             expanded = !expanded
         },
-        modifier = Modifier.padding(8.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
-        TextField(
+        OutlinedTextField(
             readOnly = true,
             value = typeLabels[selectedOption]!!,
             onValueChange = { },
@@ -467,8 +476,11 @@ fun ImageEditDropdown(@StringRes labelId: Int, type: ImageEdit, onChange: (newVa
                     expanded = expanded
                 )
             },
-            colors = ExposedDropdownMenuDefaults.textFieldColors(),
-            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable)
+            shape = RoundedCornerShape(16.dp),
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -506,9 +518,11 @@ fun TextTypeDropdown(@StringRes labelId: Int, type: TextType, onChange: (newValu
         onExpandedChange = {
             expanded = !expanded
         },
-        modifier = Modifier.padding(8.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
-        TextField(
+        OutlinedTextField(
             readOnly = true,
             value = typeLabels[selectedOption]!!,
             onValueChange = { },
@@ -518,8 +532,11 @@ fun TextTypeDropdown(@StringRes labelId: Int, type: TextType, onChange: (newValu
                     expanded = expanded
                 )
             },
-            colors = ExposedDropdownMenuDefaults.textFieldColors(),
-            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable)
+            shape = RoundedCornerShape(16.dp),
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -569,9 +586,11 @@ fun IconPackDropdown(
         onExpandedChange = {
             expanded = !expanded
         },
-        modifier = Modifier.padding(8.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
-        TextField(
+        OutlinedTextField(
             readOnly = true,
             value = selectedOption.applicationName,
             onValueChange = { },
@@ -581,8 +600,11 @@ fun IconPackDropdown(
                     expanded = expanded
                 )
             },
-            colors = ExposedDropdownMenuDefaults.textFieldColors(),
-            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable)
+            shape = RoundedCornerShape(16.dp),
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
