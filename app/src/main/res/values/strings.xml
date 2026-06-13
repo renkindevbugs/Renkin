@@ -136,4 +136,6 @@
     <string name="deleteRule">Delete rule</string>
     <string name="noWatchRulesYet">No watch rules yet — tap + to add one</string>
     <string name="openWatchedIcons">Open watched icons</string>
+    <string name="deleteRuleTitle">Delete this rule?</string>
+    <string name="deleteRuleText">This watch rule will be removed.</string>
 </resources>

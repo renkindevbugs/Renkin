@@ -5,6 +5,7 @@ package dev.alembiconsProject.alembicons.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -96,6 +97,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
     // null = list; otherwise the editor is open (editing this rule, or a new rule when blank)
     var showEditor by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<RuleWithDetails?>(null) }
+    var pendingDelete by remember { mutableStateOf<Long?>(null) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -117,8 +119,9 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         packs = packs,
                         onClose = { showEditor = false; editing = null },
                         onSave = { selApps, watchAll, selPacks ->
+                            // Capture the edit target now — the coroutine runs after we reset state below
+                            val target = editing
                             scope.launch {
-                                val target = editing
                                 if (target == null) {
                                     repo.createRule(selApps, watchAll, selPacks)
                                 } else {
@@ -137,12 +140,43 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         onClose = onDismiss,
                         onAdd = { editing = null; showEditor = true },
                         onEdit = { editing = it; showEditor = true },
-                        onDelete = { ruleId -> scope.launch { repo.deleteRule(ruleId) } }
+                        onDelete = { ruleId -> pendingDelete = ruleId }
                     )
                 }
             }
         }
     }
+
+    pendingDelete?.let { ruleId ->
+        DeleteRuleDialog(
+            onDismiss = { pendingDelete = null },
+            onConfirm = {
+                pendingDelete = null
+                scope.launch { repo.deleteRule(ruleId) }
+            }
+        )
+    }
+}
+
+@Composable
+private fun DeleteRuleDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.deleteRuleTitle)) },
+        text = { Text(stringResource(R.string.deleteRuleText)) },
+        confirmButton = {
+            IconButton(onClick = onConfirm) {
+                Icon(Icons.Filled.Check, stringResource(R.string.confirm), tint = MaterialTheme.colorScheme.primary)
+            }
+        },
+        dismissButton = {
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Filled.Close, stringResource(R.string.dismiss), tint = MaterialTheme.colorScheme.error)
+            }
+        }
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +289,10 @@ private fun ActiveRuleCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp)) {
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 rule.apps.forEach { ra ->
                     val app = apps.find { it.packageName == ra.packageName && it.activityName == ra.activityName }
                     AppPill(app, ra.packageName)
@@ -289,6 +326,7 @@ private fun ActiveRuleCard(
                 } else {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.weight(1f)
                     ) {
                         rule.packs.forEach { rp ->
@@ -495,25 +533,6 @@ private fun WatchRuleEditor(
                 fontWeight = FontWeight.SemiBold
             )
 
-            if (selectedApps.isNotEmpty()) {
-                FlowRow(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    selectedApps.toList().forEach { comp ->
-                        val app = apps.find { it.packageName == comp.packageName && it.activityName == comp.activityName }
-                        RemovableChip(
-                            label = app?.appName ?: comp.packageName,
-                            iconApp = app,
-                            iconPackPackage = null,
-                            onRemove = { selectedApps.remove(comp) }
-                        )
-                    }
-                }
-            }
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -604,6 +623,28 @@ private fun WatchRuleEditor(
                 }
             }
 
+            // Selected apps sit below the grid so adding one doesn't shove the grid down;
+            // single scrolling row, labels clipped to keep chips small
+            if (selectedApps.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState())
+                        .padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    selectedApps.toList().forEach { comp ->
+                        val app = apps.find { it.packageName == comp.packageName && it.activityName == comp.activityName }
+                        RemovableChip(
+                            label = clipChipLabel(app?.appName ?: comp.packageName),
+                            iconApp = app,
+                            iconPackPackage = null,
+                            onRemove = { selectedApps.remove(comp) }
+                        )
+                    }
+                }
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -626,30 +667,31 @@ private fun WatchRuleEditor(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.padding(top = 8.dp)
                 )
-                if (selectedPacks.isNotEmpty()) {
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        selectedPacks.toList().forEach { pkg ->
-                            val pack = packs.find { it.packageName == pkg }
-                            RemovableChip(
-                                label = pack?.applicationName ?: pkg,
-                                iconApp = null,
-                                iconPackPackage = pkg,
-                                onRemove = { selectedPacks.remove(pkg) }
-                            )
-                        }
-                    }
-                }
                 Box(modifier = Modifier.padding(top = 8.dp)) {
                     TileRows(sortedPacks) { pack ->
                         val selected = selectedPacks.contains(pack.packageName)
                         IconTile(rememberPackBitmap(pack.packageName), pack.applicationName, selected) {
                             if (selected) selectedPacks.remove(pack.packageName)
                             else selectedPacks.add(pack.packageName)
+                        }
+                    }
+                }
+                if (selectedPacks.isNotEmpty()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState())
+                            .padding(top = 10.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        selectedPacks.toList().forEach { pkg ->
+                            val pack = packs.find { it.packageName == pkg }
+                            RemovableChip(
+                                label = clipChipLabel(pack?.applicationName ?: pkg),
+                                iconApp = null,
+                                iconPackPackage = pkg,
+                                onRemove = { selectedPacks.remove(pkg) }
+                            )
                         }
                     }
                 }
@@ -661,6 +703,10 @@ private fun WatchRuleEditor(
 // ---------------------------------------------------------------------------
 // Small reusable pieces
 // ---------------------------------------------------------------------------
+
+/** Chip labels are clipped so selected chips stay small in their single scrolling row. */
+private fun clipChipLabel(name: String): String =
+    if (name.length > 7) name.take(7) + "…" else name
 
 /** One shared selectable tile (rounded card: icon on top, name below) for apps and packs. */
 @Composable
@@ -805,19 +851,27 @@ private fun AppPill(app: PackageInfoStruct?, fallbackPackage: String) {
     }
 }
 
-/** Small pack icon + name used in the "Watching" / "New icon in" rows. */
+/** Pack pill (icon + name) used in the "Watching" / "New icon in" rows. */
 @Composable
 private fun PackLabel(packPackage: String, name: String?) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        PackIconImage(packPackage, 16.dp)
-        Text(
-            text = name ?: packPackage,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.padding(start = 5.dp)
-        )
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHigh
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PackIconImage(packPackage, 18.dp)
+            Text(
+                text = name ?: packPackage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(start = 6.dp)
+            )
+        }
     }
 }
 
