@@ -5,6 +5,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -40,5 +41,10 @@ fun getPreferences(): DataStore<Preferences> {
 
 @Composable
 fun ShowToast(text: String) {
-    Toast.makeText(LocalContext.current, text, Toast.LENGTH_LONG).show()
+    // Fire the toast as a side effect so it shows once on appearance instead of
+    // on every recomposition while it is in the tree
+    val context = LocalContext.current
+    LaunchedEffect(text) {
+        Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+    }
 }
