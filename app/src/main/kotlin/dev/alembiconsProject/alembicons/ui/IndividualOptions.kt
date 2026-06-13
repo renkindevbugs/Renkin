@@ -34,6 +34,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -928,7 +929,9 @@ fun CreateTab(
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
                         iconPacks.distinctBy { it.packageName }.forEach { pack ->
-                            item(key = "${pack.packageName}_header") { PackSectionHeader(pack) }
+                            item(key = "${pack.packageName}_header") {
+                                PackSectionHeader(pack) { expandedPack = pack }
+                            }
                             item(key = "${pack.packageName}_icons") {
                                 PackIconsRow(
                                     iconPack = pack,
@@ -1815,11 +1818,12 @@ enum class IconSortOrder { NAME_ASC, NAME_DESC }
 
 
 @Composable
-fun PackSectionHeader(iconPack: IconPack) {
+fun PackSectionHeader(iconPack: IconPack, onClick: (() -> Unit)? = null) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp),
+            .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+            .padding(start = 16.dp, end = 8.dp, top = 16.dp, bottom = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -1828,8 +1832,18 @@ fun PackSectionHeader(iconPack: IconPack) {
             text = iconPack.applicationName,
             style = MaterialTheme.typography.titleSmall,
             fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
         )
+        if (onClick != null) {
+            // Tapping anywhere on the row opens the full grid for just this pack
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+        }
     }
 }
 
@@ -1873,6 +1887,7 @@ fun PackIconsRow(
     sortOrder: IconSortOrder,
     query: String = "",
     onMore: (() -> Unit)? = null,
+    onResult: (hasMatches: Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
 ) {
     val context = getCurrentContext()
@@ -1913,6 +1928,7 @@ fun PackIconsRow(
         }
         iconPairs = loaded
         isLoading = false
+        onResult(loaded.isNotEmpty())
     }
 
     if (isLoading) {
