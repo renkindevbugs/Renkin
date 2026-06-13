@@ -12,33 +12,16 @@ import androidx.room.Room
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.constants.SuppressRedundantSuspendModifier
 import dev.alembiconsProject.alembicons.data.AlchemiconPackDatabase
-import dev.alembiconsProject.alembicons.data.BackgroundColorKey
 import dev.alembiconsProject.alembicons.data.CalendarIconsKey
 import dev.alembiconsProject.alembicons.data.DbApplication
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
-import dev.alembiconsProject.alembicons.data.IMAGE_EDIT_DEFAULT
-import dev.alembiconsProject.alembicons.data.IconColorKey
 import dev.alembiconsProject.alembicons.data.IconPack
-import dev.alembiconsProject.alembicons.data.IncludeVectorKey
 import dev.alembiconsProject.alembicons.data.InstalledApplication
-import dev.alembiconsProject.alembicons.data.MonochromeKey
-import dev.alembiconsProject.alembicons.data.OverrideIconKey
 import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
-import dev.alembiconsProject.alembicons.data.PrimaryImageEditKey
-import dev.alembiconsProject.alembicons.data.PrimarySourceKey
-import dev.alembiconsProject.alembicons.data.PrimaryTextTypeKey
 import dev.alembiconsProject.alembicons.data.RawElement
-import dev.alembiconsProject.alembicons.data.SOURCE_DEFAULT
-import dev.alembiconsProject.alembicons.data.SecondaryIconPackKey
-import dev.alembiconsProject.alembicons.data.SecondaryImageEditKey
-import dev.alembiconsProject.alembicons.data.SecondarySourceKey
-import dev.alembiconsProject.alembicons.data.SecondaryTextTypeKey
-import dev.alembiconsProject.alembicons.data.TEXT_TYPE_DEFAULT
 import dev.alembiconsProject.alembicons.data.getBooleanValue
-import dev.alembiconsProject.alembicons.data.getColorValue
 import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
 import dev.alembiconsProject.alembicons.data.getDefaultIconColor
-import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.drawable.BitmapIconDrawable
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
@@ -54,7 +37,6 @@ import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.ui.supportDynamicColors
 import dev.alembiconsProject.alembicons.ui.toHexString
-import dev.alembiconsProject.alembicons.ui.toInt
 import dev.alembiconsProject.alembicons.vector.VectorParser
 import dev.alembiconsProject.alembicons.xml.XmlDecoder
 
@@ -114,38 +96,8 @@ class ApplicationProvider(private val context: Context) {
     }
 
     fun refreshIcon(application: PackageInfoStruct, preferences: Preferences) {
-        val primarySource = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
-        val primaryImageEdit = preferences.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
-        val primaryTextType = preferences.getEnumValue(PrimaryTextTypeKey, TEXT_TYPE_DEFAULT)
-        val primaryIconPack = preferences.getStringValue(PrimaryIconPackKey)
-        val secondarySource = preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT)
-        val secondaryImageEdit = preferences.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT)
-        val secondaryTextType = preferences.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT)
-        val secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey)
-        val monochrome = preferences.getBooleanValue(MonochromeKey)
-        val vector = preferences.getBooleanValue(IncludeVectorKey)
-        val iconColorValue = preferences.getColorValue(IconColorKey
-            , preferences.getDefaultIconColor(context))
-        val bgColorValue = preferences.getColorValue(BackgroundColorKey
-            , preferences.getDefaultBackgroundColor(context))
-        val themed = preferences.getBooleanValue(ExportThemedKey)
-
-        val genOptions = GenerationOptions(
-            primarySource
-            , primaryImageEdit
-            , primaryTextType
-            , primaryIconPack
-            , secondarySource
-            , secondaryImageEdit
-            , secondaryTextType
-            , secondaryIconPack
-            , iconColorValue.toInt()
-            , bgColorValue.toInt()
-            , vector
-            , monochrome
-            , themed
-            , true)
-
+        // A newly installed app always gets its icon (re)generated
+        val genOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
         refreshIcon(application, genOptions)
     }
 
@@ -163,59 +115,26 @@ class ApplicationProvider(private val context: Context) {
     }
 
     fun refreshIcons(preferences: Preferences) {
-        val primarySource = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
-        val primaryImageEdit = preferences.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
-        val primaryTextType = preferences.getEnumValue(PrimaryTextTypeKey, TEXT_TYPE_DEFAULT)
-        val primaryIconPack = preferences.getStringValue(PrimaryIconPackKey)
-        val secondarySource = preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT)
-        val secondaryImageEdit = preferences.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT)
-        val secondaryTextType = preferences.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT)
-        val secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey)
-        val monochrome = preferences.getBooleanValue(MonochromeKey)
-        val vector = preferences.getBooleanValue(IncludeVectorKey)
-        val iconColorValue = preferences.getColorValue(IconColorKey
-            , preferences.getDefaultIconColor(context))
-        val bgColorValue = preferences.getColorValue(BackgroundColorKey
-            , preferences.getDefaultBackgroundColor(context))
-        val themed = preferences.getBooleanValue(ExportThemedKey)
-        val dynamicColor = themed && supportDynamicColors()
+        var opt = GenerationOptions.fromPreferences(preferences, context)
         val retrieveCalendarIcon = preferences.getBooleanValue(CalendarIconsKey)
-        val overrideIcon = preferences.getBooleanValue(OverrideIconKey)
 
-        val primaryIconPackApps = getIconPackAppDrawables(primaryIconPack)
-        val secondaryIconPackApps = getIconPackAppDrawables(secondaryIconPack)
+        val primaryIconPackApps = getIconPackAppDrawables(opt.primaryIconPack)
+        val secondaryIconPackApps = getIconPackAppDrawables(opt.secondaryIconPack)
 
-        if (primaryIconPack != "" && retrieveCalendarIcon) {
-            retrieveCalendarIcons(primaryIconPack)
+        if (opt.primaryIconPack != "" && retrieveCalendarIcon) {
+            retrieveCalendarIcons(opt.primaryIconPack)
         }
 
-        var iconColor = iconColorValue.toInt()
-        var bgColor = bgColorValue.toInt()
-
-        if (dynamicColor) {
-            iconColor = context.resources.getColor(R.color.icon_color, null)
-            bgColor = context.resources.getColor(R.color.icon_background_color, null)
+        // Themed icons on Android 12+ are recoloured with the system dynamic palette
+        if (opt.themed && supportDynamicColors()) {
+            opt = opt.copy(
+                color = context.resources.getColor(R.color.icon_color, null),
+                bgColor = context.resources.getColor(R.color.icon_background_color, null)
+            )
         }
 
-        val opt = GenerationOptions(
-            primarySource,
-            primaryImageEdit,
-            primaryTextType,
-            primaryIconPack,
-            secondarySource,
-            secondaryImageEdit,
-            secondaryTextType,
-            secondaryIconPack,
-            iconColor,
-            bgColor,
-            vector,
-            monochrome,
-            themed,
-            overrideIcon
-        )
-
-        val pack1 = IconPackContainer(primaryIconPack, primaryIconPackApps)
-        val pack2 = IconPackContainer(secondaryIconPack, secondaryIconPackApps)
+        val pack1 = IconPackContainer(opt.primaryIconPack, primaryIconPackApps)
+        val pack2 = IconPackContainer(opt.secondaryIconPack, secondaryIconPackApps)
 
         val builder = IconGenerator(context, opt, pack1, pack2)
         builder.generateIcons(applicationList) { application, icon ->
