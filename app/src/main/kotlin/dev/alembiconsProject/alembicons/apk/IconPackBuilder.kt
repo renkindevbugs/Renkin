@@ -8,8 +8,6 @@ import android.net.Uri
 import android.os.Build
 import androidx.annotation.DrawableRes
 import androidx.annotation.RequiresApi
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.vectorResource
 import androidx.core.net.toUri
 import app.revanced.library.ApkUtils
 import dev.alembiconsProject.alembicons.R
@@ -115,7 +113,7 @@ class IconPackBuilder(
         manifest.platformBuildVersionName = framework.versionName
 
         setSdkVersions(manifest.manifestElement, minSdkVersion, framework.versionCode)
-        manifest.setApplicationLabel("Alchemy Pack V2")
+        manifest.setApplicationLabel("Renkin Pack")
 
         createMainActivity(manifest)
 
@@ -533,12 +531,13 @@ class IconPackBuilder(
         createBitmapResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher_round, "ic_launcher_round", "xxhdpi", "mipmap")
         createBitmapResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher_round, "ic_launcher_round", "xxxhdpi", "mipmap")
 
-        val foreground = ImageVector.vectorResource(null, ctx.resources, R.drawable.alchemiconpack_ic_launcher_foreground)
-        createXmlDrawableResource(apkModule, packageBlock, foreground.toXmlFile(), "ic_launcher_foreground")
+        // Renkin Pack icon: raster foreground + background layers (from Icon Kitchen)
+        createBitmapResource(apkModule, packageBlock, R.drawable.renkinpack_ic_launcher_foreground, "ic_launcher_foreground")
+        createBitmapResource(apkModule, packageBlock, R.drawable.renkinpack_ic_launcher_background, "ic_launcher_background")
 
         val launcher = AdaptiveIconXml()
         launcher.foreground("ic_launcher")
-        launcher.background("#340E7D")
+        launcher.background("@drawable/ic_launcher_background")
 
         createXmlDrawableResource(apkModule, packageBlock, launcher, "ic_launcher", "anydpi-v26", "mipmap")
         createXmlDrawableResource(apkModule, packageBlock, launcher, "ic_launcher_round", "anydpi-v26", "mipmap")

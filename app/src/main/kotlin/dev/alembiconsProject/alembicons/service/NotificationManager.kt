@@ -44,7 +44,7 @@ class NotificationManager {
             PendingIntent.FLAG_IMMUTABLE)
 
         val builder = NotificationCompat.Builder(context, newApplicationChannelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.mipmap.ic_launcher_monochrome)
             .setContentTitle(context.getString(R.string.app_name))
             .setContentText(context.getString(R.string.newApplicationNotificationText))
             .setStyle(
@@ -53,7 +53,7 @@ class NotificationManager {
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
-            .addAction(R.drawable.ic_launcher_foreground, context.getString(R.string.update), updatePendingIntent)
+            .addAction(R.mipmap.ic_launcher_monochrome, context.getString(R.string.update), updatePendingIntent)
 
         with(NotificationManagerCompat.from(context)) {
             if (ActivityCompat.checkSelfPermission(
@@ -71,7 +71,7 @@ class NotificationManager {
         createUpdatePackChannel(service)
 
         val notification = NotificationCompat.Builder(service, updatePackChannelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.mipmap.ic_launcher_monochrome)
             .setContentTitle(service.getString(R.string.app_name))
             .setContentText(service.getString(R.string.updatePackNotificationText))
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
