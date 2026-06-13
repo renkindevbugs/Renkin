@@ -56,6 +56,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -269,6 +271,13 @@ fun OptionsDialog(
         else -> currentIcon
     }
 
+    // The modifier needs something to act on — it stays greyed out until then
+    val hasIcon = currentIcon != null || uploadIcon != null || vectorIcon != null
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val snackbarScope = rememberCoroutineScope()
+    val selectIconMessage = stringResource(R.string.selectIconFirst)
+
     LaunchedEffect(selectedTab) {
         if (selectedTab != 0) headerCollapsed = false
         // Modifiers live only in the Modifier tab — leaving it starts the next visit clean
@@ -295,12 +304,13 @@ fun OptionsDialog(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
-            Column(
+            Box(
                 Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
                     .imePadding()
             ) {
+            Column(Modifier.fillMaxSize()) {
                 // Sticky comparison header — close/delete/apply live in the same row
                 // and the icons shrink while the icon list is scrolled
                 ComparisonHeader(
@@ -381,7 +391,8 @@ fun OptionsDialog(
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // Bottom navigation
+                // Bottom navigation — Modifier sits last and stays greyed out
+                // until an icon is chosen, since it only edits an existing icon
                 NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                     NavigationBarItem(
                         selected = selectedTab == 0,
@@ -396,18 +407,46 @@ fun OptionsDialog(
                         label = { Text(stringResource(R.string.upload)) }
                     )
                     NavigationBarItem(
-                        selected = selectedTab == 2,
-                        onClick = { selectedTab = 2 },
-                        icon = { Icon(Icons.Filled.Tune, null) },
-                        label = { Text(stringResource(R.string.modifierTab)) }
-                    )
-                    NavigationBarItem(
                         selected = selectedTab == 3,
                         onClick = { selectedTab = 3 },
                         icon = { Icon(Icons.Filled.Create, null) },
                         label = { Text(stringResource(R.string.editVector)) }
                     )
+                    val disabledTint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                    NavigationBarItem(
+                        selected = selectedTab == 2,
+                        onClick = {
+                            if (hasIcon) {
+                                selectedTab = 2
+                            } else {
+                                snackbarScope.launch {
+                                    snackbarHostState.showSnackbar(selectIconMessage)
+                                }
+                            }
+                        },
+                        icon = {
+                            Icon(
+                                Icons.Filled.Tune,
+                                null,
+                                tint = if (hasIcon) Color.Unspecified else disabledTint
+                            )
+                        },
+                        label = {
+                            Text(
+                                stringResource(R.string.modifierTab),
+                                color = if (hasIcon) Color.Unspecified else disabledTint
+                            )
+                        }
+                    )
                 }
+            }
+
+            SnackbarHost(
+                hostState = snackbarHostState,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 96.dp)
+            )
             }
         }
         }
