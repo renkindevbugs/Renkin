@@ -1,11 +1,18 @@
 package dev.alembiconsProject.alembicons.ui
 
 import androidx.annotation.StringRes
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
@@ -26,6 +33,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
@@ -39,7 +47,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.BackgroundColorKey
@@ -143,32 +154,72 @@ fun OptionsCard(
 
     val scope = rememberCoroutineScope()
 
-    Card(
-        shape = RoundedCornerShape(8.dp),
+    Surface(
+        shape = RoundedCornerShape(20.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp, 8.dp)
-            .clickable(
-                onClick = { expanded = !expanded }
-            )
     ) {
-        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-            Row(modifier = Modifier.fillMaxWidth(),
+        // No inner scroll — the card lives inside the app list and scrolls with it
+        Column {
+            Row(modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClick = { expanded = !expanded })
+                .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = stringResource(id = R.string.options),
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(8.dp)
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
                 )
 
-                val optionIcon = if (expanded) Icons.Filled.KeyboardArrowUp else Icons.Filled.KeyboardArrowDown
+                val chevronRotation by animateFloatAsState(
+                    targetValue = if (expanded) 180f else 0f,
+                    label = "optionsChevron"
+                )
                 Icon(
-                    imageVector = optionIcon,
+                    imageVector = Icons.Filled.KeyboardArrowDown,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.rotate(chevronRotation)
                 )
             }
-            if (expanded) {
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(Modifier.padding(bottom = 12.dp)) {
+                // Users otherwise don't know these settings only take effect after a refresh
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.optionsHint),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(start = 8.dp)
+                        )
+                    }
+                }
+
                 SourceDropdown(R.string.primarySource, primarySource) { scope.launch { prefs.setEnumValue(PrimarySourceKey, it) } }
 
                 if (needIconPack(primarySource)) {
@@ -233,6 +284,7 @@ fun OptionsCard(
                 }
 
                 ThemedIconsSwitch(useThemed) { scope.launch { prefs.setBooleanValue(ExportThemedKey, it) } }
+                }
             }
         }
     }
@@ -543,13 +595,21 @@ fun IconPackDropdown(
                 val bitmap = icon?.value?.drawable?.shrinkIfBiggerThan(500)
 
                 DropdownMenuItem(
-                    text = { Text(text = selectionOption.applicationName) },
-                    trailingIcon = {
+                    modifier = Modifier.padding(vertical = 2.dp),
+                    text = {
+                        Text(
+                            text = selectionOption.applicationName,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    },
+                    leadingIcon = {
                         if (bitmap != null) {
                             Image(
                                 painter = BitmapIconDrawable(bitmap).getPainter(),
                                 contentDescription = null,
-                                modifier = Modifier.size(50.dp)
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(9.dp))
                             )
                         }
                     },
