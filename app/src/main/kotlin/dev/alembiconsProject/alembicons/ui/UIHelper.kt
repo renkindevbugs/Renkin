@@ -1,16 +1,24 @@
 package dev.alembiconsProject.alembicons.ui
 
-import android.app.Activity
 import android.content.Context
-import android.content.ContextWrapper
 import android.widget.Toast
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.MainActivity
 import dev.alembiconsProject.alembicons.dataStore
+
+/**
+ * The hosting [MainActivity], provided at the root by MainActivity itself.
+ * Lets composables reach the activity without walking and casting the context
+ * chain (the old getCurrentActivity() as MainActivity).
+ */
+val LocalMainActivity = staticCompositionLocalOf<MainActivity> {
+    error("LocalMainActivity not provided")
+}
 
 @Composable
 fun getCurrentContext(): Context {
@@ -18,21 +26,7 @@ fun getCurrentContext(): Context {
 }
 
 @Composable
-fun getCurrentActivity(): Activity {
-    var context = LocalContext.current
-
-    while (context is ContextWrapper) {
-        if (context is Activity) return context
-        context = context.baseContext
-    }
-
-    throw IllegalStateException("No Activity")
-}
-
-@Composable
-fun getCurrentMainActivity(): MainActivity {
-    return getCurrentActivity() as MainActivity
-}
+fun getCurrentMainActivity(): MainActivity = LocalMainActivity.current
 
 @Composable
 fun getPreferences(): DataStore<Preferences> {
