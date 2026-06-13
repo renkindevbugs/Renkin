@@ -503,6 +503,16 @@ class IconGenerator(
     }
 
     private fun exportIconPackXML(iconPackName: String, iconDrawable: ResourceDrawable): Drawable? {
+        // Parsing only extracts an editable vector — a malformed adaptive icon XML
+        // in a third-party pack must fall back to the plain bitmap, not crash (#119)
+        return try {
+            parseIconPackXML(iconPackName, iconDrawable)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parseIconPackXML(iconPackName: String, iconDrawable: ResourceDrawable): Drawable? {
         if (!isVectorDrawable(iconDrawable.drawable)) return null
 
         val res = ApplicationManager(ctx).getResources(iconPackName) ?: return null

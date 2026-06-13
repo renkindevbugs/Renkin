@@ -425,7 +425,12 @@ class ApplicationProvider(private val context: Context) {
 
         val builder = IconGenerator(context, options, pack, pack)
         for (drawable in drawables) {
-            exportDrawables[drawable] = builder.colorizeFromIconPack(iconPackName, drawable)
+            // One broken icon must not take the whole pack down (#119)
+            exportDrawables[drawable] = try {
+                builder.colorizeFromIconPack(iconPackName, drawable)
+            } catch (_: Exception) {
+                null
+            }
         }
 
         return exportDrawables
