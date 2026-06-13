@@ -2,16 +2,22 @@
 
 package dev.alembiconsProject.alembicons.ui
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.app.WallpaperColors
 import android.app.WallpaperManager
 import android.content.Context
+import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -107,12 +113,15 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -486,10 +495,31 @@ private fun ApplyConfirmDialog(
 ) {
     val context = getCurrentContext()
 
-    // The actual wallpaper image needs storage permission (removed in this app), so
-    // this usually fails — we fall back to a gradient from the permission-free palette
-    val wallpaper = remember {
-        try {
+    // Reading the wallpaper image needs legacy storage permission on API 23..32;
+    // request it on the fly, then reload once granted. (API 33+ has no such perm.)
+    val needsLegacyPermission = Build.VERSION.SDK_INT in 23..32
+    var storageGranted by remember {
+        mutableStateOf(
+            !needsLegacyPermission ||
+                ContextCompat.checkSelfPermission(
+                    context, Manifest.permission.READ_EXTERNAL_STORAGE
+                ) == PackageManager.PERMISSION_GRANTED
+        )
+    }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> storageGranted = granted }
+
+    LaunchedEffect(Unit) {
+        if (needsLegacyPermission && !storageGranted) {
+            permissionLauncher.launch(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+    }
+
+    // Falls back to a gradient from the permission-free palette when unreadable
+    val wallpaper = remember(storageGranted) {
+        if (needsLegacyPermission && !storageGranted) null
+        else try {
             WallpaperManager.getInstance(context).drawable?.toSafeBitmapOrNull()
         } catch (_: Exception) {
             null
@@ -523,21 +553,23 @@ private fun ApplyConfirmDialog(
             }
         },
         confirmButton = {
-            IconButton(onClick = onConfirm) {
-                Icon(
-                    imageVector = Icons.Filled.Done,
-                    contentDescription = stringResource(R.string.confirm),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        },
-        dismissButton = {
-            IconButton(onClick = onDismiss) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = stringResource(R.string.dismiss),
-                    tint = MaterialTheme.colorScheme.error
-                )
+            // X on the left, check on the right — both in circular M3 icon buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                FilledTonalIconButton(
+                    onClick = onDismiss,
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
+                }
+                FilledIconButton(onClick = onConfirm) {
+                    Icon(Icons.Filled.Done, stringResource(R.string.confirm))
+                }
             }
         }
     )
@@ -596,16 +628,19 @@ private fun HomeScreenPreview(
                     modifier = Modifier.size(72.dp)
                 )
                 Spacer(Modifier.height(6.dp))
-                // Label plate keeps the name legible over any wallpaper
+                // No plate — a soft shadow keeps the name legible like a real launcher
                 Text(
                     text = appName,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = Color.White,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        color = Color.White,
+                        shadow = Shadow(
+                            color = Color.Black.copy(alpha = 0.7f),
+                            offset = Offset(0f, 2f),
+                            blurRadius = 6f
+                        )
+                    ),
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
-                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                    overflow = TextOverflow.Ellipsis
                 )
             }
         }
