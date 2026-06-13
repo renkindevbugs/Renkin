@@ -115,7 +115,7 @@ class IconPackBuilder(
         manifest.platformBuildVersionName = framework.versionName
 
         setSdkVersions(manifest.manifestElement, minSdkVersion, framework.versionCode)
-        manifest.setApplicationLabel("Alchemicon Pack")
+        manifest.setApplicationLabel("Alchemy Pack V2")
 
         createMainActivity(manifest)
 
