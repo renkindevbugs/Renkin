@@ -391,35 +391,45 @@ fun ThemedIconsSwitch(useThemed: Boolean, onChange: (newValue: Boolean) -> Unit)
     DefaultSwitchLayoutWithInfo(useThemed, R.string.themedIcons, R.string.themedIconsOptionDescription) { onChange(it) }
 }
 
+@Composable
+fun SourceDropdown(@StringRes labelId: Int, source: Source, onChange: (newValue: Source) -> Unit) =
+    EnumDropdown(labelId, source, getSourceLabels(), onChange)
+
+@Composable
+fun ImageEditDropdown(@StringRes labelId: Int, type: ImageEdit, onChange: (newValue: ImageEdit) -> Unit) =
+    EnumDropdown(labelId, type, getImageEditLabels(), onChange)
+
+@Composable
+fun TextTypeDropdown(@StringRes labelId: Int, type: TextType, onChange: (newValue: TextType) -> Unit) =
+    EnumDropdown(labelId, type, getTextTypeLabels(), onChange)
+
+/**
+ * A read-only outlined dropdown over a fixed set of [labels]. The three option
+ * dropdowns (source / image modifier / text type) only differ by their label map.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SourceDropdown(@StringRes labelId: Int, source: Source, onChange: (newValue: Source) -> Unit) {
-    val typeLabels = getSourceLabels()
-
+fun <T> EnumDropdown(
+    @StringRes labelId: Int,
+    selected: T,
+    labels: Map<T, String>,
+    onChange: (T) -> Unit
+) {
     var expanded by remember { mutableStateOf(false) }
-    var selectedOption by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
-
-    selectedOption = source
 
     ExposedDropdownMenuBox(
         expanded = expanded,
-        onExpandedChange = {
-            expanded = !expanded
-        },
+        onExpandedChange = { expanded = !expanded },
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
         OutlinedTextField(
             readOnly = true,
-            value = typeLabels[selectedOption]!!,
+            value = labels[selected] ?: "",
             onValueChange = { },
             label = { Text(stringResource(labelId)) },
-            trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(
-                    expanded = expanded
-                )
-            },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             shape = RoundedCornerShape(16.dp),
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             modifier = Modifier
@@ -428,130 +438,14 @@ fun SourceDropdown(@StringRes labelId: Int, source: Source, onChange: (newValue:
         )
         ExposedDropdownMenu(
             expanded = expanded,
-            onDismissRequest = {
-                expanded = false
-            }
+            onDismissRequest = { expanded = false }
         ) {
-            typeLabels.forEach { selectionOption ->
+            labels.forEach { (key, label) ->
                 DropdownMenuItem(
-                    text = { Text(text = selectionOption.value) },
+                    text = { Text(text = label) },
                     onClick = {
-                        selectedOption = selectionOption.key
                         expanded = false
-
-                        onChange(selectionOption.key)
-                    }
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun ImageEditDropdown(@StringRes labelId: Int, type: ImageEdit, onChange: (newValue: ImageEdit) -> Unit) {
-    val typeLabels = getImageEditLabels()
-
-    var expanded by remember { mutableStateOf(false) }
-    var selectedOption by rememberSaveable { mutableStateOf(IMAGE_EDIT_DEFAULT) }
-
-    selectedOption = type
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = {
-            expanded = !expanded
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-    ) {
-        OutlinedTextField(
-            readOnly = true,
-            value = typeLabels[selectedOption]!!,
-            onValueChange = { },
-            label = { Text(stringResource(labelId)) },
-            trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(
-                    expanded = expanded
-                )
-            },
-            shape = RoundedCornerShape(16.dp),
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-            modifier = Modifier
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = {
-                expanded = false
-            }
-        ) {
-            typeLabels.forEach { selectionOption ->
-                DropdownMenuItem(
-                    text = { Text(text = selectionOption.value) },
-                    onClick = {
-                        selectedOption = selectionOption.key
-                        expanded = false
-
-                        onChange(selectionOption.key)
-                    }
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TextTypeDropdown(@StringRes labelId: Int, type: TextType, onChange: (newValue: TextType) -> Unit) {
-    val typeLabels = getTextTypeLabels()
-
-    var expanded by remember { mutableStateOf(false) }
-    var selectedOption by rememberSaveable { mutableStateOf(TEXT_TYPE_DEFAULT) }
-
-    selectedOption = type
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = {
-            expanded = !expanded
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-    ) {
-        OutlinedTextField(
-            readOnly = true,
-            value = typeLabels[selectedOption]!!,
-            onValueChange = { },
-            label = { Text(stringResource(labelId)) },
-            trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(
-                    expanded = expanded
-                )
-            },
-            shape = RoundedCornerShape(16.dp),
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-            modifier = Modifier
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = {
-                expanded = false
-            }
-        ) {
-            typeLabels.forEach { selectionOption ->
-                DropdownMenuItem(
-                    text = { Text(text = selectionOption.value) },
-                    onClick = {
-                        selectedOption = selectionOption.key
-                        expanded = false
-
-                        onChange(selectionOption.key)
+                        onChange(key)
                     }
                 )
             }
