@@ -47,8 +47,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -103,6 +105,20 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
     val filterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
 
+    // The pinned search bar sits right under the top bar, so it tracks the same
+    // scrolled tint — otherwise the header looks split (tinted bar, white search)
+    val headerScrolled by remember {
+        derivedStateOf { scrollBehavior.state.collapsedFraction > 0.01f }
+    }
+    val headerColor by animateColorAsState(
+        targetValue = if (headerScrolled) {
+            MaterialTheme.colorScheme.surfaceContainer
+        } else {
+            MaterialTheme.colorScheme.background
+        },
+        label = "searchBarBackground"
+    )
+
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = { TitleBar(scrollBehavior) { isInRefresh = it } },
@@ -111,6 +127,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
             SearchBar(
+                containerColor = headerColor,
                 sortOrder = sortOrder,
                 filterNoIcon = filterNoIcon,
                 onSortChange = { scope.launch { prefs.setEnumValue(AppSortOrderKey, it) } },
@@ -530,6 +547,7 @@ fun BottomBar() {
 fun SearchBar(
     sortOrder: AppSortOrder,
     filterNoIcon: Boolean,
+    containerColor: Color = MaterialTheme.colorScheme.background,
     onSortChange: (AppSortOrder) -> Unit,
     onFilterChange: (Boolean) -> Unit,
     onSearch: (String) -> Unit
@@ -537,6 +555,7 @@ fun SearchBar(
     var text by remember { mutableStateOf("") }
     var showSortMenu by remember { mutableStateOf(false) }
 
+    Surface(color = containerColor, modifier = Modifier.fillMaxWidth()) {
     Row(modifier = Modifier
         .fillMaxWidth()
         .padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
@@ -608,5 +627,6 @@ fun SearchBar(
                 )
             }
         }
+    }
     }
 }
