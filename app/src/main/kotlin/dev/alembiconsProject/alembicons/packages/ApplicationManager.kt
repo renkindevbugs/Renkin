@@ -158,7 +158,9 @@ class ApplicationManager(private val ctx: Context) {
             type = xmlParser.next()
         }
 
-        return list
+        // Icon packs often list the same drawable in multiple categories of drawable.xml.
+        // Duplicates would produce duplicate resource ids and crash lazy lists keyed by id.
+        return list.distinct()
     }
 
     fun getIconPackDrawableIds(iconPackName: String, drawableNames: List<String>): List<Int> {
@@ -168,7 +170,7 @@ class ApplicationManager(private val ctx: Context) {
         for (name in drawableNames) {
             val resourceId = res.getIdentifierByName(name, "drawable", iconPackName)
 
-            if (resourceId > 0) {
+            if (resourceId > 0 && !list.contains(resourceId)) {
                 list.add(resourceId)
             }
         }
