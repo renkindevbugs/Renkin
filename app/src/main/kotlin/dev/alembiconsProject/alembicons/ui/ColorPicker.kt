@@ -106,7 +106,7 @@ fun ColorButton(caption: String, initialColor: Color, onColorSelected: (Color) -
 }
 
 @Composable
-private fun ColorDialog(
+fun ColorDialog(
     onDismiss: (() -> Unit),
     currentlySelected: Color,
     onColorSelected: ((Color) -> Unit) // when a colour is picked
@@ -114,9 +114,9 @@ private fun ColorDialog(
     val controller = rememberColorPickerController()
 
     AlertDialog(
-        shape = RoundedCornerShape(20.dp),
-        containerColor = MaterialTheme.colorScheme.background,
-        titleContentColor = MaterialTheme.colorScheme.outline,
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
         onDismissRequest = onDismiss,
         text = {
             Column {
