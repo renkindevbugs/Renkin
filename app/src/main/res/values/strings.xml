@@ -1,5 +1,5 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
-    <string name="app_name" translatable="false">Alembicons</string>
+    <string name="app_name" translatable="false">Alembicons V2</string>
 
     <string name="options">Options</string>
     <string name="type">Type</string>
@@ -59,17 +59,17 @@
     <string name="packageAddedNotification">New application notification</string>
     <string name="newApplicationChannelName">Application added</string>
     <string name="newApplicationChannelDescription">Get a notification when an application is installed</string>
-    <string name="newApplicationNotificationText">Update Alchemicon Pack</string>
+    <string name="newApplicationNotificationText">Update Alchemy Pack V2</string>
     <string name="newApplicationNotificationLongText">An application has been installed, you can update your icon pack</string>
     <string name="notifPermissionWarning">You must enable notification permission</string>
     <string name="overrideIcon">Override icon</string>
     <string name="deleteIconPack">Uninstall icon pack</string>
     <string name="update">Update</string>
-    <string name="updatePackChannelName">Update Alchemicon Pack</string>
-    <string name="updatePackChannelDescription">Update Alchemicon Pack with the newly installed application</string>
-    <string name="updatePackNotificationText">Updating Alchemicon Pack</string>
+    <string name="updatePackChannelName">Update Alchemy Pack V2</string>
+    <string name="updatePackChannelDescription">Update Alchemy Pack V2 with the newly installed application</string>
+    <string name="updatePackNotificationText">Updating Alchemy Pack V2</string>
     <string name="automaticallyUpdate">Automatically update</string>
-    <string name="iconPackUninstalled">Alchemicon Pack uninstalled</string>
+    <string name="iconPackUninstalled">Alchemy Pack V2 uninstalled</string>
     <string name="refreshApplicationList">Refresh application list</string>
     <string name="applicationIcon">Application Icon</string>
     <string name="primarySource">Primary source</string>
@@ -85,4 +85,31 @@
     <string name="imageEdit">Image Modifier</string>
     <string name="textType">Text Type</string>
     <string name="colorize">Colorize</string>
+    <string name="clearIcons">Clear icons</string>
+    <string name="searchIcons">Search icons…</string>
+    <string name="noIconsFound">No icons found</string>
+    <string name="sourceAppIcon">App Icon</string>
+    <string name="sourceText">Text</string>
+    <string name="modifierTab">Modifier</string>
+    <string name="buildIconPack">Build icon pack</string>
+    <string name="sortByName">Name</string>
+    <string name="sortByInstallDate">Recently installed</string>
+    <string name="sortApps">Sort apps</string>
+    <string name="filterWithoutIcon">Without icon</string>
+    <string name="filterAllApps">All apps</string>
+    <string name="addImages">Add images</string>
+    <string name="yourImages">Your images</string>
+    <string name="deleteImage">Delete images</string>
+    <string name="deleteImageText">Remove the selected images from your gallery?</string>
+    <string name="noImagesYet">No images yet — add some with the button above</string>
+    <string name="paths">Paths</string>
+    <string name="addPath">Add path</string>
+    <string name="editPath">Edit path</string>
+    <string name="pathData">SVG path data</string>
+    <string name="noPathsYet">No paths yet — add one to start drawing</string>
+    <string name="edgeDetail">Detail</string>
+    <string name="edgeSmoothing">Smoothing</string>
+    <string name="edgeContrast">Normalize contrast</string>
+    <string name="optionsHint">These options apply to all apps at once. After changing them, tap the refresh button in the top bar to regenerate the icons.</string>
+    <string name="selectIconFirst">Select an icon before opening the modifier</string>
 </resources>

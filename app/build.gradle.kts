@@ -6,9 +6,8 @@ plugins {
 }
 
 android {
-    namespace = "com.kaanelloed.iconeration"
+    namespace = "dev.alembiconsProject.alembicons"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
-    buildToolsVersion = "34.0.0"
 
     defaultConfig {
         applicationId = "com.kaanelloed.iconeration"
@@ -31,6 +30,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            applicationIdSuffix = ".dev"
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -88,6 +90,7 @@ dependencies {
     implementation(libs.androidx.material3.android)
     implementation(libs.androidx.activity.compose)
     implementation(libs.colorpicker.compose)
+    implementation("androidx.compose.material:material-icons-extended")
 
     //Data
     implementation(libs.androidx.room.ktx)

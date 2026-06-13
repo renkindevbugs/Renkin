@@ -58,17 +58,17 @@
     <string name="packageAddedNotification">Notification de l\'ajout d\'une nouvelle application</string>
     <string name="newApplicationChannelName">Application ajoutée</string>
     <string name="newApplicationChannelDescription">Recevoir une notification quand une application est installée</string>
-    <string name="newApplicationNotificationText">Mettre à jour Alchemicon Pack</string>
+    <string name="newApplicationNotificationText">Mettre à jour Alchemy Pack V2</string>
     <string name="newApplicationNotificationLongText">Une nouvelle application a été installée, vous pouvez mettre à jour le pack d\'îcones</string>
     <string name="notifPermissionWarning">Vous devez activer la permission pour les notifications</string>
     <string name="overrideIcon">Remplacer icône</string>
     <string name="deleteIconPack">Désinstaller le pack d\'icônes</string>
     <string name="update">Mettre à jour</string>
-    <string name="updatePackChannelName">Mettre à jour Alchemicon Pack</string>
-    <string name="updatePackChannelDescription">Mettre à jour Alchemicon Pack avec l\'application récemment installée</string>
-    <string name="updatePackNotificationText">Mise à jour d\'Alchemicon Pack</string>
+    <string name="updatePackChannelName">Mettre à jour Alchemy Pack V2</string>
+    <string name="updatePackChannelDescription">Mettre à jour Alchemy Pack V2 avec l\'application récemment installée</string>
+    <string name="updatePackNotificationText">Mise à jour d\'Alchemy Pack V2</string>
     <string name="automaticallyUpdate">Mettre à jour automatiquement</string>
-    <string name="iconPackUninstalled">Alchemicon Pack désinstallé</string>
+    <string name="iconPackUninstalled">Alchemy Pack V2 désinstallé</string>
     <string name="refreshApplicationList">Rafraîchir la liste d\'application</string>
     <string name="applicationIcon">Icône de l\'application</string>
     <string name="primarySource">Source primaire</string>
@@ -84,4 +84,5 @@
     <string name="imageEdit">Édition d\'image</string>
     <string name="textType">Type de texte</string>
     <string name="colorize">Coloriser</string>
+    <string name="clearIcons">Retirer les icônes</string>
 </resources>
