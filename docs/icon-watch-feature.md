@@ -20,38 +20,49 @@ bar**.
 Watching should be **event-driven**: only look when a watched pack actually
 *updates*. No point scanning a pack that hasn't changed.
 
-### Rule lifecycle the user described
-- A **rule** = a set of apps + a set of icon packs to watch for them.
-- When an icon is found and **applied** for one app in a rule:
-  - That app is **split off** the rule into a **new rule marked "completed"**.
-  - The original rule keeps watching its remaining apps.
-  - If the rule had only that one app, the rule itself becomes "completed".
-- **Completed** rules are shown but **not checked again**; the user must delete
-  them manually (a visible "done" marker + delete action).
+### Rule lifecycle (finalised with user)
+- A **rule** = a set of apps + either **specific icon packs** or **all installed
+  packs** to watch for them (`watchAllPacks` flag).
+- Completion is triggered **when a new icon is found** for an app (i.e. when a
+  suggestion is generated), **regardless of whether the user applies or ignores it**:
+  - That app is **split off** the rule into a **new rule marked "completed"** (which
+    records the matched pack(s) and keeps the suggestion so the user can still apply
+    it later).
+  - The original rule keeps watching its remaining apps; if it had only that one
+    app, the rule itself becomes "completed".
+- **Completed** rules are **not checked again** and persist until the user **deletes**
+  them. Ignoring a notification does **not** delete anything — it stays as a completed
+  rule.
+- The **home-screen bell shows a badge** = number of completed (undeleted) rules,
+  e.g. `1` means one rule is done and awaiting the user.
 
 ## 2. Key design questions & answers
 
 ### Q: Can we check only when the pack updates (not poll)?
-**Yes.** Two complementary mechanisms:
+**Yes.** Decision (user picked the more robust / maintainable option, see §8 #5):
+**WorkManager is the single engine.**
 
-1. **Event-driven (primary):** listen for `Intent.ACTION_PACKAGE_REPLACED`
-   (data scheme `package`) for the watched icon-pack package names. On Android 8+
-   these package broadcasts **cannot** be declared in the manifest as implicit
-   receivers — they must be **runtime-registered**. The app already does exactly
-   this in [`PackageAddedService`](app/src/main/kotlin/dev/alembiconsProject/alembicons/service/PackageAddedService.kt)
-   (a started Service that registers `PackageAddedReceiver` for `PACKAGE_ADDED`/
-   `PACKAGE_REMOVED`). We extend that filter with `ACTION_PACKAGE_REPLACED` and
-   branch in [`PackageAddedReceiver`](app/src/main/kotlin/dev/alembiconsProject/alembicons/service/PackageAddedReceiver.kt).
-
-2. **Safety-net periodic check (secondary):** a `WorkManager` periodic job (e.g.
-   once/day) that, for each watched pack, compares the pack's **current
-   versionCode** against the **last seen versionCode** we stored, and only scans
-   when it changed. This catches updates that happened while our runtime receiver
-   wasn't alive (started services can be killed; that's why there's already a
-   `BootCompletedReceiver`). The version-code gate means "no update → no scan".
+- A **`WorkManager` periodic job** (e.g. once/day) iterates the packs referenced by
+  active rules, compares each pack's **current versionCode** against the **last seen
+  versionCode** in `WatchState`, and **only scans when it changed**. Version-gate =
+  "no update → no scan", so it never wastes work, and WorkManager survives process
+  death / reboot without our own `BootCompletedReceiver` plumbing. This is simpler to
+  evolve than the started-service + runtime-receiver approach.
+- **Optional later fast-path:** extend the existing runtime receiver
+  ([`PackageAddedService`](app/src/main/kotlin/dev/alembiconsProject/alembicons/service/PackageAddedService.kt) /
+  [`PackageAddedReceiver`](app/src/main/kotlin/dev/alembiconsProject/alembicons/service/PackageAddedReceiver.kt))
+  with `ACTION_PACKAGE_REPLACED` to enqueue an expedited one-off check immediately
+  when a watched pack updates. Not required for v1 — the periodic job already covers
+  correctness. (Implicit package broadcasts can't be manifest-declared since API 26,
+  hence the runtime registration.)
 
 `ApplicationManager.getVersionCode(PackageInfo)` already exists for the version
 check; `getPackage(packageName)` returns the `PackageInfo`.
+
+### Q: which packs does a rule watch?
+A rule watches **either** an explicit set of packs **or** all installed packs
+(`WatchRule.watchAllPacks = true`). With "all packs", any installed pack that starts
+offering an icon for a watched app triggers a suggestion.
 
 ### Q: How do we know a pack has a "new icon" for an app?
 For a given (app, pack) we can already resolve whether the pack ships an icon for
@@ -86,8 +97,10 @@ Proposed tables:
 ```
 WatchRule
   id: Long (PK, autoGenerate)
-  completed: Boolean          // done → not checked, user must delete
+  watchAllPacks: Boolean      // true → ignore WatchRulePack, check every installed pack
+  completed: Boolean          // done → not checked; user must delete; counts toward bell badge
   createdAt: Long
+  completedAt: Long?
 
 WatchRuleApp                  // apps belonging to a rule (many per rule)
   ruleId: Long (FK → WatchRule.id)
@@ -95,31 +108,39 @@ WatchRuleApp                  // apps belonging to a rule (many per rule)
   activityName: String
   (PK: ruleId + packageName + activityName)
 
-WatchRulePack                 // packs a rule monitors (many per rule)
+WatchRulePack                 // explicit packs a rule monitors (only when !watchAllPacks)
   ruleId: Long (FK → WatchRule.id)
   iconPackPackage: String
   (PK: ruleId + iconPackPackage)
 
-WatchState                    // baseline fingerprint per app+pack
+WatchState                    // baseline content fingerprint per app+pack
   packageName: String
   activityName: String
   iconPackPackage: String
   lastPackVersionCode: Long
   lastIconName: String?       // null = pack had no icon for the app last time
-  lastIconHash: String?       // optional content hash
+  lastIconHash: String?       // CONTENT hash of the resolved drawable bitmap (decided: hash)
   lastCheckedAt: Long
   (PK: packageName + activityName + iconPackPackage)
 
-PendingIconSuggestion         // what a fired notification points at
+IconSuggestion                // one per (rule, app) — grouped across packs
   id: Long (PK, autoGenerate)
+  ruleId: Long                // the COMPLETED rule this belongs to
   packageName: String
   activityName: String
-  iconPackPackage: String
-  drawableName: String        // the new icon's drawable in the pack
   createdAt: Long
+
+IconSuggestionCandidate       // the new icon options, one per matching pack
+  suggestionId: Long (FK → IconSuggestion.id)
+  iconPackPackage: String
+  drawableName: String
+  iconHash: String
+  (PK: suggestionId + iconPackPackage)
 ```
 
 > Note: a rule with N apps × M packs fans out to N×M (app,pack) watch pairs.
+> When several packs offer an icon for the same app, they become **multiple
+> candidates of one suggestion** (grouped — user picks the pack in the modal).
 
 ## 4. UI
 
@@ -127,6 +148,8 @@ PendingIconSuggestion         // what a fired notification points at
 - Add a **bell `IconButton`** to the home top bar in
   [`MainScreen.kt` `TitleBar`](app/src/main/kotlin/dev/alembiconsProject/alembicons/ui/MainScreen.kt)
   (next to refresh / info / settings). Opens the Watch screen.
+- The bell carries a **badge** = number of completed (undeleted) rules (M3
+  `BadgedBox`). `0` → no badge.
 
 ### 4.2 Watch screen (new composable / full-screen dialog)
 Mirror the look of the existing full-screen editor
@@ -138,9 +161,12 @@ Mirror the look of the existing full-screen editor
   way to clear it; it is never re-checked).
 - **FAB / add button** → "New rule" editor:
   - Multi-select **apps** (from `appProvider.applicationList`).
-  - Multi-select **icon packs** (from `appProvider.iconPacks`).
+  - **"Watch all icon packs"** toggle; when off, multi-select **icon packs**
+    (from `appProvider.iconPacks`).
   - Reuse existing dropdown/icon helpers where possible.
 - Editing an existing active rule (add/remove apps or packs) should be possible.
+- A **completed** rule that still holds a suggestion can be **applied from here too**
+  (opens the same compare modal), not only via the notification.
 
 ### 4.3 Notification → home-screen apply modal
 - Notification `contentIntent` → `MainActivity` with extras identifying the
@@ -149,59 +175,70 @@ Mirror the look of the existing full-screen editor
   warm (`onNewIntent` — add the override; consider `launchMode=singleTop`). Expose
   the pending suggestion as Compose state and show a modal in `MainColumn`.
 - Modal: **original app icon** (left) vs **newly generated icon** (right),
-  "Set this icon?" → confirm / cancel. (We already removed a wallpaper-preview
-  modal; this is a different, simpler compare modal — see `ComparisonHeader` for a
-  reference layout of original→preview.)
+  "Set this icon?" → confirm / cancel. If the suggestion has **multiple candidate
+  packs**, the modal lets the user **pick which pack** (e.g. a row of pack chips /
+  segmented buttons); the right-hand preview updates per selection. (We already
+  removed a wallpaper-preview modal; this is a different, simpler compare modal — see
+  `ComparisonHeader` for a reference layout of original→preview.)
 - The "new icon" is produced by running the resolved pack `ResourceDrawable`
   through the normal generation path:
   `appProvider.getIcon(app, options, customIcon = resolvedResourceDrawable)`
   (see [`ApplicationProvider.getIcon`](app/src/main/kotlin/dev/alembiconsProject/alembicons/apk/ApplicationProvider.kt)).
-- **Confirm** = apply: `editApplication(index, app.changeExport(icon))` (same as the
-  editor's `onConfirm`). Then run the **rule-split / mark-completed** logic and
-  delete the consumed `PendingIconSuggestion`. Decide whether to also rebuild/
-  reinstall the pack immediately or leave it for the user/auto-update (open Q).
+- **Confirm = store only (decided):** `editApplication(index, app.changeExport(icon))`
+  (same as the editor's `onConfirm`) and **show a toast** telling the user to press
+  **Build** to regenerate the pack with the new icon. **Do NOT auto-rebuild/reinstall.**
+  Then delete the consumed `IconSuggestion`/candidates. The rule was already split &
+  marked completed at suggestion time (see §5), so nothing else changes here.
+- **Cancel/ignore:** nothing is applied; the completed rule + suggestion stay so the
+  user can still apply later from the watch screen. The bell badge keeps counting it.
 
 ## 5. Background flow (putting it together)
 
 ```
-[watched pack updated]
-  PACKAGE_REPLACED(pack)  ──or──  WorkManager periodic tick
+WorkManager periodic tick   (optional fast-path: PACKAGE_REPLACED → expedited one-off)
         │
         ▼
-  For each active (non-completed) rule that includes this pack:
-    for each app in rule:
-      resolve icon for (app, pack) via appfilter
-      compare fingerprint vs WatchState
-      if changed/new:
-        create PendingIconSuggestion(app, pack, drawableName)
-        post notification (deep-link with suggestionId)
-      update WatchState (versionCode, fingerprint, checkedAt)
+  For each active (non-completed) rule:
+    packs = if rule.watchAllPacks then all installed packs else rule packs
+    for each pack in packs:
+      if pack.versionCode == WatchState.lastPackVersionCode: skip   // no update → no scan
+      for each app in rule:
+        resolve icon for (app, pack) via appfilter; hash the bitmap
+        new = (icon now exists where it didn't) OR (hash != lastIconHash)
+        update WatchState(versionCode, name, hash, checkedAt)
+        if new: collect candidate (pack, drawableName, hash) for this app
+
+    for each app that collected >=1 candidate:
+      create IconSuggestion(app) + IconSuggestionCandidate(per pack)
+      SPLIT app out of the rule into a NEW rule marked completed (records matched packs);
+        remove app from the original rule (complete the rule if it becomes empty)
+      post ONE grouped notification (deep-link with suggestionId)
+      → bell badge increments (counts completed rules)
         │
         ▼
-  [user taps notification]
+  [user taps notification]  ── or ──  [opens watch screen → taps the completed rule]
         │
         ▼
-  MainActivity → home modal (original vs new) → confirm?
-        ├─ yes → apply icon; split app into new completed rule;
-        │         remove app from original rule (or complete it if last);
-        │         delete suggestion
-        └─ no  → dismiss (suggestion kept or dropped — open Q)
+  MainActivity → home modal (original vs new; pick pack if multiple candidates)
+        ├─ confirm → store icon (changeExport) + TOAST "press Build to apply";
+        │            delete the suggestion. (NO auto-rebuild.)
+        └─ cancel  → keep the completed rule + suggestion (still applyable later)
+
+  Completed rules are never re-checked; user deletes them manually → badge decrements.
 ```
 
 ## 6. Manifest / permissions / deps
 - `POST_NOTIFICATIONS` — already declared and requested.
-- Extend the runtime `IntentFilter` in `PackageAddedService` with
-  `Intent.ACTION_PACKAGE_REPLACED` (keep data scheme `package`). No new manifest
-  receiver needed (implicit package broadcasts are blocked since API 26).
-- Add **`androidx.work:work-runtime-ktx`** for the periodic safety-net job (verify
-  it's not already in `gradle/libs.versions.toml` / `app/build.gradle.kts`).
+- Add **`androidx.work:work-runtime-ktx`** — confirmed **NOT yet** in
+  `gradle/libs.versions.toml` / `app/build.gradle.kts`; must be added. WorkManager is
+  the **primary (and for v1, only) engine** (decided in §8 #5 for durability +
+  maintainability).
 - New **notification channel** for "icon available" (separate from the existing
   `alembicons_package_added` / `alembicons_update_pack` channels in
   [`NotificationManager`](app/src/main/kotlin/dev/alembiconsProject/alembicons/service/NotificationManager.kt)).
-- Reliability: the existing watcher is a started Service revived by
-  `BootCompletedReceiver`. For this feature, prefer **WorkManager** as the durable
-  scheduler and keep the runtime receiver as a fast-path. (Open Q: migrate fully to
-  WorkManager?)
+- *(Optional, later)* fast-path: extend the runtime `IntentFilter` in
+  `PackageAddedService` with `Intent.ACTION_PACKAGE_REPLACED` to enqueue an expedited
+  one-off check. Not needed for v1.
 
 ## 7. Existing code to reuse (pointers for next session)
 - Resolve a pack's icon for an app: `ApplicationManager.getAppFilterRawElements`,
@@ -218,37 +255,40 @@ Mirror the look of the existing full-screen editor
 - DataStore prefs pattern: `data/DataPreferences.kt`.
 - Room pattern: `data/DbApplication.kt`.
 
-## 8. Open questions (decide with user before/while implementing)
-1. **"New icon" definition:** drawable-name change vs content-hash. Hash is more
-   correct but costs a bitmap decode per (app,pack) per check. Default: hash.
-2. **After applying** an icon from a suggestion: rebuild & reinstall the Renkin Pack
-   immediately, or just store and let the user build later (respect the existing
-   `AutomaticallyUpdate` setting)?
-3. **Dismiss/"not now":** if the user ignores or declines a suggestion, do we
-   update the fingerprint (so we don't re-notify for the same version) or keep
-   re-notifying on the next pack update only? Default: update fingerprint on the
-   pack version so we notify again only on the *next* pack update.
-4. **Multiple packs** offering an icon for the same app at once: one notification
-   per (app,pack), or one grouped notification letting the user pick the pack in the
-   modal? Affects modal UX.
-5. **DB migration:** proper Room migration vs destructive (the pack table is
-   rebuilt anyway, but watch tables are new and must persist).
-6. **WatchState lifecycle:** when a rule/app/pack is removed, prune its WatchState
-   rows.
-7. **Reliability target:** is WorkManager-only acceptable (simpler, durable) if the
-   event receiver proves flaky?
+## 8. Decisions (resolved with user 2026-06-13)
+1. **"New icon" = content hash** of the resolved drawable bitmap (not just name).
+2. **After applying: store only**, no auto-rebuild. Show a **toast** prompting the
+   user to press **Build** to regenerate the pack with the new icon.
+3. **Ignoring a suggestion** does not re-notify: the app is already split into a
+   **completed** rule at suggestion time, so it's never re-checked. The completed
+   rule lingers (applyable later) and is counted by the **bell badge** until the user
+   deletes it.
+4. **Multiple packs → one grouped notification**; the user **picks the pack in the
+   modal** (candidates list).
+5. **Engine: WorkManager only** for v1 (most robust + easiest to extend). Event
+   receiver is an optional later optimisation.
+6. A rule watches **specific packs OR all installed packs** (`watchAllPacks`).
+
+### Remaining minor questions
+- **DB migration:** proper Room migration vs destructive. Watch tables are new and
+  must persist across rebuilds; the existing `DbApplication` table is rebuilt on each
+  pack install so it can tolerate a destructive path — but a real migration is safer.
+- **WatchState pruning:** when a rule/app/pack is removed or a rule completes, prune
+  the now-irrelevant `WatchState` rows.
+- **Badge source of truth:** simplest = `COUNT(*) WHERE completed = true`.
 
 ## 9. Suggested implementation phases
 1. **Data layer:** Room v2 + entities + DAO + a `WatchRepository`.
 2. **Watch screen UI** (bell entry + rule list + add/edit rule) writing to the repo.
    Get the user's sign-off on the UX here (interactive prototype per their
    preference).
-3. **Detection engine:** a `WatchChecker` that, given a pack, scans rules and
-   produces `PendingIconSuggestion`s + updates `WatchState`. Unit-testable in
-   isolation.
-4. **Triggers:** extend `PackageAddedReceiver` for `PACKAGE_REPLACED` + a
-   `WorkManager` periodic worker, both calling `WatchChecker`.
-5. **Notification + deep link:** new channel + suggestion deep-link intent.
+3. **Detection engine:** a `WatchChecker` that scans active rules (version-gated per
+   pack), produces grouped `IconSuggestion` + `IconSuggestionCandidate` rows, performs
+   the **rule split/complete**, and updates `WatchState`. Unit-testable in isolation.
+4. **Trigger:** a `WorkManager` periodic worker calling `WatchChecker`. (Optional
+   later: `PACKAGE_REPLACED` fast-path enqueuing an expedited check.)
+5. **Notification + deep link:** new channel + grouped suggestion deep-link intent
+   (carries `suggestionId`).
 6. **Apply modal** on home screen (`MainActivity` intent handling + `MainColumn`
-   modal) + apply + **rule split/complete** logic.
-7. Polish: completed-rule management, edge cases from §8.
+   modal, pack picker for multiple candidates) → store icon + toast "press Build".
+7. Polish: completed-rule management + bell badge, edge cases from §8.
