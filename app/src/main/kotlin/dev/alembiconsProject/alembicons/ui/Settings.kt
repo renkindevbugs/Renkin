@@ -8,16 +8,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -126,9 +128,11 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
         onExpandedChange = {
             expanded = !expanded
         },
-        modifier = Modifier.padding(8.dp, 4.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp)
     ) {
-        TextField(
+        OutlinedTextField(
             readOnly = true,
             value = darkModeLabels[selectedOption]!!,
             onValueChange = { },
@@ -138,8 +142,11 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
                     expanded = expanded
                 )
             },
-            colors = ExposedDropdownMenuDefaults.textFieldColors(),
-            modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable)
+            shape = RoundedCornerShape(16.dp),
+            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier = Modifier
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .fillMaxWidth()
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -162,15 +169,25 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
     }
 }
 
+// All settings actions share one full-width shape so the column lines up
+private val settingsButtonModifier: Modifier
+    @Composable get() = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 8.dp, vertical = 4.dp)
+
 @Composable
 fun SyncButton() {
     val mainActivity = getCurrentMainActivity()
 
-    Button( onClick = {
-        CoroutineScope(Dispatchers.Default).launch {
-            mainActivity.appProvider.forceSync()
-        }}
-        , modifier = Modifier.padding(8.dp, 4.dp) ) {
+    Button(
+        onClick = {
+            CoroutineScope(Dispatchers.Default).launch {
+                mainActivity.appProvider.forceSync()
+            }
+        },
+        shape = RoundedCornerShape(16.dp),
+        modifier = settingsButtonModifier
+    ) {
         Text(stringResource(R.string.syncPacks))
     }
 }
@@ -179,10 +196,15 @@ fun SyncButton() {
 fun RefreshApplicationListButton() {
     val mainActivity = getCurrentMainActivity()
 
-    Button( onClick = { CoroutineScope(Dispatchers.Default).launch {
-        mainActivity.appProvider.initialize()
-    }}
-        , modifier = Modifier.padding(8.dp, 4.dp) ) {
+    Button(
+        onClick = {
+            CoroutineScope(Dispatchers.Default).launch {
+                mainActivity.appProvider.initialize()
+            }
+        },
+        shape = RoundedCornerShape(16.dp),
+        modifier = settingsButtonModifier
+    ) {
         Text(stringResource(R.string.refreshApplicationList))
     }
 }
@@ -194,11 +216,20 @@ fun DeleteIconPackButton() {
 
     var openSuccess by rememberSaveable { mutableStateOf(false) }
 
-    Button( onClick = {
-        scope.launch {
-            openSuccess = ApkUninstaller(context).uninstall("com.kaanelloed.iconerationiconpack")
-        }}
-        , modifier = Modifier.padding(8.dp, 4.dp) ) {
+    // Destructive action — tonal/error styling sets it apart from the blue actions
+    FilledTonalButton(
+        onClick = {
+            scope.launch {
+                openSuccess = ApkUninstaller(context).uninstall("com.kaanelloed.iconerationiconpack")
+            }
+        },
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer
+        ),
+        modifier = settingsButtonModifier
+    ) {
         Text(stringResource(R.string.deleteIconPack))
     }
 
@@ -212,10 +243,20 @@ fun DeleteIconPackButton() {
 fun RemoveIconsButton() {
     val mainActivity = getCurrentMainActivity()
 
-    Button( onClick = { CoroutineScope(Dispatchers.Default).launch {
-        mainActivity.appProvider.clearIcons()
-    }}
-        , modifier = Modifier.padding(8.dp, 4.dp) ) {
+    // Destructive action — tonal/error styling sets it apart from the blue actions
+    FilledTonalButton(
+        onClick = {
+            CoroutineScope(Dispatchers.Default).launch {
+                mainActivity.appProvider.clearIcons()
+            }
+        },
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer
+        ),
+        modifier = settingsButtonModifier
+    ) {
         Text(stringResource(R.string.clearIcons))
     }
 }
@@ -231,7 +272,10 @@ fun PackageAddedNotificationSwitch(notification: Boolean, onChange: (newValue: B
         .fillMaxWidth()
         .padding(8.dp, 4.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.packageAddedNotification))
+        Text(
+            text = stringResource(R.string.packageAddedNotification),
+            modifier = Modifier.weight(1f)
+        )
         Switch(
             checked = checked,
             onCheckedChange = {
@@ -253,7 +297,10 @@ fun AutomaticallyUpdateSwitch(automaticallyUpdate: Boolean, onChange: (newValue:
         .fillMaxWidth()
         .padding(8.dp, 4.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(R.string.automaticallyUpdate))
+        Text(
+            text = stringResource(R.string.automaticallyUpdate),
+            modifier = Modifier.weight(1f)
+        )
         Switch(
             checked = checked,
             onCheckedChange = {
