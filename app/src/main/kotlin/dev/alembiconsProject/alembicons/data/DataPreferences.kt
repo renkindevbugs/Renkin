@@ -39,6 +39,8 @@ private const val SECONDARY_SOURCE_NAME = "SECONDARY_SOURCE"
 private const val SECONDARY_IMAGE_EDIT_NAME = "SECONDARY_IMAGE_EDIT"
 private const val SECONDARY_TEXT_TYPE_NAME = "SECONDARY_TEXT_TYPE"
 private const val SECONDARY_ICON_PACK_NAME = "SECONDARY_ICON_PACK"
+private const val APP_SORT_ORDER_NAME = "APP_SORT_ORDER"
+private const val APP_FILTER_NO_ICON_NAME = "APP_FILTER_NO_ICON"
 
 val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
 val SOURCE_DEFAULT = Source.NONE
@@ -81,6 +83,10 @@ val SecondaryTextTypeKey: Preferences.Key<Int>
     get() = intPreferencesKey(SECONDARY_TEXT_TYPE_NAME)
 val SecondaryIconPackKey: Preferences.Key<String>
     get() = stringPreferencesKey(SECONDARY_ICON_PACK_NAME)
+val AppSortOrderKey: Preferences.Key<Int>
+    get() = intPreferencesKey(APP_SORT_ORDER_NAME)
+val AppFilterNoIconKey: Preferences.Key<Boolean>
+    get() = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
 
 @Composable
 fun DataStore<Preferences>.getPreferencesValue(): Preferences {
