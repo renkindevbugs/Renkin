@@ -36,6 +36,7 @@ import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
 import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
 import dev.alembiconsProject.alembicons.extension.changeBackgroundColor
 import dev.alembiconsProject.alembicons.extension.clone
+import dev.alembiconsProject.alembicons.extension.scaleFromCenter
 import dev.alembiconsProject.alembicons.icon.parser.IconParser
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
@@ -48,6 +49,7 @@ import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.editStroke
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.editPaths
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.resizeAndCenter
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.scaleAtCenter
+import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.setReferenceColorPaths
 import dev.alembiconsProject.imagetracer.ImageTracer
 import dev.alembiconsProject.tgCannyEdgeCompose.CannyEdgeDetector
 import dev.alembiconsProject.tgCannyEdgeCompose.DetectionOptions
@@ -115,6 +117,41 @@ class IconGenerator(
                 )
 
             onUpdate(app, icon)
+        }
+    }
+
+    /**
+     * Applies an image modifier to an already-built icon (e.g. a hand-edited
+     * vector), instead of regenerating one from a source. Vectors are colourised
+     * in place to stay crisp; path/edge detection rasterise first since they are
+     * bitmap operations. Works on a copy — colourising and [toBitmap] mutate the
+     * vector in place.
+     */
+    fun applyModifier(icon: IconPackDrawable, imageEdit: ImageEdit): IconPackDrawable {
+        if (imageEdit == ImageEdit.NONE) return icon
+
+        if (icon is ImageVectorDrawable) {
+            val copy = ImageVectorDrawable(icon.toImageVector())
+            return when (imageEdit) {
+                ImageEdit.NONE -> icon
+                ImageEdit.COLORIZE -> {
+                    // Recolour while keeping each path's fill-vs-stroke nature (#117),
+                    // unlike colorizeVector which forces everything to a stroke
+                    copy.root.setReferenceColorPaths(SolidColor(Color(options.color)))
+                    copy.tintColor = Color.Unspecified
+                    copy
+                }
+                ImageEdit.PATH -> generatePathTracing(copy.toBitmap(), null)
+                ImageEdit.EDGE -> generateCannyEdgeDetection(copy.toBitmap(), null)
+            }
+        }
+
+        val bitmap = icon.toBitmap()
+        return when (imageEdit) {
+            ImageEdit.NONE -> icon
+            ImageEdit.COLORIZE -> colorizeImage(bitmap, null, PorterDuff.Mode.MULTIPLY)
+            ImageEdit.PATH -> generatePathTracing(bitmap, null)
+            ImageEdit.EDGE -> generateCannyEdgeDetection(bitmap, null)
         }
     }
 
@@ -471,11 +508,14 @@ class IconGenerator(
     private fun getIconBitmap(icon: Drawable, maxSize: Int = 500): Bitmap? {
         return if (icon.isAdaptiveIconDrawable()) {
             icon as AdaptiveIconDrawable
+            // An adaptive icon's foreground only fills the inner 72/108 safe zone,
+            // so the raw bitmap renders too small. Scale it up to fill the frame —
+            // the bitmap analogue of fixAdaptiveIconSize for vector foregrounds (#80).
             if (icon.foreground is InsetDrawable) {
                 val inset = icon.foreground as InsetDrawable
-                inset.drawable?.shrinkIfBiggerThan(maxSize)
+                inset.drawable?.shrinkIfBiggerThan(maxSize)?.scaleFromCenter(adaptiveIconScale)
             } else {
-                icon.foreground.shrinkIfBiggerThan(maxSize)
+                icon.foreground.shrinkIfBiggerThan(maxSize)?.scaleFromCenter(adaptiveIconScale)
             }
         } else {
             if (icon is InsetDrawable) {

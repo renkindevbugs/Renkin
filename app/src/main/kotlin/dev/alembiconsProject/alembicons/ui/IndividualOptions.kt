@@ -107,6 +107,9 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 
+/** The source that produced the icon currently being previewed and confirmed. */
+private enum class IconOrigin { CREATE, UPLOAD, VECTOR }
+
 @Composable
 fun OptionsDialog(
     iconPacks: List<IconPack>,
@@ -132,6 +135,10 @@ fun OptionsDialog(
     var currentIcon by remember { mutableStateOf(app.createdIcon) }
     var uploadIcon by remember { mutableStateOf<IconPackDrawable?>(null) }
     var vectorIcon by remember { mutableStateOf<IconPackDrawable?>(null) }
+    // Which source actually produced the icon being previewed/confirmed. Without
+    // this the modifier tab would fall back to the create-source icon and wipe a
+    // freshly built vector (or upload) just by switching tabs.
+    var iconOrigin by remember { mutableStateOf(IconOrigin.CREATE) }
     var showConfirmClear by remember { mutableStateOf(false) }
     var headerCollapsed by remember { mutableStateOf(false) }
     var optionsInitialized by remember { mutableStateOf(false) }
@@ -189,12 +196,20 @@ fun OptionsDialog(
         currentIcon = activity.appProvider.getIcon(app, generatingOptions, custom)
     }
 
-    // On the Upload tab keep showing the already chosen icon until a gallery
-    // image is actually selected
-    val iconToConfirm = when (selectedTab) {
-        1 -> uploadIcon ?: currentIcon
-        3 -> vectorIcon
-        else -> currentIcon
+    // A hand-edited vector isn't built from a source, so the modifier tab can't go
+    // through getIcon — apply the chosen modifier (colorize / path / edge) to it here
+    val modifiedVector = remember(vectorIcon, generatingOptions) {
+        val base = vectorIcon ?: return@remember null
+        if (generatingOptions.primaryImageEdit == ImageEdit.NONE) base
+        else activity.appProvider.applyModifier(base, generatingOptions)
+    }
+
+    // The previewed/confirmed icon follows whichever source produced it, not the
+    // open tab — so visiting the modifier tab never silently drops an upload/vector
+    val iconToConfirm = when (iconOrigin) {
+        IconOrigin.UPLOAD -> uploadIcon ?: currentIcon
+        IconOrigin.VECTOR -> modifiedVector
+        IconOrigin.CREATE -> currentIcon
     }
 
     // The modifier needs something to act on — it stays greyed out until then
@@ -277,15 +292,19 @@ fun OptionsDialog(
                                 onIconSelect = { res, pack ->
                                     customIconList = listOf(res)
                                     iconPack = pack.packageName
+                                    iconOrigin = IconOrigin.CREATE
                                 },
-                                onTextTypeChange = { textType = it },
+                                onTextTypeChange = { textType = it; iconOrigin = IconOrigin.CREATE },
                                 onCollapsedChange = { headerCollapsed = it }
                             )
                             1 -> UploadColumn(
                                 app = app,
                                 imageEdit = imageEdit,
                                 iconColor = iconColor
-                            ) { uploadIcon = it }
+                            ) {
+                                uploadIcon = it
+                                if (it != null) iconOrigin = IconOrigin.UPLOAD
+                            }
                             2 -> ModifierTab(
                                 source = source,
                                 imageEdit = imageEdit,
@@ -303,7 +322,10 @@ fun OptionsDialog(
                                 onEdgeSmoothingChange = { edgeSmoothing = it },
                                 onEdgeContrastChange = { edgeContrast = it }
                             )
-                            else -> PrepareEditVector(app) { vectorIcon = it }
+                            else -> PrepareEditVector(app) {
+                                vectorIcon = it
+                                if (it != null) iconOrigin = IconOrigin.VECTOR
+                            }
                         }
                     }
                 }
@@ -313,6 +335,7 @@ fun OptionsDialog(
                     SourcePills(source = source) { newSource ->
                         source = newSource
                         customIconList = listOf()
+                        iconOrigin = IconOrigin.CREATE
                     }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

@@ -107,6 +107,10 @@
     <string name="editPath">Edit path</string>
     <string name="pathData">SVG path data</string>
     <string name="noPathsYet">No paths yet — add one to start drawing</string>
+    <string name="lineThickness">Line thickness</string>
+    <string name="fillSolid">Fill</string>
+    <string name="strokeLine">Stroke</string>
+    <string name="fillStrokeToggle">Toggle fill / stroke</string>
     <string name="edgeDetail">Detail</string>
     <string name="edgeSmoothing">Smoothing</string>
     <string name="edgeContrast">Normalize contrast</string>

@@ -20,10 +20,12 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -36,7 +38,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.EmptyPath
@@ -56,7 +57,6 @@ import dev.alembiconsProject.alembicons.drawable.InsetIconDrawable
 import dev.alembiconsProject.alembicons.drawable.MutableVectorPath
 import dev.alembiconsProject.alembicons.drawable.toImageVectorDrawable
 import dev.alembiconsProject.alembicons.extension.createEmptyVector
-import dev.alembiconsProject.alembicons.extension.getBuilder
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.vector.PathExporter.Companion.toStringPath
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.applyAndRemoveGroup
@@ -84,6 +84,43 @@ fun PrepareEditVector(app: PackageInfoStruct, onChange: (icon: IconPackDrawable?
     }
 }
 
+/**
+ * One drawable path being edited. [path] carries the geometry and the (preview)
+ * colour; [filled] selects solid-fill vs stroke rendering (#117) and [baseStroke]
+ * is the unscaled stroke width the thickness slider (#115) multiplies.
+ */
+private data class PathEntry(val path: VectorPath, val filled: Boolean, val baseStroke: Float)
+
+/**
+ * Builds the live drawable path. A filled path drops the stroke and is exported
+ * solid — [setReferenceColorPaths] keys the fill/stroke choice off a zero stroke
+ * width, so [filled] maps straight onto `strokeLineWidth == 0`.
+ */
+private fun PathEntry.toMutablePath(thickness: Float): MutableVectorPath {
+    val color = path.stroke ?: path.fill ?: SolidColor(Color.White)
+    return MutableVectorPath(path).also { mp ->
+        if (filled) {
+            mp.fill = color
+            mp.fillAlpha = 1f
+            mp.stroke = null
+            mp.strokeLineWidth = 0f
+        } else {
+            mp.stroke = color
+            mp.strokeAlpha = 1f
+            mp.fill = null
+            mp.strokeLineWidth = baseStroke * thickness
+        }
+    }
+}
+
+/** A single-path vector for the per-path preview thumbnail. */
+private fun PathEntry.toPreviewVector(template: ImageVector, thickness: Float): ImageVector {
+    val preview = template.toImageVectorDrawable()
+    preview.root.children.clear()
+    preview.root.children.add(toMutablePath(thickness))
+    return preview.toImageVector()
+}
+
 @Composable
 fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) -> Unit) {
     Column(
@@ -92,24 +129,31 @@ fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) ->
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        var paths: List<VectorPath> by remember { mutableStateOf(listOf()) }
+        var entries: List<PathEntry> by remember { mutableStateOf(listOf()) }
         var automaticallyCenter by rememberSaveable { mutableStateOf(true) }
+        var thickness by rememberSaveable { mutableStateOf(1f) }
+
+        // The pack's icons are authored at 1F stroke on a 48 viewport
+        val defaultStroke = remember(vector) {
+            (vector.viewportHeight / 48f).takeIf { it > 0f } ?: 1f
+        }
 
         LaunchedEffect(Unit) {
+            val initial = mutableListOf<PathEntry>()
             for (path in vector.root) {
                 if (path is VectorPath && path.pathData != EmptyPath) {
-                    val mutableList = paths.toMutableList()
-                    mutableList.add(path)
-                    paths = mutableList.toList()
+                    val filled = path.strokeLineWidth == 0f && path.fill != null
+                    val base = if (path.strokeLineWidth > 0f) path.strokeLineWidth else defaultStroke
+                    initial.add(PathEntry(path, filled, base))
                 }
             }
+            entries = initial.toList()
         }
 
         val editedVector = vector.toImageVectorDrawable()
-
         editedVector.root.children.clear()
-        for (path in paths) {
-            editedVector.root.children.add(MutableVectorPath(path))
+        for (entry in entries) {
+            editedVector.root.children.add(entry.toMutablePath(thickness))
         }
         if (automaticallyCenter)
             editedVector.center()
@@ -127,6 +171,8 @@ fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) ->
         CenterSwitch {
             automaticallyCenter = it
         }
+
+        ThicknessSlider(thickness) { thickness = it }
 
         Row(
             modifier = Modifier
@@ -146,30 +192,22 @@ fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) ->
                     return@NewPath
                 }
 
-                var stroke = SolidColor(Color.White) as Brush?
-                var strokeWidth = 1F
-
-                val lastPath = editedVector.root.children.lastOrNull() as MutableVectorPath?
-                if (lastPath != null) {
-                    stroke = lastPath.stroke
-                    strokeWidth = lastPath.strokeLineWidth
-                }
-
                 val parser = PathParser().parsePathString(it)
 
-                val builder = editedVector.toImageVector().getBuilder()
-                builder.addPath(parser.toNodes(), stroke = stroke, strokeLineWidth = strokeWidth)
-                val newVector = builder.build()
+                val builder = ImageVector.Builder(
+                    defaultWidth = vector.defaultWidth,
+                    defaultHeight = vector.defaultHeight,
+                    viewportWidth = vector.viewportWidth,
+                    viewportHeight = vector.viewportHeight
+                )
+                builder.addPath(parser.toNodes(), stroke = SolidColor(Color.White), strokeLineWidth = defaultStroke)
+                val newPath = builder.build().root.first() as VectorPath
 
-                val newPath = newVector.root.last() as VectorPath
-
-                val mutableList = paths.toMutableList()
-                mutableList.add(newPath)
-                paths = mutableList.toList()
+                entries = entries + PathEntry(newPath, filled = false, baseStroke = defaultStroke)
             }
         }
 
-        if (paths.isEmpty()) {
+        if (entries.isEmpty()) {
             Text(
                 text = stringResource(R.string.noPathsYet),
                 style = MaterialTheme.typography.bodySmall,
@@ -183,44 +221,75 @@ fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) ->
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(bottom = 16.dp)
         ) {
-            itemsIndexed(paths) { index, path ->
-                VectorPathItem(editedVector.toImageVector(), path, {
-                    val mutableList = paths.toMutableList()
-                    mutableList.removeAt(index)
-                    paths = mutableList.toList()
-                }) {
-                    val parser = PathParser().parsePathString(it)
+            itemsIndexed(entries) { index, entry ->
+                VectorPathItem(
+                    previewVector = entry.toPreviewVector(vector, thickness),
+                    pathString = entry.path.pathData.toStringPath(),
+                    filled = entry.filled,
+                    onToggleFill = {
+                        entries = entries.toMutableList().also {
+                            it[index] = entry.copy(filled = !entry.filled)
+                        }
+                    },
+                    onDelete = {
+                        entries = entries.toMutableList().also { it.removeAt(index) }
+                    },
+                    onChange = { newPathString ->
+                        val nodes = PathParser().parsePathString(newPathString).toNodes()
 
-                    val mutablePath = editedVector.root.children[index] as MutableVectorPath
-                    mutablePath.pathData.clear()
-                    mutablePath.pathData.addAll(parser.toNodes())
+                        val builder = ImageVector.Builder(
+                            defaultWidth = vector.defaultWidth,
+                            defaultHeight = vector.defaultHeight,
+                            viewportWidth = vector.viewportWidth,
+                            viewportHeight = vector.viewportHeight
+                        )
+                        builder.addPath(nodes, stroke = entry.path.stroke, fill = entry.path.fill, strokeLineWidth = entry.baseStroke)
+                        val rebuilt = builder.build().root.first() as VectorPath
 
-                    val newPath = editedVector.toImageVector().root[index] as VectorPath
-
-                    val mutableList = paths.toMutableList()
-                    mutableList[index] = newPath
-                    paths = mutableList.toList()
-                }
+                        entries = entries.toMutableList().also { it[index] = entry.copy(path = rebuilt) }
+                    }
+                )
             }
         }
 
         // An empty vector is not a real icon — don't expose it (keeps Modifier greyed)
-        onChange(if (paths.isEmpty()) null else editedVector)
+        onChange(if (entries.isEmpty()) null else editedVector)
+    }
+}
+
+@Composable
+fun ThicknessSlider(thickness: Float, onChange: (newValue: Float) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.lineThickness),
+            style = MaterialTheme.typography.bodyMedium
+        )
+        Slider(
+            value = thickness,
+            onValueChange = onChange,
+            valueRange = 0.25f..4f,
+            modifier = Modifier
+                .weight(1f)
+                .padding(start = 12.dp)
+        )
     }
 }
 
 @Composable
 fun VectorPathItem(
-    vector: ImageVector,
-    path: VectorPath,
+    previewVector: ImageVector,
+    pathString: String,
+    filled: Boolean,
+    onToggleFill: () -> Unit,
     onDelete: () -> Unit,
     onChange: (newPath: String) -> Unit
 ) {
     var showPathEditor by remember { mutableStateOf(false) }
-
-    val newVector = vector.toImageVectorDrawable()
-    newVector.root.children.clear()
-    newVector.root.children.add(MutableVectorPath(path))
 
     Surface(
         shape = RoundedCornerShape(20.dp),
@@ -232,25 +301,34 @@ fun VectorPathItem(
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Surface(
                 shape = RoundedCornerShape(14.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
-                val painter = rememberVectorPainter(newVector.toImageVector())
+                val painter = rememberVectorPainter(previewVector)
                 Image(painter, null, Modifier
                     .padding(6.dp)
                     .size(48.dp, 48.dp))
             }
 
             Text(
-                text = path.pathData.toStringPath(),
+                text = pathString,
                 style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
+            )
+
+            // Solid-fill vs stroke for this path (#117)
+            FilterChip(
+                selected = filled,
+                onClick = onToggleFill,
+                label = {
+                    Text(stringResource(if (filled) R.string.fillSolid else R.string.strokeLine))
+                }
             )
 
             IconButton(onClick = { showPathEditor = true }, modifier = Modifier.size(40.dp)) {
@@ -273,7 +351,7 @@ fun VectorPathItem(
     }
 
     if (showPathEditor) {
-        EditPathDialog(path.pathData.toStringPath(), { showPathEditor = false }) {
+        EditPathDialog(pathString, { showPathEditor = false }) {
             onChange(it)
             showPathEditor = false
         }

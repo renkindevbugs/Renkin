@@ -4,6 +4,8 @@ import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
+import android.graphics.Matrix
+import android.graphics.Paint
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.Base64
@@ -16,6 +18,22 @@ fun Bitmap.changeBackgroundColor(color: Int): Bitmap {
     canvas.drawBitmap(this, 0F, 0F, null)
     recycle()
     return newBitmap
+}
+
+/**
+ * Scales the content up around the centre, keeping the same dimensions (the
+ * overflow is cropped). Used to fill the frame with an adaptive icon's
+ * foreground, whose artwork only occupies the inner 72/108 safe zone (#80).
+ */
+fun Bitmap.scaleFromCenter(scale: Float): Bitmap {
+    if (scale == 1f) return this
+
+    val result = Bitmap.createBitmap(width, height, config ?: Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(result)
+    val matrix = Matrix().apply { postScale(scale, scale, width / 2f, height / 2f) }
+    canvas.drawBitmap(this, matrix, Paint(Paint.FILTER_BITMAP_FLAG))
+
+    return result
 }
 
 fun Bitmap.clone(): Bitmap {
