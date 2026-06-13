@@ -2,16 +2,22 @@
 
 package dev.alembiconsProject.alembicons.ui
 
+import android.annotation.SuppressLint
+import android.app.WallpaperColors
+import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.activity.compose.BackHandler
@@ -49,10 +55,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
@@ -64,7 +72,9 @@ import dev.alembiconsProject.alembicons.data.TextType
 import dev.alembiconsProject.alembicons.data.getImageEditLabels
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
+import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
+import dev.alembiconsProject.alembicons.packages.PackageVersion
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -140,6 +150,7 @@ fun OptionsDialog(
     // freshly built vector (or upload) just by switching tabs.
     var iconOrigin by remember { mutableStateOf(IconOrigin.CREATE) }
     var showConfirmClear by remember { mutableStateOf(false) }
+    var showApplyConfirm by remember { mutableStateOf(false) }
     var headerCollapsed by remember { mutableStateOf(false) }
     var optionsInitialized by remember { mutableStateOf(false) }
     var edgeThreshold by rememberSaveable { mutableFloatStateOf(2.5f) }
@@ -261,7 +272,10 @@ fun OptionsDialog(
                     collapsed = headerCollapsed,
                     onDismiss = startClose,
                     onClear = { showConfirmClear = true },
-                    onConfirm = { onConfirm(iconToConfirm) }
+                    // Confirm with a home-screen preview first; nothing to preview when empty
+                    onConfirm = {
+                        if (iconToConfirm != null) showApplyConfirm = true else onConfirm(null)
+                    }
                 )
 
                 // The Create tab draws its own divider under the search bar;
@@ -401,6 +415,19 @@ fun OptionsDialog(
         }
     }
 
+    val confirmIcon = iconToConfirm
+    if (showApplyConfirm && confirmIcon != null) {
+        ApplyConfirmDialog(
+            appName = app.appName,
+            icon = confirmIcon,
+            onDismiss = { showApplyConfirm = false },
+            onConfirm = {
+                showApplyConfirm = false
+                onConfirm(confirmIcon)
+            }
+        )
+    }
+
     if (showConfirmClear) {
         ConfirmClearDialog(
             onDismiss = { showConfirmClear = false },
@@ -448,6 +475,141 @@ fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
             }
         }
     )
+}
+
+@Composable
+private fun ApplyConfirmDialog(
+    appName: String,
+    icon: IconPackDrawable,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    val context = getCurrentContext()
+
+    // The actual wallpaper image needs storage permission (removed in this app), so
+    // this usually fails — we fall back to a gradient from the permission-free palette
+    val wallpaper = remember {
+        try {
+            WallpaperManager.getInstance(context).drawable?.toSafeBitmapOrNull()
+        } catch (_: Exception) {
+            null
+        }
+    }
+    val palette = remember {
+        if (PackageVersion.is27OrMore()) {
+            try {
+                WallpaperManager.getInstance(context).getWallpaperColors(WallpaperManager.FLAG_SYSTEM)
+            } catch (_: Exception) {
+                null
+            }
+        } else null
+    }
+
+    AlertDialog(
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        titleContentColor = MaterialTheme.colorScheme.onSurface,
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.applyIconTitle)) },
+        text = {
+            Column {
+                Text(
+                    text = stringResource(R.string.applyIconQuestion),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(16.dp))
+                HomeScreenPreview(appName, icon, wallpaper, palette)
+            }
+        },
+        confirmButton = {
+            IconButton(onClick = onConfirm) {
+                Icon(
+                    imageVector = Icons.Filled.Done,
+                    contentDescription = stringResource(R.string.confirm),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        },
+        dismissButton = {
+            IconButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = Icons.Filled.Close,
+                    contentDescription = stringResource(R.string.dismiss),
+                    tint = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    )
+}
+
+/** A mock home screen: the chosen icon over the wallpaper (or its palette). */
+// palette is only non-null on API 27+ (guarded where it's fetched)
+@SuppressLint("NewApi")
+@Composable
+private fun HomeScreenPreview(
+    appName: String,
+    icon: IconPackDrawable,
+    wallpaper: Bitmap?,
+    palette: WallpaperColors?
+) {
+    val paletteBrush = remember(palette) {
+        if (palette == null) return@remember null
+        val colors = listOfNotNull(
+            Color(palette.primaryColor.toArgb()),
+            palette.secondaryColor?.let { Color(it.toArgb()) },
+            palette.tertiaryColor?.let { Color(it.toArgb()) }
+        )
+        if (colors.size >= 2) Brush.verticalGradient(colors) else null
+    }
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(260.dp)
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            when {
+                wallpaper != null -> Image(
+                    painter = BitmapPainter(wallpaper.asImageBitmap()),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                paletteBrush != null -> Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(paletteBrush)
+                )
+                else -> Box(
+                    Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                )
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Image(
+                    painter = icon.getPainter(),
+                    contentDescription = null,
+                    modifier = Modifier.size(72.dp)
+                )
+                Spacer(Modifier.height(6.dp))
+                // Label plate keeps the name legible over any wallpaper
+                Text(
+                    text = appName,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(6.dp))
+                        .padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+        }
+    }
 }
 
 @Composable
