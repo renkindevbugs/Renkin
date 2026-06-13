@@ -15,18 +15,21 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyHorizontalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -35,6 +38,8 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -46,6 +51,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,10 +63,12 @@ import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -413,10 +421,37 @@ private fun WatchRuleEditor(
     var watchAll by remember { mutableStateOf(existing?.rule?.watchAllPacks ?: false) }
     var query by remember { mutableStateOf("") }
 
-    val sortedPacks = remember(packs) { packs.sortedBy { it.applicationName.lowercase() } }
-    val filteredApps = remember(apps, query) {
-        if (query.isBlank()) apps else apps.filter { it.appName.contains(query.trim(), ignoreCase = true) }
+    var sortOrder by remember { mutableStateOf(AppSortOrder.NAME) }
+    var filterNoIcon by remember { mutableStateOf(false) }
+    var showSortMenu by remember { mutableStateOf(false) }
+
+    val context = getCurrentContext()
+    // First-install times don't change at runtime; recompute only when the set changes
+    val installTimes = remember(apps.size) {
+        apps.associate { app ->
+            app.packageName to runCatching {
+                context.packageManager.getPackageInfo(app.packageName, 0).firstInstallTime
+            }.getOrDefault(0L)
+        }
     }
+
+    val sortedPacks = remember(packs) { packs.sortedBy { it.applicationName.lowercase() } }
+    val filteredApps = remember(apps, query, sortOrder, filterNoIcon, installTimes) {
+        var seq = apps.asSequence()
+        if (query.isNotBlank()) seq = seq.filter { it.appName.contains(query.trim(), ignoreCase = true) }
+        if (filterNoIcon) seq = seq.filter { it.createdIcon == null }
+        when (sortOrder) {
+            AppSortOrder.NAME -> seq.sortedBy { it.appName.lowercase() }
+            AppSortOrder.INSTALL_DATE -> seq.sortedByDescending { installTimes[it.packageName] ?: 0L }
+        }.toList()
+    }
+    // 3 rows × 3 columns per page → a horizontally paged grid with dots
+    val appPages = filteredApps.chunked(9)
+    val pagerState = rememberPagerState(pageCount = { appPages.size.coerceAtLeast(1) })
+    LaunchedEffect(query, sortOrder, filterNoIcon) {
+        if (pagerState.currentPage != 0) pagerState.scrollToPage(0)
+    }
+
     val canSave = selectedApps.isNotEmpty() && (watchAll || selectedPacks.isNotEmpty())
 
     Column(Modifier.fillMaxSize()) {
@@ -450,7 +485,8 @@ private fun WatchRuleEditor(
 
         Column(
             Modifier
-                .fillMaxSize()
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
             Text(
@@ -478,43 +514,95 @@ private fun WatchRuleEditor(
                 }
             }
 
-            OutlinedTextField(
-                value = query,
-                onValueChange = { query = it },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                placeholder = { Text(stringResource(R.string.searchApps)) },
-                leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 8.dp)
-            )
-
-            // Horizontally scrolling 3-row grid keeps the picker compact vertically
-            LazyHorizontalGrid(
-                rows = GridCells.Fixed(3),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(252.dp)
-                    .padding(top = 10.dp)
+                    .padding(top = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                items(filteredApps, key = { "${it.packageName}/${it.activityName}" }) { app ->
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    singleLine = true,
+                    shape = RoundedCornerShape(16.dp),
+                    placeholder = { Text(stringResource(R.string.searchApps)) },
+                    leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
+                    modifier = Modifier.weight(1f)
+                )
+                Box {
+                    IconButton(onClick = { showSortMenu = true }) {
+                        Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.sortApps), tint = MaterialTheme.colorScheme.primary)
+                    }
+                    DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.sortByName)) },
+                            onClick = { sortOrder = AppSortOrder.NAME; showSortMenu = false },
+                            leadingIcon = if (sortOrder == AppSortOrder.NAME) {
+                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
+                            } else null
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.sortByInstallDate)) },
+                            onClick = { sortOrder = AppSortOrder.INSTALL_DATE; showSortMenu = false },
+                            leadingIcon = if (sortOrder == AppSortOrder.INSTALL_DATE) {
+                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
+                            } else null
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.filterAllApps)) },
+                            onClick = { filterNoIcon = false; showSortMenu = false },
+                            leadingIcon = if (!filterNoIcon) {
+                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
+                            } else null
+                        )
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.filterWithoutIcon)) },
+                            onClick = { filterNoIcon = true; showSortMenu = false },
+                            leadingIcon = if (filterNoIcon) {
+                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
+                            } else null
+                        )
+                    }
+                }
+            }
+
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(312.dp)
+                    .padding(top = 10.dp)
+            ) { page ->
+                TileRows(appPages.getOrNull(page).orEmpty()) { app ->
                     val comp = AppComponent(app.packageName, app.activityName)
                     val selected = selectedApps.any { it.packageName == comp.packageName && it.activityName == comp.activityName }
-                    AppTile(app, selected) {
+                    IconTile(rememberAppBitmap(app), app.appName, selected) {
                         if (selected) selectedApps.removeAll { it.packageName == comp.packageName && it.activityName == comp.activityName }
                         else selectedApps.add(comp)
                     }
                 }
             }
-            Text(
-                text = stringResource(R.string.swipeForMore),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                modifier = Modifier.padding(top = 2.dp, start = 2.dp)
-            )
+
+            if (appPages.size > 1) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    repeat(appPages.size) { i ->
+                        val sel = pagerState.currentPage == i
+                        Box(
+                            Modifier
+                                .padding(horizontal = 3.dp)
+                                .size(if (sel) 8.dp else 6.dp)
+                                .clip(CircleShape)
+                                .background(if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+                        )
+                    }
+                }
+            }
 
             Row(
                 modifier = Modifier
@@ -556,15 +644,10 @@ private fun WatchRuleEditor(
                         }
                     }
                 }
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    items(sortedPacks, key = { it.packageName }) { pack ->
+                Box(modifier = Modifier.padding(top = 8.dp)) {
+                    TileRows(sortedPacks) { pack ->
                         val selected = selectedPacks.contains(pack.packageName)
-                        PackRow(pack, selected) {
+                        IconTile(rememberPackBitmap(pack.packageName), pack.applicationName, selected) {
                             if (selected) selectedPacks.remove(pack.packageName)
                             else selectedPacks.add(pack.packageName)
                         }
@@ -579,63 +662,86 @@ private fun WatchRuleEditor(
 // Small reusable pieces
 // ---------------------------------------------------------------------------
 
+/** One shared selectable tile (rounded card: icon on top, name below) for apps and packs. */
 @Composable
-private fun AppTile(app: PackageInfoStruct, selected: Boolean, onClick: () -> Unit) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
+private fun IconTile(bitmap: ImageBitmap?, label: String, selected: Boolean, onClick: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+        border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = Modifier
-            .width(86.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
-            .background(
-                if (selected) MaterialTheme.colorScheme.secondaryContainer else androidx.compose.ui.graphics.Color.Transparent
-            )
-            .padding(vertical = 8.dp, horizontal = 4.dp)
     ) {
-        AppIcon(app, app.packageName, 44.dp)
-        Text(
-            text = app.appName,
-            style = MaterialTheme.typography.labelSmall,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurface,
-            modifier = Modifier.padding(top = 5.dp)
-        )
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(top = 12.dp, bottom = 10.dp, start = 4.dp, end = 4.dp)
+        ) {
+            if (bitmap != null) {
+                Image(
+                    painter = BitmapPainter(bitmap),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(11.dp))
+                )
+            } else {
+                Surface(
+                    modifier = Modifier.size(42.dp),
+                    shape = RoundedCornerShape(11.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {}
+            }
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 2,
+                minLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .padding(top = 6.dp)
+                    .fillMaxWidth()
+            )
+        }
+    }
+}
+
+/** Lays [items] into rows of [columns], padding the last row so tile widths stay equal. */
+@Composable
+private fun <T> TileRows(items: List<T>, columns: Int = 3, tile: @Composable (T) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        items.chunked(columns).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                row.forEach { item ->
+                    Box(Modifier.weight(1f)) { tile(item) }
+                }
+                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
     }
 }
 
 @Composable
-private fun PackRow(pack: IconPack, selected: Boolean, onClick: () -> Unit) {
-    Surface(
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 9.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            PackIconImage(pack.packageName, 26.dp)
-            Text(
-                text = pack.applicationName,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .padding(start = 10.dp)
-                    .weight(1f)
-            )
-            if (selected) {
-                Icon(
-                    Icons.Filled.Check, null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+private fun rememberAppBitmap(app: PackageInfoStruct): ImageBitmap? {
+    return remember(app.packageName, app.internalVersion) {
+        app.icon.toSafeBitmapOrNull()?.asImageBitmap()
+    }
+}
+
+@Composable
+private fun rememberPackBitmap(packPackage: String): ImageBitmap? {
+    val context = getCurrentContext()
+    return remember(packPackage) {
+        try {
+            context.packageManager.getApplicationIcon(packPackage).toSafeBitmapOrNull()?.asImageBitmap()
+        } catch (_: Exception) {
+            null
         }
     }
 }
