@@ -1683,7 +1683,8 @@ fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) ->
             }
         }
 
-        onChange(editedVector)
+        // An empty vector is not a real icon — don't expose it (keeps Modifier greyed)
+        onChange(if (paths.isEmpty()) null else editedVector)
     }
 }
 
