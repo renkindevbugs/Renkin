@@ -95,6 +95,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.caverock.androidsvg.SVG
 import com.caverock.androidsvg.SVGParseException
+import dev.alembiconsProject.alembicons.MainActivity
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.data.IconPack
@@ -1953,6 +1954,43 @@ const val PACK_ROW_LIMIT = 30
 // and eagerly generated previews for all of them would run out of memory.
 const val PACK_DETAIL_LIMIT = 400
 
+/** Drawable names of [packageName] matching [query], sorted by [sortOrder]. */
+private fun filteredSortedPackNames(
+    appMan: ApplicationManager,
+    packageName: String,
+    query: String,
+    sortOrder: IconSortOrder
+): List<String> {
+    val allNames = appMan.getIconPackDrawableNames(packageName)
+    val formattedQuery = query.lowercase().trim().replace(' ', '_')
+    val matching = if (formattedQuery.isEmpty()) {
+        allNames
+    } else {
+        allNames.filter { it.contains(formattedQuery) }
+    }
+    return when (sortOrder) {
+        IconSortOrder.NAME_ASC -> matching.sortedBy { it }
+        IconSortOrder.NAME_DESC -> matching.sortedByDescending { it }
+    }
+}
+
+/** Generates the preview icons for the given drawable [names] of a pack. */
+private fun loadPackIconPairs(
+    appMan: ApplicationManager,
+    activity: MainActivity,
+    packageName: String,
+    options: GenerationOptions,
+    names: List<String>
+): List<Pair<ResourceDrawable, IconPackDrawable>> {
+    val ids = appMan.getIconPackDrawableIds(packageName, names)
+    val drawables = appMan.getIconPackDrawables(packageName, ids)
+    val exportDrawables = activity.appProvider.getIconPackIcons(packageName, options, drawables)
+    return exportDrawables.entries
+        .filter { it.value != null }
+        .map { Pair(it.key, it.value!!) }
+        .distinctBy { it.first.resourceId }
+}
+
 @Composable
 fun PackIconsRow(
     iconPack: IconPack,
@@ -1974,25 +2012,9 @@ fun PackIconsRow(
         val loaded = withContext(Dispatchers.Default) {
             try {
                 val appMan = ApplicationManager(context)
-                val allNames = appMan.getIconPackDrawableNames(iconPack.packageName)
-                val formattedQuery = query.lowercase().trim().replace(' ', '_')
-                val matchingNames = if (formattedQuery.isEmpty()) {
-                    allNames
-                } else {
-                    allNames.filter { it.contains(formattedQuery) }
-                }
-                val sortedNames = when (sortOrder) {
-                    IconSortOrder.NAME_ASC -> matchingNames.sortedBy { it }
-                    IconSortOrder.NAME_DESC -> matchingNames.sortedByDescending { it }
-                }
+                val sortedNames = filteredSortedPackNames(appMan, iconPack.packageName, query, sortOrder)
                 moreCount = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
-                val ids = appMan.getIconPackDrawableIds(iconPack.packageName, sortedNames.take(PACK_ROW_LIMIT))
-                val drawables = appMan.getIconPackDrawables(iconPack.packageName, ids)
-                val exportDrawables = activity.appProvider.getIconPackIcons(iconPack.packageName, options, drawables)
-                exportDrawables.entries
-                    .filter { it.value != null }
-                    .map { Pair(it.key, it.value!!) }
-                    .distinctBy { it.first.resourceId }
+                loadPackIconPairs(appMan, activity, iconPack.packageName, options, sortedNames.take(PACK_ROW_LIMIT))
             } catch (_: Exception) {
                 // A malformed icon pack must not crash the browser
                 moreCount = 0
@@ -2101,26 +2123,11 @@ fun PackDetailGrid(
         withContext(Dispatchers.Default) {
             try {
                 val appMan = ApplicationManager(context)
-                val allNames = appMan.getIconPackDrawableNames(iconPack.packageName)
-                val formattedQuery = query.lowercase().trim().replace(' ', '_')
-                val matchingNames = if (formattedQuery.isEmpty()) {
-                    allNames
-                } else {
-                    allNames.filter { it.contains(formattedQuery) }
-                }
-                val sortedNames = when (sortOrder) {
-                    IconSortOrder.NAME_ASC -> matchingNames.sortedBy { it }
-                    IconSortOrder.NAME_DESC -> matchingNames.sortedByDescending { it }
-                }
+                val sortedNames = filteredSortedPackNames(appMan, iconPack.packageName, query, sortOrder)
                 // Load in chunks so the grid fills progressively instead of blocking
                 for (chunk in sortedNames.take(PACK_DETAIL_LIMIT).chunked(40)) {
                     coroutineContext.ensureActive()
-                    val ids = appMan.getIconPackDrawableIds(iconPack.packageName, chunk)
-                    val drawables = appMan.getIconPackDrawables(iconPack.packageName, ids)
-                    val exportDrawables = activity.appProvider.getIconPackIcons(iconPack.packageName, options, drawables)
-                    val pairs = exportDrawables.entries
-                        .filter { it.value != null }
-                        .map { Pair(it.key, it.value!!) }
+                    val pairs = loadPackIconPairs(appMan, activity, iconPack.packageName, options, chunk)
                     iconPairs = (iconPairs + pairs).distinctBy { it.first.resourceId }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
