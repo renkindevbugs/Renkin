@@ -158,6 +158,13 @@ class ApplicationProvider(private val context: Context) {
         return icon
     }
 
+    /** Applies the modifier from [options] to an already-built icon (e.g. a hand-edited vector). */
+    fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable {
+        val pack = IconPackContainer("", emptyMap())
+        val builder = IconGenerator(context, options, pack, pack)
+        return builder.applyModifier(icon, options.primaryImageEdit)
+    }
+
     fun buildAndSignIconPack(preferences: Preferences, textMethod: (text: String) -> Unit): BuiltIconPack {
         val themed = preferences.getBooleanValue(ExportThemedKey)
         val iconColor = preferences.getDefaultIconColor(context)
