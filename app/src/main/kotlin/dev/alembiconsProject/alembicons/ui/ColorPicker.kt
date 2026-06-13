@@ -52,13 +52,13 @@ fun ColorButton(caption: String, initialColor: Color, onColorSelected: (Color) -
 
     Box(
         modifier = Modifier
-            .padding(8.dp)
-            .fillMaxWidth(0.8f)
-            .clip(RoundedCornerShape(20))
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
             .border(
-                2.dp,
-                MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-                RoundedCornerShape(20)
+                1.dp,
+                MaterialTheme.colorScheme.outline,
+                RoundedCornerShape(16.dp)
             )
             .clickable {
                 colorPickerOpen = true

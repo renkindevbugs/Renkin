@@ -677,18 +677,23 @@ fun OverrideIconSwitch(override: Boolean, onChange: (newValue: Boolean) -> Unit)
 fun DefaultSwitchLayout(isChecked: Boolean, @StringRes label: Int, onChange: (newValue: Boolean) -> Unit) {
     var checked by rememberSaveable { mutableStateOf(isChecked) }
 
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(label))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(label),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f)
+        )
         Switch(
             checked = checked,
             onCheckedChange = {
                 checked = it
                 onChange(it)
-            },
-            modifier = Modifier.padding(start = 8.dp)
+            }
         )
     }
 }
@@ -698,27 +703,34 @@ fun DefaultSwitchLayoutWithInfo(isChecked: Boolean, @StringRes label: Int, @Stri
     var checked by rememberSaveable { mutableStateOf(isChecked) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
 
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(stringResource(label))
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(label),
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.weight(1f)
+        )
+        // Info sits left of the switch so all switches stay aligned to the edge
+        IconButton(onClick = { openInfo = true }, modifier = Modifier.size(28.dp)) {
+            Icon(
+                imageVector = Icons.Filled.Info,
+                contentDescription = "Option info",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
         Switch(
             checked = checked,
             onCheckedChange = {
                 checked = it
                 onChange(it)
             },
-            modifier = Modifier.padding(start = 8.dp)
+            modifier = Modifier.padding(start = 12.dp)
         )
-
-        IconButton(onClick = { openInfo = true }) {
-            Icon(
-                imageVector = Icons.Filled.Info,
-                contentDescription = "Option info",
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
     }
 
     if (openInfo) {
