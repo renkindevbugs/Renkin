@@ -116,4 +116,24 @@
     <string name="edgeContrast">Normalize contrast</string>
     <string name="optionsHint">These options apply to all apps at once. After changing them, tap the refresh button in the top bar to regenerate the icons.</string>
     <string name="selectIconFirst">Select an icon before opening the modifier</string>
+    <string name="watchedIcons">Watched icons</string>
+    <string name="watchActive">Active</string>
+    <string name="watchCompleted">Completed</string>
+    <string name="watchDone">Done</string>
+    <string name="newIconIn">New icon in</string>
+    <string name="watching">Watching</string>
+    <string name="allIconPacks">all icon packs</string>
+    <string name="newWatchRule">New watch rule</string>
+    <string name="editWatchRule">Edit watch rule</string>
+    <string name="appsToWatch">Apps to watch</string>
+    <string name="searchApps">Search apps</string>
+    <string name="swipeForMore">swipe for more</string>
+    <string name="watchAllPacksLabel">Watch all icon packs</string>
+    <string name="iconPacksToCheck">Icon packs to check</string>
+    <string name="save">Save</string>
+    <string name="reviewIcon">Review</string>
+    <string name="addWatchRule">Add watch rule</string>
+    <string name="deleteRule">Delete rule</string>
+    <string name="noWatchRulesYet">No watch rules yet — tap + to add one</string>
+    <string name="openWatchedIcons">Open watched icons</string>
 </resources>
