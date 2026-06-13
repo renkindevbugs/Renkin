@@ -18,7 +18,11 @@ class GenerationOptions(
     val vector: Boolean,
     val monochrome: Boolean,
     val themed: Boolean,
-    val override: Boolean
+    val override: Boolean,
+    val edgeLowThreshold: Float = 2.5F,
+    val edgeHighThreshold: Float = 7.5F,
+    val edgeGaussianRadius: Float = 2F,
+    val edgeContrastNormalized: Boolean = false
 ) {
     constructor(
         source: Source,
@@ -30,7 +34,11 @@ class GenerationOptions(
         vector: Boolean,
         monochrome: Boolean,
         themed: Boolean,
-        override: Boolean
+        override: Boolean,
+        edgeLowThreshold: Float = 2.5F,
+        edgeHighThreshold: Float = 7.5F,
+        edgeGaussianRadius: Float = 2F,
+        edgeContrastNormalized: Boolean = false
     )
             : this(
         source,
@@ -46,7 +54,11 @@ class GenerationOptions(
         vector,
         monochrome,
         themed,
-        override
+        override,
+        edgeLowThreshold,
+        edgeHighThreshold,
+        edgeGaussianRadius,
+        edgeContrastNormalized
     )
 
     override fun hashCode(): Int {
@@ -64,6 +76,10 @@ class GenerationOptions(
         result = 31 * result + monochrome.hashCode()
         result = 31 * result + themed.hashCode()
         result = 31 * result + override.hashCode()
+        result = 31 * result + edgeLowThreshold.hashCode()
+        result = 31 * result + edgeHighThreshold.hashCode()
+        result = 31 * result + edgeGaussianRadius.hashCode()
+        result = 31 * result + edgeContrastNormalized.hashCode()
         return result
     }
 
@@ -87,6 +103,10 @@ class GenerationOptions(
         if (monochrome != other.monochrome) return false
         if (themed != other.themed) return false
         if (override != other.override) return false
+        if (edgeLowThreshold != other.edgeLowThreshold) return false
+        if (edgeHighThreshold != other.edgeHighThreshold) return false
+        if (edgeGaussianRadius != other.edgeGaussianRadius) return false
+        if (edgeContrastNormalized != other.edgeContrastNormalized) return false
 
         return true
     }

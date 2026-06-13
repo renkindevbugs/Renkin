@@ -232,7 +232,12 @@ class IconGenerator(
         edgeDetector.process(
             bitmapIcon.asImageBitmap(),
             options.color,
-            DetectionOptions()
+            DetectionOptions().apply {
+                lowThreshold = options.edgeLowThreshold
+                highThreshold = options.edgeHighThreshold
+                gaussianKernelRadius = options.edgeGaussianRadius
+                contrastNormalized = options.edgeContrastNormalized
+            }
         )
 
         if (parsedIcon != null) {
