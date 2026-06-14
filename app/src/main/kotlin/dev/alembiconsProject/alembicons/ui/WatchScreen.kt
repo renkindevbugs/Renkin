@@ -591,8 +591,8 @@ private fun WatchRuleEditor(
                 state = pagerState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(312.dp)
                     .padding(top = 10.dp)
+                    .height(348.dp)
             ) { page ->
                 TileRows(appPages.getOrNull(page).orEmpty()) { app ->
                     val comp = AppComponent(app.packageName, app.activityName)
