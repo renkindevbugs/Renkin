@@ -79,6 +79,7 @@ import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.AppComponent
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
 import dev.alembiconsProject.alembicons.data.watch.WatchRepository
+import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import kotlinx.coroutines.launch
@@ -596,7 +597,12 @@ private fun WatchRuleEditor(
                 TileRows(appPages.getOrNull(page).orEmpty()) { app ->
                     val comp = AppComponent(app.packageName, app.activityName)
                     val selected = selectedApps.any { it.packageName == comp.packageName && it.activityName == comp.activityName }
-                    IconTile(rememberAppBitmap(app), app.appName, selected) {
+                    IconTile(
+                        bitmap = rememberAppBitmap(app),
+                        label = clipLabel(app.appName, 13),
+                        selected = selected,
+                        overlayIcon = app.createdIcon
+                    ) {
                         if (selected) selectedApps.removeAll { it.packageName == comp.packageName && it.activityName == comp.activityName }
                         else selectedApps.add(comp)
                     }
@@ -636,7 +642,7 @@ private fun WatchRuleEditor(
                     selectedApps.toList().forEach { comp ->
                         val app = apps.find { it.packageName == comp.packageName && it.activityName == comp.activityName }
                         RemovableChip(
-                            label = clipChipLabel(app?.appName ?: comp.packageName),
+                            label = clipLabel(app?.appName ?: comp.packageName, 7),
                             iconApp = app,
                             iconPackPackage = null,
                             onRemove = { selectedApps.remove(comp) }
@@ -670,7 +676,7 @@ private fun WatchRuleEditor(
                 Box(modifier = Modifier.padding(top = 8.dp)) {
                     TileRows(sortedPacks) { pack ->
                         val selected = selectedPacks.contains(pack.packageName)
-                        IconTile(rememberPackBitmap(pack.packageName), pack.applicationName, selected) {
+                        IconTile(rememberPackBitmap(pack.packageName), clipLabel(pack.applicationName, 13), selected) {
                             if (selected) selectedPacks.remove(pack.packageName)
                             else selectedPacks.add(pack.packageName)
                         }
@@ -687,7 +693,7 @@ private fun WatchRuleEditor(
                         selectedPacks.toList().forEach { pkg ->
                             val pack = packs.find { it.packageName == pkg }
                             RemovableChip(
-                                label = clipChipLabel(pack?.applicationName ?: pkg),
+                                label = clipLabel(pack?.applicationName ?: pkg, 7),
                                 iconApp = null,
                                 iconPackPackage = pkg,
                                 onRemove = { selectedPacks.remove(pkg) }
@@ -704,13 +710,23 @@ private fun WatchRuleEditor(
 // Small reusable pieces
 // ---------------------------------------------------------------------------
 
-/** Chip labels are clipped so selected chips stay small in their single scrolling row. */
-private fun clipChipLabel(name: String): String =
-    if (name.length > 7) name.take(7) + "…" else name
+/** Clips a label to [max] characters with an ellipsis so it stays on one line. */
+private fun clipLabel(name: String, max: Int): String =
+    if (name.length > max) name.take(max) + "…" else name
 
-/** One shared selectable tile (rounded card: icon on top, name below) for apps and packs. */
+/**
+ * One shared selectable tile (rounded card: icon on top, single-line name below) for
+ * apps and packs. [overlayIcon], when set (apps that already have a chosen icon),
+ * is shown as a small badge in the big icon's bottom-right corner.
+ */
 @Composable
-private fun IconTile(bitmap: ImageBitmap?, label: String, selected: Boolean, onClick: () -> Unit) {
+private fun IconTile(
+    bitmap: ImageBitmap?,
+    label: String,
+    selected: Boolean,
+    overlayIcon: IconPackDrawable? = null,
+    onClick: () -> Unit
+) {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
@@ -724,26 +740,45 @@ private fun IconTile(bitmap: ImageBitmap?, label: String, selected: Boolean, onC
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier.padding(top = 12.dp, bottom = 10.dp, start = 4.dp, end = 4.dp)
         ) {
-            if (bitmap != null) {
-                Image(
-                    painter = BitmapPainter(bitmap),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(RoundedCornerShape(11.dp))
-                )
-            } else {
-                Surface(
-                    modifier = Modifier.size(42.dp),
-                    shape = RoundedCornerShape(11.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant
-                ) {}
+            Box(Modifier.size(54.dp)) {
+                if (bitmap != null) {
+                    Image(
+                        painter = BitmapPainter(bitmap),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(14.dp))
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {}
+                }
+                if (overlayIcon != null) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(26.dp),
+                        shape = RoundedCornerShape(8.dp),
+                        color = MaterialTheme.colorScheme.surface,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    ) {
+                        Image(
+                            painter = overlayIcon.getPainter(),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(2.dp)
+                        )
+                    }
+                }
             }
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelSmall,
-                maxLines = 2,
-                minLines = 2,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurface,
