@@ -2,6 +2,7 @@
 
 package dev.alembiconsProject.alembicons.ui
 
+import android.widget.Toast
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -49,6 +50,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -82,6 +84,7 @@ import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
+import dev.alembiconsProject.alembicons.service.WatchChecker
 import kotlinx.coroutines.launch
 
 @Composable
@@ -99,6 +102,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
     var showEditor by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<RuleWithDetails?>(null) }
     var pendingDelete by remember { mutableStateOf<Long?>(null) }
+    var isRefreshing by remember { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -138,6 +142,20 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         rules = rules,
                         apps = apps,
                         packs = packs,
+                        isRefreshing = isRefreshing,
+                        onRefresh = {
+                            isRefreshing = true
+                            scope.launch {
+                                val fired = WatchChecker(context).runCheck()
+                                isRefreshing = false
+                                val msg = if (fired.isEmpty()) {
+                                    context.getString(R.string.watchRefreshNone)
+                                } else {
+                                    context.getString(R.string.watchRefreshFound, fired.size)
+                                }
+                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                            }
+                        },
                         onClose = onDismiss,
                         onAdd = { editing = null; showEditor = true },
                         onEdit = { editing = it; showEditor = true },
@@ -184,11 +202,14 @@ private fun DeleteRuleDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
 // Rule list (Completed on top so it's the first thing the user can clear, then Active)
 // ---------------------------------------------------------------------------
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun WatchRuleList(
     rules: List<RuleWithDetails>,
     apps: List<PackageInfoStruct>,
     packs: List<IconPack>,
+    isRefreshing: Boolean,
+    onRefresh: () -> Unit,
     onClose: () -> Unit,
     onAdd: () -> Unit,
     onEdit: (RuleWithDetails) -> Unit,
@@ -218,21 +239,31 @@ private fun WatchRuleList(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            if (rules.isEmpty()) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(
-                        text = stringResource(R.string.noWatchRulesYet),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                        modifier = Modifier.padding(32.dp)
-                    )
-                }
-            } else {
+            // Pull down to run a manual check (the spinner stays until WatchChecker finishes)
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = onRefresh,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    if (rules.isEmpty()) {
+                        item {
+                            Box(Modifier.fillParentMaxSize(), contentAlignment = Alignment.Center) {
+                                Text(
+                                    text = stringResource(R.string.noWatchRulesYet),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                    modifier = Modifier.padding(32.dp)
+                                )
+                            }
+                        }
+                    }
                     if (completed.isNotEmpty()) {
                         item { SectionLabel(stringResource(R.string.watchCompleted)) }
                         items(completed, key = { it.rule.id }) { rule ->
@@ -487,6 +518,12 @@ private fun WatchRuleEditor(
     // 3 rows × 3 columns per page → a horizontally paged grid with dots
     val appPages = filteredApps.chunked(9)
     val pagerState = rememberPagerState(pageCount = { appPages.size.coerceAtLeast(1) })
+    // Shrink the grid to the rows actually needed (e.g. a narrow search result),
+    // but keep full 3-row height once it pages so swiping doesn't resize it
+    val visibleRows = if (appPages.size <= 1) {
+        (((appPages.firstOrNull()?.size ?: 0) + 2) / 3).coerceIn(1, 3)
+    } else 3
+    val gridHeight = (visibleRows * 112 + (visibleRows - 1) * 8).dp
     LaunchedEffect(query, sortOrder, filterNoIcon) {
         if (pagerState.currentPage != 0) pagerState.scrollToPage(0)
     }
@@ -592,7 +629,7 @@ private fun WatchRuleEditor(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 10.dp)
-                    .height(348.dp)
+                    .height(gridHeight)
             ) { page ->
                 TileRows(appPages.getOrNull(page).orEmpty()) { app ->
                     val comp = AppComponent(app.packageName, app.activityName)
