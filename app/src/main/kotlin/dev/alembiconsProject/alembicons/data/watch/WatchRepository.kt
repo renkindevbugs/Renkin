@@ -65,4 +65,63 @@ class WatchRepository(context: Context) {
         dao.deletePacksForRule(ruleId)
         dao.deleteRule(ruleId)
     }
+
+    // --- Detection (phase 3) -------------------------------------------------
+
+    suspend fun getState(packageName: String, activityName: String, iconPackPackage: String): WatchState? =
+        dao.getState(packageName, activityName, iconPackPackage)
+
+    suspend fun upsertState(state: WatchState) = dao.upsertState(state)
+
+    suspend fun getSuggestion(id: Long): IconSuggestion? = dao.getSuggestion(id)
+
+    suspend fun getCandidates(suggestionId: Long): List<IconSuggestionCandidate> = dao.getCandidates(suggestionId)
+
+    suspend fun deleteSuggestion(id: Long) = db.withTransaction {
+        dao.deleteCandidates(id)
+        dao.deleteSuggestion(id)
+    }
+
+    /**
+     * Records that a new icon was found for [app] in [originalRuleId]. The app is split
+     * into its own completed rule (recording the matched packs) — or, if it was the
+     * rule's only app, the rule itself is completed. Returns the new suggestion's id.
+     */
+    suspend fun completeWithSuggestion(
+        originalRuleId: Long,
+        app: AppComponent,
+        candidates: List<CandidateInput>
+    ): Long = db.withTransaction {
+        val original = dao.getRuleWithDetails(originalRuleId) ?: return@withTransaction -1L
+        val matchedPacks = candidates.map { it.iconPackPackage }.distinct()
+        val now = System.currentTimeMillis()
+
+        val completedRuleId: Long
+        if (original.apps.size <= 1) {
+            dao.updateRule(original.rule.copy(completed = true, completedAt = now, watchAllPacks = false))
+            dao.deletePacksForRule(originalRuleId)
+            dao.insertPacks(matchedPacks.map { WatchRulePack(originalRuleId, it) })
+            completedRuleId = originalRuleId
+        } else {
+            completedRuleId = dao.insertRule(WatchRule(watchAllPacks = false, completed = true, completedAt = now))
+            dao.insertApps(listOf(WatchRuleApp(completedRuleId, app.packageName, app.activityName)))
+            dao.insertPacks(matchedPacks.map { WatchRulePack(completedRuleId, it) })
+            dao.deleteApp(originalRuleId, app.packageName, app.activityName)
+        }
+
+        val suggestionId = dao.insertSuggestion(
+            IconSuggestion(ruleId = completedRuleId, packageName = app.packageName, activityName = app.activityName)
+        )
+        dao.insertCandidates(candidates.map {
+            IconSuggestionCandidate(suggestionId, it.iconPackPackage, it.drawableName, it.iconHash)
+        })
+        suggestionId
+    }
 }
+
+/** A newly-found icon for an app from one pack, collected during a check. */
+data class CandidateInput(
+    val iconPackPackage: String,
+    val drawableName: String,
+    val iconHash: String
+)

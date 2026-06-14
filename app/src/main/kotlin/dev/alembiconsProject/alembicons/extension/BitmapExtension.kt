@@ -10,6 +10,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.Base64
 import java.io.ByteArrayOutputStream
+import java.security.MessageDigest
 
 fun Bitmap.changeBackgroundColor(color: Int): Bitmap {
     val newBitmap = this.clone()
@@ -58,6 +59,16 @@ fun Bitmap.getBytes(format: Bitmap.CompressFormat, quality: Int): ByteArray {
 fun Bitmap.toBase64(format: Bitmap.CompressFormat, quality: Int, base64Flag: Int = Base64.NO_WRAP): String {
     val bytes = this.getBytes(format, quality)
     return Base64.encodeToString(bytes, base64Flag)
+}
+
+/**
+ * A content fingerprint of the pixels, used to tell whether an icon pack changed an
+ * app's icon (#icon-watch). PNG encoding is deterministic for identical pixels.
+ */
+fun Bitmap.contentHash(): String {
+    val bytes = getBytes(Bitmap.CompressFormat.PNG, 100)
+    val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
+    return digest.joinToString("") { "%02x".format(it) }
 }
 
 fun bitmapFromBase64(base64: String, base64Flag: Int = Base64.NO_WRAP): Bitmap {
