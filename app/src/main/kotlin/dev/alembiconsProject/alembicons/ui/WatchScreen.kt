@@ -130,11 +130,15 @@ fun WatchScreen(onDismiss: () -> Unit) {
                             // Capture the edit target now — the coroutine runs after we reset state below
                             val target = editing
                             scope.launch {
-                                if (target == null) {
+                                val ruleId = if (target == null) {
                                     repo.createRule(selApps, watchAll, selPacks)
                                 } else {
                                     repo.updateRule(target.rule.id, selApps, watchAll, selPacks)
+                                    target.rule.id
                                 }
+                                // Snapshot current icons so a later pack update is the trigger,
+                                // not the icons that already existed when the rule was made
+                                WatchChecker(context).baselineRule(ruleId)
                             }
                             showEditor = false
                             editing = null
