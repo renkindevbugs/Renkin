@@ -11,6 +11,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -40,10 +43,17 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "se
 class MainActivity : ComponentActivity() {
     val appProvider = ApplicationProvider(this)
 
+    // Set when opened from an icon-watch notification; the home screen shows the apply
+    // modal for this suggestion (consumed in the watch apply flow, phase 6).
+    var pendingWatchSuggestionId by mutableStateOf<Long?>(null)
+        private set
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         appProvider.defaultColor = if (this.isSystemInDarkTheme()) Color.White else Color.Black
+
+        handleWatchIntent(intent)
 
         appProvider.initializeApplications()
         CoroutineScope(Dispatchers.Default).launch {
@@ -94,6 +104,24 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleWatchIntent(intent)
+    }
+
+    private fun handleWatchIntent(intent: Intent?) {
+        if (intent?.action == ACTION_OPEN_SUGGESTION) {
+            val id = intent.getLongExtra(EXTRA_SUGGESTION_ID, -1L)
+            if (id >= 0) pendingWatchSuggestionId = id
+        }
+    }
+
+    /** Called once the apply modal has handled (applied or dismissed) the suggestion. */
+    fun clearPendingWatchSuggestion() {
+        pendingWatchSuggestionId = null
+    }
+
     private fun edgeToEdge(darkMode: Boolean) {
         val style = SystemBarStyle.auto(Color.Transparent.toArgb()
             , Color.Transparent.toArgb()
@@ -121,5 +149,10 @@ class MainActivity : ComponentActivity() {
 
         ApplicationManager(this)
             .changeManifestEnabledState(BootCompletedReceiver::class.java, enabled)
+    }
+
+    companion object {
+        const val ACTION_OPEN_SUGGESTION = "dev.alembiconsProject.alembicons.OPEN_SUGGESTION"
+        const val EXTRA_SUGGESTION_ID = "watch_suggestion_id"
     }
 }

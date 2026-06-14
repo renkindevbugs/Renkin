@@ -33,6 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -76,6 +77,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.AppComponent
@@ -85,6 +87,7 @@ import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.service.WatchChecker
+import dev.alembiconsProject.alembicons.service.WatchWorker
 import kotlinx.coroutines.launch
 
 @Composable
@@ -159,7 +162,16 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         onClose = onDismiss,
                         onAdd = { editing = null; showEditor = true },
                         onEdit = { editing = it; showEditor = true },
-                        onDelete = { ruleId -> pendingDelete = ruleId }
+                        onDelete = { ruleId -> pendingDelete = ruleId },
+                        onSimulate = {
+                            scope.launch {
+                                // Establish a baseline, stale it, then re-check via the worker
+                                // so the full notify + deep-link path runs (debug builds only)
+                                WatchChecker(context).runCheck()
+                                repo.debugStaleAllStates()
+                                WatchWorker.runNow(context)
+                            }
+                        }
                     )
                 }
             }
@@ -213,7 +225,8 @@ private fun WatchRuleList(
     onClose: () -> Unit,
     onAdd: () -> Unit,
     onEdit: (RuleWithDetails) -> Unit,
-    onDelete: (Long) -> Unit
+    onDelete: (Long) -> Unit,
+    onSimulate: () -> Unit
 ) {
     val completed = rules.filter { it.rule.completed }
     val active = rules.filter { !it.rule.completed }
@@ -234,8 +247,18 @@ private fun WatchRuleList(
                     text = stringResource(R.string.watchedIcons),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
                 )
+                if (BuildConfig.DEBUG) {
+                    IconButton(onClick = onSimulate) {
+                        Icon(
+                            Icons.Filled.BugReport,
+                            stringResource(R.string.watchSimulate),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 

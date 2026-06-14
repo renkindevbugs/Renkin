@@ -140,4 +140,10 @@
     <string name="deleteRuleText">This watch rule will be removed.</string>
     <string name="watchRefreshNone">No new icons found</string>
     <string name="watchRefreshFound">%d new icon(s) found</string>
+    <string name="iconAvailableChannelName">New icon available</string>
+    <string name="iconAvailableChannelDescription">A watched icon pack published a new icon for a watched app</string>
+    <string name="iconAvailableTitle">New icon for %s</string>
+    <string name="iconAvailableTextSingle">%s has a new icon — tap to apply</string>
+    <string name="iconAvailableTextMulti">%1$d packs have a new icon — tap to apply</string>
+    <string name="watchSimulate">Simulate update (debug)</string>
 </resources>

@@ -73,6 +73,9 @@ class WatchRepository(context: Context) {
 
     suspend fun upsertState(state: WatchState) = dao.upsertState(state)
 
+    /** Debug only: stale all baselines so the next check fires for any app with an icon. */
+    suspend fun debugStaleAllStates() = dao.debugStaleAllStates()
+
     suspend fun getSuggestion(id: Long): IconSuggestion? = dao.getSuggestion(id)
 
     suspend fun getCandidates(suggestionId: Long): List<IconSuggestionCandidate> = dao.getCandidates(suggestionId)

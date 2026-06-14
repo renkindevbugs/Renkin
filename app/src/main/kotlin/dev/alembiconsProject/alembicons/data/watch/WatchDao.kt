@@ -97,4 +97,8 @@ interface WatchDao {
 
     @Query("DELETE FROM watch_state WHERE packageName = :packageName AND activityName = :activityName")
     suspend fun deleteStateForApp(packageName: String, activityName: String)
+
+    /** Debug only: makes every baseline look outdated so the next check reports "new". */
+    @Query("UPDATE watch_state SET lastPackVersionCode = -1, lastIconHash = 'debug-force'")
+    suspend fun debugStaleAllStates()
 }

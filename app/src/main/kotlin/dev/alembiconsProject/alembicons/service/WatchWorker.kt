@@ -26,6 +26,15 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
         return try {
             val fired = WatchChecker(applicationContext).runCheck()
             Log.debug("Alembicons", "WatchChecker fired ${fired.size} suggestion(s)")
+            val notifier = NotificationManager()
+            for (suggestion in fired) {
+                notifier.postIconAvailable(
+                    applicationContext,
+                    suggestion.suggestionId,
+                    suggestion.packageName,
+                    suggestion.packPackages
+                )
+            }
             Result.success()
         } catch (e: Exception) {
             Log.debug("Alembicons", "WatchChecker failed: ${e.message}")
