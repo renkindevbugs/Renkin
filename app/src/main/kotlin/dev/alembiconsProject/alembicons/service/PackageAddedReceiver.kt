@@ -16,6 +16,15 @@ class PackageAddedReceiver: BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         if (context == null) return
 
+        // A pack (or any app) was updated — let the watcher see if a watched pack
+        // changed an icon. Handled before the EXTRA_REPLACING guard below (which exists
+        // to suppress the new-app notification on updates). The check is version-gated.
+        if (intent?.action == Intent.ACTION_PACKAGE_REPLACED) {
+            Log.debug("Alembicons", intent.data.toString() + " replaced")
+            WatchWorker.runNow(context)
+            return
+        }
+
         //Ignore updated application
         if (intent?.extras?.getBoolean(Intent.EXTRA_REPLACING, false) == true) {
             return

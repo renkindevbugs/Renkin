@@ -22,6 +22,8 @@ class PackageAddedService: Service() {
         val intent = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REMOVED)
+            // A pack update fires PACKAGE_REPLACED — the event-driven trigger for icon-watch
+            addAction(Intent.ACTION_PACKAGE_REPLACED)
             addDataScheme("package")
         }
 

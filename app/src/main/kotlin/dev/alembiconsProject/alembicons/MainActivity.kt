@@ -23,10 +23,12 @@ import dev.alembiconsProject.alembicons.data.getPreferenceFlow
 import dev.alembiconsProject.alembicons.data.isDarkModeEnabled
 import dev.alembiconsProject.alembicons.data.isSystemInDarkTheme
 import dev.alembiconsProject.alembicons.data.setBooleanValue
+import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PermissionManager
 import dev.alembiconsProject.alembicons.service.BootCompletedReceiver
 import dev.alembiconsProject.alembicons.service.PackageAddedService
+import dev.alembiconsProject.alembicons.service.WatchWorker
 import dev.alembiconsProject.alembicons.ui.*
 import dev.alembiconsProject.alembicons.ui.theme.IconerationTheme
 import kotlinx.coroutines.CoroutineScope
@@ -49,6 +51,16 @@ class MainActivity : ComponentActivity() {
         }
         CoroutineScope(Dispatchers.Default).launch {
             appProvider.initializeAlchemiconPack()
+        }
+
+        // Icon-watch (phase 4): the daily safety-net check is always scheduled (version-gated,
+        // so it's near-free when nothing changed); the event-driven fast path needs the
+        // package receiver running, so start it when there are active watch rules.
+        CoroutineScope(Dispatchers.Default).launch {
+            WatchWorker.schedulePeriodic(applicationContext)
+            if (WatchRepository(applicationContext).getActiveRules().isNotEmpty()) {
+                startPackageAddedService()
+            }
         }
 
         CoroutineScope(Dispatchers.Default).launch {
