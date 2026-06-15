@@ -5,6 +5,8 @@ package dev.alembiconsProject.alembicons.ui
 import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -158,10 +160,14 @@ fun CreateTab(
     Column(Modifier.fillMaxSize()) {
         if (source == Source.ICON_PACK) {
             // Search bar slides away while the icon list is scrolled to save space
+            // Reveal/hide the search bar with a soft, low-stiffness spring so it eases
+            // in gradually on scroll-up instead of snapping open all at once
             AnimatedVisibility(
                 visible = !collapsed,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
+                enter = expandVertically(spring(stiffness = Spring.StiffnessLow)) +
+                        fadeIn(spring(stiffness = Spring.StiffnessLow)),
+                exit = shrinkVertically(spring(stiffness = Spring.StiffnessMediumLow)) +
+                        fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
             ) {
             Row(
                 modifier = Modifier
