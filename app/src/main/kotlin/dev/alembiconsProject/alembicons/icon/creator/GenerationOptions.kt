@@ -30,15 +30,14 @@ import dev.alembiconsProject.alembicons.data.getDefaultIconColor
 import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getStringValue
 
+// The secondary* fields default to "no secondary source", so a single-source
+// caller can omit them entirely. They sit at the end so positional construction
+// (primary source + the shared options) stays terse.
 data class GenerationOptions(
     val primarySource: Source,
     val primaryImageEdit: ImageEdit,
     val primaryTextType: TextType,
     val primaryIconPack: String,
-    val secondarySource: Source,
-    val secondaryImageEdit: ImageEdit,
-    val secondaryTextType: TextType,
-    val secondaryIconPack: String,
     val color: Int,
     val bgColor: Int,
     val vector: Boolean,
@@ -48,45 +47,12 @@ data class GenerationOptions(
     val edgeLowThreshold: Float = 2.5F,
     val edgeHighThreshold: Float = 7.5F,
     val edgeGaussianRadius: Float = 2F,
-    val edgeContrastNormalized: Boolean = false
+    val edgeContrastNormalized: Boolean = false,
+    val secondarySource: Source = Source.NONE,
+    val secondaryImageEdit: ImageEdit = ImageEdit.NONE,
+    val secondaryTextType: TextType = TextType.FULL_NAME,
+    val secondaryIconPack: String = ""
 ) {
-    constructor(
-        source: Source,
-        imageEdit: ImageEdit,
-        textType: TextType,
-        iconPack: String,
-        color: Int,
-        bgColor: Int,
-        vector: Boolean,
-        monochrome: Boolean,
-        themed: Boolean,
-        override: Boolean,
-        edgeLowThreshold: Float = 2.5F,
-        edgeHighThreshold: Float = 7.5F,
-        edgeGaussianRadius: Float = 2F,
-        edgeContrastNormalized: Boolean = false
-    )
-            : this(
-        source,
-        imageEdit,
-        textType,
-        iconPack,
-        Source.NONE,
-        ImageEdit.NONE,
-        TextType.FULL_NAME,
-        "",
-        color,
-        bgColor,
-        vector,
-        monochrome,
-        themed,
-        override,
-        edgeLowThreshold,
-        edgeHighThreshold,
-        edgeGaussianRadius,
-        edgeContrastNormalized
-    )
-
     companion object {
         /**
          * Builds the options from the stored preferences. [override] defaults to the
