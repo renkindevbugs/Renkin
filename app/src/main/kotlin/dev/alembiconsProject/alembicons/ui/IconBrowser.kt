@@ -63,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.stringResource
@@ -363,6 +364,17 @@ private fun filteredSortedPackNames(
     }
 }
 
+/**
+ * A pack icon ready to show: the source [resource] (passed back on tap) and a
+ * [preview] bitmap rasterised once on a background thread. Rendering this bitmap
+ * is far cheaper per frame than rebuilding a vector painter for every grid item.
+ */
+data class PackIconPreview(
+    val resource: ResourceDrawable,
+    val drawable: IconPackDrawable,
+    val preview: ImageBitmap
+)
+
 /** Generates the preview icons for the given drawable [names] of a pack. */
 private fun loadPackIconPairs(
     appMan: ApplicationManager,
@@ -370,14 +382,14 @@ private fun loadPackIconPairs(
     packageName: String,
     options: GenerationOptions,
     names: List<String>
-): List<Pair<ResourceDrawable, IconPackDrawable>> {
+): List<PackIconPreview> {
     val ids = appMan.getIconPackDrawableIds(packageName, names)
     val drawables = appMan.getIconPackDrawables(packageName, ids)
     val exportDrawables = activity.appProvider.getIconPackIcons(packageName, options, drawables)
     return exportDrawables.entries
         .filter { it.value != null }
-        .map { Pair(it.key, it.value!!) }
-        .distinctBy { it.first.resourceId }
+        .distinctBy { it.key.resourceId }
+        .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().asImageBitmap()) }
 }
 
 @Composable
@@ -392,7 +404,7 @@ fun PackIconsRow(
 ) {
     val context = getCurrentContext()
     val activity = getCurrentMainActivity()
-    var iconPairs by remember { mutableStateOf<List<Pair<ResourceDrawable, IconPackDrawable>>>(emptyList()) }
+    var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var moreCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
 
@@ -448,14 +460,14 @@ fun PackIconsRow(
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
-            itemsIndexed(iconPairs, key = { _, pair -> pair.first.resourceId }) { _, pair ->
+            itemsIndexed(iconPairs, key = { _, item -> item.resource.resourceId }) { _, item ->
                 Image(
-                    painter = pair.second.getPainter(),
+                    bitmap = item.preview,
                     contentDescription = null,
                     modifier = Modifier
                         .size(64.dp)
                         .padding(4.dp)
-                        .clickable { onSelect(pair.first, pair.second) }
+                        .clickable { onSelect(item.resource, item.drawable) }
                 )
             }
             if (moreCount > 0 && onMore != null) {
@@ -495,7 +507,7 @@ fun PackDetailGrid(
 ) {
     val context = getCurrentContext()
     val activity = getCurrentMainActivity()
-    var iconPairs by remember { mutableStateOf<List<Pair<ResourceDrawable, IconPackDrawable>>>(emptyList()) }
+    var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
     val gridState = rememberLazyGridState()
@@ -517,7 +529,7 @@ fun PackDetailGrid(
                 for (chunk in sortedNames.take(PACK_DETAIL_LIMIT).chunked(40)) {
                     coroutineContext.ensureActive()
                     val pairs = loadPackIconPairs(appMan, activity, iconPack.packageName, options, chunk)
-                    iconPairs = (iconPairs + pairs).distinctBy { it.first.resourceId }
+                    iconPairs = (iconPairs + pairs).distinctBy { it.resource.resourceId }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -581,14 +593,15 @@ fun PackDetailGrid(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 16.dp)
             ) {
-                items(iconPairs, key = { it.first.resourceId }) { pair ->
+                items(iconPairs, key = { it.resource.resourceId }) { item ->
                     Image(
-                        painter = pair.second.getPainter(),
+                        bitmap = item.preview,
                         contentDescription = null,
                         modifier = Modifier
+                            .animateItem()
                             .padding(4.dp)
                             .size(56.dp)
-                            .clickable { onSelect(pair.first, pair.second) }
+                            .clickable { onSelect(item.resource, item.drawable) }
                     )
                 }
             }
