@@ -31,6 +31,7 @@ import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ImageVectorDrawable
 import dev.alembiconsProject.alembicons.drawable.InsetIconDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
+import dev.alembiconsProject.alembicons.drawable.foregroundVectorOrNull
 import dev.alembiconsProject.alembicons.drawable.haveMonochrome
 import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
 import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
@@ -146,13 +147,9 @@ class IconGenerator(
             }
         }
 
-        val bitmap = icon.toBitmap()
-        return when (imageEdit) {
-            ImageEdit.NONE -> icon
-            ImageEdit.COLORIZE -> colorizeImage(bitmap, null, PorterDuff.Mode.MULTIPLY)
-            ImageEdit.PATH -> generatePathTracing(bitmap, null)
-            ImageEdit.EDGE -> generateCannyEdgeDetection(bitmap, null)
-        }
+        // Non-vector icons rasterise, then run through the shared modifier dispatch
+        // (NONE is already handled by the early return at the top of this method).
+        return generateImage(icon.toBitmap(), null, imageEdit, PorterDuff.Mode.MULTIPLY)
     }
 
     fun colorizeFromIconPack(iconPackName: String, icon: ResourceDrawable): IconPackDrawable? {
@@ -205,21 +202,22 @@ class IconGenerator(
         return generateImage(bitmapIcon, parsedIcon, imageEdit, PorterDuff.Mode.MULTIPLY)
     }
 
+    /**
+     * Single dispatch point for applying an [ImageEdit] to a (bitmap, parsedIcon)
+     * pair. Adding a new modifier means adding one [ImageEdit] entry and one branch
+     * here — every "generate from a source" path routes through this method.
+     */
     private fun generateImage(
         bitmapIcon: Bitmap,
         parsedIcon: Drawable?,
         imageEdit: ImageEdit,
         mode: PorterDuff.Mode): IconPackDrawable {
-        if (parsedIcon != null) {
-            if (parsedIcon.isAdaptiveIconDrawable()) {
-                fixAdaptiveIconSize(parsedIcon as AdaptiveIconDrawable)
-            }
+        if (parsedIcon != null && parsedIcon.isAdaptiveIconDrawable()) {
+            fixAdaptiveIconSize(parsedIcon as AdaptiveIconDrawable)
         }
 
-        val defaultIcon = getDefaultIcon(bitmapIcon, parsedIcon)
-
         return when (imageEdit) {
-            ImageEdit.NONE -> defaultIcon
+            ImageEdit.NONE -> getDefaultIcon(bitmapIcon, parsedIcon)
             ImageEdit.PATH -> generatePathTracing(bitmapIcon, parsedIcon)
             ImageEdit.EDGE -> generateCannyEdgeDetection(bitmapIcon, parsedIcon)
             ImageEdit.COLORIZE -> colorizeImage(bitmapIcon, parsedIcon, mode)
@@ -321,10 +319,7 @@ class IconGenerator(
                 if (inset.drawable is ImageVectorDrawable) {
                     vectorIcon = inset.drawable
 
-                    val stroke = vectorIcon.viewportHeight / 48 //1F at 48
-                    vectorIcon.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
-                    vectorIcon.tintColor = Color.Unspecified
-
+                    recolorVectorStrokes(vectorIcon)
                     return inset
                 }
             }
@@ -338,10 +333,7 @@ class IconGenerator(
             if (parsedIcon.drawable is ImageVectorDrawable) {
                 vectorIcon = parsedIcon.drawable
 
-                val stroke = vectorIcon.viewportHeight / 48 //1F at 48
-                vectorIcon.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
-                vectorIcon.tintColor = Color.Unspecified
-
+                recolorVectorStrokes(vectorIcon)
                 return parsedIcon
             }
         }
@@ -350,9 +342,7 @@ class IconGenerator(
             return generateColorQuantizationDetection(bitmapIcon)
         }
 
-        val stroke = vectorIcon.viewportHeight / 48 //1F at 48
-        vectorIcon.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
-        vectorIcon.tintColor = Color.Unspecified
+        recolorVectorStrokes(vectorIcon)
 
         if (options.themed) {
             return vectorToInset(vectorIcon)
@@ -386,8 +376,7 @@ class IconGenerator(
             , ImageTracer.TracingOptions())
 
         val vector = imageVector.toImageVectorDrawable()
-        val stroke = imageVector.viewportHeight / 48 //1F at 48
-        vector.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+        recolorVectorStrokes(vector)
         vector.resizeAndCenter()
 
         if (options.themed) {
@@ -560,23 +549,7 @@ class IconGenerator(
 
         if (!icon.isAdaptiveIconDrawable()) return null
 
-        val adaptiveIcon = icon as AdaptiveIconDrawable
-        var vectorIcon: ImageVectorDrawable? = null
-
-        if (adaptiveIcon.foreground is InsetIconDrawable) {
-            val inset = adaptiveIcon.foreground as InsetIconDrawable
-            if (inset.drawable is ImageVectorDrawable) {
-                vectorIcon = inset.drawable
-            }
-        }
-
-        if (adaptiveIcon.foreground is ImageVectorDrawable) {
-            vectorIcon = adaptiveIcon.foreground as ImageVectorDrawable
-        }
-
-        if (vectorIcon == null) {
-            return null
-        }
+        val vectorIcon = icon.foregroundVectorOrNull() ?: return null
 
         val stroke = vectorIcon.viewportHeight / 48 //1F at 48
         vectorIcon.root.editStrokePaths(stroke)
@@ -594,6 +567,17 @@ class IconGenerator(
         }
     }
 
+    /**
+     * Re-strokes every path in [vector] with the user's colour and clears the tint
+     * so the stroke colour shows through. Stroke width is normalised to 1f on a
+     * 48-unit viewport.
+     */
+    private fun recolorVectorStrokes(vector: ImageVectorDrawable) {
+        val stroke = vector.viewportHeight / 48 // 1F at 48
+        vector.root.editPaths(stroke, SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+        vector.tintColor = Color.Unspecified
+    }
+
     private fun colorizeVector(vectorIcon: ImageVectorDrawable): ImageVectorDrawable {
         vectorIcon.root.editPathColors(SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
         vectorIcon.tintColor = Color.Unspecified
@@ -607,15 +591,7 @@ class IconGenerator(
 
     @RequiresApi(Build.VERSION_CODES.O)
     private fun fixAdaptiveIconSize(adaptiveIconDrawable: AdaptiveIconDrawable) {
-        val vector = if (adaptiveIconDrawable.foreground is InsetIconDrawable) {
-            val inset = adaptiveIconDrawable.foreground as InsetIconDrawable
-            if (inset.drawable is ImageVectorDrawable) {
-                inset.drawable
-            } else null
-        } else if (adaptiveIconDrawable.foreground is ImageVectorDrawable) {
-            adaptiveIconDrawable.foreground as ImageVectorDrawable
-        } else null
-
+        val vector = adaptiveIconDrawable.foregroundVectorOrNull()
         vector?.resizeAndCenter()?.applyAndRemoveGroup()?.scaleAtCenter(adaptiveIconScale)
     }
 }
