@@ -74,6 +74,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -411,6 +412,7 @@ fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     val activity = getCurrentMainActivity()
@@ -434,7 +436,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
             openBuilder = true
             CoroutineScope(Dispatchers.Default).launch {
                 val iconPack = activity.appProvider.buildAndSignIconPack(preferences) {
-                    text += it + "\n"
+                    text = it
                 }
 
                 openBuilder = false
@@ -455,13 +457,25 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
 
     if (openBuilder) {
         AlertDialog(
-            shape = RoundedCornerShape(20.dp),
-            containerColor = MaterialTheme.colorScheme.background,
-            titleContentColor = MaterialTheme.colorScheme.outline,
+            shape = RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
             onDismissRequest = {},
+            icon = {
+                LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+            },
             title = { Text(stringResource(id = R.string.iconPack)) },
             text = {
-                Text(text = text)
+                // Show only the current step, crossfading between them, instead of an
+                // ever-growing log
+                Crossfade(targetState = text, label = "buildStep") { step ->
+                    Text(
+                        text = step,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
             confirmButton = { }
         )
