@@ -98,6 +98,14 @@ interface WatchDao {
     @Query("DELETE FROM watch_state WHERE packageName = :packageName AND activityName = :activityName")
     suspend fun deleteStateForApp(packageName: String, activityName: String)
 
+    /** Drops baseline rows for apps no longer referenced by any rule. */
+    @Query(
+        "DELETE FROM watch_state WHERE NOT EXISTS (" +
+            "SELECT 1 FROM watch_rule_app ra " +
+            "WHERE ra.packageName = watch_state.packageName AND ra.activityName = watch_state.activityName)"
+    )
+    suspend fun pruneOrphanStates()
+
     /** Debug only: makes every baseline look outdated so the next check reports "new". */
     @Query("UPDATE watch_state SET lastPackVersionCode = -1, lastIconHash = 'debug-force'")
     suspend fun debugStaleAllStates()

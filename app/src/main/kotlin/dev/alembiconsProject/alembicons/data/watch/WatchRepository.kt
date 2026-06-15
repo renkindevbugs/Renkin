@@ -43,6 +43,7 @@ class WatchRepository(context: Context) {
         dao.deleteAppsForRule(ruleId)
         dao.deletePacksForRule(ruleId)
         writeRuleChildren(ruleId, apps, watchAllPacks, packPackages)
+        dao.pruneOrphanStates()
     }
 
     private suspend fun writeRuleChildren(
@@ -64,6 +65,7 @@ class WatchRepository(context: Context) {
         dao.deleteAppsForRule(ruleId)
         dao.deletePacksForRule(ruleId)
         dao.deleteRule(ruleId)
+        dao.pruneOrphanStates()
     }
 
     // --- Detection (phase 3) -------------------------------------------------

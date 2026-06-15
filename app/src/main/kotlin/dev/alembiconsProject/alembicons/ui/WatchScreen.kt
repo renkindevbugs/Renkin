@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ImageNotSupported
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -231,6 +232,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     var candidates by remember(suggestionId) { mutableStateOf<List<IconSuggestionCandidate>>(emptyList()) }
     var selectedPack by remember(suggestionId) { mutableStateOf<String?>(null) }
     var newIcon by remember(suggestionId) { mutableStateOf<IconPackDrawable?>(null) }
+    var generating by remember(suggestionId) { mutableStateOf(false) }
     var loaded by remember(suggestionId) { mutableStateOf(false) }
 
     LaunchedEffect(suggestionId) {
@@ -248,15 +250,23 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
 
     // (Re)generate the new icon for the selected pack
     LaunchedEffect(selectedPack, suggestion, app) {
-        val s = suggestion ?: return@LaunchedEffect
-        val pack = selectedPack ?: return@LaunchedEffect
-        val targetApp = app ?: return@LaunchedEffect
-        val candidate = candidates.find { it.iconPackPackage == pack } ?: return@LaunchedEffect
+        val s = suggestion
+        val pack = selectedPack
+        val targetApp = app
+        val candidate = candidates.find { it.iconPackPackage == pack }
+        // App or pack uninstalled since the suggestion fired → nothing to generate
+        if (s == null || pack == null || targetApp == null || candidate == null) {
+            newIcon = null
+            generating = false
+            return@LaunchedEffect
+        }
+        generating = true
         newIcon = null
         newIcon = withContext(Dispatchers.Default) {
             val options = GenerationOptions.fromPreferences(prefs.data.first(), context, override = true)
             activity.appProvider.getIconFromPackDrawable(targetApp, pack, candidate.drawableName, options)
         }
+        generating = false
     }
 
     if (!loaded || suggestion == null) return
@@ -277,12 +287,12 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                 )
                 Spacer(Modifier.height(16.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ComparePreview(app?.let { rememberAppBitmap(it) }, null)
+                    ComparePreview(app?.let { rememberAppBitmap(it) }, null, loading = false)
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowForward, null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    ComparePreview(null, newIcon)
+                    ComparePreview(null, newIcon, loading = generating)
                 }
 
                 Spacer(Modifier.height(16.dp))
@@ -348,9 +358,13 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     )
 }
 
-/** A small framed preview cell showing either a bitmap (current) or a drawable (new). */
+/** A small framed preview cell: a bitmap (current), a drawable (new), a spinner, or "unavailable". */
 @Composable
-private fun ComparePreview(bitmap: androidx.compose.ui.graphics.ImageBitmap?, icon: IconPackDrawable?) {
+private fun ComparePreview(
+    bitmap: androidx.compose.ui.graphics.ImageBitmap?,
+    icon: IconPackDrawable?,
+    loading: Boolean
+) {
     Surface(
         modifier = Modifier.size(72.dp),
         shape = RoundedCornerShape(18.dp),
@@ -360,7 +374,12 @@ private fun ComparePreview(bitmap: androidx.compose.ui.graphics.ImageBitmap?, ic
             when {
                 bitmap != null -> Image(BitmapPainter(bitmap), null, Modifier.fillMaxSize())
                 icon != null -> Image(icon.getPainter(), null, Modifier.fillMaxSize())
-                else -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                loading -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                else -> Icon(
+                    Icons.Filled.ImageNotSupported, null,
+                    tint = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.size(28.dp)
+                )
             }
         }
     }
