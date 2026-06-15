@@ -153,4 +153,7 @@
     <string name="iconAvailableSummaryTitle">New icons available</string>
     <string name="iconAvailableSummaryText">Watched packs published new icons</string>
     <string name="pressBackToExit">Press back again to exit</string>
+    <string name="buildPreviewTitle">Pack preview</string>
+    <string name="buildPreviewEmpty">No icons yet — assign some to your apps first</string>
+    <string name="buildPreviewCount">%d icons</string>
 </resources>
