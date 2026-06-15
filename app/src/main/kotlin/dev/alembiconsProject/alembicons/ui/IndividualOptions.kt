@@ -8,19 +8,14 @@ import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -54,7 +49,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -78,9 +72,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
@@ -155,8 +147,6 @@ fun OptionsDialog(
     var edgeSmoothing by rememberSaveable { mutableFloatStateOf(2f) }
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
     var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
-    var removeBackground by rememberSaveable { mutableStateOf(false) }
-    var bgTolerance by rememberSaveable { mutableFloatStateOf(0.25f) }
 
     // Slide the editor in from the right; closing plays the reverse animation
     // before the dialog window is actually dismissed
@@ -189,9 +179,7 @@ fun OptionsDialog(
         edgeHighThreshold = edgeThreshold * 3f,
         edgeGaussianRadius = edgeSmoothing,
         edgeContrastNormalized = edgeContrast,
-        iconScale = iconScale,
-        removeBackground = removeBackground,
-        backgroundTolerance = (bgTolerance * 128).toInt()
+        iconScale = iconScale
     )
 
     LaunchedEffect(generatingOptions, customIconList) {
@@ -208,11 +196,7 @@ fun OptionsDialog(
             return@LaunchedEffect
         }
         val custom = customIconList.firstOrNull()
-        // Off the main thread: generation can now run ML background segmentation, which
-        // blocks on its result
-        currentIcon = withContext(Dispatchers.Default) {
-            activity.appProvider.getIcon(app, generatingOptions, custom)
-        }
+        currentIcon = activity.appProvider.getIcon(app, generatingOptions, custom)
     }
 
     // A hand-edited vector isn't built from a source, so the modifier tab can't go
@@ -244,8 +228,6 @@ fun OptionsDialog(
         if (selectedTab != 2) {
             imageEdit = ImageEdit.NONE
             iconScale = 1f
-            removeBackground = false
-            bgTolerance = 0.25f
         }
     }
 
@@ -339,8 +321,6 @@ fun OptionsDialog(
                                 edgeSmoothing = edgeSmoothing,
                                 edgeContrast = edgeContrast,
                                 iconScale = iconScale,
-                                removeBackground = removeBackground,
-                                bgTolerance = bgTolerance,
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },
@@ -348,9 +328,7 @@ fun OptionsDialog(
                                 onEdgeThresholdChange = { edgeThreshold = it },
                                 onEdgeSmoothingChange = { edgeSmoothing = it },
                                 onEdgeContrastChange = { edgeContrast = it },
-                                onIconScaleChange = { iconScale = it },
-                                onRemoveBackgroundChange = { removeBackground = it },
-                                onBgToleranceChange = { bgTolerance = it }
+                                onIconScaleChange = { iconScale = it }
                             )
                             else -> PrepareEditVector(app) {
                                 vectorIcon = it
@@ -666,8 +644,6 @@ private fun ModifierTab(
     edgeSmoothing: Float,
     edgeContrast: Boolean,
     iconScale: Float,
-    removeBackground: Boolean,
-    bgTolerance: Float,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
@@ -675,9 +651,7 @@ private fun ModifierTab(
     onEdgeThresholdChange: (Float) -> Unit,
     onEdgeSmoothingChange: (Float) -> Unit,
     onEdgeContrastChange: (Boolean) -> Unit,
-    onIconScaleChange: (Float) -> Unit,
-    onRemoveBackgroundChange: (Boolean) -> Unit,
-    onBgToleranceChange: (Float) -> Unit
+    onIconScaleChange: (Float) -> Unit
 ) {
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
@@ -839,46 +813,17 @@ private fun ModifierTab(
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.removeBackground),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Switch(
-                        checked = removeBackground,
-                        onCheckedChange = { onRemoveBackgroundChange(it) }
-                    )
-                }
-                // Tolerance only matters while removing the background
-                if (removeBackground) {
-                    Text(
-                        text = stringResource(R.string.backgroundTolerance),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Slider(
-                        value = bgTolerance,
-                        onValueChange = { onBgToleranceChange(it) },
-                        valueRange = 0f..1f
-                    )
-                }
                 Text(
                     text = stringResource(R.string.iconScale),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                // Centred at 1.0: left shrinks (padding), right enlarges (zoom). The
-                // active track grows from the centre outwards (M3 "centered slider").
+                // Range centred on 1.0, so the thumb starts in the middle: left shrinks
+                // (padding), right enlarges (zoom)
                 Slider(
                     value = iconScale,
                     onValueChange = { onIconScaleChange(it) },
-                    valueRange = 0.5f..1.5f,
-                    track = { CenteredSliderTrack(fraction = (iconScale - 0.5f).coerceIn(0f, 1f)) }
+                    valueRange = 0.5f..1.5f
                 )
             }
         }
@@ -889,55 +834,6 @@ private fun ModifierTab(
             onDismiss = { colorPickerOpen = false },
             currentlySelected = iconColor,
             onColorSelected = { onColorChange(it) }
-        )
-    }
-}
-
-/**
- * Slider track whose active fill grows from the centre (the default value) outwards to
- * the thumb, instead of from the start — the Material 3 Expressive "centered slider"
- * look, drawn manually since this material3 version doesn't expose it as a flag.
- * [fraction] is the thumb position in 0f..1f (0.5f = centre).
- */
-@Composable
-private fun CenteredSliderTrack(fraction: Float) {
-    val trackHeight = 16.dp
-    BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(trackHeight),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        val full = maxWidth
-        val center = full / 2f
-        val thumb = full * fraction
-        val left = minOf(center, thumb)
-        val segment = maxOf(center, thumb) - left
-
-        // Thick rounded inactive track (matches the M3 Expressive slider weight)
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(trackHeight)
-                .clip(RoundedCornerShape(50))
-                .background(MaterialTheme.colorScheme.secondaryContainer)
-        )
-        // Active fill growing from the centre outwards
-        Box(
-            Modifier
-                .padding(start = left)
-                .width(segment)
-                .height(trackHeight)
-                .clip(RoundedCornerShape(50))
-                .background(MaterialTheme.colorScheme.primary)
-        )
-        // Small stop indicator at the centre (the default value)
-        Box(
-            Modifier
-                .padding(start = center - 2.dp)
-                .size(4.dp)
-                .clip(CircleShape)
-                .background(MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.4f))
         )
     }
 }

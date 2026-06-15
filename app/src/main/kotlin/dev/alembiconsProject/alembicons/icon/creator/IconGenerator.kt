@@ -51,10 +51,6 @@ import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.editPaths
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.resizeAndCenter
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.scaleAtCenter
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.setReferenceColorPaths
-import com.google.android.gms.tasks.Tasks
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
-import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
 import dev.alembiconsProject.imagetracer.ImageTracer
 import dev.alembiconsProject.tgCannyEdgeCompose.CannyEdgeDetector
 import dev.alembiconsProject.tgCannyEdgeCompose.DetectionOptions
@@ -576,15 +572,13 @@ class IconGenerator(
     }
 
     /**
-     * Applies the per-icon Modifier-tab adjustments (background removal, scale) on top
-     * of an already-built icon. No-op with the defaults (removeBackground=false,
-     * iconScale=1f), so it's safe to run on every generation path.
+     * Applies the per-icon Modifier-tab adjustments (currently just scale) on top of an
+     * already-built icon. No-op with the default (iconScale=1f), so it's safe to run on
+     * every generation path.
      */
     private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {
-        var result = icon
-        if (options.removeBackground) result = removeIconBackground(result)
-        if (options.iconScale != 1f) result = scaleIcon(result, options.iconScale)
-        return result
+        if (options.iconScale != 1f) return scaleIcon(icon, options.iconScale)
+        return icon
     }
 
     /**
@@ -601,120 +595,6 @@ class IconGenerator(
         canvas.scale(scale, scale, src.width / 2f, src.height / 2f)
         canvas.drawBitmap(src, 0f, 0f, null)
         return BitmapIconDrawable(ctx.resources, out)
-    }
-
-    /**
-     * Removes a solid background by flood-filling from the four corners: pixels matching
-     * a corner's colour (within tolerance) become transparent. Layered/adaptive icons
-     * already have transparent corners, so nothing is removed there.
-     *
-     * Guard: if the fill would swallow almost the whole icon (an edge-to-edge icon with
-     * no distinct background, where the corner colour bleeds through everything), the
-     * original is kept instead of erasing it.
-     */
-    private fun removeIconBackground(icon: IconPackDrawable): IconPackDrawable {
-        val src = icon.toBitmap()
-        if (src.width <= 0 || src.height <= 0) return icon
-
-        // Prefer on-device ML subject segmentation (handles edge-to-edge icons the
-        // corner flood-fill can't); fall back to the flood-fill when it's unavailable
-        // (e.g. running on the UI thread, or no segmented subject found).
-        segmentForeground(src)?.let { return BitmapIconDrawable(ctx.resources, it) }
-
-        val bitmap = src.copy(Bitmap.Config.ARGB_8888, true)
-        val erasedEverything = floodFillCornersTransparent(bitmap, options.backgroundTolerance)
-        if (erasedEverything) return icon
-
-        return BitmapIconDrawable(ctx.resources, bitmap)
-    }
-
-    /**
-     * Runs ML Kit subject segmentation and returns a foreground-only bitmap (transparent
-     * background), or null if it can't run. The call blocks on the segmentation Task, so
-     * it must run off the main thread — on the UI thread it returns null and the caller
-     * falls back to the flood-fill.
-     */
-    private fun segmentForeground(bitmap: Bitmap): Bitmap? {
-        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) return null
-
-        return try {
-            val segOptions = SubjectSegmenterOptions.Builder()
-                .enableForegroundBitmap()
-                .build()
-            val segmenter = SubjectSegmentation.getClient(segOptions)
-            val input = InputImage.fromBitmap(bitmap, 0)
-            val result = Tasks.await(segmenter.process(input))
-            result.foregroundBitmap
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    /** Returns true if the fill removed almost all opaque pixels (so it should be discarded). */
-    private fun floodFillCornersTransparent(bitmap: Bitmap, tolerance: Int = 32): Boolean {
-        val w = bitmap.width
-        val h = bitmap.height
-        if (w <= 0 || h <= 0) return false
-
-        val pixels = IntArray(w * h)
-        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
-        val visited = BooleanArray(w * h)
-        val stack = ArrayDeque<Int>()
-
-        var opaqueBefore = 0
-        for (p in pixels) if (android.graphics.Color.alpha(p) != 0) opaqueBefore++
-        var removed = 0
-
-        // Sample a little in from each corner (and the edge midpoints) instead of the
-        // literal corner pixel: adaptive icons are rendered with rounded, transparent
-        // corners, so the actual background colour sits just inside the edge.
-        val dx = (w * 0.08f).toInt().coerceIn(1, w - 1)
-        val dy = (h * 0.08f).toInt().coerceIn(1, h - 1)
-        val seedPoints = intArrayOf(
-            dy * w + dx,                 // top-left
-            dy * w + (w - 1 - dx),       // top-right
-            (h - 1 - dy) * w + dx,       // bottom-left
-            (h - 1 - dy) * w + (w - 1 - dx), // bottom-right
-            dy * w + w / 2,              // top-middle
-            (h - 1 - dy) * w + w / 2,    // bottom-middle
-            (h / 2) * w + dx,            // left-middle
-            (h / 2) * w + (w - 1 - dx)   // right-middle
-        )
-
-        for (corner in seedPoints) {
-            val seed = pixels[corner]
-            // A transparent seed means there's no solid background to strip here
-            if (android.graphics.Color.alpha(seed) == 0 || visited[corner]) continue
-
-            stack.addLast(corner)
-            while (stack.isNotEmpty()) {
-                val i = stack.removeLast()
-                if (visited[i] || !colorClose(pixels[i], seed, tolerance)) continue
-                visited[i] = true
-                pixels[i] = 0 // transparent
-                removed++
-
-                val x = i % w
-                val y = i / w
-                if (x > 0) stack.addLast(i - 1)
-                if (x < w - 1) stack.addLast(i + 1)
-                if (y > 0) stack.addLast(i - w)
-                if (y < h - 1) stack.addLast(i + w)
-            }
-        }
-
-        // Edge-to-edge icon with no real background → don't erase it
-        if (opaqueBefore > 0 && removed > opaqueBefore * 0.85f) return true
-
-        bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
-        return false
-    }
-
-    private fun colorClose(a: Int, b: Int, tolerance: Int): Boolean {
-        if (android.graphics.Color.alpha(a) == 0) return false
-        return kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) <= tolerance &&
-            kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) <= tolerance &&
-            kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b)) <= tolerance
     }
 
     /**

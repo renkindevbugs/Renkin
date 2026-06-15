@@ -101,9 +101,6 @@ dependencies {
     //Svg
     implementation(libs.android.svg)
 
-    //ML — on-device subject segmentation for background removal (model downloaded via Play Services)
-    implementation(libs.mlkit.segmentation.subject)
-
     //Compat
     coreLibraryDesugaring(libs.android.tools.desugar.jdk.libs.nio)
 
