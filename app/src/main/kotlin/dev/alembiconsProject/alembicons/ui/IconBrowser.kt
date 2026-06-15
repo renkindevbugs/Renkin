@@ -491,7 +491,7 @@ fun PackIconsRow(
                     modifier = Modifier
                         .size(64.dp)
                         .padding(4.dp)
-                        .clickable { onSelect(item.resource, item.drawable) }
+                        .tappableIcon { onSelect(item.resource, item.drawable) }
                 )
             }
             if (moreCount > 0 && onMore != null) {
@@ -625,7 +625,7 @@ fun PackDetailGrid(
                             .animateItem()
                             .padding(4.dp)
                             .size(56.dp)
-                            .clickable { onSelect(item.resource, item.drawable) }
+                            .tappableIcon { onSelect(item.resource, item.drawable) }
                     )
                 }
             }
