@@ -378,6 +378,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                             }
                             if (index >= 0) {
                                 activity.appProvider.editApplication(index, targetApp.changeExport(icon))
+                                activity.markIconChanged(targetApp.packageName, targetApp.activityName)
                             }
                             // Applying handles the rule, so remove it (cascades the suggestion)
                             suggestion?.ruleId?.let { ruleId -> scope.launch { repo.deleteRule(ruleId) } }

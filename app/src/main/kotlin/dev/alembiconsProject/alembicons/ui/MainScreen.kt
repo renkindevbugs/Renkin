@@ -392,6 +392,7 @@ fun OpenAppOptions(
     AppOptions(iconPacks, app, themed, { icon ->
         CoroutineScope(Dispatchers.Default).launch {
             activity.appProvider.editApplication(index, app.changeExport(icon))
+            activity.markIconChanged(app.packageName, app.activityName)
             onDismiss()
         }
     }, {
@@ -538,9 +539,15 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
 @Composable
 fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
     val activity = getCurrentMainActivity()
+    val changed = activity.recentlyChangedIcons.toSet()
+    // Icons changed this session float to the top so the user sees them without
+    // scrolling; the rest stay alphabetical
     val themedApps = activity.appProvider.applicationList
         .filter { it.createdIcon != null }
-        .sortedBy { it.appName.lowercase() }
+        .sortedWith(
+            compareByDescending<PackageInfoStruct> { "${it.packageName}/${it.activityName}" in changed }
+                .thenBy { it.appName.lowercase() }
+        )
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -598,7 +605,10 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(themedApps, key = { "${it.packageName}/${it.activityName}" }) { app ->
-                            BuildPreviewItem(app)
+                            BuildPreviewItem(
+                                app = app,
+                                changed = "${app.packageName}/${app.activityName}" in changed
+                            )
                         }
                     }
                 }
@@ -621,16 +631,31 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
 }
 
 @Composable
-private fun BuildPreviewItem(app: PackageInfoStruct) {
+private fun BuildPreviewItem(app: PackageInfoStruct, changed: Boolean = false) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        app.createdIcon?.let { icon ->
-            Image(
-                painter = icon.getPainter(),
-                contentDescription = app.appName,
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(14.dp))
-            )
+        Box {
+            app.createdIcon?.let { icon ->
+                Image(
+                    painter = icon.getPainter(),
+                    contentDescription = app.appName,
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                )
+            }
+            // Green dot marks icons changed this session so they're easy to spot
+            if (changed) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .size(12.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .padding(2.dp)
+                        .clip(CircleShape)
+                        .background(Color(0xFF34C759))
+                )
+            }
         }
         Spacer(Modifier.height(4.dp))
         Text(
