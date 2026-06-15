@@ -1,5 +1,7 @@
 package dev.alembiconsProject.alembicons.ui
 
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -136,6 +138,22 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
     val filterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
 
+    // Require a second back press to leave. Registered here (before the search bar),
+    // so the search bar's clear-on-back handler takes priority while it has text.
+    val context = LocalContext.current
+    val activity = getCurrentMainActivity()
+    val pressBackMessage = stringResource(R.string.pressBackToExit)
+    var lastBackPress by remember { mutableStateOf(0L) }
+    BackHandler {
+        val now = System.currentTimeMillis()
+        if (now - lastBackPress < 2000) {
+            activity.finish()
+        } else {
+            lastBackPress = now
+            Toast.makeText(context, pressBackMessage, Toast.LENGTH_SHORT).show()
+        }
+    }
+
     // The pinned search bar sits right under the top bar, so it tracks the same
     // scrolled tint — otherwise the header looks split (tinted bar, white search)
     val headerScrolled by remember {
@@ -170,7 +188,6 @@ fun MainColumn(iconPacks: List<IconPack>) {
     }
 
     // Opened from an icon-watch notification → show the apply modal for that suggestion
-    val activity = getCurrentMainActivity()
     val pendingSuggestion = activity.pendingWatchSuggestionId
     if (pendingSuggestion != null) {
         WatchApplyModal(pendingSuggestion) { activity.clearPendingWatchSuggestion() }
@@ -655,6 +672,13 @@ fun SearchBar(
 ) {
     var text by remember { mutableStateOf("") }
     var showSortMenu by remember { mutableStateOf(false) }
+
+    // Back clears the query first; only once it's empty does back fall through to
+    // the exit handler above (the keyboard, if open, is dismissed by the system first)
+    BackHandler(enabled = text.isNotEmpty()) {
+        text = ""
+        onSearch("")
+    }
 
     Surface(color = containerColor, modifier = Modifier.fillMaxWidth()) {
     Row(modifier = Modifier
