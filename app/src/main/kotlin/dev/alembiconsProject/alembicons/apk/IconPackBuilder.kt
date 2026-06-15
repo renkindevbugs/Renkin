@@ -432,15 +432,6 @@ class IconPackBuilder(
         res.setValueAsRaw(coder.valueType, coder.value)
     }
 
-    private fun getCurrentVersionCode(): Long {
-        val appMan = ApplicationManager(ctx)
-
-        val iconPack = appMan.getPackage(iconPackName)
-            ?: return 0L
-
-        return appMan.getVersionCode(iconPack)
-    }
-
     private fun buildDex(apkModule: ApkModule, resourceId: Int) {
         buildClasses(apkModule, resourceId)
         buildClasses2(apkModule, resourceId)
