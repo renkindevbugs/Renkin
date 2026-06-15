@@ -150,4 +150,7 @@
     <string name="watchApplyTitle">Apply this icon?</string>
     <string name="watchApplyFromPack">New icon from</string>
     <string name="watchApplyToast">Icon set — press Build to update the pack</string>
+    <string name="iconAvailableSummaryTitle">New icons available</string>
+    <string name="iconAvailableSummaryText">Watched packs published new icons</string>
+    <string name="pressBackToExit">Press back again to exit</string>
 </resources>

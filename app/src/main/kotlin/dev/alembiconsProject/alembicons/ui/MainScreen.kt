@@ -1,5 +1,7 @@
 package dev.alembiconsProject.alembicons.ui
 
+import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -13,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -50,6 +53,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -68,9 +72,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -97,17 +103,56 @@ import kotlinx.coroutines.launch
 
 enum class AppSortOrder { NAME, INSTALL_DATE }
 
+/**
+ * True while the list is scrolling up (or sitting at the top). Used to expand the
+ * build FAB on scroll-up and collapse it to an icon on scroll-down.
+ */
+@Composable
+private fun LazyListState.isScrollingUp(): Boolean {
+    var previousIndex by remember(this) { mutableStateOf(firstVisibleItemIndex) }
+    var previousScrollOffset by remember(this) { mutableStateOf(firstVisibleItemScrollOffset) }
+    return remember(this) {
+        derivedStateOf {
+            if (previousIndex != firstVisibleItemIndex) {
+                previousIndex > firstVisibleItemIndex
+            } else {
+                previousScrollOffset >= firstVisibleItemScrollOffset
+            }.also {
+                previousIndex = firstVisibleItemIndex
+                previousScrollOffset = firstVisibleItemScrollOffset
+            }
+        }
+    }.value
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainColumn(iconPacks: List<IconPack>) {
     var packageFilter by remember { mutableStateOf("") }
     var isInRefresh by rememberSaveable { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val listState = rememberLazyListState()
 
     val prefs = getPreferences()
     val scope = rememberCoroutineScope()
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
     val filterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
+
+    // Require a second back press to leave. Registered here (before the search bar),
+    // so the search bar's clear-on-back handler takes priority while it has text.
+    val context = LocalContext.current
+    val activity = getCurrentMainActivity()
+    val pressBackMessage = stringResource(R.string.pressBackToExit)
+    var lastBackPress by remember { mutableStateOf(0L) }
+    BackHandler {
+        val now = System.currentTimeMillis()
+        if (now - lastBackPress < 2000) {
+            activity.finish()
+        } else {
+            lastBackPress = now
+            Toast.makeText(context, pressBackMessage, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     // The pinned search bar sits right under the top bar, so it tracks the same
     // scrolled tint — otherwise the header looks split (tinted bar, white search)
@@ -126,7 +171,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = { TitleBar(scrollBehavior) { isInRefresh = it } },
-        floatingActionButton = { BuildPackFab(isInRefresh) },
+        floatingActionButton = { BuildPackFab(isInRefresh, expanded = listState.isScrollingUp()) },
         bottomBar = { BottomBar() }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
@@ -138,12 +183,11 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 onFilterChange = { scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, it) } },
                 onSearch = { packageFilter = it }
             )
-            ApplicationList(iconPacks, packageFilter, sortOrder, filterNoIcon)
+            ApplicationList(iconPacks, packageFilter, sortOrder, filterNoIcon, listState)
         }
     }
 
     // Opened from an icon-watch notification → show the apply modal for that suggestion
-    val activity = getCurrentMainActivity()
     val pendingSuggestion = activity.pendingWatchSuggestionId
     if (pendingSuggestion != null) {
         WatchApplyModal(pendingSuggestion) { activity.clearPendingWatchSuggestion() }
@@ -155,12 +199,12 @@ fun ApplicationList(
     iconPacks: List<IconPack>,
     filter: String,
     sortOrder: AppSortOrder,
-    filterNoIcon: Boolean
+    filterNoIcon: Boolean,
+    listState: LazyListState = rememberLazyListState()
 ) {
     val activity = getCurrentMainActivity()
     val pm = LocalContext.current.packageManager
     val applications = activity.appProvider.applicationList
-    val listState = rememberLazyListState()
 
     // Read preferences once for the whole list — a DataStore subscription per row
     // causes visible scroll jank
@@ -207,7 +251,7 @@ fun ApplicationList(
             OptionsCard(iconPacks)
         }
         items(displayList, key = { "${it.value.packageName}/${it.value.activityName}" }) { indexedApp ->
-            ApplicationItem(iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue)
+            ApplicationItem(iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue, Modifier.animateItem())
         }
     }
 }
@@ -218,16 +262,19 @@ fun ApplicationItem(
     app: PackageInfoStruct,
     index: Int,
     themed: Boolean,
-    bgColorValue: Color
+    bgColorValue: Color,
+    modifier: Modifier = Modifier
 ) {
     val activity = getCurrentMainActivity()
     val dynamicColor = themed && supportDynamicColors()
+    val view = LocalView.current
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
     var openWarning by rememberSaveable { mutableStateOf(false) }
 
     Surface(
         onClick = {
+            view.performTapHaptic()
             if (activity.appProvider.iconPackLoaded) {
                 openAppOptions = true
             } else {
@@ -236,7 +283,7 @@ fun ApplicationItem(
         },
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
     ) {
@@ -278,28 +325,34 @@ fun ApplicationItem(
                 Color.Unspecified
             }
 
-            if (app.createdIcon != null) {
-                Image(
-                    painter = app.createdIcon.getPainter(),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(bgColor)
-                )
-            } else {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Icon(
-                            imageVector = Icons.Filled.Edit,
-                            contentDescription = "Edit",
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.size(20.dp)
+            // Crossfade the trailing slot so assigning or clearing an icon fades
+            // between the preview and the edit bubble instead of popping
+            Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+                Crossfade(targetState = app.createdIcon, label = "iconPreview") { createdIcon ->
+                    if (createdIcon != null) {
+                        Image(
+                            painter = createdIcon.getPainter(),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(bgColor)
                         )
+                    } else {
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.Edit,
+                                    contentDescription = "Edit",
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -376,10 +429,12 @@ fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun BuildPackFab(isInRefresh: Boolean) {
+fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     val activity = getCurrentMainActivity()
     val preferences = getPreferences().getPreferencesValue()
+    val view = LocalView.current
 
     var openBuilder by rememberSaveable { mutableStateOf(false) }
     var openSuccess by remember { mutableStateOf(false) }
@@ -393,11 +448,12 @@ fun BuildPackFab(isInRefresh: Boolean) {
                 return@ExtendedFloatingActionButton
             }
 
+            view.performConfirmHaptic()
             text = ""
             openBuilder = true
             CoroutineScope(Dispatchers.Default).launch {
                 val iconPack = activity.appProvider.buildAndSignIconPack(preferences) {
-                    text += it + "\n"
+                    text = it
                 }
 
                 openBuilder = false
@@ -411,19 +467,32 @@ fun BuildPackFab(isInRefresh: Boolean) {
             )
         },
         text = { Text(stringResource(id = R.string.buildIconPack)) },
+        expanded = expanded,
         containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer
     )
 
     if (openBuilder) {
         AlertDialog(
-            shape = RoundedCornerShape(20.dp),
-            containerColor = MaterialTheme.colorScheme.background,
-            titleContentColor = MaterialTheme.colorScheme.outline,
+            shape = RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            titleContentColor = MaterialTheme.colorScheme.onSurface,
             onDismissRequest = {},
+            icon = {
+                LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+            },
             title = { Text(stringResource(id = R.string.iconPack)) },
             text = {
-                Text(text = text)
+                // Show only the current step, crossfading between them, instead of an
+                // ever-growing log
+                Crossfade(targetState = text, label = "buildStep") { step ->
+                    Text(
+                        text = step,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             },
             confirmButton = { }
         )
@@ -603,6 +672,13 @@ fun SearchBar(
 ) {
     var text by remember { mutableStateOf("") }
     var showSortMenu by remember { mutableStateOf(false) }
+
+    // Back clears the query first; only once it's empty does back fall through to
+    // the exit handler above (the keyboard, if open, is dismissed by the system first)
+    BackHandler(enabled = text.isNotEmpty()) {
+        text = ""
+        onSearch("")
+    }
 
     Surface(color = containerColor, modifier = Modifier.fillMaxWidth()) {
     Row(modifier = Modifier
