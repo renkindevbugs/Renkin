@@ -3,6 +3,15 @@
 package dev.alembiconsProject.alembicons.ui
 
 import android.widget.Toast
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -78,6 +87,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -135,7 +145,22 @@ fun WatchScreen(onDismiss: () -> Unit) {
                     .fillMaxSize()
                     .statusBarsPadding()
             ) {
-                if (showEditor) {
+                // Slide the editor in from the right like a forward navigation,
+                // and back to the list from the left, instead of a hard swap
+                AnimatedContent(
+                    targetState = showEditor,
+                    transitionSpec = {
+                        if (targetState) {
+                            (slideInHorizontally(spring(stiffness = Spring.StiffnessMediumLow)) { it } + fadeIn()) togetherWith
+                                (slideOutHorizontally(spring(stiffness = Spring.StiffnessMediumLow)) { -it / 5 } + fadeOut())
+                        } else {
+                            (slideInHorizontally(spring(stiffness = Spring.StiffnessMediumLow)) { -it / 5 } + fadeIn()) togetherWith
+                                (slideOutHorizontally(spring(stiffness = Spring.StiffnessMediumLow)) { it } + fadeOut())
+                        }
+                    },
+                    label = "watchEditor"
+                ) { editorOpen ->
+                if (editorOpen) {
                     WatchRuleEditor(
                         existing = editing,
                         apps = apps,
@@ -194,6 +219,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         }
                     )
                 }
+                }
             }
         }
     }
@@ -227,6 +253,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     val repo = remember { WatchRepository(context) }
     val prefs = getPreferences()
     val scope = rememberCoroutineScope()
+    val view = LocalView.current
 
     var suggestion by remember(suggestionId) { mutableStateOf<IconSuggestion?>(null) }
     var candidates by remember(suggestionId) { mutableStateOf<List<IconSuggestionCandidate>>(emptyList()) }
@@ -334,6 +361,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                 val applyToast = stringResource(R.string.watchApplyToast)
                 FilledIconButton(
                     onClick = {
+                        view.performConfirmHaptic()
                         val icon = newIcon
                         val targetApp = app
                         if (icon != null && targetApp != null) {
@@ -365,21 +393,31 @@ private fun ComparePreview(
     icon: IconPackDrawable?,
     loading: Boolean
 ) {
+    // Crossfade between states so the new icon fades in after the spinner instead
+    // of snapping in once generation finishes
+    val state = when {
+        bitmap != null -> "bitmap"
+        icon != null -> "icon"
+        loading -> "loading"
+        else -> "empty"
+    }
     Surface(
         modifier = Modifier.size(72.dp),
         shape = RoundedCornerShape(18.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
-        Box(Modifier.padding(10.dp), contentAlignment = Alignment.Center) {
-            when {
-                bitmap != null -> Image(BitmapPainter(bitmap), null, Modifier.fillMaxSize())
-                icon != null -> Image(icon.getPainter(), null, Modifier.fillMaxSize())
-                loading -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                else -> Icon(
-                    Icons.Filled.ImageNotSupported, null,
-                    tint = MaterialTheme.colorScheme.outline,
-                    modifier = Modifier.size(28.dp)
-                )
+        Crossfade(targetState = state, label = "comparePreview") { s ->
+            Box(Modifier.padding(10.dp), contentAlignment = Alignment.Center) {
+                when (s) {
+                    "bitmap" -> bitmap?.let { Image(BitmapPainter(it), null, Modifier.fillMaxSize()) }
+                    "icon" -> icon?.let { Image(it.getPainter(), null, Modifier.fillMaxSize()) }
+                    "loading" -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    else -> Icon(
+                        Icons.Filled.ImageNotSupported, null,
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
             }
         }
     }
@@ -490,29 +528,34 @@ private fun WatchRuleList(
                     if (completed.isNotEmpty()) {
                         item { SectionLabel(stringResource(R.string.watchCompleted)) }
                         items(completed, key = { it.rule.id }) { rule ->
-                            CompletedRuleCard(
-                                rule, apps, packs,
-                                onClick = { onApply(rule) },
-                                onDelete = { onDelete(rule.rule.id) }
-                            )
+                            Box(Modifier.animateItem()) {
+                                CompletedRuleCard(
+                                    rule, apps, packs,
+                                    onClick = { onApply(rule) },
+                                    onDelete = { onDelete(rule.rule.id) }
+                                )
+                            }
                         }
                     }
                     if (active.isNotEmpty()) {
                         item { SectionLabel(stringResource(R.string.watchActive)) }
                         items(active, key = { it.rule.id }) { rule ->
-                            ActiveRuleCard(
-                                rule, apps, packs,
-                                onEdit = { onEdit(rule) },
-                                onDelete = { onDelete(rule.rule.id) }
-                            )
+                            Box(Modifier.animateItem()) {
+                                ActiveRuleCard(
+                                    rule, apps, packs,
+                                    onEdit = { onEdit(rule) },
+                                    onDelete = { onDelete(rule.rule.id) }
+                                )
+                            }
                         }
                     }
                 }
             }
         }
 
+        val view = LocalView.current
         FloatingActionButton(
-            onClick = onAdd,
+            onClick = { view.performTapHaptic(); onAdd() },
             shape = RoundedCornerShape(18.dp),
             containerColor = MaterialTheme.colorScheme.primary,
             modifier = Modifier
