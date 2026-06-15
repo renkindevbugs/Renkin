@@ -2,6 +2,7 @@
 
 package dev.alembiconsProject.alembicons.ui
 
+import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.expandVertically
@@ -375,6 +376,23 @@ data class PackIconPreview(
     val preview: ImageBitmap
 )
 
+// Previews only ever render at ~56-64dp; a 96px bitmap covers that on the highest
+// densities while keeping the full-pack grid (up to PACK_DETAIL_LIMIT items) within
+// a sane memory budget — a full 256px raster each would be ~100 MB for 400 icons.
+private const val PREVIEW_PX = 96
+
+private fun Bitmap.scaledPreview(max: Int = PREVIEW_PX): Bitmap {
+    val biggest = maxOf(width, height)
+    if (biggest <= max) return this
+    val scale = max.toFloat() / biggest
+    return Bitmap.createScaledBitmap(
+        this,
+        (width * scale).toInt().coerceAtLeast(1),
+        (height * scale).toInt().coerceAtLeast(1),
+        true
+    )
+}
+
 /** Generates the preview icons for the given drawable [names] of a pack. */
 private fun loadPackIconPairs(
     appMan: ApplicationManager,
@@ -389,7 +407,7 @@ private fun loadPackIconPairs(
     return exportDrawables.entries
         .filter { it.value != null }
         .distinctBy { it.key.resourceId }
-        .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().asImageBitmap()) }
+        .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap()) }
 }
 
 @Composable
