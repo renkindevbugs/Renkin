@@ -91,6 +91,21 @@ fun AdaptiveIconDrawable.haveMonochrome(): Boolean {
     return false
 }
 
+/**
+ * The editable [ImageVectorDrawable] backing this icon, if any — looking through
+ * an [AdaptiveIconDrawable]'s foreground and an [InsetIconDrawable] wrapper.
+ * Returns null when the icon has no vector foreground (e.g. a plain bitmap icon).
+ */
+fun Drawable.foregroundVectorOrNull(): ImageVectorDrawable? {
+    val foreground = if (isAdaptiveIconDrawable()) (this as AdaptiveIconDrawable).foreground else this
+
+    return when (foreground) {
+        is ImageVectorDrawable -> foreground
+        is InsetIconDrawable -> foreground.drawable as? ImageVectorDrawable
+        else -> null
+    }
+}
+
 @RequiresApi(Build.VERSION_CODES.O)
 fun newAdaptiveIconDrawable(foreground: Drawable, background: Drawable, monochrome: Drawable?): AdaptiveIconDrawable {
     if (PackageVersion.is33OrMore()) {
