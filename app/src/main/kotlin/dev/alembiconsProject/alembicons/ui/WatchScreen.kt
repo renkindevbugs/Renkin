@@ -119,6 +119,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
     var editing by remember { mutableStateOf<RuleWithDetails?>(null) }
     var pendingDelete by remember { mutableStateOf<Long?>(null) }
     var isRefreshing by remember { mutableStateOf(false) }
+    var applySuggestionId by remember { mutableStateOf<Long?>(null) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -179,6 +180,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         onClose = onDismiss,
                         onAdd = { editing = null; showEditor = true },
                         onEdit = { editing = it; showEditor = true },
+                        onApply = { rule -> rule.suggestions.firstOrNull()?.id?.let { applySuggestionId = it } },
                         onDelete = { ruleId -> pendingDelete = ruleId },
                         onSimulate = {
                             scope.launch {
@@ -203,6 +205,11 @@ fun WatchScreen(onDismiss: () -> Unit) {
                 scope.launch { repo.deleteRule(ruleId) }
             }
         )
+    }
+
+    // Tapping a completed rule opens the same apply modal right here in the watch screen
+    applySuggestionId?.let { sid ->
+        WatchApplyModal(sid) { applySuggestionId = null }
     }
 }
 
@@ -326,7 +333,8 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                             if (index >= 0) {
                                 activity.appProvider.editApplication(index, targetApp.changeExport(icon))
                             }
-                            scope.launch { repo.deleteSuggestion(suggestionId) }
+                            // Applying handles the rule, so remove it (cascades the suggestion)
+                            suggestion?.ruleId?.let { ruleId -> scope.launch { repo.deleteRule(ruleId) } }
                             Toast.makeText(context, applyToast, Toast.LENGTH_LONG).show()
                         }
                         onDismiss()
@@ -397,6 +405,7 @@ private fun WatchRuleList(
     onClose: () -> Unit,
     onAdd: () -> Unit,
     onEdit: (RuleWithDetails) -> Unit,
+    onApply: (RuleWithDetails) -> Unit,
     onDelete: (Long) -> Unit,
     onSimulate: () -> Unit
 ) {
@@ -462,7 +471,11 @@ private fun WatchRuleList(
                     if (completed.isNotEmpty()) {
                         item { SectionLabel(stringResource(R.string.watchCompleted)) }
                         items(completed, key = { it.rule.id }) { rule ->
-                            CompletedRuleCard(rule, apps, packs, onDelete = { onDelete(rule.rule.id) })
+                            CompletedRuleCard(
+                                rule, apps, packs,
+                                onClick = { onApply(rule) },
+                                onDelete = { onDelete(rule.rule.id) }
+                            )
                         }
                     }
                     if (active.isNotEmpty()) {
@@ -586,9 +599,11 @@ private fun CompletedRuleCard(
     rule: RuleWithDetails,
     apps: List<PackageInfoStruct>,
     packs: List<IconPack>,
+    onClick: () -> Unit,
     onDelete: () -> Unit
 ) {
     Surface(
+        onClick = onClick,
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest,
         modifier = Modifier.fillMaxWidth()
