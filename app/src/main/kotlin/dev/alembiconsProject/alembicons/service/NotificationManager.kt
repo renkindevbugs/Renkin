@@ -30,6 +30,10 @@ class NotificationManager {
     private val updatePackNotificationId = 1
     // Watch notifications get a stable id per suggestion so they update/cancel cleanly
     private val iconAvailableBaseId = 1000
+    // Bundle all icon-available notifications under one group + summary so several
+    // firing at once collapse into a single entry instead of flooding the shade
+    private val iconAvailableGroupKey = "dev.alembiconsProject.alembicons.ICON_AVAILABLE"
+    private val iconAvailableSummaryId = 999
 
     private val newApplicationTag = "dev.alembiconsProject.alembicons"
 
@@ -145,7 +149,19 @@ class NotificationManager {
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)
+            .setGroup(iconAvailableGroupKey)
         if (largeIcon != null) builder.setLargeIcon(largeIcon)
+
+        // The summary the system shows when several of these are collapsed together
+        val summary = NotificationCompat.Builder(context, iconAvailableChannelId)
+            .setSmallIcon(R.mipmap.ic_launcher_monochrome)
+            .setContentTitle(context.getString(R.string.iconAvailableSummaryTitle))
+            .setContentText(context.getString(R.string.iconAvailableSummaryText))
+            .setStyle(NotificationCompat.InboxStyle())
+            .setGroup(iconAvailableGroupKey)
+            .setGroupSummary(true)
+            .setAutoCancel(true)
+            .build()
 
         with(NotificationManagerCompat.from(context)) {
             if (ActivityCompat.checkSelfPermission(
@@ -156,6 +172,7 @@ class NotificationManager {
                 return
             }
             notify(iconAvailableBaseId + suggestionId.toInt(), builder.build())
+            notify(iconAvailableSummaryId, summary)
         }
     }
 
