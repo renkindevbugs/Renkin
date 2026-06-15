@@ -70,6 +70,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
@@ -248,12 +249,14 @@ fun ApplicationItem(
 ) {
     val activity = getCurrentMainActivity()
     val dynamicColor = themed && supportDynamicColors()
+    val view = LocalView.current
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
     var openWarning by rememberSaveable { mutableStateOf(false) }
 
     Surface(
         onClick = {
+            view.performTapHaptic()
             if (activity.appProvider.iconPackLoaded) {
                 openAppOptions = true
             } else {
@@ -412,6 +415,7 @@ fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
 fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     val activity = getCurrentMainActivity()
     val preferences = getPreferences().getPreferencesValue()
+    val view = LocalView.current
 
     var openBuilder by rememberSaveable { mutableStateOf(false) }
     var openSuccess by remember { mutableStateOf(false) }
@@ -425,6 +429,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
                 return@ExtendedFloatingActionButton
             }
 
+            view.performConfirmHaptic()
             text = ""
             openBuilder = true
             CoroutineScope(Dispatchers.Default).launch {
