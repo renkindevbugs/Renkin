@@ -141,6 +141,13 @@ fun MainColumn(iconPacks: List<IconPack>) {
             ApplicationList(iconPacks, packageFilter, sortOrder, filterNoIcon)
         }
     }
+
+    // Opened from an icon-watch notification → show the apply modal for that suggestion
+    val activity = getCurrentMainActivity()
+    val pendingSuggestion = activity.pendingWatchSuggestionId
+    if (pendingSuggestion != null) {
+        WatchApplyModal(pendingSuggestion) { activity.clearPendingWatchSuggestion() }
+    }
 }
 
 @Composable

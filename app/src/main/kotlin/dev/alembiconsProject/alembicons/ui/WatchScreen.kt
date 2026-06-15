@@ -31,6 +31,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BugReport
@@ -40,14 +41,20 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -81,14 +88,20 @@ import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.AppComponent
+import dev.alembiconsProject.alembicons.data.watch.IconSuggestion
+import dev.alembiconsProject.alembicons.data.watch.IconSuggestionCandidate
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
 import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
+import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.service.WatchChecker
 import dev.alembiconsProject.alembicons.service.WatchWorker
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun WatchScreen(onDismiss: () -> Unit) {
@@ -192,6 +205,161 @@ fun WatchScreen(onDismiss: () -> Unit) {
         )
     }
 }
+
+/**
+ * Shown on the home screen when opened from an icon-watch notification (phase 6):
+ * the app's current icon vs the newly found one (with a pack picker if several packs
+ * offer one). Confirm stores the icon and toasts to press Build; cancel keeps the
+ * suggestion so it can still be applied later from the watch screen.
+ */
+@Composable
+fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
+    val context = getCurrentContext()
+    val activity = getCurrentMainActivity()
+    val repo = remember { WatchRepository(context) }
+    val prefs = getPreferences()
+    val scope = rememberCoroutineScope()
+
+    var suggestion by remember(suggestionId) { mutableStateOf<IconSuggestion?>(null) }
+    var candidates by remember(suggestionId) { mutableStateOf<List<IconSuggestionCandidate>>(emptyList()) }
+    var selectedPack by remember(suggestionId) { mutableStateOf<String?>(null) }
+    var newIcon by remember(suggestionId) { mutableStateOf<IconPackDrawable?>(null) }
+    var loaded by remember(suggestionId) { mutableStateOf(false) }
+
+    LaunchedEffect(suggestionId) {
+        val s = repo.getSuggestion(suggestionId)
+        val c = repo.getCandidates(suggestionId)
+        suggestion = s
+        candidates = c
+        selectedPack = c.firstOrNull()?.iconPackPackage
+        loaded = true
+        if (s == null) onDismiss() // already handled/deleted → nothing to show
+    }
+
+    val apps = activity.appProvider.applicationList
+    val app = suggestion?.let { s -> apps.find { it.packageName == s.packageName && it.activityName == s.activityName } }
+
+    // (Re)generate the new icon for the selected pack
+    LaunchedEffect(selectedPack, suggestion, app) {
+        val s = suggestion ?: return@LaunchedEffect
+        val pack = selectedPack ?: return@LaunchedEffect
+        val targetApp = app ?: return@LaunchedEffect
+        val candidate = candidates.find { it.iconPackPackage == pack } ?: return@LaunchedEffect
+        newIcon = null
+        newIcon = withContext(Dispatchers.Default) {
+            val options = GenerationOptions.fromPreferences(prefs.data.first(), context, override = true)
+            activity.appProvider.getIconFromPackDrawable(targetApp, pack, candidate.drawableName, options)
+        }
+    }
+
+    if (!loaded || suggestion == null) return
+
+    AlertDialog(
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.watchApplyTitle)) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = app?.appName ?: suggestion!!.packageName,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.height(16.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    ComparePreview(app?.let { rememberAppBitmap(it) }, null)
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward, null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    ComparePreview(null, newIcon)
+                }
+
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.watchApplyFromPack),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    candidates.forEach { candidate ->
+                        val pack = packsName(activity.appProvider.iconPacks, candidate.iconPackPackage)
+                        FilterChip(
+                            selected = selectedPack == candidate.iconPackPackage,
+                            onClick = { selectedPack = candidate.iconPackPackage },
+                            label = { Text(pack, maxLines = 1) },
+                            leadingIcon = { PackIconImage(candidate.iconPackPackage, 18.dp) }
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                FilledTonalIconButton(
+                    onClick = onDismiss,
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
+                }
+                val applyToast = stringResource(R.string.watchApplyToast)
+                FilledIconButton(
+                    onClick = {
+                        val icon = newIcon
+                        val targetApp = app
+                        if (icon != null && targetApp != null) {
+                            val index = apps.indexOfFirst {
+                                it.packageName == targetApp.packageName && it.activityName == targetApp.activityName
+                            }
+                            if (index >= 0) {
+                                activity.appProvider.editApplication(index, targetApp.changeExport(icon))
+                            }
+                            scope.launch { repo.deleteSuggestion(suggestionId) }
+                            Toast.makeText(context, applyToast, Toast.LENGTH_LONG).show()
+                        }
+                        onDismiss()
+                    },
+                    enabled = newIcon != null && app != null
+                ) {
+                    Icon(Icons.Filled.Check, stringResource(R.string.confirm))
+                }
+            }
+        }
+    )
+}
+
+/** A small framed preview cell showing either a bitmap (current) or a drawable (new). */
+@Composable
+private fun ComparePreview(bitmap: androidx.compose.ui.graphics.ImageBitmap?, icon: IconPackDrawable?) {
+    Surface(
+        modifier = Modifier.size(72.dp),
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
+    ) {
+        Box(Modifier.padding(10.dp), contentAlignment = Alignment.Center) {
+            when {
+                bitmap != null -> Image(BitmapPainter(bitmap), null, Modifier.fillMaxSize())
+                icon != null -> Image(icon.getPainter(), null, Modifier.fillMaxSize())
+                else -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+            }
+        }
+    }
+}
+
+private fun packsName(packs: List<IconPack>, packageName: String): String =
+    packs.find { it.packageName == packageName }?.applicationName ?: packageName
 
 @Composable
 private fun DeleteRuleDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {

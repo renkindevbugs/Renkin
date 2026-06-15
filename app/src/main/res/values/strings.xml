@@ -146,4 +146,7 @@
     <string name="iconAvailableTextSingle">%s has a new icon — tap to apply</string>
     <string name="iconAvailableTextMulti">%1$d packs have a new icon — tap to apply</string>
     <string name="watchSimulate">Simulate update (debug)</string>
+    <string name="watchApplyTitle">Apply this icon?</string>
+    <string name="watchApplyFromPack">New icon from</string>
+    <string name="watchApplyToast">Icon set — press Build to update the pack</string>
 </resources>
