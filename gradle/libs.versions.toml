@@ -16,6 +16,7 @@ kotlin = "2.1.20"
 ksp = "2.1.20-1.0.32"
 material3Android = "1.5.0-alpha14"
 roomKtx = "2.6.1"
+workRuntime = "2.9.1"
 androidSvg = "1.4"
 imageTracer = "1.0.3"
 cannyEdge = "1.0.2"
@@ -39,6 +40,7 @@ androidx-material = { group = "com.google.android.material", name = "material", 
 androidx-material3-android = { module = "androidx.compose.material3:material3-android", version.ref = "material3Android" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "roomKtx" }
 androidx-room-ktx = { module = "androidx.room:room-ktx", version.ref = "roomKtx" }
+androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "workRuntime" }
 arscLib = { module = "io.github.reandroid:ARSCLib", version.ref = "arsclib" }
 colorpicker-compose = { module = "com.github.skydoves:colorpicker-compose", version.ref = "colorpickerCompose" }
 android-svg = { module = "com.caverock:androidsvg", version.ref = "androidSvg" }

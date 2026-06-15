@@ -47,6 +47,7 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.Material3.DayNight.NoActionBar"
             android:screenOrientation="portrait"
             tools:ignore="DiscouragedApi,LockedOrientationActivity">

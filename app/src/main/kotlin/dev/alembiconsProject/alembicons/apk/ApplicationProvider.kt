@@ -16,9 +16,11 @@ import dev.alembiconsProject.alembicons.data.CalendarIconsKey
 import dev.alembiconsProject.alembicons.data.DbApplication
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IconPack
+import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
 import dev.alembiconsProject.alembicons.data.RawElement
+import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
 import dev.alembiconsProject.alembicons.data.getDefaultIconColor
@@ -156,6 +158,26 @@ class ApplicationProvider(private val context: Context) {
         }
 
         return icon
+    }
+
+    /**
+     * Builds the icon a specific pack provides for an app, by drawable name — used by the
+     * icon-watch apply modal to preview/apply a suggested icon. No extra modifier is applied.
+     */
+    fun getIconFromPackDrawable(
+        application: PackageInfoStruct,
+        packPackage: String,
+        drawableName: String,
+        options: GenerationOptions
+    ): IconPackDrawable? {
+        val ids = appManager.getIconPackDrawableIds(packPackage, listOf(drawableName))
+        val resource = appManager.getIconPackDrawables(packPackage, ids).firstOrNull() ?: return null
+        val packOptions = options.copy(
+            primarySource = Source.ICON_PACK,
+            primaryImageEdit = ImageEdit.NONE,
+            primaryIconPack = packPackage
+        )
+        return getIcon(application, packOptions, resource)
     }
 
     /** Applies the modifier from [options] to an already-built icon (e.g. a hand-edited vector). */

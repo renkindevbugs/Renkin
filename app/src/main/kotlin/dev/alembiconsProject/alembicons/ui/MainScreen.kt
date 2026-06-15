@@ -23,11 +23,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -50,6 +53,7 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -136,6 +140,13 @@ fun MainColumn(iconPacks: List<IconPack>) {
             )
             ApplicationList(iconPacks, packageFilter, sortOrder, filterNoIcon)
         }
+    }
+
+    // Opened from an icon-watch notification → show the apply modal for that suggestion
+    val activity = getCurrentMainActivity()
+    val pendingSuggestion = activity.pendingWatchSuggestionId
+    if (pendingSuggestion != null) {
+        WatchApplyModal(pendingSuggestion) { activity.clearPendingWatchSuggestion() }
     }
 }
 
@@ -436,8 +447,13 @@ fun TitleBar(
     onRefreshChange: (Boolean) -> Unit = {}
 ) {
     val prefs = getPreferences()
+    val context = getCurrentContext()
     var openSettings by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
+    var openWatch by rememberSaveable { mutableStateOf(false) }
+
+    val watchRepo = remember { dev.alembiconsProject.alembicons.data.watch.WatchRepository(context) }
+    val completedCount by watchRepo.completedCount.collectAsState(initial = 0)
 
     LargeFlexibleTopAppBar(
         scrollBehavior = scrollBehavior,
@@ -452,6 +468,19 @@ fun TitleBar(
         actions = {
             RefreshButton {
                 onRefreshChange(it)
+            }
+            IconButton(onClick = { openWatch = true }) {
+                BadgedBox(badge = {
+                    if (completedCount > 0) {
+                        Badge { Text(completedCount.toString()) }
+                    }
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.Notifications,
+                        contentDescription = stringResource(R.string.openWatchedIcons),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
             }
             IconButton(onClick = { openInfo = true }) {
                 Icon(
@@ -479,6 +508,12 @@ fun TitleBar(
     if (openInfo) {
         InfoDialog {
             openInfo = false
+        }
+    }
+
+    if (openWatch) {
+        WatchScreen {
+            openWatch = false
         }
     }
 }
