@@ -3,6 +3,7 @@
 package dev.alembiconsProject.alembicons.ui
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Spring
@@ -145,6 +146,13 @@ fun WatchScreen(onDismiss: () -> Unit) {
                     .fillMaxSize()
                     .statusBarsPadding()
             ) {
+                // Back from the editor returns to the rule list rather than closing
+                // the whole watch screen
+                BackHandler(enabled = showEditor) {
+                    showEditor = false
+                    editing = null
+                }
+
                 // Slide the editor in from the right like a forward navigation,
                 // and back to the list from the left, instead of a hard swap
                 AnimatedContent(
