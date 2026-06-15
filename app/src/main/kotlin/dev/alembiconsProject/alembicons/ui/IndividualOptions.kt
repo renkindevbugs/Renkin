@@ -385,18 +385,21 @@ fun OptionsDialog(
                                 }
                             }
                         },
+                        // When enabled, let NavigationBarItem apply its own selected/unselected
+                        // colours (matching the other tabs); only override when disabled
                         icon = {
-                            Icon(
-                                Icons.Filled.Tune,
-                                null,
-                                tint = if (hasIcon) Color.Unspecified else disabledTint
-                            )
+                            if (hasIcon) {
+                                Icon(Icons.Filled.Tune, null)
+                            } else {
+                                Icon(Icons.Filled.Tune, null, tint = disabledTint)
+                            }
                         },
                         label = {
-                            Text(
-                                stringResource(R.string.modifierTab),
-                                color = if (hasIcon) Color.Unspecified else disabledTint
-                            )
+                            if (hasIcon) {
+                                Text(stringResource(R.string.modifierTab))
+                            } else {
+                                Text(stringResource(R.string.modifierTab), color = disabledTint)
+                            }
                         }
                     )
                 }
@@ -836,10 +839,11 @@ private fun ModifierTab(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+                // Centred at 1.0: left shrinks (padding), right enlarges (zoom)
                 Slider(
                     value = iconScale,
                     onValueChange = { onIconScaleChange(it) },
-                    valueRange = 0.5f..1f
+                    valueRange = 0.5f..1.5f
                 )
             }
         }

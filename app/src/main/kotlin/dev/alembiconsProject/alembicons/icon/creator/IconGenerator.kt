@@ -6,7 +6,6 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
-import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
@@ -580,38 +579,60 @@ class IconGenerator(
     private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {
         var result = icon
         if (options.removeBackground) result = removeIconBackground(result)
-        if (options.iconScale < 1f) result = scaleWithPadding(result, options.iconScale)
+        if (options.iconScale != 1f) result = scaleIcon(result, options.iconScale)
         return result
     }
 
-    /** Pads the icon inside its frame by [scale] (1f = none, 0.5f = half size, centred). */
-    private fun scaleWithPadding(icon: IconPackDrawable, scale: Float): IconPackDrawable {
-        val fraction = ((1f - scale) / 2f).coerceIn(0f, 0.49f)
-        val fractions = RectF(fraction, fraction, fraction, fraction)
-        return InsetIconDrawable(icon, Rect(), fractions)
+    /**
+     * Scales the icon around its centre. < 1f shrinks it (transparent padding around it),
+     * > 1f zooms in (cropping to the original frame). Rasterises, since it must work for
+     * bitmaps and vectors alike.
+     */
+    private fun scaleIcon(icon: IconPackDrawable, scale: Float): IconPackDrawable {
+        val src = icon.toBitmap()
+        if (src.width <= 0 || src.height <= 0) return icon
+
+        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        canvas.scale(scale, scale, src.width / 2f, src.height / 2f)
+        canvas.drawBitmap(src, 0f, 0f, null)
+        return BitmapIconDrawable(ctx.resources, out)
     }
 
     /**
      * Removes a solid background by flood-filling from the four corners: pixels matching
      * a corner's colour (within tolerance) become transparent. Layered/adaptive icons
-     * already have transparent corners, so nothing is removed there — covering both the
-     * "separate background layer" and "flat icon with baked-in background" cases.
+     * already have transparent corners, so nothing is removed there.
+     *
+     * Guard: if the fill would swallow almost the whole icon (an edge-to-edge icon with
+     * no distinct background, where the corner colour bleeds through everything), the
+     * original is kept instead of erasing it.
      */
     private fun removeIconBackground(icon: IconPackDrawable): IconPackDrawable {
-        val bitmap = icon.toBitmap().copy(Bitmap.Config.ARGB_8888, true)
-        floodFillCornersTransparent(bitmap)
+        val src = icon.toBitmap()
+        if (src.width <= 0 || src.height <= 0) return icon
+
+        val bitmap = src.copy(Bitmap.Config.ARGB_8888, true)
+        val erasedEverything = floodFillCornersTransparent(bitmap)
+        if (erasedEverything) return icon
+
         return BitmapIconDrawable(ctx.resources, bitmap)
     }
 
-    private fun floodFillCornersTransparent(bitmap: Bitmap, tolerance: Int = 32) {
+    /** Returns true if the fill removed almost all opaque pixels (so it should be discarded). */
+    private fun floodFillCornersTransparent(bitmap: Bitmap, tolerance: Int = 32): Boolean {
         val w = bitmap.width
         val h = bitmap.height
-        if (w <= 0 || h <= 0) return
+        if (w <= 0 || h <= 0) return false
 
         val pixels = IntArray(w * h)
         bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
         val visited = BooleanArray(w * h)
         val stack = ArrayDeque<Int>()
+
+        var opaqueBefore = 0
+        for (p in pixels) if (android.graphics.Color.alpha(p) != 0) opaqueBefore++
+        var removed = 0
 
         for (corner in intArrayOf(0, w - 1, (h - 1) * w, w * h - 1)) {
             val seed = pixels[corner]
@@ -624,6 +645,7 @@ class IconGenerator(
                 if (visited[i] || !colorClose(pixels[i], seed, tolerance)) continue
                 visited[i] = true
                 pixels[i] = 0 // transparent
+                removed++
 
                 val x = i % w
                 val y = i / w
@@ -634,7 +656,11 @@ class IconGenerator(
             }
         }
 
+        // Edge-to-edge icon with no real background → don't erase it
+        if (opaqueBefore > 0 && removed > opaqueBefore * 0.85f) return true
+
         bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
+        return false
     }
 
     private fun colorClose(a: Int, b: Int, tolerance: Int): Boolean {
