@@ -634,9 +634,25 @@ class IconGenerator(
         for (p in pixels) if (android.graphics.Color.alpha(p) != 0) opaqueBefore++
         var removed = 0
 
-        for (corner in intArrayOf(0, w - 1, (h - 1) * w, w * h - 1)) {
+        // Sample a little in from each corner (and the edge midpoints) instead of the
+        // literal corner pixel: adaptive icons are rendered with rounded, transparent
+        // corners, so the actual background colour sits just inside the edge.
+        val dx = (w * 0.08f).toInt().coerceIn(1, w - 1)
+        val dy = (h * 0.08f).toInt().coerceIn(1, h - 1)
+        val seedPoints = intArrayOf(
+            dy * w + dx,                 // top-left
+            dy * w + (w - 1 - dx),       // top-right
+            (h - 1 - dy) * w + dx,       // bottom-left
+            (h - 1 - dy) * w + (w - 1 - dx), // bottom-right
+            dy * w + w / 2,              // top-middle
+            (h - 1 - dy) * w + w / 2,    // bottom-middle
+            (h / 2) * w + dx,            // left-middle
+            (h / 2) * w + (w - 1 - dx)   // right-middle
+        )
+
+        for (corner in seedPoints) {
             val seed = pixels[corner]
-            // A transparent corner means there's no solid background to strip here
+            // A transparent seed means there's no solid background to strip here
             if (android.graphics.Color.alpha(seed) == 0 || visited[corner]) continue
 
             stack.addLast(corner)
