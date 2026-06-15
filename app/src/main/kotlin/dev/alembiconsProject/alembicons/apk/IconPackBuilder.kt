@@ -64,9 +64,9 @@ class IconPackBuilder(
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
-    private val keyStoreFile = ctx.filesDir.resolve("iconeration.keystore")
+    private val keyStoreFile = ctx.filesDir.resolve("renkinpack.keystore")
 
-    private val iconPackName = "com.kaanelloed.iconerationiconpack"
+    private val iconPackName = "dev.alembiconsProject.renkinpack"
     private val newInternalVersionCode = 0
     private val frameworkVersion = 34
     private val minSdkVersion = 21
@@ -308,7 +308,7 @@ class IconPackBuilder(
             AndroidManifestBlock.NAME_name,
             AndroidManifestBlock.ID_name
         )
-        activityName.valueAsString = "com.kaanelloed.iconerationiconpack.MainActivity"
+        activityName.valueAsString = "dev.alembiconsProject.renkinpack.MainActivity"
 
         val exported = activity.getOrCreateAndroidAttribute(
             AndroidManifestBlock.NAME_exported,
@@ -430,15 +430,6 @@ class IconPackBuilder(
         val res = packageBlock.getOrCreate("v31", "color", name)
         val coder = ValueCoder.encodeReference(packageBlock, reference)
         res.setValueAsRaw(coder.valueType, coder.value)
-    }
-
-    private fun getCurrentVersionCode(): Long {
-        val appMan = ApplicationManager(ctx)
-
-        val iconPack = appMan.getPackage(iconPackName)
-            ?: return 0L
-
-        return appMan.getVersionCode(iconPack)
     }
 
     private fun buildDex(apkModule: ApkModule, resourceId: Int) {
@@ -565,6 +556,6 @@ class IconPackBuilder(
         val pwd = "s3cur3p@ssw0rd"
 
         val dtl = ApkUtils.KeyStoreDetails(keyStoreFile, pwd, "alias", pwd)
-        ApkUtils.signApk(file, outFile, "Iconeration", dtl)
+        ApkUtils.signApk(file, outFile, "Renkin Pack", dtl)
     }
 }

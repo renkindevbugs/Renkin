@@ -1,10 +1,10 @@
-.class public final Lcom/kaanelloed/iconerationiconpack/R$layout;
+.class public final Ldev/alembiconsProject/renkinpack/R$layout;
 .super Ljava/lang/Object;
 
 
 # annotations
 .annotation system Ldalvik/annotation/EnclosingClass;
-    value = Lcom/kaanelloed/iconerationiconpack/R;
+    value = Ldev/alembiconsProject/renkinpack/R;
 .end annotation
 
 .annotation system Ldalvik/annotation/InnerClass;
