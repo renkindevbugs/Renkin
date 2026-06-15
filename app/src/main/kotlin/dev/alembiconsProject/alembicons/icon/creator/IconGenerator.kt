@@ -51,6 +51,10 @@ import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.editPaths
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.resizeAndCenter
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.scaleAtCenter
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.setReferenceColorPaths
+import com.google.android.gms.tasks.Tasks
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
+import com.google.mlkit.vision.segmentation.subject.SubjectSegmenterOptions
 import dev.alembiconsProject.imagetracer.ImageTracer
 import dev.alembiconsProject.tgCannyEdgeCompose.CannyEdgeDetector
 import dev.alembiconsProject.tgCannyEdgeCompose.DetectionOptions
@@ -612,11 +616,38 @@ class IconGenerator(
         val src = icon.toBitmap()
         if (src.width <= 0 || src.height <= 0) return icon
 
+        // Prefer on-device ML subject segmentation (handles edge-to-edge icons the
+        // corner flood-fill can't); fall back to the flood-fill when it's unavailable
+        // (e.g. running on the UI thread, or no segmented subject found).
+        segmentForeground(src)?.let { return BitmapIconDrawable(ctx.resources, it) }
+
         val bitmap = src.copy(Bitmap.Config.ARGB_8888, true)
         val erasedEverything = floodFillCornersTransparent(bitmap, options.backgroundTolerance)
         if (erasedEverything) return icon
 
         return BitmapIconDrawable(ctx.resources, bitmap)
+    }
+
+    /**
+     * Runs ML Kit subject segmentation and returns a foreground-only bitmap (transparent
+     * background), or null if it can't run. The call blocks on the segmentation Task, so
+     * it must run off the main thread — on the UI thread it returns null and the caller
+     * falls back to the flood-fill.
+     */
+    private fun segmentForeground(bitmap: Bitmap): Bitmap? {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) return null
+
+        return try {
+            val segOptions = SubjectSegmenterOptions.Builder()
+                .enableForegroundBitmap()
+                .build()
+            val segmenter = SubjectSegmentation.getClient(segOptions)
+            val input = InputImage.fromBitmap(bitmap, 0)
+            val result = Tasks.await(segmenter.process(input))
+            result.foregroundBitmap
+        } catch (_: Exception) {
+            null
+        }
     }
 
     /** Returns true if the fill removed almost all opaque pixels (so it should be discarded). */

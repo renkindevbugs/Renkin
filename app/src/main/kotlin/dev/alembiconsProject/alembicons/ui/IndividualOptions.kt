@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -77,7 +78,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
@@ -205,7 +208,11 @@ fun OptionsDialog(
             return@LaunchedEffect
         }
         val custom = customIconList.firstOrNull()
-        currentIcon = activity.appProvider.getIcon(app, generatingOptions, custom)
+        // Off the main thread: generation can now run ML background segmentation, which
+        // blocks on its result
+        currentIcon = withContext(Dispatchers.Default) {
+            activity.appProvider.getIcon(app, generatingOptions, custom)
+        }
     }
 
     // A hand-edited vector isn't built from a source, so the modifier tab can't go
@@ -894,10 +901,11 @@ private fun ModifierTab(
  */
 @Composable
 private fun CenteredSliderTrack(fraction: Float) {
+    val trackHeight = 16.dp
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
-            .height(16.dp),
+            .height(trackHeight),
         contentAlignment = Alignment.CenterStart
     ) {
         val full = maxWidth
@@ -906,20 +914,30 @@ private fun CenteredSliderTrack(fraction: Float) {
         val left = minOf(center, thumb)
         val segment = maxOf(center, thumb) - left
 
+        // Thick rounded inactive track (matches the M3 Expressive slider weight)
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(6.dp)
+                .height(trackHeight)
                 .clip(RoundedCornerShape(50))
                 .background(MaterialTheme.colorScheme.secondaryContainer)
         )
+        // Active fill growing from the centre outwards
         Box(
             Modifier
                 .padding(start = left)
                 .width(segment)
-                .height(6.dp)
+                .height(trackHeight)
                 .clip(RoundedCornerShape(50))
                 .background(MaterialTheme.colorScheme.primary)
+        )
+        // Small stop indicator at the centre (the default value)
+        Box(
+            Modifier
+                .padding(start = center - 2.dp)
+                .size(4.dp)
+                .clip(CircleShape)
+                .background(MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.4f))
         )
     }
 }
