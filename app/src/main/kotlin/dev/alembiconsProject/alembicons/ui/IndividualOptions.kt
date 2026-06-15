@@ -145,6 +145,8 @@ fun OptionsDialog(
     var edgeThreshold by rememberSaveable { mutableFloatStateOf(2.5f) }
     var edgeSmoothing by rememberSaveable { mutableFloatStateOf(2f) }
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
+    var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
+    var removeBackground by rememberSaveable { mutableStateOf(false) }
 
     // Slide the editor in from the right; closing plays the reverse animation
     // before the dialog window is actually dismissed
@@ -176,7 +178,9 @@ fun OptionsDialog(
         edgeLowThreshold = edgeThreshold,
         edgeHighThreshold = edgeThreshold * 3f,
         edgeGaussianRadius = edgeSmoothing,
-        edgeContrastNormalized = edgeContrast
+        edgeContrastNormalized = edgeContrast,
+        iconScale = iconScale,
+        removeBackground = removeBackground
     )
 
     LaunchedEffect(generatingOptions, customIconList) {
@@ -222,7 +226,11 @@ fun OptionsDialog(
     LaunchedEffect(selectedTab) {
         if (selectedTab != 0) headerCollapsed = false
         // Modifiers live only in the Modifier tab — leaving it starts the next visit clean
-        if (selectedTab != 2) imageEdit = ImageEdit.NONE
+        if (selectedTab != 2) {
+            imageEdit = ImageEdit.NONE
+            iconScale = 1f
+            removeBackground = false
+        }
     }
 
     Dialog(
@@ -314,13 +322,17 @@ fun OptionsDialog(
                                 edgeThreshold = edgeThreshold,
                                 edgeSmoothing = edgeSmoothing,
                                 edgeContrast = edgeContrast,
+                                iconScale = iconScale,
+                                removeBackground = removeBackground,
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },
                                 onMonochromeChange = { useMonochrome = it },
                                 onEdgeThresholdChange = { edgeThreshold = it },
                                 onEdgeSmoothingChange = { edgeSmoothing = it },
-                                onEdgeContrastChange = { edgeContrast = it }
+                                onEdgeContrastChange = { edgeContrast = it },
+                                onIconScaleChange = { iconScale = it },
+                                onRemoveBackgroundChange = { removeBackground = it }
                             )
                             else -> PrepareEditVector(app) {
                                 vectorIcon = it
@@ -632,13 +644,17 @@ private fun ModifierTab(
     edgeThreshold: Float,
     edgeSmoothing: Float,
     edgeContrast: Boolean,
+    iconScale: Float,
+    removeBackground: Boolean,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
     onMonochromeChange: (Boolean) -> Unit,
     onEdgeThresholdChange: (Float) -> Unit,
     onEdgeSmoothingChange: (Float) -> Unit,
-    onEdgeContrastChange: (Boolean) -> Unit
+    onEdgeContrastChange: (Boolean) -> Unit,
+    onIconScaleChange: (Float) -> Unit,
+    onRemoveBackgroundChange: (Boolean) -> Unit
 ) {
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
@@ -784,6 +800,47 @@ private fun ModifierTab(
                     VectorSwitch(useVector) { onVectorChange(it) }
                     MonochromeSwitch(useMonochrome) { onMonochromeChange(it) }
                 }
+            }
+        }
+
+        // Per-icon adjustments, independent of the modifier chosen above
+        Text(
+            text = stringResource(R.string.adjustments),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.removeBackground),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Switch(
+                        checked = removeBackground,
+                        onCheckedChange = { onRemoveBackgroundChange(it) }
+                    )
+                }
+                Text(
+                    text = stringResource(R.string.iconScale),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Slider(
+                    value = iconScale,
+                    onValueChange = { onIconScaleChange(it) },
+                    valueRange = 0.5f..1f
+                )
             }
         }
     }

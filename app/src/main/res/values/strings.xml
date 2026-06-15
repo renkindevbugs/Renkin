@@ -117,6 +117,9 @@
     <string name="edgeContrast">Normalize contrast</string>
     <string name="optionsHint">These options apply to all apps at once. After changing them, tap the refresh button in the top bar to regenerate the icons.</string>
     <string name="selectIconFirst">Select an icon before opening the modifier</string>
+    <string name="adjustments">Adjustments</string>
+    <string name="removeBackground">Remove background</string>
+    <string name="iconScale">Icon scale</string>
     <string name="watchedIcons">Watched icons</string>
     <string name="watchActive">Active</string>
     <string name="watchCompleted">Completed</string>

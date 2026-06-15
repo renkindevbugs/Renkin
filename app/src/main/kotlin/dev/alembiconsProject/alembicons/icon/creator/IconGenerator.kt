@@ -6,6 +6,7 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
@@ -88,7 +89,7 @@ class IconGenerator(
             customIcon
         )
 
-        onUpdate(application, icon)
+        onUpdate(application, icon?.let { applyAdjustments(it) })
     }
 
     fun generateIcons(applications: List<PackageInfoStruct>
@@ -129,6 +130,10 @@ class IconGenerator(
      * vector in place.
      */
     fun applyModifier(icon: IconPackDrawable, imageEdit: ImageEdit): IconPackDrawable {
+        return applyAdjustments(applyModifierInner(icon, imageEdit))
+    }
+
+    private fun applyModifierInner(icon: IconPackDrawable, imageEdit: ImageEdit): IconPackDrawable {
         if (imageEdit == ImageEdit.NONE) return icon
 
         if (icon is ImageVectorDrawable) {
@@ -565,6 +570,78 @@ class IconGenerator(
             is ImageVectorDrawable -> colorizeVector(parsedIcon)
             else -> BitmapIconDrawable(ctx.resources, colorizeBitmap(bitmapIcon, mode))
         }
+    }
+
+    /**
+     * Applies the per-icon Modifier-tab adjustments (background removal, scale) on top
+     * of an already-built icon. No-op with the defaults (removeBackground=false,
+     * iconScale=1f), so it's safe to run on every generation path.
+     */
+    private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {
+        var result = icon
+        if (options.removeBackground) result = removeIconBackground(result)
+        if (options.iconScale < 1f) result = scaleWithPadding(result, options.iconScale)
+        return result
+    }
+
+    /** Pads the icon inside its frame by [scale] (1f = none, 0.5f = half size, centred). */
+    private fun scaleWithPadding(icon: IconPackDrawable, scale: Float): IconPackDrawable {
+        val fraction = ((1f - scale) / 2f).coerceIn(0f, 0.49f)
+        val fractions = RectF(fraction, fraction, fraction, fraction)
+        return InsetIconDrawable(icon, Rect(), fractions)
+    }
+
+    /**
+     * Removes a solid background by flood-filling from the four corners: pixels matching
+     * a corner's colour (within tolerance) become transparent. Layered/adaptive icons
+     * already have transparent corners, so nothing is removed there — covering both the
+     * "separate background layer" and "flat icon with baked-in background" cases.
+     */
+    private fun removeIconBackground(icon: IconPackDrawable): IconPackDrawable {
+        val bitmap = icon.toBitmap().copy(Bitmap.Config.ARGB_8888, true)
+        floodFillCornersTransparent(bitmap)
+        return BitmapIconDrawable(ctx.resources, bitmap)
+    }
+
+    private fun floodFillCornersTransparent(bitmap: Bitmap, tolerance: Int = 32) {
+        val w = bitmap.width
+        val h = bitmap.height
+        if (w <= 0 || h <= 0) return
+
+        val pixels = IntArray(w * h)
+        bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+        val visited = BooleanArray(w * h)
+        val stack = ArrayDeque<Int>()
+
+        for (corner in intArrayOf(0, w - 1, (h - 1) * w, w * h - 1)) {
+            val seed = pixels[corner]
+            // A transparent corner means there's no solid background to strip here
+            if (android.graphics.Color.alpha(seed) == 0 || visited[corner]) continue
+
+            stack.addLast(corner)
+            while (stack.isNotEmpty()) {
+                val i = stack.removeLast()
+                if (visited[i] || !colorClose(pixels[i], seed, tolerance)) continue
+                visited[i] = true
+                pixels[i] = 0 // transparent
+
+                val x = i % w
+                val y = i / w
+                if (x > 0) stack.addLast(i - 1)
+                if (x < w - 1) stack.addLast(i + 1)
+                if (y > 0) stack.addLast(i - w)
+                if (y < h - 1) stack.addLast(i + w)
+            }
+        }
+
+        bitmap.setPixels(pixels, 0, w, 0, 0, w, h)
+    }
+
+    private fun colorClose(a: Int, b: Int, tolerance: Int): Boolean {
+        if (android.graphics.Color.alpha(a) == 0) return false
+        return kotlin.math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) <= tolerance &&
+            kotlin.math.abs(android.graphics.Color.green(a) - android.graphics.Color.green(b)) <= tolerance &&
+            kotlin.math.abs(android.graphics.Color.blue(a) - android.graphics.Color.blue(b)) <= tolerance
     }
 
     /**
