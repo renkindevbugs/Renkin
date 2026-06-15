@@ -554,6 +554,20 @@ fun InfoDialog(onDismiss: () -> Unit) {
                 )
                 Text(text = stringResource(id = R.string.buildIconDescription))
             }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Notifications,
+                    contentDescription = "Watch",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(end = 16.dp)
+                )
+                Text(text = stringResource(id = R.string.watchIconDescription))
+            }
         }
     }
 }

@@ -25,6 +25,7 @@
     <string name="version">Version %s</string>
     <string name="refreshIconDescription">Refresh icons with options provided</string>
     <string name="buildIconDescription">Build the icon pack</string>
+    <string name="watchIconDescription">Watch apps and icon packs: pick apps and the packs to watch, and get notified when a watched pack publishes a new icon for one of them. Tap the notification to preview and apply it.</string>
     <string name="sync">Synchronization</string>
     <string name="syncText">Icon pack data synchronization, please wait and try again</string>
     <string name="initializeFramework">Initializing framework …</string>
