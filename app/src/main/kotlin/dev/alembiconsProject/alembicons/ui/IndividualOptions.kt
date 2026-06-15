@@ -147,6 +147,7 @@ fun OptionsDialog(
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
     var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
     var removeBackground by rememberSaveable { mutableStateOf(false) }
+    var bgTolerance by rememberSaveable { mutableFloatStateOf(0.25f) }
 
     // Slide the editor in from the right; closing plays the reverse animation
     // before the dialog window is actually dismissed
@@ -180,7 +181,8 @@ fun OptionsDialog(
         edgeGaussianRadius = edgeSmoothing,
         edgeContrastNormalized = edgeContrast,
         iconScale = iconScale,
-        removeBackground = removeBackground
+        removeBackground = removeBackground,
+        backgroundTolerance = (bgTolerance * 128).toInt()
     )
 
     LaunchedEffect(generatingOptions, customIconList) {
@@ -230,6 +232,7 @@ fun OptionsDialog(
             imageEdit = ImageEdit.NONE
             iconScale = 1f
             removeBackground = false
+            bgTolerance = 0.25f
         }
     }
 
@@ -324,6 +327,7 @@ fun OptionsDialog(
                                 edgeContrast = edgeContrast,
                                 iconScale = iconScale,
                                 removeBackground = removeBackground,
+                                bgTolerance = bgTolerance,
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },
@@ -332,7 +336,8 @@ fun OptionsDialog(
                                 onEdgeSmoothingChange = { edgeSmoothing = it },
                                 onEdgeContrastChange = { edgeContrast = it },
                                 onIconScaleChange = { iconScale = it },
-                                onRemoveBackgroundChange = { removeBackground = it }
+                                onRemoveBackgroundChange = { removeBackground = it },
+                                onBgToleranceChange = { bgTolerance = it }
                             )
                             else -> PrepareEditVector(app) {
                                 vectorIcon = it
@@ -649,6 +654,7 @@ private fun ModifierTab(
     edgeContrast: Boolean,
     iconScale: Float,
     removeBackground: Boolean,
+    bgTolerance: Float,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
@@ -657,7 +663,8 @@ private fun ModifierTab(
     onEdgeSmoothingChange: (Float) -> Unit,
     onEdgeContrastChange: (Boolean) -> Unit,
     onIconScaleChange: (Float) -> Unit,
-    onRemoveBackgroundChange: (Boolean) -> Unit
+    onRemoveBackgroundChange: (Boolean) -> Unit,
+    onBgToleranceChange: (Float) -> Unit
 ) {
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
@@ -832,6 +839,19 @@ private fun ModifierTab(
                     Switch(
                         checked = removeBackground,
                         onCheckedChange = { onRemoveBackgroundChange(it) }
+                    )
+                }
+                // Tolerance only matters while removing the background
+                if (removeBackground) {
+                    Text(
+                        text = stringResource(R.string.backgroundTolerance),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Slider(
+                        value = bgTolerance,
+                        onValueChange = { onBgToleranceChange(it) },
+                        valueRange = 0f..1f
                     )
                 }
                 Text(

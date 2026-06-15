@@ -613,7 +613,7 @@ class IconGenerator(
         if (src.width <= 0 || src.height <= 0) return icon
 
         val bitmap = src.copy(Bitmap.Config.ARGB_8888, true)
-        val erasedEverything = floodFillCornersTransparent(bitmap)
+        val erasedEverything = floodFillCornersTransparent(bitmap, options.backgroundTolerance)
         if (erasedEverything) return icon
 
         return BitmapIconDrawable(ctx.resources, bitmap)

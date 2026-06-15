@@ -55,7 +55,9 @@ data class GenerationOptions(
     // Per-icon adjustments from the Modifier tab (not part of the bulk preferences).
     // iconScale 1f = unchanged; < 1f pads the icon inside its frame.
     val iconScale: Float = 1f,
-    val removeBackground: Boolean = false
+    val removeBackground: Boolean = false,
+    // Per-channel colour tolerance for background flood-fill (0 = exact match only)
+    val backgroundTolerance: Int = 32
 ) {
     companion object {
         /**

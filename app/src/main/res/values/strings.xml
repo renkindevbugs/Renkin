@@ -120,6 +120,7 @@
     <string name="adjustments">Adjustments</string>
     <string name="removeBackground">Remove background</string>
     <string name="iconScale">Icon scale</string>
+    <string name="backgroundTolerance">Background tolerance</string>
     <string name="watchedIcons">Watched icons</string>
     <string name="watchActive">Active</string>
     <string name="watchCompleted">Completed</string>
