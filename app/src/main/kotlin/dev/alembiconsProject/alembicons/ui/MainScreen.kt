@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -97,12 +98,35 @@ import kotlinx.coroutines.launch
 
 enum class AppSortOrder { NAME, INSTALL_DATE }
 
+/**
+ * True while the list is scrolling up (or sitting at the top). Used to expand the
+ * build FAB on scroll-up and collapse it to an icon on scroll-down.
+ */
+@Composable
+private fun LazyListState.isScrollingUp(): Boolean {
+    var previousIndex by remember(this) { mutableStateOf(firstVisibleItemIndex) }
+    var previousScrollOffset by remember(this) { mutableStateOf(firstVisibleItemScrollOffset) }
+    return remember(this) {
+        derivedStateOf {
+            if (previousIndex != firstVisibleItemIndex) {
+                previousIndex > firstVisibleItemIndex
+            } else {
+                previousScrollOffset >= firstVisibleItemScrollOffset
+            }.also {
+                previousIndex = firstVisibleItemIndex
+                previousScrollOffset = firstVisibleItemScrollOffset
+            }
+        }
+    }.value
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainColumn(iconPacks: List<IconPack>) {
     var packageFilter by remember { mutableStateOf("") }
     var isInRefresh by rememberSaveable { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    val listState = rememberLazyListState()
 
     val prefs = getPreferences()
     val scope = rememberCoroutineScope()
@@ -126,7 +150,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = { TitleBar(scrollBehavior) { isInRefresh = it } },
-        floatingActionButton = { BuildPackFab(isInRefresh) },
+        floatingActionButton = { BuildPackFab(isInRefresh, expanded = listState.isScrollingUp()) },
         bottomBar = { BottomBar() }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
@@ -138,7 +162,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 onFilterChange = { scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, it) } },
                 onSearch = { packageFilter = it }
             )
-            ApplicationList(iconPacks, packageFilter, sortOrder, filterNoIcon)
+            ApplicationList(iconPacks, packageFilter, sortOrder, filterNoIcon, listState)
         }
     }
 
@@ -155,12 +179,12 @@ fun ApplicationList(
     iconPacks: List<IconPack>,
     filter: String,
     sortOrder: AppSortOrder,
-    filterNoIcon: Boolean
+    filterNoIcon: Boolean,
+    listState: LazyListState = rememberLazyListState()
 ) {
     val activity = getCurrentMainActivity()
     val pm = LocalContext.current.packageManager
     val applications = activity.appProvider.applicationList
-    val listState = rememberLazyListState()
 
     // Read preferences once for the whole list — a DataStore subscription per row
     // causes visible scroll jank
@@ -207,7 +231,7 @@ fun ApplicationList(
             OptionsCard(iconPacks)
         }
         items(displayList, key = { "${it.value.packageName}/${it.value.activityName}" }) { indexedApp ->
-            ApplicationItem(iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue)
+            ApplicationItem(iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue, Modifier.animateItem())
         }
     }
 }
@@ -218,7 +242,8 @@ fun ApplicationItem(
     app: PackageInfoStruct,
     index: Int,
     themed: Boolean,
-    bgColorValue: Color
+    bgColorValue: Color,
+    modifier: Modifier = Modifier
 ) {
     val activity = getCurrentMainActivity()
     val dynamicColor = themed && supportDynamicColors()
@@ -236,7 +261,7 @@ fun ApplicationItem(
         },
         shape = RoundedCornerShape(20.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
     ) {
@@ -377,7 +402,7 @@ fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
 }
 
 @Composable
-fun BuildPackFab(isInRefresh: Boolean) {
+fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     val activity = getCurrentMainActivity()
     val preferences = getPreferences().getPreferencesValue()
 
@@ -411,6 +436,7 @@ fun BuildPackFab(isInRefresh: Boolean) {
             )
         },
         text = { Text(stringResource(id = R.string.buildIconPack)) },
+        expanded = expanded,
         containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer
     )
