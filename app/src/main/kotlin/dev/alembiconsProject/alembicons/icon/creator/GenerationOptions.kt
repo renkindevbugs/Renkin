@@ -51,7 +51,10 @@ data class GenerationOptions(
     val secondarySource: Source = Source.NONE,
     val secondaryImageEdit: ImageEdit = ImageEdit.NONE,
     val secondaryTextType: TextType = TextType.FULL_NAME,
-    val secondaryIconPack: String = ""
+    val secondaryIconPack: String = "",
+    // Per-icon adjustments from the Modifier tab (not part of the bulk preferences).
+    // iconScale 1f = unchanged; < 1f pads the icon inside its frame.
+    val iconScale: Float = 1f
 ) {
     companion object {
         /**
