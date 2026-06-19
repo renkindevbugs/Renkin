@@ -105,6 +105,7 @@
     <string name="noImagesYet">Nothing in your gallery yet</string>
     <string name="galleryEmptyHint">Tap the + button to add images</string>
     <string name="selectAll">Select all</string>
+    <string name="addingImages">Adding images…</string>
     <string name="paths">Paths</string>
     <string name="addPath">Add path</string>
     <string name="editPath">Edit path</string>

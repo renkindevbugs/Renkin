@@ -400,15 +400,32 @@ fun UploadColumn(app: PackageInfoStruct,
             )
         }
 
-        // Loading overlay while the picked images are decoded and saved
+        // Loading overlay while the picked images are decoded and saved — a dimmed
+        // backdrop with a card (spinner + label) so it's clear what's happening
         if (isUploading) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)),
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            text = stringResource(R.string.addingImages),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                }
             }
         }
     }
