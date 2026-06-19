@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,8 +39,11 @@ import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -71,6 +75,7 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.caverock.androidsvg.SVG
@@ -112,6 +117,7 @@ fun UploadColumn(app: PackageInfoStruct,
     var selectionMode by remember { mutableStateOf(false) }
     var markedForDelete by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var isUploading by remember { mutableStateOf(false) }
     val maxSize = 500
 
     val activity = getCurrentMainActivity()
@@ -128,21 +134,26 @@ fun UploadColumn(app: PackageInfoStruct,
     ) { uris ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
-            var failed = false
-            val added = withContext(Dispatchers.IO) {
-                uris.mapNotNull { uri ->
-                    val bitmap = getBitmapFromURI(context, uri)?.toDrawable(res)?.shrinkIfBiggerThan(maxSize)
-                    if (bitmap == null) {
-                        failed = true
-                        null
-                    } else {
-                        UploadedImageStore.save(context, bitmap)
+            isUploading = true
+            try {
+                var failed = false
+                val added = withContext(Dispatchers.IO) {
+                    uris.mapNotNull { uri ->
+                        val bitmap = getBitmapFromURI(context, uri)?.toDrawable(res)?.shrinkIfBiggerThan(maxSize)
+                        if (bitmap == null) {
+                            failed = true
+                            null
+                        } else {
+                            UploadedImageStore.save(context, bitmap)
+                        }
                     }
                 }
+                savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
+                if (added.isNotEmpty()) selectedImagePath = added.first().absolutePath
+                if (failed) uploadError = true
+            } finally {
+                isUploading = false
             }
-            savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
-            if (added.isNotEmpty()) selectedImagePath = added.first().absolutePath
-            if (failed) uploadError = true
         }
     }
 
@@ -285,46 +296,15 @@ fun UploadColumn(app: PackageInfoStruct,
                 }
 
                 item(key = "gallery_header", span = { GridItemSpan(maxLineSpan) }) {
-                    Row(
+                    Text(
+                        text = stringResource(R.string.yourImages),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(top = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = if (selectionMode) {
-                                "${markedForDelete.size}"
-                            } else {
-                                stringResource(R.string.yourImages)
-                            },
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        if (selectionMode) {
-                            IconButton(onClick = {
-                                selectionMode = false
-                                markedForDelete = emptySet()
-                            }) {
-                                Icon(
-                                    imageVector = Icons.Filled.Close,
-                                    contentDescription = stringResource(R.string.dismiss),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            IconButton(
-                                onClick = { showDeleteConfirm = true },
-                                enabled = markedForDelete.isNotEmpty()
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Delete,
-                                    contentDescription = stringResource(R.string.deleteImage),
-                                    tint = MaterialTheme.colorScheme.error
-                                )
-                            }
-                        }
-                    }
+                            .padding(top = 4.dp)
+                    )
                 }
 
                 items(savedImages, key = { it.absolutePath }) { file ->
@@ -357,17 +337,80 @@ fun UploadColumn(app: PackageInfoStruct,
             }
         }
 
-        // Add images is now a FAB instead of an inline button
-        ExtendedFloatingActionButton(
-            onClick = { launcher.launch(MIME_TYPE_IMAGE) },
-            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-            text = { Text(stringResource(R.string.addImages)) },
-            containerColor = MaterialTheme.colorScheme.primaryContainer,
-            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
-        )
+        // Selection mode swaps the add FAB for a contextual bar (cancel · count ·
+        // select-all) next to a delete button
+        if (selectionMode) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = {
+                            selectionMode = false
+                            markedForDelete = emptySet()
+                        }) {
+                            Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
+                        }
+                        Text(
+                            text = "${markedForDelete.size}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = {
+                            val all = savedImages.map { it.absolutePath }.toSet()
+                            markedForDelete = if (markedForDelete.size == all.size) emptySet() else all
+                        }) {
+                            Icon(Icons.Filled.SelectAll, stringResource(R.string.selectAll))
+                        }
+                    }
+                }
+                FloatingActionButton(
+                    onClick = { if (markedForDelete.isNotEmpty()) showDeleteConfirm = true },
+                    shape = RoundedCornerShape(18.dp),
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                ) {
+                    Icon(Icons.Filled.Delete, stringResource(R.string.deleteImage))
+                }
+            }
+        } else {
+            ExtendedFloatingActionButton(
+                onClick = { launcher.launch(MIME_TYPE_IMAGE) },
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text(stringResource(R.string.addImages)) },
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp)
+            )
+        }
+
+        // Loading overlay while the picked images are decoded and saved
+        if (isUploading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.32f)),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            }
+        }
     }
 
     if (showDeleteConfirm) {
@@ -421,7 +464,12 @@ private fun UploadedImageThumbnail(
     var thumbnail by remember(file.absolutePath) { mutableStateOf<Bitmap?>(null) }
 
     LaunchedEffect(file.absolutePath) {
-        thumbnail = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(file.absolutePath) }
+        // Grid cells are small, so decode a downsampled bitmap — decoding the full
+        // ~500px image for every thumbnail is what made bulk uploads stutter
+        thumbnail = withContext(Dispatchers.IO) {
+            val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
+            BitmapFactory.decodeFile(file.absolutePath, opts)
+        }
     }
 
     val borderColor = when {
