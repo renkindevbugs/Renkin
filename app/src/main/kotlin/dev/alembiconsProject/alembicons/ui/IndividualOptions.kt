@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -818,12 +819,13 @@ private fun ModifierTab(
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
-                // Range centred on 1.0, so the thumb starts in the middle: left shrinks
-                // (padding), right enlarges (zoom)
+                // Range centred on 1.0: left shrinks (padding), right enlarges (zoom).
+                // Official M3 centered track fills from the middle outwards.
                 Slider(
                     value = iconScale,
                     onValueChange = { onIconScaleChange(it) },
-                    valueRange = 0.5f..1.5f
+                    valueRange = 0.5f..1.5f,
+                    track = { SliderDefaults.CenteredTrack(sliderState = it) }
                 )
             }
         }
