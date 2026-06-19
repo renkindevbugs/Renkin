@@ -101,7 +101,6 @@ fun CreateTab(
     onCollapsedChange: (Boolean) -> Unit = {},
     contentReady: Boolean = true
 ) {
-    val context = getCurrentContext()
     var searchQuery by rememberSaveable { mutableStateOf(appName) }
     var debouncedQuery by rememberSaveable { mutableStateOf(appName) }
     var sortOrder by rememberSaveable { mutableStateOf(IconSortOrder.NAME_ASC) }
@@ -109,10 +108,11 @@ fun CreateTab(
     var expandedPack by remember { mutableStateOf<IconPack?>(null) }
     var collapsed by remember { mutableStateOf(false) }
     val distinctPacks = remember(iconPacks) { iconPacks.distinctBy { it.packageName } }
-    // Packages with at least one icon matching the query (null while still computing, or
-    // when not searching). Matching is by drawable name — cheap — so the list settles in
-    // one pass and keeps a stable order, rather than reordering as heavy previews finish.
-    var matchingPackages by remember { mutableStateOf<Set<String>?>(null) }
+    // packageName -> whether the pack has icons matching the current query
+    var packMatches by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
+    // The order actually shown. Updated only once the results settle so the list
+    // doesn't shuffle on every pack that finishes loading.
+    var orderedPacks by remember(iconPacks) { mutableStateOf(distinctPacks) }
 
     val listState = rememberLazyListState()
     val listScrolled by remember {
@@ -126,25 +126,23 @@ fun CreateTab(
         }
     }
 
-    // When the query settles: jump back to the top (so clearing or changing it never
-    // leaves you scrolled into a moved pack) and recompute which packs match — off the
-    // main thread, by name only, in a single pass. The pack order never changes.
-    LaunchedEffect(debouncedQuery, sortOrder, distinctPacks) {
-        listState.scrollToItem(0)
-        if (debouncedQuery.isBlank()) {
-            matchingPackages = null
-            return@LaunchedEffect
-        }
-        matchingPackages = null
-        val appMan = ApplicationManager(context)
-        matchingPackages = withContext(Dispatchers.Default) {
-            distinctPacks.filter { pack ->
-                try {
-                    filteredSortedPackNames(appMan, pack.packageName, debouncedQuery, sortOrder).isNotEmpty()
-                } catch (_: Exception) {
-                    false
-                }
-            }.map { it.packageName }.toSet()
+    // Forget previous results and restore the default order when the query changes
+    LaunchedEffect(debouncedQuery) {
+        packMatches = emptyMap()
+        orderedPacks = distinctPacks
+    }
+
+    // Reorder once the match results settle (not on every pack) and pin the user
+    // to the top so packs floating up don't push them down
+    LaunchedEffect(packMatches) {
+        if (packMatches.isEmpty()) return@LaunchedEffect
+        delay(450)
+        val newOrder = distinctPacks.sortedByDescending { packMatches[it.packageName] != false }
+        if (newOrder.map { it.packageName } != orderedPacks.map { it.packageName }) {
+            val atTop = listState.firstVisibleItemIndex == 0 &&
+                listState.firstVisibleItemScrollOffset == 0
+            orderedPacks = newOrder
+            if (atTop) listState.scrollToItem(0)
         }
     }
 
@@ -248,59 +246,30 @@ fun CreateTab(
                         )
                     }
                 } else {
-                    val searching = debouncedQuery.isNotBlank()
-                    val displayedPacks = if (searching) {
-                        distinctPacks.filter { matchingPackages?.contains(it.packageName) == true }
-                    } else {
-                        distinctPacks
-                    }
-
-                    when {
-                        // Still working out which packs match the query
-                        searching && matchingPackages == null -> {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                LinearWavyProgressIndicator(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 32.dp),
-                                    color = MaterialTheme.colorScheme.primary,
-                                    trackColor = MaterialTheme.colorScheme.surfaceVariant
-                                )
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 16.dp)
+                    ) {
+                        orderedPacks.forEach { pack ->
+                            item(key = "${pack.packageName}_header") {
+                                Box(Modifier.animateItem()) {
+                                    PackSectionHeader(pack) { expandedPack = pack }
+                                }
                             }
-                        }
-                        displayedPacks.isEmpty() -> {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Text(
-                                    text = stringResource(R.string.noIconsFound),
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                                    style = MaterialTheme.typography.bodyLarge
-                                )
-                            }
-                        }
-                        else -> {
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(bottom = 16.dp)
-                            ) {
-                                displayedPacks.forEach { pack ->
-                                    item(key = "${pack.packageName}_header") {
-                                        Box(Modifier.animateItem()) {
-                                            PackSectionHeader(pack) { expandedPack = pack }
+                            item(key = "${pack.packageName}_icons") {
+                                Box(Modifier.animateItem()) {
+                                    PackIconsRow(
+                                        iconPack = pack,
+                                        options = options,
+                                        sortOrder = sortOrder,
+                                        query = debouncedQuery,
+                                        onMore = { expandedPack = pack },
+                                        onResult = { hasMatches ->
+                                            packMatches = packMatches + (pack.packageName to hasMatches)
                                         }
-                                    }
-                                    item(key = "${pack.packageName}_icons") {
-                                        Box(Modifier.animateItem()) {
-                                            PackIconsRow(
-                                                iconPack = pack,
-                                                options = options,
-                                                sortOrder = sortOrder,
-                                                query = debouncedQuery,
-                                                onMore = { expandedPack = pack }
-                                            ) { resource, _ ->
-                                                onIconSelect(resource, pack)
-                                            }
-                                        }
+                                    ) { resource, _ ->
+                                        onIconSelect(resource, pack)
                                     }
                                 }
                             }
