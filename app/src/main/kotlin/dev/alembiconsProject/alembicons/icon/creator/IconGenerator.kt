@@ -88,7 +88,7 @@ class IconGenerator(
             customIcon
         )
 
-        onUpdate(application, icon)
+        onUpdate(application, icon?.let { applyAdjustments(it) })
     }
 
     fun generateIcons(applications: List<PackageInfoStruct>
@@ -129,6 +129,10 @@ class IconGenerator(
      * vector in place.
      */
     fun applyModifier(icon: IconPackDrawable, imageEdit: ImageEdit): IconPackDrawable {
+        return applyAdjustments(applyModifierInner(icon, imageEdit))
+    }
+
+    private fun applyModifierInner(icon: IconPackDrawable, imageEdit: ImageEdit): IconPackDrawable {
         if (imageEdit == ImageEdit.NONE) return icon
 
         if (icon is ImageVectorDrawable) {
@@ -565,6 +569,32 @@ class IconGenerator(
             is ImageVectorDrawable -> colorizeVector(parsedIcon)
             else -> BitmapIconDrawable(ctx.resources, colorizeBitmap(bitmapIcon, mode))
         }
+    }
+
+    /**
+     * Applies the per-icon Modifier-tab adjustments (currently just scale) on top of an
+     * already-built icon. No-op with the default (iconScale=1f), so it's safe to run on
+     * every generation path.
+     */
+    private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {
+        if (options.iconScale != 1f) return scaleIcon(icon, options.iconScale)
+        return icon
+    }
+
+    /**
+     * Scales the icon around its centre. < 1f shrinks it (transparent padding around it),
+     * > 1f zooms in (cropping to the original frame). Rasterises, since it must work for
+     * bitmaps and vectors alike.
+     */
+    private fun scaleIcon(icon: IconPackDrawable, scale: Float): IconPackDrawable {
+        val src = icon.toBitmap()
+        if (src.width <= 0 || src.height <= 0) return icon
+
+        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(out)
+        canvas.scale(scale, scale, src.width / 2f, src.height / 2f)
+        canvas.drawBitmap(src, 0f, 0f, null)
+        return BitmapIconDrawable(ctx.resources, out)
     }
 
     /**

@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalFoundationApi::class)
+@file:OptIn(ExperimentalMaterial3ExpressiveApi::class, ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 
 package dev.alembiconsProject.alembicons.ui
 
@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
@@ -72,6 +73,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -94,6 +96,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -145,6 +148,7 @@ fun OptionsDialog(
     var edgeThreshold by rememberSaveable { mutableFloatStateOf(2.5f) }
     var edgeSmoothing by rememberSaveable { mutableFloatStateOf(2f) }
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
+    var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
 
     // Slide the editor in from the right; closing plays the reverse animation
     // before the dialog window is actually dismissed
@@ -176,7 +180,8 @@ fun OptionsDialog(
         edgeLowThreshold = edgeThreshold,
         edgeHighThreshold = edgeThreshold * 3f,
         edgeGaussianRadius = edgeSmoothing,
-        edgeContrastNormalized = edgeContrast
+        edgeContrastNormalized = edgeContrast,
+        iconScale = iconScale
     )
 
     LaunchedEffect(generatingOptions, customIconList) {
@@ -222,7 +227,10 @@ fun OptionsDialog(
     LaunchedEffect(selectedTab) {
         if (selectedTab != 0) headerCollapsed = false
         // Modifiers live only in the Modifier tab — leaving it starts the next visit clean
-        if (selectedTab != 2) imageEdit = ImageEdit.NONE
+        if (selectedTab != 2) {
+            imageEdit = ImageEdit.NONE
+            iconScale = 1f
+        }
     }
 
     Dialog(
@@ -314,13 +322,15 @@ fun OptionsDialog(
                                 edgeThreshold = edgeThreshold,
                                 edgeSmoothing = edgeSmoothing,
                                 edgeContrast = edgeContrast,
+                                iconScale = iconScale,
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },
                                 onMonochromeChange = { useMonochrome = it },
                                 onEdgeThresholdChange = { edgeThreshold = it },
                                 onEdgeSmoothingChange = { edgeSmoothing = it },
-                                onEdgeContrastChange = { edgeContrast = it }
+                                onEdgeContrastChange = { edgeContrast = it },
+                                onIconScaleChange = { iconScale = it }
                             )
                             else -> PrepareEditVector(app) {
                                 vectorIcon = it
@@ -373,18 +383,21 @@ fun OptionsDialog(
                                 }
                             }
                         },
+                        // When enabled, let NavigationBarItem apply its own selected/unselected
+                        // colours (matching the other tabs); only override when disabled
                         icon = {
-                            Icon(
-                                Icons.Filled.Tune,
-                                null,
-                                tint = if (hasIcon) Color.Unspecified else disabledTint
-                            )
+                            if (hasIcon) {
+                                Icon(Icons.Filled.Tune, null)
+                            } else {
+                                Icon(Icons.Filled.Tune, null, tint = disabledTint)
+                            }
                         },
                         label = {
-                            Text(
-                                stringResource(R.string.modifierTab),
-                                color = if (hasIcon) Color.Unspecified else disabledTint
-                            )
+                            if (hasIcon) {
+                                Text(stringResource(R.string.modifierTab))
+                            } else {
+                                Text(stringResource(R.string.modifierTab), color = disabledTint)
+                            }
                         }
                     )
                 }
@@ -632,13 +645,15 @@ private fun ModifierTab(
     edgeThreshold: Float,
     edgeSmoothing: Float,
     edgeContrast: Boolean,
+    iconScale: Float,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
     onMonochromeChange: (Boolean) -> Unit,
     onEdgeThresholdChange: (Float) -> Unit,
     onEdgeSmoothingChange: (Float) -> Unit,
-    onEdgeContrastChange: (Boolean) -> Unit
+    onEdgeContrastChange: (Boolean) -> Unit,
+    onIconScaleChange: (Float) -> Unit
 ) {
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
@@ -784,6 +799,46 @@ private fun ModifierTab(
                     VectorSwitch(useVector) { onVectorChange(it) }
                     MonochromeSwitch(useMonochrome) { onMonochromeChange(it) }
                 }
+            }
+        }
+
+        // Per-icon adjustments, independent of the modifier chosen above
+        Text(
+            text = stringResource(R.string.adjustments),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.iconScale),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "${(iconScale * 100).roundToInt()}%",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                // Range centred on 1.0: left shrinks (padding), right enlarges (zoom).
+                // Official M3 centered track fills from the middle outwards.
+                Slider(
+                    value = iconScale,
+                    onValueChange = { onIconScaleChange(it) },
+                    valueRange = 0.5f..1.5f,
+                    track = { SliderDefaults.CenteredTrack(sliderState = it) }
+                )
             }
         }
     }

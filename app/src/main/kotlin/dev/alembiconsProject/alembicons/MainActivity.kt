@@ -43,6 +43,16 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "se
 class MainActivity : ComponentActivity() {
     val appProvider = ApplicationProvider(this)
 
+    // Keys ("package/activity") of icons changed in this session, so the pack preview
+    // can surface them first and flag them. Session-only (cleared on restart).
+    // NOTE: experimental review aid — safe to drop with the commit that added it.
+    val recentlyChangedIcons = androidx.compose.runtime.mutableStateListOf<String>()
+
+    fun markIconChanged(packageName: String, activityName: String) {
+        val key = "$packageName/$activityName"
+        if (key !in recentlyChangedIcons) recentlyChangedIcons.add(key)
+    }
+
     // Set when opened from an icon-watch notification; the home screen shows the apply
     // modal for this suggestion (consumed in the watch apply flow, phase 6).
     var pendingWatchSuggestionId by mutableStateOf<Long?>(null)

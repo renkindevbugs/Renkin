@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,8 +20,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
@@ -31,13 +34,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -69,6 +75,7 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.caverock.androidsvg.SVG
@@ -110,6 +117,7 @@ fun UploadColumn(app: PackageInfoStruct,
     var selectionMode by remember { mutableStateOf(false) }
     var markedForDelete by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var isUploading by remember { mutableStateOf(false) }
     val maxSize = 500
 
     val activity = getCurrentMainActivity()
@@ -126,21 +134,26 @@ fun UploadColumn(app: PackageInfoStruct,
     ) { uris ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         scope.launch {
-            var failed = false
-            val added = withContext(Dispatchers.IO) {
-                uris.mapNotNull { uri ->
-                    val bitmap = getBitmapFromURI(context, uri)?.toDrawable(res)?.shrinkIfBiggerThan(maxSize)
-                    if (bitmap == null) {
-                        failed = true
-                        null
-                    } else {
-                        UploadedImageStore.save(context, bitmap)
+            isUploading = true
+            try {
+                var failed = false
+                val added = withContext(Dispatchers.IO) {
+                    uris.mapNotNull { uri ->
+                        val bitmap = getBitmapFromURI(context, uri)?.toDrawable(res)?.shrinkIfBiggerThan(maxSize)
+                        if (bitmap == null) {
+                            failed = true
+                            null
+                        } else {
+                            UploadedImageStore.save(context, bitmap)
+                        }
                     }
                 }
+                savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
+                if (added.isNotEmpty()) selectedImagePath = added.first().absolutePath
+                if (failed) uploadError = true
+            } finally {
+                isUploading = false
             }
-            savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
-            if (added.isNotEmpty()) selectedImagePath = added.first().absolutePath
-            if (failed) uploadError = true
         }
     }
 
@@ -179,160 +192,248 @@ fun UploadColumn(app: PackageInfoStruct,
         markedForDelete = emptySet()
     }
 
-    LazyVerticalGrid(
-        columns = GridCells.Fixed(4),
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        item(key = "add", span = { GridItemSpan(maxLineSpan) }) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                Button(onClick = { launcher.launch(MIME_TYPE_IMAGE) }) {
-                    Icon(Icons.Filled.Add, null, Modifier.size(18.dp))
+    // Leave selection mode once nothing is selected (unselect-all or the last manual
+    // deselect), so the contextual bar doesn't linger empty
+    LaunchedEffect(selectionMode, markedForDelete) {
+        if (selectionMode && markedForDelete.isEmpty()) {
+            selectionMode = false
+        }
+    }
+
+    Box(Modifier.fillMaxSize()) {
+        if (savedImages.isEmpty()) {
+            // Big, centred empty state instead of a small line of text
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(32.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(
+                        imageVector = Icons.Filled.AddPhotoAlternate,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(Modifier.height(12.dp))
                     Text(
-                        text = stringResource(R.string.addImages),
-                        modifier = Modifier.padding(start = 6.dp)
+                        text = stringResource(R.string.noImagesYet),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = stringResource(R.string.galleryEmptyHint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                     )
                 }
             }
-        }
+        } else {
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(4),
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                val editedImage = modifiedImage
+                if (editedImage != null) {
+                    item(key = "editor", span = { GridItemSpan(maxLineSpan) }) {
+                        val zoomedImage = zoomBitmap(editedImage, zoomLevel)
 
-        val editedImage = modifiedImage
-        if (editedImage != null) {
-            item(key = "editor", span = { GridItemSpan(maxLineSpan) }) {
-                val zoomedImage = zoomBitmap(editedImage, zoomLevel)
-
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
-                        Image(
-                            painter = BitmapPainter(editedImage.asImageBitmap()),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .padding(2.dp)
-                                .size(108.dp, 108.dp)
-                        )
-
-                        if (asAdaptiveIcon) {
-                            Image(
-                                painter = BitmapPainter(zoomedImage.asImageBitmap()),
-                                contentDescription = null,
+                        // Editor lives in a rounded card for a cleaner, modern look
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(
                                 modifier = Modifier
-                                    .padding(2.dp)
-                                    .size(108.dp, 108.dp)
-                                    .drawWithContent {
-                                        drawContent()
-                                        drawImage(
-                                            mask!!.asImageBitmap(),
-                                            srcSize = IntSize(mask!!.width, mask!!.height),
-                                            dstSize = IntSize(
-                                                this.size.width.toInt(),
-                                                this.size.height.toInt()
-                                            ),
-                                            blendMode = BlendMode.Overlay
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                                    Image(
+                                        painter = BitmapPainter(editedImage.asImageBitmap()),
+                                        contentDescription = null,
+                                        modifier = Modifier
+                                            .padding(2.dp)
+                                            .size(108.dp, 108.dp)
+                                    )
+
+                                    if (asAdaptiveIcon) {
+                                        Image(
+                                            painter = BitmapPainter(zoomedImage.asImageBitmap()),
+                                            contentDescription = null,
+                                            modifier = Modifier
+                                                .padding(2.dp)
+                                                .size(108.dp, 108.dp)
+                                                .drawWithContent {
+                                                    drawContent()
+                                                    drawImage(
+                                                        mask!!.asImageBitmap(),
+                                                        srcSize = IntSize(mask!!.width, mask!!.height),
+                                                        dstSize = IntSize(
+                                                            this.size.width.toInt(),
+                                                            this.size.height.toInt()
+                                                        ),
+                                                        blendMode = BlendMode.Overlay
+                                                    )
+                                                }
                                         )
                                     }
-                            )
+                                }
+
+                                if (asAdaptiveIcon) {
+                                    Text(stringResource(R.string.deadZone), color = Red)
+                                }
+
+                                AdaptiveIconSwitch(asAdaptiveIcon, onChange = { asAdaptiveIcon = it; zoomLevel = 1f })
+
+                                if (asAdaptiveIcon) {
+                                    ZoomSlider(zoomLevel, onChange = { zoomLevel = it })
+                                }
+
+                                onChange(BitmapIconDrawable(zoomedImage, asAdaptiveIcon))
+                            }
                         }
                     }
-
-                    if (asAdaptiveIcon) {
-                        Text(stringResource(R.string.deadZone), color = Red)
-                    }
-
-                    AdaptiveIconSwitch(asAdaptiveIcon, onChange = { asAdaptiveIcon = it; zoomLevel = 1f })
-
-                    if (asAdaptiveIcon) {
-                        ZoomSlider(zoomLevel, onChange = { zoomLevel = it })
-                    }
-
-                    onChange(BitmapIconDrawable(zoomedImage, asAdaptiveIcon))
                 }
-            }
-        }
 
-        item(key = "gallery_header", span = { GridItemSpan(maxLineSpan) }) {
-            Column {
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                item(key = "gallery_header", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
-                        text = if (selectionMode) {
-                            "${markedForDelete.size}"
-                        } else {
-                            stringResource(R.string.yourImages)
-                        },
+                        text = stringResource(R.string.yourImages),
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
                     )
-                    if (selectionMode) {
+                }
+
+                items(savedImages, key = { it.absolutePath }) { file ->
+                    val path = file.absolutePath
+                    UploadedImageThumbnail(
+                        file = file,
+                        selected = !selectionMode && path == selectedImagePath,
+                        marked = selectionMode && path in markedForDelete,
+                        onClick = {
+                            if (selectionMode) {
+                                markedForDelete = if (path in markedForDelete) {
+                                    markedForDelete - path
+                                } else {
+                                    markedForDelete + path
+                                }
+                            } else {
+                                // Tapping the selected image again deselects it and the header
+                                // falls back to the previously chosen icon
+                                selectedImagePath = if (path == selectedImagePath) null else path
+                            }
+                        },
+                        onLongClick = {
+                            if (!selectionMode) {
+                                selectionMode = true
+                                markedForDelete = setOf(path)
+                            }
+                        }
+                    )
+                }
+            }
+        }
+
+        // Selection mode swaps the add FAB for a contextual bar (cancel · count ·
+        // select-all) next to a delete button
+        if (selectionMode) {
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         IconButton(onClick = {
                             selectionMode = false
                             markedForDelete = emptySet()
                         }) {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = stringResource(R.string.dismiss),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
                         }
-                        IconButton(
-                            onClick = { showDeleteConfirm = true },
-                            enabled = markedForDelete.isNotEmpty()
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Delete,
-                                contentDescription = stringResource(R.string.deleteImage),
-                                tint = MaterialTheme.colorScheme.error
-                            )
+                        Text(
+                            text = "${markedForDelete.size}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.weight(1f)
+                        )
+                        IconButton(onClick = {
+                            val all = savedImages.map { it.absolutePath }.toSet()
+                            markedForDelete = if (markedForDelete.size == all.size) emptySet() else all
+                        }) {
+                            Icon(Icons.Filled.SelectAll, stringResource(R.string.selectAll))
                         }
                     }
                 }
-            }
-        }
-
-        if (savedImages.isEmpty()) {
-            item(key = "empty", span = { GridItemSpan(maxLineSpan) }) {
-                Text(
-                    text = stringResource(R.string.noImagesYet),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                    modifier = Modifier.padding(vertical = 16.dp)
-                )
+                FloatingActionButton(
+                    onClick = { if (markedForDelete.isNotEmpty()) showDeleteConfirm = true },
+                    shape = RoundedCornerShape(18.dp),
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                ) {
+                    Icon(Icons.Filled.Delete, stringResource(R.string.deleteImage))
+                }
             }
         } else {
-            items(savedImages, key = { it.absolutePath }) { file ->
-                val path = file.absolutePath
-                UploadedImageThumbnail(
-                    file = file,
-                    selected = !selectionMode && path == selectedImagePath,
-                    marked = selectionMode && path in markedForDelete,
-                    onClick = {
-                        if (selectionMode) {
-                            markedForDelete = if (path in markedForDelete) {
-                                markedForDelete - path
-                            } else {
-                                markedForDelete + path
-                            }
-                        } else {
-                            // Tapping the selected image again deselects it and the header
-                            // falls back to the previously chosen icon
-                            selectedImagePath = if (path == selectedImagePath) null else path
-                        }
-                    },
-                    onLongClick = {
-                        if (!selectionMode) {
-                            selectionMode = true
-                            markedForDelete = setOf(path)
-                        }
+            ExtendedFloatingActionButton(
+                onClick = { launcher.launch(MIME_TYPE_IMAGE) },
+                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+                text = { Text(stringResource(R.string.addImages)) },
+                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp)
+            )
+        }
+
+        // Loading overlay while the picked images are decoded and saved — a dimmed
+        // backdrop with a card (spinner + label) so it's clear what's happening
+        if (isUploading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.scrim.copy(alpha = 0.45f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 32.dp, vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            text = stringResource(R.string.addingImages),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
                     }
-                )
+                }
             }
         }
     }
@@ -388,7 +489,12 @@ private fun UploadedImageThumbnail(
     var thumbnail by remember(file.absolutePath) { mutableStateOf<Bitmap?>(null) }
 
     LaunchedEffect(file.absolutePath) {
-        thumbnail = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(file.absolutePath) }
+        // Grid cells are small, so decode a downsampled bitmap — decoding the full
+        // ~500px image for every thumbnail is what made bulk uploads stutter
+        thumbnail = withContext(Dispatchers.IO) {
+            val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
+            BitmapFactory.decodeFile(file.absolutePath, opts)
+        }
     }
 
     val borderColor = when {
