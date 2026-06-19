@@ -192,6 +192,14 @@ fun UploadColumn(app: PackageInfoStruct,
         markedForDelete = emptySet()
     }
 
+    // Leave selection mode once nothing is selected (unselect-all or the last manual
+    // deselect), so the contextual bar doesn't linger empty
+    LaunchedEffect(selectionMode, markedForDelete) {
+        if (selectionMode && markedForDelete.isEmpty()) {
+            selectionMode = false
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         if (savedImages.isEmpty()) {
             // Big, centred empty state instead of a small line of text
