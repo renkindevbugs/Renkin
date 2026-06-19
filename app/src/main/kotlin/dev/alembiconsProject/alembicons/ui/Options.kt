@@ -11,7 +11,9 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -31,6 +33,7 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Surface
@@ -115,6 +118,11 @@ fun OptionsCard(
 ) {
     val prefs = getPreferences()
 
+    // Completion progress across all apps (updates live as icons are assigned/cleared)
+    val apps = getCurrentMainActivity().appProvider.applicationList
+    val themedCount = apps.count { it.createdIcon != null }
+    val totalCount = apps.size
+
     var expanded by remember { mutableStateOf(false) }
 
     var primarySource by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
@@ -187,6 +195,36 @@ fun OptionsCard(
                     modifier = Modifier.rotate(chevronRotation)
                 )
             }
+
+            // Always-visible completion progress, so the user sees how much is left
+            if (totalCount > 0) {
+                val targetFraction = themedCount / totalCount.toFloat()
+                val animatedFraction by animateFloatAsState(
+                    targetValue = targetFraction,
+                    label = "completionProgress"
+                )
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp)
+                        .padding(bottom = 12.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.completionProgress, themedCount, totalCount),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { animatedFraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(50)),
+                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                    )
+                }
+            }
+
             AnimatedVisibility(
                 visible = expanded,
                 enter = expandVertically() + fadeIn(),
