@@ -98,7 +98,8 @@ fun CreateTab(
     appName: String,
     onIconSelect: (ResourceDrawable, IconPack) -> Unit,
     onTextTypeChange: (TextType) -> Unit,
-    onCollapsedChange: (Boolean) -> Unit = {}
+    onCollapsedChange: (Boolean) -> Unit = {},
+    contentReady: Boolean = true
 ) {
     var searchQuery by rememberSaveable { mutableStateOf(appName) }
     var debouncedQuery by rememberSaveable { mutableStateOf(appName) }
@@ -232,6 +233,18 @@ fun CreateTab(
                         onCollapsedChange = { collapsed = it },
                         onSelect = { resource, _ -> onIconSelect(resource, detailPack) }
                     )
+                } else if (!contentReady) {
+                    // Hold off mounting the (heavy) pack browser until the dialog has
+                    // finished opening, so the open animation stays smooth
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        LinearWavyProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 32.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
+                    }
                 } else {
                     LazyColumn(
                         state = listState,
@@ -321,17 +334,23 @@ fun PackSectionHeader(iconPack: IconPack, onClick: (() -> Unit)? = null) {
 @Composable
 private fun PackIcon(packageName: String, size: androidx.compose.ui.unit.Dp) {
     val context = getCurrentContext()
-    val packIcon = remember(packageName) {
-        try {
-            context.packageManager.getApplicationIcon(packageName).toSafeBitmapOrNull()
-        } catch (_: Exception) {
-            null
+    // Decode off the main thread — doing it in remember{} blocked the UI thread for
+    // every pack header while the editor dialog was opening
+    var packIcon by remember(packageName) { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(packageName) {
+        packIcon = withContext(Dispatchers.IO) {
+            try {
+                context.packageManager.getApplicationIcon(packageName).toSafeBitmapOrNull()
+            } catch (_: Exception) {
+                null
+            }
         }
     }
 
-    if (packIcon != null) {
+    val icon = packIcon
+    if (icon != null) {
         Image(
-            painter = BitmapPainter(packIcon.asImageBitmap()),
+            painter = BitmapPainter(icon.asImageBitmap()),
             contentDescription = null,
             modifier = Modifier
                 .size(size)

@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -157,6 +158,12 @@ fun OptionsDialog(
         if (!dialogTransition.targetState && dialogTransition.isIdle) onDismiss()
     }
     val startClose: () -> Unit = { dialogTransition.targetState = false }
+
+    // The Create tab's icon-pack browser is heavy to mount, so defer it until the open
+    // animation has settled — the dialog then appears instantly
+    val createTabReady by remember {
+        derivedStateOf { dialogTransition.isIdle && dialogTransition.currentState }
+    }
 
     val heroBitmap = remember(app.icon) {
         try {
@@ -303,7 +310,8 @@ fun OptionsDialog(
                                     iconOrigin = IconOrigin.CREATE
                                 },
                                 onTextTypeChange = { textType = it; iconOrigin = IconOrigin.CREATE },
-                                onCollapsedChange = { headerCollapsed = it }
+                                onCollapsedChange = { headerCollapsed = it },
+                                contentReady = createTabReady
                             )
                             1 -> UploadColumn(
                                 app = app,
