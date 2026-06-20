@@ -140,7 +140,9 @@ fun OptionsDialog(
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
     var iconPack by rememberSaveable { mutableStateOf(iconPacks.firstOrNull()?.packageName ?: "") }
-    var customIconList by rememberSaveable { mutableStateOf<List<ResourceDrawable>>(listOf()) }
+    // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
+    // Parcelable, so saving the list on stop crashes.
+    var customIconList by remember { mutableStateOf<List<ResourceDrawable>>(listOf()) }
     // Start with the icon the app already has so it stays visible (e.g. when only the
     // modifier is being changed) instead of forcing the user to find it again.
     var currentIcon by remember { mutableStateOf(app.createdIcon) }

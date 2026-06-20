@@ -507,7 +507,9 @@ fun IconPackDropdown(
     val newList = listOf(emptyPack) + iconPacks
     val defaultPack = newList.find { it.packageName == packageName }
 
-    var icons: Map<String, ResourceDrawable> by rememberSaveable { mutableStateOf(mapOf()) }
+    // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
+    // Parcelable, so saving it on stop crashes. It's reloaded below anyway.
+    var icons: Map<String, ResourceDrawable> by remember { mutableStateOf(mapOf()) }
     var expanded by remember { mutableStateOf(false) }
     var selectedOption by remember { mutableStateOf(defaultPack ?: emptyPack) }
 
