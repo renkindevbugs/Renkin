@@ -46,7 +46,10 @@ import kotlinx.coroutines.withContext
 class ApplicationProvider(private val context: Context) {
     var applicationList: List<PackageInfoStruct> by mutableStateOf(listOf())
         private set
-    var iconPacks: List<IconPack> = listOf()
+    // Backed by Compose state so the UI re-reads it once packs finish loading
+    // (e.g. the edit dialog's icon-pack browser) instead of capturing the empty
+    // initial list.
+    var iconPacks: List<IconPack> by mutableStateOf(listOf())
         private set
     var iconPackLoaded: Boolean by mutableStateOf(false)
         private set
