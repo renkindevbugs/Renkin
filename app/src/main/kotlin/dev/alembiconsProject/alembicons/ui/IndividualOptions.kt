@@ -126,7 +126,7 @@ fun OptionsDialog(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?) -> Unit,
+    onConfirm: (icon: IconPackDrawable?, iconScale: Float) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
@@ -156,7 +156,7 @@ fun OptionsDialog(
     var edgeThreshold by rememberSaveable { mutableFloatStateOf(2.5f) }
     var edgeSmoothing by rememberSaveable { mutableFloatStateOf(2f) }
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
-    var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
+    var iconScale by rememberSaveable { mutableFloatStateOf(app.iconScale) }
 
     // Slide the editor in from the right; closing plays the reverse animation
     // before the dialog window is actually dismissed
@@ -260,7 +260,6 @@ fun OptionsDialog(
         // Modifiers live only in the Modifier tab — leaving it starts the next visit clean
         if (selectedTab != 2) {
             imageEdit = ImageEdit.NONE
-            iconScale = 1f
         }
     }
 
@@ -302,7 +301,7 @@ fun OptionsDialog(
                     previewLoading = generatingPreview,
                     onDismiss = startClose,
                     onClear = { showConfirmClear = true },
-                    onConfirm = { onConfirm(iconToConfirm) }
+                    onConfirm = { onConfirm(iconToConfirm, iconScale) }
                 )
 
                 // The Create tab draws its own divider under the search bar;
