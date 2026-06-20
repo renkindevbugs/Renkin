@@ -105,6 +105,7 @@ import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
 import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
+import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.alembiconsProject.alembicons.MainViewModel
@@ -234,16 +235,19 @@ fun ApplicationList(
         }
     }
 
-    // Keep the original index — ApplicationItem edits appProvider.applicationList by position
-    val displayList = when (sortOrder) {
-        AppSortOrder.NAME -> applications.withIndex().toList()
-        AppSortOrder.INSTALL_DATE -> applications.withIndex()
-            .sortedByDescending { installTimes[it.value.packageName] ?: 0L }
-    }.let { list ->
-        if (filterNoIcon) list.filter { it.value.createdIcon == null } else list
-    }.let { list ->
-        // Filter before the LazyColumn so non-matching rows don't become empty items
-        if (filter.isEmpty()) list else list.filter { it.value.appName.contains(filter, true) }
+    // Keep the original index — ApplicationItem edits appProvider.applicationList by position.
+    // Remembered so it isn't re-sorted/filtered on unrelated recompositions.
+    val displayList = remember(applications, sortOrder, filterNoIcon, filter, installTimes) {
+        when (sortOrder) {
+            AppSortOrder.NAME -> applications.withIndex().toList()
+            AppSortOrder.INSTALL_DATE -> applications.withIndex()
+                .sortedByDescending { installTimes[it.value.packageName] ?: 0L }
+        }.let { list ->
+            if (filterNoIcon) list.filter { it.value.createdIcon == null } else list
+        }.let { list ->
+            // Filter before the LazyColumn so non-matching rows don't become empty items
+            if (filter.isEmpty()) list else list.filter { it.value.appName.contains(filter, true) }
+        }
     }
 
     // Keyed items make LazyColumn follow the previously visible app to its new
@@ -314,8 +318,15 @@ fun ApplicationItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Converting the drawable is not free — cache it per icon
-            val bitmap = remember(app.icon) { app.icon.toSafeBitmapOrNull() }
+            // Converting the drawable is not free — cache it, and render at the on-screen
+            // size (56.dp) rather than full native resolution so scrolling new rows into
+            // view doesn't decode oversized bitmaps on the main thread (scroll jank).
+            val density = LocalDensity.current
+            val bitmap = remember(app.icon, density) {
+                val target = with(density) { 56.dp.roundToPx() }
+                val size = app.icon.intrinsicWidth.let { if (it in 1 until target) it else target }
+                app.icon.toSafeBitmapOrNull(size, size)
+            }
             if (bitmap != null) {
                 Image(
                     painter = BitmapPainter(bitmap.asImageBitmap()),
