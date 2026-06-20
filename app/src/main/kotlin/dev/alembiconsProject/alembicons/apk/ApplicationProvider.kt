@@ -91,7 +91,7 @@ class ApplicationProvider(private val context: Context) {
         loadAlchemiconPack()
     }
 
-    fun retrieveOtherIcons(preferences: Preferences) {
+    suspend fun retrieveOtherIcons(preferences: Preferences) = withContext(Dispatchers.Default) {
         val iconPackageName = preferences.getStringValue(PrimaryIconPackKey)
         val retrieveCalendarIcon = preferences.getBooleanValue(CalendarIconsKey)
 
@@ -100,7 +100,7 @@ class ApplicationProvider(private val context: Context) {
         }
     }
 
-    fun refreshIcon(application: PackageInfoStruct, preferences: Preferences) {
+    suspend fun refreshIcon(application: PackageInfoStruct, preferences: Preferences) = withContext(Dispatchers.Default) {
         // A newly installed app always gets its icon (re)generated
         val genOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
         refreshIcon(application, genOptions)
@@ -119,7 +119,7 @@ class ApplicationProvider(private val context: Context) {
         }
     }
 
-    fun refreshIcons(preferences: Preferences) {
+    suspend fun refreshIcons(preferences: Preferences) = withContext(Dispatchers.Default) {
         var opt = GenerationOptions.fromPreferences(preferences, context)
         val retrieveCalendarIcon = preferences.getBooleanValue(CalendarIconsKey)
 
@@ -192,24 +192,25 @@ class ApplicationProvider(private val context: Context) {
             builder.applyModifier(icon, options.primaryImageEdit)
         }
 
-    fun buildAndSignIconPack(preferences: Preferences, textMethod: (text: String) -> Unit): BuiltIconPack {
-        val themed = preferences.getBooleanValue(ExportThemedKey)
-        val iconColor = preferences.getDefaultIconColor(context)
-        val bgColor = preferences.getDefaultBackgroundColor(context)
+    suspend fun buildAndSignIconPack(preferences: Preferences, textMethod: (text: String) -> Unit): BuiltIconPack =
+        withContext(Dispatchers.Default) {
+            val themed = preferences.getBooleanValue(ExportThemedKey)
+            val iconColor = preferences.getDefaultIconColor(context)
+            val bgColor = preferences.getDefaultBackgroundColor(context)
 
-        val iconPackGenerator = IconPackBuilder(
-            context,
-            applicationList,
-            calendarIcon,
-            calendarIconsDrawable
-        )
-        val canBeInstalled = iconPackGenerator.canBeInstalled() // must be called before build and sign
-        val apk = iconPackGenerator.buildAndSign(themed, iconColor.toHexString(), bgColor.toHexString(), textMethod)
+            val iconPackGenerator = IconPackBuilder(
+                context,
+                applicationList,
+                calendarIcon,
+                calendarIconsDrawable
+            )
+            val canBeInstalled = iconPackGenerator.canBeInstalled() // must be called before build and sign
+            val apk = iconPackGenerator.buildAndSign(themed, iconColor.toHexString(), bgColor.toHexString(), textMethod)
 
-        return BuiltIconPack(apk, iconPackGenerator.getIconPackName(), canBeInstalled)
-    }
+            BuiltIconPack(apk, iconPackGenerator.getIconPackName(), canBeInstalled)
+        }
 
-    suspend fun installIconPack(iconPack: BuiltIconPack): Boolean {
+    suspend fun installIconPack(iconPack: BuiltIconPack): Boolean = withContext(Dispatchers.Default) {
         var success = false
 
         if (iconPack.canBeInstalled) {
@@ -222,7 +223,7 @@ class ApplicationProvider(private val context: Context) {
 
         saveAlchemiconPack()
 
-        return success
+        success
     }
 
     private fun retrieveCalendarIcons(iconPackageName: String) {
@@ -370,45 +371,47 @@ class ApplicationProvider(private val context: Context) {
         )
     }
 
-    fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, IconPackDrawable?> {
-        val exportDrawables = mutableMapOf<ResourceDrawable, IconPackDrawable?>()
+    suspend fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, IconPackDrawable?> =
+        withContext(Dispatchers.Default) {
+            val exportDrawables = mutableMapOf<ResourceDrawable, IconPackDrawable?>()
 
-        val pack = IconPackContainer("", emptyMap())
+            val pack = IconPackContainer("", emptyMap())
 
-        val builder = IconGenerator(context, options, pack, pack)
-        for (drawable in drawables) {
-            // One broken icon must not take the whole pack down (#119)
-            exportDrawables[drawable] = try {
-                builder.colorizeFromIconPack(iconPackName, drawable)
-            } catch (_: Exception) {
-                null
-            }
-        }
-
-        return exportDrawables
-    }
-
-    fun getIconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> {
-        val map = mutableMapOf<String, ResourceDrawable>()
-
-        for (pack in iconPacks) {
-            if (application == null) {
-                val icon = appManager.getResIcon(pack.packageName, pack.iconID)
-
-                if (icon != null) {
-                    map[pack.packageName] = ResourceDrawable(pack.iconID, icon)
-                }
-            } else {
-                val icons = getIconPackAppDrawable(application, pack.packageName)
-
-                if (icons.isNotEmpty()) {
-                    map[pack.packageName] = icons[application]!!
+            val builder = IconGenerator(context, options, pack, pack)
+            for (drawable in drawables) {
+                // One broken icon must not take the whole pack down (#119)
+                exportDrawables[drawable] = try {
+                    builder.colorizeFromIconPack(iconPackName, drawable)
+                } catch (_: Exception) {
+                    null
                 }
             }
+
+            exportDrawables
         }
 
-        return map
-    }
+    suspend fun getIconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
+        withContext(Dispatchers.Default) {
+            val map = mutableMapOf<String, ResourceDrawable>()
+
+            for (pack in iconPacks) {
+                if (application == null) {
+                    val icon = appManager.getResIcon(pack.packageName, pack.iconID)
+
+                    if (icon != null) {
+                        map[pack.packageName] = ResourceDrawable(pack.iconID, icon)
+                    }
+                } else {
+                    val icons = getIconPackAppDrawable(application, pack.packageName)
+
+                    if (icons.isNotEmpty()) {
+                        map[pack.packageName] = icons[application]!!
+                    }
+                }
+            }
+
+            map
+        }
 
     fun clearIcons() {
         for (app in applicationList) {
