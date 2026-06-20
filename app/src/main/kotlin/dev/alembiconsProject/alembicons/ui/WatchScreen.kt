@@ -308,6 +308,9 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     }
 
     if (!loaded || suggestion == null) return
+    // When opened cold from a notification the app list / packs may still be
+    // loading; wait so the modal shows real icons instead of empty placeholders.
+    if (!viewModel.appProvider.applicationsLoaded || !viewModel.appProvider.iconPackLoaded) return
 
     AlertDialog(
         shape = RoundedCornerShape(28.dp),
@@ -815,7 +818,7 @@ private fun WatchRuleEditor(
 
     val canSave = selectedApps.isNotEmpty() && (watchAll || selectedPacks.isNotEmpty())
 
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().navigationBarsPadding()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
