@@ -68,6 +68,18 @@ class WatchRepository(context: Context) {
         dao.pruneOrphanStates()
     }
 
+    /** Deletes several rules (and everything hanging off them) in one transaction. */
+    suspend fun deleteRules(ruleIds: List<Long>) = db.withTransaction {
+        ruleIds.forEach { ruleId ->
+            dao.deleteCandidatesForRule(ruleId)
+            dao.deleteSuggestionsForRule(ruleId)
+            dao.deleteAppsForRule(ruleId)
+            dao.deletePacksForRule(ruleId)
+            dao.deleteRule(ruleId)
+        }
+        dao.pruneOrphanStates()
+    }
+
     // --- Detection (phase 3) -------------------------------------------------
 
     suspend fun getState(packageName: String, activityName: String, iconPackPackage: String): WatchState? =
