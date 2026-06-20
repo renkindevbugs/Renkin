@@ -10,7 +10,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.Preferences
 import androidx.room.Room
 import dev.alembiconsProject.alembicons.R
-import dev.alembiconsProject.alembicons.constants.SuppressRedundantSuspendModifier
 import dev.alembiconsProject.alembicons.data.AlchemiconPackDatabase
 import dev.alembiconsProject.alembicons.data.CalendarIconsKey
 import dev.alembiconsProject.alembicons.data.DbApplication
@@ -41,6 +40,8 @@ import dev.alembiconsProject.alembicons.ui.supportDynamicColors
 import dev.alembiconsProject.alembicons.ui.toHexString
 import dev.alembiconsProject.alembicons.vector.VectorParser
 import dev.alembiconsProject.alembicons.xml.XmlDecoder
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class ApplicationProvider(private val context: Context) {
     var applicationList: List<PackageInfoStruct> by mutableStateOf(listOf())
@@ -48,6 +49,8 @@ class ApplicationProvider(private val context: Context) {
     var iconPacks: List<IconPack> = listOf()
         private set
     var iconPackLoaded: Boolean by mutableStateOf(false)
+        private set
+    var applicationsLoaded: Boolean by mutableStateOf(false)
         private set
 
     private var iconPackAppFilterElement: Map<IconPack, List<RawElement>> = emptyMap()
@@ -70,15 +73,15 @@ class ApplicationProvider(private val context: Context) {
         initializeAlchemiconPack()
     }
 
-    fun initializeApplications() {
+    suspend fun initializeApplications() = withContext(Dispatchers.Default) {
         val apps = appManager.getAllInstalledApps()
         apps.sort()
 
         applicationList = apps.toList()
+        applicationsLoaded = true
     }
 
-    @Suppress(SuppressRedundantSuspendModifier)
-    suspend fun initializeIconPacks() {
+    suspend fun initializeIconPacks() = withContext(Dispatchers.Default) {
         iconPackLoaded = false
         iconPacks = appManager.getIconPacks()
         getAppFilterElements()
@@ -144,27 +147,28 @@ class ApplicationProvider(private val context: Context) {
         }
     }
 
-    fun getIcon(application: PackageInfoStruct, options: GenerationOptions, customIcon: ResourceDrawable? = null): IconPackDrawable? {
-        var icon: IconPackDrawable? = null
+    suspend fun getIcon(application: PackageInfoStruct, options: GenerationOptions, customIcon: ResourceDrawable? = null): IconPackDrawable? =
+        withContext(Dispatchers.Default) {
+            var icon: IconPackDrawable? = null
 
-        val primaryIconPackApps = getIconPackAppDrawables(options.primaryIconPack)
+            val primaryIconPackApps = getIconPackAppDrawables(options.primaryIconPack)
 
-        val pack1 = IconPackContainer(options.primaryIconPack, primaryIconPackApps)
-        val pack2 = IconPackContainer("", emptyMap())
+            val pack1 = IconPackContainer(options.primaryIconPack, primaryIconPackApps)
+            val pack2 = IconPackContainer("", emptyMap())
 
-        val builder = IconGenerator(context, options, pack1, pack2)
-        builder.generateIcon(application, customIcon) { _, newIcon ->
-            icon = newIcon
+            val builder = IconGenerator(context, options, pack1, pack2)
+            builder.generateIcon(application, customIcon) { _, newIcon ->
+                icon = newIcon
+            }
+
+            icon
         }
-
-        return icon
-    }
 
     /**
      * Builds the icon a specific pack provides for an app, by drawable name — used by the
      * icon-watch apply modal to preview/apply a suggested icon. No extra modifier is applied.
      */
-    fun getIconFromPackDrawable(
+    suspend fun getIconFromPackDrawable(
         application: PackageInfoStruct,
         packPackage: String,
         drawableName: String,
@@ -181,11 +185,12 @@ class ApplicationProvider(private val context: Context) {
     }
 
     /** Applies the modifier from [options] to an already-built icon (e.g. a hand-edited vector). */
-    fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable {
-        val pack = IconPackContainer("", emptyMap())
-        val builder = IconGenerator(context, options, pack, pack)
-        return builder.applyModifier(icon, options.primaryImageEdit)
-    }
+    suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =
+        withContext(Dispatchers.Default) {
+            val pack = IconPackContainer("", emptyMap())
+            val builder = IconGenerator(context, options, pack, pack)
+            builder.applyModifier(icon, options.primaryImageEdit)
+        }
 
     fun buildAndSignIconPack(preferences: Preferences, textMethod: (text: String) -> Unit): BuiltIconPack {
         val themed = preferences.getBooleanValue(ExportThemedKey)
@@ -233,8 +238,7 @@ class ApplicationProvider(private val context: Context) {
             )
     }
 
-    @Suppress(SuppressRedundantSuspendModifier)
-    private suspend fun loadAlchemiconPack() {
+    private suspend fun loadAlchemiconPack() = withContext(Dispatchers.Default) {
         val db = Room.databaseBuilder(
             context,
             AlchemiconPackDatabase::class.java, "alchemiconPack"

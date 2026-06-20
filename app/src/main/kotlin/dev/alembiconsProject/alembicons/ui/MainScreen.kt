@@ -202,6 +202,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     }
 }
 
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ApplicationList(
     iconPacks: List<IconPack>,
@@ -247,6 +248,15 @@ fun ApplicationList(
     // position when the order changes — jump back to the top instead
     LaunchedEffect(sortOrder, filterNoIcon) {
         listState.scrollToItem(0)
+    }
+
+    // The app list is loaded off the main thread at startup; show a spinner until
+    // it arrives instead of a blank screen that looks frozen
+    if (!activity.appProvider.applicationsLoaded && applications.isEmpty()) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+        }
+        return
     }
 
     LazyColumn(

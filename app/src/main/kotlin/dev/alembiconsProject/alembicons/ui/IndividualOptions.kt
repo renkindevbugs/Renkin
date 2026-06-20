@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -196,6 +197,9 @@ fun OptionsDialog(
         iconScale = iconScale
     )
 
+    // Drives the spinner over the "New" preview slot while an icon is (re)generated
+    var generatingPreview by remember { mutableStateOf(false) }
+
     LaunchedEffect(generatingOptions, customIconList) {
         if (!optionsInitialized) {
             // Keep the existing icon on the first composition — only regenerate once
@@ -210,15 +214,29 @@ fun OptionsDialog(
             return@LaunchedEffect
         }
         val custom = customIconList.firstOrNull()
+        // getIcon hops to Dispatchers.Default internally, so this no longer blocks
+        // the main thread; show the spinner for the duration.
+        generatingPreview = true
         currentIcon = activity.appProvider.getIcon(app, generatingOptions, custom)
+        generatingPreview = false
     }
 
     // A hand-edited vector isn't built from a source, so the modifier tab can't go
-    // through getIcon — apply the chosen modifier (colorize / path / edge) to it here
-    val modifiedVector = remember(vectorIcon, generatingOptions) {
-        val base = vectorIcon ?: return@remember null
-        if (generatingOptions.primaryImageEdit == ImageEdit.NONE) base
-        else activity.appProvider.applyModifier(base, generatingOptions)
+    // through getIcon — apply the chosen modifier (colorize / path / edge) here, off
+    // the main thread (it used to run during composition and jank the dialog).
+    var modifiedVector by remember { mutableStateOf<IconPackDrawable?>(null) }
+    LaunchedEffect(vectorIcon, generatingOptions) {
+        val base = vectorIcon
+        modifiedVector = when {
+            base == null -> null
+            generatingOptions.primaryImageEdit == ImageEdit.NONE -> base
+            else -> {
+                generatingPreview = true
+                val result = activity.appProvider.applyModifier(base, generatingOptions)
+                generatingPreview = false
+                result
+            }
+        }
     }
 
     // The previewed/confirmed icon follows whichever source produced it, not the
@@ -278,6 +296,7 @@ fun OptionsDialog(
                     heroBitmap = heroBitmap,
                     appName = app.appName,
                     previewIcon = iconToConfirm,
+                    previewLoading = generatingPreview,
                     onDismiss = startClose,
                     onClear = { showConfirmClear = true },
                     onConfirm = { onConfirm(iconToConfirm) }
@@ -480,6 +499,7 @@ private fun ComparisonHeader(
     heroBitmap: Bitmap?,
     appName: String,
     previewIcon: IconPackDrawable?,
+    previewLoading: Boolean,
     onDismiss: () -> Unit,
     onClear: () -> Unit,
     onConfirm: () -> Unit
@@ -585,19 +605,27 @@ private fun ComparisonHeader(
                     color = MaterialTheme.colorScheme.surfaceVariant,
                     border = BorderStroke(2.dp, borderColor)
                 ) {
-                    if (previewIcon != null) {
-                        Image(
-                            painter = previewIcon.getPainter(),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        if (previewIcon != null) {
+                            Image(
+                                painter = previewIcon.getPainter(),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
                             Icon(
                                 imageVector = Icons.Filled.Add,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.outlineVariant,
                                 modifier = Modifier.size(size / 2)
+                            )
+                        }
+                        // Spinner over the slot while the new icon is being (re)generated
+                        if (previewLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(size / 2),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
                             )
                         }
                     }
