@@ -80,6 +80,8 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.caverock.androidsvg.SVG
 import com.caverock.androidsvg.SVGParseException
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.Source
@@ -120,7 +122,7 @@ fun UploadColumn(app: PackageInfoStruct,
     var isUploading by remember { mutableStateOf(false) }
     val maxSize = 500
 
-    val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
     val context = getCurrentContext()
     val res = context.resources
     val scope = rememberCoroutineScope()
@@ -179,7 +181,7 @@ fun UploadColumn(app: PackageInfoStruct,
     LaunchedEffect(uploadedImage, imageEdit, iconColor) {
         val image = uploadedImage ?: return@LaunchedEffect
         val generatingOptions = GenerationOptions(Source.ICON_PACK, imageEdit, TextType.FULL_NAME, "", iconColor.toInt(), 0, false, false, false, true)
-        modifiedImage = activity.appProvider.getIcon(app, generatingOptions, ResourceDrawable(0, image.toDrawable(res)))?.toBitmap()
+        modifiedImage = viewModel.appProvider.getIcon(app, generatingOptions, ResourceDrawable(0, image.toDrawable(res)))?.toBitmap()
     }
 
     if (uploadError) {

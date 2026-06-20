@@ -50,6 +50,8 @@ import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
 import dev.alembiconsProject.alembicons.packages.PermissionManager
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -178,11 +180,12 @@ private val settingsButtonModifier: Modifier
 @Composable
 fun SyncButton() {
     val mainActivity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
 
     Button(
         onClick = {
             mainActivity.lifecycleScope.launch(Dispatchers.Default) {
-                mainActivity.appProvider.forceSync()
+                viewModel.appProvider.forceSync()
             }
         },
         shape = RoundedCornerShape(16.dp),
@@ -195,11 +198,12 @@ fun SyncButton() {
 @Composable
 fun RefreshApplicationListButton() {
     val mainActivity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
 
     Button(
         onClick = {
             mainActivity.lifecycleScope.launch(Dispatchers.Default) {
-                mainActivity.appProvider.initialize()
+                viewModel.appProvider.initialize()
             }
         },
         shape = RoundedCornerShape(16.dp),
@@ -242,12 +246,13 @@ fun DeleteIconPackButton() {
 @Composable
 fun RemoveIconsButton() {
     val mainActivity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
         onClick = {
             mainActivity.lifecycleScope.launch(Dispatchers.Default) {
-                mainActivity.appProvider.clearIcons()
+                viewModel.appProvider.clearIcons()
             }
         },
         shape = RoundedCornerShape(16.dp),

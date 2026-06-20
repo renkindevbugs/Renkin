@@ -73,7 +73,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import dev.alembiconsProject.alembicons.MainActivity
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.Source
@@ -82,6 +83,7 @@ import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
+import dev.alembiconsProject.alembicons.apk.ApplicationProvider
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -421,14 +423,14 @@ private fun Bitmap.scaledPreview(max: Int = PREVIEW_PX): Bitmap {
 /** Generates the preview icons for the given drawable [names] of a pack. */
 private suspend fun loadPackIconPairs(
     appMan: ApplicationManager,
-    activity: MainActivity,
+    provider: ApplicationProvider,
     packageName: String,
     options: GenerationOptions,
     names: List<String>
 ): List<PackIconPreview> {
     val ids = appMan.getIconPackDrawableIds(packageName, names)
     val drawables = appMan.getIconPackDrawables(packageName, ids)
-    val exportDrawables = activity.appProvider.getIconPackIcons(packageName, options, drawables)
+    val exportDrawables = provider.getIconPackIcons(packageName, options, drawables)
     return exportDrawables.entries
         .filter { it.value != null }
         .distinctBy { it.key.resourceId }
@@ -446,7 +448,7 @@ fun PackIconsRow(
     onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
 ) {
     val context = getCurrentContext()
-    val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var moreCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
@@ -458,7 +460,7 @@ fun PackIconsRow(
                 val appMan = ApplicationManager(context)
                 val sortedNames = filteredSortedPackNames(appMan, iconPack.packageName, query, sortOrder)
                 moreCount = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
-                loadPackIconPairs(appMan, activity, iconPack.packageName, options, sortedNames.take(PACK_ROW_LIMIT))
+                loadPackIconPairs(appMan, viewModel.appProvider, iconPack.packageName, options, sortedNames.take(PACK_ROW_LIMIT))
             } catch (_: Exception) {
                 // A malformed icon pack must not crash the browser
                 moreCount = 0
@@ -549,7 +551,7 @@ fun PackDetailGrid(
     onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
 ) {
     val context = getCurrentContext()
-    val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
@@ -571,7 +573,7 @@ fun PackDetailGrid(
                 // Load in chunks so the grid fills progressively instead of blocking
                 for (chunk in sortedNames.take(PACK_DETAIL_LIMIT).chunked(40)) {
                     coroutineContext.ensureActive()
-                    val pairs = loadPackIconPairs(appMan, activity, iconPack.packageName, options, chunk)
+                    val pairs = loadPackIconPairs(appMan, viewModel.appProvider, iconPack.packageName, options, chunk)
                     iconPairs = (iconPairs + pairs).distinctBy { it.resource.resourceId }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
