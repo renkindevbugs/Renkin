@@ -653,27 +653,10 @@ private fun ActiveRuleCard(
                         AppPill(app, ra.packageName)
                     }
                 }
-                // Stacked vertically so they take a narrow column instead of a wide
-                // row, leaving more width for the app pills. Delete on top, edit as
-                // the filled "bubble" below it.
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                        Icon(
-                            Icons.Filled.Delete, stringResource(R.string.deleteRule),
-                            tint = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                    FilledTonalIconButton(onClick = onEdit, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                            Icons.Filled.Edit, stringResource(R.string.editWatchRule),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
+                // Few apps fit on one row, so lay the actions out horizontally (keeps
+                // the card short); once the apps wrap to several rows, stack the actions
+                // vertically so they steal less width. Just a count check — no measuring.
+                RuleActions(vertical = rule.apps.size > 3, onEdit = onEdit, onDelete = onDelete)
             }
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 10.dp),
@@ -717,6 +700,40 @@ private fun ActiveRuleCard(
                 }
             }
         }
+    }
+}
+
+/** Edit + delete for a rule, laid out horizontally (compact height) or vertically
+ *  (compact width). Delete first, edit as the filled "bubble". */
+@Composable
+private fun RuleActions(vertical: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
+    val delete: @Composable () -> Unit = {
+        IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.Filled.Delete, stringResource(R.string.deleteRule),
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+    val edit: @Composable () -> Unit = {
+        FilledTonalIconButton(onClick = onEdit, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Filled.Edit, stringResource(R.string.editWatchRule),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+    if (vertical) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) { delete(); edit() }
+    } else {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) { delete(); edit() }
     }
 }
 
