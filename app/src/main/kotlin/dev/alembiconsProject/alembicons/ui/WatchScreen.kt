@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.alembiconsProject.alembicons.BuildConfig
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.WatchViewModel
@@ -79,7 +80,7 @@ import kotlinx.coroutines.flow.first
 fun WatchScreen(onDismiss: () -> Unit) {
     val context = getCurrentContext()
     val viewModel: MainViewModel = viewModel()
-    val watchViewModel: WatchViewModel = viewModel()
+    val watchViewModel: WatchViewModel = hiltViewModel()
 
     val rules by watchViewModel.rules.collectAsState()
     val apps = viewModel.appProvider.applicationList
