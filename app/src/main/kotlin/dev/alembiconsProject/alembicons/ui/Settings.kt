@@ -236,12 +236,21 @@ fun DeleteIconPackButton() {
     val scope = rememberCoroutineScope()
 
     var openSuccess by rememberSaveable { mutableStateOf(false) }
+    var notInstalled by rememberSaveable { mutableStateOf(false) }
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
         onClick = {
             scope.launch {
-                openSuccess = ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)
+                // Don't try (and then falsely report success) when the pack isn't installed
+                val installed = runCatching {
+                    context.packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
+                }.isSuccess
+                if (installed) {
+                    openSuccess = ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)
+                } else {
+                    notInstalled = true
+                }
             }
         },
         shape = RoundedCornerShape(16.dp),
@@ -257,6 +266,10 @@ fun DeleteIconPackButton() {
     if (openSuccess) {
         ShowToast(context.getString(R.string.iconPackUninstalled))
         openSuccess = false
+    }
+    if (notInstalled) {
+        ShowToast(context.getString(R.string.iconPackNotInstalled))
+        notInstalled = false
     }
 }
 

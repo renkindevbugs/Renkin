@@ -76,7 +76,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -112,7 +114,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.graphics.vector.ImageVector
-import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -803,7 +804,7 @@ fun InfoDialog(onDismiss: () -> Unit) {
                     .verticalScroll(rememberScrollState())
                     .padding(24.dp)
             ) {
-                // Header — app icon, name, version
+                // Header — app icon + name
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (appIcon != null) {
                         Image(
@@ -815,18 +816,11 @@ fun InfoDialog(onDismiss: () -> Unit) {
                         )
                         Spacer(Modifier.width(16.dp))
                     }
-                    Column {
-                        Text(
-                            text = stringResource(R.string.app_name),
-                            style = MaterialTheme.typography.headlineSmall,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = String.format(stringResource(R.string.version), BuildConfig.VERSION_NAME),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        text = stringResource(R.string.app_name),
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -834,6 +828,22 @@ fun InfoDialog(onDismiss: () -> Unit) {
                     text = stringResource(R.string.aboutApp),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    text = stringResource(R.string.aboutFork),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                val uriHandler = LocalUriHandler.current
+                Text(
+                    text = stringResource(R.string.aboutForkLink),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier
+                        .padding(top = 2.dp)
+                        .clickable { uriHandler.openUri("https://f-droid.org/packages/com.kaanelloed.iconeration/") }
                 )
 
                 Spacer(Modifier.height(24.dp))

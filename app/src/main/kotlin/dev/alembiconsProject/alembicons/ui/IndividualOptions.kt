@@ -144,6 +144,10 @@ fun OptionsDialog(
     // Start with the icon the app already has so it stays visible (e.g. when only the
     // modifier is being changed) instead of forcing the user to find it again.
     var currentIcon by remember { mutableStateOf(app.createdIcon) }
+    // Raw uploaded icon (zoom/adaptive applied) before the shared modifier. The
+    // modifier is applied at dialog level (below) so it previews live even from the
+    // Modifier tab, instead of only recomputing while the Upload tab is open.
+    var uploadBase by remember { mutableStateOf<IconPackDrawable?>(null) }
     var uploadIcon by remember { mutableStateOf<IconPackDrawable?>(null) }
     var vectorIcon by remember { mutableStateOf<IconPackDrawable?>(null) }
     // Which source actually produced the icon being previewed/confirmed. Without
@@ -244,6 +248,14 @@ fun OptionsDialog(
         }
     }
 
+    // Uploaded image: apply the shared modifier (edit / color / scale) here at dialog
+    // level so changing it on the Modifier tab updates the preview immediately.
+    LaunchedEffect(uploadBase, generatingOptions) {
+        val base = uploadBase
+        uploadIcon = if (base == null) null
+            else viewModel.appProvider.applyModifier(base, generatingOptions)
+    }
+
     // The previewed/confirmed icon follows whichever source produced it, not the
     // open tab — so visiting the modifier tab never silently drops an upload/vector
     val iconToConfirm = when (iconOrigin) {
@@ -253,7 +265,7 @@ fun OptionsDialog(
     }
 
     // The modifier needs something to act on — it stays greyed out until then
-    val hasIcon = currentIcon != null || uploadIcon != null || vectorIcon != null
+    val hasIcon = currentIcon != null || uploadBase != null || vectorIcon != null
 
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarScope = rememberCoroutineScope()
@@ -342,13 +354,8 @@ fun OptionsDialog(
                                 onCollapsedChange = { headerCollapsed = it },
                                 contentReady = createTabReady
                             )
-                            1 -> UploadColumn(
-                                app = app,
-                                imageEdit = imageEdit,
-                                iconColor = iconColor,
-                                iconScale = iconScale
-                            ) {
-                                uploadIcon = it
+                            1 -> UploadColumn(app = app) {
+                                uploadBase = it
                                 if (it != null) iconOrigin = IconOrigin.UPLOAD
                             }
                             2 -> ModifierTab(
