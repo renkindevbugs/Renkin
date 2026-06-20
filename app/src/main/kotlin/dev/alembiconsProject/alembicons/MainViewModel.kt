@@ -1,6 +1,10 @@
 package dev.alembiconsProject.alembicons
 
 import android.app.Application
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -20,6 +24,24 @@ import kotlinx.coroutines.launch
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val appProvider = ApplicationProvider(application)
+
+    // Keys ("package/activity") of icons changed in this session, so the pack preview
+    // can surface them first and flag them. Session-only (cleared on restart).
+    val recentlyChangedIcons = mutableStateListOf<String>()
+
+    fun markIconChanged(packageName: String, activityName: String) {
+        val key = "$packageName/$activityName"
+        if (key !in recentlyChangedIcons) recentlyChangedIcons.add(key)
+    }
+
+    // Set when opened from an icon-watch notification; the home screen shows the apply
+    // modal for this suggestion.
+    var pendingWatchSuggestionId by mutableStateOf<Long?>(null)
+        private set
+
+    fun setPendingWatchSuggestion(id: Long) { pendingWatchSuggestionId = id }
+
+    fun clearPendingWatchSuggestion() { pendingWatchSuggestionId = null }
 
     init {
         appProvider.defaultColor =

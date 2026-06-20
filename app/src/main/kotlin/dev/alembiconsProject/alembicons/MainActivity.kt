@@ -13,9 +13,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -48,20 +45,12 @@ class MainActivity : ComponentActivity() {
     // sites keep working unchanged.
     val appProvider get() = viewModel.appProvider
 
-    // Keys ("package/activity") of icons changed in this session, so the pack preview
-    // can surface them first and flag them. Session-only (cleared on restart).
-    // NOTE: experimental review aid — safe to drop with the commit that added it.
-    val recentlyChangedIcons = androidx.compose.runtime.mutableStateListOf<String>()
-
-    fun markIconChanged(packageName: String, activityName: String) {
-        val key = "$packageName/$activityName"
-        if (key !in recentlyChangedIcons) recentlyChangedIcons.add(key)
-    }
-
-    // Set when opened from an icon-watch notification; the home screen shows the apply
-    // modal for this suggestion (consumed in the watch apply flow, phase 6).
-    var pendingWatchSuggestionId by mutableStateOf<Long?>(null)
-        private set
+    // Session state lives in the ViewModel (survives rotation). These are thin
+    // passthroughs so existing getCurrentMainActivity().<x> call sites keep working.
+    val recentlyChangedIcons get() = viewModel.recentlyChangedIcons
+    fun markIconChanged(packageName: String, activityName: String) =
+        viewModel.markIconChanged(packageName, activityName)
+    val pendingWatchSuggestionId get() = viewModel.pendingWatchSuggestionId
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -128,13 +117,13 @@ class MainActivity : ComponentActivity() {
     private fun handleWatchIntent(intent: Intent?) {
         if (intent?.action == ACTION_OPEN_SUGGESTION) {
             val id = intent.getLongExtra(EXTRA_SUGGESTION_ID, -1L)
-            if (id >= 0) pendingWatchSuggestionId = id
+            if (id >= 0) viewModel.setPendingWatchSuggestion(id)
         }
     }
 
     /** Called once the apply modal has handled (applied or dismissed) the suggestion. */
     fun clearPendingWatchSuggestion() {
-        pendingWatchSuggestionId = null
+        viewModel.clearPendingWatchSuggestion()
     }
 
     private fun edgeToEdge(darkMode: Boolean) {
