@@ -1,6 +1,7 @@
 package dev.alembiconsProject.alembicons.ui
 
 import android.graphics.Color as AndroidColor
+import kotlin.math.roundToInt
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -293,7 +294,9 @@ val Color.blueInt: Int
     get() = floatTo255Component(this.blue)
 
 private fun floatTo255Component(component: Float): Int {
-    return (component * 255).toInt()
+    // Round, not truncate: e.g. alpha 128/255 (≈0.50196) * 255 = 127.999… which would
+    // truncate to 127 (7f) and drift on every save/parse round-trip.
+    return (component * 255).roundToInt()
 }
 
 fun String.toColor(): Color {

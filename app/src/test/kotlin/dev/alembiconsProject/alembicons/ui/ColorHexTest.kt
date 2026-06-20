@@ -24,4 +24,10 @@ class ColorHexTest {
         // Transparent white: alpha 0, RGB 255 — both exact floats, so no rounding quirk.
         assertEquals("#00ffffff", Color(0x00FFFFFF).toHexString())
     }
+
+    @Test
+    fun toHexString_roundsComponents() {
+        // alpha 128/255 ≈ 0.50196 → 127.999…; rounding keeps it 0x80 instead of 0x7f.
+        assertEquals("#80ff0000", Color(0x80FF0000).toHexString())
+    }
 }
