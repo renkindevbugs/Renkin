@@ -87,7 +87,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -784,12 +786,17 @@ private fun WatchRuleEditor(
     var showSortMenu by remember { mutableStateOf(false) }
 
     val context = getCurrentContext()
-    // First-install times don't change at runtime; recompute only when the set changes
-    val installTimes = remember(apps.size) {
-        apps.associate { app ->
-            app.packageName to runCatching {
-                context.packageManager.getPackageInfo(app.packageName, 0).firstInstallTime
-            }.getOrDefault(0L)
+    // Reading first-install time hits PackageManager once per app; doing it for every
+    // app on the main thread was what made the editor take ~1s to open. Compute it off
+    // the main thread instead — until it arrives, INSTALL_DATE sort just shows the
+    // default order. (Times don't change at runtime, so this runs once per app set.)
+    val installTimes by produceState(emptyMap<String, Long>(), apps) {
+        value = withContext(Dispatchers.IO) {
+            apps.associate { app ->
+                app.packageName to runCatching {
+                    context.packageManager.getPackageInfo(app.packageName, 0).firstInstallTime
+                }.getOrDefault(0L)
+            }
         }
     }
 
@@ -1135,17 +1142,26 @@ private fun <T> TileRows(items: List<T>, columns: Int = 3, tile: @Composable (T)
 
 @Composable
 private fun rememberAppBitmap(app: PackageInfoStruct): ImageBitmap? {
-    return remember(app.packageName, app.internalVersion) {
-        app.icon.toSafeBitmapOrNull()?.asImageBitmap()
+    // Tiles show the icon at 54.dp; render at that size instead of full native
+    // resolution so a gridful of icons is cheap to build (and light on memory).
+    val density = LocalDensity.current
+    return remember(app.packageName, app.internalVersion, density) {
+        val target = with(density) { 54.dp.roundToPx() }
+        val size = app.icon.intrinsicWidth.let { if (it in 1 until target) it else target }
+        app.icon.toSafeBitmapOrNull(size, size)?.asImageBitmap()
     }
 }
 
 @Composable
 private fun rememberPackBitmap(packPackage: String): ImageBitmap? {
     val context = getCurrentContext()
-    return remember(packPackage) {
+    val density = LocalDensity.current
+    return remember(packPackage, density) {
         try {
-            context.packageManager.getApplicationIcon(packPackage).toSafeBitmapOrNull()?.asImageBitmap()
+            val drawable = context.packageManager.getApplicationIcon(packPackage)
+            val target = with(density) { 54.dp.roundToPx() }
+            val size = drawable.intrinsicWidth.let { if (it in 1 until target) it else target }
+            drawable.toSafeBitmapOrNull(size, size)?.asImageBitmap()
         } catch (_: Exception) {
             null
         }
@@ -1257,19 +1273,28 @@ private fun AppIcon(app: PackageInfoStruct?, fallbackPackage: String, size: andr
     }
 }
 
-@Composable
-private fun PackIconImage(packPackage: String, size: androidx.compose.ui.unit.Dp) {
-    val context = getCurrentContext()
-    val bitmap = remember(packPackage) {
+// Pack icons appear as small chips repeated across many rule cards, and the LazyColumn
+// re-creates them on every scroll. Decode each pack icon once (small) and cache it
+// process-wide so scrolling doesn't keep hitting PackageManager / re-decoding bitmaps.
+private val packIconCache = mutableMapOf<String, ImageBitmap?>()
+
+private fun packIconBitmap(context: android.content.Context, packPackage: String): ImageBitmap? =
+    packIconCache.getOrPut(packPackage) {
         try {
-            context.packageManager.getApplicationIcon(packPackage).toSafeBitmapOrNull()
+            context.packageManager.getApplicationIcon(packPackage)
+                .toSafeBitmapOrNull(72, 72)?.asImageBitmap()
         } catch (_: Exception) {
             null
         }
     }
+
+@Composable
+private fun PackIconImage(packPackage: String, size: androidx.compose.ui.unit.Dp) {
+    val context = getCurrentContext()
+    val bitmap = remember(packPackage) { packIconBitmap(context, packPackage) }
     if (bitmap != null) {
         Image(
-            painter = BitmapPainter(bitmap.asImageBitmap()),
+            painter = BitmapPainter(bitmap),
             contentDescription = null,
             modifier = Modifier
                 .size(size)
