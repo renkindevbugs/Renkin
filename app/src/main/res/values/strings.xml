@@ -152,6 +152,7 @@
     <string name="allIconPacks">all icon packs</string>
     <string name="newWatchRule">New watch rule</string>
     <string name="editWatchRule">Edit watch rule</string>
+    <string name="edit">Edit</string>
     <string name="appsToWatch">Apps to watch</string>
     <string name="searchApps">Search apps</string>
     <string name="swipeForMore">swipe for more</string>

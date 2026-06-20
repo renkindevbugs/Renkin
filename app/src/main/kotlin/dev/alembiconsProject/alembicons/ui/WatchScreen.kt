@@ -17,11 +17,14 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -38,7 +41,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -377,23 +380,16 @@ private fun ActiveRuleCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp)) {
-            // Edit/delete live in the header next to the apps, so the pack chips
-            // below can use the card's full width (and wrap under everything).
-            Row(verticalAlignment = Alignment.Top) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    rule.apps.forEach { ra ->
-                        val app = apps.find { it.packageName == ra.packageName && it.activityName == ra.activityName }
-                        AppPill(app, ra.packageName)
-                    }
+            // Apps and pack tags span the full width; the actions sit at the bottom.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                rule.apps.forEach { ra ->
+                    val app = apps.find { it.packageName == ra.packageName && it.activityName == ra.activityName }
+                    AppPill(app, ra.packageName)
                 }
-                // Few apps fit on one row, so lay the actions out horizontally (keeps
-                // the card short); once the apps wrap to several rows, stack the actions
-                // vertically so they steal less width. Just a count check — no measuring.
-                RuleActions(vertical = rule.apps.size > 3, onEdit = onEdit, onDelete = onDelete)
             }
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 10.dp),
@@ -436,41 +432,33 @@ private fun ActiveRuleCard(
                     }
                 }
             }
-        }
-    }
-}
 
-/** Edit + delete for a rule, laid out horizontally (compact height) or vertically
- *  (compact width). Edit first (the filled "bubble"), then delete. */
-@Composable
-private fun RuleActions(vertical: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
-    val delete: @Composable () -> Unit = {
-        IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-            Icon(
-                Icons.Filled.Delete, stringResource(R.string.deleteRule),
-                tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(18.dp)
-            )
+            // Actions at the bottom, right-aligned: delete sits to the left of the edit
+            // pill so the apps and pack tags above can use the card's full width.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        Icons.Filled.Delete, stringResource(R.string.deleteRule),
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                FilledTonalButton(
+                    onClick = onEdit,
+                    contentPadding = PaddingValues(start = 16.dp, end = 20.dp, top = 8.dp, bottom = 8.dp)
+                ) {
+                    Icon(Icons.Filled.Edit, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.edit))
+                }
+            }
         }
-    }
-    val edit: @Composable () -> Unit = {
-        FilledTonalIconButton(onClick = onEdit, modifier = Modifier.size(40.dp)) {
-            Icon(
-                Icons.Filled.Edit, stringResource(R.string.editWatchRule),
-                modifier = Modifier.size(18.dp)
-            )
-        }
-    }
-    if (vertical) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) { edit(); delete() }
-    } else {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) { edit(); delete() }
     }
 }
 

@@ -85,6 +85,4 @@
     <string name="textType">Type de texte</string>
     <string name="colorize">Coloriser</string>
     <string name="clearIcons">Retirer les icônes</string>
-    <string name="clearIconsTitle">Retirer les icônes ?</string>
-    <string name="clearIconsText">Cela supprime les icônes générées dans l\'application. Les icônes de votre pack déjà créé y restent jusqu\'à ce que vous en construisiez un nouveau.</string>
 </resources>
