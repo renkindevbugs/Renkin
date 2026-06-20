@@ -640,28 +640,46 @@ private fun ActiveRuleCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp)) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                rule.apps.forEach { ra ->
-                    val app = apps.find { it.packageName == ra.packageName && it.activityName == ra.activityName }
-                    AppPill(app, ra.packageName)
+            // Edit/delete live in the header next to the apps, so the pack chips
+            // below can use the card's full width (and wrap under everything).
+            Row(verticalAlignment = Alignment.Top) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    rule.apps.forEach { ra ->
+                        val app = apps.find { it.packageName == ra.packageName && it.activityName == ra.activityName }
+                        AppPill(app, ra.packageName)
+                    }
                 }
+                // Few apps fit on one row, so lay the actions out horizontally (keeps
+                // the card short); once the apps wrap to several rows, stack the actions
+                // vertically so they steal less width. Just a count check — no measuring.
+                RuleActions(vertical = rule.apps.size > 3, onEdit = onEdit, onDelete = onDelete)
             }
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 10.dp),
                 color = MaterialTheme.colorScheme.outlineVariant
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.watching),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 8.dp)
+                    modifier = Modifier
+                        .align(Alignment.CenterVertically)
+                        .padding(end = 4.dp)
                 )
                 if (rule.rule.watchAllPacks) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.align(Alignment.CenterVertically)
+                    ) {
                         Icon(
                             Icons.Filled.Layers, null,
                             tint = MaterialTheme.colorScheme.primary,
@@ -675,33 +693,47 @@ private fun ActiveRuleCard(
                         )
                     }
                 } else {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        rule.packs.forEach { rp ->
-                            val pack = packs.find { it.packageName == rp.iconPackPackage }
-                            PackLabel(rp.iconPackPackage, pack?.applicationName)
-                        }
+                    rule.packs.forEach { rp ->
+                        val pack = packs.find { it.packageName == rp.iconPackPackage }
+                        PackLabel(rp.iconPackPackage, pack?.applicationName)
                     }
-                }
-                IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Filled.Edit, stringResource(R.string.editWatchRule),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Filled.Delete, stringResource(R.string.deleteRule),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp)
-                    )
                 }
             }
         }
+    }
+}
+
+/** Edit + delete for a rule, laid out horizontally (compact height) or vertically
+ *  (compact width). Edit first (the filled "bubble"), then delete. */
+@Composable
+private fun RuleActions(vertical: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
+    val delete: @Composable () -> Unit = {
+        IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.Filled.Delete, stringResource(R.string.deleteRule),
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+    val edit: @Composable () -> Unit = {
+        FilledTonalIconButton(onClick = onEdit, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Filled.Edit, stringResource(R.string.editWatchRule),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+    if (vertical) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) { edit(); delete() }
+    } else {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) { edit(); delete() }
     }
 }
 
@@ -747,18 +779,22 @@ private fun CompletedRuleCard(
                 modifier = Modifier.padding(vertical = 10.dp),
                 color = MaterialTheme.colorScheme.outlineVariant
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.newIconIn),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 8.dp)
+                    modifier = Modifier
+                        .align(Alignment.CenterVertically)
+                        .padding(end = 4.dp)
                 )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    rule.packs.forEach { rp ->
-                        val pack = packs.find { it.packageName == rp.iconPackPackage }
-                        PackLabel(rp.iconPackPackage, pack?.applicationName)
-                    }
+                rule.packs.forEach { rp ->
+                    val pack = packs.find { it.packageName == rp.iconPackPackage }
+                    PackLabel(rp.iconPackPackage, pack?.applicationName)
                 }
             }
         }
