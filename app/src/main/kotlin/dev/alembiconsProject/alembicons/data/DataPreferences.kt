@@ -47,46 +47,26 @@ val SOURCE_DEFAULT = Source.NONE
 val IMAGE_EDIT_DEFAULT = ImageEdit.NONE
 val TEXT_TYPE_DEFAULT = TextType.FULL_NAME
 
-val DarkModeKey: Preferences.Key<Int>
-    get() = intPreferencesKey(DARK_MODE_NAME)
-val IncludeVectorKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
-val MonochromeKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(MONOCHROME_NAME)
-val ExportThemedKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(EXPORT_THEMED_NAME)
-val IconColorKey: Preferences.Key<String>
-    get() = stringPreferencesKey(ICON_COLOR_NAME)
-val BackgroundColorKey: Preferences.Key<String>
-    get() = stringPreferencesKey(BACKGROUND_COLOR_NAME)
-val CalendarIconsKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS_NAME)
-val PackageAddedNotificationKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(PACKAGE_ADDED_NOTIFICATION_NAME)
-val OverrideIconKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(OVERRIDE_ICON_NAME)
-val AutomaticallyUpdateKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(AUTOMATICALLY_UPDATE_PACK_NAME)
-val PrimarySourceKey: Preferences.Key<Int>
-    get() = intPreferencesKey(PRIMARY_SOURCE_NAME)
-val PrimaryImageEditKey: Preferences.Key<Int>
-    get() = intPreferencesKey(PRIMARY_IMAGE_EDIT_NAME)
-val PrimaryTextTypeKey: Preferences.Key<Int>
-    get() = intPreferencesKey(PRIMARY_TEXT_TYPE_NAME)
-val PrimaryIconPackKey: Preferences.Key<String>
-    get() = stringPreferencesKey(PRIMARY_ICON_PACK_NAME)
-val SecondarySourceKey: Preferences.Key<Int>
-    get() = intPreferencesKey(SECONDARY_SOURCE_NAME)
-val SecondaryImageEditKey: Preferences.Key<Int>
-    get() = intPreferencesKey(SECONDARY_IMAGE_EDIT_NAME)
-val SecondaryTextTypeKey: Preferences.Key<Int>
-    get() = intPreferencesKey(SECONDARY_TEXT_TYPE_NAME)
-val SecondaryIconPackKey: Preferences.Key<String>
-    get() = stringPreferencesKey(SECONDARY_ICON_PACK_NAME)
-val AppSortOrderKey: Preferences.Key<Int>
-    get() = intPreferencesKey(APP_SORT_ORDER_NAME)
-val AppFilterNoIconKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
+val DarkModeKey = intPreferencesKey(DARK_MODE_NAME)
+val IncludeVectorKey = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
+val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
+val ExportThemedKey = booleanPreferencesKey(EXPORT_THEMED_NAME)
+val IconColorKey = stringPreferencesKey(ICON_COLOR_NAME)
+val BackgroundColorKey = stringPreferencesKey(BACKGROUND_COLOR_NAME)
+val CalendarIconsKey = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS_NAME)
+val PackageAddedNotificationKey = booleanPreferencesKey(PACKAGE_ADDED_NOTIFICATION_NAME)
+val OverrideIconKey = booleanPreferencesKey(OVERRIDE_ICON_NAME)
+val AutomaticallyUpdateKey = booleanPreferencesKey(AUTOMATICALLY_UPDATE_PACK_NAME)
+val PrimarySourceKey = intPreferencesKey(PRIMARY_SOURCE_NAME)
+val PrimaryImageEditKey = intPreferencesKey(PRIMARY_IMAGE_EDIT_NAME)
+val PrimaryTextTypeKey = intPreferencesKey(PRIMARY_TEXT_TYPE_NAME)
+val PrimaryIconPackKey = stringPreferencesKey(PRIMARY_ICON_PACK_NAME)
+val SecondarySourceKey = intPreferencesKey(SECONDARY_SOURCE_NAME)
+val SecondaryImageEditKey = intPreferencesKey(SECONDARY_IMAGE_EDIT_NAME)
+val SecondaryTextTypeKey = intPreferencesKey(SECONDARY_TEXT_TYPE_NAME)
+val SecondaryIconPackKey = stringPreferencesKey(SECONDARY_ICON_PACK_NAME)
+val AppSortOrderKey = intPreferencesKey(APP_SORT_ORDER_NAME)
+val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
 
 @Composable
 fun DataStore<Preferences>.getPreferencesValue(): Preferences {

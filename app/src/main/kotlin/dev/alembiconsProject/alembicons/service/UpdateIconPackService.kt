@@ -64,7 +64,7 @@ class UpdateIconPackService: Service() {
         //TODO: Update notification
         appProvider.installIconPack(iconPack)
 
-        Log.debug("Alembicons", "Alchemicon Pack updated")
+        Log.debug("Renkin", "Renkin Pack updated")
 
         ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
         stopSelf()

@@ -8,11 +8,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.Preferences
-import androidx.room.Room
 import dev.alembiconsProject.alembicons.R
-import dev.alembiconsProject.alembicons.data.AlchemiconPackDatabase
 import dev.alembiconsProject.alembicons.data.CalendarIconsKey
 import dev.alembiconsProject.alembicons.data.DbApplication
+import dev.alembiconsProject.alembicons.data.RenkinPackRepository
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.ImageEdit
@@ -63,6 +62,8 @@ class ApplicationProvider(private val context: Context) {
 
     var defaultColor: Color = Color.Unspecified
 
+    private val renkinPackRepo = RenkinPackRepository(context)
+
     private var am: ApplicationManager? = null
     private val appManager: ApplicationManager
         get() {
@@ -73,7 +74,7 @@ class ApplicationProvider(private val context: Context) {
     suspend fun initialize() {
         initializeApplications()
         initializeIconPacks()
-        initializeAlchemiconPack()
+        initializeRenkinPack()
     }
 
     suspend fun initializeApplications() = withContext(Dispatchers.Default) {
@@ -90,8 +91,8 @@ class ApplicationProvider(private val context: Context) {
         getAppFilterElements()
     }
 
-    suspend fun initializeAlchemiconPack() {
-        loadAlchemiconPack()
+    suspend fun initializeRenkinPack() {
+        loadRenkinPack()
     }
 
     suspend fun retrieveOtherIcons(preferences: Preferences) = withContext(Dispatchers.Default) {
@@ -224,7 +225,7 @@ class ApplicationProvider(private val context: Context) {
             }
         }
 
-        saveAlchemiconPack()
+        saveRenkinPack()
 
         success
     }
@@ -242,15 +243,8 @@ class ApplicationProvider(private val context: Context) {
             )
     }
 
-    private suspend fun loadAlchemiconPack() = withContext(Dispatchers.Default) {
-        val db = Room.databaseBuilder(
-            context,
-            AlchemiconPackDatabase::class.java, "alchemiconPack"
-        ).build()
-
-        val dao = db.alchemiconPackDao()
-
-        val dbApps = dao.getAll()
+    private suspend fun loadRenkinPack() = withContext(Dispatchers.Default) {
+        val dbApps = renkinPackRepo.getAll()
         val apps = applicationList.toList() //clone
 
         for (app in apps) {
@@ -266,16 +260,9 @@ class ApplicationProvider(private val context: Context) {
                 editApplication(app, app.changeExport(icon))
             }
         }
-
-        db.close()
     }
 
-    private fun saveAlchemiconPack() {
-        val db = Room.databaseBuilder(
-            context,
-            AlchemiconPackDatabase::class.java, "alchemiconPack"
-        ).build()
-
+    private suspend fun saveRenkinPack() {
         val dbApps = mutableListOf<DbApplication>()
 
         for (app in applicationList) {
@@ -294,12 +281,7 @@ class ApplicationProvider(private val context: Context) {
             }
         }
 
-        val packDao = db.alchemiconPackDao()
-
-        packDao.deleteAllApplications()
-        packDao.insertAll(dbApps)
-
-        db.close()
+        renkinPackRepo.replaceAll(dbApps)
     }
 
     private fun getAppFilterElements() {
