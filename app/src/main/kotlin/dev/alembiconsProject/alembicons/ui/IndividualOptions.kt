@@ -97,7 +97,6 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Tune
@@ -285,11 +284,13 @@ fun OptionsDialog(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
+            // No imePadding here: the keyboard should overlay the bottom tabs
+            // rather than lifting them. The search field sits near the top, so it
+            // stays visible above the keyboard.
             Box(
                 Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
-                    .imePadding()
             ) {
             Column(Modifier.fillMaxSize()) {
                 // Sticky comparison header — close/delete/apply live in the same row
