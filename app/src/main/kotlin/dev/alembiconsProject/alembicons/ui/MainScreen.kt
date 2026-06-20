@@ -106,6 +106,8 @@ import dev.alembiconsProject.alembicons.data.setEnumValue
 import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -150,6 +152,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // so the search bar's clear-on-back handler takes priority while it has text.
     val context = LocalContext.current
     val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
     val pressBackMessage = stringResource(R.string.pressBackToExit)
     var lastBackPress by remember { mutableStateOf(0L) }
     BackHandler {
@@ -195,9 +198,9 @@ fun MainColumn(iconPacks: List<IconPack>) {
     }
 
     // Opened from an icon-watch notification → show the apply modal for that suggestion
-    val pendingSuggestion = activity.pendingWatchSuggestionId
+    val pendingSuggestion = viewModel.pendingWatchSuggestionId
     if (pendingSuggestion != null) {
-        WatchApplyModal(pendingSuggestion) { activity.clearPendingWatchSuggestion() }
+        WatchApplyModal(pendingSuggestion) { viewModel.clearPendingWatchSuggestion() }
     }
 }
 
@@ -210,9 +213,9 @@ fun ApplicationList(
     filterNoIcon: Boolean,
     listState: LazyListState = rememberLazyListState()
 ) {
-    val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
     val pm = LocalContext.current.packageManager
-    val applications = activity.appProvider.applicationList
+    val applications = viewModel.appProvider.applicationList
 
     // Read preferences once for the whole list — a DataStore subscription per row
     // causes visible scroll jank
@@ -251,7 +254,7 @@ fun ApplicationList(
 
     // The app list is loaded off the main thread at startup; show a spinner until
     // it arrives instead of a blank screen that looks frozen
-    if (!activity.appProvider.applicationsLoaded && applications.isEmpty()) {
+    if (!viewModel.appProvider.applicationsLoaded && applications.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             LoadingIndicator(color = MaterialTheme.colorScheme.primary)
         }
@@ -282,7 +285,7 @@ fun ApplicationItem(
     bgColorValue: Color,
     modifier: Modifier = Modifier
 ) {
-    val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
     val dynamicColor = themed && supportDynamicColors()
     val view = LocalView.current
 
@@ -292,7 +295,7 @@ fun ApplicationItem(
     Surface(
         onClick = {
             view.performTapHaptic()
-            if (activity.appProvider.iconPackLoaded) {
+            if (viewModel.appProvider.iconPackLoaded) {
                 openAppOptions = true
             } else {
                 openWarning = true
@@ -397,18 +400,19 @@ fun OpenAppOptions(
     onDismiss: () -> Unit
 ) {
     val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
 
     AppOptions(iconPacks, app, themed, { icon ->
         activity.lifecycleScope.launch(Dispatchers.Default) {
-            activity.appProvider.editApplication(index, app.changeExport(icon))
-            activity.markIconChanged(app.packageName, app.activityName)
+            viewModel.appProvider.editApplication(index, app.changeExport(icon))
+            viewModel.markIconChanged(app.packageName, app.activityName)
             onDismiss()
         }
     }, {
         onDismiss()
     }) {
         onDismiss()
-        activity.appProvider.editApplication(index, app.changeExport(null))
+        viewModel.appProvider.editApplication(index, app.changeExport(null))
     }
 }
 
@@ -418,18 +422,19 @@ fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
     val iconPackageName = preferences.getStringValue(PrimaryIconPackKey)
 
     val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
 
     var openWarning by rememberSaveable { mutableStateOf(false) }
 
     IconButton(onClick = {
         activity.lifecycleScope.launch(Dispatchers.Default) {
-            if (!activity.appProvider.iconPackLoaded && iconPackageName != "") {
+            if (!viewModel.appProvider.iconPackLoaded && iconPackageName != "") {
                 openWarning = true
                 return@launch
             }
             onChangeIsRefresh(true)
 
-            activity.appProvider.refreshIcons(preferences)
+            viewModel.appProvider.refreshIcons(preferences)
 
             onChangeIsRefresh(false)
         }
@@ -451,6 +456,7 @@ fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
 @Composable
 fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
     val preferences = getPreferences().getPreferencesValue()
     val view = LocalView.current
 
@@ -492,12 +498,12 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
                 text = ""
                 openBuilder = true
                 activity.lifecycleScope.launch(Dispatchers.Default) {
-                    val iconPack = activity.appProvider.buildAndSignIconPack(preferences) {
+                    val iconPack = viewModel.appProvider.buildAndSignIconPack(preferences) {
                         text = it
                     }
 
                     openBuilder = false
-                    openSuccess = activity.appProvider.installIconPack(iconPack)
+                    openSuccess = viewModel.appProvider.installIconPack(iconPack)
                 }
             }
         )
@@ -547,11 +553,11 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
  */
 @Composable
 fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
-    val activity = getCurrentMainActivity()
-    val changed = activity.recentlyChangedIcons.toSet()
+    val viewModel: MainViewModel = viewModel()
+    val changed = viewModel.recentlyChangedIcons.toSet()
     // Icons changed this session float to the top so the user sees them without
     // scrolling; the rest stay alphabetical
-    val themedApps = activity.appProvider.applicationList
+    val themedApps = viewModel.appProvider.applicationList
         .filter { it.createdIcon != null }
         .sortedWith(
             compareByDescending<PackageInfoStruct> { "${it.packageName}/${it.activityName}" in changed }
