@@ -416,7 +416,7 @@ class ApplicationProvider(private val context: Context) {
             map
         }
 
-    fun clearIcons() {
+    suspend fun clearIcons() = withContext(Dispatchers.Default) {
         for (app in applicationList) {
             editApplication(app, app.changeExport(null))
         }

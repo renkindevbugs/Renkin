@@ -100,7 +100,6 @@ import dev.alembiconsProject.alembicons.data.AppSortOrderKey
 import dev.alembiconsProject.alembicons.data.BackgroundColorKey
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IconPack
-import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
 import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getColorValue
 import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
@@ -108,14 +107,11 @@ import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
-import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import androidx.compose.ui.platform.LocalDensity
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.graphics.vector.ImageVector
 import dev.alembiconsProject.alembicons.MainViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 enum class AppSortOrder { NAME, INSTALL_DATE }
@@ -146,7 +142,6 @@ private fun LazyListState.isScrollingUp(): Boolean {
 @Composable
 fun MainColumn(iconPacks: List<IconPack>) {
     var packageFilter by remember { mutableStateOf("") }
-    var isInRefresh by rememberSaveable { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val listState = rememberLazyListState()
 
@@ -160,6 +155,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val context = LocalContext.current
     val activity = getCurrentMainActivity()
     val viewModel: MainViewModel = viewModel()
+    val isInRefresh = viewModel.isRefreshing
     val pressBackMessage = stringResource(R.string.pressBackToExit)
     var lastBackPress by remember { mutableStateOf(0L) }
     BackHandler {
@@ -188,7 +184,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = { TitleBar(scrollBehavior) { isInRefresh = it } },
+        topBar = { TitleBar(scrollBehavior) },
         floatingActionButton = { BuildPackFab(isInRefresh, expanded = listState.isScrollingUp()) }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
@@ -416,44 +412,29 @@ fun OpenAppOptions(
     index: Int,
     onDismiss: () -> Unit
 ) {
-    val activity = getCurrentMainActivity()
     val viewModel: MainViewModel = viewModel()
 
     AppOptions(iconPacks, app, themed, { icon ->
-        activity.lifecycleScope.launch(Dispatchers.Default) {
-            viewModel.appProvider.editApplication(index, app.changeExport(icon))
-            viewModel.markIconChanged(app.packageName, app.activityName)
-            onDismiss()
-        }
+        viewModel.applyIcon(index, app, icon)
+        onDismiss()
     }, {
         onDismiss()
     }) {
         onDismiss()
-        viewModel.appProvider.editApplication(index, app.changeExport(null))
+        viewModel.applyIcon(index, app, null)
     }
 }
 
 @Composable
-fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
+fun RefreshButton() {
     val preferences = getPreferences().getPreferencesValue()
-    val iconPackageName = preferences.getStringValue(PrimaryIconPackKey)
-
-    val activity = getCurrentMainActivity()
     val viewModel: MainViewModel = viewModel()
 
     var openWarning by rememberSaveable { mutableStateOf(false) }
 
     IconButton(onClick = {
-        activity.lifecycleScope.launch(Dispatchers.Default) {
-            if (!viewModel.appProvider.iconPackLoaded && iconPackageName != "") {
-                openWarning = true
-                return@launch
-            }
-            onChangeIsRefresh(true)
-
-            viewModel.appProvider.refreshIcons(preferences)
-
-            onChangeIsRefresh(false)
+        if (!viewModel.refresh(preferences)) {
+            openWarning = true
         }
     }) {
         Icon(
@@ -472,16 +453,14 @@ fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
-    val activity = getCurrentMainActivity()
     val viewModel: MainViewModel = viewModel()
     val preferences = getPreferences().getPreferencesValue()
     val view = LocalView.current
 
-    var openBuilder by rememberSaveable { mutableStateOf(false) }
-    var openSuccess by remember { mutableStateOf(false) }
     var openInRefresh by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(false) }
-    var text by remember { mutableStateOf("") }
+
+    val buildStep = viewModel.buildStep
 
     ExtendedFloatingActionButton(
         onClick = {
@@ -512,21 +491,12 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
             onBuild = {
                 showPreview = false
                 view.performConfirmHaptic()
-                text = ""
-                openBuilder = true
-                activity.lifecycleScope.launch(Dispatchers.Default) {
-                    val iconPack = viewModel.appProvider.buildAndSignIconPack(preferences) {
-                        text = it
-                    }
-
-                    openBuilder = false
-                    openSuccess = viewModel.appProvider.installIconPack(iconPack)
-                }
+                viewModel.build(preferences)
             }
         )
     }
 
-    if (openBuilder) {
+    if (buildStep != null) {
         AlertDialog(
             shape = RoundedCornerShape(28.dp),
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -539,9 +509,9 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
             text = {
                 // Show only the current step, crossfading between them, instead of an
                 // ever-growing log
-                Crossfade(targetState = text, label = "buildStep") { step ->
+                Crossfade(targetState = buildStep, label = "buildStep") { step ->
                     Text(
-                        text = step,
+                        text = step ?: "",
                         textAlign = TextAlign.Center,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.fillMaxWidth()
@@ -552,9 +522,9 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
         )
     }
 
-    if (openSuccess) {
+    if (viewModel.buildInstalled) {
         ShowToast(stringResource(id = R.string.iconPackInstalled))
-        openSuccess = false
+        viewModel.consumeBuildInstalled()
     }
 
     if (openInRefresh) {
@@ -705,8 +675,7 @@ private fun BuildPreviewItem(app: PackageInfoStruct, changed: Boolean = false) {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun TitleBar(
-    scrollBehavior: TopAppBarScrollBehavior? = null,
-    onRefreshChange: (Boolean) -> Unit = {}
+    scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     val prefs = getPreferences()
     val context = getCurrentContext()
@@ -728,9 +697,7 @@ fun TitleBar(
             Text(stringResource(id = R.string.app_name))
         },
         actions = {
-            RefreshButton {
-                onRefreshChange(it)
-            }
+            RefreshButton()
             IconButton(onClick = { openWatch = true }) {
                 BadgedBox(badge = {
                     if (completedCount > 0) {
