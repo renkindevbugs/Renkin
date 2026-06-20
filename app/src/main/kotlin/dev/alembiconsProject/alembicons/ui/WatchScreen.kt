@@ -704,7 +704,7 @@ private fun ActiveRuleCard(
 }
 
 /** Edit + delete for a rule, laid out horizontally (compact height) or vertically
- *  (compact width). Delete first, edit as the filled "bubble". */
+ *  (compact width). Edit first (the filled "bubble"), then delete. */
 @Composable
 private fun RuleActions(vertical: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
     val delete: @Composable () -> Unit = {
@@ -728,12 +728,12 @@ private fun RuleActions(vertical: Boolean, onEdit: () -> Unit, onDelete: () -> U
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) { delete(); edit() }
+        ) { edit(); delete() }
     } else {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) { delete(); edit() }
+        ) { edit(); delete() }
     }
 }
 
