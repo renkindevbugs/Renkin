@@ -12,10 +12,7 @@ class PackageInfoStruct(
     val icon: Drawable,
     val iconID: Int,
     val createdIcon: IconPackDrawable? = null,
-    val internalVersion: Int = 0,
-    // The Modifier-tab scale baked into createdIcon, remembered so re-editing
-    // restores the slider instead of starting from 100%. Session-only for now.
-    val iconScale: Float = 1f
+    val internalVersion: Int = 0
 ) : Comparable<PackageInfoStruct> {
     override fun equals(other: Any?): Boolean {
         if (other is PackageInfoStruct) {
@@ -31,10 +28,9 @@ class PackageInfoStruct(
     }
 
     fun changeExport(
-        createdIcon: IconPackDrawable?,
-        iconScale: Float = this.iconScale
+        createdIcon: IconPackDrawable?
     ): PackageInfoStruct {
-        return PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, iconScale)
+        return PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1)
     }
 
     fun getFileName(): String {
