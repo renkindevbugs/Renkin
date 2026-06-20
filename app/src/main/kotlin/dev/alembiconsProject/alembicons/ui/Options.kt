@@ -55,6 +55,8 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.BackgroundColorKey
 import dev.alembiconsProject.alembicons.data.CalendarIconsKey
@@ -119,7 +121,7 @@ fun OptionsCard(
     val prefs = getPreferences()
 
     // Completion progress across all apps (updates live as icons are assigned/cleared)
-    val apps = getCurrentMainActivity().appProvider.applicationList
+    val apps = viewModel<MainViewModel>().appProvider.applicationList
     val themedCount = apps.count { it.createdIcon != null }
     val totalCount = apps.size
 
@@ -500,7 +502,7 @@ fun IconPackDropdown(
     application: InstalledApplication?,
     onChange: (newValue: IconPack) -> Unit
 ) {
-    val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
     val emptyPack = IconPack("", stringResource(R.string.none), 0, "", 0)
     val newList = listOf(emptyPack) + iconPacks
     val defaultPack = newList.find { it.packageName == packageName }
@@ -510,7 +512,7 @@ fun IconPackDropdown(
     var selectedOption by remember { mutableStateOf(defaultPack ?: emptyPack) }
 
     LaunchedEffect(Unit) {
-        icons = activity.appProvider.getIconPackDropdownIcons(application)
+        icons = viewModel.appProvider.getIconPackDropdownIcons(application)
     }
 
     ExposedDropdownMenuBox(
