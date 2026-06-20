@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,8 +28,10 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -40,6 +44,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -54,8 +59,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.data.IconPack
@@ -79,7 +87,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.fadeIn
@@ -90,15 +97,16 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -122,7 +130,7 @@ fun OptionsDialog(
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
-    val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var source by rememberSaveable { mutableStateOf(Source.ICON_PACK) }
@@ -136,6 +144,10 @@ fun OptionsDialog(
     // Start with the icon the app already has so it stays visible (e.g. when only the
     // modifier is being changed) instead of forcing the user to find it again.
     var currentIcon by remember { mutableStateOf(app.createdIcon) }
+    // Raw uploaded icon (zoom/adaptive applied) before the shared modifier. The
+    // modifier is applied at dialog level (below) so it previews live even from the
+    // Modifier tab, instead of only recomputing while the Upload tab is open.
+    var uploadBase by remember { mutableStateOf<IconPackDrawable?>(null) }
     var uploadIcon by remember { mutableStateOf<IconPackDrawable?>(null) }
     var vectorIcon by remember { mutableStateOf<IconPackDrawable?>(null) }
     // Which source actually produced the icon being previewed/confirmed. Without
@@ -157,6 +169,12 @@ fun OptionsDialog(
         if (!dialogTransition.targetState && dialogTransition.isIdle) onDismiss()
     }
     val startClose: () -> Unit = { dialogTransition.targetState = false }
+
+    // The Create tab's icon-pack browser is heavy to mount, so defer it until the open
+    // animation has settled — the dialog then appears instantly
+    val createTabReady by remember {
+        derivedStateOf { dialogTransition.isIdle && dialogTransition.currentState }
+    }
 
     val heroBitmap = remember(app.icon) {
         try {
@@ -184,6 +202,9 @@ fun OptionsDialog(
         iconScale = iconScale
     )
 
+    // Drives the spinner over the "New" preview slot while an icon is (re)generated
+    var generatingPreview by remember { mutableStateOf(false) }
+
     LaunchedEffect(generatingOptions, customIconList) {
         if (!optionsInitialized) {
             // Keep the existing icon on the first composition — only regenerate once
@@ -191,22 +212,48 @@ fun OptionsDialog(
             optionsInitialized = true
             return@LaunchedEffect
         }
-        if (generatingOptions.primarySource == Source.ICON_PACK
-            && customIconList.isEmpty() && app.createdIcon == null) {
-            // Never auto-pick an icon from a pack — wait for an explicit tap
-            currentIcon = null
-            return@LaunchedEffect
-        }
         val custom = customIconList.firstOrNull()
-        currentIcon = activity.appProvider.getIcon(app, generatingOptions, custom)
+        // getIcon / applyModifier hop to Dispatchers.Default internally, so this no
+        // longer blocks the main thread; show the spinner for the duration.
+        generatingPreview = true
+        currentIcon = when {
+            // Explicit pick from a pack
+            custom != null -> viewModel.appProvider.getIcon(app, generatingOptions, custom)
+            // Icon-pack source with no new pick: apply the modifier to the already
+            // saved icon rather than pulling a fresh one from the first pack (which
+            // would swap the icon out from under the user). Null until a tap if none.
+            generatingOptions.primarySource == Source.ICON_PACK ->
+                app.createdIcon?.let { viewModel.appProvider.applyModifier(it, generatingOptions) }
+            // Text / app-icon sources generate from the source itself
+            else -> viewModel.appProvider.getIcon(app, generatingOptions, null)
+        }
+        generatingPreview = false
     }
 
     // A hand-edited vector isn't built from a source, so the modifier tab can't go
-    // through getIcon — apply the chosen modifier (colorize / path / edge) to it here
-    val modifiedVector = remember(vectorIcon, generatingOptions) {
-        val base = vectorIcon ?: return@remember null
-        if (generatingOptions.primaryImageEdit == ImageEdit.NONE) base
-        else activity.appProvider.applyModifier(base, generatingOptions)
+    // through getIcon — apply the chosen modifier (colorize / path / edge) here, off
+    // the main thread (it used to run during composition and jank the dialog).
+    var modifiedVector by remember { mutableStateOf<IconPackDrawable?>(null) }
+    LaunchedEffect(vectorIcon, generatingOptions) {
+        val base = vectorIcon
+        modifiedVector = when {
+            base == null -> null
+            generatingOptions.primaryImageEdit == ImageEdit.NONE -> base
+            else -> {
+                generatingPreview = true
+                val result = viewModel.appProvider.applyModifier(base, generatingOptions)
+                generatingPreview = false
+                result
+            }
+        }
+    }
+
+    // Uploaded image: apply the shared modifier (edit / color / scale) here at dialog
+    // level so changing it on the Modifier tab updates the preview immediately.
+    LaunchedEffect(uploadBase, generatingOptions) {
+        val base = uploadBase
+        uploadIcon = if (base == null) null
+            else viewModel.appProvider.applyModifier(base, generatingOptions)
     }
 
     // The previewed/confirmed icon follows whichever source produced it, not the
@@ -218,7 +265,7 @@ fun OptionsDialog(
     }
 
     // The modifier needs something to act on — it stays greyed out until then
-    val hasIcon = currentIcon != null || uploadIcon != null || vectorIcon != null
+    val hasIcon = currentIcon != null || uploadBase != null || vectorIcon != null
 
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarScope = rememberCoroutineScope()
@@ -229,7 +276,6 @@ fun OptionsDialog(
         // Modifiers live only in the Modifier tab — leaving it starts the next visit clean
         if (selectedTab != 2) {
             imageEdit = ImageEdit.NONE
-            iconScale = 1f
         }
     }
 
@@ -253,11 +299,13 @@ fun OptionsDialog(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.surfaceContainerLow
         ) {
+            // No imePadding here: the keyboard should overlay the bottom tabs
+            // rather than lifting them. The search field sits near the top, so it
+            // stays visible above the keyboard.
             Box(
                 Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
-                    .imePadding()
             ) {
             Column(Modifier.fillMaxSize()) {
                 // Sticky comparison header — close/delete/apply live in the same row
@@ -266,7 +314,7 @@ fun OptionsDialog(
                     heroBitmap = heroBitmap,
                     appName = app.appName,
                     previewIcon = iconToConfirm,
-                    collapsed = headerCollapsed,
+                    previewLoading = generatingPreview,
                     onDismiss = startClose,
                     onClear = { showConfirmClear = true },
                     onConfirm = { onConfirm(iconToConfirm) }
@@ -303,14 +351,11 @@ fun OptionsDialog(
                                     iconOrigin = IconOrigin.CREATE
                                 },
                                 onTextTypeChange = { textType = it; iconOrigin = IconOrigin.CREATE },
-                                onCollapsedChange = { headerCollapsed = it }
+                                onCollapsedChange = { headerCollapsed = it },
+                                contentReady = createTabReady
                             )
-                            1 -> UploadColumn(
-                                app = app,
-                                imageEdit = imageEdit,
-                                iconColor = iconColor
-                            ) {
-                                uploadIcon = it
+                            1 -> UploadColumn(app = app) {
+                                uploadBase = it
                                 if (it != null) iconOrigin = IconOrigin.UPLOAD
                             }
                             2 -> ModifierTab(
@@ -468,21 +513,169 @@ private fun ComparisonHeader(
     heroBitmap: Bitmap?,
     appName: String,
     previewIcon: IconPackDrawable?,
-    collapsed: Boolean,
+    previewLoading: Boolean,
     onDismiss: () -> Unit,
     onClear: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    val iconSize by animateDpAsState(
-        targetValue = if (collapsed) 36.dp else 64.dp,
-        animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow),
-        label = "headerIconSize"
+    // Both icons fly up into their slots when the dialog opens
+    val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
+    val flyInSpec = spring<androidx.compose.ui.unit.IntOffset>(
+        Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow
     )
-    val verticalPadding by animateDpAsState(
-        targetValue = if (collapsed) 6.dp else 12.dp,
-        animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow),
-        label = "headerPadding"
-    )
+    val flyInEnter = remember(flyInSpec) {
+        slideInVertically(flyInSpec) { it * 2 } + fadeIn() + scaleIn(initialScale = 0.5f)
+    }
+    var menuOpen by remember { mutableStateOf(false) }
+
+    // On wide screens (tablet / unfolded foldable) the whole header fits on a
+    // single row; on phones it stacks into two tiers so nothing gets cramped.
+    val wide = LocalConfiguration.current.screenWidthDp >= 600
+
+    val closeButton: @Composable () -> Unit = {
+        FilledTonalIconButton(onClick = onDismiss, modifier = Modifier.size(40.dp)) {
+            Icon(
+                imageVector = Icons.Filled.Close,
+                contentDescription = stringResource(R.string.dismiss),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+
+    val overflow: @Composable () -> Unit = {
+        Box {
+            IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    imageVector = Icons.Filled.MoreVert,
+                    contentDescription = stringResource(R.string.moreOptions),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = stringResource(R.string.resetToDefault),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    leadingIcon = {
+                        Icon(
+                            imageVector = Icons.Filled.Delete,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error
+                        )
+                    },
+                    onClick = {
+                        menuOpen = false
+                        onClear()
+                    }
+                )
+            }
+        }
+    }
+
+    val currentSlot: @Composable (androidx.compose.ui.unit.Dp, Boolean) -> Unit = { size, showLabel ->
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
+                if (heroBitmap != null) {
+                    Image(
+                        painter = BitmapPainter(heroBitmap.asImageBitmap()),
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(size)
+                            .clip(RoundedCornerShape(size / 4))
+                    )
+                } else {
+                    Surface(
+                        modifier = Modifier.size(size),
+                        shape = RoundedCornerShape(size / 4),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Icon(Icons.Filled.Face, null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(size / 2))
+                        }
+                    }
+                }
+            }
+            if (showLabel) {
+                Text(
+                    text = stringResource(R.string.iconCurrent),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+    }
+
+    val newSlot: @Composable (androidx.compose.ui.unit.Dp, Boolean) -> Unit = { size, showLabel ->
+        val borderColor = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
+                Surface(
+                    modifier = Modifier.size(size),
+                    shape = RoundedCornerShape(size / 4),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(2.dp, borderColor)
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        if (previewIcon != null) {
+                            Image(
+                                painter = previewIcon.getPainter(),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outlineVariant,
+                                modifier = Modifier.size(size / 2)
+                            )
+                        }
+                        // Spinner over the slot while the new icon is being (re)generated
+                        if (previewLoading) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(size / 2),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            }
+            if (showLabel) {
+                Text(
+                    text = stringResource(R.string.iconNew),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+    }
+
+    val arrow: @Composable () -> Unit = {
+        Text(
+            text = "→",
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.padding(horizontal = 12.dp)
+        )
+    }
+
+    val applyButton: @Composable (Modifier) -> Unit = { mod ->
+        Button(onClick = onConfirm, modifier = mod) {
+            Icon(
+                imageVector = Icons.Filled.Done,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(stringResource(R.string.apply))
+        }
+    }
 
     ElevatedCard(
         modifier = Modifier
@@ -493,114 +686,92 @@ private fun ComparisonHeader(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = verticalPadding),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            FilledTonalIconButton(onClick = onDismiss, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = stringResource(R.string.dismiss),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-
-            // Both icons fly up into their header slots when the dialog opens
-            val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
-            val flyInSpec = spring<androidx.compose.ui.unit.IntOffset>(
-                Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow
-            )
-
-            AnimatedVisibility(
-                visibleState = flyIn,
-                enter = slideInVertically(flyInSpec) { it * 2 } + fadeIn() +
-                        scaleIn(initialScale = 0.5f)
-            ) {
-                if (heroBitmap != null) {
-                    Image(
-                        painter = BitmapPainter(heroBitmap.asImageBitmap()),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(iconSize)
-                            .clip(RoundedCornerShape(iconSize / 4))
-                    )
-                } else {
-                    Surface(
-                        modifier = Modifier.size(iconSize),
-                        shape = RoundedCornerShape(iconSize / 4),
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Filled.Face, null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(iconSize / 2))
-                        }
-                    }
-                }
-            }
-
-            Text(
-                text = "→",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
-
-            val borderColor = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-            AnimatedVisibility(
-                visibleState = flyIn,
-                enter = slideInVertically(flyInSpec) { it * 2 } + fadeIn() +
-                        scaleIn(initialScale = 0.5f)
-            ) {
-                Surface(
-                    modifier = Modifier.size(iconSize),
-                    shape = RoundedCornerShape(iconSize / 4),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    border = BorderStroke(2.dp, borderColor)
-                ) {
-                    if (previewIcon != null) {
-                        Image(
-                            painter = previewIcon.getPainter(),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.Add,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.outlineVariant,
-                                modifier = Modifier.size(iconSize / 2)
-                            )
-                        }
-                    }
-                }
-            }
-
-            Text(
-                text = appName,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
+        if (wide) {
+            // Single compact row — close + name on the left, comparison icons
+            // centered, apply + overflow on the right. Left and right clusters
+            // share equal weight so the icons land dead-center; a long name gets
+            // ellipsised before it can reach them.
+            Row(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(start = 2.dp)
-            )
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    closeButton()
+                    Text(
+                        text = appName,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .padding(horizontal = 4.dp)
+                    )
+                }
 
-            IconButton(onClick = onClear, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = stringResource(R.string.clearIcons),
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(20.dp)
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    currentSlot(44.dp, false)
+                    arrow()
+                    newSlot(44.dp, false)
+                }
+
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)
+                ) {
+                    applyButton(Modifier)
+                    overflow()
+                }
             }
-            FilledIconButton(onClick = onConfirm, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = Icons.Filled.Done,
-                    contentDescription = stringResource(R.string.confirm),
-                    modifier = Modifier.size(20.dp)
+        } else {
+            // Tier 1 — app bar: close, name, overflow (destructive reset lives here)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 8.dp, end = 8.dp, top = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                closeButton()
+                Text(
+                    text = appName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 4.dp)
+                )
+                overflow()
+            }
+
+            // Tier 2 — comparison hero (Current → New) with Apply as primary action
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    currentSlot(56.dp, true)
+                    arrow()
+                    newSlot(56.dp, true)
+                }
+                applyButton(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(top = 12.dp)
                 )
             }
         }

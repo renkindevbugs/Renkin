@@ -2,29 +2,27 @@ package dev.alembiconsProject.alembicons
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.lifecycle.lifecycleScope
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
-import dev.alembiconsProject.alembicons.apk.ApplicationProvider
 import dev.alembiconsProject.alembicons.data.PackageAddedNotificationKey
 import dev.alembiconsProject.alembicons.data.getPreferenceFlow
 import dev.alembiconsProject.alembicons.data.isDarkModeEnabled
-import dev.alembiconsProject.alembicons.data.isSystemInDarkTheme
 import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
@@ -34,56 +32,52 @@ import dev.alembiconsProject.alembicons.service.PackageAddedService
 import dev.alembiconsProject.alembicons.service.WatchWorker
 import dev.alembiconsProject.alembicons.ui.*
 import dev.alembiconsProject.alembicons.ui.theme.IconerationTheme
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 class MainActivity : ComponentActivity() {
-    val appProvider = ApplicationProvider(this)
+    private val viewModel: MainViewModel by viewModels()
 
-    // Keys ("package/activity") of icons changed in this session, so the pack preview
-    // can surface them first and flag them. Session-only (cleared on restart).
-    // NOTE: experimental review aid — safe to drop with the commit that added it.
-    val recentlyChangedIcons = androidx.compose.runtime.mutableStateListOf<String>()
+    // Delegated to the ViewModel so the provider and its loaded state survive
+    // configuration changes. Existing getCurrentMainActivity().appProvider call
+    // sites keep working unchanged.
+    val appProvider get() = viewModel.appProvider
 
-    fun markIconChanged(packageName: String, activityName: String) {
-        val key = "$packageName/$activityName"
-        if (key !in recentlyChangedIcons) recentlyChangedIcons.add(key)
-    }
-
-    // Set when opened from an icon-watch notification; the home screen shows the apply
-    // modal for this suggestion (consumed in the watch apply flow, phase 6).
-    var pendingWatchSuggestionId by mutableStateOf<Long?>(null)
-        private set
+    // Session state lives in the ViewModel (survives rotation). These are thin
+    // passthroughs so existing getCurrentMainActivity().<x> call sites keep working.
+    val recentlyChangedIcons get() = viewModel.recentlyChangedIcons
+    fun markIconChanged(packageName: String, activityName: String) =
+        viewModel.markIconChanged(packageName, activityName)
+    val pendingWatchSuggestionId get() = viewModel.pendingWatchSuggestionId
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        appProvider.defaultColor = if (this.isSystemInDarkTheme()) Color.White else Color.Black
+        // Landscape is only allowed on large screens (sw >= 600dp). Phones and
+        // folded foldables stay locked to portrait.
+        requestedOrientation = if (resources.getBoolean(R.bool.allowLandscape)) {
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
 
+        // App + pack loading now lives in MainViewModel, so it runs once and
+        // survives configuration changes (rotation) instead of re-loading.
         handleWatchIntent(intent)
-
-        appProvider.initializeApplications()
-        CoroutineScope(Dispatchers.Default).launch {
-            appProvider.initializeIconPacks()
-        }
-        CoroutineScope(Dispatchers.Default).launch {
-            appProvider.initializeAlchemiconPack()
-        }
 
         // Icon-watch (phase 4): the daily safety-net check is always scheduled (version-gated,
         // so it's near-free when nothing changed); the event-driven fast path needs the
         // package receiver running, so start it when there are active watch rules.
-        CoroutineScope(Dispatchers.Default).launch {
+        lifecycleScope.launch(Dispatchers.Default) {
             WatchWorker.schedulePeriodic(applicationContext)
             if (WatchRepository(applicationContext).getActiveRules().isNotEmpty()) {
                 startPackageAddedService()
             }
         }
 
-        CoroutineScope(Dispatchers.Default).launch {
+        lifecycleScope.launch(Dispatchers.Default) {
             applicationContext.dataStore.getPreferenceFlow(PackageAddedNotificationKey).collect {
                 if (it == true) {
                     if (PermissionManager(this@MainActivity).isPostNotificationEnabled()) {
@@ -123,13 +117,13 @@ class MainActivity : ComponentActivity() {
     private fun handleWatchIntent(intent: Intent?) {
         if (intent?.action == ACTION_OPEN_SUGGESTION) {
             val id = intent.getLongExtra(EXTRA_SUGGESTION_ID, -1L)
-            if (id >= 0) pendingWatchSuggestionId = id
+            if (id >= 0) viewModel.setPendingWatchSuggestion(id)
         }
     }
 
     /** Called once the apply modal has handled (applied or dismissed) the suggestion. */
     fun clearPendingWatchSuggestion() {
-        pendingWatchSuggestionId = null
+        viewModel.clearPendingWatchSuggestion()
     }
 
     private fun edgeToEdge(darkMode: Boolean) {

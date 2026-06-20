@@ -89,6 +89,7 @@ dependencies {
     androidTestImplementation(composeBom)
     implementation(libs.androidx.material3.android)
     implementation(libs.androidx.activity.compose)
+    implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.colorpicker.compose)
     implementation("androidx.compose.material:material-icons-extended")
 

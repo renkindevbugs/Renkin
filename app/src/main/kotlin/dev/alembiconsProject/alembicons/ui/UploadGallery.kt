@@ -82,15 +82,11 @@ import com.caverock.androidsvg.SVG
 import com.caverock.androidsvg.SVGParseException
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.ImageEdit
-import dev.alembiconsProject.alembicons.data.Source
-import dev.alembiconsProject.alembicons.data.TextType
 import dev.alembiconsProject.alembicons.data.UploadedImageStore
 import dev.alembiconsProject.alembicons.drawable.BitmapIconDrawable
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
-import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
 import dev.alembiconsProject.alembicons.extension.toDrawable
-import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import java.io.File
 import java.io.InputStream
@@ -103,15 +99,12 @@ const val MIME_TYPE_IMAGE = "image/*"
 
 @Composable
 fun UploadColumn(app: PackageInfoStruct,
-                 imageEdit: ImageEdit,
-                 iconColor: Color,
                  onChange: (icon: IconPackDrawable?) -> Unit) {
     var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
     var zoomLevel by rememberSaveable { mutableFloatStateOf(1f) }
     var selectedImagePath by rememberSaveable { mutableStateOf<String?>(null) }
     var savedImages by remember { mutableStateOf<List<File>>(emptyList()) }
     var uploadedImage by remember { mutableStateOf(null as Bitmap?) }
-    var modifiedImage by remember { mutableStateOf(null as Bitmap?) }
     var mask by remember { mutableStateOf(null as Bitmap?) }
     var uploadError by remember { mutableStateOf(false) }
     var selectionMode by remember { mutableStateOf(false) }
@@ -120,7 +113,6 @@ fun UploadColumn(app: PackageInfoStruct,
     var isUploading by remember { mutableStateOf(false) }
     val maxSize = 500
 
-    val activity = getCurrentMainActivity()
     val context = getCurrentContext()
     val res = context.resources
     val scope = rememberCoroutineScope()
@@ -161,7 +153,6 @@ fun UploadColumn(app: PackageInfoStruct,
         val path = selectedImagePath
         if (path == null) {
             uploadedImage = null
-            modifiedImage = null
             onChange(null)
             return@LaunchedEffect
         }
@@ -173,13 +164,6 @@ fun UploadColumn(app: PackageInfoStruct,
         } else {
             uploadError = true
         }
-    }
-
-    // The bottom-bar Modifier tab drives image edits for the uploaded image too
-    LaunchedEffect(uploadedImage, imageEdit, iconColor) {
-        val image = uploadedImage ?: return@LaunchedEffect
-        val generatingOptions = GenerationOptions(Source.ICON_PACK, imageEdit, TextType.FULL_NAME, "", iconColor.toInt(), 0, false, false, false, true)
-        modifiedImage = activity.appProvider.getIcon(app, generatingOptions, ResourceDrawable(0, image.toDrawable(res)))?.toBitmap()
     }
 
     if (uploadError) {
@@ -238,7 +222,7 @@ fun UploadColumn(app: PackageInfoStruct,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val editedImage = modifiedImage
+                val editedImage = uploadedImage
                 if (editedImage != null) {
                     item(key = "editor", span = { GridItemSpan(maxLineSpan) }) {
                         val zoomedImage = zoomBitmap(editedImage, zoomLevel)

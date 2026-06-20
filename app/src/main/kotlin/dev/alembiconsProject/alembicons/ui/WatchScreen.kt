@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
@@ -86,7 +87,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
@@ -97,6 +100,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.alembiconsProject.alembicons.BuildConfig
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.AppComponent
@@ -118,18 +123,19 @@ import kotlinx.coroutines.withContext
 @Composable
 fun WatchScreen(onDismiss: () -> Unit) {
     val context = getCurrentContext()
-    val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
     val repo = remember { WatchRepository(context) }
     val scope = rememberCoroutineScope()
 
     val rules by repo.rules.collectAsState(initial = emptyList())
-    val apps = activity.appProvider.applicationList
-    val packs = activity.appProvider.iconPacks
+    val apps = viewModel.appProvider.applicationList
+    val packs = viewModel.appProvider.iconPacks
 
     // null = list; otherwise the editor is open (editing this rule, or a new rule when blank)
     var showEditor by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<RuleWithDetails?>(null) }
     var pendingDelete by remember { mutableStateOf<Long?>(null) }
+    var pendingDeleteAllCompleted by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     var applySuggestionId by remember { mutableStateOf<Long?>(null) }
 
@@ -216,6 +222,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         onEdit = { editing = it; showEditor = true },
                         onApply = { rule -> rule.suggestions.firstOrNull()?.id?.let { applySuggestionId = it } },
                         onDelete = { ruleId -> pendingDelete = ruleId },
+                        onDeleteAllCompleted = { pendingDeleteAllCompleted = true },
                         onSimulate = {
                             scope.launch {
                                 // Establish a baseline, stale it, then re-check via the worker
@@ -233,11 +240,25 @@ fun WatchScreen(onDismiss: () -> Unit) {
     }
 
     pendingDelete?.let { ruleId ->
-        DeleteRuleDialog(
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.deleteRuleTitle),
+            text = stringResource(R.string.deleteRuleText),
             onDismiss = { pendingDelete = null },
             onConfirm = {
                 pendingDelete = null
                 scope.launch { repo.deleteRule(ruleId) }
+            }
+        )
+    }
+
+    if (pendingDeleteAllCompleted) {
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.deleteAllCompletedTitle),
+            text = stringResource(R.string.deleteAllCompletedText),
+            onDismiss = { pendingDeleteAllCompleted = false },
+            onConfirm = {
+                pendingDeleteAllCompleted = false
+                scope.launch { repo.deleteRules(rules.filter { it.rule.completed }.map { it.rule.id }) }
             }
         )
     }
@@ -257,7 +278,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
 @Composable
 fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     val context = getCurrentContext()
-    val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
     val repo = remember { WatchRepository(context) }
     val prefs = getPreferences()
     val scope = rememberCoroutineScope()
@@ -280,7 +301,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         if (s == null) onDismiss() // already handled/deleted → nothing to show
     }
 
-    val apps = activity.appProvider.applicationList
+    val apps = viewModel.appProvider.applicationList
     val app = suggestion?.let { s -> apps.find { it.packageName == s.packageName && it.activityName == s.activityName } }
 
     // (Re)generate the new icon for the selected pack
@@ -299,12 +320,15 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         newIcon = null
         newIcon = withContext(Dispatchers.Default) {
             val options = GenerationOptions.fromPreferences(prefs.data.first(), context, override = true)
-            activity.appProvider.getIconFromPackDrawable(targetApp, pack, candidate.drawableName, options)
+            viewModel.appProvider.getIconFromPackDrawable(targetApp, pack, candidate.drawableName, options)
         }
         generating = false
     }
 
     if (!loaded || suggestion == null) return
+    // When opened cold from a notification the app list / packs may still be
+    // loading; wait so the modal shows real icons instead of empty placeholders.
+    if (!viewModel.appProvider.applicationsLoaded || !viewModel.appProvider.iconPackLoaded) return
 
     AlertDialog(
         shape = RoundedCornerShape(28.dp),
@@ -344,7 +368,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     candidates.forEach { candidate ->
-                        val pack = packsName(activity.appProvider.iconPacks, candidate.iconPackPackage)
+                        val pack = packsName(viewModel.appProvider.iconPacks, candidate.iconPackPackage)
                         FilterChip(
                             selected = selectedPack == candidate.iconPackPackage,
                             onClick = { selectedPack = candidate.iconPackPackage },
@@ -377,8 +401,8 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                                 it.packageName == targetApp.packageName && it.activityName == targetApp.activityName
                             }
                             if (index >= 0) {
-                                activity.appProvider.editApplication(index, targetApp.changeExport(icon))
-                                activity.markIconChanged(targetApp.packageName, targetApp.activityName)
+                                viewModel.appProvider.editApplication(index, targetApp.changeExport(icon))
+                                viewModel.markIconChanged(targetApp.packageName, targetApp.activityName)
                             }
                             // Applying handles the rule, so remove it (cascades the suggestion)
                             suggestion?.ruleId?.let { ruleId -> scope.launch { repo.deleteRule(ruleId) } }
@@ -436,13 +460,13 @@ private fun packsName(packs: List<IconPack>, packageName: String): String =
     packs.find { it.packageName == packageName }?.applicationName ?: packageName
 
 @Composable
-private fun DeleteRuleDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+private fun ConfirmDeleteDialog(title: String, text: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     androidx.compose.material3.AlertDialog(
         shape = RoundedCornerShape(28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.deleteRuleTitle)) },
-        text = { Text(stringResource(R.string.deleteRuleText)) },
+        title = { Text(title) },
+        text = { Text(text) },
         confirmButton = {
             IconButton(onClick = onConfirm) {
                 Icon(Icons.Filled.Check, stringResource(R.string.confirm), tint = MaterialTheme.colorScheme.primary)
@@ -473,6 +497,7 @@ private fun WatchRuleList(
     onEdit: (RuleWithDetails) -> Unit,
     onApply: (RuleWithDetails) -> Unit,
     onDelete: (Long) -> Unit,
+    onDeleteAllCompleted: () -> Unit,
     onSimulate: () -> Unit
 ) {
     val completed = rules.filter { it.rule.completed }
@@ -535,7 +560,21 @@ private fun WatchRuleList(
                         }
                     }
                     if (completed.isNotEmpty()) {
-                        item { SectionLabel(stringResource(R.string.watchCompleted)) }
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                SectionLabel(stringResource(R.string.watchCompleted), Modifier.weight(1f))
+                                IconButton(onClick = onDeleteAllCompleted, modifier = Modifier.size(36.dp)) {
+                                    Icon(
+                                        Icons.Filled.Delete,
+                                        stringResource(R.string.deleteAllCompleted),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
                         items(completed, key = { it.rule.id }) { rule ->
                             Box(Modifier.animateItem()) {
                                 CompletedRuleCard(
@@ -569,6 +608,7 @@ private fun WatchRuleList(
             containerColor = MaterialTheme.colorScheme.primary,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
+                .navigationBarsPadding()
                 .padding(20.dp)
         ) {
             Icon(Icons.Filled.Add, stringResource(R.string.addWatchRule))
@@ -577,12 +617,12 @@ private fun WatchRuleList(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-        modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+        modifier = modifier.padding(start = 4.dp, top = 4.dp)
     )
 }
 
@@ -600,28 +640,46 @@ private fun ActiveRuleCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp)) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                rule.apps.forEach { ra ->
-                    val app = apps.find { it.packageName == ra.packageName && it.activityName == ra.activityName }
-                    AppPill(app, ra.packageName)
+            // Edit/delete live in the header next to the apps, so the pack chips
+            // below can use the card's full width (and wrap under everything).
+            Row(verticalAlignment = Alignment.Top) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    rule.apps.forEach { ra ->
+                        val app = apps.find { it.packageName == ra.packageName && it.activityName == ra.activityName }
+                        AppPill(app, ra.packageName)
+                    }
                 }
+                // Few apps fit on one row, so lay the actions out horizontally (keeps
+                // the card short); once the apps wrap to several rows, stack the actions
+                // vertically so they steal less width. Just a count check — no measuring.
+                RuleActions(vertical = rule.apps.size > 3, onEdit = onEdit, onDelete = onDelete)
             }
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 10.dp),
                 color = MaterialTheme.colorScheme.outlineVariant
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.watching),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 8.dp)
+                    modifier = Modifier
+                        .align(Alignment.CenterVertically)
+                        .padding(end = 4.dp)
                 )
                 if (rule.rule.watchAllPacks) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.align(Alignment.CenterVertically)
+                    ) {
                         Icon(
                             Icons.Filled.Layers, null,
                             tint = MaterialTheme.colorScheme.primary,
@@ -635,33 +693,47 @@ private fun ActiveRuleCard(
                         )
                     }
                 } else {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        rule.packs.forEach { rp ->
-                            val pack = packs.find { it.packageName == rp.iconPackPackage }
-                            PackLabel(rp.iconPackPackage, pack?.applicationName)
-                        }
+                    rule.packs.forEach { rp ->
+                        val pack = packs.find { it.packageName == rp.iconPackPackage }
+                        PackLabel(rp.iconPackPackage, pack?.applicationName)
                     }
-                }
-                IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Filled.Edit, stringResource(R.string.editWatchRule),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Filled.Delete, stringResource(R.string.deleteRule),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp)
-                    )
                 }
             }
         }
+    }
+}
+
+/** Edit + delete for a rule, laid out horizontally (compact height) or vertically
+ *  (compact width). Edit first (the filled "bubble"), then delete. */
+@Composable
+private fun RuleActions(vertical: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
+    val delete: @Composable () -> Unit = {
+        IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+            Icon(
+                Icons.Filled.Delete, stringResource(R.string.deleteRule),
+                tint = MaterialTheme.colorScheme.error,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+    val edit: @Composable () -> Unit = {
+        FilledTonalIconButton(onClick = onEdit, modifier = Modifier.size(40.dp)) {
+            Icon(
+                Icons.Filled.Edit, stringResource(R.string.editWatchRule),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+    if (vertical) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) { edit(); delete() }
+    } else {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) { edit(); delete() }
     }
 }
 
@@ -707,18 +779,22 @@ private fun CompletedRuleCard(
                 modifier = Modifier.padding(vertical = 10.dp),
                 color = MaterialTheme.colorScheme.outlineVariant
             )
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.newIconIn),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(end = 8.dp)
+                    modifier = Modifier
+                        .align(Alignment.CenterVertically)
+                        .padding(end = 4.dp)
                 )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    rule.packs.forEach { rp ->
-                        val pack = packs.find { it.packageName == rp.iconPackPackage }
-                        PackLabel(rp.iconPackPackage, pack?.applicationName)
-                    }
+                rule.packs.forEach { rp ->
+                    val pack = packs.find { it.packageName == rp.iconPackPackage }
+                    PackLabel(rp.iconPackPackage, pack?.applicationName)
                 }
             }
         }
@@ -777,12 +853,17 @@ private fun WatchRuleEditor(
     var showSortMenu by remember { mutableStateOf(false) }
 
     val context = getCurrentContext()
-    // First-install times don't change at runtime; recompute only when the set changes
-    val installTimes = remember(apps.size) {
-        apps.associate { app ->
-            app.packageName to runCatching {
-                context.packageManager.getPackageInfo(app.packageName, 0).firstInstallTime
-            }.getOrDefault(0L)
+    // Reading first-install time hits PackageManager once per app; doing it for every
+    // app on the main thread was what made the editor take ~1s to open. Compute it off
+    // the main thread instead — until it arrives, INSTALL_DATE sort just shows the
+    // default order. (Times don't change at runtime, so this runs once per app set.)
+    val installTimes by produceState(emptyMap<String, Long>(), apps) {
+        value = withContext(Dispatchers.IO) {
+            apps.associate { app ->
+                app.packageName to runCatching {
+                    context.packageManager.getPackageInfo(app.packageName, 0).firstInstallTime
+                }.getOrDefault(0L)
+            }
         }
     }
 
@@ -811,7 +892,7 @@ private fun WatchRuleEditor(
 
     val canSave = selectedApps.isNotEmpty() && (watchAll || selectedPacks.isNotEmpty())
 
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().navigationBarsPadding()) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1128,17 +1209,26 @@ private fun <T> TileRows(items: List<T>, columns: Int = 3, tile: @Composable (T)
 
 @Composable
 private fun rememberAppBitmap(app: PackageInfoStruct): ImageBitmap? {
-    return remember(app.packageName, app.internalVersion) {
-        app.icon.toSafeBitmapOrNull()?.asImageBitmap()
+    // Tiles show the icon at 54.dp; render at that size instead of full native
+    // resolution so a gridful of icons is cheap to build (and light on memory).
+    val density = LocalDensity.current
+    return remember(app.packageName, app.internalVersion, density) {
+        val target = with(density) { 54.dp.roundToPx() }
+        val size = app.icon.intrinsicWidth.let { if (it in 1 until target) it else target }
+        app.icon.toSafeBitmapOrNull(size, size)?.asImageBitmap()
     }
 }
 
 @Composable
 private fun rememberPackBitmap(packPackage: String): ImageBitmap? {
     val context = getCurrentContext()
-    return remember(packPackage) {
+    val density = LocalDensity.current
+    return remember(packPackage, density) {
         try {
-            context.packageManager.getApplicationIcon(packPackage).toSafeBitmapOrNull()?.asImageBitmap()
+            val drawable = context.packageManager.getApplicationIcon(packPackage)
+            val target = with(density) { 54.dp.roundToPx() }
+            val size = drawable.intrinsicWidth.let { if (it in 1 until target) it else target }
+            drawable.toSafeBitmapOrNull(size, size)?.asImageBitmap()
         } catch (_: Exception) {
             null
         }
@@ -1250,19 +1340,28 @@ private fun AppIcon(app: PackageInfoStruct?, fallbackPackage: String, size: andr
     }
 }
 
-@Composable
-private fun PackIconImage(packPackage: String, size: androidx.compose.ui.unit.Dp) {
-    val context = getCurrentContext()
-    val bitmap = remember(packPackage) {
+// Pack icons appear as small chips repeated across many rule cards, and the LazyColumn
+// re-creates them on every scroll. Decode each pack icon once (small) and cache it
+// process-wide so scrolling doesn't keep hitting PackageManager / re-decoding bitmaps.
+private val packIconCache = mutableMapOf<String, ImageBitmap?>()
+
+private fun packIconBitmap(context: android.content.Context, packPackage: String): ImageBitmap? =
+    packIconCache.getOrPut(packPackage) {
         try {
-            context.packageManager.getApplicationIcon(packPackage).toSafeBitmapOrNull()
+            context.packageManager.getApplicationIcon(packPackage)
+                .toSafeBitmapOrNull(72, 72)?.asImageBitmap()
         } catch (_: Exception) {
             null
         }
     }
+
+@Composable
+private fun PackIconImage(packPackage: String, size: androidx.compose.ui.unit.Dp) {
+    val context = getCurrentContext()
+    val bitmap = remember(packPackage) { packIconBitmap(context, packPackage) }
     if (bitmap != null) {
         Image(
-            painter = BitmapPainter(bitmap.asImageBitmap()),
+            painter = BitmapPainter(bitmap),
             contentDescription = null,
             modifier = Modifier
                 .size(size)

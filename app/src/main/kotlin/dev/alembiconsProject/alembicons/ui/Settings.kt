@@ -38,6 +38,7 @@ import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.apk.ApkUninstaller
+import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.data.AutomaticallyUpdateKey
 import dev.alembiconsProject.alembicons.data.DARK_MODE_DEFAULT
 import dev.alembiconsProject.alembicons.data.DarkMode
@@ -49,7 +50,9 @@ import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
 import dev.alembiconsProject.alembicons.packages.PermissionManager
-import kotlinx.coroutines.CoroutineScope
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -178,11 +181,15 @@ private val settingsButtonModifier: Modifier
 @Composable
 fun SyncButton() {
     val mainActivity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
+    val context = getCurrentContext()
+    var done by remember { mutableStateOf(false) }
 
     Button(
         onClick = {
-            CoroutineScope(Dispatchers.Default).launch {
-                mainActivity.appProvider.forceSync()
+            mainActivity.lifecycleScope.launch(Dispatchers.Default) {
+                viewModel.appProvider.forceSync()
+                done = true
             }
         },
         shape = RoundedCornerShape(16.dp),
@@ -190,22 +197,36 @@ fun SyncButton() {
     ) {
         Text(stringResource(R.string.syncPacks))
     }
+
+    if (done) {
+        ShowToast(context.getString(R.string.packsSynced))
+        done = false
+    }
 }
 
 @Composable
 fun RefreshApplicationListButton() {
     val mainActivity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
+    val context = getCurrentContext()
+    var done by remember { mutableStateOf(false) }
 
     Button(
         onClick = {
-            CoroutineScope(Dispatchers.Default).launch {
-                mainActivity.appProvider.initialize()
+            mainActivity.lifecycleScope.launch(Dispatchers.Default) {
+                viewModel.appProvider.initialize()
+                done = true
             }
         },
         shape = RoundedCornerShape(16.dp),
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.refreshApplicationList))
+    }
+
+    if (done) {
+        ShowToast(context.getString(R.string.appListRefreshed))
+        done = false
     }
 }
 
@@ -215,12 +236,21 @@ fun DeleteIconPackButton() {
     val scope = rememberCoroutineScope()
 
     var openSuccess by rememberSaveable { mutableStateOf(false) }
+    var notInstalled by rememberSaveable { mutableStateOf(false) }
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
         onClick = {
             scope.launch {
-                openSuccess = ApkUninstaller(context).uninstall("com.kaanelloed.iconerationiconpack")
+                // Don't try (and then falsely report success) when the pack isn't installed
+                val installed = runCatching {
+                    context.packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
+                }.isSuccess
+                if (installed) {
+                    openSuccess = ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)
+                } else {
+                    notInstalled = true
+                }
             }
         },
         shape = RoundedCornerShape(16.dp),
@@ -237,17 +267,22 @@ fun DeleteIconPackButton() {
         ShowToast(context.getString(R.string.iconPackUninstalled))
         openSuccess = false
     }
+    if (notInstalled) {
+        ShowToast(context.getString(R.string.iconPackNotInstalled))
+        notInstalled = false
+    }
 }
 
 @Composable
 fun RemoveIconsButton() {
     val mainActivity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
         onClick = {
-            CoroutineScope(Dispatchers.Default).launch {
-                mainActivity.appProvider.clearIcons()
+            mainActivity.lifecycleScope.launch(Dispatchers.Default) {
+                viewModel.appProvider.clearIcons()
             }
         },
         shape = RoundedCornerShape(16.dp),
