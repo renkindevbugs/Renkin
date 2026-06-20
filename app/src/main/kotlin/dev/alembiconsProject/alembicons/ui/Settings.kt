@@ -20,6 +20,7 @@ import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -260,10 +261,11 @@ fun DeleteIconPackButton() {
 @Composable
 fun RemoveIconsButton() {
     val viewModel: MainViewModel = viewModel()
+    var confirm by rememberSaveable { mutableStateOf(false) }
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
-        onClick = { viewModel.clearIcons() },
+        onClick = { confirm = true },
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -272,6 +274,32 @@ fun RemoveIconsButton() {
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.clearIcons))
+    }
+
+    if (confirm) {
+        AlertDialog(
+            shape = RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(R.string.clearIconsTitle)) },
+            text = { Text(stringResource(R.string.clearIconsText)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirm = false
+                    viewModel.clearIcons()
+                }) {
+                    Text(
+                        stringResource(R.string.confirm),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirm = false }) {
+                    Text(stringResource(R.string.dismiss))
+                }
+            }
+        )
     }
 }
 
