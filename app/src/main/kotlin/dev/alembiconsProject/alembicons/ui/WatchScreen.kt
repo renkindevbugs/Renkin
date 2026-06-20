@@ -1273,19 +1273,28 @@ private fun AppIcon(app: PackageInfoStruct?, fallbackPackage: String, size: andr
     }
 }
 
-@Composable
-private fun PackIconImage(packPackage: String, size: androidx.compose.ui.unit.Dp) {
-    val context = getCurrentContext()
-    val bitmap = remember(packPackage) {
+// Pack icons appear as small chips repeated across many rule cards, and the LazyColumn
+// re-creates them on every scroll. Decode each pack icon once (small) and cache it
+// process-wide so scrolling doesn't keep hitting PackageManager / re-decoding bitmaps.
+private val packIconCache = mutableMapOf<String, ImageBitmap?>()
+
+private fun packIconBitmap(context: android.content.Context, packPackage: String): ImageBitmap? =
+    packIconCache.getOrPut(packPackage) {
         try {
-            context.packageManager.getApplicationIcon(packPackage).toSafeBitmapOrNull()
+            context.packageManager.getApplicationIcon(packPackage)
+                .toSafeBitmapOrNull(72, 72)?.asImageBitmap()
         } catch (_: Exception) {
             null
         }
     }
+
+@Composable
+private fun PackIconImage(packPackage: String, size: androidx.compose.ui.unit.Dp) {
+    val context = getCurrentContext()
+    val bitmap = remember(packPackage) { packIconBitmap(context, packPackage) }
     if (bitmap != null) {
         Image(
-            painter = BitmapPainter(bitmap.asImageBitmap()),
+            painter = BitmapPainter(bitmap),
             contentDescription = null,
             modifier = Modifier
                 .size(size)
