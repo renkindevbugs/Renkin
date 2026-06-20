@@ -1,7 +1,6 @@
 package dev.alembiconsProject.alembicons.apk
 
 import android.content.Context
-import android.graphics.drawable.Drawable
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -17,7 +16,6 @@ import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
-import dev.alembiconsProject.alembicons.data.RawElement
 import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
@@ -25,8 +23,6 @@ import dev.alembiconsProject.alembicons.data.getDefaultIconColor
 import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.drawable.BitmapIconDrawable
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
-import dev.alembiconsProject.alembicons.drawable.ImageVectorDrawable
-import dev.alembiconsProject.alembicons.drawable.InsetIconDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.extension.bitmapFromBase64
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
@@ -37,7 +33,6 @@ import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.ui.supportDynamicColors
 import dev.alembiconsProject.alembicons.ui.toHexString
-import dev.alembiconsProject.alembicons.vector.VectorParser
 import dev.alembiconsProject.alembicons.xml.XmlDecoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -45,24 +40,18 @@ import kotlinx.coroutines.withContext
 class ApplicationProvider(private val context: Context) {
     var applicationList: List<PackageInfoStruct> by mutableStateOf(listOf())
         private set
-    // Backed by Compose state so the UI re-reads it once packs finish loading
-    // (e.g. the edit dialog's icon-pack browser) instead of capturing the empty
-    // initial list.
-    var iconPacks: List<IconPack> by mutableStateOf(listOf())
-        private set
-    var iconPackLoaded: Boolean by mutableStateOf(false)
-        private set
+    // Icon-pack data (packs, app-filter elements, calendar icons) lives in
+    // IconPackRepository; iconPacks / iconPackLoaded delegate to it so existing UI reads
+    // stay reactive (the repo backs them with Compose state).
+    val iconPacks: List<IconPack> get() = iconPackRepo.iconPacks
+    val iconPackLoaded: Boolean get() = iconPackRepo.iconPackLoaded
     var applicationsLoaded: Boolean by mutableStateOf(false)
         private set
-
-    private var iconPackAppFilterElement: Map<IconPack, List<RawElement>> = emptyMap()
-    private var installedApplications: List<InstalledApplication> = listOf()
-    private var calendarIcon: Map<InstalledApplication, String> = mapOf()
-    private var calendarIconsDrawable: Map<String, Drawable> = emptyMap()
 
     var defaultColor: Color = Color.Unspecified
 
     private val renkinPackRepo = RenkinPackRepository(context)
+    private val iconPackRepo = IconPackRepository(context)
 
     private var am: ApplicationManager? = null
     private val appManager: ApplicationManager
@@ -85,11 +74,7 @@ class ApplicationProvider(private val context: Context) {
         applicationsLoaded = true
     }
 
-    suspend fun initializeIconPacks() = withContext(Dispatchers.Default) {
-        iconPackLoaded = false
-        iconPacks = appManager.getIconPacks()
-        getAppFilterElements()
-    }
+    suspend fun initializeIconPacks() = iconPackRepo.load()
 
     suspend fun initializeRenkinPack() {
         loadRenkinPack()
@@ -100,7 +85,7 @@ class ApplicationProvider(private val context: Context) {
         val retrieveCalendarIcon = preferences.getBooleanValue(CalendarIconsKey)
 
         if (iconPackageName != "" && retrieveCalendarIcon) {
-            retrieveCalendarIcons(iconPackageName)
+            iconPackRepo.retrieveCalendarIcons(iconPackageName)
         }
     }
 
@@ -111,8 +96,8 @@ class ApplicationProvider(private val context: Context) {
     }
 
     private fun refreshIcon(application: PackageInfoStruct, options: GenerationOptions) {
-        val primaryIconPackApps = getIconPackAppDrawables(options.primaryIconPack)
-        val secondaryIconPackApps = getIconPackAppDrawables(options.secondaryIconPack)
+        val primaryIconPackApps = iconPackRepo.getAppDrawables(options.primaryIconPack)
+        val secondaryIconPackApps = iconPackRepo.getAppDrawables(options.secondaryIconPack)
 
         val pack1 = IconPackContainer(options.primaryIconPack, primaryIconPackApps)
         val pack2 = IconPackContainer(options.secondaryIconPack, secondaryIconPackApps)
@@ -127,11 +112,11 @@ class ApplicationProvider(private val context: Context) {
         var opt = GenerationOptions.fromPreferences(preferences, context)
         val retrieveCalendarIcon = preferences.getBooleanValue(CalendarIconsKey)
 
-        val primaryIconPackApps = getIconPackAppDrawables(opt.primaryIconPack)
-        val secondaryIconPackApps = getIconPackAppDrawables(opt.secondaryIconPack)
+        val primaryIconPackApps = iconPackRepo.getAppDrawables(opt.primaryIconPack)
+        val secondaryIconPackApps = iconPackRepo.getAppDrawables(opt.secondaryIconPack)
 
         if (opt.primaryIconPack != "" && retrieveCalendarIcon) {
-            retrieveCalendarIcons(opt.primaryIconPack)
+            iconPackRepo.retrieveCalendarIcons(opt.primaryIconPack)
         }
 
         // Themed icons on Android 12+ are recoloured with the system dynamic palette
@@ -155,7 +140,7 @@ class ApplicationProvider(private val context: Context) {
         withContext(Dispatchers.Default) {
             var icon: IconPackDrawable? = null
 
-            val primaryIconPackApps = getIconPackAppDrawables(options.primaryIconPack)
+            val primaryIconPackApps = iconPackRepo.getAppDrawables(options.primaryIconPack)
 
             val pack1 = IconPackContainer(options.primaryIconPack, primaryIconPackApps)
             val pack2 = IconPackContainer("", emptyMap())
@@ -205,8 +190,8 @@ class ApplicationProvider(private val context: Context) {
             val iconPackGenerator = IconPackBuilder(
                 context,
                 applicationList,
-                calendarIcon,
-                calendarIconsDrawable
+                iconPackRepo.calendarIcon,
+                iconPackRepo.calendarIconsDrawable
             )
             val canBeInstalled = iconPackGenerator.canBeInstalled() // must be called before build and sign
             val apk = iconPackGenerator.buildAndSign(themed, iconColor.toHexString(), bgColor.toHexString(), textMethod)
@@ -228,19 +213,6 @@ class ApplicationProvider(private val context: Context) {
         saveRenkinPack()
 
         success
-    }
-
-    private fun retrieveCalendarIcons(iconPackageName: String) {
-        val appMan = ApplicationManager(context)
-        val entry = iconPackAppFilterElement.entries.find { it.key.packageName == iconPackageName }
-
-        val packApps = entry?.value ?: listOf()
-        calendarIcon = appMan.getCalendarApplications(installedApplications, packApps)
-        calendarIconsDrawable =
-            appMan.getCalendarFromAppFilterElements(
-                iconPackageName,
-                packApps
-            )
     }
 
     private suspend fun loadRenkinPack() = withContext(Dispatchers.Default) {
@@ -284,22 +256,9 @@ class ApplicationProvider(private val context: Context) {
         renkinPackRepo.replaceAll(dbApps)
     }
 
-    private fun getAppFilterElements() {
-        val map = mutableMapOf<IconPack, List<RawElement>>()
-
-        installedApplications = appManager.getAllInstalledApplications()
-
-        for (iconPack in iconPacks) {
-            map[iconPack] = appManager.getAppFilterRawElements(iconPack.packageName, installedApplications)
-        }
-
-        iconPackAppFilterElement = map
-        iconPackLoaded = true
-    }
-
     suspend fun forceSync() {
-        if (iconPackLoaded) {
-            initializeIconPacks()
+        if (iconPackRepo.iconPackLoaded) {
+            iconPackRepo.load()
         }
     }
 
@@ -313,47 +272,6 @@ class ApplicationProvider(private val context: Context) {
         applicationList = applicationList.toMutableList().also {
             it[index] = newApp
         }
-    }
-
-    fun copy(): ApplicationProvider {
-        val newProvider = ApplicationProvider(context)
-
-        newProvider.applicationList = applicationList.toList()
-        newProvider.iconPacks = iconPacks.toList()
-        newProvider.iconPackLoaded = iconPackLoaded
-        newProvider.iconPackAppFilterElement = iconPackAppFilterElement.toMap()
-        newProvider.installedApplications = installedApplications.toList()
-        newProvider.calendarIcon = calendarIcon.toMap()
-        newProvider.calendarIconsDrawable = calendarIconsDrawable.toMap()
-        newProvider.defaultColor = defaultColor
-
-        return newProvider
-    }
-
-    private fun getIconPackAppDrawables(iconPack: String): Map<InstalledApplication, ResourceDrawable> {
-        if (iconPack == "") return emptyMap()
-        val entry = iconPackAppFilterElement.entries.find { it.key.packageName == iconPack } ?: return emptyMap()
-
-        val apps = entry.value
-
-        return appManager.getDrawableFromAppFilterElements(
-            iconPack,
-            installedApplications,
-            apps
-        )
-    }
-
-    private fun getIconPackAppDrawable(app: InstalledApplication, iconPack: String): Map<InstalledApplication, ResourceDrawable> {
-        if (iconPack == "") return emptyMap()
-        val entry = iconPackAppFilterElement.entries.find { it.key.packageName == iconPack } ?: return emptyMap()
-
-        val apps = entry.value
-
-        return appManager.getDrawableFromAppFilterElements(
-            iconPack,
-            listOf(app),
-            apps
-        )
     }
 
     suspend fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, IconPackDrawable?> =
@@ -376,27 +294,7 @@ class ApplicationProvider(private val context: Context) {
         }
 
     suspend fun getIconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
-        withContext(Dispatchers.Default) {
-            val map = mutableMapOf<String, ResourceDrawable>()
-
-            for (pack in iconPacks) {
-                if (application == null) {
-                    val icon = appManager.getResIcon(pack.packageName, pack.iconID)
-
-                    if (icon != null) {
-                        map[pack.packageName] = ResourceDrawable(pack.iconID, icon)
-                    }
-                } else {
-                    val icons = getIconPackAppDrawable(application, pack.packageName)
-
-                    if (icons.isNotEmpty()) {
-                        map[pack.packageName] = icons[application]!!
-                    }
-                }
-            }
-
-            map
-        }
+        iconPackRepo.getDropdownIcons(application)
 
     suspend fun clearIcons() = withContext(Dispatchers.Default) {
         for (app in applicationList) {
