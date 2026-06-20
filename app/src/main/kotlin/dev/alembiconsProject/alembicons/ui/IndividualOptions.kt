@@ -345,7 +345,8 @@ fun OptionsDialog(
                             1 -> UploadColumn(
                                 app = app,
                                 imageEdit = imageEdit,
-                                iconColor = iconColor
+                                iconColor = iconColor,
+                                iconScale = iconScale
                             ) {
                                 uploadIcon = it
                                 if (it != null) iconOrigin = IconOrigin.UPLOAD

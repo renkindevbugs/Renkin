@@ -107,6 +107,7 @@ const val MIME_TYPE_IMAGE = "image/*"
 fun UploadColumn(app: PackageInfoStruct,
                  imageEdit: ImageEdit,
                  iconColor: Color,
+                 iconScale: Float,
                  onChange: (icon: IconPackDrawable?) -> Unit) {
     var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
     var zoomLevel by rememberSaveable { mutableFloatStateOf(1f) }
@@ -178,9 +179,9 @@ fun UploadColumn(app: PackageInfoStruct,
     }
 
     // The bottom-bar Modifier tab drives image edits for the uploaded image too
-    LaunchedEffect(uploadedImage, imageEdit, iconColor) {
+    LaunchedEffect(uploadedImage, imageEdit, iconColor, iconScale) {
         val image = uploadedImage ?: return@LaunchedEffect
-        val generatingOptions = GenerationOptions(Source.ICON_PACK, imageEdit, TextType.FULL_NAME, "", iconColor.toInt(), 0, false, false, false, true)
+        val generatingOptions = GenerationOptions(Source.ICON_PACK, imageEdit, TextType.FULL_NAME, "", iconColor.toInt(), 0, false, false, false, true, iconScale = iconScale)
         modifiedImage = viewModel.appProvider.getIcon(app, generatingOptions, ResourceDrawable(0, image.toDrawable(res)))?.toBitmap()
     }
 

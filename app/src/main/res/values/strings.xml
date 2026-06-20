@@ -32,6 +32,8 @@
     <string name="aboutApp">Renkin gives your apps custom icons. Pick an icon from an installed pack, upload or draw your own, adjust it, then build an installable icon pack — all on device.</string>
     <string name="aboutFeatures">What the toolbar does</string>
     <string name="close">Close</string>
+    <string name="packsSynced">Icon packs synced</string>
+    <string name="appListRefreshed">Application list refreshed</string>
     <string name="featureRefresh">Refresh icons</string>
     <string name="featureBuild">Build icon pack</string>
     <string name="featureWatch">Watch icons</string>

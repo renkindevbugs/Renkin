@@ -38,6 +38,7 @@ import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.apk.ApkUninstaller
+import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.data.AutomaticallyUpdateKey
 import dev.alembiconsProject.alembicons.data.DARK_MODE_DEFAULT
 import dev.alembiconsProject.alembicons.data.DarkMode
@@ -181,11 +182,14 @@ private val settingsButtonModifier: Modifier
 fun SyncButton() {
     val mainActivity = getCurrentMainActivity()
     val viewModel: MainViewModel = viewModel()
+    val context = getCurrentContext()
+    var done by remember { mutableStateOf(false) }
 
     Button(
         onClick = {
             mainActivity.lifecycleScope.launch(Dispatchers.Default) {
                 viewModel.appProvider.forceSync()
+                done = true
             }
         },
         shape = RoundedCornerShape(16.dp),
@@ -193,23 +197,36 @@ fun SyncButton() {
     ) {
         Text(stringResource(R.string.syncPacks))
     }
+
+    if (done) {
+        ShowToast(context.getString(R.string.packsSynced))
+        done = false
+    }
 }
 
 @Composable
 fun RefreshApplicationListButton() {
     val mainActivity = getCurrentMainActivity()
     val viewModel: MainViewModel = viewModel()
+    val context = getCurrentContext()
+    var done by remember { mutableStateOf(false) }
 
     Button(
         onClick = {
             mainActivity.lifecycleScope.launch(Dispatchers.Default) {
                 viewModel.appProvider.initialize()
+                done = true
             }
         },
         shape = RoundedCornerShape(16.dp),
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.refreshApplicationList))
+    }
+
+    if (done) {
+        ShowToast(context.getString(R.string.appListRefreshed))
+        done = false
     }
 }
 
@@ -224,7 +241,7 @@ fun DeleteIconPackButton() {
     FilledTonalButton(
         onClick = {
             scope.launch {
-                openSuccess = ApkUninstaller(context).uninstall("com.kaanelloed.iconerationiconpack")
+                openSuccess = ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)
             }
         },
         shape = RoundedCornerShape(16.dp),

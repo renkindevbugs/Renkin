@@ -112,7 +112,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.res.painterResource
 import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.MainViewModel
 import kotlinx.coroutines.Dispatchers
@@ -782,6 +781,15 @@ fun TitleBar(
 
 @Composable
 fun InfoDialog(onDismiss: () -> Unit) {
+    // The launcher icon is an adaptive (XML) icon, which painterResource can't load,
+    // so render it via PackageManager -> bitmap instead.
+    val context = LocalContext.current
+    val appIcon = remember {
+        runCatching {
+            context.packageManager.getApplicationIcon(context.packageName)
+                .toSafeBitmapOrNull()?.asImageBitmap()
+        }.getOrNull()
+    }
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = RoundedCornerShape(28.dp),
@@ -797,14 +805,16 @@ fun InfoDialog(onDismiss: () -> Unit) {
             ) {
                 // Header — app icon, name, version
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Image(
-                        painter = painterResource(R.mipmap.ic_launcher),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(56.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                    )
-                    Spacer(Modifier.width(16.dp))
+                    if (appIcon != null) {
+                        Image(
+                            painter = BitmapPainter(appIcon),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                        )
+                        Spacer(Modifier.width(16.dp))
+                    }
                     Column {
                         Text(
                             text = stringResource(R.string.app_name),

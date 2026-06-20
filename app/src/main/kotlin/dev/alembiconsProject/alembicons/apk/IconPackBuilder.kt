@@ -66,7 +66,12 @@ class IconPackBuilder(
     private val signedApk = apkDir.resolve("app-release.apk")
     private val keyStoreFile = ctx.filesDir.resolve("renkinpack.keystore")
 
-    private val iconPackName = "dev.alembiconsProject.renkinpack"
+    private val iconPackName = PACKAGE_NAME
+
+    companion object {
+        /** Package id of the generated Renkin icon pack. */
+        const val PACKAGE_NAME = "dev.alembiconsProject.renkinpack"
+    }
     private val newInternalVersionCode = 0
     private val frameworkVersion = 34
     private val minSdkVersion = 21
