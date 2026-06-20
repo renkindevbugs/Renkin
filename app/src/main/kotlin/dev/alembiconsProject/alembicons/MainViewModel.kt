@@ -2,7 +2,6 @@ package dev.alembiconsProject.alembicons
 
 import android.app.Application
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
@@ -30,14 +29,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val appProvider = ApplicationProvider(application)
 
-    // Keys ("package/activity") of icons changed in this session, so the pack preview
-    // can surface them first and flag them. Session-only (cleared on restart).
-    val recentlyChangedIcons = mutableStateListOf<String>()
-
-    fun markIconChanged(packageName: String, activityName: String) {
-        val key = "$packageName/$activityName"
-        if (key !in recentlyChangedIcons) recentlyChangedIcons.add(key)
-    }
+    // Keys ("package/activity") of the apps already in the last built/saved pack.
+    // An app with an icon whose key is NOT here is "added" (pending build); a key here
+    // whose app no longer has an icon is "removed". Reloaded after each successful build,
+    // so the change state is a diff against what was actually built (survives refresh).
+    var builtKeys by mutableStateOf<Set<String>>(emptySet())
+        private set
 
     // Set when opened from an icon-watch notification; the home screen shows the apply
     // modal for this suggestion.
@@ -59,6 +56,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             appProvider.initializeApplications()
             appProvider.initializeRenkinPack()
+            builtKeys = appProvider.getSavedPackKeys()
         }
         viewModelScope.launch { appProvider.initializeIconPacks() }
     }
@@ -107,14 +105,17 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             buildStep = ""
             val pack = appProvider.buildAndSignIconPack(preferences) { buildStep = it }
             buildStep = null
-            if (appProvider.installIconPack(pack)) buildInstalled = true
+            if (appProvider.installIconPack(pack)) {
+                buildInstalled = true
+                // The saved pack now matches the current icons → reset the change baseline.
+                builtKeys = appProvider.getSavedPackKeys()
+            }
         }
     }
 
     /** Assigns (or clears, when [icon] is null) the created icon for the app at [index]. */
     fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?) {
         appProvider.editApplication(index, app.changeExport(icon))
-        if (icon != null) markIconChanged(app.packageName, app.activityName)
     }
 
     /** One-shot signal that a settings operation finished; consume with [consumeSyncDone]. */

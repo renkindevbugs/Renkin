@@ -404,6 +404,11 @@ class ApplicationProvider(private val context: Context) {
         }
     }
 
+    /** Keys ("package/activity") of the apps stored in the last built/saved pack. */
+    suspend fun getSavedPackKeys(): Set<String> = withContext(Dispatchers.Default) {
+        renkinPackRepo.getAll().map { "${it.packageName}/${it.activityName}" }.toSet()
+    }
+
     data class BuiltIconPack(
         val uri: Uri,
         val packageName: String,

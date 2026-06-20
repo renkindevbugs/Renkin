@@ -8,10 +8,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -33,7 +36,6 @@ import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Surface
@@ -52,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -114,15 +117,50 @@ fun AppOptions(
     OptionsDialog(iconPacks, app, themed, onConfirm, onDismiss, onIconClear)
 }
 
+// The green used for icons added since the last build (matches the build-preview dot).
+private val addedColor = Color(0xFF34C759)
+
+/**
+ * Segmented completion bar: blue = icons already in the last built pack, green = added
+ * since (pending build), red = removed since. Material 3 has no multi-colour progress
+ * bar, so this is a small custom one with the same rounded look.
+ */
+@Composable
+private fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
+    val builtF by animateFloatAsState(if (total > 0) built / total.toFloat() else 0f, label = "builtFrac")
+    val addedF by animateFloatAsState(if (total > 0) added / total.toFloat() else 0f, label = "addedFrac")
+    val removedF by animateFloatAsState(if (total > 0) removed / total.toFloat() else 0f, label = "removedFrac")
+    val rest = (1f - builtF - addedF - removedF).coerceAtLeast(0f)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .height(8.dp)
+            .clip(RoundedCornerShape(50))
+            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+    ) {
+        if (builtF > 0f) Box(Modifier.fillMaxHeight().weight(builtF).background(MaterialTheme.colorScheme.primary))
+        if (addedF > 0f) Box(Modifier.fillMaxHeight().weight(addedF).background(addedColor))
+        if (removedF > 0f) Box(Modifier.fillMaxHeight().weight(removedF).background(MaterialTheme.colorScheme.error))
+        if (rest > 0f) Spacer(Modifier.weight(rest))
+    }
+}
+
 @Composable
 fun OptionsCard(
     iconPacks: List<IconPack>
 ) {
     val prefs = getPreferences()
 
-    // Completion progress across all apps (updates live as icons are assigned/cleared)
-    val apps = viewModel<MainViewModel>().appProvider.applicationList
-    val themedCount = apps.count { it.createdIcon != null }
+    // Completion progress across all apps (updates live as icons are assigned/cleared).
+    // The bar is a diff against the last built pack: blue = already built, green = added
+    // since (pending build), red = removed since. builtKeys updates after each build.
+    val vm = viewModel<MainViewModel>()
+    val apps = vm.appProvider.applicationList
+    val builtKeys = vm.builtKeys
+    val builtCount = apps.count { it.createdIcon != null && "${it.packageName}/${it.activityName}" in builtKeys }
+    val addedCount = apps.count { it.createdIcon != null && "${it.packageName}/${it.activityName}" !in builtKeys }
+    val removedCount = apps.count { it.createdIcon == null && "${it.packageName}/${it.activityName}" in builtKeys }
+    val themedCount = builtCount + addedCount
     val totalCount = apps.size
 
     var expanded by remember { mutableStateOf(false) }
@@ -200,30 +238,39 @@ fun OptionsCard(
 
             // Always-visible completion progress, so the user sees how much is left
             if (totalCount > 0) {
-                val targetFraction = themedCount / totalCount.toFloat()
-                val animatedFraction by animateFloatAsState(
-                    targetValue = targetFraction,
-                    label = "completionProgress"
-                )
                 Column(
                     Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .padding(bottom = 12.dp)
                 ) {
-                    Text(
-                        text = stringResource(R.string.completionProgress, themedCount, totalCount),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = stringResource(R.string.completionProgress, themedCount, totalCount),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        // Pending changes since the last build, mirroring the bar colours
+                        if (addedCount > 0) {
+                            Text(
+                                text = "+$addedCount",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = addedColor
+                            )
+                        }
+                        if (removedCount > 0) {
+                            Text(
+                                text = " −$removedCount",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
                     Spacer(Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { animatedFraction },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(50)),
-                        trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-                    )
+                    ChangeBar(totalCount, builtCount, addedCount, removedCount)
                 }
             }
 
