@@ -640,55 +640,17 @@ private fun ActiveRuleCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp)) {
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                rule.apps.forEach { ra ->
-                    val app = apps.find { it.packageName == ra.packageName && it.activityName == ra.activityName }
-                    AppPill(app, ra.packageName)
-                }
-            }
-            HorizontalDivider(
-                modifier = Modifier.padding(vertical = 10.dp),
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
+            // Edit/delete live in the header next to the apps, so the pack chips
+            // below can use the card's full width (and wrap under everything).
             Row(verticalAlignment = Alignment.Top) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    Text(
-                        text = stringResource(R.string.watching),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier
-                            .align(Alignment.CenterVertically)
-                            .padding(end = 4.dp)
-                    )
-                    if (rule.rule.watchAllPacks) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.align(Alignment.CenterVertically)
-                        ) {
-                            Icon(
-                                Icons.Filled.Layers, null,
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = stringResource(R.string.allIconPacks),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(start = 4.dp)
-                            )
-                        }
-                    } else {
-                        rule.packs.forEach { rp ->
-                            val pack = packs.find { it.packageName == rp.iconPackPackage }
-                            PackLabel(rp.iconPackPackage, pack?.applicationName)
-                        }
+                    rule.apps.forEach { ra ->
+                        val app = apps.find { it.packageName == ra.packageName && it.activityName == ra.activityName }
+                        AppPill(app, ra.packageName)
                     }
                 }
                 IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
@@ -704,6 +666,47 @@ private fun ActiveRuleCard(
                         tint = MaterialTheme.colorScheme.error,
                         modifier = Modifier.size(18.dp)
                     )
+                }
+            }
+            HorizontalDivider(
+                modifier = Modifier.padding(vertical = 10.dp),
+                color = MaterialTheme.colorScheme.outlineVariant
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = stringResource(R.string.watching),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .align(Alignment.CenterVertically)
+                        .padding(end = 4.dp)
+                )
+                if (rule.rule.watchAllPacks) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.align(Alignment.CenterVertically)
+                    ) {
+                        Icon(
+                            Icons.Filled.Layers, null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = stringResource(R.string.allIconPacks),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
+                } else {
+                    rule.packs.forEach { rp ->
+                        val pack = packs.find { it.packageName == rp.iconPackPackage }
+                        PackLabel(rp.iconPackPackage, pack?.applicationName)
+                    }
                 }
             }
         }
