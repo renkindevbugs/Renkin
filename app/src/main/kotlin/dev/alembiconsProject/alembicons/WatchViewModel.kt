@@ -10,6 +10,7 @@ import dev.alembiconsProject.alembicons.data.watch.AppComponent
 import dev.alembiconsProject.alembicons.data.watch.IconSuggestion
 import dev.alembiconsProject.alembicons.data.watch.IconSuggestionCandidate
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
+import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.service.WatchChecker
 import dev.alembiconsProject.alembicons.service.WatchWorker
@@ -17,15 +18,18 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /**
  * Owns the icon-watch domain (rule CRUD, manual checks) so the watch UI is plain
  * composables that call functions and read state, instead of spinning up their own
  * coroutine scopes and reaching for the repository / checker / worker directly.
  */
-class WatchViewModel(application: Application) : AndroidViewModel(application) {
-
-    private val repo = WatchRepository(application)
+@HiltViewModel
+class WatchViewModel @Inject constructor(
+    application: Application,
+    private val repo: WatchRepository
+) : AndroidViewModel(application) {
 
     /** All watch rules (active + completed); the UI splits them by `completed`. */
     val rules: StateFlow<List<RuleWithDetails>> =
