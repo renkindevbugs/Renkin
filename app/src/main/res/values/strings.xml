@@ -31,8 +31,9 @@
     <string name="aboutTitle">About</string>
     <string name="aboutApp">Renkin gives your apps custom icons. Pick an icon from an installed pack, upload or draw your own, adjust it, then build an installable icon pack — all on device.</string>
     <string name="aboutFeatures">What the toolbar does</string>
-    <string name="aboutFork">Renkin is an open-source fork of Iconeration.</string>
-    <string name="aboutForkLink">View Iconeration on F-Droid</string>
+    <string name="aboutFork">Renkin is an open-source fork of Alembicons.</string>
+    <string name="aboutThanks">Huge thanks to its author for creating Alembicons — this app simply continues that great work.</string>
+    <string name="aboutForkLink">View Alembicons on F-Droid</string>
     <string name="close">Close</string>
     <string name="packsSynced">Icon packs synced</string>
     <string name="appListRefreshed">Application list refreshed</string>
