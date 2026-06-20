@@ -45,11 +45,8 @@ class MainActivity : ComponentActivity() {
     // sites keep working unchanged.
     val appProvider get() = viewModel.appProvider
 
-    // Session state lives in the ViewModel (survives rotation). These are thin
-    // passthroughs so existing getCurrentMainActivity().<x> call sites keep working.
-    val recentlyChangedIcons get() = viewModel.recentlyChangedIcons
-    fun markIconChanged(packageName: String, activityName: String) =
-        viewModel.markIconChanged(packageName, activityName)
+    // Session state lives in the ViewModel (survives rotation). Thin passthrough so the
+    // existing getCurrentMainActivity().<x> call site keeps working.
     val pendingWatchSuggestionId get() = viewModel.pendingWatchSuggestionId
 
     override fun onCreate(savedInstanceState: Bundle?) {

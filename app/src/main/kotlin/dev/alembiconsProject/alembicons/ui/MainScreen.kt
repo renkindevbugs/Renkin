@@ -541,13 +541,13 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
 @Composable
 fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
     val viewModel: MainViewModel = viewModel()
-    val changed = viewModel.recentlyChangedIcons.toSet()
-    // Icons changed this session float to the top so the user sees them without
-    // scrolling; the rest stay alphabetical
+    val builtKeys = viewModel.builtKeys
+    // Icons added since the last build (not yet in the saved pack) float to the top so
+    // the user sees what's new without scrolling; the rest stay alphabetical
     val themedApps = viewModel.appProvider.applicationList
         .filter { it.createdIcon != null }
         .sortedWith(
-            compareByDescending<PackageInfoStruct> { "${it.packageName}/${it.activityName}" in changed }
+            compareByDescending<PackageInfoStruct> { "${it.packageName}/${it.activityName}" !in builtKeys }
                 .thenBy { it.appName.lowercase() }
         )
 
@@ -610,7 +610,7 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                         items(themedApps, key = { "${it.packageName}/${it.activityName}" }) { app ->
                             BuildPreviewItem(
                                 app = app,
-                                changed = "${app.packageName}/${app.activityName}" in changed
+                                changed = "${app.packageName}/${app.activityName}" !in builtKeys
                             )
                         }
                     }
