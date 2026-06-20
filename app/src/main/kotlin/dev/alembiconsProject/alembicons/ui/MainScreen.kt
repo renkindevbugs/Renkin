@@ -105,7 +105,7 @@ import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
 import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
-import kotlinx.coroutines.CoroutineScope
+import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -400,7 +400,7 @@ fun OpenAppOptions(
     val activity = getCurrentMainActivity()
 
     AppOptions(iconPacks, app, themed, { icon ->
-        CoroutineScope(Dispatchers.Default).launch {
+        activity.lifecycleScope.launch(Dispatchers.Default) {
             activity.appProvider.editApplication(index, app.changeExport(icon))
             activity.markIconChanged(app.packageName, app.activityName)
             onDismiss()
@@ -423,7 +423,7 @@ fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
     var openWarning by rememberSaveable { mutableStateOf(false) }
 
     IconButton(onClick = {
-        CoroutineScope(Dispatchers.Default).launch {
+        activity.lifecycleScope.launch(Dispatchers.Default) {
             if (!activity.appProvider.iconPackLoaded && iconPackageName != "") {
                 openWarning = true
                 return@launch
@@ -492,7 +492,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
                 view.performConfirmHaptic()
                 text = ""
                 openBuilder = true
-                CoroutineScope(Dispatchers.Default).launch {
+                activity.lifecycleScope.launch(Dispatchers.Default) {
                     val iconPack = activity.appProvider.buildAndSignIconPack(preferences) {
                         text = it
                     }

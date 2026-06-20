@@ -11,10 +11,16 @@ import dev.alembiconsProject.alembicons.dataStore
 import dev.alembiconsProject.alembicons.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 
 class UpdateIconPackService: Service() {
     private val appProvider = ApplicationProvider(this)
+
+    // Bound to the service: cancelled in onDestroy so the (otherwise endless)
+    // dataStore collect in updateIconPack doesn't leak after the service stops.
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onBind(intent: Intent?): IBinder? {
         return null
@@ -23,12 +29,17 @@ class UpdateIconPackService: Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         NotificationManager().startUpdatePackNotification(this)
 
-        CoroutineScope(Dispatchers.Default).launch {
+        serviceScope.launch {
             appProvider.initialize()
             updateIconPack(intent?.data)
         }
 
         return super.onStartCommand(intent, flags, startId)
+    }
+
+    override fun onDestroy() {
+        serviceScope.cancel()
+        super.onDestroy()
     }
 
     private suspend fun updateIconPack(data: Uri?) {
