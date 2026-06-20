@@ -146,8 +146,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    /** Clears every created icon. */
+    /** Clears every created icon (and persists the empty state). */
     fun clearIcons() {
-        viewModelScope.launch { appProvider.clearIcons() }
+        viewModelScope.launch {
+            appProvider.clearIcons()
+            // Saved pack is now empty → reset the change baseline so the bar clears too.
+            builtKeys = appProvider.getSavedPackKeys()
+        }
     }
 }

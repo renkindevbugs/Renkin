@@ -402,6 +402,9 @@ class ApplicationProvider(private val context: Context) {
         for (app in applicationList) {
             editApplication(app, app.changeExport(null))
         }
+        // Persist the cleared state, otherwise the saved pack reloads the icons on the
+        // next launch and "Remove icons" looks like it did nothing.
+        saveRenkinPack()
     }
 
     /** Keys ("package/activity") of the apps stored in the last built/saved pack. */

@@ -105,6 +105,8 @@
     <string name="textType">Text Type</string>
     <string name="colorize">Colorize</string>
     <string name="clearIcons">Clear icons</string>
+    <string name="clearIconsTitle">Clear icons?</string>
+    <string name="clearIconsText">This removes the generated icons inside the app. The icons in your already-built icon pack stay there until you build a new one.</string>
     <string name="searchIcons">Search icons…</string>
     <string name="noIconsFound">No icons found</string>
     <string name="sourceAppIcon">App Icon</string>
