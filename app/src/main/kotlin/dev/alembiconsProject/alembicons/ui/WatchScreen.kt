@@ -98,6 +98,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.alembiconsProject.alembicons.BuildConfig
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.AppComponent
@@ -119,13 +121,13 @@ import kotlinx.coroutines.withContext
 @Composable
 fun WatchScreen(onDismiss: () -> Unit) {
     val context = getCurrentContext()
-    val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
     val repo = remember { WatchRepository(context) }
     val scope = rememberCoroutineScope()
 
     val rules by repo.rules.collectAsState(initial = emptyList())
-    val apps = activity.appProvider.applicationList
-    val packs = activity.appProvider.iconPacks
+    val apps = viewModel.appProvider.applicationList
+    val packs = viewModel.appProvider.iconPacks
 
     // null = list; otherwise the editor is open (editing this rule, or a new rule when blank)
     var showEditor by remember { mutableStateOf(false) }
@@ -258,7 +260,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
 @Composable
 fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     val context = getCurrentContext()
-    val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
     val repo = remember { WatchRepository(context) }
     val prefs = getPreferences()
     val scope = rememberCoroutineScope()
@@ -281,7 +283,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         if (s == null) onDismiss() // already handled/deleted → nothing to show
     }
 
-    val apps = activity.appProvider.applicationList
+    val apps = viewModel.appProvider.applicationList
     val app = suggestion?.let { s -> apps.find { it.packageName == s.packageName && it.activityName == s.activityName } }
 
     // (Re)generate the new icon for the selected pack
@@ -300,7 +302,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         newIcon = null
         newIcon = withContext(Dispatchers.Default) {
             val options = GenerationOptions.fromPreferences(prefs.data.first(), context, override = true)
-            activity.appProvider.getIconFromPackDrawable(targetApp, pack, candidate.drawableName, options)
+            viewModel.appProvider.getIconFromPackDrawable(targetApp, pack, candidate.drawableName, options)
         }
         generating = false
     }
@@ -345,7 +347,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     candidates.forEach { candidate ->
-                        val pack = packsName(activity.appProvider.iconPacks, candidate.iconPackPackage)
+                        val pack = packsName(viewModel.appProvider.iconPacks, candidate.iconPackPackage)
                         FilterChip(
                             selected = selectedPack == candidate.iconPackPackage,
                             onClick = { selectedPack = candidate.iconPackPackage },
@@ -378,8 +380,8 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                                 it.packageName == targetApp.packageName && it.activityName == targetApp.activityName
                             }
                             if (index >= 0) {
-                                activity.appProvider.editApplication(index, targetApp.changeExport(icon))
-                                activity.markIconChanged(targetApp.packageName, targetApp.activityName)
+                                viewModel.appProvider.editApplication(index, targetApp.changeExport(icon))
+                                viewModel.markIconChanged(targetApp.packageName, targetApp.activityName)
                             }
                             // Applying handles the rule, so remove it (cascades the suggestion)
                             suggestion?.ruleId?.let { ruleId -> scope.launch { repo.deleteRule(ruleId) } }
