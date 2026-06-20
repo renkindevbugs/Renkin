@@ -1,11 +1,13 @@
 package dev.alembiconsProject.alembicons.data
 
+import android.content.Context
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Delete
 import androidx.room.Entity
 import androidx.room.Insert
 import androidx.room.Query
+import androidx.room.Room
 import androidx.room.RoomDatabase
 
 @Entity(primaryKeys = ["packageName", "activityName"])
@@ -18,7 +20,7 @@ data class DbApplication(
 )
 
 @Dao
-interface AlchemiconPackDao {
+interface RenkinPackDao {
     @Query("SELECT * FROM DbApplication")
     fun getAll(): List<DbApplication>
 
@@ -45,6 +47,23 @@ interface AlchemiconPackDao {
     entities = [DbApplication::class],
     version = 1
 )
-abstract class AlchemiconPackDatabase : RoomDatabase() {
-    abstract fun alchemiconPackDao(): AlchemiconPackDao
+abstract class RenkinPackDatabase : RoomDatabase() {
+    abstract fun renkinPackDao(): RenkinPackDao
+
+    companion object {
+        @Volatile
+        private var instance: RenkinPackDatabase? = null
+
+        // Physical file name stays "alchemiconPack" so existing installs keep their
+        // saved generated icons across the rename.
+        fun get(context: Context): RenkinPackDatabase {
+            return instance ?: synchronized(this) {
+                instance ?: Room.databaseBuilder(
+                    context.applicationContext,
+                    RenkinPackDatabase::class.java,
+                    "alchemiconPack"
+                ).build().also { instance = it }
+            }
+        }
+    }
 }

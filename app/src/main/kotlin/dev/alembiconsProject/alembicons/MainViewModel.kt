@@ -52,13 +52,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         appProvider.defaultColor =
             if (application.isSystemInDarkTheme()) Color.White else Color.Black
 
-        // Loaded once. The Alchemicon pack reads the app list, so it runs after the
+        // Loaded once. The Renkin pack reads the app list, so it runs after the
         // apps are loaded; icon packs are independent and load in parallel. The heavy
         // work hops to Dispatchers.Default inside each call, so viewModelScope (main)
         // is fine here.
         viewModelScope.launch {
             appProvider.initializeApplications()
-            appProvider.initializeAlchemiconPack()
+            appProvider.initializeRenkinPack()
         }
         viewModelScope.launch { appProvider.initializeIconPacks() }
     }
