@@ -645,30 +645,48 @@ private fun ComparisonHeader(
         )
     ) {
         if (wide) {
-            // Single compact row — close · comparison · name · apply · overflow
+            // Single compact row — close + name on the left, comparison icons
+            // centered, apply + overflow on the right. Left and right clusters
+            // share equal weight so the icons land dead-center; a long name gets
+            // ellipsised before it can reach them.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                closeButton()
-                currentSlot(44.dp, false)
-                arrow()
-                newSlot(44.dp, false)
-                Text(
-                    text = appName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 8.dp)
-                )
-                applyButton(Modifier)
-                overflow()
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    closeButton()
+                    Text(
+                        text = appName,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f, fill = false)
+                            .padding(horizontal = 4.dp)
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    currentSlot(44.dp, false)
+                    arrow()
+                    newSlot(44.dp, false)
+                }
+
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)
+                ) {
+                    applyButton(Modifier)
+                    overflow()
+                }
             }
         } else {
             // Tier 1 — app bar: close, name, overflow (destructive reset lives here)
