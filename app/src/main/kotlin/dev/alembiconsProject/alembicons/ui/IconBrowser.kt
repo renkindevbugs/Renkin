@@ -419,7 +419,7 @@ private fun Bitmap.scaledPreview(max: Int = PREVIEW_PX): Bitmap {
 }
 
 /** Generates the preview icons for the given drawable [names] of a pack. */
-private fun loadPackIconPairs(
+private suspend fun loadPackIconPairs(
     appMan: ApplicationManager,
     activity: MainActivity,
     packageName: String,
