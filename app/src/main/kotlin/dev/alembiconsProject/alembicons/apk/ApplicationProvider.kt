@@ -9,8 +9,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.CalendarIconsKey
-import dev.alembiconsProject.alembicons.data.DbApplication
-import dev.alembiconsProject.alembicons.data.RenkinPackRepository
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.InstalledApplication
@@ -19,17 +17,13 @@ import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
 import dev.alembiconsProject.alembicons.data.getDefaultIconColor
 import dev.alembiconsProject.alembicons.data.getStringValue
-import dev.alembiconsProject.alembicons.drawable.BitmapIconDrawable
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
-import dev.alembiconsProject.alembicons.extension.bitmapFromBase64
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
-import dev.alembiconsProject.alembicons.icon.parser.XmlNodeParser
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.ui.supportDynamicColors
 import dev.alembiconsProject.alembicons.ui.toHexString
-import dev.alembiconsProject.alembicons.xml.XmlDecoder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -46,7 +40,7 @@ class ApplicationProvider(private val context: Context) {
 
     var defaultColor: Color = Color.Unspecified
 
-    private val renkinPackRepo = RenkinPackRepository(context)
+    private val renkinPackStore = RenkinPackStore(context)
     private val iconPackRepo = IconPackRepository(context)
     private val iconGenService = IconGenerationService(context, iconPackRepo)
 
@@ -168,46 +162,17 @@ class ApplicationProvider(private val context: Context) {
         success
     }
 
-    private suspend fun loadRenkinPack() = withContext(Dispatchers.Default) {
-        val dbApps = renkinPackRepo.getAll()
-        val apps = applicationList.toList() //clone
+    private suspend fun loadRenkinPack() {
+        val saved = renkinPackStore.load(defaultColor)
+        if (saved.isEmpty()) return
 
-        for (app in apps) {
-            val dbApp = dbApps.find { it.packageName == app.packageName && it.activityName == app.activityName }
-            if (dbApp != null) {
-                val icon = if (dbApp.isXml) {
-                    val nodes = XmlDecoder.fromBase64(dbApp.drawable)
-                    XmlNodeParser.parse(context.resources, nodes, defaultColor)
-                } else {
-                    BitmapIconDrawable(bitmapFromBase64(dbApp.drawable), dbApp.isAdaptiveIcon)
-                }
-
-                editApplication(app, app.changeExport(icon))
-            }
+        for (app in applicationList.toList()) {
+            val icon = saved["${app.packageName}/${app.activityName}"] ?: continue
+            editApplication(app, app.changeExport(icon))
         }
     }
 
-    private suspend fun saveRenkinPack() {
-        val dbApps = mutableListOf<DbApplication>()
-
-        for (app in applicationList) {
-            if (app.createdIcon != null) {
-                val isXml = app.createdIcon !is BitmapIconDrawable
-
-                dbApps.add(
-                    DbApplication(
-                        app.packageName,
-                        app.activityName,
-                        app.createdIcon.isAdaptiveIcon(),
-                        isXml,
-                        app.createdIcon.toDbString()
-                    )
-                )
-            }
-        }
-
-        renkinPackRepo.replaceAll(dbApps)
-    }
+    private suspend fun saveRenkinPack() = renkinPackStore.save(applicationList)
 
     suspend fun forceSync() {
         if (iconPackRepo.iconPackLoaded) {
@@ -243,9 +208,7 @@ class ApplicationProvider(private val context: Context) {
     }
 
     /** Keys ("package/activity") of the apps stored in the last built/saved pack. */
-    suspend fun getSavedPackKeys(): Set<String> = withContext(Dispatchers.Default) {
-        renkinPackRepo.getAll().map { "${it.packageName}/${it.activityName}" }.toSet()
-    }
+    suspend fun getSavedPackKeys(): Set<String> = renkinPackStore.savedKeys()
 
     data class BuiltIconPack(
         val uri: Uri,
