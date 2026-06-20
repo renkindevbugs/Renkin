@@ -79,7 +79,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.runtime.toMutableStateList
@@ -102,32 +101,28 @@ import androidx.compose.ui.window.DialogProperties
 import dev.alembiconsProject.alembicons.BuildConfig
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.alembiconsProject.alembicons.MainViewModel
+import dev.alembiconsProject.alembicons.WatchViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.AppComponent
 import dev.alembiconsProject.alembicons.data.watch.IconSuggestion
 import dev.alembiconsProject.alembicons.data.watch.IconSuggestionCandidate
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
-import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
-import dev.alembiconsProject.alembicons.service.WatchChecker
-import dev.alembiconsProject.alembicons.service.WatchWorker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
 fun WatchScreen(onDismiss: () -> Unit) {
     val context = getCurrentContext()
     val viewModel: MainViewModel = viewModel()
-    val repo = remember { WatchRepository(context) }
-    val scope = rememberCoroutineScope()
+    val watchViewModel: WatchViewModel = viewModel()
 
-    val rules by repo.rules.collectAsState(initial = emptyList())
+    val rules by watchViewModel.rules.collectAsState()
     val apps = viewModel.appProvider.applicationList
     val packs = viewModel.appProvider.iconPacks
 
@@ -136,7 +131,6 @@ fun WatchScreen(onDismiss: () -> Unit) {
     var editing by remember { mutableStateOf<RuleWithDetails?>(null) }
     var pendingDelete by remember { mutableStateOf<Long?>(null) }
     var pendingDeleteAllCompleted by remember { mutableStateOf(false) }
-    var isRefreshing by remember { mutableStateOf(false) }
     var applySuggestionId by remember { mutableStateOf<Long?>(null) }
 
     Dialog(
@@ -181,19 +175,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         packs = packs,
                         onClose = { showEditor = false; editing = null },
                         onSave = { selApps, watchAll, selPacks ->
-                            // Capture the edit target now — the coroutine runs after we reset state below
-                            val target = editing
-                            scope.launch {
-                                val ruleId = if (target == null) {
-                                    repo.createRule(selApps, watchAll, selPacks)
-                                } else {
-                                    repo.updateRule(target.rule.id, selApps, watchAll, selPacks)
-                                    target.rule.id
-                                }
-                                // Snapshot current icons so a later pack update is the trigger,
-                                // not the icons that already existed when the rule was made
-                                WatchChecker(context).baselineRule(ruleId)
-                            }
+                            watchViewModel.saveRule(editing, selApps, watchAll, selPacks)
                             showEditor = false
                             editing = null
                         }
@@ -203,16 +185,13 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         rules = rules,
                         apps = apps,
                         packs = packs,
-                        isRefreshing = isRefreshing,
+                        isRefreshing = watchViewModel.isChecking,
                         onRefresh = {
-                            isRefreshing = true
-                            scope.launch {
-                                val fired = WatchChecker(context).runCheck()
-                                isRefreshing = false
-                                val msg = if (fired.isEmpty()) {
+                            watchViewModel.runCheck { found ->
+                                val msg = if (found == 0) {
                                     context.getString(R.string.watchRefreshNone)
                                 } else {
-                                    context.getString(R.string.watchRefreshFound, fired.size)
+                                    context.getString(R.string.watchRefreshFound, found)
                                 }
                                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
@@ -223,15 +202,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         onApply = { rule -> rule.suggestions.firstOrNull()?.id?.let { applySuggestionId = it } },
                         onDelete = { ruleId -> pendingDelete = ruleId },
                         onDeleteAllCompleted = { pendingDeleteAllCompleted = true },
-                        onSimulate = {
-                            scope.launch {
-                                // Establish a baseline, stale it, then re-check via the worker
-                                // so the full notify + deep-link path runs (debug builds only)
-                                WatchChecker(context).runCheck()
-                                repo.debugStaleAllStates()
-                                WatchWorker.runNow(context)
-                            }
-                        }
+                        onSimulate = { watchViewModel.simulate() }
                     )
                 }
                 }
@@ -246,7 +217,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
             onDismiss = { pendingDelete = null },
             onConfirm = {
                 pendingDelete = null
-                scope.launch { repo.deleteRule(ruleId) }
+                watchViewModel.deleteRule(ruleId)
             }
         )
     }
@@ -258,7 +229,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
             onDismiss = { pendingDeleteAllCompleted = false },
             onConfirm = {
                 pendingDeleteAllCompleted = false
-                scope.launch { repo.deleteRules(rules.filter { it.rule.completed }.map { it.rule.id }) }
+                watchViewModel.deleteCompleted()
             }
         )
     }
@@ -279,9 +250,8 @@ fun WatchScreen(onDismiss: () -> Unit) {
 fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     val context = getCurrentContext()
     val viewModel: MainViewModel = viewModel()
-    val repo = remember { WatchRepository(context) }
+    val watchViewModel: WatchViewModel = viewModel()
     val prefs = getPreferences()
-    val scope = rememberCoroutineScope()
     val view = LocalView.current
 
     var suggestion by remember(suggestionId) { mutableStateOf<IconSuggestion?>(null) }
@@ -292,8 +262,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     var loaded by remember(suggestionId) { mutableStateOf(false) }
 
     LaunchedEffect(suggestionId) {
-        val s = repo.getSuggestion(suggestionId)
-        val c = repo.getCandidates(suggestionId)
+        val (s, c) = watchViewModel.loadSuggestion(suggestionId)
         suggestion = s
         candidates = c
         selectedPack = c.firstOrNull()?.iconPackPackage
@@ -401,11 +370,10 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                                 it.packageName == targetApp.packageName && it.activityName == targetApp.activityName
                             }
                             if (index >= 0) {
-                                viewModel.appProvider.editApplication(index, targetApp.changeExport(icon))
-                                viewModel.markIconChanged(targetApp.packageName, targetApp.activityName)
+                                viewModel.applyIcon(index, targetApp, icon)
                             }
                             // Applying handles the rule, so remove it (cascades the suggestion)
-                            suggestion?.ruleId?.let { ruleId -> scope.launch { repo.deleteRule(ruleId) } }
+                            suggestion?.ruleId?.let { ruleId -> watchViewModel.deleteRule(ruleId) }
                             Toast.makeText(context, applyToast, Toast.LENGTH_LONG).show()
                         }
                         onDismiss()
