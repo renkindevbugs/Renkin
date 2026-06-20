@@ -10,7 +10,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.Preferences
 import androidx.room.Room
 import dev.alembiconsProject.alembicons.R
-import dev.alembiconsProject.alembicons.constants.SuppressRedundantSuspendModifier
 import dev.alembiconsProject.alembicons.data.AlchemiconPackDatabase
 import dev.alembiconsProject.alembicons.data.CalendarIconsKey
 import dev.alembiconsProject.alembicons.data.DbApplication
@@ -82,8 +81,7 @@ class ApplicationProvider(private val context: Context) {
         applicationsLoaded = true
     }
 
-    @Suppress(SuppressRedundantSuspendModifier)
-    suspend fun initializeIconPacks() {
+    suspend fun initializeIconPacks() = withContext(Dispatchers.Default) {
         iconPackLoaded = false
         iconPacks = appManager.getIconPacks()
         getAppFilterElements()
@@ -240,8 +238,7 @@ class ApplicationProvider(private val context: Context) {
             )
     }
 
-    @Suppress(SuppressRedundantSuspendModifier)
-    private suspend fun loadAlchemiconPack() {
+    private suspend fun loadAlchemiconPack() = withContext(Dispatchers.Default) {
         val db = Room.databaseBuilder(
             context,
             AlchemiconPackDatabase::class.java, "alchemiconPack"

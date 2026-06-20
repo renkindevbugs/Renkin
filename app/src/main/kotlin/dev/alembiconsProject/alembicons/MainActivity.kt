@@ -78,9 +78,13 @@ class MainActivity : ComponentActivity() {
         // App + pack loading runs in lifecycle-scoped coroutines (the heavy work
         // hops to Dispatchers.Default inside each call) so the main thread stays
         // free during startup; the UI shows loading state until the list arrives.
-        lifecycleScope.launch { appProvider.initializeApplications() }
+        // The Alchemicon pack reads applicationList, so it must run after the apps
+        // are loaded; icon packs are independent and load in parallel.
+        lifecycleScope.launch {
+            appProvider.initializeApplications()
+            appProvider.initializeAlchemiconPack()
+        }
         lifecycleScope.launch { appProvider.initializeIconPacks() }
-        lifecycleScope.launch { appProvider.initializeAlchemiconPack() }
 
         // Icon-watch (phase 4): the daily safety-net check is always scheduled (version-gated,
         // so it's near-free when nothing changed); the event-driven fast path needs the
