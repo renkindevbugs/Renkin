@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Spacer
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -26,6 +28,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -80,7 +83,6 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.fadeIn
@@ -97,9 +99,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -273,7 +277,6 @@ fun OptionsDialog(
                     heroBitmap = heroBitmap,
                     appName = app.appName,
                     previewIcon = iconToConfirm,
-                    collapsed = headerCollapsed,
                     onDismiss = startClose,
                     onClear = { showConfirmClear = true },
                     onConfirm = { onConfirm(iconToConfirm) }
@@ -476,21 +479,18 @@ private fun ComparisonHeader(
     heroBitmap: Bitmap?,
     appName: String,
     previewIcon: IconPackDrawable?,
-    collapsed: Boolean,
     onDismiss: () -> Unit,
     onClear: () -> Unit,
     onConfirm: () -> Unit
 ) {
-    val iconSize by animateDpAsState(
-        targetValue = if (collapsed) 36.dp else 64.dp,
-        animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow),
-        label = "headerIconSize"
+    val iconSize = 56.dp
+
+    // Both icons fly up into their slots when the dialog opens
+    val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
+    val flyInSpec = spring<androidx.compose.ui.unit.IntOffset>(
+        Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow
     )
-    val verticalPadding by animateDpAsState(
-        targetValue = if (collapsed) 6.dp else 12.dp,
-        animationSpec = spring(Spring.DampingRatioNoBouncy, Spring.StiffnessMediumLow),
-        label = "headerPadding"
-    )
+    var menuOpen by remember { mutableStateOf(false) }
 
     ElevatedCard(
         modifier = Modifier
@@ -501,12 +501,13 @@ private fun ComparisonHeader(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
     ) {
+        // Tier 1 — app bar: close, name, overflow (destructive reset lives here)
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = verticalPadding),
+                .padding(start = 8.dp, end = 8.dp, top = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             FilledTonalIconButton(onClick = onDismiss, modifier = Modifier.size(40.dp)) {
                 Icon(
@@ -516,100 +517,156 @@ private fun ComparisonHeader(
                 )
             }
 
-            // Both icons fly up into their header slots when the dialog opens
-            val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
-            val flyInSpec = spring<androidx.compose.ui.unit.IntOffset>(
-                Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow
-            )
-
-            AnimatedVisibility(
-                visibleState = flyIn,
-                enter = slideInVertically(flyInSpec) { it * 2 } + fadeIn() +
-                        scaleIn(initialScale = 0.5f)
-            ) {
-                if (heroBitmap != null) {
-                    Image(
-                        painter = BitmapPainter(heroBitmap.asImageBitmap()),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(iconSize)
-                            .clip(RoundedCornerShape(iconSize / 4))
-                    )
-                } else {
-                    Surface(
-                        modifier = Modifier.size(iconSize),
-                        shape = RoundedCornerShape(iconSize / 4),
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Filled.Face, null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(iconSize / 2))
-                        }
-                    }
-                }
-            }
-
-            Text(
-                text = "→",
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
-
-            val borderColor = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-            AnimatedVisibility(
-                visibleState = flyIn,
-                enter = slideInVertically(flyInSpec) { it * 2 } + fadeIn() +
-                        scaleIn(initialScale = 0.5f)
-            ) {
-                Surface(
-                    modifier = Modifier.size(iconSize),
-                    shape = RoundedCornerShape(iconSize / 4),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    border = BorderStroke(2.dp, borderColor)
-                ) {
-                    if (previewIcon != null) {
-                        Image(
-                            painter = previewIcon.getPainter(),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(
-                                imageVector = Icons.Filled.Add,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.outlineVariant,
-                                modifier = Modifier.size(iconSize / 2)
-                            )
-                        }
-                    }
-                }
-            }
-
             Text(
                 text = appName,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+                maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .weight(1f)
-                    .padding(start = 2.dp)
+                    .padding(start = 4.dp)
             )
 
-            IconButton(onClick = onClear, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = Icons.Filled.Delete,
-                    contentDescription = stringResource(R.string.clearIcons),
-                    tint = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(20.dp)
-                )
+            Box {
+                IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        imageVector = Icons.Filled.MoreVert,
+                        contentDescription = stringResource(R.string.moreOptions),
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                    DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = stringResource(R.string.resetToDefault),
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Filled.Delete,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        },
+                        onClick = {
+                            menuOpen = false
+                            onClear()
+                        }
+                    )
+                }
             }
-            FilledIconButton(onClick = onConfirm, modifier = Modifier.size(40.dp)) {
+        }
+
+        // Tier 2 — comparison hero (Current → New) with Apply as the primary action
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Current icon
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    AnimatedVisibility(
+                        visibleState = flyIn,
+                        enter = slideInVertically(flyInSpec) { it * 2 } + fadeIn() +
+                                scaleIn(initialScale = 0.5f)
+                    ) {
+                        if (heroBitmap != null) {
+                            Image(
+                                painter = BitmapPainter(heroBitmap.asImageBitmap()),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .size(iconSize)
+                                    .clip(RoundedCornerShape(iconSize / 4))
+                            )
+                        } else {
+                            Surface(
+                                modifier = Modifier.size(iconSize),
+                                shape = RoundedCornerShape(iconSize / 4),
+                                color = MaterialTheme.colorScheme.surfaceVariant
+                            ) {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Icon(Icons.Filled.Face, null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(iconSize / 2))
+                                }
+                            }
+                        }
+                    }
+                    Text(
+                        text = stringResource(R.string.iconCurrent),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                Text(
+                    text = "→",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                )
+
+                // New icon
+                val borderColor = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    AnimatedVisibility(
+                        visibleState = flyIn,
+                        enter = slideInVertically(flyInSpec) { it * 2 } + fadeIn() +
+                                scaleIn(initialScale = 0.5f)
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(iconSize),
+                            shape = RoundedCornerShape(iconSize / 4),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                            border = BorderStroke(2.dp, borderColor)
+                        ) {
+                            if (previewIcon != null) {
+                                Image(
+                                    painter = previewIcon.getPainter(),
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Add,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.outlineVariant,
+                                        modifier = Modifier.size(iconSize / 2)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    Text(
+                        text = stringResource(R.string.iconNew),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+            }
+
+            Button(
+                onClick = onConfirm,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Filled.Done,
-                    contentDescription = stringResource(R.string.confirm),
-                    modifier = Modifier.size(20.dp)
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
                 )
+                Spacer(Modifier.width(8.dp))
+                Text(stringResource(R.string.apply))
             }
         }
     }
