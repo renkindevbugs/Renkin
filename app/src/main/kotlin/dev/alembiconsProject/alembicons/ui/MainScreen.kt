@@ -42,7 +42,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.Card
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
@@ -180,8 +179,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = { TitleBar(scrollBehavior) { isInRefresh = it } },
-        floatingActionButton = { BuildPackFab(isInRefresh, expanded = listState.isScrollingUp()) },
-        bottomBar = { BottomBar() }
+        floatingActionButton = { BuildPackFab(isInRefresh, expanded = listState.isScrollingUp()) }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
             SearchBar(
@@ -808,26 +806,6 @@ fun InfoDialog(onDismiss: () -> Unit) {
                     modifier = Modifier.padding(end = 16.dp)
                 )
                 Text(text = stringResource(id = R.string.watchIconDescription))
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun BottomBar() {
-    if (!getCurrentMainActivity().appProvider.iconPackLoaded) {
-        BottomAppBar(containerColor = MaterialTheme.colorScheme.background,
-            contentColor = MaterialTheme.colorScheme.primary
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(stringResource(id = R.string.syncIconPack), Modifier.padding(4.dp))
-                LoadingIndicator(
-                    modifier = Modifier
-                        .width(40.dp)
-                        .padding(4.dp),
-                    color = MaterialTheme.colorScheme.secondary,
-                )
             }
         }
     }
