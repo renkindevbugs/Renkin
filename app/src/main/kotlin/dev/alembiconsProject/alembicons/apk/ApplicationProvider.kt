@@ -13,10 +13,8 @@ import dev.alembiconsProject.alembicons.data.DbApplication
 import dev.alembiconsProject.alembicons.data.RenkinPackRepository
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IconPack
-import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
-import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
 import dev.alembiconsProject.alembicons.data.getDefaultIconColor
@@ -26,8 +24,6 @@ import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.extension.bitmapFromBase64
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
-import dev.alembiconsProject.alembicons.icon.creator.IconGenerator
-import dev.alembiconsProject.alembicons.icon.creator.IconPackContainer
 import dev.alembiconsProject.alembicons.icon.parser.XmlNodeParser
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
@@ -52,6 +48,7 @@ class ApplicationProvider(private val context: Context) {
 
     private val renkinPackRepo = RenkinPackRepository(context)
     private val iconPackRepo = IconPackRepository(context)
+    private val iconGenService = IconGenerationService(context, iconPackRepo)
 
     private var am: ApplicationManager? = null
     private val appManager: ApplicationManager
@@ -92,18 +89,7 @@ class ApplicationProvider(private val context: Context) {
     suspend fun refreshIcon(application: PackageInfoStruct, preferences: Preferences) = withContext(Dispatchers.Default) {
         // A newly installed app always gets its icon (re)generated
         val genOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
-        refreshIcon(application, genOptions)
-    }
-
-    private fun refreshIcon(application: PackageInfoStruct, options: GenerationOptions) {
-        val primaryIconPackApps = iconPackRepo.getAppDrawables(options.primaryIconPack)
-        val secondaryIconPackApps = iconPackRepo.getAppDrawables(options.secondaryIconPack)
-
-        val pack1 = IconPackContainer(options.primaryIconPack, primaryIconPackApps)
-        val pack2 = IconPackContainer(options.secondaryIconPack, secondaryIconPackApps)
-
-        val builder = IconGenerator(context, options, pack1, pack2)
-        builder.generateIcon(application) { app, icon ->
+        iconGenService.refreshIcon(application, genOptions) { app, icon ->
             editApplication(app, app.changeExport(icon))
         }
     }
@@ -111,9 +97,6 @@ class ApplicationProvider(private val context: Context) {
     suspend fun refreshIcons(preferences: Preferences) = withContext(Dispatchers.Default) {
         var opt = GenerationOptions.fromPreferences(preferences, context)
         val retrieveCalendarIcon = preferences.getBooleanValue(CalendarIconsKey)
-
-        val primaryIconPackApps = iconPackRepo.getAppDrawables(opt.primaryIconPack)
-        val secondaryIconPackApps = iconPackRepo.getAppDrawables(opt.secondaryIconPack)
 
         if (opt.primaryIconPack != "" && retrieveCalendarIcon) {
             iconPackRepo.retrieveCalendarIcons(opt.primaryIconPack)
@@ -127,31 +110,13 @@ class ApplicationProvider(private val context: Context) {
             )
         }
 
-        val pack1 = IconPackContainer(opt.primaryIconPack, primaryIconPackApps)
-        val pack2 = IconPackContainer(opt.secondaryIconPack, secondaryIconPackApps)
-
-        val builder = IconGenerator(context, opt, pack1, pack2)
-        builder.generateIcons(applicationList) { application, icon ->
+        iconGenService.refreshIcons(applicationList, opt) { application, icon ->
             editApplication(application, application.changeExport(icon))
         }
     }
 
     suspend fun getIcon(application: PackageInfoStruct, options: GenerationOptions, customIcon: ResourceDrawable? = null): IconPackDrawable? =
-        withContext(Dispatchers.Default) {
-            var icon: IconPackDrawable? = null
-
-            val primaryIconPackApps = iconPackRepo.getAppDrawables(options.primaryIconPack)
-
-            val pack1 = IconPackContainer(options.primaryIconPack, primaryIconPackApps)
-            val pack2 = IconPackContainer("", emptyMap())
-
-            val builder = IconGenerator(context, options, pack1, pack2)
-            builder.generateIcon(application, customIcon) { _, newIcon ->
-                icon = newIcon
-            }
-
-            icon
-        }
+        iconGenService.getIcon(application, options, customIcon)
 
     /**
      * Builds the icon a specific pack provides for an app, by drawable name — used by the
@@ -162,24 +127,12 @@ class ApplicationProvider(private val context: Context) {
         packPackage: String,
         drawableName: String,
         options: GenerationOptions
-    ): IconPackDrawable? {
-        val ids = appManager.getIconPackDrawableIds(packPackage, listOf(drawableName))
-        val resource = appManager.getIconPackDrawables(packPackage, ids).firstOrNull() ?: return null
-        val packOptions = options.copy(
-            primarySource = Source.ICON_PACK,
-            primaryImageEdit = ImageEdit.NONE,
-            primaryIconPack = packPackage
-        )
-        return getIcon(application, packOptions, resource)
-    }
+    ): IconPackDrawable? =
+        iconGenService.getIconFromPackDrawable(application, packPackage, drawableName, options)
 
     /** Applies the modifier from [options] to an already-built icon (e.g. a hand-edited vector). */
     suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =
-        withContext(Dispatchers.Default) {
-            val pack = IconPackContainer("", emptyMap())
-            val builder = IconGenerator(context, options, pack, pack)
-            builder.applyModifier(icon, options.primaryImageEdit)
-        }
+        iconGenService.applyModifier(icon, options)
 
     suspend fun buildAndSignIconPack(preferences: Preferences, textMethod: (text: String) -> Unit): BuiltIconPack =
         withContext(Dispatchers.Default) {
@@ -275,23 +228,7 @@ class ApplicationProvider(private val context: Context) {
     }
 
     suspend fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, IconPackDrawable?> =
-        withContext(Dispatchers.Default) {
-            val exportDrawables = mutableMapOf<ResourceDrawable, IconPackDrawable?>()
-
-            val pack = IconPackContainer("", emptyMap())
-
-            val builder = IconGenerator(context, options, pack, pack)
-            for (drawable in drawables) {
-                // One broken icon must not take the whole pack down (#119)
-                exportDrawables[drawable] = try {
-                    builder.colorizeFromIconPack(iconPackName, drawable)
-                } catch (_: Exception) {
-                    null
-                }
-            }
-
-            exportDrawables
-        }
+        iconGenService.getIconPackIcons(iconPackName, options, drawables)
 
     suspend fun getIconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
         iconPackRepo.getDropdownIcons(application)
