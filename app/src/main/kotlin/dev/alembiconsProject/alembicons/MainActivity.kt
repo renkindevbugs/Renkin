@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -22,11 +23,9 @@ import androidx.lifecycle.lifecycleScope
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
-import dev.alembiconsProject.alembicons.apk.ApplicationProvider
 import dev.alembiconsProject.alembicons.data.PackageAddedNotificationKey
 import dev.alembiconsProject.alembicons.data.getPreferenceFlow
 import dev.alembiconsProject.alembicons.data.isDarkModeEnabled
-import dev.alembiconsProject.alembicons.data.isSystemInDarkTheme
 import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
@@ -42,7 +41,12 @@ import kotlinx.coroutines.launch
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 class MainActivity : ComponentActivity() {
-    val appProvider = ApplicationProvider(this)
+    private val viewModel: MainViewModel by viewModels()
+
+    // Delegated to the ViewModel so the provider and its loaded state survive
+    // configuration changes. Existing getCurrentMainActivity().appProvider call
+    // sites keep working unchanged.
+    val appProvider get() = viewModel.appProvider
 
     // Keys ("package/activity") of icons changed in this session, so the pack preview
     // can surface them first and flag them. Session-only (cleared on restart).
@@ -70,20 +74,9 @@ class MainActivity : ComponentActivity() {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
 
-        appProvider.defaultColor = if (this.isSystemInDarkTheme()) Color.White else Color.Black
-
+        // App + pack loading now lives in MainViewModel, so it runs once and
+        // survives configuration changes (rotation) instead of re-loading.
         handleWatchIntent(intent)
-
-        // App + pack loading runs in lifecycle-scoped coroutines (the heavy work
-        // hops to Dispatchers.Default inside each call) so the main thread stays
-        // free during startup; the UI shows loading state until the list arrives.
-        // The Alchemicon pack reads applicationList, so it must run after the apps
-        // are loaded; icon packs are independent and load in parallel.
-        lifecycleScope.launch {
-            appProvider.initializeApplications()
-            appProvider.initializeAlchemiconPack()
-        }
-        lifecycleScope.launch { appProvider.initializeIconPacks() }
 
         // Icon-watch (phase 4): the daily safety-net check is always scheduled (version-gated,
         // so it's near-free when nothing changed); the event-driven fast path needs the
