@@ -653,19 +653,26 @@ private fun ActiveRuleCard(
                         AppPill(app, ra.packageName)
                     }
                 }
-                IconButton(onClick = onEdit, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Filled.Edit, stringResource(R.string.editWatchRule),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-                    Icon(
-                        Icons.Filled.Delete, stringResource(R.string.deleteRule),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp)
-                    )
+                // Stacked vertically so they take a narrow column instead of a wide
+                // row, leaving more width for the app pills. Delete on top, edit as
+                // the filled "bubble" below it.
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
+                        Icon(
+                            Icons.Filled.Delete, stringResource(R.string.deleteRule),
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                    FilledTonalIconButton(onClick = onEdit, modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            Icons.Filled.Edit, stringResource(R.string.editWatchRule),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
             HorizontalDivider(
