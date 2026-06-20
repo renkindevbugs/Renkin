@@ -400,9 +400,9 @@ fun OpenAppOptions(
 ) {
     val activity = getCurrentMainActivity()
 
-    AppOptions(iconPacks, app, themed, { icon, scale ->
+    AppOptions(iconPacks, app, themed, { icon ->
         activity.lifecycleScope.launch(Dispatchers.Default) {
-            activity.appProvider.editApplication(index, app.changeExport(icon, scale))
+            activity.appProvider.editApplication(index, app.changeExport(icon))
             activity.markIconChanged(app.packageName, app.activityName)
             onDismiss()
         }
@@ -410,7 +410,7 @@ fun OpenAppOptions(
         onDismiss()
     }) {
         onDismiss()
-        activity.appProvider.editApplication(index, app.changeExport(null, 1f))
+        activity.appProvider.editApplication(index, app.changeExport(null))
     }
 }
 

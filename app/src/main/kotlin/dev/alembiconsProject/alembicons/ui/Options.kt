@@ -107,7 +107,7 @@ fun AppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?, iconScale: Float) -> Unit,
+    onConfirm: (icon: IconPackDrawable?) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {

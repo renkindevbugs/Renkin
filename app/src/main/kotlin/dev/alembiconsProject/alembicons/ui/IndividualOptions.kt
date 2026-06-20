@@ -126,7 +126,7 @@ fun OptionsDialog(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?, iconScale: Float) -> Unit,
+    onConfirm: (icon: IconPackDrawable?) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
@@ -156,7 +156,7 @@ fun OptionsDialog(
     var edgeThreshold by rememberSaveable { mutableFloatStateOf(2.5f) }
     var edgeSmoothing by rememberSaveable { mutableFloatStateOf(2f) }
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
-    var iconScale by rememberSaveable { mutableFloatStateOf(app.iconScale) }
+    var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
 
     // Slide the editor in from the right; closing plays the reverse animation
     // before the dialog window is actually dismissed
@@ -208,17 +208,21 @@ fun OptionsDialog(
             optionsInitialized = true
             return@LaunchedEffect
         }
-        if (generatingOptions.primarySource == Source.ICON_PACK
-            && customIconList.isEmpty() && app.createdIcon == null) {
-            // Never auto-pick an icon from a pack — wait for an explicit tap
-            currentIcon = null
-            return@LaunchedEffect
-        }
         val custom = customIconList.firstOrNull()
-        // getIcon hops to Dispatchers.Default internally, so this no longer blocks
-        // the main thread; show the spinner for the duration.
+        // getIcon / applyModifier hop to Dispatchers.Default internally, so this no
+        // longer blocks the main thread; show the spinner for the duration.
         generatingPreview = true
-        currentIcon = viewModel.appProvider.getIcon(app, generatingOptions, custom)
+        currentIcon = when {
+            // Explicit pick from a pack
+            custom != null -> viewModel.appProvider.getIcon(app, generatingOptions, custom)
+            // Icon-pack source with no new pick: apply the modifier to the already
+            // saved icon rather than pulling a fresh one from the first pack (which
+            // would swap the icon out from under the user). Null until a tap if none.
+            generatingOptions.primarySource == Source.ICON_PACK ->
+                app.createdIcon?.let { viewModel.appProvider.applyModifier(it, generatingOptions) }
+            // Text / app-icon sources generate from the source itself
+            else -> viewModel.appProvider.getIcon(app, generatingOptions, null)
+        }
         generatingPreview = false
     }
 
@@ -301,7 +305,7 @@ fun OptionsDialog(
                     previewLoading = generatingPreview,
                     onDismiss = startClose,
                     onClear = { showConfirmClear = true },
-                    onConfirm = { onConfirm(iconToConfirm, iconScale) }
+                    onConfirm = { onConfirm(iconToConfirm) }
                 )
 
                 // The Create tab draws its own divider under the search bar;
