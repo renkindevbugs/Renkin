@@ -50,10 +50,8 @@ import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
 import dev.alembiconsProject.alembicons.packages.PermissionManager
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.alembiconsProject.alembicons.MainViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
@@ -180,53 +178,39 @@ private val settingsButtonModifier: Modifier
 
 @Composable
 fun SyncButton() {
-    val mainActivity = getCurrentMainActivity()
     val viewModel: MainViewModel = viewModel()
     val context = getCurrentContext()
-    var done by remember { mutableStateOf(false) }
 
     Button(
-        onClick = {
-            mainActivity.lifecycleScope.launch(Dispatchers.Default) {
-                viewModel.appProvider.forceSync()
-                done = true
-            }
-        },
+        onClick = { viewModel.sync() },
         shape = RoundedCornerShape(16.dp),
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.syncPacks))
     }
 
-    if (done) {
+    if (viewModel.syncDone) {
         ShowToast(context.getString(R.string.packsSynced))
-        done = false
+        viewModel.consumeSyncDone()
     }
 }
 
 @Composable
 fun RefreshApplicationListButton() {
-    val mainActivity = getCurrentMainActivity()
     val viewModel: MainViewModel = viewModel()
     val context = getCurrentContext()
-    var done by remember { mutableStateOf(false) }
 
     Button(
-        onClick = {
-            mainActivity.lifecycleScope.launch(Dispatchers.Default) {
-                viewModel.appProvider.initialize()
-                done = true
-            }
-        },
+        onClick = { viewModel.refreshApps() },
         shape = RoundedCornerShape(16.dp),
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.refreshApplicationList))
     }
 
-    if (done) {
+    if (viewModel.appsRefreshed) {
         ShowToast(context.getString(R.string.appListRefreshed))
-        done = false
+        viewModel.consumeAppsRefreshed()
     }
 }
 
@@ -275,16 +259,11 @@ fun DeleteIconPackButton() {
 
 @Composable
 fun RemoveIconsButton() {
-    val mainActivity = getCurrentMainActivity()
     val viewModel: MainViewModel = viewModel()
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
-        onClick = {
-            mainActivity.lifecycleScope.launch(Dispatchers.Default) {
-                viewModel.appProvider.clearIcons()
-            }
-        },
+        onClick = { viewModel.clearIcons() },
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = MaterialTheme.colorScheme.errorContainer,
