@@ -36,7 +36,6 @@ import dev.alembiconsProject.alembicons.service.PackageAddedService
 import dev.alembiconsProject.alembicons.service.WatchWorker
 import dev.alembiconsProject.alembicons.ui.*
 import dev.alembiconsProject.alembicons.ui.theme.IconerationTheme
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -89,14 +88,14 @@ class MainActivity : ComponentActivity() {
         // Icon-watch (phase 4): the daily safety-net check is always scheduled (version-gated,
         // so it's near-free when nothing changed); the event-driven fast path needs the
         // package receiver running, so start it when there are active watch rules.
-        CoroutineScope(Dispatchers.Default).launch {
+        lifecycleScope.launch(Dispatchers.Default) {
             WatchWorker.schedulePeriodic(applicationContext)
             if (WatchRepository(applicationContext).getActiveRules().isNotEmpty()) {
                 startPackageAddedService()
             }
         }
 
-        CoroutineScope(Dispatchers.Default).launch {
+        lifecycleScope.launch(Dispatchers.Default) {
             applicationContext.dataStore.getPreferenceFlow(PackageAddedNotificationKey).collect {
                 if (it == true) {
                     if (PermissionManager(this@MainActivity).isPostNotificationEnabled()) {

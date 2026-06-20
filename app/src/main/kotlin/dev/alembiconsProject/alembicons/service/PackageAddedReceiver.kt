@@ -10,6 +10,7 @@ import dev.alembiconsProject.alembicons.dataStore
 import dev.alembiconsProject.alembicons.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class PackageAddedReceiver: BroadcastReceiver() {
@@ -32,8 +33,15 @@ class PackageAddedReceiver: BroadcastReceiver() {
 
         if (intent?.action == Intent.ACTION_PACKAGE_ADDED) {
             Log.debug("Alembicons", intent.data.toString() + " added")
+            // goAsync keeps the process alive past onReceive while we read prefs and
+            // act; finish() is called once the (now finite) work completes.
+            val pendingResult = goAsync()
             CoroutineScope(Dispatchers.Default).launch {
-                handleNewApplication(context, intent)
+                try {
+                    handleNewApplication(context, intent)
+                } finally {
+                    pendingResult.finish()
+                }
             }
         }
 
@@ -43,9 +51,10 @@ class PackageAddedReceiver: BroadcastReceiver() {
     }
 
     private suspend fun handleNewApplication(context: Context, intent: Intent) {
-        context.dataStore.data.collect {
-            handleNewApplication(context, intent, it)
-        }
+        // Read the current prefs once instead of collecting forever (which never
+        // completed and leaked the coroutine).
+        val prefs = context.dataStore.data.first()
+        handleNewApplication(context, intent, prefs)
     }
 
     private fun handleNewApplication(context: Context, intent: Intent, prefs: Preferences) {
