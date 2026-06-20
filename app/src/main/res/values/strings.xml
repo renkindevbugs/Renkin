@@ -150,6 +150,9 @@
     <string name="openWatchedIcons">Open watched icons</string>
     <string name="deleteRuleTitle">Delete this rule?</string>
     <string name="deleteRuleText">This watch rule will be removed.</string>
+    <string name="deleteAllCompleted">Delete all completed</string>
+    <string name="deleteAllCompletedTitle">Delete all completed?</string>
+    <string name="deleteAllCompletedText">All completed watch suggestions will be removed.</string>
     <string name="watchRefreshNone">No new icons found</string>
     <string name="watchRefreshFound">%d new icon(s) found</string>
     <string name="iconAvailableChannelName">New icon available</string>

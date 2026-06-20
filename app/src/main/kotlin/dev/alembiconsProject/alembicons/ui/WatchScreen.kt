@@ -135,6 +135,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
     var showEditor by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<RuleWithDetails?>(null) }
     var pendingDelete by remember { mutableStateOf<Long?>(null) }
+    var pendingDeleteAllCompleted by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
     var applySuggestionId by remember { mutableStateOf<Long?>(null) }
 
@@ -221,6 +222,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         onEdit = { editing = it; showEditor = true },
                         onApply = { rule -> rule.suggestions.firstOrNull()?.id?.let { applySuggestionId = it } },
                         onDelete = { ruleId -> pendingDelete = ruleId },
+                        onDeleteAllCompleted = { pendingDeleteAllCompleted = true },
                         onSimulate = {
                             scope.launch {
                                 // Establish a baseline, stale it, then re-check via the worker
@@ -238,11 +240,25 @@ fun WatchScreen(onDismiss: () -> Unit) {
     }
 
     pendingDelete?.let { ruleId ->
-        DeleteRuleDialog(
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.deleteRuleTitle),
+            text = stringResource(R.string.deleteRuleText),
             onDismiss = { pendingDelete = null },
             onConfirm = {
                 pendingDelete = null
                 scope.launch { repo.deleteRule(ruleId) }
+            }
+        )
+    }
+
+    if (pendingDeleteAllCompleted) {
+        ConfirmDeleteDialog(
+            title = stringResource(R.string.deleteAllCompletedTitle),
+            text = stringResource(R.string.deleteAllCompletedText),
+            onDismiss = { pendingDeleteAllCompleted = false },
+            onConfirm = {
+                pendingDeleteAllCompleted = false
+                scope.launch { repo.deleteRules(rules.filter { it.rule.completed }.map { it.rule.id }) }
             }
         )
     }
@@ -444,13 +460,13 @@ private fun packsName(packs: List<IconPack>, packageName: String): String =
     packs.find { it.packageName == packageName }?.applicationName ?: packageName
 
 @Composable
-private fun DeleteRuleDialog(onDismiss: () -> Unit, onConfirm: () -> Unit) {
+private fun ConfirmDeleteDialog(title: String, text: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     androidx.compose.material3.AlertDialog(
         shape = RoundedCornerShape(28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.deleteRuleTitle)) },
-        text = { Text(stringResource(R.string.deleteRuleText)) },
+        title = { Text(title) },
+        text = { Text(text) },
         confirmButton = {
             IconButton(onClick = onConfirm) {
                 Icon(Icons.Filled.Check, stringResource(R.string.confirm), tint = MaterialTheme.colorScheme.primary)
@@ -481,6 +497,7 @@ private fun WatchRuleList(
     onEdit: (RuleWithDetails) -> Unit,
     onApply: (RuleWithDetails) -> Unit,
     onDelete: (Long) -> Unit,
+    onDeleteAllCompleted: () -> Unit,
     onSimulate: () -> Unit
 ) {
     val completed = rules.filter { it.rule.completed }
@@ -543,7 +560,21 @@ private fun WatchRuleList(
                         }
                     }
                     if (completed.isNotEmpty()) {
-                        item { SectionLabel(stringResource(R.string.watchCompleted)) }
+                        item {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                SectionLabel(stringResource(R.string.watchCompleted), Modifier.weight(1f))
+                                IconButton(onClick = onDeleteAllCompleted, modifier = Modifier.size(36.dp)) {
+                                    Icon(
+                                        Icons.Filled.Delete,
+                                        stringResource(R.string.deleteAllCompleted),
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
+                            }
+                        }
                         items(completed, key = { it.rule.id }) { rule ->
                             Box(Modifier.animateItem()) {
                                 CompletedRuleCard(
@@ -586,12 +617,12 @@ private fun WatchRuleList(
 }
 
 @Composable
-private fun SectionLabel(text: String) {
+private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
         text = text.uppercase(),
         style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-        modifier = Modifier.padding(start = 4.dp, top = 4.dp)
+        modifier = modifier.padding(start = 4.dp, top = 4.dp)
     )
 }
 
