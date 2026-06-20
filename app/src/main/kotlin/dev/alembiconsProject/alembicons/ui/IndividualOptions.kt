@@ -62,6 +62,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.data.IconPack
@@ -129,7 +131,7 @@ fun OptionsDialog(
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
-    val activity = getCurrentMainActivity()
+    val viewModel: MainViewModel = viewModel()
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var source by rememberSaveable { mutableStateOf(Source.ICON_PACK) }
@@ -217,7 +219,7 @@ fun OptionsDialog(
         // getIcon hops to Dispatchers.Default internally, so this no longer blocks
         // the main thread; show the spinner for the duration.
         generatingPreview = true
-        currentIcon = activity.appProvider.getIcon(app, generatingOptions, custom)
+        currentIcon = viewModel.appProvider.getIcon(app, generatingOptions, custom)
         generatingPreview = false
     }
 
@@ -232,7 +234,7 @@ fun OptionsDialog(
             generatingOptions.primaryImageEdit == ImageEdit.NONE -> base
             else -> {
                 generatingPreview = true
-                val result = activity.appProvider.applyModifier(base, generatingOptions)
+                val result = viewModel.appProvider.applyModifier(base, generatingOptions)
                 generatingPreview = false
                 result
             }
