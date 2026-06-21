@@ -35,8 +35,8 @@ object CrashReporter {
     //  3. ⋮ menu → "Get pre-filled link" → put any text in the field → "Get link" → the
     //     copied URL contains "entry.<NUMBER>=..." → that NUMBER is FORM_ENTRY_ID.
     // Until both are filled in, [sendReport] is a no-op that reports failure.
-    private const val FORM_ID = "PASTE_FORM_ID_HERE"
-    private const val FORM_ENTRY_ID = "PASTE_ENTRY_ID_HERE"
+    private const val FORM_ID = "1FAIpQLSdsusd7Suze7yZlw48wHQBMuy7I9Ut9cxOnxNNkDLHQy7tfGg"
+    private const val FORM_ENTRY_ID = "2115806369"
 
     /** Records uncaught exceptions to the crash file; call once from the Application. */
     fun install(context: Context) {
