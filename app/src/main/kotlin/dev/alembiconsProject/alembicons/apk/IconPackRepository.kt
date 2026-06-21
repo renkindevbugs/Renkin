@@ -45,7 +45,9 @@ class IconPackRepository(private val context: Context) {
 
     suspend fun load() = withContext(Dispatchers.Default) {
         iconPackLoaded = false
-        iconPacks = appManager.getIconPacks()
+        // Drop our own generated pack — it only ever holds icons we just built, so offering
+        // it as an icon source (or a watch target) is pointless and just clutters the lists.
+        iconPacks = appManager.getIconPacks().filter { it.packageName != IconPackBuilder.PACKAGE_NAME }
         loadAppFilterElements()
     }
 
