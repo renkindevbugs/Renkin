@@ -3,6 +3,7 @@ package dev.alembiconsProject.alembicons.apk
 import android.content.Context
 import android.net.Uri
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
@@ -28,8 +29,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
 class ApplicationProvider(private val context: Context) {
-    var applicationList: List<PackageInfoStruct> by mutableStateOf(listOf())
-        private set
+    // A SnapshotStateList (not mutableStateOf(List)) so editing one app's icon is an O(1)
+    // in-place set instead of copying the whole list — refreshIcons edits every app, so the
+    // old copy-per-edit made it O(n²). Exposed read-only as List; the UI still observes it.
+    private val _applicationList = mutableStateListOf<PackageInfoStruct>()
+    val applicationList: List<PackageInfoStruct> get() = _applicationList
     // Icon-pack data (packs, app-filter elements, calendar icons) lives in
     // IconPackRepository; iconPacks / iconPackLoaded delegate to it so existing UI reads
     // stay reactive (the repo backs them with Compose state).
@@ -61,7 +65,8 @@ class ApplicationProvider(private val context: Context) {
         val apps = appManager.getAllInstalledApps()
         apps.sort()
 
-        applicationList = apps.toList()
+        _applicationList.clear()
+        _applicationList.addAll(apps.asList())
         applicationsLoaded = true
     }
 
@@ -104,7 +109,9 @@ class ApplicationProvider(private val context: Context) {
             )
         }
 
-        iconGenService.refreshIcons(applicationList, opt) { application, icon ->
+        // Iterate a snapshot copy: the callback edits the live list in place, and iterating
+        // the SnapshotStateList itself while mutating it would throw.
+        iconGenService.refreshIcons(applicationList.toList(), opt) { application, icon ->
             editApplication(application, application.changeExport(icon))
         }
     }
@@ -187,9 +194,7 @@ class ApplicationProvider(private val context: Context) {
     }
 
     fun editApplication(index: Int, newApp: PackageInfoStruct) {
-        applicationList = applicationList.toMutableList().also {
-            it[index] = newApp
-        }
+        _applicationList[index] = newApp
     }
 
     suspend fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, IconPackDrawable?> =
@@ -199,7 +204,8 @@ class ApplicationProvider(private val context: Context) {
         iconPackRepo.getDropdownIcons(application)
 
     suspend fun clearIcons() = withContext(Dispatchers.Default) {
-        for (app in applicationList) {
+        // Snapshot copy: editApplication mutates the live list in place.
+        for (app in applicationList.toList()) {
             editApplication(app, app.changeExport(null))
         }
         // Persist the cleared state, otherwise the saved pack reloads the icons on the
