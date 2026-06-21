@@ -89,12 +89,6 @@ class ApplicationManager(private val ctx: Context) {
         return getIconPacks(Intent("org.adw.launcher.THEMES", null))
     }
 
-    /** True if [packageName] is an installed icon pack (declares the THEMES intent filter). */
-    fun isIconPack(packageName: String): Boolean {
-        val intent = Intent("org.adw.launcher.THEMES", null).setPackage(packageName)
-        return getResolves(intent).isNotEmpty()
-    }
-
     fun getAppFilterRawElements(iconPackName: String, applications: List<InstalledApplication>): List<RawElement> {
         val res = getResources(iconPackName) ?: return emptyList()
         val xmlParser = getAppfilter(res, iconPackName)

@@ -52,7 +52,15 @@ class MainViewModel @Inject constructor(
     var newIconPackInstalled by mutableStateOf<String?>(null)
         private set
 
-    fun onIconPackInstalled(label: String) { newIconPackInstalled = label }
+    // Packs we've already prompted for this session, so dismissing the dialog doesn't make
+    // it pop again on every return to the foreground.
+    private val promptedIconPacks = mutableSetOf<String>()
+
+    /** Prompts for a newly-detected icon pack, at most once per pack per session. */
+    fun onIconPackInstalled(packageName: String, label: String) {
+        if (!promptedIconPacks.add(packageName)) return
+        newIconPackInstalled = label
+    }
 
     fun dismissNewIconPack() { newIconPackInstalled = null }
 

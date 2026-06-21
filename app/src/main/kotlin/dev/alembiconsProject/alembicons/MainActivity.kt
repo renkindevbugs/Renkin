@@ -1,9 +1,7 @@
 package dev.alembiconsProject.alembicons
 
-import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -19,19 +17,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
-import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
-import dev.alembiconsProject.alembicons.data.PackageAddedNotificationKey
-import dev.alembiconsProject.alembicons.data.getPreferenceFlow
 import dev.alembiconsProject.alembicons.data.isDarkModeEnabled
-import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
-import dev.alembiconsProject.alembicons.packages.PermissionManager
 import dev.alembiconsProject.alembicons.service.BootCompletedReceiver
 import dev.alembiconsProject.alembicons.service.PackageAddedService
 import dev.alembiconsProject.alembicons.service.WatchWorker
@@ -82,20 +75,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        lifecycleScope.launch(Dispatchers.Default) {
-            applicationContext.dataStore.getPreferenceFlow(PackageAddedNotificationKey).collect {
-                if (it == true) {
-                    if (PermissionManager(this@MainActivity).isPostNotificationEnabled()) {
-                        startPackageAddedService()
-                    } else {
-                        stopPackageAddedService()
-                        applicationContext.dataStore.setBooleanValue(
-                            PackageAddedNotificationKey, false)
-                    }
-                }
-            }
-        }
-
         setContent {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
             edgeToEdge(darkMode)
@@ -125,39 +104,26 @@ class MainActivity : ComponentActivity() {
         handleWatchIntent(intent)
     }
 
-    // While the app is open, watch for newly installed icon packs (excluding our own
-    // generated pack and updates). The background PackageAddedReceiver stays silent for
-    // icon packs; here we instead prompt the user to reload so the new pack shows up.
-    private val iconPackInstallReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            if (intent.action != Intent.ACTION_PACKAGE_ADDED) return
-            if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return
-            val packageName = intent.data?.schemeSpecificPart ?: return
-            if (packageName == IconPackBuilder.PACKAGE_NAME) return
-
-            lifecycleScope.launch(Dispatchers.Default) {
-                val manager = ApplicationManager(this@MainActivity)
-                if (!manager.isIconPack(packageName)) return@launch
-                val label = runCatching {
-                    val pm = packageManager
-                    pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
-                }.getOrDefault(packageName)
-                withContext(Dispatchers.Main) { viewModel.onIconPackInstalled(label) }
-            }
-        }
-    }
-
     override fun onStart() {
         super.onStart()
-        val filter = IntentFilter(Intent.ACTION_PACKAGE_ADDED).apply { addDataScheme("package") }
-        ContextCompat.registerReceiver(
-            this, iconPackInstallReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED
-        )
-    }
-
-    override fun onStop() {
-        unregisterReceiver(iconPackInstallReceiver)
-        super.onStop()
+        // An icon pack installed while the app was away won't be in the loaded list yet.
+        // On every return to the foreground, diff the installed icon packs against what we
+        // have loaded; a new one (other than our own generated pack) prompts a reload so it
+        // shows up among the sources. Covers installs done while Renkin was backgrounded
+        // (the installer obscures us, so this fires when the user comes back).
+        lifecycleScope.launch(Dispatchers.Default) {
+            // Skip until the initial pack load finished, otherwise every installed pack
+            // looks "new" against the still-empty loaded list on first launch.
+            if (!viewModel.appProvider.iconPackLoaded) return@launch
+            val installed = ApplicationManager(this@MainActivity).getIconPacks()
+            val loaded = viewModel.appProvider.iconPacks.map { it.packageName }.toSet()
+            val newPack = installed.firstOrNull {
+                it.packageName != IconPackBuilder.PACKAGE_NAME && it.packageName !in loaded
+            } ?: return@launch
+            withContext(Dispatchers.Main) {
+                viewModel.onIconPackInstalled(newPack.packageName, newPack.applicationName)
+            }
+        }
     }
 
     private fun handleWatchIntent(intent: Intent?) {
@@ -180,25 +146,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(style, style)
     }
 
+    /** Starts the icon-watch package monitor and enables the boot receiver so it survives reboot. */
     fun startPackageAddedService() {
-        togglePackageAddedService(true)
-    }
-
-    fun stopPackageAddedService() {
-        togglePackageAddedService(false)
-    }
-
-    private fun togglePackageAddedService(enabled: Boolean) {
-        val intent = Intent(this, PackageAddedService::class.java)
-
-        if (enabled) {
-            startService(intent)
-        } else {
-            stopService(intent)
-        }
-
+        startService(Intent(this, PackageAddedService::class.java))
         ApplicationManager(this)
-            .changeManifestEnabledState(BootCompletedReceiver::class.java, enabled)
+            .changeManifestEnabledState(BootCompletedReceiver::class.java, true)
     }
 
     companion object {
