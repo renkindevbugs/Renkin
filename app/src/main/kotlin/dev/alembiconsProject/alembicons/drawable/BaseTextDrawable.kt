@@ -1,27 +1,10 @@
 package dev.alembiconsProject.alembicons.drawable
 
-import android.graphics.Canvas
-import android.graphics.ColorFilter
 import android.graphics.Path
 import android.graphics.drawable.Drawable
 
+// Drawable's draw / setAlpha / setColorFilter / getOpacity are already abstract, so they're
+// left for the concrete subclasses (TextDrawable, MultiLineTextDrawable) to implement.
 abstract class BaseTextDrawable: Drawable() {
     abstract fun getPaths(): List<Path>
-
-    override fun draw(canvas: Canvas) {
-        TODO("Not yet implemented")
-    }
-
-    override fun setAlpha(alpha: Int) {
-        TODO("Not yet implemented")
-    }
-
-    override fun setColorFilter(colorFilter: ColorFilter?) {
-        TODO("Not yet implemented")
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun getOpacity(): Int {
-        TODO("Not yet implemented")
-    }
 }
