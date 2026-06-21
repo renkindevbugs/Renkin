@@ -29,7 +29,7 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -445,7 +445,7 @@ fun TitleBar(
 
     LargeFlexibleTopAppBar(
         scrollBehavior = scrollBehavior,
-        colors = TopAppBarDefaults.largeTopAppBarColors(
+        colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.background,
             scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
             titleContentColor = MaterialTheme.colorScheme.primary,
@@ -558,7 +558,7 @@ fun SearchBar(
         Box {
             IconButton(onClick = { showSortMenu = true }) {
                 Icon(
-                    imageVector = Icons.Filled.Sort,
+                    imageVector = Icons.AutoMirrored.Filled.Sort,
                     contentDescription = stringResource(R.string.sortApps),
                     tint = MaterialTheme.colorScheme.primary
                 )

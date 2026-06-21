@@ -14,7 +14,7 @@ import android.content.res.XmlResourceParser
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.os.UserManager
-import dev.alembiconsProject.alembicons.constants.SuppressDeprecation
+import androidx.core.content.pm.PackageInfoCompat
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.RawCalendar
@@ -475,11 +475,8 @@ class ApplicationManager(private val ctx: Context) {
         pm.setComponentEnabledSetting(componentName, state, PackageManager.DONT_KILL_APP)
     }
 
-    @Suppress(SuppressDeprecation)
     fun getVersionCode(pack: PackageInfo): Long {
-        return if (dev.alembiconsProject.alembicons.packages.PackageVersion.is28OrMore())
-            pack.longVersionCode
-        else
-            pack.versionCode.toLong()
+        // PackageInfoCompat handles the longVersionCode (API 28+) vs versionCode split.
+        return PackageInfoCompat.getLongVersionCode(pack)
     }
 }
