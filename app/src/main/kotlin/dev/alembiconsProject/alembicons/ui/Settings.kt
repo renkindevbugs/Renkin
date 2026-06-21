@@ -16,10 +16,10 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.MenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,8 +27,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -39,32 +39,18 @@ import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.apk.ApkUninstaller
 import dev.alembiconsProject.alembicons.apk.IconPackBuilder
-import dev.alembiconsProject.alembicons.data.AutomaticallyUpdateKey
 import dev.alembiconsProject.alembicons.data.DARK_MODE_DEFAULT
 import dev.alembiconsProject.alembicons.data.DarkMode
 import dev.alembiconsProject.alembicons.data.DarkModeKey
-import dev.alembiconsProject.alembicons.data.PackageAddedNotificationKey
-import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getDarkModeLabels
 import dev.alembiconsProject.alembicons.data.getEnumValue
-import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
-import dev.alembiconsProject.alembicons.packages.PermissionManager
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
-    var notificationPermissionWarning by remember { mutableStateOf(false) }
-
-    val scope = rememberCoroutineScope()
-    val activity = getCurrentMainActivity()
-    val notification = prefs.getBooleanValue(PackageAddedNotificationKey)
-    val automaticallyUpdate = prefs.getBooleanValue(AutomaticallyUpdateKey)
-
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.background,
@@ -74,32 +60,6 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
         text = {
             Column {
                 DarkModeDropdown(prefs)
-                PackageAddedNotificationSwitch(notification) {
-                    if (it) {
-                        val permissionManager = PermissionManager(activity)
-                        if (!permissionManager.isPostNotificationEnabled()) {
-                            permissionManager.askForPostNotification()
-                        }
-
-                        if (!permissionManager.isPostNotificationEnabled()) {
-                            notificationPermissionWarning = true
-                            return@PackageAddedNotificationSwitch
-                        }
-
-                        activity.startPackageAddedService()
-                    } else {
-                        activity.stopPackageAddedService()
-                    }
-
-                    scope.launch { prefs.setBooleanValue(PackageAddedNotificationKey, it) }
-                }
-
-                if (notification) {
-                    AutomaticallyUpdateSwitch(automaticallyUpdate) {
-                        scope.launch { prefs.setBooleanValue(AutomaticallyUpdateKey, it) }
-                    }
-                }
-
                 SyncButton()
                 RefreshApplicationListButton()
                 RemoveIconsButton()
@@ -109,11 +69,6 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
         },
         confirmButton = {}
     )
-
-    if (notificationPermissionWarning) {
-        ShowToast(stringResource(R.string.notifPermissionWarning))
-        notificationPermissionWarning = false
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -148,7 +103,7 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
             shape = RoundedCornerShape(16.dp),
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             modifier = Modifier
-                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth()
         )
         ExposedDropdownMenu(
@@ -180,53 +135,27 @@ private val settingsButtonModifier: Modifier
 
 @Composable
 fun SyncButton() {
-    val mainActivity = getCurrentMainActivity()
-    val viewModel: MainViewModel = viewModel()
-    val context = getCurrentContext()
-    var done by remember { mutableStateOf(false) }
+    val viewModel: MainViewModel = hiltViewModel()
 
     Button(
-        onClick = {
-            mainActivity.lifecycleScope.launch(Dispatchers.Default) {
-                viewModel.appProvider.forceSync()
-                done = true
-            }
-        },
+        onClick = { viewModel.sync() },
         shape = RoundedCornerShape(16.dp),
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.syncPacks))
     }
-
-    if (done) {
-        ShowToast(context.getString(R.string.packsSynced))
-        done = false
-    }
 }
 
 @Composable
 fun RefreshApplicationListButton() {
-    val mainActivity = getCurrentMainActivity()
-    val viewModel: MainViewModel = viewModel()
-    val context = getCurrentContext()
-    var done by remember { mutableStateOf(false) }
+    val viewModel: MainViewModel = hiltViewModel()
 
     Button(
-        onClick = {
-            mainActivity.lifecycleScope.launch(Dispatchers.Default) {
-                viewModel.appProvider.initialize()
-                done = true
-            }
-        },
+        onClick = { viewModel.refreshApps() },
         shape = RoundedCornerShape(16.dp),
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.refreshApplicationList))
-    }
-
-    if (done) {
-        ShowToast(context.getString(R.string.appListRefreshed))
-        done = false
     }
 }
 
@@ -234,22 +163,24 @@ fun RefreshApplicationListButton() {
 fun DeleteIconPackButton() {
     val context = getCurrentContext()
     val scope = rememberCoroutineScope()
-
-    var openSuccess by rememberSaveable { mutableStateOf(false) }
-    var notInstalled by rememberSaveable { mutableStateOf(false) }
+    val toaster = LocalToaster.current
+    val view = LocalView.current
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
         onClick = {
+            view.performConfirmHaptic()
             scope.launch {
                 // Don't try (and then falsely report success) when the pack isn't installed
                 val installed = runCatching {
                     context.packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
                 }.isSuccess
                 if (installed) {
-                    openSuccess = ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)
+                    if (ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)) {
+                        toaster.show(context.getString(R.string.iconPackUninstalled))
+                    }
                 } else {
-                    notInstalled = true
+                    toaster.show(context.getString(R.string.iconPackNotInstalled))
                 }
             }
         },
@@ -262,29 +193,17 @@ fun DeleteIconPackButton() {
     ) {
         Text(stringResource(R.string.deleteIconPack))
     }
-
-    if (openSuccess) {
-        ShowToast(context.getString(R.string.iconPackUninstalled))
-        openSuccess = false
-    }
-    if (notInstalled) {
-        ShowToast(context.getString(R.string.iconPackNotInstalled))
-        notInstalled = false
-    }
 }
 
 @Composable
 fun RemoveIconsButton() {
-    val mainActivity = getCurrentMainActivity()
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
+    val view = LocalView.current
+    var confirm by rememberSaveable { mutableStateOf(false) }
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
-        onClick = {
-            mainActivity.lifecycleScope.launch(Dispatchers.Default) {
-                viewModel.appProvider.clearIcons()
-            }
-        },
+        onClick = { confirm = true },
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -294,58 +213,35 @@ fun RemoveIconsButton() {
     ) {
         Text(stringResource(R.string.clearIcons))
     }
-}
 
-
-@Composable
-fun PackageAddedNotificationSwitch(notification: Boolean, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(false) }
-
-    checked = notification
-
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(8.dp, 4.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = stringResource(R.string.packageAddedNotification),
-            modifier = Modifier.weight(1f)
-        )
-        Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
+    if (confirm) {
+        AlertDialog(
+            shape = RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            onDismissRequest = { confirm = false },
+            title = { Text(stringResource(R.string.clearIconsTitle)) },
+            text = { Text(stringResource(R.string.clearIconsText)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    view.performConfirmHaptic()
+                    confirm = false
+                    viewModel.clearIcons()
+                }) {
+                    Text(
+                        stringResource(R.string.confirm),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             },
-            modifier = Modifier.padding(start = 8.dp)
+            dismissButton = {
+                TextButton(onClick = { confirm = false }) {
+                    Text(stringResource(R.string.dismiss))
+                }
+            }
         )
     }
 }
 
-@Composable
-fun AutomaticallyUpdateSwitch(automaticallyUpdate: Boolean, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(false) }
-
-    checked = automaticallyUpdate
-
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(8.dp, 4.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = stringResource(R.string.automaticallyUpdate),
-            modifier = Modifier.weight(1f)
-        )
-        Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
-            },
-            modifier = Modifier.padding(start = 8.dp)
-        )
-    }
-}
 
 @Composable
 fun AppVersion() {

@@ -9,8 +9,11 @@ import kotlinx.coroutines.flow.Flow
  * the checker (phase 3) uses the suggestion/state helpers. Mutations run inside a
  * Room transaction so a rule and its child rows stay consistent.
  */
-class WatchRepository(context: Context) {
-    private val db = WatchDatabase.get(context)
+class WatchRepository(private val db: WatchDatabase) {
+    /** Production entry point: uses the shared singleton database. Tests use the primary
+     * constructor with an in-memory [WatchDatabase] instead. */
+    constructor(context: Context) : this(WatchDatabase.get(context))
+
     private val dao = db.watchDao()
 
     val rules: Flow<List<RuleWithDetails>> = dao.observeRules()

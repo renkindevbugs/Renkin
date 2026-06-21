@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -20,37 +21,33 @@ import androidx.lifecycle.lifecycleScope
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
-import dev.alembiconsProject.alembicons.data.PackageAddedNotificationKey
-import dev.alembiconsProject.alembicons.data.getPreferenceFlow
 import dev.alembiconsProject.alembicons.data.isDarkModeEnabled
-import dev.alembiconsProject.alembicons.data.setBooleanValue
+import dev.alembiconsProject.alembicons.data.WatchCheckIntervalKey
+import dev.alembiconsProject.alembicons.data.WATCH_CHECK_INTERVAL_DEFAULT
+import dev.alembiconsProject.alembicons.data.getIntValue
+import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
-import dev.alembiconsProject.alembicons.packages.PermissionManager
 import dev.alembiconsProject.alembicons.service.BootCompletedReceiver
 import dev.alembiconsProject.alembicons.service.PackageAddedService
 import dev.alembiconsProject.alembicons.service.WatchWorker
 import dev.alembiconsProject.alembicons.ui.*
 import dev.alembiconsProject.alembicons.ui.theme.IconerationTheme
 import kotlinx.coroutines.Dispatchers
+import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
-    // Delegated to the ViewModel so the provider and its loaded state survive
-    // configuration changes. Existing getCurrentMainActivity().appProvider call
-    // sites keep working unchanged.
+    // The provider lives in the ViewModel so it (and its loaded state) survives
+    // configuration changes; exposed here for the activity's own use in setContent.
     val appProvider get() = viewModel.appProvider
-
-    // Session state lives in the ViewModel (survives rotation). These are thin
-    // passthroughs so existing getCurrentMainActivity().<x> call sites keep working.
-    val recentlyChangedIcons get() = viewModel.recentlyChangedIcons
-    fun markIconChanged(packageName: String, activityName: String) =
-        viewModel.markIconChanged(packageName, activityName)
-    val pendingWatchSuggestionId get() = viewModel.pendingWatchSuggestionId
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -63,31 +60,19 @@ class MainActivity : ComponentActivity() {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
 
-        // App + pack loading now lives in MainViewModel, so it runs once and
-        // survives configuration changes (rotation) instead of re-loading.
         handleWatchIntent(intent)
 
-        // Icon-watch (phase 4): the daily safety-net check is always scheduled (version-gated,
+        // Icon-watch: the daily safety-net check is always scheduled (version-gated,
         // so it's near-free when nothing changed); the event-driven fast path needs the
         // package receiver running, so start it when there are active watch rules.
         lifecycleScope.launch(Dispatchers.Default) {
-            WatchWorker.schedulePeriodic(applicationContext)
+            // KEEP so an already-running interval timer isn't reset on every launch; the
+            // user's chosen interval is applied immediately (UPDATE) when they change it.
+            val intervalMinutes = applicationContext.dataStore.data.first()
+                .getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)
+            WatchWorker.schedulePeriodic(applicationContext, intervalMinutes)
             if (WatchRepository(applicationContext).getActiveRules().isNotEmpty()) {
                 startPackageAddedService()
-            }
-        }
-
-        lifecycleScope.launch(Dispatchers.Default) {
-            applicationContext.dataStore.getPreferenceFlow(PackageAddedNotificationKey).collect {
-                if (it == true) {
-                    if (PermissionManager(this@MainActivity).isPostNotificationEnabled()) {
-                        startPackageAddedService()
-                    } else {
-                        stopPackageAddedService()
-                        applicationContext.dataStore.setBooleanValue(
-                            PackageAddedNotificationKey, false)
-                    }
-                }
             }
         }
 
@@ -95,12 +80,18 @@ class MainActivity : ComponentActivity() {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
             edgeToEdge(darkMode)
 
-            CompositionLocalProvider(LocalMainActivity provides this) {
+            val toaster = remember { Toaster() }
+
+            CompositionLocalProvider(
+                LocalMainActivity provides this,
+                LocalToaster provides toaster
+            ) {
                 IconerationTheme(darkMode) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
                     ) {
+                        ToastHost(toaster)
                         MainColumn(appProvider.iconPacks)
                     }
                 }
@@ -114,16 +105,33 @@ class MainActivity : ComponentActivity() {
         handleWatchIntent(intent)
     }
 
+    override fun onStart() {
+        super.onStart()
+        // An icon pack installed while the app was away won't be in the loaded list yet.
+        // On every return to the foreground, diff the installed icon packs against what we
+        // have loaded; a new one (other than our own generated pack) prompts a reload so it
+        // shows up among the sources. Covers installs done while Renkin was backgrounded
+        // (the installer obscures us, so this fires when the user comes back).
+        lifecycleScope.launch(Dispatchers.Default) {
+            // Skip until the initial pack load finished, otherwise every installed pack
+            // looks "new" against the still-empty loaded list on first launch.
+            if (!viewModel.appProvider.iconPackLoaded) return@launch
+            val installed = ApplicationManager(this@MainActivity).getIconPacks()
+            val loaded = viewModel.appProvider.iconPacks.map { it.packageName }.toSet()
+            val newPack = installed.firstOrNull {
+                it.packageName != IconPackBuilder.PACKAGE_NAME && it.packageName !in loaded
+            } ?: return@launch
+            withContext(Dispatchers.Main) {
+                viewModel.onIconPackInstalled(newPack.packageName, newPack.applicationName)
+            }
+        }
+    }
+
     private fun handleWatchIntent(intent: Intent?) {
         if (intent?.action == ACTION_OPEN_SUGGESTION) {
             val id = intent.getLongExtra(EXTRA_SUGGESTION_ID, -1L)
             if (id >= 0) viewModel.setPendingWatchSuggestion(id)
         }
-    }
-
-    /** Called once the apply modal has handled (applied or dismissed) the suggestion. */
-    fun clearPendingWatchSuggestion() {
-        viewModel.clearPendingWatchSuggestion()
     }
 
     private fun edgeToEdge(darkMode: Boolean) {
@@ -134,25 +142,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(style, style)
     }
 
+    /** Starts the icon-watch package monitor and enables the boot receiver so it survives reboot. */
     fun startPackageAddedService() {
-        togglePackageAddedService(true)
-    }
-
-    fun stopPackageAddedService() {
-        togglePackageAddedService(false)
-    }
-
-    private fun togglePackageAddedService(enabled: Boolean) {
-        val intent = Intent(this, PackageAddedService::class.java)
-
-        if (enabled) {
-            startService(intent)
-        } else {
-            stopService(intent)
-        }
-
+        startService(Intent(this, PackageAddedService::class.java))
         ApplicationManager(this)
-            .changeManifestEnabledState(BootCompletedReceiver::class.java, enabled)
+            .changeManifestEnabledState(BootCompletedReceiver::class.java, true)
     }
 
     companion object {

@@ -2,10 +2,10 @@
 
 package dev.alembiconsProject.alembicons.ui
 
+import android.text.format.DateUtils
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -13,130 +13,100 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.pager.HorizontalPager
-import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.ImageNotSupported
 import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshots.SnapshotStateList
-import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.runtime.produceState
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.alembiconsProject.alembicons.BuildConfig
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
+import dev.alembiconsProject.alembicons.WatchViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.IconPack
-import dev.alembiconsProject.alembicons.data.watch.AppComponent
-import dev.alembiconsProject.alembicons.data.watch.IconSuggestion
-import dev.alembiconsProject.alembicons.data.watch.IconSuggestionCandidate
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
-import dev.alembiconsProject.alembicons.data.watch.WatchRepository
-import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
-import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
-import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
-import dev.alembiconsProject.alembicons.service.WatchChecker
-import dev.alembiconsProject.alembicons.service.WatchWorker
-import kotlinx.coroutines.Dispatchers
+import dev.alembiconsProject.alembicons.packages.PermissionManager
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 @Composable
 fun WatchScreen(onDismiss: () -> Unit) {
     val context = getCurrentContext()
-    val viewModel: MainViewModel = viewModel()
-    val repo = remember { WatchRepository(context) }
-    val scope = rememberCoroutineScope()
+    val viewModel: MainViewModel = hiltViewModel()
+    val watchViewModel: WatchViewModel = hiltViewModel()
 
-    val rules by repo.rules.collectAsState(initial = emptyList())
+    val rules by watchViewModel.rules.collectAsState()
     val apps = viewModel.appProvider.applicationList
     val packs = viewModel.appProvider.iconPacks
+
+    // Icon-watch is the only feature that posts notifications now, so ask for the permission
+    // here (it used to be requested by the removed package-added setting).
+    val activity = getCurrentMainActivity()
+    LaunchedEffect(Unit) {
+        val permissions = PermissionManager(activity)
+        if (!permissions.isPostNotificationEnabled()) permissions.askForPostNotification()
+    }
 
     // null = list; otherwise the editor is open (editing this rule, or a new rule when blank)
     var showEditor by remember { mutableStateOf(false) }
     var editing by remember { mutableStateOf<RuleWithDetails?>(null) }
     var pendingDelete by remember { mutableStateOf<Long?>(null) }
     var pendingDeleteAllCompleted by remember { mutableStateOf(false) }
-    var isRefreshing by remember { mutableStateOf(false) }
     var applySuggestionId by remember { mutableStateOf<Long?>(null) }
 
     Dialog(
@@ -181,19 +151,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         packs = packs,
                         onClose = { showEditor = false; editing = null },
                         onSave = { selApps, watchAll, selPacks ->
-                            // Capture the edit target now — the coroutine runs after we reset state below
-                            val target = editing
-                            scope.launch {
-                                val ruleId = if (target == null) {
-                                    repo.createRule(selApps, watchAll, selPacks)
-                                } else {
-                                    repo.updateRule(target.rule.id, selApps, watchAll, selPacks)
-                                    target.rule.id
-                                }
-                                // Snapshot current icons so a later pack update is the trigger,
-                                // not the icons that already existed when the rule was made
-                                WatchChecker(context).baselineRule(ruleId)
-                            }
+                            watchViewModel.saveRule(editing, selApps, watchAll, selPacks)
                             showEditor = false
                             editing = null
                         }
@@ -203,16 +161,13 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         rules = rules,
                         apps = apps,
                         packs = packs,
-                        isRefreshing = isRefreshing,
+                        isRefreshing = watchViewModel.isChecking,
                         onRefresh = {
-                            isRefreshing = true
-                            scope.launch {
-                                val fired = WatchChecker(context).runCheck()
-                                isRefreshing = false
-                                val msg = if (fired.isEmpty()) {
+                            watchViewModel.runCheck { found ->
+                                val msg = if (found == 0) {
                                     context.getString(R.string.watchRefreshNone)
                                 } else {
-                                    context.getString(R.string.watchRefreshFound, fired.size)
+                                    context.getString(R.string.watchRefreshFound, found)
                                 }
                                 Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
                             }
@@ -223,15 +178,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         onApply = { rule -> rule.suggestions.firstOrNull()?.id?.let { applySuggestionId = it } },
                         onDelete = { ruleId -> pendingDelete = ruleId },
                         onDeleteAllCompleted = { pendingDeleteAllCompleted = true },
-                        onSimulate = {
-                            scope.launch {
-                                // Establish a baseline, stale it, then re-check via the worker
-                                // so the full notify + deep-link path runs (debug builds only)
-                                WatchChecker(context).runCheck()
-                                repo.debugStaleAllStates()
-                                WatchWorker.runNow(context)
-                            }
-                        }
+                        onSimulate = { watchViewModel.simulate() }
                     )
                 }
                 }
@@ -246,7 +193,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
             onDismiss = { pendingDelete = null },
             onConfirm = {
                 pendingDelete = null
-                scope.launch { repo.deleteRule(ruleId) }
+                watchViewModel.deleteRule(ruleId)
             }
         )
     }
@@ -258,7 +205,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
             onDismiss = { pendingDeleteAllCompleted = false },
             onConfirm = {
                 pendingDeleteAllCompleted = false
-                scope.launch { repo.deleteRules(rules.filter { it.rule.completed }.map { it.rule.id }) }
+                watchViewModel.deleteCompleted()
             }
         )
     }
@@ -269,198 +216,9 @@ fun WatchScreen(onDismiss: () -> Unit) {
     }
 }
 
-/**
- * Shown on the home screen when opened from an icon-watch notification (phase 6):
- * the app's current icon vs the newly found one (with a pack picker if several packs
- * offer one). Confirm stores the icon and toasts to press Build; cancel keeps the
- * suggestion so it can still be applied later from the watch screen.
- */
-@Composable
-fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
-    val context = getCurrentContext()
-    val viewModel: MainViewModel = viewModel()
-    val repo = remember { WatchRepository(context) }
-    val prefs = getPreferences()
-    val scope = rememberCoroutineScope()
-    val view = LocalView.current
-
-    var suggestion by remember(suggestionId) { mutableStateOf<IconSuggestion?>(null) }
-    var candidates by remember(suggestionId) { mutableStateOf<List<IconSuggestionCandidate>>(emptyList()) }
-    var selectedPack by remember(suggestionId) { mutableStateOf<String?>(null) }
-    var newIcon by remember(suggestionId) { mutableStateOf<IconPackDrawable?>(null) }
-    var generating by remember(suggestionId) { mutableStateOf(false) }
-    var loaded by remember(suggestionId) { mutableStateOf(false) }
-
-    LaunchedEffect(suggestionId) {
-        val s = repo.getSuggestion(suggestionId)
-        val c = repo.getCandidates(suggestionId)
-        suggestion = s
-        candidates = c
-        selectedPack = c.firstOrNull()?.iconPackPackage
-        loaded = true
-        if (s == null) onDismiss() // already handled/deleted → nothing to show
-    }
-
-    val apps = viewModel.appProvider.applicationList
-    val app = suggestion?.let { s -> apps.find { it.packageName == s.packageName && it.activityName == s.activityName } }
-
-    // (Re)generate the new icon for the selected pack
-    LaunchedEffect(selectedPack, suggestion, app) {
-        val s = suggestion
-        val pack = selectedPack
-        val targetApp = app
-        val candidate = candidates.find { it.iconPackPackage == pack }
-        // App or pack uninstalled since the suggestion fired → nothing to generate
-        if (s == null || pack == null || targetApp == null || candidate == null) {
-            newIcon = null
-            generating = false
-            return@LaunchedEffect
-        }
-        generating = true
-        newIcon = null
-        newIcon = withContext(Dispatchers.Default) {
-            val options = GenerationOptions.fromPreferences(prefs.data.first(), context, override = true)
-            viewModel.appProvider.getIconFromPackDrawable(targetApp, pack, candidate.drawableName, options)
-        }
-        generating = false
-    }
-
-    if (!loaded || suggestion == null) return
-    // When opened cold from a notification the app list / packs may still be
-    // loading; wait so the modal shows real icons instead of empty placeholders.
-    if (!viewModel.appProvider.applicationsLoaded || !viewModel.appProvider.iconPackLoaded) return
-
-    AlertDialog(
-        shape = RoundedCornerShape(28.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.watchApplyTitle)) },
-        text = {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    text = app?.appName ?: suggestion!!.packageName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(16.dp))
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ComparePreview(app?.let { rememberAppBitmap(it) }, null, loading = false)
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowForward, null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    ComparePreview(null, newIcon, loading = generating)
-                }
-
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.watchApplyFromPack),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(6.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    candidates.forEach { candidate ->
-                        val pack = packsName(viewModel.appProvider.iconPacks, candidate.iconPackPackage)
-                        FilterChip(
-                            selected = selectedPack == candidate.iconPackPackage,
-                            onClick = { selectedPack = candidate.iconPackPackage },
-                            label = { Text(pack, maxLines = 1) },
-                            leadingIcon = { PackIconImage(candidate.iconPackPackage, 18.dp) }
-                        )
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                FilledTonalIconButton(
-                    onClick = onDismiss,
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                        contentColor = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                ) {
-                    Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
-                }
-                val applyToast = stringResource(R.string.watchApplyToast)
-                FilledIconButton(
-                    onClick = {
-                        view.performConfirmHaptic()
-                        val icon = newIcon
-                        val targetApp = app
-                        if (icon != null && targetApp != null) {
-                            val index = apps.indexOfFirst {
-                                it.packageName == targetApp.packageName && it.activityName == targetApp.activityName
-                            }
-                            if (index >= 0) {
-                                viewModel.appProvider.editApplication(index, targetApp.changeExport(icon))
-                                viewModel.markIconChanged(targetApp.packageName, targetApp.activityName)
-                            }
-                            // Applying handles the rule, so remove it (cascades the suggestion)
-                            suggestion?.ruleId?.let { ruleId -> scope.launch { repo.deleteRule(ruleId) } }
-                            Toast.makeText(context, applyToast, Toast.LENGTH_LONG).show()
-                        }
-                        onDismiss()
-                    },
-                    enabled = newIcon != null && app != null
-                ) {
-                    Icon(Icons.Filled.Check, stringResource(R.string.confirm))
-                }
-            }
-        }
-    )
-}
-
-/** A small framed preview cell: a bitmap (current), a drawable (new), a spinner, or "unavailable". */
-@Composable
-private fun ComparePreview(
-    bitmap: androidx.compose.ui.graphics.ImageBitmap?,
-    icon: IconPackDrawable?,
-    loading: Boolean
-) {
-    // Crossfade between states so the new icon fades in after the spinner instead
-    // of snapping in once generation finishes
-    val state = when {
-        bitmap != null -> "bitmap"
-        icon != null -> "icon"
-        loading -> "loading"
-        else -> "empty"
-    }
-    Surface(
-        modifier = Modifier.size(72.dp),
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest
-    ) {
-        Crossfade(targetState = state, label = "comparePreview") { s ->
-            Box(Modifier.padding(10.dp), contentAlignment = Alignment.Center) {
-                when (s) {
-                    "bitmap" -> bitmap?.let { Image(BitmapPainter(it), null, Modifier.fillMaxSize()) }
-                    "icon" -> icon?.let { Image(it.getPainter(), null, Modifier.fillMaxSize()) }
-                    "loading" -> CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    else -> Icon(
-                        Icons.Filled.ImageNotSupported, null,
-                        tint = MaterialTheme.colorScheme.outline,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-private fun packsName(packs: List<IconPack>, packageName: String): String =
-    packs.find { it.packageName == packageName }?.applicationName ?: packageName
-
 @Composable
 private fun ConfirmDeleteDialog(title: String, text: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    val view = LocalView.current
     androidx.compose.material3.AlertDialog(
         shape = RoundedCornerShape(28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -468,7 +226,7 @@ private fun ConfirmDeleteDialog(title: String, text: String, onDismiss: () -> Un
         title = { Text(title) },
         text = { Text(text) },
         confirmButton = {
-            IconButton(onClick = onConfirm) {
+            IconButton(onClick = { view.performConfirmHaptic(); onConfirm() }) {
                 Icon(Icons.Filled.Check, stringResource(R.string.confirm), tint = MaterialTheme.colorScheme.primary)
             }
         },
@@ -534,6 +292,11 @@ private fun WatchRuleList(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
+            // Only meaningful while something is actively watched — hide it otherwise.
+            if (active.isNotEmpty()) {
+                WatchCheckScheduleRow()
+            }
+
             // Pull down to run a manual check (the spinner stays until WatchChecker finishes)
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
@@ -542,9 +305,15 @@ private fun WatchRuleList(
                     .weight(1f)
                     .fillMaxWidth()
             ) {
+                // Bottom padding = nav-bar inset (so buttons clear the system nav bar; the
+                // dialog draws edge-to-edge with decorFitsSystemWindows = false) + room for
+                // the FAB, so the last rule's Edit/Delete aren't hidden behind it.
+                val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                    contentPadding = PaddingValues(
+                        start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp + navBarInset
+                    ),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (rules.isEmpty()) {
@@ -616,6 +385,75 @@ private fun WatchRuleList(
     }
 }
 
+/**
+ * Shows when the next periodic check is due (from WorkManager's real schedule). In debug
+ * builds it also exposes a frequency picker so the watcher can be tested without waiting
+ * the full 24h — WorkManager's periodic floor is 15 min, so that's the smallest option.
+ */
+@Composable
+private fun WatchCheckScheduleRow() {
+    val watchViewModel: WatchViewModel = hiltViewModel()
+    val context = getCurrentContext()
+    val nextCheck by watchViewModel.nextCheckAt.collectAsState()
+    val intervalMinutes by watchViewModel.checkIntervalMinutes.collectAsState()
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val nextText = nextCheck?.let {
+            stringResource(
+                R.string.watchNextCheck,
+                DateUtils.formatDateTime(
+                    context, it,
+                    DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_ALL
+                )
+            )
+        } ?: stringResource(R.string.watchNextCheckUnknown)
+        Text(
+            text = nextText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        if (BuildConfig.DEBUG) {
+            WatchIntervalPicker(intervalMinutes) { watchViewModel.setCheckIntervalMinutes(it) }
+        }
+    }
+}
+
+/** Debug-only frequency picker. Options are all valid WorkManager periodic intervals. */
+@Composable
+private fun WatchIntervalPicker(selectedMinutes: Int, onChange: (Int) -> Unit) {
+    val options = listOf(15, 60, 1440)
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { expanded = true }) {
+            Text(intervalLabel(selectedMinutes))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { minutes ->
+                DropdownMenuItem(
+                    text = { Text(intervalLabel(minutes)) },
+                    onClick = { expanded = false; onChange(minutes) },
+                    leadingIcon = if (minutes == selectedMinutes) {
+                        { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
+                    } else null
+                )
+            }
+        }
+    }
+}
+
+private fun intervalLabel(minutes: Int): String = when (minutes) {
+    15 -> "15 min"
+    60 -> "1 h"
+    1440 -> "24 h"
+    else -> "$minutes min"
+}
+
 @Composable
 private fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     Text(
@@ -640,23 +478,16 @@ private fun ActiveRuleCard(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp)) {
-            // Edit/delete live in the header next to the apps, so the pack chips
-            // below can use the card's full width (and wrap under everything).
-            Row(verticalAlignment = Alignment.Top) {
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    rule.apps.forEach { ra ->
-                        val app = apps.find { it.packageName == ra.packageName && it.activityName == ra.activityName }
-                        AppPill(app, ra.packageName)
-                    }
+            // Apps and pack tags span the full width; the actions sit at the bottom.
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                rule.apps.forEach { ra ->
+                    val app = apps.find { it.packageName == ra.packageName && it.activityName == ra.activityName }
+                    AppPill(app, ra.packageName)
                 }
-                // Few apps fit on one row, so lay the actions out horizontally (keeps
-                // the card short); once the apps wrap to several rows, stack the actions
-                // vertically so they steal less width. Just a count check — no measuring.
-                RuleActions(vertical = rule.apps.size > 3, onEdit = onEdit, onDelete = onDelete)
             }
             HorizontalDivider(
                 modifier = Modifier.padding(vertical = 10.dp),
@@ -699,41 +530,33 @@ private fun ActiveRuleCard(
                     }
                 }
             }
-        }
-    }
-}
 
-/** Edit + delete for a rule, laid out horizontally (compact height) or vertically
- *  (compact width). Edit first (the filled "bubble"), then delete. */
-@Composable
-private fun RuleActions(vertical: Boolean, onEdit: () -> Unit, onDelete: () -> Unit) {
-    val delete: @Composable () -> Unit = {
-        IconButton(onClick = onDelete, modifier = Modifier.size(36.dp)) {
-            Icon(
-                Icons.Filled.Delete, stringResource(R.string.deleteRule),
-                tint = MaterialTheme.colorScheme.error,
-                modifier = Modifier.size(18.dp)
-            )
+            // Actions at the bottom, right-aligned: delete sits to the left of the edit
+            // pill so the apps and pack tags above can use the card's full width.
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
+                    Icon(
+                        Icons.Filled.Delete, stringResource(R.string.deleteRule),
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                FilledTonalButton(
+                    onClick = onEdit,
+                    contentPadding = PaddingValues(start = 16.dp, end = 20.dp, top = 8.dp, bottom = 8.dp)
+                ) {
+                    Icon(Icons.Filled.Edit, null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.edit))
+                }
+            }
         }
-    }
-    val edit: @Composable () -> Unit = {
-        FilledTonalIconButton(onClick = onEdit, modifier = Modifier.size(40.dp)) {
-            Icon(
-                Icons.Filled.Edit, stringResource(R.string.editWatchRule),
-                modifier = Modifier.size(18.dp)
-            )
-        }
-    }
-    if (vertical) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) { edit(); delete() }
-    } else {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp)
-        ) { edit(); delete() }
     }
 }
 
@@ -826,450 +649,6 @@ private fun DoneBadge() {
     }
 }
 
-// ---------------------------------------------------------------------------
-// Rule editor
-// ---------------------------------------------------------------------------
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun WatchRuleEditor(
-    existing: RuleWithDetails?,
-    apps: List<PackageInfoStruct>,
-    packs: List<IconPack>,
-    onClose: () -> Unit,
-    onSave: (apps: List<AppComponent>, watchAll: Boolean, packs: List<String>) -> Unit
-) {
-    val selectedApps: SnapshotStateList<AppComponent> = remember {
-        existing?.apps?.map { AppComponent(it.packageName, it.activityName) }.orEmpty().toMutableStateList()
-    }
-    val selectedPacks: SnapshotStateList<String> = remember {
-        existing?.packs?.map { it.iconPackPackage }.orEmpty().toMutableStateList()
-    }
-    var watchAll by remember { mutableStateOf(existing?.rule?.watchAllPacks ?: false) }
-    var query by remember { mutableStateOf("") }
-
-    var sortOrder by remember { mutableStateOf(AppSortOrder.NAME) }
-    var filterNoIcon by remember { mutableStateOf(false) }
-    var showSortMenu by remember { mutableStateOf(false) }
-
-    val context = getCurrentContext()
-    // Reading first-install time hits PackageManager once per app; doing it for every
-    // app on the main thread was what made the editor take ~1s to open. Compute it off
-    // the main thread instead — until it arrives, INSTALL_DATE sort just shows the
-    // default order. (Times don't change at runtime, so this runs once per app set.)
-    val installTimes by produceState(emptyMap<String, Long>(), apps) {
-        value = withContext(Dispatchers.IO) {
-            apps.associate { app ->
-                app.packageName to runCatching {
-                    context.packageManager.getPackageInfo(app.packageName, 0).firstInstallTime
-                }.getOrDefault(0L)
-            }
-        }
-    }
-
-    val sortedPacks = remember(packs) { packs.sortedBy { it.applicationName.lowercase() } }
-    val filteredApps = remember(apps, query, sortOrder, filterNoIcon, installTimes) {
-        var seq = apps.asSequence()
-        if (query.isNotBlank()) seq = seq.filter { it.appName.contains(query.trim(), ignoreCase = true) }
-        if (filterNoIcon) seq = seq.filter { it.createdIcon == null }
-        when (sortOrder) {
-            AppSortOrder.NAME -> seq.sortedBy { it.appName.lowercase() }
-            AppSortOrder.INSTALL_DATE -> seq.sortedByDescending { installTimes[it.packageName] ?: 0L }
-        }.toList()
-    }
-    // 3 rows × 3 columns per page → a horizontally paged grid with dots
-    val appPages = filteredApps.chunked(9)
-    val pagerState = rememberPagerState(pageCount = { appPages.size.coerceAtLeast(1) })
-    // Shrink the grid to the rows actually needed (e.g. a narrow search result),
-    // but keep full 3-row height once it pages so swiping doesn't resize it
-    val visibleRows = if (appPages.size <= 1) {
-        (((appPages.firstOrNull()?.size ?: 0) + 2) / 3).coerceIn(1, 3)
-    } else 3
-    val gridHeight = (visibleRows * 112 + (visibleRows - 1) * 8).dp
-    LaunchedEffect(query, sortOrder, filterNoIcon) {
-        if (pagerState.currentPage != 0) pagerState.scrollToPage(0)
-    }
-
-    val canSave = selectedApps.isNotEmpty() && (watchAll || selectedPacks.isNotEmpty())
-
-    Column(Modifier.fillMaxSize().navigationBarsPadding()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            IconButton(onClick = onClose) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.dismiss))
-            }
-            Text(
-                text = stringResource(if (existing == null) R.string.newWatchRule else R.string.editWatchRule),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.weight(1f)
-            )
-            Button(
-                onClick = {
-                    onSave(selectedApps.toList(), watchAll, selectedPacks.toList())
-                },
-                enabled = canSave,
-                shape = RoundedCornerShape(14.dp)
-            ) {
-                Text(stringResource(R.string.save))
-            }
-        }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-        Column(
-            Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.appsToWatch),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = query,
-                    onValueChange = { query = it },
-                    singleLine = true,
-                    shape = RoundedCornerShape(16.dp),
-                    placeholder = { Text(stringResource(R.string.searchApps)) },
-                    leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
-                    modifier = Modifier.weight(1f)
-                )
-                Box {
-                    IconButton(onClick = { showSortMenu = true }) {
-                        Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.sortApps), tint = MaterialTheme.colorScheme.primary)
-                    }
-                    DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.sortByName)) },
-                            onClick = { sortOrder = AppSortOrder.NAME; showSortMenu = false },
-                            leadingIcon = if (sortOrder == AppSortOrder.NAME) {
-                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.sortByInstallDate)) },
-                            onClick = { sortOrder = AppSortOrder.INSTALL_DATE; showSortMenu = false },
-                            leadingIcon = if (sortOrder == AppSortOrder.INSTALL_DATE) {
-                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.filterAllApps)) },
-                            onClick = { filterNoIcon = false; showSortMenu = false },
-                            leadingIcon = if (!filterNoIcon) {
-                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.filterWithoutIcon)) },
-                            onClick = { filterNoIcon = true; showSortMenu = false },
-                            leadingIcon = if (filterNoIcon) {
-                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                    }
-                }
-            }
-
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
-                    .height(gridHeight)
-            ) { page ->
-                TileRows(appPages.getOrNull(page).orEmpty()) { app ->
-                    val comp = AppComponent(app.packageName, app.activityName)
-                    val selected = selectedApps.any { it.packageName == comp.packageName && it.activityName == comp.activityName }
-                    IconTile(
-                        bitmap = rememberAppBitmap(app),
-                        label = clipLabel(app.appName, 13),
-                        selected = selected,
-                        overlayIcon = app.createdIcon
-                    ) {
-                        if (selected) selectedApps.removeAll { it.packageName == comp.packageName && it.activityName == comp.activityName }
-                        else selectedApps.add(comp)
-                    }
-                }
-            }
-
-            if (appPages.size > 1) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    repeat(appPages.size) { i ->
-                        val sel = pagerState.currentPage == i
-                        Box(
-                            Modifier
-                                .padding(horizontal = 3.dp)
-                                .size(if (sel) 8.dp else 6.dp)
-                                .clip(CircleShape)
-                                .background(if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
-                        )
-                    }
-                }
-            }
-
-            // Selected apps sit below the grid so adding one doesn't shove the grid down;
-            // single scrolling row, labels clipped to keep chips small
-            if (selectedApps.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState())
-                        .padding(top = 10.dp),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    selectedApps.toList().forEach { comp ->
-                        val app = apps.find { it.packageName == comp.packageName && it.activityName == comp.activityName }
-                        RemovableChip(
-                            label = clipLabel(app?.appName ?: comp.packageName, 7),
-                            iconApp = app,
-                            iconPackPackage = null,
-                            onRemove = { selectedApps.remove(comp) }
-                        )
-                    }
-                }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 18.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.watchAllPacksLabel),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f)
-                )
-                Switch(checked = watchAll, onCheckedChange = { watchAll = it })
-            }
-
-            if (!watchAll) {
-                Text(
-                    text = stringResource(R.string.iconPacksToCheck),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-                Box(modifier = Modifier.padding(top = 8.dp)) {
-                    TileRows(sortedPacks) { pack ->
-                        val selected = selectedPacks.contains(pack.packageName)
-                        IconTile(rememberPackBitmap(pack.packageName), clipLabel(pack.applicationName, 13), selected) {
-                            if (selected) selectedPacks.remove(pack.packageName)
-                            else selectedPacks.add(pack.packageName)
-                        }
-                    }
-                }
-                if (selectedPacks.isNotEmpty()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(rememberScrollState())
-                            .padding(top = 10.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        selectedPacks.toList().forEach { pkg ->
-                            val pack = packs.find { it.packageName == pkg }
-                            RemovableChip(
-                                label = clipLabel(pack?.applicationName ?: pkg, 7),
-                                iconApp = null,
-                                iconPackPackage = pkg,
-                                onRemove = { selectedPacks.remove(pkg) }
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Small reusable pieces
-// ---------------------------------------------------------------------------
-
-/** Clips a label to [max] characters with an ellipsis so it stays on one line. */
-private fun clipLabel(name: String, max: Int): String =
-    if (name.length > max) name.take(max) + "…" else name
-
-/**
- * One shared selectable tile (rounded card: icon on top, single-line name below) for
- * apps and packs. [overlayIcon], when set (apps that already have a chosen icon),
- * is shown as a small badge in the big icon's bottom-right corner.
- */
-@Composable
-private fun IconTile(
-    bitmap: ImageBitmap?,
-    label: String,
-    selected: Boolean,
-    overlayIcon: IconPackDrawable? = null,
-    onClick: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        color = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surfaceContainer,
-        border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .clickable(onClick = onClick)
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(top = 12.dp, bottom = 10.dp, start = 4.dp, end = 4.dp)
-        ) {
-            Box(Modifier.size(54.dp)) {
-                if (bitmap != null) {
-                    Image(
-                        painter = BitmapPainter(bitmap),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(14.dp))
-                    )
-                } else {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        shape = RoundedCornerShape(14.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {}
-                }
-                if (overlayIcon != null) {
-                    Surface(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(26.dp),
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.surface,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                    ) {
-                        Image(
-                            painter = overlayIcon.getPainter(),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(2.dp)
-                        )
-                    }
-                }
-            }
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelSmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .padding(top = 6.dp)
-                    .fillMaxWidth()
-            )
-        }
-    }
-}
-
-/** Lays [items] into rows of [columns], padding the last row so tile widths stay equal. */
-@Composable
-private fun <T> TileRows(items: List<T>, columns: Int = 3, tile: @Composable (T) -> Unit) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        items.chunked(columns).forEach { row ->
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                row.forEach { item ->
-                    Box(Modifier.weight(1f)) { tile(item) }
-                }
-                repeat(columns - row.size) { Spacer(Modifier.weight(1f)) }
-            }
-        }
-    }
-}
-
-@Composable
-private fun rememberAppBitmap(app: PackageInfoStruct): ImageBitmap? {
-    // Tiles show the icon at 54.dp; render at that size instead of full native
-    // resolution so a gridful of icons is cheap to build (and light on memory).
-    val density = LocalDensity.current
-    return remember(app.packageName, app.internalVersion, density) {
-        val target = with(density) { 54.dp.roundToPx() }
-        val size = app.icon.intrinsicWidth.let { if (it in 1 until target) it else target }
-        app.icon.toSafeBitmapOrNull(size, size)?.asImageBitmap()
-    }
-}
-
-@Composable
-private fun rememberPackBitmap(packPackage: String): ImageBitmap? {
-    val context = getCurrentContext()
-    val density = LocalDensity.current
-    return remember(packPackage, density) {
-        try {
-            val drawable = context.packageManager.getApplicationIcon(packPackage)
-            val target = with(density) { 54.dp.roundToPx() }
-            val size = drawable.intrinsicWidth.let { if (it in 1 until target) it else target }
-            drawable.toSafeBitmapOrNull(size, size)?.asImageBitmap()
-        } catch (_: Exception) {
-            null
-        }
-    }
-}
-
-@Composable
-private fun RemovableChip(
-    label: String,
-    iconApp: PackageInfoStruct?,
-    iconPackPackage: String?,
-    onRemove: () -> Unit
-) {
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer
-    ) {
-        Row(
-            modifier = Modifier.padding(start = 6.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (iconApp != null) AppIcon(iconApp, iconApp.packageName, 18.dp)
-            else if (iconPackPackage != null) PackIconImage(iconPackPackage, 18.dp)
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSecondaryContainer,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 6.dp)
-            )
-            IconButton(onClick = onRemove, modifier = Modifier.size(22.dp).padding(start = 2.dp)) {
-                Icon(
-                    Icons.Filled.Close, stringResource(R.string.dismiss),
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
-        }
-    }
-}
 
 /** App pill (icon + name) used on the active rule card. */
 @Composable
@@ -1318,60 +697,3 @@ private fun PackLabel(packPackage: String, name: String?) {
     }
 }
 
-@Composable
-private fun AppIcon(app: PackageInfoStruct?, fallbackPackage: String, size: androidx.compose.ui.unit.Dp) {
-    val bitmap = remember(app?.packageName ?: fallbackPackage, app?.internalVersion) {
-        app?.icon?.toSafeBitmapOrNull()
-    }
-    if (bitmap != null) {
-        Image(
-            painter = BitmapPainter(bitmap.asImageBitmap()),
-            contentDescription = null,
-            modifier = Modifier
-                .size(size)
-                .clip(RoundedCornerShape(size / 4))
-        )
-    } else {
-        Surface(
-            modifier = Modifier.size(size),
-            shape = RoundedCornerShape(size / 4),
-            color = MaterialTheme.colorScheme.surfaceVariant
-        ) {}
-    }
-}
-
-// Pack icons appear as small chips repeated across many rule cards, and the LazyColumn
-// re-creates them on every scroll. Decode each pack icon once (small) and cache it
-// process-wide so scrolling doesn't keep hitting PackageManager / re-decoding bitmaps.
-private val packIconCache = mutableMapOf<String, ImageBitmap?>()
-
-private fun packIconBitmap(context: android.content.Context, packPackage: String): ImageBitmap? =
-    packIconCache.getOrPut(packPackage) {
-        try {
-            context.packageManager.getApplicationIcon(packPackage)
-                .toSafeBitmapOrNull(72, 72)?.asImageBitmap()
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-@Composable
-private fun PackIconImage(packPackage: String, size: androidx.compose.ui.unit.Dp) {
-    val context = getCurrentContext()
-    val bitmap = remember(packPackage) { packIconBitmap(context, packPackage) }
-    if (bitmap != null) {
-        Image(
-            painter = BitmapPainter(bitmap),
-            contentDescription = null,
-            modifier = Modifier
-                .size(size)
-                .clip(RoundedCornerShape(size / 4))
-        )
-    } else {
-        Surface(
-            modifier = Modifier.size(size),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary
-        ) {}
-    }
-}

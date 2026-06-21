@@ -9,28 +9,18 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
@@ -39,18 +29,15 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
-import androidx.compose.material3.Button
 import androidx.compose.material3.BadgedBox
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -60,6 +47,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.animation.Crossfade
@@ -76,10 +64,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.clickable
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -88,11 +73,8 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.AppFilterNoIconKey
@@ -100,7 +82,6 @@ import dev.alembiconsProject.alembicons.data.AppSortOrderKey
 import dev.alembiconsProject.alembicons.data.BackgroundColorKey
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IconPack
-import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
 import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getColorValue
 import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
@@ -108,14 +89,10 @@ import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
-import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import androidx.compose.ui.platform.LocalDensity
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.viewmodel.compose.viewModel
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 enum class AppSortOrder { NAME, INSTALL_DATE }
@@ -146,7 +123,6 @@ private fun LazyListState.isScrollingUp(): Boolean {
 @Composable
 fun MainColumn(iconPacks: List<IconPack>) {
     var packageFilter by remember { mutableStateOf("") }
-    var isInRefresh by rememberSaveable { mutableStateOf(false) }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val listState = rememberLazyListState()
 
@@ -159,7 +135,31 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // so the search bar's clear-on-back handler takes priority while it has text.
     val context = LocalContext.current
     val activity = getCurrentMainActivity()
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
+    val isInRefresh = viewModel.isRefreshing
+
+    // Forward one-shot toast events from the ViewModel to the shared Toaster. A single
+    // collector here covers every VM-originated toast (build installed, packs synced,
+    // app list refreshed) regardless of which dialog/button triggered it.
+    val toaster = LocalToaster.current
+    LaunchedEffect(Unit) {
+        viewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
+    }
+
+    // An external icon pack was installed while the app was open → offer to reload so it
+    // shows up among the available icon-pack sources.
+    val newIconPack = viewModel.newIconPackInstalled
+    if (newIconPack != null) {
+        NewIconPackDialog(
+            packLabel = newIconPack,
+            onReload = {
+                viewModel.sync()
+                viewModel.dismissNewIconPack()
+            },
+            onDismiss = { viewModel.dismissNewIconPack() }
+        )
+    }
+
     val pressBackMessage = stringResource(R.string.pressBackToExit)
     var lastBackPress by remember { mutableStateOf(0L) }
     BackHandler {
@@ -188,7 +188,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
 
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
-        topBar = { TitleBar(scrollBehavior) { isInRefresh = it } },
+        topBar = { TitleBar(scrollBehavior) },
         floatingActionButton = { BuildPackFab(isInRefresh, expanded = listState.isScrollingUp()) }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding)) {
@@ -211,6 +211,27 @@ fun MainColumn(iconPacks: List<IconPack>) {
     }
 }
 
+/**
+ * Prompts the user to reload after an external icon pack was installed while the app was
+ * open, so the new pack appears among the available sources. [onReload] re-syncs the packs.
+ */
+@Composable
+fun NewIconPackDialog(packLabel: String, onReload: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.newIconPackTitle)) },
+        text = { Text(stringResource(R.string.newIconPackText, packLabel)) },
+        confirmButton = {
+            TextButton(onClick = onReload) { Text(stringResource(R.string.reload)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
+        }
+    )
+}
+
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun ApplicationList(
@@ -220,7 +241,7 @@ fun ApplicationList(
     filterNoIcon: Boolean,
     listState: LazyListState = rememberLazyListState()
 ) {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
     val pm = LocalContext.current.packageManager
     val applications = viewModel.appProvider.applicationList
 
@@ -242,17 +263,21 @@ fun ApplicationList(
     }
 
     // Keep the original index — ApplicationItem edits appProvider.applicationList by position.
-    // Remembered so it isn't re-sorted/filtered on unrelated recompositions.
-    val displayList = remember(applications, sortOrder, filterNoIcon, filter, installTimes) {
-        when (sortOrder) {
-            AppSortOrder.NAME -> applications.withIndex().toList()
-            AppSortOrder.INSTALL_DATE -> applications.withIndex()
-                .sortedByDescending { installTimes[it.value.packageName] ?: 0L }
-        }.let { list ->
-            if (filterNoIcon) list.filter { it.value.createdIcon == null } else list
-        }.let { list ->
-            // Filter before the LazyColumn so non-matching rows don't become empty items
-            if (filter.isEmpty()) list else list.filter { it.value.appName.contains(filter, true) }
+    // derivedStateOf so it recomputes when the list's contents change (applicationList is a
+    // SnapshotStateList edited in place, so its instance identity never changes) while still
+    // caching across unrelated recompositions. Recreated when the sort/filter inputs change.
+    val displayList by remember(sortOrder, filterNoIcon, filter, installTimes) {
+        derivedStateOf {
+            when (sortOrder) {
+                AppSortOrder.NAME -> applications.withIndex().toList()
+                AppSortOrder.INSTALL_DATE -> applications.withIndex()
+                    .sortedByDescending { installTimes[it.value.packageName] ?: 0L }
+            }.let { list ->
+                if (filterNoIcon) list.filter { it.value.createdIcon == null } else list
+            }.let { list ->
+                // Filter before the LazyColumn so non-matching rows don't become empty items
+                if (filter.isEmpty()) list else list.filter { it.value.appName.contains(filter, true) }
+            }
         }
     }
 
@@ -295,12 +320,13 @@ fun ApplicationItem(
     bgColorValue: Color,
     modifier: Modifier = Modifier
 ) {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
     val dynamicColor = themed && supportDynamicColors()
     val view = LocalView.current
+    val toaster = LocalToaster.current
+    val syncWarning = stringResource(id = R.string.syncText)
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
-    var openWarning by rememberSaveable { mutableStateOf(false) }
 
     Surface(
         onClick = {
@@ -308,7 +334,7 @@ fun ApplicationItem(
             if (viewModel.appProvider.iconPackLoaded) {
                 openAppOptions = true
             } else {
-                openWarning = true
+                toaster.show(syncWarning)
             }
         },
         shape = RoundedCornerShape(20.dp),
@@ -401,11 +427,6 @@ fun ApplicationItem(
             openAppOptions = false
         }
     }
-    
-    if (openWarning) {
-        ShowToast(stringResource(id = R.string.syncText))
-        openWarning = false
-    }
 }
 
 @Composable
@@ -416,44 +437,29 @@ fun OpenAppOptions(
     index: Int,
     onDismiss: () -> Unit
 ) {
-    val activity = getCurrentMainActivity()
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
 
     AppOptions(iconPacks, app, themed, { icon ->
-        activity.lifecycleScope.launch(Dispatchers.Default) {
-            viewModel.appProvider.editApplication(index, app.changeExport(icon))
-            viewModel.markIconChanged(app.packageName, app.activityName)
-            onDismiss()
-        }
+        viewModel.applyIcon(index, app, icon)
+        onDismiss()
     }, {
         onDismiss()
     }) {
         onDismiss()
-        viewModel.appProvider.editApplication(index, app.changeExport(null))
+        viewModel.applyIcon(index, app, null)
     }
 }
 
 @Composable
-fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
+fun RefreshButton() {
     val preferences = getPreferences().getPreferencesValue()
-    val iconPackageName = preferences.getStringValue(PrimaryIconPackKey)
-
-    val activity = getCurrentMainActivity()
-    val viewModel: MainViewModel = viewModel()
-
-    var openWarning by rememberSaveable { mutableStateOf(false) }
+    val viewModel: MainViewModel = hiltViewModel()
+    val toaster = LocalToaster.current
+    val syncWarning = stringResource(id = R.string.syncText)
 
     IconButton(onClick = {
-        activity.lifecycleScope.launch(Dispatchers.Default) {
-            if (!viewModel.appProvider.iconPackLoaded && iconPackageName != "") {
-                openWarning = true
-                return@launch
-            }
-            onChangeIsRefresh(true)
-
-            viewModel.appProvider.refreshIcons(preferences)
-
-            onChangeIsRefresh(false)
+        if (!viewModel.refresh(preferences)) {
+            toaster.show(syncWarning)
         }
     }) {
         Icon(
@@ -462,251 +468,12 @@ fun RefreshButton(onChangeIsRefresh: (Boolean) -> Unit) {
             tint = MaterialTheme.colorScheme.primary
         )
     }
-
-    if (openWarning) {
-        ShowToast(stringResource(id = R.string.syncText))
-        openWarning = false
-    }
-}
-
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
-    val activity = getCurrentMainActivity()
-    val viewModel: MainViewModel = viewModel()
-    val preferences = getPreferences().getPreferencesValue()
-    val view = LocalView.current
-
-    var openBuilder by rememberSaveable { mutableStateOf(false) }
-    var openSuccess by remember { mutableStateOf(false) }
-    var openInRefresh by remember { mutableStateOf(false) }
-    var showPreview by remember { mutableStateOf(false) }
-    var text by remember { mutableStateOf("") }
-
-    ExtendedFloatingActionButton(
-        onClick = {
-            if (isInRefresh) {
-                openInRefresh = true
-                return@ExtendedFloatingActionButton
-            }
-
-            // Review the whole pack before committing to a build
-            view.performTapHaptic()
-            showPreview = true
-        },
-        icon = {
-            Icon(
-                imageVector = Icons.Filled.Build,
-                contentDescription = null
-            )
-        },
-        text = { Text(stringResource(id = R.string.buildIconPack)) },
-        expanded = expanded,
-        containerColor = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-    )
-
-    if (showPreview) {
-        BuildPackPreview(
-            onDismiss = { showPreview = false },
-            onBuild = {
-                showPreview = false
-                view.performConfirmHaptic()
-                text = ""
-                openBuilder = true
-                activity.lifecycleScope.launch(Dispatchers.Default) {
-                    val iconPack = viewModel.appProvider.buildAndSignIconPack(preferences) {
-                        text = it
-                    }
-
-                    openBuilder = false
-                    openSuccess = viewModel.appProvider.installIconPack(iconPack)
-                }
-            }
-        )
-    }
-
-    if (openBuilder) {
-        AlertDialog(
-            shape = RoundedCornerShape(28.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-            onDismissRequest = {},
-            icon = {
-                LoadingIndicator(color = MaterialTheme.colorScheme.primary)
-            },
-            title = { Text(stringResource(id = R.string.iconPack)) },
-            text = {
-                // Show only the current step, crossfading between them, instead of an
-                // ever-growing log
-                Crossfade(targetState = text, label = "buildStep") { step ->
-                    Text(
-                        text = step,
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            },
-            confirmButton = { }
-        )
-    }
-
-    if (openSuccess) {
-        ShowToast(stringResource(id = R.string.iconPackInstalled))
-        openSuccess = false
-    }
-
-    if (openInRefresh) {
-        ShowToast(stringResource(id = R.string.iconsStillGenerated))
-        openInRefresh = false
-    }
-}
-
-/**
- * Full-screen review of every icon that will go into the pack (apps that have a
- * created icon), shown before the actual build so the user can judge the set as a
- * whole. The Build button kicks off the real build.
- */
-@Composable
-fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
-    val viewModel: MainViewModel = viewModel()
-    val changed = viewModel.recentlyChangedIcons.toSet()
-    // Icons changed this session float to the top so the user sees them without
-    // scrolling; the rest stay alphabetical
-    val themedApps = viewModel.appProvider.applicationList
-        .filter { it.createdIcon != null }
-        .sortedWith(
-            compareByDescending<PackageInfoStruct> { "${it.packageName}/${it.activityName}" in changed }
-                .thenBy { it.appName.lowercase() }
-        )
-
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.surfaceContainerLow
-        ) {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
-                    }
-                    Text(
-                        text = stringResource(R.string.buildPreviewTitle),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = stringResource(R.string.buildPreviewCount, themedApps.size),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.outline
-                    )
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-
-                if (themedApps.isEmpty()) {
-                    Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                        Text(
-                            text = stringResource(R.string.buildPreviewEmpty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                            modifier = Modifier.padding(32.dp)
-                        )
-                    }
-                } else {
-                    LazyVerticalGrid(
-                        columns = GridCells.Adaptive(72.dp),
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(themedApps, key = { "${it.packageName}/${it.activityName}" }) { app ->
-                            BuildPreviewItem(
-                                app = app,
-                                changed = "${app.packageName}/${app.activityName}" in changed
-                            )
-                        }
-                    }
-                }
-
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Button(
-                    onClick = onBuild,
-                    enabled = themedApps.isNotEmpty(),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp)
-                ) {
-                    Icon(Icons.Filled.Build, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.buildIconPack))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun BuildPreviewItem(app: PackageInfoStruct, changed: Boolean = false) {
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box {
-            app.createdIcon?.let { icon ->
-                Image(
-                    painter = icon.getPainter(),
-                    contentDescription = app.appName,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                )
-            }
-            // Green dot marks icons changed this session so they're easy to spot
-            if (changed) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .size(12.dp)
-                        .clip(CircleShape)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                        .padding(2.dp)
-                        .clip(CircleShape)
-                        .background(Color(0xFF34C759))
-                )
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Text(
-            text = app.appName,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center
-        )
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun TitleBar(
-    scrollBehavior: TopAppBarScrollBehavior? = null,
-    onRefreshChange: (Boolean) -> Unit = {}
+    scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     val prefs = getPreferences()
     val context = getCurrentContext()
@@ -719,7 +486,7 @@ fun TitleBar(
 
     LargeFlexibleTopAppBar(
         scrollBehavior = scrollBehavior,
-        colors = TopAppBarDefaults.largeTopAppBarColors(
+        colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.background,
             scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
             titleContentColor = MaterialTheme.colorScheme.primary,
@@ -728,9 +495,7 @@ fun TitleBar(
             Text(stringResource(id = R.string.app_name))
         },
         actions = {
-            RefreshButton {
-                onRefreshChange(it)
-            }
+            RefreshButton()
             IconButton(onClick = { openWatch = true }) {
                 BadgedBox(badge = {
                     if (completedCount > 0) {
@@ -776,138 +541,6 @@ fun TitleBar(
     if (openWatch) {
         WatchScreen {
             openWatch = false
-        }
-    }
-}
-
-@Composable
-fun InfoDialog(onDismiss: () -> Unit) {
-    // The launcher icon is an adaptive (XML) icon, which painterResource can't load,
-    // so render it via PackageManager -> bitmap instead.
-    val context = LocalContext.current
-    val appIcon = remember {
-        runCatching {
-            context.packageManager.getApplicationIcon(context.packageName)
-                .toSafeBitmapOrNull()?.asImageBitmap()
-        }.getOrNull()
-    }
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-        ) {
-            Column(
-                modifier = Modifier
-                    .verticalScroll(rememberScrollState())
-                    .padding(24.dp)
-            ) {
-                // Header — app icon + name
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (appIcon != null) {
-                        Image(
-                            painter = BitmapPainter(appIcon),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(56.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                        )
-                        Spacer(Modifier.width(16.dp))
-                    }
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                }
-
-                Spacer(Modifier.height(20.dp))
-                Text(
-                    text = stringResource(R.string.aboutApp),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = stringResource(R.string.aboutFork),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = stringResource(R.string.aboutThanks),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                val uriHandler = LocalUriHandler.current
-                Text(
-                    text = stringResource(R.string.aboutForkLink),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .padding(top = 2.dp)
-                        .clickable { uriHandler.openUri("https://f-droid.org/packages/com.kaanelloed.iconeration/") }
-                )
-
-                Spacer(Modifier.height(24.dp))
-                Text(
-                    text = stringResource(R.string.aboutFeatures),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(Modifier.height(4.dp))
-                InfoFeatureRow(Icons.Filled.Refresh, stringResource(R.string.featureRefresh), stringResource(R.string.refreshIconDescription))
-                InfoFeatureRow(Icons.Filled.Build, stringResource(R.string.featureBuild), stringResource(R.string.buildIconDescription))
-                InfoFeatureRow(Icons.Filled.Notifications, stringResource(R.string.featureWatch), stringResource(R.string.watchIconDescription))
-
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {
-                    Text(stringResource(R.string.close))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun InfoFeatureRow(icon: ImageVector, title: String, description: String) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        Surface(
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.secondaryContainer,
-            modifier = Modifier.size(40.dp)
-        ) {
-            Box(contentAlignment = Alignment.Center) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        }
-        Spacer(Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
     }
 }
@@ -966,7 +599,7 @@ fun SearchBar(
         Box {
             IconButton(onClick = { showSortMenu = true }) {
                 Icon(
-                    imageVector = Icons.Filled.Sort,
+                    imageVector = Icons.AutoMirrored.Filled.Sort,
                     contentDescription = stringResource(R.string.sortApps),
                     tint = MaterialTheme.colorScheme.primary
                 )

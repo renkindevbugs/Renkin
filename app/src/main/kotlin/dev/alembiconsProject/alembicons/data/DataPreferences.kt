@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.toColor
@@ -28,9 +29,7 @@ private const val EXPORT_THEMED_NAME = "EXPORT_THEMED"
 private const val ICON_COLOR_NAME = "ICON_COLOR"
 private const val BACKGROUND_COLOR_NAME = "BACKGROUND_COLOR"
 private const val RETRIEVE_CALENDAR_ICONS_NAME = "RETRIEVE_CALENDAR_ICONS"
-private const val PACKAGE_ADDED_NOTIFICATION_NAME = "PACKAGE_ADDED_NOTIFICATION"
 private const val OVERRIDE_ICON_NAME = "OVERRIDE_ICON"
-private const val AUTOMATICALLY_UPDATE_PACK_NAME = "AUTOMATICALLY_UPDATE_PACK"
 private const val PRIMARY_SOURCE_NAME = "PRIMARY_SOURCE"
 private const val PRIMARY_IMAGE_EDIT_NAME = "PRIMARY_IMAGE_EDIT"
 private const val PRIMARY_TEXT_TYPE_NAME = "PRIMARY_TEXT_TYPE"
@@ -41,52 +40,38 @@ private const val SECONDARY_TEXT_TYPE_NAME = "SECONDARY_TEXT_TYPE"
 private const val SECONDARY_ICON_PACK_NAME = "SECONDARY_ICON_PACK"
 private const val APP_SORT_ORDER_NAME = "APP_SORT_ORDER"
 private const val APP_FILTER_NO_ICON_NAME = "APP_FILTER_NO_ICON"
+private const val WATCH_CHECK_INTERVAL_NAME = "WATCH_CHECK_INTERVAL_MINUTES"
+private const val LAST_WATCH_CHECK_AT_NAME = "LAST_WATCH_CHECK_AT"
+
+// Icon-watch periodic check interval, in minutes. 24h by default; the debug build can
+// lower it (min 15, WorkManager's periodic floor) to test the watcher quickly.
+const val WATCH_CHECK_INTERVAL_DEFAULT = 24 * 60
 
 val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
 val SOURCE_DEFAULT = Source.NONE
 val IMAGE_EDIT_DEFAULT = ImageEdit.NONE
 val TEXT_TYPE_DEFAULT = TextType.FULL_NAME
 
-val DarkModeKey: Preferences.Key<Int>
-    get() = intPreferencesKey(DARK_MODE_NAME)
-val IncludeVectorKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
-val MonochromeKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(MONOCHROME_NAME)
-val ExportThemedKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(EXPORT_THEMED_NAME)
-val IconColorKey: Preferences.Key<String>
-    get() = stringPreferencesKey(ICON_COLOR_NAME)
-val BackgroundColorKey: Preferences.Key<String>
-    get() = stringPreferencesKey(BACKGROUND_COLOR_NAME)
-val CalendarIconsKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS_NAME)
-val PackageAddedNotificationKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(PACKAGE_ADDED_NOTIFICATION_NAME)
-val OverrideIconKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(OVERRIDE_ICON_NAME)
-val AutomaticallyUpdateKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(AUTOMATICALLY_UPDATE_PACK_NAME)
-val PrimarySourceKey: Preferences.Key<Int>
-    get() = intPreferencesKey(PRIMARY_SOURCE_NAME)
-val PrimaryImageEditKey: Preferences.Key<Int>
-    get() = intPreferencesKey(PRIMARY_IMAGE_EDIT_NAME)
-val PrimaryTextTypeKey: Preferences.Key<Int>
-    get() = intPreferencesKey(PRIMARY_TEXT_TYPE_NAME)
-val PrimaryIconPackKey: Preferences.Key<String>
-    get() = stringPreferencesKey(PRIMARY_ICON_PACK_NAME)
-val SecondarySourceKey: Preferences.Key<Int>
-    get() = intPreferencesKey(SECONDARY_SOURCE_NAME)
-val SecondaryImageEditKey: Preferences.Key<Int>
-    get() = intPreferencesKey(SECONDARY_IMAGE_EDIT_NAME)
-val SecondaryTextTypeKey: Preferences.Key<Int>
-    get() = intPreferencesKey(SECONDARY_TEXT_TYPE_NAME)
-val SecondaryIconPackKey: Preferences.Key<String>
-    get() = stringPreferencesKey(SECONDARY_ICON_PACK_NAME)
-val AppSortOrderKey: Preferences.Key<Int>
-    get() = intPreferencesKey(APP_SORT_ORDER_NAME)
-val AppFilterNoIconKey: Preferences.Key<Boolean>
-    get() = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
+val DarkModeKey = intPreferencesKey(DARK_MODE_NAME)
+val IncludeVectorKey = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
+val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
+val ExportThemedKey = booleanPreferencesKey(EXPORT_THEMED_NAME)
+val IconColorKey = stringPreferencesKey(ICON_COLOR_NAME)
+val BackgroundColorKey = stringPreferencesKey(BACKGROUND_COLOR_NAME)
+val CalendarIconsKey = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS_NAME)
+val OverrideIconKey = booleanPreferencesKey(OVERRIDE_ICON_NAME)
+val PrimarySourceKey = intPreferencesKey(PRIMARY_SOURCE_NAME)
+val PrimaryImageEditKey = intPreferencesKey(PRIMARY_IMAGE_EDIT_NAME)
+val PrimaryTextTypeKey = intPreferencesKey(PRIMARY_TEXT_TYPE_NAME)
+val PrimaryIconPackKey = stringPreferencesKey(PRIMARY_ICON_PACK_NAME)
+val SecondarySourceKey = intPreferencesKey(SECONDARY_SOURCE_NAME)
+val SecondaryImageEditKey = intPreferencesKey(SECONDARY_IMAGE_EDIT_NAME)
+val SecondaryTextTypeKey = intPreferencesKey(SECONDARY_TEXT_TYPE_NAME)
+val SecondaryIconPackKey = stringPreferencesKey(SECONDARY_ICON_PACK_NAME)
+val AppSortOrderKey = intPreferencesKey(APP_SORT_ORDER_NAME)
+val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
+val WatchCheckIntervalKey = intPreferencesKey(WATCH_CHECK_INTERVAL_NAME)
+val LastWatchCheckAtKey = longPreferencesKey(LAST_WATCH_CHECK_AT_NAME)
 
 @Composable
 fun DataStore<Preferences>.getPreferencesValue(): Preferences {
@@ -169,6 +154,22 @@ suspend fun DataStore<Preferences>.setIntValue(key: Preferences.Key<Int>, value:
 }
 
 fun Preferences.getIntValue(key: Preferences.Key<Int>, default: Int = 0): Int {
+    return this[key] ?: default
+}
+
+@Composable
+fun DataStore<Preferences>.getLongValue(
+    key: Preferences.Key<Long>
+    , default: Long = 0L
+): Long {
+    return getPreferenceValue(key, default)
+}
+
+suspend fun DataStore<Preferences>.setLongValue(key: Preferences.Key<Long>, value: Long) {
+    setPreferenceValue(key, value)
+}
+
+fun Preferences.getLongValue(key: Preferences.Key<Long>, default: Long = 0L): Long {
     return this[key] ?: default
 }
 
