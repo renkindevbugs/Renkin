@@ -41,14 +41,9 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "se
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
-    // Delegated to the ViewModel so the provider and its loaded state survive
-    // configuration changes. Existing getCurrentMainActivity().appProvider call
-    // sites keep working unchanged.
+    // The provider lives in the ViewModel so it (and its loaded state) survives
+    // configuration changes; exposed here for the activity's own use in setContent.
     val appProvider get() = viewModel.appProvider
-
-    // Session state lives in the ViewModel (survives rotation). Thin passthrough so the
-    // existing getCurrentMainActivity().<x> call site keeps working.
-    val pendingWatchSuggestionId get() = viewModel.pendingWatchSuggestionId
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,11 +56,9 @@ class MainActivity : ComponentActivity() {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
         }
 
-        // App + pack loading now lives in MainViewModel, so it runs once and
-        // survives configuration changes (rotation) instead of re-loading.
         handleWatchIntent(intent)
 
-        // Icon-watch (phase 4): the daily safety-net check is always scheduled (version-gated,
+        // Icon-watch: the daily safety-net check is always scheduled (version-gated,
         // so it's near-free when nothing changed); the event-driven fast path needs the
         // package receiver running, so start it when there are active watch rules.
         lifecycleScope.launch(Dispatchers.Default) {
@@ -131,11 +124,6 @@ class MainActivity : ComponentActivity() {
             val id = intent.getLongExtra(EXTRA_SUGGESTION_ID, -1L)
             if (id >= 0) viewModel.setPendingWatchSuggestion(id)
         }
-    }
-
-    /** Called once the apply modal has handled (applied or dismissed) the suggestion. */
-    fun clearPendingWatchSuggestion() {
-        viewModel.clearPendingWatchSuggestion()
     }
 
     private fun edgeToEdge(darkMode: Boolean) {

@@ -13,13 +13,13 @@ import dev.alembiconsProject.alembicons.util.Log
 import java.util.concurrent.TimeUnit
 
 /**
- * Runs the icon-watch check off the main thread. Triggered two ways (phase 4):
+ * Runs the icon-watch check off the main thread. Triggered two ways:
  *  - a daily [schedulePeriodic] job — the reliable safety net (survives reboot,
  *    battery-friendly, and cheap because [WatchChecker] is version-gated), and
  *  - an immediate [runNow] enqueued by [PackageAddedReceiver] when a pack is replaced.
  *
- * Notifications for any fired suggestions are posted in phase 5; for now the DB updates
- * (a completed rule + bell badge) are the visible result.
+ * Each fired suggestion posts an "icon available" notification and updates the DB
+ * (a completed rule + bell badge).
  */
 class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
