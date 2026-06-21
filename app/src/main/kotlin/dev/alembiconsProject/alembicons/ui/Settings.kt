@@ -64,6 +64,9 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
                 RefreshApplicationListButton()
                 RemoveIconsButton()
                 DeleteIconPackButton()
+                if (BuildConfig.DEBUG) {
+                    ForceCrashButton()
+                }
                 AppVersion()
             }
         },
@@ -242,6 +245,22 @@ fun RemoveIconsButton() {
     }
 }
 
+
+/** Debug-only: throws to verify the crash-capture + report-on-next-launch flow. */
+@Composable
+private fun ForceCrashButton() {
+    FilledTonalButton(
+        onClick = { throw RuntimeException("Forced crash for testing") },
+        shape = RoundedCornerShape(16.dp),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer,
+            contentColor = MaterialTheme.colorScheme.onErrorContainer
+        ),
+        modifier = settingsButtonModifier
+    ) {
+        Text(stringResource(R.string.forceCrash))
+    }
+}
 
 @Composable
 fun AppVersion() {
