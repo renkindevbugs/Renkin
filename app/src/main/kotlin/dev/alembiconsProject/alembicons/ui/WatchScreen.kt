@@ -20,9 +20,12 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
@@ -292,9 +295,15 @@ private fun WatchRuleList(
                     .weight(1f)
                     .fillMaxWidth()
             ) {
+                // Bottom padding = nav-bar inset (so buttons clear the system nav bar; the
+                // dialog draws edge-to-edge with decorFitsSystemWindows = false) + room for
+                // the FAB, so the last rule's Edit/Delete aren't hidden behind it.
+                val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp),
+                    contentPadding = PaddingValues(
+                        start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp + navBarInset
+                    ),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     if (rules.isEmpty()) {
