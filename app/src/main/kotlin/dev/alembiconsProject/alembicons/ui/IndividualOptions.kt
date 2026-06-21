@@ -320,7 +320,8 @@ fun OptionsDialog(
                                 },
                                 onTextTypeChange = { textType = it; iconOrigin = IconOrigin.CREATE },
                                 onCollapsedChange = { headerCollapsed = it },
-                                contentReady = createTabReady
+                                contentReady = createTabReady,
+                                selectedResourceId = customIconList.firstOrNull()?.resourceId
                             )
                             1 -> UploadColumn(app = app) {
                                 uploadBase = it
