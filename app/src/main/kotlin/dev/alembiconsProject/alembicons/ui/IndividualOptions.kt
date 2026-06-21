@@ -113,6 +113,9 @@ fun OptionsDialog(
     var uploadBase by remember { mutableStateOf<IconPackDrawable?>(null) }
     var uploadIcon by remember { mutableStateOf<IconPackDrawable?>(null) }
     var vectorIcon by remember { mutableStateOf<IconPackDrawable?>(null) }
+    // Hoisted above the tab AnimatedContent so leaving the vector tab and coming back
+    // keeps the user's paths instead of disposing the editor and resetting them.
+    val vectorEditState = remember { VectorEditState() }
     // Which source actually produced the icon being previewed/confirmed. Without
     // this the modifier tab would fall back to the create-source icon and wipe a
     // freshly built vector (or upload) just by switching tabs.
@@ -201,7 +204,9 @@ fun OptionsDialog(
         val base = vectorIcon
         modifiedVector = when {
             base == null -> null
-            generatingOptions.primaryImageEdit == ImageEdit.NONE -> base
+            // Only skip when there's truly nothing to apply — scale (iconScale) is applied
+            // by applyModifier too, so a scale change with no image-edit must still run it.
+            generatingOptions.primaryImageEdit == ImageEdit.NONE && generatingOptions.iconScale == 1f -> base
             else -> {
                 generatingPreview = true
                 val result = viewModel.appProvider.applyModifier(base, generatingOptions)
@@ -340,7 +345,7 @@ fun OptionsDialog(
                                 onEdgeContrastChange = { edgeContrast = it },
                                 onIconScaleChange = { iconScale = it }
                             )
-                            else -> PrepareEditVector(app) {
+                            else -> PrepareEditVector(app, vectorEditState) {
                                 vectorIcon = it
                                 if (it != null) iconOrigin = IconOrigin.VECTOR
                             }
