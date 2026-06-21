@@ -24,6 +24,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.MainActivity
 import dev.alembiconsProject.alembicons.dataStore
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 
 /**
  * The hosting [MainActivity], provided at the root by MainActivity itself.
@@ -88,12 +90,39 @@ fun Modifier.tappableIcon(onClick: () -> Unit): Modifier {
         }
 }
 
+/**
+ * App-wide toast surface. UI code (and the [MainViewModel] event bridge) calls [show];
+ * a single [ToastHost] near the composition root actually displays the messages, one at a
+ * time. Replaces the repeated `var done by remember { mutableStateOf(false) }; if (done) {
+ * ShowToast(...); done = false }` one-shot idiom that was scattered across the UI.
+ */
+class Toaster {
+    // BUFFERED so events fired while no host is collecting (e.g. before first composition)
+    // are not dropped; they replay to the host once it attaches.
+    private val messages = Channel<String>(Channel.BUFFERED)
+    val events = messages.receiveAsFlow()
+
+    /** Queues [message] to be shown once. Safe to call from any thread. */
+    fun show(message: String) {
+        messages.trySend(message)
+    }
+}
+
+/** The active [Toaster], provided at the root by MainActivity. */
+val LocalToaster = staticCompositionLocalOf<Toaster> {
+    error("LocalToaster not provided")
+}
+
+/**
+ * Drives the single toast surface: collects [toaster] events and shows each as a toast.
+ * Provide [LocalToaster] and place this once near the composition root.
+ */
 @Composable
-fun ShowToast(text: String) {
-    // Fire the toast as a side effect so it shows once on appearance instead of
-    // on every recomposition while it is in the tree
+fun ToastHost(toaster: Toaster) {
     val context = LocalContext.current
-    LaunchedEffect(text) {
-        Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+    LaunchedEffect(toaster) {
+        toaster.events.collect { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
     }
 }

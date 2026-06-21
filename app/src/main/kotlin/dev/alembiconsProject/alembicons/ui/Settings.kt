@@ -57,7 +57,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
-    var notificationPermissionWarning by remember { mutableStateOf(false) }
+    val toaster = LocalToaster.current
+    val permissionWarning = stringResource(R.string.notifPermissionWarning)
 
     val scope = rememberCoroutineScope()
     val activity = getCurrentMainActivity()
@@ -81,7 +82,7 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
                         }
 
                         if (!permissionManager.isPostNotificationEnabled()) {
-                            notificationPermissionWarning = true
+                            toaster.show(permissionWarning)
                             return@PackageAddedNotificationSwitch
                         }
 
@@ -108,11 +109,6 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
         },
         confirmButton = {}
     )
-
-    if (notificationPermissionWarning) {
-        ShowToast(stringResource(R.string.notifPermissionWarning))
-        notificationPermissionWarning = false
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -180,7 +176,6 @@ private val settingsButtonModifier: Modifier
 @Composable
 fun SyncButton() {
     val viewModel: MainViewModel = hiltViewModel()
-    val context = getCurrentContext()
 
     Button(
         onClick = { viewModel.sync() },
@@ -189,17 +184,11 @@ fun SyncButton() {
     ) {
         Text(stringResource(R.string.syncPacks))
     }
-
-    if (viewModel.syncDone) {
-        ShowToast(context.getString(R.string.packsSynced))
-        viewModel.consumeSyncDone()
-    }
 }
 
 @Composable
 fun RefreshApplicationListButton() {
     val viewModel: MainViewModel = hiltViewModel()
-    val context = getCurrentContext()
 
     Button(
         onClick = { viewModel.refreshApps() },
@@ -208,20 +197,13 @@ fun RefreshApplicationListButton() {
     ) {
         Text(stringResource(R.string.refreshApplicationList))
     }
-
-    if (viewModel.appsRefreshed) {
-        ShowToast(context.getString(R.string.appListRefreshed))
-        viewModel.consumeAppsRefreshed()
-    }
 }
 
 @Composable
 fun DeleteIconPackButton() {
     val context = getCurrentContext()
     val scope = rememberCoroutineScope()
-
-    var openSuccess by rememberSaveable { mutableStateOf(false) }
-    var notInstalled by rememberSaveable { mutableStateOf(false) }
+    val toaster = LocalToaster.current
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
@@ -232,9 +214,11 @@ fun DeleteIconPackButton() {
                     context.packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
                 }.isSuccess
                 if (installed) {
-                    openSuccess = ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)
+                    if (ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)) {
+                        toaster.show(context.getString(R.string.iconPackUninstalled))
+                    }
                 } else {
-                    notInstalled = true
+                    toaster.show(context.getString(R.string.iconPackNotInstalled))
                 }
             }
         },
@@ -246,15 +230,6 @@ fun DeleteIconPackButton() {
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.deleteIconPack))
-    }
-
-    if (openSuccess) {
-        ShowToast(context.getString(R.string.iconPackUninstalled))
-        openSuccess = false
-    }
-    if (notInstalled) {
-        ShowToast(context.getString(R.string.iconPackNotInstalled))
-        notInstalled = false
     }
 }
 

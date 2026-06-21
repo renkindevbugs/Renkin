@@ -15,6 +15,8 @@ import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.data.isSystemInDarkTheme
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -44,6 +46,12 @@ class MainViewModel @Inject constructor(
     fun setPendingWatchSuggestion(id: Long) { pendingWatchSuggestionId = id }
 
     fun clearPendingWatchSuggestion() { pendingWatchSuggestionId = null }
+
+    // One-shot toast events (string resource ids). Emitted when an operation finishes and
+    // collected once near the composition root, which forwards them to the shared Toaster.
+    // Replaces the old mirrored buildInstalled/syncDone/appsRefreshed flag + consume pairs.
+    private val _toastEvents = Channel<Int>(Channel.BUFFERED)
+    val toastEvents = _toastEvents.receiveAsFlow()
 
     init {
         appProvider.defaultColor =
@@ -92,12 +100,6 @@ class MainViewModel @Inject constructor(
     var buildStep by mutableStateOf<String?>(null)
         private set
 
-    /** One-shot: set true once a freshly built pack installs; consume with [consumeBuildInstalled]. */
-    var buildInstalled by mutableStateOf(false)
-        private set
-
-    fun consumeBuildInstalled() { buildInstalled = false }
-
     /** Builds, signs and installs the icon pack, surfacing progress through [buildStep]. */
     fun build(preferences: Preferences) {
         if (buildStep != null) return
@@ -106,7 +108,7 @@ class MainViewModel @Inject constructor(
             val pack = appProvider.buildAndSignIconPack(preferences) { buildStep = it }
             buildStep = null
             if (appProvider.installIconPack(pack)) {
-                buildInstalled = true
+                _toastEvents.trySend(R.string.iconPackInstalled)
                 // The saved pack now matches the current icons → reset the change baseline.
                 builtKeys = appProvider.getSavedPackKeys()
             }
@@ -118,31 +120,19 @@ class MainViewModel @Inject constructor(
         appProvider.editApplication(index, app.changeExport(icon))
     }
 
-    /** One-shot signal that a settings operation finished; consume with [consumeSyncDone]. */
-    var syncDone by mutableStateOf(false)
-        private set
-
-    fun consumeSyncDone() { syncDone = false }
-
     /** Re-reads the installed icon packs. */
     fun sync() {
         viewModelScope.launch {
             appProvider.forceSync()
-            syncDone = true
+            _toastEvents.trySend(R.string.packsSynced)
         }
     }
-
-    /** One-shot signal that the app list finished reloading; consume with [consumeAppsRefreshed]. */
-    var appsRefreshed by mutableStateOf(false)
-        private set
-
-    fun consumeAppsRefreshed() { appsRefreshed = false }
 
     /** Reloads apps, icon packs and the saved Alchemicon pack from scratch. */
     fun refreshApps() {
         viewModelScope.launch {
             appProvider.initialize()
-            appsRefreshed = true
+            _toastEvents.trySend(R.string.appListRefreshed)
         }
     }
 

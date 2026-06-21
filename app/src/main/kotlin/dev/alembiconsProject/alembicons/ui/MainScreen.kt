@@ -135,6 +135,15 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val activity = getCurrentMainActivity()
     val viewModel: MainViewModel = hiltViewModel()
     val isInRefresh = viewModel.isRefreshing
+
+    // Forward one-shot toast events from the ViewModel to the shared Toaster. A single
+    // collector here covers every VM-originated toast (build installed, packs synced,
+    // app list refreshed) regardless of which dialog/button triggered it.
+    val toaster = LocalToaster.current
+    LaunchedEffect(Unit) {
+        viewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
+    }
+
     val pressBackMessage = stringResource(R.string.pressBackToExit)
     var lastBackPress by remember { mutableStateOf(0L) }
     BackHandler {
@@ -273,9 +282,10 @@ fun ApplicationItem(
     val viewModel: MainViewModel = hiltViewModel()
     val dynamicColor = themed && supportDynamicColors()
     val view = LocalView.current
+    val toaster = LocalToaster.current
+    val syncWarning = stringResource(id = R.string.syncText)
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
-    var openWarning by rememberSaveable { mutableStateOf(false) }
 
     Surface(
         onClick = {
@@ -283,7 +293,7 @@ fun ApplicationItem(
             if (viewModel.appProvider.iconPackLoaded) {
                 openAppOptions = true
             } else {
-                openWarning = true
+                toaster.show(syncWarning)
             }
         },
         shape = RoundedCornerShape(20.dp),
@@ -376,11 +386,6 @@ fun ApplicationItem(
             openAppOptions = false
         }
     }
-    
-    if (openWarning) {
-        ShowToast(stringResource(id = R.string.syncText))
-        openWarning = false
-    }
 }
 
 @Composable
@@ -408,12 +413,12 @@ fun OpenAppOptions(
 fun RefreshButton() {
     val preferences = getPreferences().getPreferencesValue()
     val viewModel: MainViewModel = hiltViewModel()
-
-    var openWarning by rememberSaveable { mutableStateOf(false) }
+    val toaster = LocalToaster.current
+    val syncWarning = stringResource(id = R.string.syncText)
 
     IconButton(onClick = {
         if (!viewModel.refresh(preferences)) {
-            openWarning = true
+            toaster.show(syncWarning)
         }
     }) {
         Icon(
@@ -421,11 +426,6 @@ fun RefreshButton() {
             contentDescription = "Refresh icons",
             tint = MaterialTheme.colorScheme.primary
         )
-    }
-
-    if (openWarning) {
-        ShowToast(stringResource(id = R.string.syncText))
-        openWarning = false
     }
 }
 
