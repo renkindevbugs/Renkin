@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color.Companion.Red
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -94,6 +95,7 @@ fun UploadColumn(app: PackageInfoStruct,
     val res = context.resources
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val view = LocalView.current
     val uploadErrorMessage = stringResource(R.string.uploadImageError)
 
     LaunchedEffect(Unit) {
@@ -406,6 +408,7 @@ fun UploadColumn(app: PackageInfoStruct,
             text = { Text(stringResource(R.string.deleteImageText)) },
             confirmButton = {
                 IconButton(onClick = {
+                    view.performConfirmHaptic()
                     showDeleteConfirm = false
                     val toDelete = savedImages.filter { it.absolutePath in markedForDelete }
                     selectionMode = false

@@ -3,6 +3,7 @@
 package dev.alembiconsProject.alembicons.ui
 
 import android.graphics.Bitmap
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -206,8 +207,12 @@ private suspend fun loadPackIconPairs(
 // visible on the grid itself (not just in the header). Matches the added-green elsewhere.
 private val selectedIconBorderColor = Color(0xFF34C759)
 
-private fun Modifier.selectedIconBorder(selected: Boolean): Modifier =
-    if (selected) this.border(2.dp, selectedIconBorderColor, RoundedCornerShape(16.dp)) else this
+@Composable
+private fun Modifier.selectedIconBorder(selected: Boolean): Modifier {
+    // Animate the width so the frame eases in/out instead of snapping.
+    val width by animateDpAsState(if (selected) 2.dp else 0.dp, label = "selectedIconBorder")
+    return if (width > 0.dp) border(width, selectedIconBorderColor, RoundedCornerShape(16.dp)) else this
+}
 
 @Composable
 fun PackIconsRow(

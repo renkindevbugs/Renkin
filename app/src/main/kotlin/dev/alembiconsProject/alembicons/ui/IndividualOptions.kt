@@ -37,6 +37,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -442,6 +443,7 @@ fun OptionsDialog(
 
 @Composable
 fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
+    val view = LocalView.current
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.background,
@@ -453,6 +455,7 @@ fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
         },
         confirmButton = {
             IconButton(onClick = {
+                view.performConfirmHaptic()
                 onDismiss()
                 onIconClear()
             }) {
