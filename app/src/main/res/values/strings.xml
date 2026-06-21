@@ -141,10 +141,12 @@
     <string name="watchNextCheck">Next check: %1$s</string>
     <string name="watchNextCheckUnknown">Next check: not scheduled</string>
     <string name="crashTitle">Renkin crashed last time</string>
-    <string name="crashText">Renkin closed unexpectedly the last time you used it. You can send us the crash log to help fix it — it contains only the error and your device model, no personal data.</string>
-    <string name="crashSend">Send log</string>
-    <string name="crashSent">Crash log sent — thank you!</string>
-    <string name="crashSendFailed">Couldn\'t send the log. Please try again later.</string>
+    <string name="crashText">Renkin closed unexpectedly last time. To help fix it, copy the log and email it to us, or open a GitHub issue. It contains only the error and your device model, no personal data.</string>
+    <string name="crashCopyLog">Copy crash log</string>
+    <string name="crashReportGithub">Report on GitHub</string>
+    <string name="crashLogCopied">Crash log copied</string>
+    <string name="crashEmailCopied">Email copied</string>
+    <string name="crashGithubUrl" translatable="false">PASTE_GITHUB_ISSUES_URL_HERE</string>
     <string name="forceCrash">Force crash (debug)</string>
     <string name="watchDone">Done</string>
     <string name="newIconIn">New icon in</string>

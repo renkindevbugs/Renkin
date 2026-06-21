@@ -16,7 +16,6 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -86,8 +85,8 @@ class MainActivity : ComponentActivity() {
             edgeToEdge(darkMode)
 
             val toaster = remember { Toaster() }
-            val crashScope = rememberCoroutineScope()
-            // Detected once per launch: if the previous session crashed, offer to upload the log.
+            // Detected once per launch: if the previous session crashed, offer the log for
+            // manual reporting (copy / email / GitHub) — nothing is sent automatically.
             var crashPending by remember { mutableStateOf(CrashReporter.hasCrash(this@MainActivity)) }
 
             CompositionLocalProvider(
@@ -104,17 +103,6 @@ class MainActivity : ComponentActivity() {
 
                         if (crashPending) {
                             CrashReportDialog(
-                                onSend = {
-                                    crashPending = false
-                                    crashScope.launch {
-                                        val sent = CrashReporter.sendReport(this@MainActivity)
-                                        toaster.show(
-                                            getString(if (sent) R.string.crashSent else R.string.crashSendFailed)
-                                        )
-                                        // Keep the log on failure so the next launch can retry.
-                                        if (sent) CrashReporter.clear(this@MainActivity)
-                                    }
-                                },
                                 onDismiss = {
                                     CrashReporter.clear(this@MainActivity)
                                     crashPending = false

@@ -3,14 +3,9 @@ package dev.alembiconsProject.alembicons.util
 import android.content.Context
 import android.os.Build
 import dev.alembiconsProject.alembicons.BuildConfig
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 import java.text.DateFormat
 import java.util.Date
 
@@ -18,25 +13,15 @@ import java.util.Date
  * Lightweight, privacy-friendly crash capture: installs a default uncaught-exception
  * handler that writes the stack trace (plus app/device info, no personal data) to a file,
  * then chains to the platform handler so the process still dies normally. On the next
- * launch the app can detect the file and offer to upload it.
+ * launch the app detects the file and offers the log for manual reporting.
  *
- * The log only ever leaves the device if the user taps "Send", and it's posted silently to
- * a Google Form (no third-party SDK, no email-app chooser) — see [FORM_ID] for setup.
+ * Fully offline — no network and no third-party SDK. The crash dialog only lets the user
+ * copy the log (to email it or paste into a GitHub issue); nothing leaves the device on
+ * its own.
  */
 object CrashReporter {
     private const val CRASH_DIR = "crash"
     private const val CRASH_FILE = "last_crash.txt"
-
-    // --- Google Form crash intake -------------------------------------------------------
-    // One-time setup to make sending work:
-    //  1. Create a Google Form with a single "Paragraph" (long answer) question.
-    //  2. Send → link (🔗) → copy URL: https://docs.google.com/forms/d/e/<FORM_ID>/viewform
-    //     FORM_ID is the segment between "/d/e/" and "/viewform".
-    //  3. ⋮ menu → "Get pre-filled link" → put any text in the field → "Get link" → the
-    //     copied URL contains "entry.<NUMBER>=..." → that NUMBER is FORM_ENTRY_ID.
-    // Until both are filled in, [sendReport] is a no-op that reports failure.
-    private const val FORM_ID = "1FAIpQLSdsusd7Suze7yZlw48wHQBMuy7I9Ut9cxOnxNNkDLHQy7tfGg"
-    private const val FORM_ENTRY_ID = "2115806369"
 
     /** Records uncaught exceptions to the crash file; call once from the Application. */
     fun install(context: Context) {
@@ -55,31 +40,10 @@ object CrashReporter {
         runCatching { crashFile(context).delete() }
     }
 
-    /** Silently uploads the crash log to the Google Form. Returns true on success. */
-    suspend fun sendReport(context: Context): Boolean = withContext(Dispatchers.IO) {
-        if (FORM_ID == "PASTE_FORM_ID_HERE" || FORM_ENTRY_ID == "PASTE_ENTRY_ID_HERE") return@withContext false
+    /** The captured crash log, or null if none/unreadable. */
+    fun readLog(context: Context): String? {
         val file = crashFile(context)
-        if (!file.exists()) return@withContext false
-
-        val body = ("entry.$FORM_ENTRY_ID=" + URLEncoder.encode(file.readText(), "UTF-8") +
-            "&fvv=1&pageHistory=0").toByteArray()
-        val url = URL("https://docs.google.com/forms/d/e/$FORM_ID/formResponse")
-        val connection = (url.openConnection() as HttpURLConnection).apply {
-            requestMethod = "POST"
-            doOutput = true
-            connectTimeout = 15_000
-            readTimeout = 15_000
-            setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
-        }
-        try {
-            connection.outputStream.use { it.write(body) }
-            // Forms answers with 200 (or a redirect to the thank-you page) on success.
-            connection.responseCode in 200..399
-        } catch (_: Exception) {
-            false
-        } finally {
-            connection.disconnect()
-        }
+        return if (file.exists()) runCatching { file.readText() }.getOrNull() else null
     }
 
     private fun crashFile(context: Context): File =
