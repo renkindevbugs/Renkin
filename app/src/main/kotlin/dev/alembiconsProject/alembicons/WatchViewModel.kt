@@ -6,6 +6,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.work.ExistingPeriodicWorkPolicy
+import dev.alembiconsProject.alembicons.data.WATCH_CHECK_INTERVAL_DEFAULT
+import dev.alembiconsProject.alembicons.data.WatchCheckIntervalKey
+import dev.alembiconsProject.alembicons.data.getPreferenceFlow
+import dev.alembiconsProject.alembicons.data.setIntValue
+import dev.alembiconsProject.alembicons.dataStore
 import dev.alembiconsProject.alembicons.data.watch.AppComponent
 import dev.alembiconsProject.alembicons.data.watch.IconSuggestion
 import dev.alembiconsProject.alembicons.data.watch.IconSuggestionCandidate
@@ -16,6 +22,7 @@ import dev.alembiconsProject.alembicons.service.WatchChecker
 import dev.alembiconsProject.alembicons.service.WatchWorker
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -34,6 +41,26 @@ class WatchViewModel @Inject constructor(
     /** All watch rules (active + completed); the UI splits them by `completed`. */
     val rules: StateFlow<List<RuleWithDetails>> =
         repo.rules.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Epoch-millis of the next scheduled periodic check; null when none is pending. */
+    val nextCheckAt: StateFlow<Long?> =
+        WatchWorker.nextScheduledCheckFlow(application)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    /** Configured periodic check interval in minutes (24h default; debug can lower it). */
+    val checkIntervalMinutes: StateFlow<Int> =
+        application.dataStore.getPreferenceFlow(WatchCheckIntervalKey)
+            .map { it ?: WATCH_CHECK_INTERVAL_DEFAULT }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WATCH_CHECK_INTERVAL_DEFAULT)
+
+    /** Debug: change how often the periodic check runs and reschedule it immediately. */
+    fun setCheckIntervalMinutes(minutes: Int) {
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            app.dataStore.setIntValue(WatchCheckIntervalKey, minutes)
+            WatchWorker.schedulePeriodic(app, minutes, ExistingPeriodicWorkPolicy.UPDATE)
+        }
+    }
 
     /** True while a manual check is running; drives the pull-to-refresh spinner. */
     var isChecking by mutableStateOf(false)

@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.toColor
@@ -39,6 +40,12 @@ private const val SECONDARY_TEXT_TYPE_NAME = "SECONDARY_TEXT_TYPE"
 private const val SECONDARY_ICON_PACK_NAME = "SECONDARY_ICON_PACK"
 private const val APP_SORT_ORDER_NAME = "APP_SORT_ORDER"
 private const val APP_FILTER_NO_ICON_NAME = "APP_FILTER_NO_ICON"
+private const val WATCH_CHECK_INTERVAL_NAME = "WATCH_CHECK_INTERVAL_MINUTES"
+private const val LAST_WATCH_CHECK_AT_NAME = "LAST_WATCH_CHECK_AT"
+
+// Icon-watch periodic check interval, in minutes. 24h by default; the debug build can
+// lower it (min 15, WorkManager's periodic floor) to test the watcher quickly.
+const val WATCH_CHECK_INTERVAL_DEFAULT = 24 * 60
 
 val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
 val SOURCE_DEFAULT = Source.NONE
@@ -63,6 +70,8 @@ val SecondaryTextTypeKey = intPreferencesKey(SECONDARY_TEXT_TYPE_NAME)
 val SecondaryIconPackKey = stringPreferencesKey(SECONDARY_ICON_PACK_NAME)
 val AppSortOrderKey = intPreferencesKey(APP_SORT_ORDER_NAME)
 val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
+val WatchCheckIntervalKey = intPreferencesKey(WATCH_CHECK_INTERVAL_NAME)
+val LastWatchCheckAtKey = longPreferencesKey(LAST_WATCH_CHECK_AT_NAME)
 
 @Composable
 fun DataStore<Preferences>.getPreferencesValue(): Preferences {
@@ -145,6 +154,22 @@ suspend fun DataStore<Preferences>.setIntValue(key: Preferences.Key<Int>, value:
 }
 
 fun Preferences.getIntValue(key: Preferences.Key<Int>, default: Int = 0): Int {
+    return this[key] ?: default
+}
+
+@Composable
+fun DataStore<Preferences>.getLongValue(
+    key: Preferences.Key<Long>
+    , default: Long = 0L
+): Long {
+    return getPreferenceValue(key, default)
+}
+
+suspend fun DataStore<Preferences>.setLongValue(key: Preferences.Key<Long>, value: Long) {
+    setPreferenceValue(key, value)
+}
+
+fun Preferences.getLongValue(key: Preferences.Key<Long>, default: Long = 0L): Long {
     return this[key] ?: default
 }
 
