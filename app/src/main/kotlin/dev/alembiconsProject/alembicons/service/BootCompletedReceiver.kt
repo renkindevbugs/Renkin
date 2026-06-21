@@ -9,7 +9,7 @@ class BootCompletedReceiver: BroadcastReceiver() {
         if (context == null) return
 
         if (intent?.action == Intent.ACTION_BOOT_COMPLETED) {
-            NotificationManager().startNewApplicationService(context)
+            RenkinNotifications().startNewApplicationService(context)
         }
     }
 }

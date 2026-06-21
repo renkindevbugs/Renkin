@@ -26,7 +26,7 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
         return try {
             val fired = WatchChecker(applicationContext).runCheck()
             Log.debug("Alembicons", "WatchChecker fired ${fired.size} suggestion(s)")
-            val notifier = NotificationManager()
+            val notifier = RenkinNotifications()
             for (suggestion in fired) {
                 notifier.postIconAvailable(
                     applicationContext,

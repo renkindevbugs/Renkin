@@ -21,7 +21,12 @@ import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.packages.PackageVersion
 
-class NotificationManager {
+/**
+ * Builds and posts the app's notifications (new-app, update-pack, icon-available) and
+ * starts the related services. Named to avoid shadowing the framework
+ * [android.app.NotificationManager], which this class uses internally for channels.
+ */
+class RenkinNotifications {
     private val newApplicationChannelId = "alembicons_package_added"
     private val updatePackChannelId = "alembicons_update_pack"
     private val iconAvailableChannelId = "alembicons_icon_available"

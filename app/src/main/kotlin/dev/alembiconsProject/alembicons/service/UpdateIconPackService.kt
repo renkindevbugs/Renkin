@@ -27,7 +27,7 @@ class UpdateIconPackService: Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        NotificationManager().startUpdatePackNotification(this)
+        RenkinNotifications().startUpdatePackNotification(this)
 
         serviceScope.launch {
             appProvider.initialize()

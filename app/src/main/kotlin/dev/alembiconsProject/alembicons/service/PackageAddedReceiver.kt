@@ -58,7 +58,7 @@ class PackageAddedReceiver: BroadcastReceiver() {
     }
 
     private fun handleNewApplication(context: Context, intent: Intent, prefs: Preferences) {
-        val notificationManager = NotificationManager()
+        val notificationManager = RenkinNotifications()
 
         if (prefs.getBooleanValue(AutomaticallyUpdateKey)) {
             notificationManager.startUpdatePackService(context, intent)

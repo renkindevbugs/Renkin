@@ -8,7 +8,7 @@ class UpdateIconPackReceiver: BroadcastReceiver() {
     override fun onReceive(context: Context?, intent: Intent?) {
         if (context == null) return
 
-        val notificationManager = NotificationManager()
+        val notificationManager = RenkinNotifications()
         notificationManager.stopNewApplicationNotification(context)
         notificationManager.startUpdatePackService(context, intent)
     }
