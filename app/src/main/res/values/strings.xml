@@ -81,6 +81,9 @@
     <string name="newApplicationNotificationText">Update Renkin Pack</string>
     <string name="newApplicationNotificationLongText">An application has been installed, you can update your icon pack</string>
     <string name="notifPermissionWarning">You must enable notification permission</string>
+    <string name="newIconPackTitle">New icon pack installed</string>
+    <string name="newIconPackText">Reload Renkin to use \"%1$s\" for your icons.</string>
+    <string name="reload">Reload</string>
     <string name="overrideIcon">Override icon</string>
     <string name="deleteIconPack">Uninstall icon pack</string>
     <string name="update">Update</string>

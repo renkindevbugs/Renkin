@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.data.AutomaticallyUpdateKey
 import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.dataStore
+import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,6 +59,14 @@ class PackageAddedReceiver: BroadcastReceiver() {
     }
 
     private fun handleNewApplication(context: Context, intent: Intent, prefs: Preferences) {
+        // Installing an icon pack should never raise the "new application" notification
+        // (nor trigger an auto-update rebuild). When the app is open, the foreground
+        // receiver in MainActivity prompts to reload instead; otherwise we stay silent.
+        val packageName = intent.data?.schemeSpecificPart
+        if (packageName != null && ApplicationManager(context).isIconPack(packageName)) {
+            return
+        }
+
         val notificationManager = RenkinNotifications()
 
         if (prefs.getBooleanValue(AutomaticallyUpdateKey)) {

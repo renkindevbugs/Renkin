@@ -30,6 +30,7 @@ import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -46,6 +47,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.animation.Crossfade
@@ -144,6 +146,20 @@ fun MainColumn(iconPacks: List<IconPack>) {
         viewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
     }
 
+    // An external icon pack was installed while the app was open → offer to reload so it
+    // shows up among the available icon-pack sources.
+    val newIconPack = viewModel.newIconPackInstalled
+    if (newIconPack != null) {
+        NewIconPackDialog(
+            packLabel = newIconPack,
+            onReload = {
+                viewModel.sync()
+                viewModel.dismissNewIconPack()
+            },
+            onDismiss = { viewModel.dismissNewIconPack() }
+        )
+    }
+
     val pressBackMessage = stringResource(R.string.pressBackToExit)
     var lastBackPress by remember { mutableStateOf(0L) }
     BackHandler {
@@ -193,6 +209,27 @@ fun MainColumn(iconPacks: List<IconPack>) {
     if (pendingSuggestion != null) {
         WatchApplyModal(pendingSuggestion) { viewModel.clearPendingWatchSuggestion() }
     }
+}
+
+/**
+ * Prompts the user to reload after an external icon pack was installed while the app was
+ * open, so the new pack appears among the available sources. [onReload] re-syncs the packs.
+ */
+@Composable
+fun NewIconPackDialog(packLabel: String, onReload: () -> Unit, onDismiss: () -> Unit) {
+    AlertDialog(
+        shape = RoundedCornerShape(28.dp),
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.newIconPackTitle)) },
+        text = { Text(stringResource(R.string.newIconPackText, packLabel)) },
+        confirmButton = {
+            TextButton(onClick = onReload) { Text(stringResource(R.string.reload)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)

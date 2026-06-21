@@ -47,6 +47,15 @@ class MainViewModel @Inject constructor(
 
     fun clearPendingWatchSuggestion() { pendingWatchSuggestionId = null }
 
+    // Label of an external icon pack installed while the app was open; non-null drives a
+    // dialog prompting to reload so the new pack appears among the available sources.
+    var newIconPackInstalled by mutableStateOf<String?>(null)
+        private set
+
+    fun onIconPackInstalled(label: String) { newIconPackInstalled = label }
+
+    fun dismissNewIconPack() { newIconPackInstalled = null }
+
     // One-shot toast events (string resource ids). Emitted when an operation finishes and
     // collected once near the composition root, which forwards them to the shared Toaster.
     // Replaces the old mirrored buildInstalled/syncDone/appsRefreshed flag + consume pairs.

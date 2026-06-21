@@ -1,7 +1,9 @@
 package dev.alembiconsProject.alembicons
 
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.ActivityInfo
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -17,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -25,6 +28,7 @@ import dev.alembiconsProject.alembicons.data.PackageAddedNotificationKey
 import dev.alembiconsProject.alembicons.data.getPreferenceFlow
 import dev.alembiconsProject.alembicons.data.isDarkModeEnabled
 import dev.alembiconsProject.alembicons.data.setBooleanValue
+import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PermissionManager
@@ -36,6 +40,7 @@ import dev.alembiconsProject.alembicons.ui.theme.IconerationTheme
 import kotlinx.coroutines.Dispatchers
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -118,6 +123,41 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleWatchIntent(intent)
+    }
+
+    // While the app is open, watch for newly installed icon packs (excluding our own
+    // generated pack and updates). The background PackageAddedReceiver stays silent for
+    // icon packs; here we instead prompt the user to reload so the new pack shows up.
+    private val iconPackInstallReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            if (intent.action != Intent.ACTION_PACKAGE_ADDED) return
+            if (intent.getBooleanExtra(Intent.EXTRA_REPLACING, false)) return
+            val packageName = intent.data?.schemeSpecificPart ?: return
+            if (packageName == IconPackBuilder.PACKAGE_NAME) return
+
+            lifecycleScope.launch(Dispatchers.Default) {
+                val manager = ApplicationManager(this@MainActivity)
+                if (!manager.isIconPack(packageName)) return@launch
+                val label = runCatching {
+                    val pm = packageManager
+                    pm.getApplicationLabel(pm.getApplicationInfo(packageName, 0)).toString()
+                }.getOrDefault(packageName)
+                withContext(Dispatchers.Main) { viewModel.onIconPackInstalled(label) }
+            }
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val filter = IntentFilter(Intent.ACTION_PACKAGE_ADDED).apply { addDataScheme("package") }
+        ContextCompat.registerReceiver(
+            this, iconPackInstallReceiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED
+        )
+    }
+
+    override fun onStop() {
+        unregisterReceiver(iconPackInstallReceiver)
+        super.onStop()
     }
 
     private fun handleWatchIntent(intent: Intent?) {
