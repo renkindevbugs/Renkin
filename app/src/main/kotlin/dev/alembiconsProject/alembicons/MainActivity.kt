@@ -21,13 +21,10 @@ import androidx.lifecycle.lifecycleScope
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
-import dev.alembiconsProject.alembicons.data.PackageAddedNotificationKey
-import dev.alembiconsProject.alembicons.data.getPreferenceFlow
 import dev.alembiconsProject.alembicons.data.isDarkModeEnabled
-import dev.alembiconsProject.alembicons.data.setBooleanValue
+import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
-import dev.alembiconsProject.alembicons.packages.PermissionManager
 import dev.alembiconsProject.alembicons.service.BootCompletedReceiver
 import dev.alembiconsProject.alembicons.service.PackageAddedService
 import dev.alembiconsProject.alembicons.service.WatchWorker
@@ -36,6 +33,7 @@ import dev.alembiconsProject.alembicons.ui.theme.IconerationTheme
 import kotlinx.coroutines.Dispatchers
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
@@ -77,20 +75,6 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        lifecycleScope.launch(Dispatchers.Default) {
-            applicationContext.dataStore.getPreferenceFlow(PackageAddedNotificationKey).collect {
-                if (it == true) {
-                    if (PermissionManager(this@MainActivity).isPostNotificationEnabled()) {
-                        startPackageAddedService()
-                    } else {
-                        stopPackageAddedService()
-                        applicationContext.dataStore.setBooleanValue(
-                            PackageAddedNotificationKey, false)
-                    }
-                }
-            }
-        }
-
         setContent {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
             edgeToEdge(darkMode)
@@ -120,6 +104,28 @@ class MainActivity : ComponentActivity() {
         handleWatchIntent(intent)
     }
 
+    override fun onStart() {
+        super.onStart()
+        // An icon pack installed while the app was away won't be in the loaded list yet.
+        // On every return to the foreground, diff the installed icon packs against what we
+        // have loaded; a new one (other than our own generated pack) prompts a reload so it
+        // shows up among the sources. Covers installs done while Renkin was backgrounded
+        // (the installer obscures us, so this fires when the user comes back).
+        lifecycleScope.launch(Dispatchers.Default) {
+            // Skip until the initial pack load finished, otherwise every installed pack
+            // looks "new" against the still-empty loaded list on first launch.
+            if (!viewModel.appProvider.iconPackLoaded) return@launch
+            val installed = ApplicationManager(this@MainActivity).getIconPacks()
+            val loaded = viewModel.appProvider.iconPacks.map { it.packageName }.toSet()
+            val newPack = installed.firstOrNull {
+                it.packageName != IconPackBuilder.PACKAGE_NAME && it.packageName !in loaded
+            } ?: return@launch
+            withContext(Dispatchers.Main) {
+                viewModel.onIconPackInstalled(newPack.packageName, newPack.applicationName)
+            }
+        }
+    }
+
     private fun handleWatchIntent(intent: Intent?) {
         if (intent?.action == ACTION_OPEN_SUGGESTION) {
             val id = intent.getLongExtra(EXTRA_SUGGESTION_ID, -1L)
@@ -140,25 +146,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(style, style)
     }
 
+    /** Starts the icon-watch package monitor and enables the boot receiver so it survives reboot. */
     fun startPackageAddedService() {
-        togglePackageAddedService(true)
-    }
-
-    fun stopPackageAddedService() {
-        togglePackageAddedService(false)
-    }
-
-    private fun togglePackageAddedService(enabled: Boolean) {
-        val intent = Intent(this, PackageAddedService::class.java)
-
-        if (enabled) {
-            startService(intent)
-        } else {
-            stopService(intent)
-        }
-
+        startService(Intent(this, PackageAddedService::class.java))
         ApplicationManager(this)
-            .changeManifestEnabledState(BootCompletedReceiver::class.java, enabled)
+            .changeManifestEnabledState(BootCompletedReceiver::class.java, true)
     }
 
     companion object {

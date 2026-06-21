@@ -18,7 +18,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,7 +27,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -40,31 +38,18 @@ import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.apk.ApkUninstaller
 import dev.alembiconsProject.alembicons.apk.IconPackBuilder
-import dev.alembiconsProject.alembicons.data.AutomaticallyUpdateKey
 import dev.alembiconsProject.alembicons.data.DARK_MODE_DEFAULT
 import dev.alembiconsProject.alembicons.data.DarkMode
 import dev.alembiconsProject.alembicons.data.DarkModeKey
-import dev.alembiconsProject.alembicons.data.PackageAddedNotificationKey
-import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getDarkModeLabels
 import dev.alembiconsProject.alembicons.data.getEnumValue
-import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
-import dev.alembiconsProject.alembicons.packages.PermissionManager
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
-    val toaster = LocalToaster.current
-    val permissionWarning = stringResource(R.string.notifPermissionWarning)
-
-    val scope = rememberCoroutineScope()
-    val activity = getCurrentMainActivity()
-    val notification = prefs.getBooleanValue(PackageAddedNotificationKey)
-    val automaticallyUpdate = prefs.getBooleanValue(AutomaticallyUpdateKey)
-
     AlertDialog(
         shape = RoundedCornerShape(20.dp),
         containerColor = MaterialTheme.colorScheme.background,
@@ -74,32 +59,6 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
         text = {
             Column {
                 DarkModeDropdown(prefs)
-                PackageAddedNotificationSwitch(notification) {
-                    if (it) {
-                        val permissionManager = PermissionManager(activity)
-                        if (!permissionManager.isPostNotificationEnabled()) {
-                            permissionManager.askForPostNotification()
-                        }
-
-                        if (!permissionManager.isPostNotificationEnabled()) {
-                            toaster.show(permissionWarning)
-                            return@PackageAddedNotificationSwitch
-                        }
-
-                        activity.startPackageAddedService()
-                    } else {
-                        activity.stopPackageAddedService()
-                    }
-
-                    scope.launch { prefs.setBooleanValue(PackageAddedNotificationKey, it) }
-                }
-
-                if (notification) {
-                    AutomaticallyUpdateSwitch(automaticallyUpdate) {
-                        scope.launch { prefs.setBooleanValue(AutomaticallyUpdateKey, it) }
-                    }
-                }
-
                 SyncButton()
                 RefreshApplicationListButton()
                 RemoveIconsButton()
@@ -278,56 +237,6 @@ fun RemoveIconsButton() {
     }
 }
 
-
-@Composable
-fun PackageAddedNotificationSwitch(notification: Boolean, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(false) }
-
-    checked = notification
-
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(8.dp, 4.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = stringResource(R.string.packageAddedNotification),
-            modifier = Modifier.weight(1f)
-        )
-        Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
-            },
-            modifier = Modifier.padding(start = 8.dp)
-        )
-    }
-}
-
-@Composable
-fun AutomaticallyUpdateSwitch(automaticallyUpdate: Boolean, onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(false) }
-
-    checked = automaticallyUpdate
-
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(8.dp, 4.dp),
-        verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            text = stringResource(R.string.automaticallyUpdate),
-            modifier = Modifier.weight(1f)
-        )
-        Switch(
-            checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
-            },
-            modifier = Modifier.padding(start = 8.dp)
-        )
-    }
-}
 
 @Composable
 fun AppVersion() {

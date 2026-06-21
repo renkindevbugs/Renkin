@@ -51,6 +51,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -73,6 +74,7 @@ import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
+import dev.alembiconsProject.alembicons.packages.PermissionManager
 import kotlinx.coroutines.flow.first
 
 @Composable
@@ -84,6 +86,14 @@ fun WatchScreen(onDismiss: () -> Unit) {
     val rules by watchViewModel.rules.collectAsState()
     val apps = viewModel.appProvider.applicationList
     val packs = viewModel.appProvider.iconPacks
+
+    // Icon-watch is the only feature that posts notifications now, so ask for the permission
+    // here (it used to be requested by the removed package-added setting).
+    val activity = getCurrentMainActivity()
+    LaunchedEffect(Unit) {
+        val permissions = PermissionManager(activity)
+        if (!permissions.isPostNotificationEnabled()) permissions.askForPostNotification()
+    }
 
     // null = list; otherwise the editor is open (editing this rule, or a new rule when blank)
     var showEditor by remember { mutableStateOf(false) }
