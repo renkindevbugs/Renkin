@@ -292,7 +292,10 @@ private fun WatchRuleList(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            WatchCheckScheduleRow()
+            // Only meaningful while something is actively watched — hide it otherwise.
+            if (active.isNotEmpty()) {
+                WatchCheckScheduleRow()
+            }
 
             // Pull down to run a manual check (the spinner stays until WatchChecker finishes)
             PullToRefreshBox(
