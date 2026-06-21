@@ -2,6 +2,7 @@
 
 package dev.alembiconsProject.alembicons.ui
 
+import android.text.format.DateUtils
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
@@ -46,6 +47,8 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -53,6 +56,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -288,6 +292,11 @@ private fun WatchRuleList(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
+            // Only meaningful while something is actively watched — hide it otherwise.
+            if (active.isNotEmpty()) {
+                WatchCheckScheduleRow()
+            }
+
             // Pull down to run a manual check (the spinner stays until WatchChecker finishes)
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
@@ -374,6 +383,75 @@ private fun WatchRuleList(
             Icon(Icons.Filled.Add, stringResource(R.string.addWatchRule))
         }
     }
+}
+
+/**
+ * Shows when the next periodic check is due (from WorkManager's real schedule). In debug
+ * builds it also exposes a frequency picker so the watcher can be tested without waiting
+ * the full 24h — WorkManager's periodic floor is 15 min, so that's the smallest option.
+ */
+@Composable
+private fun WatchCheckScheduleRow() {
+    val watchViewModel: WatchViewModel = hiltViewModel()
+    val context = getCurrentContext()
+    val nextCheck by watchViewModel.nextCheckAt.collectAsState()
+    val intervalMinutes by watchViewModel.checkIntervalMinutes.collectAsState()
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val nextText = nextCheck?.let {
+            stringResource(
+                R.string.watchNextCheck,
+                DateUtils.formatDateTime(
+                    context, it,
+                    DateUtils.FORMAT_SHOW_TIME or DateUtils.FORMAT_SHOW_DATE or DateUtils.FORMAT_ABBREV_ALL
+                )
+            )
+        } ?: stringResource(R.string.watchNextCheckUnknown)
+        Text(
+            text = nextText,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        if (BuildConfig.DEBUG) {
+            WatchIntervalPicker(intervalMinutes) { watchViewModel.setCheckIntervalMinutes(it) }
+        }
+    }
+}
+
+/** Debug-only frequency picker. Options are all valid WorkManager periodic intervals. */
+@Composable
+private fun WatchIntervalPicker(selectedMinutes: Int, onChange: (Int) -> Unit) {
+    val options = listOf(15, 60, 1440)
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        TextButton(onClick = { expanded = true }) {
+            Text(intervalLabel(selectedMinutes))
+        }
+        DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            options.forEach { minutes ->
+                DropdownMenuItem(
+                    text = { Text(intervalLabel(minutes)) },
+                    onClick = { expanded = false; onChange(minutes) },
+                    leadingIcon = if (minutes == selectedMinutes) {
+                        { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
+                    } else null
+                )
+            }
+        }
+    }
+}
+
+private fun intervalLabel(minutes: Int): String = when (minutes) {
+    15 -> "15 min"
+    60 -> "1 h"
+    1440 -> "24 h"
+    else -> "$minutes min"
 }
 
 @Composable

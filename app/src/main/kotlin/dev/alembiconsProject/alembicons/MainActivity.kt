@@ -22,6 +22,9 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import dev.alembiconsProject.alembicons.data.isDarkModeEnabled
+import dev.alembiconsProject.alembicons.data.WatchCheckIntervalKey
+import dev.alembiconsProject.alembicons.data.WATCH_CHECK_INTERVAL_DEFAULT
+import dev.alembiconsProject.alembicons.data.getIntValue
 import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
@@ -32,6 +35,7 @@ import dev.alembiconsProject.alembicons.ui.*
 import dev.alembiconsProject.alembicons.ui.theme.IconerationTheme
 import kotlinx.coroutines.Dispatchers
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -62,7 +66,11 @@ class MainActivity : ComponentActivity() {
         // so it's near-free when nothing changed); the event-driven fast path needs the
         // package receiver running, so start it when there are active watch rules.
         lifecycleScope.launch(Dispatchers.Default) {
-            WatchWorker.schedulePeriodic(applicationContext)
+            // KEEP so an already-running interval timer isn't reset on every launch; the
+            // user's chosen interval is applied immediately (UPDATE) when they change it.
+            val intervalMinutes = applicationContext.dataStore.data.first()
+                .getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)
+            WatchWorker.schedulePeriodic(applicationContext, intervalMinutes)
             if (WatchRepository(applicationContext).getActiveRules().isNotEmpty()) {
                 startPackageAddedService()
             }
