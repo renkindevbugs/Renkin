@@ -79,7 +79,7 @@ private val DarkColorScheme = darkColorScheme(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun IconerationTheme(
+fun RenkinTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
