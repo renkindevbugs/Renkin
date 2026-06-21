@@ -10,8 +10,6 @@ import android.text.StaticLayout
 import android.text.TextPaint
 import android.text.TextUtils
 import androidx.core.graphics.withTranslation
-import dev.alembiconsProject.alembicons.constants.SuppressDeprecation
-import dev.alembiconsProject.alembicons.packages.PackageVersion
 
 class MultiLineTextDrawable(
     text: CharSequence
@@ -36,29 +34,13 @@ class MultiLineTextDrawable(
     }
 
     private fun buildStaticLayout(text: CharSequence, width: Int, maxLines: Int): StaticLayout {
-        if (PackageVersion.is23OrMore()) {
-            return StaticLayout.Builder
-                .obtain(text, 0, text.length, paint, width)
-                .setAlignment(Layout.Alignment.ALIGN_CENTER)
-                .setEllipsize(TextUtils.TruncateAt.END)
-                .setMaxLines(maxLines)
-                .build()
-        } else {
-            @Suppress(SuppressDeprecation)
-            return StaticLayout(
-                text,
-                0,
-                text.length,
-                paint,
-                width,
-                Layout.Alignment.ALIGN_CENTER,
-                1.0f,
-                0.0f,
-                true,
-                TextUtils.TruncateAt.END,
-                width
-            )
-        }
+        // minSdk is 23, so the Builder API is always available.
+        return StaticLayout.Builder
+            .obtain(text, 0, text.length, paint, width)
+            .setAlignment(Layout.Alignment.ALIGN_CENTER)
+            .setEllipsize(TextUtils.TruncateAt.END)
+            .setMaxLines(maxLines)
+            .build()
     }
 
     private fun adjustTextSize(text: String, minTextSize: Float, width: Int, maxLines: Int) {
