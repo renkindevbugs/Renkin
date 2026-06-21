@@ -214,6 +214,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
 
 @Composable
 private fun ConfirmDeleteDialog(title: String, text: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
+    val view = LocalView.current
     androidx.compose.material3.AlertDialog(
         shape = RoundedCornerShape(28.dp),
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -221,7 +222,7 @@ private fun ConfirmDeleteDialog(title: String, text: String, onDismiss: () -> Un
         title = { Text(title) },
         text = { Text(text) },
         confirmButton = {
-            IconButton(onClick = onConfirm) {
+            IconButton(onClick = { view.performConfirmHaptic(); onConfirm() }) {
                 Icon(Icons.Filled.Check, stringResource(R.string.confirm), tint = MaterialTheme.colorScheme.primary)
             }
         },

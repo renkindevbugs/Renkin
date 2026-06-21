@@ -28,6 +28,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -163,10 +164,12 @@ fun DeleteIconPackButton() {
     val context = getCurrentContext()
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
+    val view = LocalView.current
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
         onClick = {
+            view.performConfirmHaptic()
             scope.launch {
                 // Don't try (and then falsely report success) when the pack isn't installed
                 val installed = runCatching {
@@ -195,6 +198,7 @@ fun DeleteIconPackButton() {
 @Composable
 fun RemoveIconsButton() {
     val viewModel: MainViewModel = hiltViewModel()
+    val view = LocalView.current
     var confirm by rememberSaveable { mutableStateOf(false) }
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
@@ -219,6 +223,7 @@ fun RemoveIconsButton() {
             text = { Text(stringResource(R.string.clearIconsText)) },
             confirmButton = {
                 TextButton(onClick = {
+                    view.performConfirmHaptic()
                     confirm = false
                     viewModel.clearIcons()
                 }) {

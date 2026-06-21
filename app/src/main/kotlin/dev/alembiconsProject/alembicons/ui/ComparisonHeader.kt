@@ -33,9 +33,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.Crossfade
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
@@ -81,6 +83,7 @@ internal fun ComparisonHeader(
         slideInVertically(flyInSpec) { it * 2 } + fadeIn() + scaleIn(initialScale = 0.5f)
     }
     var menuOpen by remember { mutableStateOf(false) }
+    val view = LocalView.current
 
     // On wide screens (tablet / unfolded foldable) the whole header fits on a
     // single row; on phones it stacks into two tiers so nothing gets cramped.
@@ -174,19 +177,25 @@ internal fun ComparisonHeader(
                     border = BorderStroke(2.dp, borderColor)
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        if (previewIcon != null) {
-                            Image(
-                                painter = previewIcon.getPainter(),
-                                contentDescription = null,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Icon(
-                                imageVector = Icons.Filled.Add,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.outlineVariant,
-                                modifier = Modifier.size(size / 2)
-                            )
+                        // Fade between icons so a regenerated/changed preview eases in
+                        // instead of snapping.
+                        Crossfade(targetState = previewIcon, label = "previewIcon") { icon ->
+                            if (icon != null) {
+                                Image(
+                                    painter = icon.getPainter(),
+                                    contentDescription = null,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        imageVector = Icons.Filled.Add,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.outlineVariant,
+                                        modifier = Modifier.size(size / 2)
+                                    )
+                                }
+                            }
                         }
                         // Spinner over the slot while the new icon is being (re)generated
                         if (previewLoading) {
@@ -220,7 +229,7 @@ internal fun ComparisonHeader(
     }
 
     val applyButton: @Composable (Modifier) -> Unit = { mod ->
-        Button(onClick = onConfirm, modifier = mod) {
+        Button(onClick = { view.performConfirmHaptic(); onConfirm() }, modifier = mod) {
             Icon(
                 imageVector = Icons.Filled.Done,
                 contentDescription = null,
