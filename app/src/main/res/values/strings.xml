@@ -148,7 +148,7 @@
     <string name="crashReportGithub">Report on GitHub</string>
     <string name="crashLogCopied">Crash log copied</string>
     <string name="crashEmailCopied">Email copied</string>
-    <string name="crashGithubUrl" translatable="false">PASTE_GITHUB_ISSUES_URL_HERE</string>
+    <string name="crashGithubUrl" translatable="false">https://github.com/renkindevbugs/Renkin/issues</string>
     <string name="forceCrash">Force crash (debug)</string>
     <string name="watchDone">Done</string>
     <string name="newIconIn">New icon in</string>
