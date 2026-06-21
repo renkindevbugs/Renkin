@@ -226,7 +226,9 @@ private fun ComparePreview(
         color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Crossfade(targetState = state, label = "comparePreview") { s ->
-            Box(Modifier.padding(10.dp), contentAlignment = Alignment.Center) {
+            // fillMaxSize so the cell centers small content (the spinner / empty icon);
+            // without it the Box shrinks to its content and Crossfade pins it top-left.
+            Box(Modifier.fillMaxSize().padding(10.dp), contentAlignment = Alignment.Center) {
                 when (s) {
                     "bitmap" -> bitmap?.let { Image(BitmapPainter(it), null, Modifier.fillMaxSize()) }
                     "icon" -> icon?.let { Image(it.getPainter(), null, Modifier.fillMaxSize()) }
