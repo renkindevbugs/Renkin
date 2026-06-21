@@ -142,6 +142,8 @@
     <string name="watchNextCheckUnknown">Next check: not scheduled</string>
     <string name="crashTitle">Renkin crashed last time</string>
     <string name="crashText">Renkin closed unexpectedly last time. To help fix it, copy the log and email it to us, or open a GitHub issue. It contains only the error and your device model, no personal data.</string>
+    <string name="crashEmailLabel">Email it to us</string>
+    <string name="crashGithubLabel">Or open a GitHub issue</string>
     <string name="crashCopyLog">Copy crash log</string>
     <string name="crashReportGithub">Report on GitHub</string>
     <string name="crashLogCopied">Crash log copied</string>
