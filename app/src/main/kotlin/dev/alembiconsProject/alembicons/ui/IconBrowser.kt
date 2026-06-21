@@ -67,7 +67,10 @@ fun CreateTab(
     onIconSelect: (ResourceDrawable, IconPack) -> Unit,
     onTextTypeChange: (TextType) -> Unit,
     onCollapsedChange: (Boolean) -> Unit = {},
-    contentReady: Boolean = true
+    contentReady: Boolean = true,
+    // Resource id of the icon currently picked (from options.primaryIconPack), so the grid
+    // can frame it. null = nothing picked yet.
+    selectedResourceId: Int? = null
 ) {
     var searchQuery by rememberSaveable { mutableStateOf(appName) }
     var debouncedQuery by rememberSaveable { mutableStateOf(appName) }
@@ -197,6 +200,7 @@ fun CreateTab(
                         options = options,
                         sortOrder = sortOrder,
                         query = debouncedQuery,
+                        selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.primaryIconPack },
                         onBack = { expandedPack = null },
                         onCollapsedChange = { collapsed = it },
                         onSelect = { resource, _ -> onIconSelect(resource, detailPack) }
@@ -232,6 +236,7 @@ fun CreateTab(
                                         options = options,
                                         sortOrder = sortOrder,
                                         query = debouncedQuery,
+                                        selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
                                         onMore = { expandedPack = pack },
                                         onResult = { hasMatches ->
                                             packMatches = packMatches + (pack.packageName to hasMatches)

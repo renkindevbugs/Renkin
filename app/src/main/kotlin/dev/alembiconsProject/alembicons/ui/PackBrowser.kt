@@ -4,6 +4,7 @@ package dev.alembiconsProject.alembicons.ui
 
 import android.graphics.Bitmap
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -200,12 +202,20 @@ private suspend fun loadPackIconPairs(
         .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap()) }
 }
 
+// Subtle green frame on the icon the user picked from this pack, so the selection is
+// visible on the grid itself (not just in the header). Matches the added-green elsewhere.
+private val selectedIconBorderColor = Color(0xFF34C759)
+
+private fun Modifier.selectedIconBorder(selected: Boolean): Modifier =
+    if (selected) this.border(2.dp, selectedIconBorderColor, RoundedCornerShape(16.dp)) else this
+
 @Composable
 fun PackIconsRow(
     iconPack: IconPack,
     options: GenerationOptions,
     sortOrder: IconSortOrder,
     query: String = "",
+    selectedResourceId: Int? = null,
     onMore: (() -> Unit)? = null,
     onResult: (hasMatches: Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
@@ -274,6 +284,7 @@ fun PackIconsRow(
                     contentDescription = null,
                     modifier = Modifier
                         .size(64.dp)
+                        .selectedIconBorder(item.resource.resourceId == selectedResourceId)
                         .padding(4.dp)
                         .tappableIcon { onSelect(item.resource, item.drawable) }
                 )
@@ -309,6 +320,7 @@ fun PackDetailGrid(
     options: GenerationOptions,
     sortOrder: IconSortOrder,
     query: String,
+    selectedResourceId: Int? = null,
     onBack: () -> Unit,
     onCollapsedChange: (Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
@@ -409,6 +421,7 @@ fun PackDetailGrid(
                             .animateItem()
                             .padding(4.dp)
                             .size(56.dp)
+                            .selectedIconBorder(item.resource.resourceId == selectedResourceId)
                             .tappableIcon { onSelect(item.resource, item.drawable) }
                     )
                 }
