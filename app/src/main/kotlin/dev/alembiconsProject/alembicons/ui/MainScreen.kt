@@ -263,17 +263,21 @@ fun ApplicationList(
     }
 
     // Keep the original index — ApplicationItem edits appProvider.applicationList by position.
-    // Remembered so it isn't re-sorted/filtered on unrelated recompositions.
-    val displayList = remember(applications, sortOrder, filterNoIcon, filter, installTimes) {
-        when (sortOrder) {
-            AppSortOrder.NAME -> applications.withIndex().toList()
-            AppSortOrder.INSTALL_DATE -> applications.withIndex()
-                .sortedByDescending { installTimes[it.value.packageName] ?: 0L }
-        }.let { list ->
-            if (filterNoIcon) list.filter { it.value.createdIcon == null } else list
-        }.let { list ->
-            // Filter before the LazyColumn so non-matching rows don't become empty items
-            if (filter.isEmpty()) list else list.filter { it.value.appName.contains(filter, true) }
+    // derivedStateOf so it recomputes when the list's contents change (applicationList is a
+    // SnapshotStateList edited in place, so its instance identity never changes) while still
+    // caching across unrelated recompositions. Recreated when the sort/filter inputs change.
+    val displayList by remember(sortOrder, filterNoIcon, filter, installTimes) {
+        derivedStateOf {
+            when (sortOrder) {
+                AppSortOrder.NAME -> applications.withIndex().toList()
+                AppSortOrder.INSTALL_DATE -> applications.withIndex()
+                    .sortedByDescending { installTimes[it.value.packageName] ?: 0L }
+            }.let { list ->
+                if (filterNoIcon) list.filter { it.value.createdIcon == null } else list
+            }.let { list ->
+                // Filter before the LazyColumn so non-matching rows don't become empty items
+                if (filter.isEmpty()) list else list.filter { it.value.appName.contains(filter, true) }
+            }
         }
     }
 
