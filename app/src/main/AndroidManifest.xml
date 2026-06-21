@@ -9,6 +9,8 @@
     </queries>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Only used to upload a crash log when the user taps "Send" on the crash dialog. -->
+    <uses-permission android:name="android.permission.INTERNET" />
 
     <uses-permission
         android:name="${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
