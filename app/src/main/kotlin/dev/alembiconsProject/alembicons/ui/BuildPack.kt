@@ -65,8 +65,9 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     val viewModel: MainViewModel = hiltViewModel()
     val preferences = getPreferences().getPreferencesValue()
     val view = LocalView.current
+    val context = getCurrentContext()
+    val toaster = LocalToaster.current
 
-    var openInRefresh by remember { mutableStateOf(false) }
     var showPreview by remember { mutableStateOf(false) }
 
     val buildStep = viewModel.buildStep
@@ -74,7 +75,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     ExtendedFloatingActionButton(
         onClick = {
             if (isInRefresh) {
-                openInRefresh = true
+                toaster.show(context.getString(R.string.iconsStillGenerated))
                 return@ExtendedFloatingActionButton
             }
 
@@ -131,15 +132,6 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
         )
     }
 
-    if (viewModel.buildInstalled) {
-        ShowToast(stringResource(id = R.string.iconPackInstalled))
-        viewModel.consumeBuildInstalled()
-    }
-
-    if (openInRefresh) {
-        ShowToast(stringResource(id = R.string.iconsStillGenerated))
-        openInRefresh = false
-    }
 }
 
 /**

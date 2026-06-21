@@ -106,7 +106,6 @@ fun UploadColumn(app: PackageInfoStruct,
     var savedImages by remember { mutableStateOf<List<File>>(emptyList()) }
     var uploadedImage by remember { mutableStateOf(null as Bitmap?) }
     var mask by remember { mutableStateOf(null as Bitmap?) }
-    var uploadError by remember { mutableStateOf(false) }
     var selectionMode by remember { mutableStateOf(false) }
     var markedForDelete by remember { mutableStateOf<Set<String>>(emptySet()) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -116,6 +115,8 @@ fun UploadColumn(app: PackageInfoStruct,
     val context = getCurrentContext()
     val res = context.resources
     val scope = rememberCoroutineScope()
+    val toaster = LocalToaster.current
+    val uploadErrorMessage = stringResource(R.string.uploadImageError)
 
     LaunchedEffect(Unit) {
         savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
@@ -142,7 +143,7 @@ fun UploadColumn(app: PackageInfoStruct,
                 }
                 savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
                 if (added.isNotEmpty()) selectedImagePath = added.first().absolutePath
-                if (failed) uploadError = true
+                if (failed) toaster.show(uploadErrorMessage)
             } finally {
                 isUploading = false
             }
@@ -162,13 +163,8 @@ fun UploadColumn(app: PackageInfoStruct,
             uploadedImage = squared
             mask = createMask(squared)
         } else {
-            uploadError = true
+            toaster.show(uploadErrorMessage)
         }
-    }
-
-    if (uploadError) {
-        ShowToast(stringResource(R.string.uploadImageError))
-        uploadError = false
     }
 
     BackHandler(enabled = selectionMode) {
