@@ -32,7 +32,7 @@ import dev.alembiconsProject.alembicons.service.BootCompletedReceiver
 import dev.alembiconsProject.alembicons.service.PackageAddedService
 import dev.alembiconsProject.alembicons.service.WatchWorker
 import dev.alembiconsProject.alembicons.ui.*
-import dev.alembiconsProject.alembicons.ui.theme.IconerationTheme
+import dev.alembiconsProject.alembicons.ui.theme.RenkinTheme
 import kotlinx.coroutines.Dispatchers
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
@@ -86,7 +86,7 @@ class MainActivity : ComponentActivity() {
                 LocalMainActivity provides this,
                 LocalToaster provides toaster
             ) {
-                IconerationTheme(darkMode) {
+                RenkinTheme(darkMode) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         color = MaterialTheme.colorScheme.background
