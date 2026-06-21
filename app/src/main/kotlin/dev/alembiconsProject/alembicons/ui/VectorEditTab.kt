@@ -63,7 +63,7 @@ import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.applyAndRe
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.center
 
 @Composable
-fun PrepareEditVector(app: PackageInfoStruct, onChange: (icon: IconPackDrawable?) -> Unit) {
+internal fun PrepareEditVector(app: PackageInfoStruct, state: VectorEditState, onChange: (icon: IconPackDrawable?) -> Unit) {
     val editedVector = when (app.createdIcon) {
         is ImageVectorDrawable -> app.createdIcon.applyAndRemoveGroup().toImageVector()
         is InsetIconDrawable -> {
@@ -75,7 +75,7 @@ fun PrepareEditVector(app: PackageInfoStruct, onChange: (icon: IconPackDrawable?
         else -> ImageVector.createEmptyVector()
     }
 
-    EditVectorColumn(editedVector) {
+    EditVectorColumn(editedVector, state) {
         if (app.createdIcon is InsetIconDrawable && it != null) {
             onChange(InsetIconDrawable(it, app.createdIcon.dimensions, app.createdIcon.fractions))
         } else {
@@ -89,7 +89,19 @@ fun PrepareEditVector(app: PackageInfoStruct, onChange: (icon: IconPackDrawable?
  * colour; [filled] selects solid-fill vs stroke rendering (#117) and [baseStroke]
  * is the unscaled stroke width the thickness slider (#115) multiplies.
  */
-private data class PathEntry(val path: VectorPath, val filled: Boolean, val baseStroke: Float)
+internal data class PathEntry(val path: VectorPath, val filled: Boolean, val baseStroke: Float)
+
+/**
+ * Vector-editor working state, hoisted above the tab's [androidx.compose.animation.AnimatedContent]
+ * (in OptionsDialog) so switching to another tab and back doesn't dispose it and wipe the
+ * user's paths. Seeded once from the source vector via [initialized].
+ */
+internal class VectorEditState {
+    var entries: List<PathEntry> by mutableStateOf(listOf())
+    var thickness: Float by mutableStateOf(1f)
+    var automaticallyCenter: Boolean by mutableStateOf(true)
+    var initialized: Boolean by mutableStateOf(false)
+}
 
 /**
  * Builds the live drawable path. A filled path drops the stroke and is exported
@@ -122,23 +134,21 @@ private fun PathEntry.toPreviewVector(template: ImageVector, thickness: Float): 
 }
 
 @Composable
-fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) -> Unit) {
+internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onChange: (icon: IconPackDrawable?) -> Unit) {
     Column(
         Modifier
             .fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        var entries: List<PathEntry> by remember { mutableStateOf(listOf()) }
-        var automaticallyCenter by rememberSaveable { mutableStateOf(true) }
-        var thickness by rememberSaveable { mutableStateOf(1f) }
-
         // The pack's icons are authored at 1F stroke on a 48 viewport
         val defaultStroke = remember(vector) {
             (vector.viewportHeight / 48f).takeIf { it > 0f } ?: 1f
         }
 
         LaunchedEffect(Unit) {
+            // Seed from the source vector only once — re-entering the tab keeps edits.
+            if (state.initialized) return@LaunchedEffect
             val initial = mutableListOf<PathEntry>()
             for (path in vector.root) {
                 if (path is VectorPath && path.pathData != EmptyPath) {
@@ -147,15 +157,16 @@ fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) ->
                     initial.add(PathEntry(path, filled, base))
                 }
             }
-            entries = initial.toList()
+            state.entries = initial.toList()
+            state.initialized = true
         }
 
         val editedVector = vector.toImageVectorDrawable()
         editedVector.root.children.clear()
-        for (entry in entries) {
-            editedVector.root.children.add(entry.toMutablePath(thickness))
+        for (entry in state.entries) {
+            editedVector.root.children.add(entry.toMutablePath(state.thickness))
         }
-        if (automaticallyCenter)
+        if (state.automaticallyCenter)
             editedVector.center()
 
         val painter = rememberVectorPainter(editedVector.toImageVector())
@@ -168,11 +179,11 @@ fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) ->
                 .size(96.dp, 96.dp))
         }
 
-        CenterSwitch {
-            automaticallyCenter = it
+        CenterSwitch(state.automaticallyCenter) {
+            state.automaticallyCenter = it
         }
 
-        ThicknessSlider(thickness) { thickness = it }
+        ThicknessSlider(state.thickness) { state.thickness = it }
 
         Row(
             modifier = Modifier
@@ -203,11 +214,11 @@ fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) ->
                 builder.addPath(parser.toNodes(), stroke = SolidColor(Color.White), strokeLineWidth = defaultStroke)
                 val newPath = builder.build().root.first() as VectorPath
 
-                entries = entries + PathEntry(newPath, filled = false, baseStroke = defaultStroke)
+                state.entries = state.entries + PathEntry(newPath, filled = false, baseStroke = defaultStroke)
             }
         }
 
-        if (entries.isEmpty()) {
+        if (state.entries.isEmpty()) {
             Text(
                 text = stringResource(R.string.noPathsYet),
                 style = MaterialTheme.typography.bodySmall,
@@ -221,18 +232,18 @@ fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) ->
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(bottom = 16.dp)
         ) {
-            itemsIndexed(entries) { index, entry ->
+            itemsIndexed(state.entries) { index, entry ->
                 VectorPathItem(
-                    previewVector = entry.toPreviewVector(vector, thickness),
+                    previewVector = entry.toPreviewVector(vector, state.thickness),
                     pathString = entry.path.pathData.toStringPath(),
                     filled = entry.filled,
                     onToggleFill = {
-                        entries = entries.toMutableList().also {
+                        state.entries = state.entries.toMutableList().also {
                             it[index] = entry.copy(filled = !entry.filled)
                         }
                     },
                     onDelete = {
-                        entries = entries.toMutableList().also { it.removeAt(index) }
+                        state.entries = state.entries.toMutableList().also { it.removeAt(index) }
                     },
                     onChange = { newPathString ->
                         val nodes = PathParser().parsePathString(newPathString).toNodes()
@@ -246,14 +257,14 @@ fun EditVectorColumn(vector: ImageVector, onChange: (icon: IconPackDrawable?) ->
                         builder.addPath(nodes, stroke = entry.path.stroke, fill = entry.path.fill, strokeLineWidth = entry.baseStroke)
                         val rebuilt = builder.build().root.first() as VectorPath
 
-                        entries = entries.toMutableList().also { it[index] = entry.copy(path = rebuilt) }
+                        state.entries = state.entries.toMutableList().also { it[index] = entry.copy(path = rebuilt) }
                     }
                 )
             }
         }
 
         // An empty vector is not a real icon — don't expose it (keeps Modifier greyed)
-        onChange(if (entries.isEmpty()) null else editedVector)
+        onChange(if (state.entries.isEmpty()) null else editedVector)
     }
 }
 
@@ -467,9 +478,7 @@ fun EditPathDialog(path: String, onDismiss: () -> Unit, onChange: (newPath: Stri
 }
 
 @Composable
-fun CenterSwitch(onChange: (newValue: Boolean) -> Unit) {
-    var checked by rememberSaveable { mutableStateOf(true) }
-
+fun CenterSwitch(checked: Boolean, onChange: (newValue: Boolean) -> Unit) {
     Row(modifier = Modifier
         .fillMaxWidth()
         .padding(8.dp),
@@ -477,10 +486,7 @@ fun CenterSwitch(onChange: (newValue: Boolean) -> Unit) {
         Text(stringResource(R.string.automaticallyCenter))
         Switch(
             checked = checked,
-            onCheckedChange = {
-                checked = it
-                onChange(it)
-            },
+            onCheckedChange = { onChange(it) },
             modifier = Modifier.padding(start = 8.dp)
         )
     }
