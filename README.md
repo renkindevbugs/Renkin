@@ -7,6 +7,8 @@
 
 *Formerly Iconeration*. Icon pack creator for Android and [Arcticons](https://github.com/Donnnno/Arcticons) companion application. Create your own icon pack or extend Arcticons or another icon pack.
 
+> Developers: see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the layered architecture, DI, persistence and gotchas. (This fork ships as **Renkin**.)
+
 ## Basic features
 
 - Get icon from icon pack
