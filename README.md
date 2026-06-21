@@ -1,29 +1,41 @@
-[<img alt="F-Droid" src="https://img.shields.io/f-droid/v/com.kaanelloed.iconeration">](https://f-droid.org/packages/com.kaanelloed.iconeration) [<img alt="Release" src="https://img.shields.io/gitea/v/release/kaanelloed/Alembicons?gitea_url=https%3A%2F%2Fcodeberg.org%2F
-">](https://codeberg.org/kaanelloed/Alembicons/releases) ![](https://img.shields.io/badge/calver-YYYY.0M.MICRO-22bfda.svg)
+<p align="center">
+  <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.png" width="120" alt="Renkin icon">
+</p>
 
-[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png" alt="Get it on F-Droid" height="90">](https://f-droid.org/packages/com.kaanelloed.iconeration)
+<h1 align="center">Renkin</h1>
 
-# Alembicons
+<p align="center">Build your own Android icon pack, right on your phone.</p>
 
-*Formerly Iconeration*. Icon pack creator for Android and [Arcticons](https://github.com/Donnnno/Arcticons) companion application. Create your own icon pack or extend Arcticons or another icon pack.
+---
 
-> Developers: see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the layered architecture, DI, persistence and gotchas. (This fork ships as **Renkin**.)
+Renkin is an on-device icon pack creator. Instead of installing a finished pack, you make one yourself: pull icons from any installed icon pack, trace or edge-detect app icons, turn app names into clean text icons, recolour everything to taste, and build a real, installable icon pack — no PC, no account, fully offline.
 
-## Basic features
+It started as a fork of [Alembicons](https://codeberg.org/kaanelloed/Alembicons) by kaanelloed (originally *Iconeration*). Big thanks to them for the original app — Renkin continues that work with its own direction and a few extra features, like watching icon packs for newly added icons.
 
-- Get icon from icon pack
-- Use path tracing on the application icon using Color Quantization
-- Use canny edge detection on the application icon
-- Create text from application name using [Arcticons OTF font](https://github.com/Arcticons-Team/Arcticons-Font)
-    - First letter
-    - Two letters
-    - Full application name
-- Choose icon color
+## Features
 
-## Advanced features
+**The basics**
+- Pull an icon from any installed icon pack
+- Path-trace an app icon (colour quantization)
+- Canny edge detection on an app icon
+- Turn the app name into a text icon — first letter, two letters, or the full name — using the [Arcticons font](https://github.com/Arcticons-Team/Arcticons-Font)
+- Pick your icon colour
 
-- Use the vector version of the application icon if available
-- Use the monochrome version of the application icon if available
-- Export icons as themed icons
-- Import an image for a specific application
-- Create or edit the vector of the application icon
+**Going further**
+- Use an app's vector or monochrome icon when it has one
+- Export as themed icons
+- Import your own image for a specific app
+- Create or hand-edit an icon's vector
+- **Watch icon packs** — get notified when a pack you follow adds an icon for an app you don't have one for yet
+
+## Built with
+
+Kotlin · Jetpack Compose (Material 3) · Hilt · Room. The icon pack APK is built and signed entirely on-device.
+
+## For developers
+
+The layered architecture, dependency injection, persistence and the various gotchas are written up in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+## License
+
+Renkin is licensed under the GPLv3, the same as the upstream project. See [LICENSE](LICENSE).

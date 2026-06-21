@@ -8,9 +8,11 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.work.ExistingPeriodicWorkPolicy
 import dev.alembiconsProject.alembicons.data.WATCH_CHECK_INTERVAL_DEFAULT
+import dev.alembiconsProject.alembicons.data.LastWatchCheckAtKey
 import dev.alembiconsProject.alembicons.data.WatchCheckIntervalKey
 import dev.alembiconsProject.alembicons.data.getPreferenceFlow
 import dev.alembiconsProject.alembicons.data.setIntValue
+import dev.alembiconsProject.alembicons.data.setLongValue
 import dev.alembiconsProject.alembicons.dataStore
 import dev.alembiconsProject.alembicons.data.watch.AppComponent
 import dev.alembiconsProject.alembicons.data.watch.IconSuggestion
@@ -103,6 +105,14 @@ class WatchViewModel @Inject constructor(
             isChecking = true
             val fired = WatchChecker(getApplication()).runCheck()
             isChecking = false
+            // A manual check counts as a check: record it and re-enqueue the periodic
+            // safety-net so its next run (and the "Next check" label) move out by a full
+            // interval from now.
+            val app = getApplication<Application>()
+            app.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())
+            WatchWorker.schedulePeriodic(
+                app, checkIntervalMinutes.value, ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE
+            )
             onResult(fired.size)
         }
     }

@@ -312,7 +312,7 @@ private fun WatchRuleList(
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(
-                        start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp + navBarInset
+                        start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp + navBarInset
                     ),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
@@ -400,7 +400,7 @@ private fun WatchCheckScheduleRow() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         val nextText = nextCheck?.let {
