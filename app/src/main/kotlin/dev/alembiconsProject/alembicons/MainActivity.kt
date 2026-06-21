@@ -13,7 +13,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -31,6 +34,7 @@ import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.service.BootCompletedReceiver
 import dev.alembiconsProject.alembicons.service.PackageAddedService
 import dev.alembiconsProject.alembicons.service.WatchWorker
+import dev.alembiconsProject.alembicons.util.CrashReporter
 import dev.alembiconsProject.alembicons.ui.*
 import dev.alembiconsProject.alembicons.ui.theme.RenkinTheme
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +85,8 @@ class MainActivity : ComponentActivity() {
             edgeToEdge(darkMode)
 
             val toaster = remember { Toaster() }
+            // Detected once per launch: if the previous session crashed, offer to email the log.
+            var crashPending by remember { mutableStateOf(CrashReporter.hasCrash(this@MainActivity)) }
 
             CompositionLocalProvider(
                 LocalMainActivity provides this,
@@ -93,6 +99,20 @@ class MainActivity : ComponentActivity() {
                     ) {
                         ToastHost(toaster)
                         MainColumn(appProvider.iconPacks)
+
+                        if (crashPending) {
+                            CrashReportDialog(
+                                onSend = {
+                                    CrashReporter.sendReport(this@MainActivity)
+                                    CrashReporter.clear(this@MainActivity)
+                                    crashPending = false
+                                },
+                                onDismiss = {
+                                    CrashReporter.clear(this@MainActivity)
+                                    crashPending = false
+                                }
+                            )
+                        }
                     }
                 }
             }
