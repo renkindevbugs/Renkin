@@ -8,6 +8,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.alembiconsProject.alembicons.apk.ApplicationProvider
 import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
 import dev.alembiconsProject.alembicons.data.getStringValue
@@ -15,19 +16,18 @@ import dev.alembiconsProject.alembicons.data.isSystemInDarkTheme
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 /**
- * Owns the [ApplicationProvider] for the app's lifetime. Because it lives in a
- * ViewModel (built with the application context, not an Activity), the loaded app
- * list / icon packs survive configuration changes such as rotation instead of
- * being re-loaded on every Activity recreation.
- *
- * First brick toward a proper ViewModel layer: the provider is still reached via
- * MainActivity.appProvider for now, so existing call sites are untouched.
+ * Owns the [ApplicationProvider] for the app's lifetime. The provider is injected (a Hilt
+ * @Singleton), so the loaded app list / icon packs survive configuration changes such as
+ * rotation instead of being re-loaded on every Activity recreation.
  */
-class MainViewModel(application: Application) : AndroidViewModel(application) {
-
-    val appProvider = ApplicationProvider(application)
+@HiltViewModel
+class MainViewModel @Inject constructor(
+    application: Application,
+    val appProvider: ApplicationProvider
+) : AndroidViewModel(application) {
 
     // Keys ("package/activity") of the apps already in the last built/saved pack.
     // An app with an icon whose key is NOT here is "added" (pending build); a key here

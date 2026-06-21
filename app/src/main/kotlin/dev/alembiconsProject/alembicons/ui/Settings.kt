@@ -51,7 +51,7 @@ import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
 import dev.alembiconsProject.alembicons.packages.PermissionManager
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import kotlinx.coroutines.launch
 
@@ -179,7 +179,7 @@ private val settingsButtonModifier: Modifier
 
 @Composable
 fun SyncButton() {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
     val context = getCurrentContext()
 
     Button(
@@ -198,7 +198,7 @@ fun SyncButton() {
 
 @Composable
 fun RefreshApplicationListButton() {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
     val context = getCurrentContext()
 
     Button(
@@ -260,7 +260,7 @@ fun DeleteIconPackButton() {
 
 @Composable
 fun RemoveIconsButton() {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
     var confirm by rememberSaveable { mutableStateOf(false) }
 
     // Destructive action — tonal/error styling sets it apart from the blue actions

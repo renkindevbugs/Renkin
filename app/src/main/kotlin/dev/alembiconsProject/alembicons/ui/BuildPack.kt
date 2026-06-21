@@ -53,7 +53,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
@@ -62,7 +62,7 @@ import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
     val preferences = getPreferences().getPreferencesValue()
     val view = LocalView.current
 
@@ -149,7 +149,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
  */
 @Composable
 fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
     val builtKeys = viewModel.builtKeys
     // Icons added since the last build (not yet in the saved pack) float to the top so
     // the user sees what's new without scrolling; the rest stay alphabetical

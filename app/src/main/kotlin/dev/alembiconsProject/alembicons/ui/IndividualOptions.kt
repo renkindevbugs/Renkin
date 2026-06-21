@@ -39,7 +39,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
@@ -91,7 +91,7 @@ fun OptionsDialog(
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
 
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
     var source by rememberSaveable { mutableStateOf(Source.ICON_PACK) }
