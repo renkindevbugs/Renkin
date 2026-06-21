@@ -3,6 +3,7 @@ package dev.alembiconsProject.alembicons.drawable
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.ColorFilter
+import android.graphics.PixelFormat
 import android.util.Base64
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.BlendMode
@@ -104,18 +105,14 @@ class ImageVectorDrawable(imageVector: ImageVector): IconPackDrawable() {
         this.renderToCanvas(canvas)
     }
 
-    override fun setAlpha(alpha: Int) {
-        TODO("Not yet implemented")
-    }
+    // The custom vector renderer ignores alpha / colour filter, so these are no-ops rather
+    // than throwing — the platform may call them during the draw pipeline.
+    override fun setAlpha(alpha: Int) {}
 
-    override fun setColorFilter(colorFilter: ColorFilter?) {
-        TODO("Not yet implemented")
-    }
+    override fun setColorFilter(colorFilter: ColorFilter?) {}
 
     @Deprecated("Deprecated in Java")
-    override fun getOpacity(): Int {
-        TODO("Not yet implemented")
-    }
+    override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
 
     @Composable
     override fun getPainter(): Painter {
