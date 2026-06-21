@@ -58,7 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.BackgroundColorKey
@@ -154,7 +154,7 @@ fun OptionsCard(
     // Completion progress across all apps (updates live as icons are assigned/cleared).
     // The bar is a diff against the last built pack: blue = already built, green = added
     // since (pending build), red = removed since. builtKeys updates after each build.
-    val vm = viewModel<MainViewModel>()
+    val vm = hiltViewModel<MainViewModel>()
     val apps = vm.appProvider.applicationList
     val builtKeys = vm.builtKeys
     val builtCount = apps.count { it.createdIcon != null && "${it.packageName}/${it.activityName}" in builtKeys }
@@ -549,7 +549,7 @@ fun IconPackDropdown(
     application: InstalledApplication?,
     onChange: (newValue: IconPack) -> Unit
 ) {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
     val emptyPack = IconPack("", stringResource(R.string.none), 0, "", 0)
     val newList = listOf(emptyPack) + iconPacks
     val defaultPack = newList.find { it.packageName == packageName }

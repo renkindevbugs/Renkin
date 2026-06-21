@@ -89,7 +89,7 @@ import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import androidx.compose.ui.platform.LocalDensity
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import kotlinx.coroutines.launch
 
@@ -133,7 +133,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // so the search bar's clear-on-back handler takes priority while it has text.
     val context = LocalContext.current
     val activity = getCurrentMainActivity()
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
     val isInRefresh = viewModel.isRefreshing
     val pressBackMessage = stringResource(R.string.pressBackToExit)
     var lastBackPress by remember { mutableStateOf(0L) }
@@ -195,7 +195,7 @@ fun ApplicationList(
     filterNoIcon: Boolean,
     listState: LazyListState = rememberLazyListState()
 ) {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
     val pm = LocalContext.current.packageManager
     val applications = viewModel.appProvider.applicationList
 
@@ -270,7 +270,7 @@ fun ApplicationItem(
     bgColorValue: Color,
     modifier: Modifier = Modifier
 ) {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
     val dynamicColor = themed && supportDynamicColors()
     val view = LocalView.current
 
@@ -391,7 +391,7 @@ fun OpenAppOptions(
     index: Int,
     onDismiss: () -> Unit
 ) {
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
 
     AppOptions(iconPacks, app, themed, { icon ->
         viewModel.applyIcon(index, app, icon)
@@ -407,7 +407,7 @@ fun OpenAppOptions(
 @Composable
 fun RefreshButton() {
     val preferences = getPreferences().getPreferencesValue()
-    val viewModel: MainViewModel = viewModel()
+    val viewModel: MainViewModel = hiltViewModel()
 
     var openWarning by rememberSaveable { mutableStateOf(false) }
 
