@@ -204,7 +204,7 @@ fun RemoveIconsButton() {
 
     if (confirm) {
         AlertDialog(
-            shape = RoundedCornerShape(28.dp),
+            shape = DialogShape,
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             onDismissRequest = { confirm = false },
             title = { Text(stringResource(R.string.clearIconsTitle)) },

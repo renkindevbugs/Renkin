@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ImageVectorDrawable
 import dev.alembiconsProject.alembicons.drawable.InsetIconDrawable
@@ -400,7 +401,7 @@ fun EditPathDialog(path: String, onDismiss: () -> Unit, onChange: (newPath: Stri
     var formatError by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
-        shape = RoundedCornerShape(28.dp),
+        shape = DialogShape,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         titleContentColor = MaterialTheme.colorScheme.onSurface,
         onDismissRequest = { onDismiss() },

@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.WatchViewModel
 import dev.alembiconsProject.alembicons.apk.IconPackBuilder
@@ -123,7 +124,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     if (!viewModel.applicationsLoaded || !viewModel.iconPackLoaded) return
 
     AlertDialog(
-        shape = RoundedCornerShape(28.dp),
+        shape = DialogShape,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.watchApplyTitle)) },

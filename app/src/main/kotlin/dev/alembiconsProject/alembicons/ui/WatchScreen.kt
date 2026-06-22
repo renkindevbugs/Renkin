@@ -79,6 +79,7 @@ import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.WatchViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.apk.IconPackBuilder
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
@@ -221,7 +222,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
 private fun ConfirmDeleteDialog(title: String, text: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
     val view = LocalView.current
     androidx.compose.material3.AlertDialog(
-        shape = RoundedCornerShape(28.dp),
+        shape = DialogShape,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = onDismiss,
         title = { Text(title) },
