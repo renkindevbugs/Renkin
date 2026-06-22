@@ -9,7 +9,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Create
@@ -497,9 +497,8 @@ private fun OptionsBottomBar(
 fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
     val view = LocalView.current
     AlertDialog(
-        shape = RoundedCornerShape(20.dp),
-        containerColor = MaterialTheme.colorScheme.background,
-        titleContentColor = MaterialTheme.colorScheme.outline,
+        shape = DialogShape,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = { onDismiss() },
         title = { Text(stringResource(R.string.confirmClear)) },
         text = {

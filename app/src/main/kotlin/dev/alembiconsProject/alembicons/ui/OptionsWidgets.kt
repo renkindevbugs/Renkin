@@ -36,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.InstalledApplication
@@ -218,9 +219,8 @@ fun IconPackDropdown(
 @Composable
 fun OptionInfoDialog(text: String, onDismiss: () -> Unit) {
     AlertDialog(
-        shape = RoundedCornerShape(20.dp),
-        containerColor = MaterialTheme.colorScheme.background,
-        titleContentColor = MaterialTheme.colorScheme.outline,
+        shape = DialogShape,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = { onDismiss() },
         title = { },
         text = {
