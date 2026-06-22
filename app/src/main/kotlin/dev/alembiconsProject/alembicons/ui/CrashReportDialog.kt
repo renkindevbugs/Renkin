@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.ContentCopy
@@ -33,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.theme.DialogShape
+import dev.alembiconsProject.alembicons.ui.theme.InnerShape
 import dev.alembiconsProject.alembicons.util.CrashReporter
 
 private const val DEV_EMAIL = "renkin.dev.bugs@gmail.com"
@@ -78,7 +78,7 @@ fun CrashReportDialog(onDismiss: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 // Code-block style chip: the address in monospace + a copy action.
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = InnerShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHighest
                 ) {
                     Row(
@@ -112,7 +112,7 @@ fun CrashReportDialog(onDismiss: () -> Unit) {
                 Spacer(Modifier.height(8.dp))
                 Surface(
                     onClick = { uriHandler.openUri(githubUrl) },
-                    shape = RoundedCornerShape(12.dp),
+                    shape = InnerShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHighest
                 ) {
                     Row(

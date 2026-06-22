@@ -63,6 +63,7 @@ import androidx.compose.ui.window.DialogProperties
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.theme.CardShape
 import dev.alembiconsProject.alembicons.ui.theme.DialogShape
+import dev.alembiconsProject.alembicons.ui.theme.InnerShape
 import dev.alembiconsProject.alembicons.util.CrashReporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -302,7 +303,7 @@ private fun CrashLogDetailDialog(
                 Spacer(Modifier.height(12.dp))
                 // The trace can be long — scroll it inside a bounded, code-block surface.
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = InnerShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHighest,
                     modifier = Modifier
                         .fillMaxWidth()

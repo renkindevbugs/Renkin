@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.ui.theme.CardShape
+import dev.alembiconsProject.alembicons.ui.theme.FieldShape
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.BackgroundColorKey
 import dev.alembiconsProject.alembicons.data.CalendarIconsKey
@@ -255,7 +256,7 @@ fun OptionsCard(
                 Column(Modifier.padding(bottom = 12.dp)) {
                 // Users otherwise don't know these settings only take effect after a refresh
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
+                    shape = FieldShape,
                     color = MaterialTheme.colorScheme.secondaryContainer,
                     modifier = Modifier
                         .fillMaxWidth()
