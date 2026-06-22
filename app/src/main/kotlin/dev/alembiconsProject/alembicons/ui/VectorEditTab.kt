@@ -51,6 +51,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
 import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ImageVectorDrawable
@@ -304,7 +305,7 @@ fun VectorPathItem(
     var showPathEditor by remember { mutableStateOf(false) }
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = CardShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {

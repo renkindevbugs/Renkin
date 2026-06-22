@@ -43,6 +43,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.BackgroundColorKey
 import dev.alembiconsProject.alembicons.data.CalendarIconsKey
@@ -175,7 +176,7 @@ fun OptionsCard(
     val scope = rememberCoroutineScope()
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = CardShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier
             .fillMaxWidth()

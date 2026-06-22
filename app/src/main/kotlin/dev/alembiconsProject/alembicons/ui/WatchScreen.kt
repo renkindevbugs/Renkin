@@ -79,6 +79,7 @@ import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.WatchViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.apk.IconPackBuilder
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
 import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
@@ -475,7 +476,7 @@ private fun ActiveRuleCard(
     onDelete: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = CardShape,
         // A clear step above the screen background (surfaceContainerLow) so the card's bounds
         // are visible; inner pills go one step higher again to stay distinct.
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
@@ -574,7 +575,7 @@ private fun CompletedRuleCard(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
+        shape = CardShape,
         // Same fill as the active card so both rule states read as one consistent card style.
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth()

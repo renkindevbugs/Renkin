@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
 import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.util.CrashReporter
 import kotlinx.coroutines.Dispatchers
@@ -251,7 +252,7 @@ private fun EmptyState(modifier: Modifier = Modifier) {
 private fun CrashLogCard(entry: CrashReporter.CrashEntry, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
+        shape = CardShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
