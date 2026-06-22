@@ -63,6 +63,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
 import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.data.UploadedImageStore
 import dev.alembiconsProject.alembicons.drawable.BitmapIconDrawable
@@ -206,7 +207,7 @@ fun UploadColumn(app: PackageInfoStruct,
 
                         // Editor lives in a rounded card for a cleaner, modern look
                         Surface(
-                            shape = RoundedCornerShape(20.dp),
+                            shape = CardShape,
                             color = MaterialTheme.colorScheme.surfaceContainer,
                             modifier = Modifier.fillMaxWidth()
                         ) {

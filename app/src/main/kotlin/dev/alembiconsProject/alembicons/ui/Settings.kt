@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -38,6 +37,7 @@ import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.theme.DialogShape
+import dev.alembiconsProject.alembicons.ui.theme.FieldShape
 import dev.alembiconsProject.alembicons.data.DARK_MODE_DEFAULT
 import dev.alembiconsProject.alembicons.data.DarkMode
 import dev.alembiconsProject.alembicons.data.DarkModeKey
@@ -102,7 +102,7 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
                     expanded = expanded
                 )
             },
-            shape = RoundedCornerShape(16.dp),
+            shape = FieldShape,
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
@@ -141,7 +141,7 @@ fun SyncButton() {
 
     Button(
         onClick = { viewModel.sync() },
-        shape = RoundedCornerShape(16.dp),
+        shape = FieldShape,
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.syncPacks))
@@ -154,7 +154,7 @@ fun RefreshApplicationListButton() {
 
     Button(
         onClick = { viewModel.refreshApps() },
-        shape = RoundedCornerShape(16.dp),
+        shape = FieldShape,
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.refreshApplicationList))
@@ -172,7 +172,7 @@ fun DeleteIconPackButton() {
             view.performConfirmHaptic()
             viewModel.deleteIconPack()
         },
-        shape = RoundedCornerShape(16.dp),
+        shape = FieldShape,
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = MaterialTheme.colorScheme.errorContainer,
             contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -192,7 +192,7 @@ fun RemoveIconsButton() {
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
         onClick = { confirm = true },
-        shape = RoundedCornerShape(16.dp),
+        shape = FieldShape,
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = MaterialTheme.colorScheme.errorContainer,
             contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -204,7 +204,7 @@ fun RemoveIconsButton() {
 
     if (confirm) {
         AlertDialog(
-            shape = RoundedCornerShape(28.dp),
+            shape = DialogShape,
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             onDismissRequest = { confirm = false },
             title = { Text(stringResource(R.string.clearIconsTitle)) },
@@ -237,7 +237,7 @@ fun CrashLogsButton() {
 
     Button(
         onClick = { open = true },
-        shape = RoundedCornerShape(16.dp),
+        shape = FieldShape,
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.crashLogs))
@@ -253,7 +253,7 @@ fun CrashLogsButton() {
 private fun ForceCrashButton() {
     FilledTonalButton(
         onClick = { throw RuntimeException("Forced crash for testing") },
-        shape = RoundedCornerShape(16.dp),
+        shape = FieldShape,
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = MaterialTheme.colorScheme.errorContainer,
             contentColor = MaterialTheme.colorScheme.onErrorContainer

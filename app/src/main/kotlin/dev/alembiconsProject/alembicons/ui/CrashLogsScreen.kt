@@ -61,6 +61,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
+import dev.alembiconsProject.alembicons.ui.theme.InnerShape
 import dev.alembiconsProject.alembicons.util.CrashReporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -165,7 +168,7 @@ fun CrashLogsScreen(onDismiss: () -> Unit) {
 
     if (confirmClearAll) {
         AlertDialog(
-            shape = RoundedCornerShape(28.dp),
+            shape = DialogShape,
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             onDismissRequest = { confirmClearAll = false },
             title = { Text(stringResource(R.string.crashLogsClearAllTitle)) },
@@ -250,7 +253,7 @@ private fun EmptyState(modifier: Modifier = Modifier) {
 private fun CrashLogCard(entry: CrashReporter.CrashEntry, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
+        shape = CardShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -286,7 +289,7 @@ private fun CrashLogDetailDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = DialogShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 6.dp
         ) {
@@ -300,7 +303,7 @@ private fun CrashLogDetailDialog(
                 Spacer(Modifier.height(12.dp))
                 // The trace can be long — scroll it inside a bounded, code-block surface.
                 Surface(
-                    shape = RoundedCornerShape(12.dp),
+                    shape = InnerShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHighest,
                     modifier = Modifier
                         .fillMaxWidth()
