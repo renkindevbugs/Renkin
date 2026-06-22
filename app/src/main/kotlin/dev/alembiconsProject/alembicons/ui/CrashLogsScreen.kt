@@ -1,6 +1,7 @@
 package dev.alembiconsProject.alembicons.ui
 
 import android.content.Intent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,11 +22,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -45,7 +48,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -82,6 +88,7 @@ fun CrashLogsScreen(onDismiss: () -> Unit) {
     }
 
     var selected by remember { mutableStateOf<CrashReporter.CrashEntry?>(null) }
+    var confirmClearAll by remember { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -100,11 +107,7 @@ fun CrashLogsScreen(onDismiss: () -> Unit) {
                         },
                         actions = {
                             if (entries.isNotEmpty()) {
-                                IconButton(onClick = {
-                                    CrashReporter.clearAll(context)
-                                    reloadTrigger++
-                                    toaster.show(clearedMessage)
-                                }) {
+                                IconButton(onClick = { confirmClearAll = true }) {
                                     Icon(
                                         Icons.Filled.DeleteSweep,
                                         stringResource(R.string.crashLogsClearAll),
@@ -129,6 +132,8 @@ fun CrashLogsScreen(onDismiss: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         item {
+                            GithubReportLink()
+                            Spacer(Modifier.height(8.dp))
                             Text(
                                 text = stringResource(R.string.crashLogsSubtitle),
                                 style = MaterialTheme.typography.bodySmall,
@@ -155,6 +160,68 @@ fun CrashLogsScreen(onDismiss: () -> Unit) {
                 reloadTrigger++
                 toaster.show(deletedMessage)
             }
+        )
+    }
+
+    if (confirmClearAll) {
+        AlertDialog(
+            shape = RoundedCornerShape(28.dp),
+            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+            onDismissRequest = { confirmClearAll = false },
+            title = { Text(stringResource(R.string.crashLogsClearAllTitle)) },
+            text = { Text(stringResource(R.string.crashLogsClearAllText)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    CrashReporter.clearAll(context)
+                    confirmClearAll = false
+                    reloadTrigger++
+                    toaster.show(clearedMessage)
+                }) {
+                    Text(stringResource(R.string.confirm), color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClearAll = false }) {
+                    Text(stringResource(R.string.dismiss))
+                }
+            }
+        )
+    }
+}
+
+/** Prominent, centered link to the GitHub issues page so a stored crash can be reported. */
+@Composable
+private fun GithubReportLink() {
+    val uriHandler = LocalUriHandler.current
+    val url = stringResource(R.string.crashGithubUrl)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .clickable { uriHandler.openUri(url) }
+            .padding(vertical = 12.dp),
+        horizontalArrangement = Arrangement.Center,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_github),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(28.dp)
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(
+            text = stringResource(R.string.crashLogsReport),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.width(8.dp))
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
         )
     }
 }

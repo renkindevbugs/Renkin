@@ -156,6 +156,9 @@
     <string name="crashLogsSubtitle">Crashes from the last 30 days are kept here; older ones are removed automatically.</string>
     <string name="crashLogsEmpty">No crashes recorded</string>
     <string name="crashLogsClearAll">Clear all</string>
+    <string name="crashLogsClearAllTitle">Delete all crash logs?</string>
+    <string name="crashLogsClearAllText">This permanently removes every stored crash log. This can\'t be undone.</string>
+    <string name="crashLogsReport">Report crash</string>
     <string name="crashLogShare">Share</string>
     <string name="crashLogDelete">Delete</string>
     <string name="crashLogDeleted">Crash log deleted</string>
