@@ -82,6 +82,8 @@ class MainActivity : ComponentActivity() {
             if (WatchRepository(applicationContext).getActiveRules().isNotEmpty()) {
                 startPackageAddedService()
             }
+            // Drop crash logs older than the retention window (and migrate any legacy log).
+            CrashReporter.prune(applicationContext)
         }
 
         setContent {
@@ -91,7 +93,7 @@ class MainActivity : ComponentActivity() {
             val toaster = remember { Toaster() }
             // Detected once per launch: if the previous session crashed, offer the log for
             // manual reporting (copy / email / GitHub) — nothing is sent automatically.
-            var crashPending by remember { mutableStateOf(CrashReporter.hasCrash(this@MainActivity)) }
+            var crashPending by remember { mutableStateOf(CrashReporter.hasNewCrash(this@MainActivity)) }
 
             CompositionLocalProvider(
                 LocalMainActivity provides this,
@@ -108,7 +110,7 @@ class MainActivity : ComponentActivity() {
                         if (crashPending) {
                             CrashReportDialog(
                                 onDismiss = {
-                                    CrashReporter.clear(this@MainActivity)
+                                    CrashReporter.markCrashesSeen(this@MainActivity)
                                     crashPending = false
                                 }
                             )

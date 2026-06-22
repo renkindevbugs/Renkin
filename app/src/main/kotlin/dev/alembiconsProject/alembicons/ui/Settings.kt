@@ -62,6 +62,7 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
                 RefreshApplicationListButton()
                 RemoveIconsButton()
                 DeleteIconPackButton()
+                CrashLogsButton()
                 if (BuildConfig.DEBUG) {
                     ForceCrashButton()
                 }
@@ -229,6 +230,23 @@ fun RemoveIconsButton() {
     }
 }
 
+
+@Composable
+fun CrashLogsButton() {
+    var open by rememberSaveable { mutableStateOf(false) }
+
+    Button(
+        onClick = { open = true },
+        shape = RoundedCornerShape(16.dp),
+        modifier = settingsButtonModifier
+    ) {
+        Text(stringResource(R.string.crashLogs))
+    }
+
+    if (open) {
+        CrashLogsScreen { open = false }
+    }
+}
 
 /** Debug-only: throws to verify the crash-capture + report-on-next-launch flow. */
 @Composable

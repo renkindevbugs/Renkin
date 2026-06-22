@@ -152,6 +152,17 @@
     <string name="crashLogCopied">Crash log copied</string>
     <string name="crashEmailCopied">Email copied</string>
     <string name="crashGithubUrl" translatable="false">https://github.com/renkindevbugs/Renkin/issues</string>
+    <string name="crashLogs">Crash logs</string>
+    <string name="crashLogsSubtitle">Crashes from the last 30 days are kept here; older ones are removed automatically.</string>
+    <string name="crashLogsEmpty">No crashes recorded</string>
+    <string name="crashLogsClearAll">Clear all</string>
+    <string name="crashLogsClearAllTitle">Delete all crash logs?</string>
+    <string name="crashLogsClearAllText">This permanently removes every stored crash log. This can\'t be undone.</string>
+    <string name="crashLogsReport">Report crash</string>
+    <string name="crashLogShare">Share</string>
+    <string name="crashLogDelete">Delete</string>
+    <string name="crashLogDeleted">Crash log deleted</string>
+    <string name="crashLogsCleared">All crash logs cleared</string>
     <string name="forceCrash">Force crash (debug)</string>
     <string name="watchDone">Done</string>
     <string name="newIconIn">New icon in</string>

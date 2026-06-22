@@ -142,7 +142,7 @@ fun CrashReportDialog(onDismiss: () -> Unit) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     FilledTonalButton(onClick = {
-                        val log = CrashReporter.readLog(context) ?: return@FilledTonalButton
+                        val log = CrashReporter.latest(context)?.text ?: return@FilledTonalButton
                         clipboard.setText(AnnotatedString(log))
                         toaster.show(logCopied)
                     }) {
