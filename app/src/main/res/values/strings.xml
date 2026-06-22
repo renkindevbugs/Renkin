@@ -34,6 +34,9 @@
     <string name="aboutFork">Renkin is an open-source fork of Alembicons.</string>
     <string name="aboutThanks">Huge thanks to its author for creating Alembicons — this app simply continues that great work.</string>
     <string name="aboutForkLink">View Alembicons on F-Droid</string>
+    <string name="githubUrl" translatable="false">https://github.com/renkindevbugs/Renkin</string>
+    <string name="viewOnGithub">View on GitHub</string>
+    <string name="aboutFeedback">Got an idea or a suggestion? Feel free to share it on GitHub — open it with the “View on GitHub” link under the app name above (suggestions and bug reports go in the “Issues” tab).</string>
     <string name="close">Close</string>
     <string name="packsSynced">Icon packs synced</string>
     <string name="appListRefreshed">Application list refreshed</string>
