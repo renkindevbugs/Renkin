@@ -49,6 +49,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.WatchViewModel
+import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.IconSuggestion
 import dev.alembiconsProject.alembicons.data.watch.IconSuggestionCandidate
@@ -81,9 +82,13 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
 
     LaunchedEffect(suggestionId) {
         val (s, c) = watchViewModel.loadSuggestion(suggestionId)
+        // Drop our own generated pack: a suggestion stored before the WatchChecker filter
+        // could still list it, and it must never be offered as an icon source. Filtering
+        // here covers the chips, the default selection and the generated preview at once.
+        val packCandidates = c.filter { it.iconPackPackage != IconPackBuilder.PACKAGE_NAME }
         suggestion = s
-        candidates = c
-        selectedPack = c.firstOrNull()?.iconPackPackage
+        candidates = packCandidates
+        selectedPack = packCandidates.firstOrNull()?.iconPackPackage
         loaded = true
         if (s == null) onDismiss() // already handled/deleted → nothing to show
     }

@@ -78,6 +78,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.WatchViewModel
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
@@ -615,10 +616,14 @@ private fun CompletedRuleCard(
                         .align(Alignment.CenterVertically)
                         .padding(end = 4.dp)
                 )
-                rule.packs.forEach { rp ->
-                    val pack = packs.find { it.packageName == rp.iconPackPackage }
-                    PackLabel(rp.iconPackPackage, pack?.applicationName)
-                }
+                // Defensive: never show our own generated pack here. New suggestions already
+                // exclude it (WatchChecker), this also hides it for rules completed earlier.
+                rule.packs
+                    .filter { it.iconPackPackage != IconPackBuilder.PACKAGE_NAME }
+                    .forEach { rp ->
+                        val pack = packs.find { it.packageName == rp.iconPackPackage }
+                        PackLabel(rp.iconPackPackage, pack?.applicationName)
+                    }
             }
         }
     }
