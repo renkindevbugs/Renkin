@@ -93,6 +93,7 @@ import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import androidx.compose.ui.platform.LocalDensity
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
+import dev.alembiconsProject.alembicons.WatchViewModel
 import kotlinx.coroutines.launch
 
 enum class AppSortOrder { NAME, INSTALL_DATE }
@@ -476,13 +477,12 @@ fun TitleBar(
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     val prefs = getPreferences()
-    val context = getCurrentContext()
     var openSettings by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
     var openWatch by rememberSaveable { mutableStateOf(false) }
 
-    val watchRepo = remember { dev.alembiconsProject.alembicons.data.watch.WatchRepository(context) }
-    val completedCount by watchRepo.completedCount.collectAsState(initial = 0)
+    val watchViewModel: WatchViewModel = hiltViewModel()
+    val completedCount by watchViewModel.completedCount.collectAsState()
 
     LargeFlexibleTopAppBar(
         scrollBehavior = scrollBehavior,
