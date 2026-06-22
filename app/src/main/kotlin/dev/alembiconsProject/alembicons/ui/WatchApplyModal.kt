@@ -88,7 +88,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         if (s == null) onDismiss() // already handled/deleted → nothing to show
     }
 
-    val apps = viewModel.appProvider.applicationList
+    val apps = viewModel.applicationList
     val app = suggestion?.let { s -> apps.find { it.packageName == s.packageName && it.activityName == s.activityName } }
 
     // (Re)generate the new icon for the selected pack
@@ -107,7 +107,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         newIcon = null
         newIcon = withContext(Dispatchers.Default) {
             val options = GenerationOptions.fromPreferences(prefs.data.first(), context, override = true)
-            viewModel.appProvider.getIconFromPackDrawable(targetApp, pack, candidate.drawableName, options)
+            viewModel.iconFromPack(targetApp, pack, candidate.drawableName, options)
         }
         generating = false
     }
@@ -115,7 +115,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     if (!loaded || suggestion == null) return
     // When opened cold from a notification the app list / packs may still be
     // loading; wait so the modal shows real icons instead of empty placeholders.
-    if (!viewModel.appProvider.applicationsLoaded || !viewModel.appProvider.iconPackLoaded) return
+    if (!viewModel.applicationsLoaded || !viewModel.iconPackLoaded) return
 
     AlertDialog(
         shape = RoundedCornerShape(28.dp),
@@ -155,7 +155,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     candidates.forEach { candidate ->
-                        val pack = packsName(viewModel.appProvider.iconPacks, candidate.iconPackPackage)
+                        val pack = packsName(viewModel.iconPacks, candidate.iconPackPackage)
                         FilterChip(
                             selected = selectedPack == candidate.iconPackPackage,
                             onClick = { selectedPack = candidate.iconPackPackage },

@@ -145,7 +145,7 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
     val builtKeys = viewModel.builtKeys
     // Icons added since the last build (not yet in the saved pack) float to the top so
     // the user sees what's new without scrolling; the rest stay alphabetical
-    val themedApps = viewModel.appProvider.applicationList
+    val themedApps = viewModel.applicationList
         .filter { it.createdIcon != null }
         .sortedWith(
             compareByDescending<PackageInfoStruct> { "${it.packageName}/${it.activityName}" !in builtKeys }

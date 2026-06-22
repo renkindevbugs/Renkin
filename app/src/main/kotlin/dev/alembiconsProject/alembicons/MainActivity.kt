@@ -49,12 +49,16 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "se
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
-    // The provider lives in the ViewModel so it (and its loaded state) survives
-    // configuration changes; exposed here for the activity's own use in setContent.
-    val appProvider get() = viewModel.appProvider
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Instantiate the view model now, on the main thread, before setContent. This forces
+        // its ApplicationProvider — and the Compose snapshot state that provider holds
+        // (iconPacks, applicationsLoaded, …) — to be created in the global snapshot. If the
+        // first touch instead happened while reading viewModel.iconPacks during the initial
+        // composition, Compose throws "Reading a state that was created after the snapshot
+        // was taken or in a snapshot that has not yet been applied".
+        viewModel
 
         // Landscape is only allowed on large screens (sw >= 600dp). Phones and
         // folded foldables stay locked to portrait.
@@ -99,7 +103,7 @@ class MainActivity : ComponentActivity() {
                         color = MaterialTheme.colorScheme.background
                     ) {
                         ToastHost(toaster)
-                        MainColumn(appProvider.iconPacks)
+                        MainColumn(viewModel.iconPacks)
 
                         if (crashPending) {
                             CrashReportDialog(
@@ -131,9 +135,9 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.Default) {
             // Skip until the initial pack load finished, otherwise every installed pack
             // looks "new" against the still-empty loaded list on first launch.
-            if (!viewModel.appProvider.iconPackLoaded) return@launch
+            if (!viewModel.iconPackLoaded) return@launch
             val installed = ApplicationManager(this@MainActivity).getIconPacks()
-            val loaded = viewModel.appProvider.iconPacks.map { it.packageName }.toSet()
+            val loaded = viewModel.iconPacks.map { it.packageName }.toSet()
             val newPack = installed.firstOrNull {
                 it.packageName != IconPackBuilder.PACKAGE_NAME && it.packageName !in loaded
             } ?: return@launch

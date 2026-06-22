@@ -10,10 +10,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.alembiconsProject.alembicons.apk.ApplicationProvider
+import dev.alembiconsProject.alembicons.data.IconPack
+import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
 import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.data.isSystemInDarkTheme
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
+import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
+import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -28,8 +32,25 @@ import javax.inject.Inject
 @HiltViewModel
 class MainViewModel @Inject constructor(
     application: Application,
-    val appProvider: ApplicationProvider
+    private val appProvider: ApplicationProvider
 ) : AndroidViewModel(application) {
+
+    // ---- Model state exposed to the UI (read-only) -------------------------------
+    // The UI observes these instead of reaching through to ApplicationProvider, so the
+    // view model stays the single point of contact with the model layer. Each is backed
+    // by Compose state in the provider/repository, so reads in composition stay reactive.
+
+    /** The loaded apps, each with its current (created) icon. Edited via [applyIcon]. */
+    val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
+
+    /** The installed icon packs available as icon sources. */
+    val iconPacks: List<IconPack> get() = appProvider.iconPacks
+
+    /** True once the icon packs have finished loading. */
+    val iconPackLoaded: Boolean get() = appProvider.iconPackLoaded
+
+    /** True once the app list has finished loading. */
+    val applicationsLoaded: Boolean get() = appProvider.applicationsLoaded
 
     // Keys ("package/activity") of the apps already in the last built/saved pack.
     // An app with an icon whose key is NOT here is "added" (pending build); a key here
@@ -152,6 +173,41 @@ class MainViewModel @Inject constructor(
             _toastEvents.trySend(R.string.appListRefreshed)
         }
     }
+
+    // ---- Icon preview (used by the per-app options / watch-apply dialogs) ---------
+    // Pure builders with no side effects: they return an icon for the dialog to preview;
+    // committing it goes through applyIcon. Each hops to Dispatchers.Default internally.
+
+    /** Builds a preview icon for [app] from [options] (optionally a specific pack pick). */
+    suspend fun previewIcon(
+        app: PackageInfoStruct,
+        options: GenerationOptions,
+        customIcon: ResourceDrawable? = null
+    ): IconPackDrawable? = appProvider.getIcon(app, options, customIcon)
+
+    /** Applies the modifier from [options] to an already-built icon (e.g. a hand-edited vector). */
+    suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =
+        appProvider.applyModifier(icon, options)
+
+    /** Builds the icon a specific pack provides for [app] by drawable name (watch-apply modal). */
+    suspend fun iconFromPack(
+        app: PackageInfoStruct,
+        packPackage: String,
+        drawableName: String,
+        options: GenerationOptions
+    ): IconPackDrawable? = appProvider.getIconFromPackDrawable(app, packPackage, drawableName, options)
+
+    /** The selectable drawables for the icon-pack dropdown, keyed by display name. */
+    suspend fun iconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
+        appProvider.getIconPackDropdownIcons(application)
+
+    /** Builds a pack's icons for the given [drawables] — used by the icon-pack browser previews. */
+    suspend fun iconPackIcons(
+        iconPackName: String,
+        options: GenerationOptions,
+        drawables: List<ResourceDrawable>
+    ): Map<ResourceDrawable, IconPackDrawable?> =
+        appProvider.getIconPackIcons(iconPackName, options, drawables)
 
     /** Clears every created icon (and persists the empty state). */
     fun clearIcons() {

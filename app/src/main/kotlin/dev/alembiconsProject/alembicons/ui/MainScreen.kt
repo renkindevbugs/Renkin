@@ -243,7 +243,7 @@ fun ApplicationList(
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val pm = LocalContext.current.packageManager
-    val applications = viewModel.appProvider.applicationList
+    val applications = viewModel.applicationList
 
     // Read preferences once for the whole list — a DataStore subscription per row
     // causes visible scroll jank
@@ -262,7 +262,7 @@ fun ApplicationList(
         }
     }
 
-    // Keep the original index — ApplicationItem edits appProvider.applicationList by position.
+    // Keep the original index — ApplicationItem edits the app list by position (via the VM).
     // derivedStateOf so it recomputes when the list's contents change (applicationList is a
     // SnapshotStateList edited in place, so its instance identity never changes) while still
     // caching across unrelated recompositions. Recreated when the sort/filter inputs change.
@@ -289,7 +289,7 @@ fun ApplicationList(
 
     // The app list is loaded off the main thread at startup; show a spinner until
     // it arrives instead of a blank screen that looks frozen
-    if (!viewModel.appProvider.applicationsLoaded && applications.isEmpty()) {
+    if (!viewModel.applicationsLoaded && applications.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             LoadingIndicator(color = MaterialTheme.colorScheme.primary)
         }
@@ -331,7 +331,7 @@ fun ApplicationItem(
     Surface(
         onClick = {
             view.performTapHaptic()
-            if (viewModel.appProvider.iconPackLoaded) {
+            if (viewModel.iconPackLoaded) {
                 openAppOptions = true
             } else {
                 toaster.show(syncWarning)

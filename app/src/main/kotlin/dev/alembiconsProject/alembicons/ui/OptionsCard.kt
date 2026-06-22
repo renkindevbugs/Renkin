@@ -127,7 +127,7 @@ fun OptionsCard(
     // The bar is a diff against the last built pack: blue = already built, green = added
     // since (pending build), red = removed since. builtKeys updates after each build.
     val vm = hiltViewModel<MainViewModel>()
-    val apps = vm.appProvider.applicationList
+    val apps = vm.applicationList
     val builtKeys = vm.builtKeys
     val builtCount = apps.count { it.createdIcon != null && "${it.packageName}/${it.activityName}" in builtKeys }
     val addedCount = apps.count { it.createdIcon != null && "${it.packageName}/${it.activityName}" !in builtKeys }
