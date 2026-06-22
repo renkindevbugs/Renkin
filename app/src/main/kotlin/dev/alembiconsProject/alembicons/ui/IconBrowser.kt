@@ -63,7 +63,10 @@ fun CreateTab(
     iconPacks: List<IconPack>,
     options: GenerationOptions,
     textType: TextType,
-    appName: String,
+    // Hoisted by the dialog so the typed (or cleared) query survives leaving and returning to
+    // this tab; it's seeded with the app name and reset per edit at the dialog level.
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit,
     onIconSelect: (ResourceDrawable, IconPack) -> Unit,
     onTextTypeChange: (TextType) -> Unit,
     onCollapsedChange: (Boolean) -> Unit = {},
@@ -72,8 +75,9 @@ fun CreateTab(
     // can frame it. null = nothing picked yet.
     selectedResourceId: Int? = null
 ) {
-    var searchQuery by rememberSaveable { mutableStateOf(appName) }
-    var debouncedQuery by rememberSaveable { mutableStateOf(appName) }
+    // Seeded from the hoisted query so returning to the tab doesn't trigger a spurious
+    // re-search (debouncedQuery already matches the preserved searchQuery).
+    var debouncedQuery by remember { mutableStateOf(searchQuery) }
     var sortOrder by rememberSaveable { mutableStateOf(IconSortOrder.NAME_ASC) }
     var showSortMenu by remember { mutableStateOf(false) }
     var expandedPack by remember { mutableStateOf<IconPack?>(null) }
@@ -149,7 +153,7 @@ fun CreateTab(
             ) {
                 OutlinedTextField(
                     value = searchQuery,
-                    onValueChange = { searchQuery = it },
+                    onValueChange = { onSearchQueryChange(it) },
                     shape = CircleShape,
                     placeholder = { Text(stringResource(R.string.searchIcons)) },
                     leadingIcon = {
@@ -157,7 +161,7 @@ fun CreateTab(
                     },
                     trailingIcon = {
                         if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
+                            IconButton(onClick = { onSearchQueryChange("") }) {
                                 Icon(Icons.Filled.Close, "Clear", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
