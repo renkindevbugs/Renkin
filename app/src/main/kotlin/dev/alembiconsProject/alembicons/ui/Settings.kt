@@ -37,6 +37,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.data.DARK_MODE_DEFAULT
 import dev.alembiconsProject.alembicons.data.DarkMode
 import dev.alembiconsProject.alembicons.data.DarkModeKey
@@ -50,9 +51,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
     AlertDialog(
-        shape = RoundedCornerShape(20.dp),
-        containerColor = MaterialTheme.colorScheme.background,
-        titleContentColor = MaterialTheme.colorScheme.outline,
+        shape = DialogShape,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.settings)) },
         text = {
