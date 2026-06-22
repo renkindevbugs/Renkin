@@ -36,12 +36,7 @@ class IconPackRepository(private val context: Context) {
     var calendarIconsDrawable: Map<String, Drawable> = emptyMap()
         private set
 
-    private var am: ApplicationManager? = null
-    private val appManager: ApplicationManager
-        get() {
-            if (am == null) am = ApplicationManager(context)
-            return am!!
-        }
+    private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
 
     suspend fun load() = withContext(Dispatchers.Default) {
         iconPackLoaded = false

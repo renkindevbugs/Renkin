@@ -605,37 +605,37 @@ fun SearchBar(
                 )
             }
             DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.sortByName)) },
-                    onClick = { onSortChange(AppSortOrder.NAME); showSortMenu = false },
-                    leadingIcon = if (sortOrder == AppSortOrder.NAME) {
-                        { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.sortByInstallDate)) },
-                    onClick = { onSortChange(AppSortOrder.INSTALL_DATE); showSortMenu = false },
-                    leadingIcon = if (sortOrder == AppSortOrder.INSTALL_DATE) {
-                        { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
+                CheckableDropdownItem(
+                    text = stringResource(R.string.sortByName),
+                    checked = sortOrder == AppSortOrder.NAME
+                ) { onSortChange(AppSortOrder.NAME); showSortMenu = false }
+                CheckableDropdownItem(
+                    text = stringResource(R.string.sortByInstallDate),
+                    checked = sortOrder == AppSortOrder.INSTALL_DATE
+                ) { onSortChange(AppSortOrder.INSTALL_DATE); showSortMenu = false }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.filterAllApps)) },
-                    onClick = { onFilterChange(false); showSortMenu = false },
-                    leadingIcon = if (!filterNoIcon) {
-                        { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.filterWithoutIcon)) },
-                    onClick = { onFilterChange(true); showSortMenu = false },
-                    leadingIcon = if (filterNoIcon) {
-                        { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
+                CheckableDropdownItem(
+                    text = stringResource(R.string.filterAllApps),
+                    checked = !filterNoIcon
+                ) { onFilterChange(false); showSortMenu = false }
+                CheckableDropdownItem(
+                    text = stringResource(R.string.filterWithoutIcon),
+                    checked = filterNoIcon
+                ) { onFilterChange(true); showSortMenu = false }
             }
         }
     }
     }
+}
+
+/** A [DropdownMenuItem] that shows a check mark in the leading slot while [checked]. */
+@Composable
+private fun CheckableDropdownItem(text: String, checked: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(text) },
+        onClick = onClick,
+        leadingIcon = if (checked) {
+            { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
+        } else null
+    )
 }
