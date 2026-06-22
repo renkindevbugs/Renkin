@@ -44,6 +44,10 @@ class WatchViewModel @Inject constructor(
     val rules: StateFlow<List<RuleWithDetails>> =
         repo.rules.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** Number of completed rules — drives the bell badge on the home screen. */
+    val completedCount: StateFlow<Int> =
+        repo.completedCount.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
     /** Epoch-millis of the next scheduled periodic check; null when none is pending. */
     val nextCheckAt: StateFlow<Long?> =
         WatchWorker.nextScheduledCheckFlow(application)

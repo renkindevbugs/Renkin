@@ -9,7 +9,9 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.alembiconsProject.alembicons.apk.ApkUninstaller
 import dev.alembiconsProject.alembicons.apk.ApplicationProvider
+import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
@@ -171,6 +173,26 @@ class MainViewModel @Inject constructor(
     /** Assigns (or clears, when [icon] is null) the created icon for the app at [index]. */
     fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?) {
         appProvider.editApplication(index, app.changeExport(icon))
+    }
+
+    /**
+     * Uninstalls the app's own generated icon pack. Emits a toast event for the outcome
+     * (uninstalled / not installed); the system shows its own uninstall confirmation.
+     */
+    fun deleteIconPack() {
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            val installed = runCatching {
+                context.packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
+            }.isSuccess
+            if (!installed) {
+                _toastEvents.trySend(R.string.iconPackNotInstalled)
+                return@launch
+            }
+            if (ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)) {
+                _toastEvents.trySend(R.string.iconPackUninstalled)
+            }
+        }
     }
 
     /** Re-reads the installed icon packs. */

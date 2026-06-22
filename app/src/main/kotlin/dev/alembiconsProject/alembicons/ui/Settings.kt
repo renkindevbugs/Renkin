@@ -37,8 +37,6 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.R
-import dev.alembiconsProject.alembicons.apk.ApkUninstaller
-import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.data.DARK_MODE_DEFAULT
 import dev.alembiconsProject.alembicons.data.DarkMode
 import dev.alembiconsProject.alembicons.data.DarkModeKey
@@ -164,28 +162,14 @@ fun RefreshApplicationListButton() {
 
 @Composable
 fun DeleteIconPackButton() {
-    val context = getCurrentContext()
-    val scope = rememberCoroutineScope()
-    val toaster = LocalToaster.current
+    val viewModel: MainViewModel = hiltViewModel()
     val view = LocalView.current
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
         onClick = {
             view.performConfirmHaptic()
-            scope.launch {
-                // Don't try (and then falsely report success) when the pack isn't installed
-                val installed = runCatching {
-                    context.packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
-                }.isSuccess
-                if (installed) {
-                    if (ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)) {
-                        toaster.show(context.getString(R.string.iconPackUninstalled))
-                    }
-                } else {
-                    toaster.show(context.getString(R.string.iconPackNotInstalled))
-                }
-            }
+            viewModel.deleteIconPack()
         },
         shape = RoundedCornerShape(16.dp),
         colors = ButtonDefaults.filledTonalButtonColors(
