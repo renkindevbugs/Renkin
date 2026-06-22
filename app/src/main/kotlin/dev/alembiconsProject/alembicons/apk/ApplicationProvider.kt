@@ -48,12 +48,7 @@ class ApplicationProvider(private val context: Context) {
     private val iconPackRepo = IconPackRepository(context)
     private val iconGenService = IconGenerationService(context, iconPackRepo)
 
-    private var am: ApplicationManager? = null
-    private val appManager: ApplicationManager
-        get() {
-            if (am == null) am = ApplicationManager(context)
-            return am!!
-        }
+    private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
 
     suspend fun initialize() {
         initializeApplications()

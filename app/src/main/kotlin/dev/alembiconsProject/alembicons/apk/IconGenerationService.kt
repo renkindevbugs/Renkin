@@ -23,12 +23,7 @@ class IconGenerationService(
     private val context: Context,
     private val iconPackRepo: IconPackRepository
 ) {
-    private var am: ApplicationManager? = null
-    private val appManager: ApplicationManager
-        get() {
-            if (am == null) am = ApplicationManager(context)
-            return am!!
-        }
+    private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
 
     /** Generates one icon from the primary pack only (preview / single-pack lookups). */
     suspend fun getIcon(
