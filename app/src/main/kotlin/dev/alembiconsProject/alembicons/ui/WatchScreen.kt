@@ -475,7 +475,9 @@ private fun ActiveRuleCard(
 ) {
     Surface(
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        // A clear step above the screen background (surfaceContainerLow) so the card's bounds
+        // are visible; inner pills go one step higher again to stay distinct.
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp)) {
@@ -572,7 +574,8 @@ private fun CompletedRuleCard(
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        // Same fill as the active card so both rule states read as one consistent card style.
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp)) {
@@ -660,7 +663,7 @@ private fun DoneBadge() {
 private fun AppPill(app: PackageInfoStruct?, fallbackPackage: String) {
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -683,7 +686,7 @@ private fun AppPill(app: PackageInfoStruct?, fallbackPackage: String) {
 private fun PackLabel(packPackage: String, name: String?) {
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
