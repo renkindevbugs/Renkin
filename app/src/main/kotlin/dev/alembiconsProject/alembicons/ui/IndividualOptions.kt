@@ -185,14 +185,14 @@ fun OptionsDialog(
         generatingPreview = true
         currentIcon = when {
             // Explicit pick from a pack
-            custom != null -> viewModel.appProvider.getIcon(app, generatingOptions, custom)
+            custom != null -> viewModel.previewIcon(app, generatingOptions, custom)
             // Icon-pack source with no new pick: apply the modifier to the already
             // saved icon rather than pulling a fresh one from the first pack (which
             // would swap the icon out from under the user). Null until a tap if none.
             generatingOptions.primarySource == Source.ICON_PACK ->
-                app.createdIcon?.let { viewModel.appProvider.applyModifier(it, generatingOptions) }
+                app.createdIcon?.let { viewModel.applyModifier(it, generatingOptions) }
             // Text / app-icon sources generate from the source itself
-            else -> viewModel.appProvider.getIcon(app, generatingOptions, null)
+            else -> viewModel.previewIcon(app, generatingOptions, null)
         }
         generatingPreview = false
     }
@@ -210,7 +210,7 @@ fun OptionsDialog(
             generatingOptions.primaryImageEdit == ImageEdit.NONE && generatingOptions.iconScale == 1f -> base
             else -> {
                 generatingPreview = true
-                val result = viewModel.appProvider.applyModifier(base, generatingOptions)
+                val result = viewModel.applyModifier(base, generatingOptions)
                 generatingPreview = false
                 result
             }
@@ -222,7 +222,7 @@ fun OptionsDialog(
     LaunchedEffect(uploadBase, generatingOptions) {
         val base = uploadBase
         uploadIcon = if (base == null) null
-            else viewModel.appProvider.applyModifier(base, generatingOptions)
+            else viewModel.applyModifier(base, generatingOptions)
     }
 
     // The previewed/confirmed icon follows whichever source produced it, not the

@@ -146,7 +146,7 @@ fun IconPackDropdown(
     var selectedOption by remember { mutableStateOf(defaultPack ?: emptyPack) }
 
     LaunchedEffect(Unit) {
-        icons = viewModel.appProvider.getIconPackDropdownIcons(application)
+        icons = viewModel.iconPackDropdownIcons(application)
     }
 
     ExposedDropdownMenuBox(

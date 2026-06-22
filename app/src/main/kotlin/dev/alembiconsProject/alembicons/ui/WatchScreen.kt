@@ -92,8 +92,8 @@ fun WatchScreen(onDismiss: () -> Unit) {
     val watchViewModel: WatchViewModel = hiltViewModel()
 
     val rules by watchViewModel.rules.collectAsState()
-    val apps = viewModel.appProvider.applicationList
-    val packs = viewModel.appProvider.iconPacks
+    val apps = viewModel.applicationList
+    val packs = viewModel.iconPacks
 
     // Icon-watch is the only feature that posts notifications now, so ask for the permission
     // here (it used to be requested by the removed package-added setting).
