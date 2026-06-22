@@ -52,6 +52,14 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
+        // Instantiate the view model now, on the main thread, before setContent. This forces
+        // its ApplicationProvider — and the Compose snapshot state that provider holds
+        // (iconPacks, applicationsLoaded, …) — to be created in the global snapshot. If the
+        // first touch instead happened while reading viewModel.iconPacks during the initial
+        // composition, Compose throws "Reading a state that was created after the snapshot
+        // was taken or in a snapshot that has not yet been applied".
+        viewModel
+
         // Landscape is only allowed on large screens (sw >= 600dp). Phones and
         // folded foldables stay locked to portrait.
         requestedOrientation = if (resources.getBoolean(R.bool.allowLandscape)) {
