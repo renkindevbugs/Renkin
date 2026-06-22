@@ -41,6 +41,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.alembiconsProject.alembicons.IconPreviewBuilder
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
@@ -81,7 +82,7 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 
 /** The source that produced the icon currently being previewed and confirmed. */
-private enum class IconOrigin { CREATE, UPLOAD, VECTOR }
+internal enum class IconOrigin { CREATE, UPLOAD, VECTOR }
 
 /**
  * Holds the draft icon being built in the options dialog and the logic that (re)generates
@@ -91,7 +92,7 @@ private enum class IconOrigin { CREATE, UPLOAD, VECTOR }
  * / [generating] back out, instead of carrying a dozen loose `remember`s plus the generation
  * effects inline.
  */
-private class IconDraftState(initialIcon: IconPackDrawable?) {
+internal class IconDraftState(initialIcon: IconPackDrawable?) {
     // Icon from the Create tab (pack pick / text / app-icon source). Starts as the icon the
     // app already has so it stays visible (e.g. when only the modifier is being changed).
     var createIcon by mutableStateOf(initialIcon)
@@ -132,7 +133,7 @@ private class IconDraftState(initialIcon: IconPackDrawable?) {
 
     /** Rebuilds the Create-tab icon for [options] (and an optional explicit pack pick). */
     suspend fun regenerateCreate(
-        viewModel: MainViewModel,
+        builder: IconPreviewBuilder,
         app: PackageInfoStruct,
         options: GenerationOptions,
         customIconList: List<ResourceDrawable>
@@ -147,20 +148,20 @@ private class IconDraftState(initialIcon: IconPackDrawable?) {
         generating = true
         createIcon = when {
             // Explicit pick from a pack
-            custom != null -> viewModel.previewIcon(app, options, custom)
+            custom != null -> builder.previewIcon(app, options, custom)
             // Icon-pack source with no new pick: apply the modifier to the already saved icon
             // rather than pulling a fresh one from the first pack (which would swap the icon
             // out from under the user). Null until a tap if none.
             options.primarySource == Source.ICON_PACK ->
-                app.createdIcon?.let { viewModel.applyModifier(it, options) }
+                app.createdIcon?.let { builder.applyModifier(it, options) }
             // Text / app-icon sources generate from the source itself
-            else -> viewModel.previewIcon(app, options, null)
+            else -> builder.previewIcon(app, options, null)
         }
         generating = false
     }
 
     /** Reapplies the shared modifier to the hand-edited vector (it isn't built from a source). */
-    suspend fun regenerateVector(viewModel: MainViewModel, options: GenerationOptions) {
+    suspend fun regenerateVector(builder: IconPreviewBuilder, options: GenerationOptions) {
         val base = vectorIcon
         modifiedVector = when {
             base == null -> null
@@ -169,7 +170,7 @@ private class IconDraftState(initialIcon: IconPackDrawable?) {
             options.primaryImageEdit == ImageEdit.NONE && options.iconScale == 1f -> base
             else -> {
                 generating = true
-                val result = viewModel.applyModifier(base, options)
+                val result = builder.applyModifier(base, options)
                 generating = false
                 result
             }
@@ -177,9 +178,9 @@ private class IconDraftState(initialIcon: IconPackDrawable?) {
     }
 
     /** Reapplies the shared modifier (edit / color / scale) to the uploaded image. */
-    suspend fun regenerateUpload(viewModel: MainViewModel, options: GenerationOptions) {
+    suspend fun regenerateUpload(builder: IconPreviewBuilder, options: GenerationOptions) {
         val base = uploadBase
-        uploadIcon = if (base == null) null else viewModel.applyModifier(base, options)
+        uploadIcon = if (base == null) null else builder.applyModifier(base, options)
     }
 }
 

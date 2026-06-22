@@ -29,11 +29,26 @@ import javax.inject.Inject
  * @Singleton), so the loaded app list / icon packs survive configuration changes such as
  * rotation instead of being re-loaded on every Activity recreation.
  */
+/**
+ * The icon-building operations the per-app options dialog's `IconDraftState` needs.
+ * [MainViewModel] implements it; a test can supply a fake, so the draft/generation logic is
+ * unit-testable without a real view model or Android.
+ */
+interface IconPreviewBuilder {
+    suspend fun previewIcon(
+        app: PackageInfoStruct,
+        options: GenerationOptions,
+        customIcon: ResourceDrawable?
+    ): IconPackDrawable?
+
+    suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable
+}
+
 @HiltViewModel
 class MainViewModel @Inject constructor(
     application: Application,
     private val appProvider: ApplicationProvider
-) : AndroidViewModel(application) {
+) : AndroidViewModel(application), IconPreviewBuilder {
 
     // ---- Model state exposed to the UI (read-only) -------------------------------
     // The UI observes these instead of reaching through to ApplicationProvider, so the
@@ -179,14 +194,14 @@ class MainViewModel @Inject constructor(
     // committing it goes through applyIcon. Each hops to Dispatchers.Default internally.
 
     /** Builds a preview icon for [app] from [options] (optionally a specific pack pick). */
-    suspend fun previewIcon(
+    override suspend fun previewIcon(
         app: PackageInfoStruct,
         options: GenerationOptions,
-        customIcon: ResourceDrawable? = null
+        customIcon: ResourceDrawable?
     ): IconPackDrawable? = appProvider.getIcon(app, options, customIcon)
 
     /** Applies the modifier from [options] to an already-built icon (e.g. a hand-edited vector). */
-    suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =
+    override suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =
         appProvider.applyModifier(icon, options)
 
     /** Builds the icon a specific pack provides for [app] by drawable name (watch-apply modal). */
