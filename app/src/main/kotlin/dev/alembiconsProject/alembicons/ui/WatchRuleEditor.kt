@@ -61,6 +61,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.theme.FieldShape
 import dev.alembiconsProject.alembicons.data.IconPack
@@ -68,8 +70,6 @@ import dev.alembiconsProject.alembicons.data.watch.AppComponent
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -93,19 +93,11 @@ internal fun WatchRuleEditor(
     var filterNoIcon by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
 
-    val context = getCurrentContext()
-    // Reading first-install time hits PackageManager once per app; doing it for every
-    // app on the main thread was what made the editor take ~1s to open. Compute it off
-    // the main thread instead — until it arrives, INSTALL_DATE sort just shows the
-    // default order. (Times don't change at runtime, so this runs once per app set.)
+    val viewModel: MainViewModel = hiltViewModel()
+    // Looked up off the main thread via the view model (this was what made the editor take ~1s
+    // to open). Until they arrive, INSTALL_DATE sort just shows the default order.
     val installTimes by produceState(emptyMap<String, Long>(), apps) {
-        value = withContext(Dispatchers.IO) {
-            apps.associate { app ->
-                app.packageName to runCatching {
-                    context.packageManager.getPackageInfo(app.packageName, 0).firstInstallTime
-                }.getOrDefault(0L)
-            }
-        }
+        value = viewModel.installTimes(apps.map { it.packageName })
     }
 
     val sortedPacks = remember(packs) { packs.sortedBy { it.applicationName.lowercase() } }

@@ -52,6 +52,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -238,7 +239,6 @@ fun ApplicationList(
     listState: LazyListState = rememberLazyListState()
 ) {
     val viewModel: MainViewModel = hiltViewModel()
-    val pm = LocalContext.current.packageManager
     val applications = viewModel.applicationList
 
     // Read preferences once for the whole list — a DataStore subscription per row
@@ -247,15 +247,11 @@ fun ApplicationList(
     val bgColorValue = prefs.getColorValue(BackgroundColorKey, prefs.getDefaultBackgroundColor())
     val themed = prefs.getBooleanValue(ExportThemedKey)
 
-    // Install times do not change while the app runs; refresh only when the list grows/shrinks
-    val installTimes = remember(applications.size) {
-        applications.associate { app ->
-            app.packageName to try {
-                pm.getPackageInfo(app.packageName, 0).firstInstallTime
-            } catch (_: Exception) {
-                0L
-            }
-        }
+    // Install times do not change while the app runs; refresh only when the list grows/shrinks.
+    // Looked up off the main thread via the view model — until they arrive, INSTALL_DATE sort
+    // just shows the default order.
+    val installTimes by produceState(emptyMap<String, Long>(), applications.size) {
+        value = viewModel.installTimes(applications.map { it.packageName })
     }
 
     // Keep the original index — ApplicationItem edits the app list by position (via the VM).
