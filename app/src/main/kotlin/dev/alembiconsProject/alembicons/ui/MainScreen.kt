@@ -95,6 +95,49 @@ import kotlinx.coroutines.launch
 enum class AppSortOrder { NAME, INSTALL_DATE }
 
 /**
+ * Shared app sort/filter overflow: a sort icon button opening a menu with the two sort orders
+ * (name / recently installed) and the all-vs-without-icon filter. Used by the home app list and
+ * the watch-rule app picker so both look and behave identically.
+ */
+@Composable
+fun AppSortFilterMenu(
+    sortOrder: AppSortOrder,
+    filterNoIcon: Boolean,
+    onSortChange: (AppSortOrder) -> Unit,
+    onFilterChange: (Boolean) -> Unit
+) {
+    var showSortMenu by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { showSortMenu = true }) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Sort,
+                contentDescription = stringResource(R.string.sortApps),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+        DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+            CheckableDropdownItem(
+                text = stringResource(R.string.sortByName),
+                checked = sortOrder == AppSortOrder.NAME
+            ) { onSortChange(AppSortOrder.NAME); showSortMenu = false }
+            CheckableDropdownItem(
+                text = stringResource(R.string.sortByInstallDate),
+                checked = sortOrder == AppSortOrder.INSTALL_DATE
+            ) { onSortChange(AppSortOrder.INSTALL_DATE); showSortMenu = false }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            CheckableDropdownItem(
+                text = stringResource(R.string.filterAllApps),
+                checked = !filterNoIcon
+            ) { onFilterChange(false); showSortMenu = false }
+            CheckableDropdownItem(
+                text = stringResource(R.string.filterWithoutIcon),
+                checked = filterNoIcon
+            ) { onFilterChange(true); showSortMenu = false }
+        }
+    }
+}
+
+/**
  * True while the list is scrolling up (or sitting at the top). Used to expand the
  * build FAB on scroll-up and collapse it to an icon on scroll-down.
  */
@@ -540,7 +583,6 @@ fun SearchBar(
     onSearch: (String) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
-    var showSortMenu by remember { mutableStateOf(false) }
 
     // Back clears the query first; only once it's empty does back fall through to
     // the exit handler above (the keyboard, if open, is dismissed by the system first)
@@ -562,34 +604,7 @@ fun SearchBar(
             },
             modifier = Modifier.weight(1f)
         )
-        Box {
-            IconButton(onClick = { showSortMenu = true }) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Sort,
-                    contentDescription = stringResource(R.string.sortApps),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-            DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                CheckableDropdownItem(
-                    text = stringResource(R.string.sortByName),
-                    checked = sortOrder == AppSortOrder.NAME
-                ) { onSortChange(AppSortOrder.NAME); showSortMenu = false }
-                CheckableDropdownItem(
-                    text = stringResource(R.string.sortByInstallDate),
-                    checked = sortOrder == AppSortOrder.INSTALL_DATE
-                ) { onSortChange(AppSortOrder.INSTALL_DATE); showSortMenu = false }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                CheckableDropdownItem(
-                    text = stringResource(R.string.filterAllApps),
-                    checked = !filterNoIcon
-                ) { onFilterChange(false); showSortMenu = false }
-                CheckableDropdownItem(
-                    text = stringResource(R.string.filterWithoutIcon),
-                    checked = filterNoIcon
-                ) { onFilterChange(true); showSortMenu = false }
-            }
-        }
+        AppSortFilterMenu(sortOrder, filterNoIcon, onSortChange, onFilterChange)
     }
     }
 }
