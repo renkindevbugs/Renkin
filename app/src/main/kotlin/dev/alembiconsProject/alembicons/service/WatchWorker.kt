@@ -23,10 +23,10 @@ import kotlinx.coroutines.flow.map
 import java.util.concurrent.TimeUnit
 
 /**
- * Runs the icon-watch check off the main thread. Triggered two ways:
- *  - a periodic [schedulePeriodic] job — the reliable safety net (24h by default,
- *    battery-friendly, and cheap because [WatchChecker] is version-gated), and
- *  - an immediate [runNow] enqueued by [PackageAddedReceiver] when a pack is replaced.
+ * Runs the icon-watch check off the main thread on a periodic [schedulePeriodic] job — the
+ * watch trigger (24h by default, battery-friendly, and cheap because [WatchChecker] is
+ * version-gated, so a run does almost nothing unless a pack actually changed). [runNow]
+ * enqueues an immediate one-off check, used by the debug "simulate" action.
  *
  * Each fired suggestion posts an "icon available" notification and updates the DB
  * (a completed rule + bell badge).
@@ -103,7 +103,7 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
                 .enqueueUniquePeriodicWork(PERIODIC_NAME, policy, request)
         }
 
-        /** Fast-path check right after a pack was replaced. */
+        /** Enqueues an immediate one-off check (used by the debug "simulate" action). */
         fun runNow(context: Context) {
             val request = OneTimeWorkRequestBuilder<WatchWorker>().build()
             WorkManager.getInstance(context)
