@@ -14,34 +14,41 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 
-// Shared low-level icon/bitmap rendering used across the watch list, editor and apply modal.
+// Shared low-level icon/bitmap rendering, reused anywhere an app or icon-pack icon is shown
+// (the app list, watch list/editor/apply modal, the about dialog, …). Decoding once here —
+// downscaled to the on-screen size — keeps icon-heavy lists cheap and off the main thread.
 
+/**
+ * The app's launcher icon as an [ImageBitmap], decoded to [size] (never upscaled past the
+ * icon's own resolution) so lists of icons stay light. Re-decoded when the app's created
+ * icon changes ([PackageInfoStruct.internalVersion]).
+ */
 @Composable
-internal fun rememberAppBitmap(app: PackageInfoStruct): ImageBitmap? {
-    // Tiles show the icon at 54.dp; render at that size instead of full native
-    // resolution so a gridful of icons is cheap to build (and light on memory).
+internal fun rememberAppBitmap(app: PackageInfoStruct, size: Dp = 54.dp): ImageBitmap? {
     val density = LocalDensity.current
-    return remember(app.packageName, app.internalVersion, density) {
-        val target = with(density) { 54.dp.roundToPx() }
-        val size = app.icon.intrinsicWidth.let { if (it in 1 until target) it else target }
-        app.icon.toSafeBitmapOrNull(size, size)?.asImageBitmap()
+    return remember(app.packageName, app.internalVersion, density, size) {
+        val target = with(density) { size.roundToPx() }
+        val px = app.icon.intrinsicWidth.let { if (it in 1 until target) it else target }
+        app.icon.toSafeBitmapOrNull(px, px)?.asImageBitmap()
     }
 }
 
+/** A package's launcher icon as an [ImageBitmap], decoded to [size]. Null if the package is gone. */
 @Composable
-internal fun rememberPackBitmap(packPackage: String): ImageBitmap? {
+internal fun rememberPackBitmap(packPackage: String, size: Dp = 54.dp): ImageBitmap? {
     val context = getCurrentContext()
     val density = LocalDensity.current
-    return remember(packPackage, density) {
+    return remember(packPackage, density, size) {
         try {
             val drawable = context.packageManager.getApplicationIcon(packPackage)
-            val target = with(density) { 54.dp.roundToPx() }
-            val size = drawable.intrinsicWidth.let { if (it in 1 until target) it else target }
-            drawable.toSafeBitmapOrNull(size, size)?.asImageBitmap()
+            val target = with(density) { size.roundToPx() }
+            val px = drawable.intrinsicWidth.let { if (it in 1 until target) it else target }
+            drawable.toSafeBitmapOrNull(px, px)?.asImageBitmap()
         } catch (_: Exception) {
             null
         }

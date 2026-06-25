@@ -29,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -40,19 +39,12 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.theme.DialogShape
-import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 
 @Composable
 fun InfoDialog(onDismiss: () -> Unit) {
-    // The launcher icon is an adaptive (XML) icon, which painterResource can't load,
-    // so render it via PackageManager -> bitmap instead.
-    val context = LocalContext.current
-    val appIcon = remember {
-        runCatching {
-            context.packageManager.getApplicationIcon(context.packageName)
-                .toSafeBitmapOrNull()?.asImageBitmap()
-        }.getOrNull()
-    }
+    // The launcher icon is an adaptive (XML) icon, which painterResource can't load, so the
+    // shared helper renders it via PackageManager -> bitmap instead.
+    val appIcon = rememberPackBitmap(LocalContext.current.packageName, 56.dp)
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = DialogShape,
