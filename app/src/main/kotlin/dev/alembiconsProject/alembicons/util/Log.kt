@@ -11,6 +11,10 @@ open class Log {
             androidLog.d(tag, message)
         }
 
+        fun error(tag: String, message: String, throwable: Throwable? = null) {
+            androidLog.e(tag, message, throwable)
+        }
+
         fun duration(code: () -> Unit) {
             val perf = startDuration()
             code()
