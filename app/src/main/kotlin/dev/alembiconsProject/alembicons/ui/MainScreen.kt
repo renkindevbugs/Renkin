@@ -21,13 +21,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.AlertDialog
@@ -36,14 +33,12 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -66,7 +61,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -77,6 +71,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.data.AppFilterNoIconKey
 import dev.alembiconsProject.alembicons.data.AppSortOrderKey
 import dev.alembiconsProject.alembicons.data.BackgroundColorKey
@@ -89,10 +85,9 @@ import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
-import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
-import androidx.compose.ui.platform.LocalDensity
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
+import dev.alembiconsProject.alembicons.WatchViewModel
 import kotlinx.coroutines.launch
 
 enum class AppSortOrder { NAME, INSTALL_DATE }
@@ -218,7 +213,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
 @Composable
 fun NewIconPackDialog(packLabel: String, onReload: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(
-        shape = RoundedCornerShape(28.dp),
+        shape = DialogShape,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.newIconPackTitle)) },
@@ -243,7 +238,7 @@ fun ApplicationList(
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val pm = LocalContext.current.packageManager
-    val applications = viewModel.appProvider.applicationList
+    val applications = viewModel.applicationList
 
     // Read preferences once for the whole list — a DataStore subscription per row
     // causes visible scroll jank
@@ -262,7 +257,7 @@ fun ApplicationList(
         }
     }
 
-    // Keep the original index — ApplicationItem edits appProvider.applicationList by position.
+    // Keep the original index — ApplicationItem edits the app list by position (via the VM).
     // derivedStateOf so it recomputes when the list's contents change (applicationList is a
     // SnapshotStateList edited in place, so its instance identity never changes) while still
     // caching across unrelated recompositions. Recreated when the sort/filter inputs change.
@@ -289,7 +284,7 @@ fun ApplicationList(
 
     // The app list is loaded off the main thread at startup; show a spinner until
     // it arrives instead of a blank screen that looks frozen
-    if (!viewModel.appProvider.applicationsLoaded && applications.isEmpty()) {
+    if (!viewModel.applicationsLoaded && applications.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             LoadingIndicator(color = MaterialTheme.colorScheme.primary)
         }
@@ -331,13 +326,13 @@ fun ApplicationItem(
     Surface(
         onClick = {
             view.performTapHaptic()
-            if (viewModel.appProvider.iconPackLoaded) {
+            if (viewModel.iconPackLoaded) {
                 openAppOptions = true
             } else {
                 toaster.show(syncWarning)
             }
         },
-        shape = RoundedCornerShape(20.dp),
+        shape = CardShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = modifier
             .fillMaxWidth()
@@ -350,18 +345,12 @@ fun ApplicationItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Converting the drawable is not free — cache it, and render at the on-screen
-            // size (56.dp) rather than full native resolution so scrolling new rows into
-            // view doesn't decode oversized bitmaps on the main thread (scroll jank).
-            val density = LocalDensity.current
-            val bitmap = remember(app.icon, density) {
-                val target = with(density) { 56.dp.roundToPx() }
-                val size = app.icon.intrinsicWidth.let { if (it in 1 until target) it else target }
-                app.icon.toSafeBitmapOrNull(size, size)
-            }
+            // Decoded once at the on-screen size (56.dp) by the shared helper, so scrolling
+            // new rows in doesn't decode oversized bitmaps on the main thread (scroll jank).
+            val bitmap = rememberAppBitmap(app, 56.dp)
             if (bitmap != null) {
                 Image(
-                    painter = BitmapPainter(bitmap.asImageBitmap()),
+                    painter = BitmapPainter(bitmap),
                     contentDescription = null,
                     modifier = Modifier
                         .size(56.dp)
@@ -410,7 +399,7 @@ fun ApplicationItem(
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Filled.Edit,
-                                    contentDescription = "Edit",
+                                    contentDescription = stringResource(R.string.edit),
                                     tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -464,7 +453,7 @@ fun RefreshButton() {
     }) {
         Icon(
             imageVector = Icons.Filled.Refresh,
-            contentDescription = "Refresh icons",
+            contentDescription = stringResource(R.string.refreshIcons),
             tint = MaterialTheme.colorScheme.primary
         )
     }
@@ -476,13 +465,12 @@ fun TitleBar(
     scrollBehavior: TopAppBarScrollBehavior? = null
 ) {
     val prefs = getPreferences()
-    val context = getCurrentContext()
     var openSettings by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
     var openWatch by rememberSaveable { mutableStateOf(false) }
 
-    val watchRepo = remember { dev.alembiconsProject.alembicons.data.watch.WatchRepository(context) }
-    val completedCount by watchRepo.completedCount.collectAsState(initial = 0)
+    val watchViewModel: WatchViewModel = hiltViewModel()
+    val completedCount by watchViewModel.completedCount.collectAsState()
 
     LargeFlexibleTopAppBar(
         scrollBehavior = scrollBehavior,
@@ -512,14 +500,14 @@ fun TitleBar(
             IconButton(onClick = { openInfo = true }) {
                 Icon(
                     imageVector = Icons.Filled.Info,
-                    contentDescription = "Info",
+                    contentDescription = stringResource(R.string.info),
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
             IconButton(onClick = { openSettings = true }) {
                 Icon(
                     imageVector = Icons.Filled.Settings,
-                    contentDescription = "Settings",
+                    contentDescription = stringResource(R.string.settings),
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -569,33 +557,14 @@ fun SearchBar(
         .fillMaxWidth()
         .padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(value = text,
+        SearchField(
+            value = text,
             onValueChange = {
                 text = it
                 onSearch(it)
             },
-            shape = CircleShape,
-            singleLine = true,
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )},
-            trailingIcon = {
-                if (text.isNotEmpty()) {
-                    IconButton(onClick = {
-                        text = ""
-                        onSearch(text)
-                    }) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "Clear",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }},
-            modifier = Modifier.weight(1f))
+            modifier = Modifier.weight(1f)
+        )
         Box {
             IconButton(onClick = { showSortMenu = true }) {
                 Icon(
@@ -605,37 +574,26 @@ fun SearchBar(
                 )
             }
             DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.sortByName)) },
-                    onClick = { onSortChange(AppSortOrder.NAME); showSortMenu = false },
-                    leadingIcon = if (sortOrder == AppSortOrder.NAME) {
-                        { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.sortByInstallDate)) },
-                    onClick = { onSortChange(AppSortOrder.INSTALL_DATE); showSortMenu = false },
-                    leadingIcon = if (sortOrder == AppSortOrder.INSTALL_DATE) {
-                        { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
+                CheckableDropdownItem(
+                    text = stringResource(R.string.sortByName),
+                    checked = sortOrder == AppSortOrder.NAME
+                ) { onSortChange(AppSortOrder.NAME); showSortMenu = false }
+                CheckableDropdownItem(
+                    text = stringResource(R.string.sortByInstallDate),
+                    checked = sortOrder == AppSortOrder.INSTALL_DATE
+                ) { onSortChange(AppSortOrder.INSTALL_DATE); showSortMenu = false }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.filterAllApps)) },
-                    onClick = { onFilterChange(false); showSortMenu = false },
-                    leadingIcon = if (!filterNoIcon) {
-                        { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.filterWithoutIcon)) },
-                    onClick = { onFilterChange(true); showSortMenu = false },
-                    leadingIcon = if (filterNoIcon) {
-                        { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
+                CheckableDropdownItem(
+                    text = stringResource(R.string.filterAllApps),
+                    checked = !filterNoIcon
+                ) { onFilterChange(false); showSortMenu = false }
+                CheckableDropdownItem(
+                    text = stringResource(R.string.filterWithoutIcon),
+                    checked = filterNoIcon
+                ) { onFilterChange(true); showSortMenu = false }
             }
         }
     }
     }
 }
+

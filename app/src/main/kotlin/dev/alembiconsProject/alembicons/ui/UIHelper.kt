@@ -11,6 +11,17 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -20,9 +31,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.MainActivity
+import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.dataStore
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
@@ -111,6 +124,54 @@ class Toaster {
 /** The active [Toaster], provided at the root by MainActivity. */
 val LocalToaster = staticCompositionLocalOf<Toaster> {
     error("LocalToaster not provided")
+}
+
+/**
+ * Shared rounded search field: a search leading icon plus a clear (×) trailing button that
+ * appears once there is text. Used by the app list and the icon browser so both look and
+ * behave identically; the sort/filter menu beside it stays at the call site since it differs.
+ */
+@Composable
+fun SearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        shape = CircleShape,
+        singleLine = true,
+        placeholder = placeholder?.let { { Text(it) } },
+        leadingIcon = {
+            Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+        },
+        trailingIcon = {
+            if (value.isNotEmpty()) {
+                IconButton(onClick = { onValueChange("") }) {
+                    Icon(
+                        Icons.Filled.Close,
+                        stringResource(R.string.clear),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        modifier = modifier
+    )
+}
+
+/** A [DropdownMenuItem] that shows a check mark in the leading slot while [checked]. */
+@Composable
+fun CheckableDropdownItem(text: String, checked: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(text) },
+        onClick = onClick,
+        leadingIcon = if (checked) {
+            { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
+        } else null
+    )
 }
 
 /**

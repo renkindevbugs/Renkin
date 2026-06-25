@@ -9,12 +9,19 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.alembiconsProject.alembicons.apk.ApkUninstaller
 import dev.alembiconsProject.alembicons.apk.ApplicationProvider
+import dev.alembiconsProject.alembicons.apk.IconPackBuilder
+import dev.alembiconsProject.alembicons.data.IconPack
+import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
 import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.data.isSystemInDarkTheme
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
+import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
+import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
+import dev.alembiconsProject.alembicons.ui.PackRowPreviews
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -25,11 +32,46 @@ import javax.inject.Inject
  * @Singleton), so the loaded app list / icon packs survive configuration changes such as
  * rotation instead of being re-loaded on every Activity recreation.
  */
+/**
+ * The icon-building operations the per-app options dialog's `IconDraftState` needs.
+ * [MainViewModel] implements it; a test can supply a fake, so the draft/generation logic is
+ * unit-testable without a real view model or Android.
+ */
+interface IconPreviewBuilder {
+    suspend fun previewIcon(
+        app: PackageInfoStruct,
+        options: GenerationOptions,
+        customIcon: ResourceDrawable?
+    ): IconPackDrawable?
+
+    suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable
+}
+
+// Roughly 30 preview bitmaps per row at ~96px ≈ 1 MB; 24 rows caps the browser cache near 25 MB.
+private const val PACK_ROW_PREVIEW_CACHE_MAX = 24
+
 @HiltViewModel
 class MainViewModel @Inject constructor(
     application: Application,
-    val appProvider: ApplicationProvider
-) : AndroidViewModel(application) {
+    private val appProvider: ApplicationProvider
+) : AndroidViewModel(application), IconPreviewBuilder {
+
+    // ---- Model state exposed to the UI (read-only) -------------------------------
+    // The UI observes these instead of reaching through to ApplicationProvider, so the
+    // view model stays the single point of contact with the model layer. Each is backed
+    // by Compose state in the provider/repository, so reads in composition stay reactive.
+
+    /** The loaded apps, each with its current (created) icon. Edited via [applyIcon]. */
+    val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
+
+    /** The installed icon packs available as icon sources. */
+    val iconPacks: List<IconPack> get() = appProvider.iconPacks
+
+    /** True once the icon packs have finished loading. */
+    val iconPackLoaded: Boolean get() = appProvider.iconPackLoaded
+
+    /** True once the app list has finished loading. */
+    val applicationsLoaded: Boolean get() = appProvider.applicationsLoaded
 
     // Keys ("package/activity") of the apps already in the last built/saved pack.
     // An app with an icon whose key is NOT here is "added" (pending build); a key here
@@ -137,6 +179,26 @@ class MainViewModel @Inject constructor(
         appProvider.editApplication(index, app.changeExport(icon))
     }
 
+    /**
+     * Uninstalls the app's own generated icon pack. Emits a toast event for the outcome
+     * (uninstalled / not installed); the system shows its own uninstall confirmation.
+     */
+    fun deleteIconPack() {
+        viewModelScope.launch {
+            val context = getApplication<Application>()
+            val installed = runCatching {
+                context.packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
+            }.isSuccess
+            if (!installed) {
+                _toastEvents.trySend(R.string.iconPackNotInstalled)
+                return@launch
+            }
+            if (ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)) {
+                _toastEvents.trySend(R.string.iconPackUninstalled)
+            }
+        }
+    }
+
     /** Re-reads the installed icon packs. */
     fun sync() {
         viewModelScope.launch {
@@ -151,6 +213,62 @@ class MainViewModel @Inject constructor(
             appProvider.initialize()
             _toastEvents.trySend(R.string.appListRefreshed)
         }
+    }
+
+    // ---- Icon preview (used by the per-app options / watch-apply dialogs) ---------
+    // Pure builders with no side effects: they return an icon for the dialog to preview;
+    // committing it goes through applyIcon. Each hops to Dispatchers.Default internally.
+
+    /** Builds a preview icon for [app] from [options] (optionally a specific pack pick). */
+    override suspend fun previewIcon(
+        app: PackageInfoStruct,
+        options: GenerationOptions,
+        customIcon: ResourceDrawable?
+    ): IconPackDrawable? = appProvider.getIcon(app, options, customIcon)
+
+    /** Applies the modifier from [options] to an already-built icon (e.g. a hand-edited vector). */
+    override suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =
+        appProvider.applyModifier(icon, options)
+
+    /** Builds the icon a specific pack provides for [app] by drawable name (watch-apply modal). */
+    suspend fun iconFromPack(
+        app: PackageInfoStruct,
+        packPackage: String,
+        drawableName: String,
+        options: GenerationOptions
+    ): IconPackDrawable? = appProvider.getIconFromPackDrawable(app, packPackage, drawableName, options)
+
+    /** The selectable drawables for the icon-pack dropdown, keyed by display name. */
+    suspend fun iconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
+        appProvider.getIconPackDropdownIcons(application)
+
+    /** Builds a pack's icons for the given [drawables] — used by the icon-pack browser previews. */
+    suspend fun iconPackIcons(
+        iconPackName: String,
+        options: GenerationOptions,
+        drawables: List<ResourceDrawable>
+    ): Map<ResourceDrawable, IconPackDrawable?> =
+        appProvider.getIconPackIcons(iconPackName, options, drawables)
+
+    // ---- Icon-pack browser preview cache ----------------------------------------------
+    // Generating a pack row's preview bitmaps is expensive. Without a cache each row regenerated
+    // them every time it scrolled back into view (a LazyColumn discards off-screen items, taking
+    // their remembered state with them) — that's the loading flicker seen while scrolling the
+    // multi-pack browser. The cache lives on the view model so it also survives reopening the
+    // dialog and rotation. Keyed by pack + sort + query + options so a different filter/option set
+    // gets a fresh entry; an LRU bound keeps memory sane. Touched only from the main thread.
+    private val packRowPreviewCache =
+        object : LinkedHashMap<String, PackRowPreviews>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PackRowPreviews>?) =
+                size > PACK_ROW_PREVIEW_CACHE_MAX
+        }
+
+    /** Cached preview bitmaps for an icon-pack browser row, or null if not generated yet. */
+    fun cachedPackRow(key: String): PackRowPreviews? = packRowPreviewCache[key]
+
+    /** Stores generated [previews] for an icon-pack browser row so scrolling back is instant. */
+    fun cachePackRow(key: String, previews: PackRowPreviews) {
+        packRowPreviewCache[key] = previews
     }
 
     /** Clears every created icon (and persists the empty state). */

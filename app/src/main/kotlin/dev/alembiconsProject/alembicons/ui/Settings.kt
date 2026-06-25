@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -37,8 +36,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.R
-import dev.alembiconsProject.alembicons.apk.ApkUninstaller
-import dev.alembiconsProject.alembicons.apk.IconPackBuilder
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
+import dev.alembiconsProject.alembicons.ui.theme.FieldShape
 import dev.alembiconsProject.alembicons.data.DARK_MODE_DEFAULT
 import dev.alembiconsProject.alembicons.data.DarkMode
 import dev.alembiconsProject.alembicons.data.DarkModeKey
@@ -52,9 +51,8 @@ import kotlinx.coroutines.launch
 @Composable
 fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
     AlertDialog(
-        shape = RoundedCornerShape(20.dp),
-        containerColor = MaterialTheme.colorScheme.background,
-        titleContentColor = MaterialTheme.colorScheme.outline,
+        shape = DialogShape,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.settings)) },
         text = {
@@ -64,6 +62,7 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
                 RefreshApplicationListButton()
                 RemoveIconsButton()
                 DeleteIconPackButton()
+                CrashLogsButton()
                 if (BuildConfig.DEBUG) {
                     ForceCrashButton()
                 }
@@ -103,7 +102,7 @@ fun DarkModeDropdown(prefs: DataStore<Preferences>) {
                     expanded = expanded
                 )
             },
-            shape = RoundedCornerShape(16.dp),
+            shape = FieldShape,
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
@@ -142,7 +141,7 @@ fun SyncButton() {
 
     Button(
         onClick = { viewModel.sync() },
-        shape = RoundedCornerShape(16.dp),
+        shape = FieldShape,
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.syncPacks))
@@ -155,7 +154,7 @@ fun RefreshApplicationListButton() {
 
     Button(
         onClick = { viewModel.refreshApps() },
-        shape = RoundedCornerShape(16.dp),
+        shape = FieldShape,
         modifier = settingsButtonModifier
     ) {
         Text(stringResource(R.string.refreshApplicationList))
@@ -164,30 +163,16 @@ fun RefreshApplicationListButton() {
 
 @Composable
 fun DeleteIconPackButton() {
-    val context = getCurrentContext()
-    val scope = rememberCoroutineScope()
-    val toaster = LocalToaster.current
+    val viewModel: MainViewModel = hiltViewModel()
     val view = LocalView.current
 
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
         onClick = {
             view.performConfirmHaptic()
-            scope.launch {
-                // Don't try (and then falsely report success) when the pack isn't installed
-                val installed = runCatching {
-                    context.packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
-                }.isSuccess
-                if (installed) {
-                    if (ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)) {
-                        toaster.show(context.getString(R.string.iconPackUninstalled))
-                    }
-                } else {
-                    toaster.show(context.getString(R.string.iconPackNotInstalled))
-                }
-            }
+            viewModel.deleteIconPack()
         },
-        shape = RoundedCornerShape(16.dp),
+        shape = FieldShape,
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = MaterialTheme.colorScheme.errorContainer,
             contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -207,7 +192,7 @@ fun RemoveIconsButton() {
     // Destructive action — tonal/error styling sets it apart from the blue actions
     FilledTonalButton(
         onClick = { confirm = true },
-        shape = RoundedCornerShape(16.dp),
+        shape = FieldShape,
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = MaterialTheme.colorScheme.errorContainer,
             contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -218,40 +203,42 @@ fun RemoveIconsButton() {
     }
 
     if (confirm) {
-        AlertDialog(
-            shape = RoundedCornerShape(28.dp),
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            onDismissRequest = { confirm = false },
-            title = { Text(stringResource(R.string.clearIconsTitle)) },
-            text = { Text(stringResource(R.string.clearIconsText)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    view.performConfirmHaptic()
-                    confirm = false
-                    viewModel.clearIcons()
-                }) {
-                    Text(
-                        stringResource(R.string.confirm),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
+        ConfirmDialog(
+            title = stringResource(R.string.clearIconsTitle),
+            text = stringResource(R.string.clearIconsText),
+            onConfirm = {
+                confirm = false
+                viewModel.clearIcons()
             },
-            dismissButton = {
-                TextButton(onClick = { confirm = false }) {
-                    Text(stringResource(R.string.dismiss))
-                }
-            }
+            onDismiss = { confirm = false }
         )
     }
 }
 
+
+@Composable
+fun CrashLogsButton() {
+    var open by rememberSaveable { mutableStateOf(false) }
+
+    Button(
+        onClick = { open = true },
+        shape = FieldShape,
+        modifier = settingsButtonModifier
+    ) {
+        Text(stringResource(R.string.crashLogs))
+    }
+
+    if (open) {
+        CrashLogsScreen { open = false }
+    }
+}
 
 /** Debug-only: throws to verify the crash-capture + report-on-next-launch flow. */
 @Composable
 private fun ForceCrashButton() {
     FilledTonalButton(
         onClick = { throw RuntimeException("Forced crash for testing") },
-        shape = RoundedCornerShape(16.dp),
+        shape = FieldShape,
         colors = ButtonDefaults.filledTonalButtonColors(
             containerColor = MaterialTheme.colorScheme.errorContainer,
             contentColor = MaterialTheme.colorScheme.onErrorContainer

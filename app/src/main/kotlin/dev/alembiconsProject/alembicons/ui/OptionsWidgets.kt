@@ -36,6 +36,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
+import dev.alembiconsProject.alembicons.ui.theme.FieldShape
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.InstalledApplication
@@ -102,7 +104,7 @@ fun <T> EnumDropdown(
             onValueChange = { },
             label = { Text(stringResource(labelId)) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            shape = RoundedCornerShape(16.dp),
+            shape = FieldShape,
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
@@ -146,7 +148,7 @@ fun IconPackDropdown(
     var selectedOption by remember { mutableStateOf(defaultPack ?: emptyPack) }
 
     LaunchedEffect(Unit) {
-        icons = viewModel.appProvider.getIconPackDropdownIcons(application)
+        icons = viewModel.iconPackDropdownIcons(application)
     }
 
     ExposedDropdownMenuBox(
@@ -168,7 +170,7 @@ fun IconPackDropdown(
                     expanded = expanded
                 )
             },
-            shape = RoundedCornerShape(16.dp),
+            shape = FieldShape,
             colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
             modifier = Modifier
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
@@ -218,9 +220,8 @@ fun IconPackDropdown(
 @Composable
 fun OptionInfoDialog(text: String, onDismiss: () -> Unit) {
     AlertDialog(
-        shape = RoundedCornerShape(20.dp),
-        containerColor = MaterialTheme.colorScheme.background,
-        titleContentColor = MaterialTheme.colorScheme.outline,
+        shape = DialogShape,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = { onDismiss() },
         title = { },
         text = {
@@ -286,7 +287,7 @@ fun DefaultSwitchLayoutWithInfo(isChecked: Boolean, @StringRes label: Int, @Stri
         IconButton(onClick = { openInfo = true }, modifier = Modifier.size(28.dp)) {
             Icon(
                 imageVector = Icons.Filled.Info,
-                contentDescription = "Option info",
+                contentDescription = stringResource(R.string.optionInfo),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp)
             )

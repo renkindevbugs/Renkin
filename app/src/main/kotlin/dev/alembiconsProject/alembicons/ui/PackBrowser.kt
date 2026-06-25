@@ -62,7 +62,6 @@ import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
-import dev.alembiconsProject.alembicons.apk.ApplicationProvider
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -169,6 +168,21 @@ data class PackIconPreview(
     val preview: ImageBitmap
 )
 
+/**
+ * A generated icon-pack browser row ready to display: its preview icons plus how many further
+ * icons didn't fit the row (the "+N" chip). Cached in [MainViewModel] so a row that scrolls
+ * off-screen (and is discarded from composition) doesn't regenerate its bitmaps on the way back.
+ */
+data class PackRowPreviews(val previews: List<PackIconPreview>, val moreCount: Int)
+
+/** Cache key for a pack row's previews — distinct per pack, sort order, query and generation options. */
+fun packRowCacheKey(
+    packageName: String,
+    sortOrder: IconSortOrder,
+    query: String,
+    options: GenerationOptions
+) = "$packageName|$sortOrder|$query|${options.hashCode()}"
+
 // Previews only ever render at ~56-64dp; a 96px bitmap covers that on the highest
 // densities while keeping the full-pack grid (up to PACK_DETAIL_LIMIT items) within
 // a sane memory budget — a full 256px raster each would be ~100 MB for 400 icons.
@@ -189,14 +203,14 @@ private fun Bitmap.scaledPreview(max: Int = PREVIEW_PX): Bitmap {
 /** Generates the preview icons for the given drawable [names] of a pack. */
 private suspend fun loadPackIconPairs(
     appMan: ApplicationManager,
-    provider: ApplicationProvider,
+    viewModel: MainViewModel,
     packageName: String,
     options: GenerationOptions,
     names: List<String>
 ): List<PackIconPreview> {
     val ids = appMan.getIconPackDrawableIds(packageName, names)
     val drawables = appMan.getIconPackDrawables(packageName, ids)
-    val exportDrawables = provider.getIconPackIcons(packageName, options, drawables)
+    val exportDrawables = viewModel.iconPackIcons(packageName, options, drawables)
     return exportDrawables.entries
         .filter { it.value != null }
         .distinctBy { it.key.resourceId }
@@ -231,21 +245,34 @@ fun PackIconsRow(
     var moreCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(iconPack.packageName, sortOrder, query) {
+    LaunchedEffect(iconPack.packageName, sortOrder, query, options) {
+        val cacheKey = packRowCacheKey(iconPack.packageName, sortOrder, query, options)
+        // Cache hit → show the previously generated previews instantly, no spinner, no regen.
+        viewModel.cachedPackRow(cacheKey)?.let { cached ->
+            iconPairs = cached.previews
+            moreCount = cached.moreCount
+            isLoading = false
+            onResult(cached.previews.isNotEmpty())
+            return@LaunchedEffect
+        }
         isLoading = true
+        // `more` is a local so the Compose state (moreCount) is only written on the main thread.
+        var more = 0
         val loaded = withContext(Dispatchers.Default) {
             try {
                 val appMan = ApplicationManager(context)
                 val sortedNames = filteredSortedPackNames(appMan, iconPack.packageName, query, sortOrder)
-                moreCount = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
-                loadPackIconPairs(appMan, viewModel.appProvider, iconPack.packageName, options, sortedNames.take(PACK_ROW_LIMIT))
+                more = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
+                loadPackIconPairs(appMan, viewModel, iconPack.packageName, options, sortedNames.take(PACK_ROW_LIMIT))
             } catch (_: Exception) {
                 // A malformed icon pack must not crash the browser
-                moreCount = 0
+                more = 0
                 emptyList()
             }
         }
+        moreCount = more
         iconPairs = loaded
+        viewModel.cachePackRow(cacheKey, PackRowPreviews(loaded, more))
         isLoading = false
         onResult(loaded.isNotEmpty())
     }
@@ -353,7 +380,7 @@ fun PackDetailGrid(
                 // Load in chunks so the grid fills progressively instead of blocking
                 for (chunk in sortedNames.take(PACK_DETAIL_LIMIT).chunked(40)) {
                     coroutineContext.ensureActive()
-                    val pairs = loadPackIconPairs(appMan, viewModel.appProvider, iconPack.packageName, options, chunk)
+                    val pairs = loadPackIconPairs(appMan, viewModel, iconPack.packageName, options, chunk)
                     iconPairs = (iconPairs + pairs).distinctBy { it.resource.resourceId }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {

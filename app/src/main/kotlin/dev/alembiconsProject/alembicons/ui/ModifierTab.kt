@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Done
@@ -31,6 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.getImageEditLabels
@@ -84,7 +84,7 @@ internal fun ModifierTab(
             val selected = imageEdit == edit
             Surface(
                 onClick = { onImageEditChange(edit) },
-                shape = RoundedCornerShape(20.dp),
+                shape = CardShape,
                 color = if (selected) {
                     MaterialTheme.colorScheme.primaryContainer
                 } else {
@@ -122,7 +122,7 @@ internal fun ModifierTab(
 
         if (imageEdit == ImageEdit.EDGE) {
             Surface(
-                shape = RoundedCornerShape(20.dp),
+                shape = CardShape,
                 color = MaterialTheme.colorScheme.surfaceContainer,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -171,7 +171,7 @@ internal fun ModifierTab(
         if (imageEdit != ImageEdit.NONE) {
             Surface(
                 onClick = { colorPickerOpen = true },
-                shape = RoundedCornerShape(20.dp),
+                shape = CardShape,
                 color = MaterialTheme.colorScheme.surfaceContainer,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -199,7 +199,7 @@ internal fun ModifierTab(
 
         if (isPathTracingEnabled(source, imageEdit)) {
             Surface(
-                shape = RoundedCornerShape(20.dp),
+                shape = CardShape,
                 color = MaterialTheme.colorScheme.surfaceContainer,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -218,7 +218,7 @@ internal fun ModifierTab(
             color = MaterialTheme.colorScheme.onSurface
         )
         Surface(
-            shape = RoundedCornerShape(20.dp),
+            shape = CardShape,
             color = MaterialTheme.colorScheme.surfaceContainer,
             modifier = Modifier.fillMaxWidth()
         ) {

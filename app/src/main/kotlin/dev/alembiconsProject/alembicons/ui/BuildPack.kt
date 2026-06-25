@@ -55,6 +55,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
@@ -108,7 +109,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
 
     if (buildStep != null) {
         AlertDialog(
-            shape = RoundedCornerShape(28.dp),
+            shape = DialogShape,
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
             titleContentColor = MaterialTheme.colorScheme.onSurface,
             onDismissRequest = {},
@@ -145,7 +146,7 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
     val builtKeys = viewModel.builtKeys
     // Icons added since the last build (not yet in the saved pack) float to the top so
     // the user sees what's new without scrolling; the rest stay alphabetical
-    val themedApps = viewModel.appProvider.applicationList
+    val themedApps = viewModel.applicationList
         .filter { it.createdIcon != null }
         .sortedWith(
             compareByDescending<PackageInfoStruct> { "${it.packageName}/${it.activityName}" !in builtKeys }

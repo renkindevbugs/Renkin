@@ -9,12 +9,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -42,6 +44,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
@@ -63,6 +66,8 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.animation.EnterTransition
 
 @Composable
 internal fun ComparisonHeader(
@@ -82,169 +87,16 @@ internal fun ComparisonHeader(
     val flyInEnter = remember(flyInSpec) {
         slideInVertically(flyInSpec) { it * 2 } + fadeIn() + scaleIn(initialScale = 0.5f)
     }
-    var menuOpen by remember { mutableStateOf(false) }
-    val view = LocalView.current
 
     // On wide screens (tablet / unfolded foldable) the whole header fits on a
     // single row; on phones it stacks into two tiers so nothing gets cramped.
     val wide = LocalConfiguration.current.screenWidthDp >= 600
 
-    val closeButton: @Composable () -> Unit = {
-        FilledTonalIconButton(onClick = onDismiss, modifier = Modifier.size(40.dp)) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription = stringResource(R.string.dismiss),
-                modifier = Modifier.size(20.dp)
-            )
-        }
-    }
-
-    val overflow: @Composable () -> Unit = {
-        Box {
-            IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    imageVector = Icons.Filled.MoreVert,
-                    contentDescription = stringResource(R.string.moreOptions),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-            DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = stringResource(R.string.resetToDefault),
-                            color = MaterialTheme.colorScheme.error
-                        )
-                    },
-                    leadingIcon = {
-                        Icon(
-                            imageVector = Icons.Filled.Delete,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                    },
-                    onClick = {
-                        menuOpen = false
-                        onClear()
-                    }
-                )
-            }
-        }
-    }
-
-    val currentSlot: @Composable (androidx.compose.ui.unit.Dp, Boolean) -> Unit = { size, showLabel ->
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
-                if (heroBitmap != null) {
-                    Image(
-                        painter = BitmapPainter(heroBitmap.asImageBitmap()),
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(size)
-                            .clip(RoundedCornerShape(size / 4))
-                    )
-                } else {
-                    Surface(
-                        modifier = Modifier.size(size),
-                        shape = RoundedCornerShape(size / 4),
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Icon(Icons.Filled.Face, null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(size / 2))
-                        }
-                    }
-                }
-            }
-            if (showLabel) {
-                Text(
-                    text = stringResource(R.string.iconCurrent),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-        }
-    }
-
-    val newSlot: @Composable (androidx.compose.ui.unit.Dp, Boolean) -> Unit = { size, showLabel ->
-        val borderColor = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
-                Surface(
-                    modifier = Modifier.size(size),
-                    shape = RoundedCornerShape(size / 4),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    border = BorderStroke(2.dp, borderColor)
-                ) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        // Fade between icons so a regenerated/changed preview eases in
-                        // instead of snapping.
-                        Crossfade(targetState = previewIcon, label = "previewIcon") { icon ->
-                            if (icon != null) {
-                                Image(
-                                    painter = icon.getPainter(),
-                                    contentDescription = null,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            } else {
-                                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        imageVector = Icons.Filled.Add,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.outlineVariant,
-                                        modifier = Modifier.size(size / 2)
-                                    )
-                                }
-                            }
-                        }
-                        // Spinner over the slot while the new icon is being (re)generated
-                        if (previewLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(size / 2),
-                                strokeWidth = 2.dp,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                        }
-                    }
-                }
-            }
-            if (showLabel) {
-                Text(
-                    text = stringResource(R.string.iconNew),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-        }
-    }
-
-    val arrow: @Composable () -> Unit = {
-        Text(
-            text = "→",
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.outline,
-            modifier = Modifier.padding(horizontal = 12.dp)
-        )
-    }
-
-    val applyButton: @Composable (Modifier) -> Unit = { mod ->
-        Button(onClick = { view.performConfirmHaptic(); onConfirm() }, modifier = mod) {
-            Icon(
-                imageVector = Icons.Filled.Done,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.apply))
-        }
-    }
-
     ElevatedCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp, vertical = 6.dp),
-        shape = RoundedCornerShape(24.dp),
+        shape = CardShape,
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
         )
@@ -265,7 +117,7 @@ internal fun ComparisonHeader(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    closeButton()
+                    CloseButton(onDismiss)
                     Text(
                         text = appName,
                         style = MaterialTheme.typography.titleMedium,
@@ -278,10 +130,10 @@ internal fun ComparisonHeader(
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    currentSlot(44.dp, false)
-                    arrow()
-                    newSlot(44.dp, false)
+                Row(verticalAlignment = Alignment.Top) {
+                    CurrentSlot(heroBitmap, flyIn, flyInEnter, 44.dp, showLabel = false)
+                    ComparisonArrow(44.dp)
+                    NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 44.dp, showLabel = false)
                 }
 
                 Row(
@@ -289,8 +141,8 @@ internal fun ComparisonHeader(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)
                 ) {
-                    applyButton(Modifier)
-                    overflow()
+                    ApplyButton(onConfirm)
+                    OverflowMenu(onClear)
                 }
             }
         } else {
@@ -302,7 +154,7 @@ internal fun ComparisonHeader(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                closeButton()
+                CloseButton(onDismiss)
                 Text(
                     text = appName,
                     style = MaterialTheme.typography.titleMedium,
@@ -313,7 +165,7 @@ internal fun ComparisonHeader(
                         .weight(1f)
                         .padding(start = 4.dp)
                 )
-                overflow()
+                OverflowMenu(onClear)
             }
 
             // Tier 2 — comparison hero (Current → New) with Apply as primary action
@@ -325,18 +177,208 @@ internal fun ComparisonHeader(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
-                    currentSlot(56.dp, true)
-                    arrow()
-                    newSlot(56.dp, true)
+                    CurrentSlot(heroBitmap, flyIn, flyInEnter, 56.dp, showLabel = true)
+                    ComparisonArrow(56.dp)
+                    NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 56.dp, showLabel = true)
                 }
-                applyButton(
+                ApplyButton(
+                    onConfirm,
                     Modifier
                         .fillMaxWidth()
                         .padding(top = 12.dp)
                 )
             }
         }
+    }
+}
+
+/** Tonal close button used in both header layouts. */
+@Composable
+private fun CloseButton(onDismiss: () -> Unit) {
+    FilledTonalIconButton(onClick = onDismiss, modifier = Modifier.size(40.dp)) {
+        Icon(
+            imageVector = Icons.Filled.Close,
+            contentDescription = stringResource(R.string.dismiss),
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+/** Overflow menu holding the destructive "reset to default" action. */
+@Composable
+private fun OverflowMenu(onClear: () -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(40.dp)) {
+            Icon(
+                imageVector = Icons.Filled.MoreVert,
+                contentDescription = stringResource(R.string.moreOptions),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = stringResource(R.string.resetToDefault),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Filled.Delete,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                },
+                onClick = {
+                    menuOpen = false
+                    onClear()
+                }
+            )
+        }
+    }
+}
+
+/** The "current" icon, flying up into its slot when the dialog opens. */
+@Composable
+private fun CurrentSlot(
+    heroBitmap: Bitmap?,
+    flyIn: MutableTransitionState<Boolean>,
+    flyInEnter: EnterTransition,
+    size: Dp,
+    showLabel: Boolean
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
+            if (heroBitmap != null) {
+                Image(
+                    painter = BitmapPainter(heroBitmap.asImageBitmap()),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(size)
+                        .clip(RoundedCornerShape(size / 4))
+                )
+            } else {
+                Surface(
+                    modifier = Modifier.size(size),
+                    shape = RoundedCornerShape(size / 4),
+                    color = MaterialTheme.colorScheme.surfaceVariant
+                ) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.Face, null, tint = MaterialTheme.colorScheme.outline, modifier = Modifier.size(size / 2))
+                    }
+                }
+            }
+        }
+        if (showLabel) {
+            Text(
+                text = stringResource(R.string.iconCurrent),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+/** The "new" icon preview, with a generating spinner and a primary border once a preview exists. */
+@Composable
+private fun NewSlot(
+    previewIcon: IconPackDrawable?,
+    previewLoading: Boolean,
+    flyIn: MutableTransitionState<Boolean>,
+    flyInEnter: EnterTransition,
+    size: Dp,
+    showLabel: Boolean
+) {
+    val borderColor = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
+            Surface(
+                modifier = Modifier.size(size),
+                shape = RoundedCornerShape(size / 4),
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                border = BorderStroke(2.dp, borderColor)
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    // Fade between icons so a regenerated/changed preview eases in
+                    // instead of snapping.
+                    Crossfade(targetState = previewIcon, label = "previewIcon") { icon ->
+                        if (icon != null) {
+                            Image(
+                                painter = icon.getPainter(),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        } else {
+                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                Icon(
+                                    imageVector = Icons.Filled.Add,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.outlineVariant,
+                                    modifier = Modifier.size(size / 2)
+                                )
+                            }
+                        }
+                    }
+                    // Spinner over the slot while the new icon is being (re)generated
+                    if (previewLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(size / 2),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+        }
+        if (showLabel) {
+            Text(
+                text = stringResource(R.string.iconNew),
+                style = MaterialTheme.typography.labelSmall,
+                color = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+    }
+}
+
+/**
+ * Auto-mirrored arrow separating the current and new icon slots. Sized to [iconSize] tall and
+ * centered within it, so it lines up with the middle of the icons rather than the middle of the
+ * whole slot column (which would sit lower, pulled down by the "Current"/"New" labels below).
+ */
+@Composable
+private fun ComparisonArrow(iconSize: Dp) {
+    Box(
+        modifier = Modifier
+            .height(iconSize)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.size(20.dp)
+        )
+    }
+}
+
+/** Primary "apply" action; fires a confirmation haptic before [onConfirm]. */
+@Composable
+private fun ApplyButton(onConfirm: () -> Unit, modifier: Modifier = Modifier) {
+    val view = LocalView.current
+    Button(onClick = { view.performConfirmHaptic(); onConfirm() }, modifier = modifier) {
+        Icon(
+            imageVector = Icons.Filled.Done,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(stringResource(R.string.apply))
     }
 }

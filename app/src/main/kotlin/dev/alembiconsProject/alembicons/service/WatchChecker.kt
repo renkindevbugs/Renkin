@@ -8,6 +8,7 @@ import dev.alembiconsProject.alembicons.data.watch.AppComponent
 import dev.alembiconsProject.alembicons.data.watch.CandidateInput
 import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.data.watch.WatchState
+import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.extension.contentHash
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
@@ -40,7 +41,11 @@ class WatchChecker(context: Context) {
 
     suspend fun runCheck(): List<FiredSuggestion> = withContext(Dispatchers.Default) {
         val fired = mutableListOf<FiredSuggestion>()
-        val installedPacks = appMan.getIconPacks().associateBy { it.packageName }
+        // Our own generated pack only ever holds icons we just built, so it must never be
+        // a watch source (it would suggest the very icon the user already applied).
+        val installedPacks = appMan.getIconPacks()
+            .filter { it.packageName != IconPackBuilder.PACKAGE_NAME }
+            .associateBy { it.packageName }
 
         for (rule in repo.getActiveRules()) {
             val packPackages = if (rule.rule.watchAllPacks) {
@@ -112,7 +117,11 @@ class WatchChecker(context: Context) {
      */
     suspend fun baselineRule(ruleId: Long) = withContext(Dispatchers.Default) {
         val rule = repo.getRule(ruleId) ?: return@withContext
-        val installedPacks = appMan.getIconPacks().associateBy { it.packageName }
+        // Our own generated pack only ever holds icons we just built, so it must never be
+        // a watch source (it would suggest the very icon the user already applied).
+        val installedPacks = appMan.getIconPacks()
+            .filter { it.packageName != IconPackBuilder.PACKAGE_NAME }
+            .associateBy { it.packageName }
         val packPackages = if (rule.rule.watchAllPacks) {
             installedPacks.keys.toList()
         } else {

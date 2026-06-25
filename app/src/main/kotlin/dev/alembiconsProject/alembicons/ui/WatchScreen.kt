@@ -78,6 +78,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.WatchViewModel
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.apk.IconPackBuilder
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
@@ -91,8 +93,8 @@ fun WatchScreen(onDismiss: () -> Unit) {
     val watchViewModel: WatchViewModel = hiltViewModel()
 
     val rules by watchViewModel.rules.collectAsState()
-    val apps = viewModel.appProvider.applicationList
-    val packs = viewModel.appProvider.iconPacks
+    val apps = viewModel.applicationList
+    val packs = viewModel.iconPacks
 
     // Icon-watch is the only feature that posts notifications now, so ask for the permission
     // here (it used to be requested by the removed package-added setting).
@@ -187,7 +189,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
     }
 
     pendingDelete?.let { ruleId ->
-        ConfirmDeleteDialog(
+        ConfirmDialog(
             title = stringResource(R.string.deleteRuleTitle),
             text = stringResource(R.string.deleteRuleText),
             onDismiss = { pendingDelete = null },
@@ -199,7 +201,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
     }
 
     if (pendingDeleteAllCompleted) {
-        ConfirmDeleteDialog(
+        ConfirmDialog(
             title = stringResource(R.string.deleteAllCompletedTitle),
             text = stringResource(R.string.deleteAllCompletedText),
             onDismiss = { pendingDeleteAllCompleted = false },
@@ -214,28 +216,6 @@ fun WatchScreen(onDismiss: () -> Unit) {
     applySuggestionId?.let { sid ->
         WatchApplyModal(sid) { applySuggestionId = null }
     }
-}
-
-@Composable
-private fun ConfirmDeleteDialog(title: String, text: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    val view = LocalView.current
-    androidx.compose.material3.AlertDialog(
-        shape = RoundedCornerShape(28.dp),
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(text) },
-        confirmButton = {
-            IconButton(onClick = { view.performConfirmHaptic(); onConfirm() }) {
-                Icon(Icons.Filled.Check, stringResource(R.string.confirm), tint = MaterialTheme.colorScheme.primary)
-            }
-        },
-        dismissButton = {
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Filled.Close, stringResource(R.string.dismiss), tint = MaterialTheme.colorScheme.error)
-            }
-        }
-    )
 }
 
 // ---------------------------------------------------------------------------
@@ -473,8 +453,10 @@ private fun ActiveRuleCard(
     onDelete: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        shape = CardShape,
+        // A clear step above the screen background (surfaceContainerLow) so the card's bounds
+        // are visible; inner pills go one step higher again to stay distinct.
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp)) {
@@ -570,8 +552,9 @@ private fun CompletedRuleCard(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        shape = CardShape,
+        // Same fill as the active card so both rule states read as one consistent card style.
+        color = MaterialTheme.colorScheme.surfaceContainerHigh,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp)) {
@@ -615,10 +598,14 @@ private fun CompletedRuleCard(
                         .align(Alignment.CenterVertically)
                         .padding(end = 4.dp)
                 )
-                rule.packs.forEach { rp ->
-                    val pack = packs.find { it.packageName == rp.iconPackPackage }
-                    PackLabel(rp.iconPackPackage, pack?.applicationName)
-                }
+                // Defensive: never show our own generated pack here. New suggestions already
+                // exclude it (WatchChecker), this also hides it for rules completed earlier.
+                rule.packs
+                    .filter { it.iconPackPackage != IconPackBuilder.PACKAGE_NAME }
+                    .forEach { rp ->
+                        val pack = packs.find { it.packageName == rp.iconPackPackage }
+                        PackLabel(rp.iconPackPackage, pack?.applicationName)
+                    }
             }
         }
     }
@@ -655,7 +642,7 @@ private fun DoneBadge() {
 private fun AppPill(app: PackageInfoStruct?, fallbackPackage: String) {
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -678,7 +665,7 @@ private fun AppPill(app: PackageInfoStruct?, fallbackPackage: String) {
 private fun PackLabel(packPackage: String, name: String?) {
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh
+        color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),

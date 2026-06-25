@@ -29,7 +29,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -39,22 +38,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
-import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 
 @Composable
 fun InfoDialog(onDismiss: () -> Unit) {
-    // The launcher icon is an adaptive (XML) icon, which painterResource can't load,
-    // so render it via PackageManager -> bitmap instead.
-    val context = LocalContext.current
-    val appIcon = remember {
-        runCatching {
-            context.packageManager.getApplicationIcon(context.packageName)
-                .toSafeBitmapOrNull()?.asImageBitmap()
-        }.getOrNull()
-    }
+    // The launcher icon is an adaptive (XML) icon, which painterResource can't load, so the
+    // shared helper renders it via PackageManager -> bitmap instead.
+    val appIcon = rememberPackBitmap(LocalContext.current.packageName, 56.dp)
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = DialogShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             modifier = Modifier
                 .fillMaxWidth()
@@ -65,7 +58,10 @@ fun InfoDialog(onDismiss: () -> Unit) {
                     .verticalScroll(rememberScrollState())
                     .padding(24.dp)
             ) {
-                // Header — app icon + name
+                val uriHandler = LocalUriHandler.current
+                val githubUrl = stringResource(R.string.githubUrl)
+
+                // Header — app icon + name, with a "View on GitHub" link right under the name
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (appIcon != null) {
                         Image(
@@ -77,11 +73,21 @@ fun InfoDialog(onDismiss: () -> Unit) {
                         )
                         Spacer(Modifier.width(16.dp))
                     }
-                    Text(
-                        text = stringResource(R.string.app_name),
-                        style = MaterialTheme.typography.headlineSmall,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
+                    Column {
+                        Text(
+                            text = stringResource(R.string.app_name),
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = stringResource(R.string.viewOnGithub),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .padding(top = 2.dp)
+                                .clickable { uriHandler.openUri(githubUrl) }
+                        )
+                    }
                 }
 
                 Spacer(Modifier.height(20.dp))
@@ -103,7 +109,6 @@ fun InfoDialog(onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                val uriHandler = LocalUriHandler.current
                 Text(
                     text = stringResource(R.string.aboutForkLink),
                     style = MaterialTheme.typography.bodyMedium,
@@ -124,6 +129,13 @@ fun InfoDialog(onDismiss: () -> Unit) {
                 InfoFeatureRow(Icons.Filled.Refresh, stringResource(R.string.featureRefresh), stringResource(R.string.refreshIconDescription))
                 InfoFeatureRow(Icons.Filled.Build, stringResource(R.string.featureBuild), stringResource(R.string.buildIconDescription))
                 InfoFeatureRow(Icons.Filled.Notifications, stringResource(R.string.featureWatch), stringResource(R.string.watchIconDescription))
+
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = stringResource(R.string.aboutFeedback),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
                 Spacer(Modifier.height(8.dp))
                 TextButton(onClick = onDismiss, modifier = Modifier.align(Alignment.End)) {

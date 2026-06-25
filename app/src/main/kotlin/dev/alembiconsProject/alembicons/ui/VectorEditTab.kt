@@ -51,6 +51,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ImageVectorDrawable
 import dev.alembiconsProject.alembicons.drawable.InsetIconDrawable
@@ -171,7 +173,7 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
 
         val painter = rememberVectorPainter(editedVector.toImageVector())
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = CardShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
             Image(painter, null, Modifier
@@ -303,7 +305,7 @@ fun VectorPathItem(
     var showPathEditor by remember { mutableStateOf(false) }
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = CardShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -400,7 +402,7 @@ fun EditPathDialog(path: String, onDismiss: () -> Unit, onChange: (newPath: Stri
     var formatError by rememberSaveable { mutableStateOf("") }
 
     AlertDialog(
-        shape = RoundedCornerShape(28.dp),
+        shape = DialogShape,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         titleContentColor = MaterialTheme.colorScheme.onSurface,
         onDismissRequest = { onDismiss() },

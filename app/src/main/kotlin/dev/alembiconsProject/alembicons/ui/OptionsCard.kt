@@ -43,6 +43,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
+import dev.alembiconsProject.alembicons.ui.theme.FieldShape
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.BackgroundColorKey
 import dev.alembiconsProject.alembicons.data.CalendarIconsKey
@@ -127,7 +129,7 @@ fun OptionsCard(
     // The bar is a diff against the last built pack: blue = already built, green = added
     // since (pending build), red = removed since. builtKeys updates after each build.
     val vm = hiltViewModel<MainViewModel>()
-    val apps = vm.appProvider.applicationList
+    val apps = vm.applicationList
     val builtKeys = vm.builtKeys
     val builtCount = apps.count { it.createdIcon != null && "${it.packageName}/${it.activityName}" in builtKeys }
     val addedCount = apps.count { it.createdIcon != null && "${it.packageName}/${it.activityName}" !in builtKeys }
@@ -175,7 +177,7 @@ fun OptionsCard(
     val scope = rememberCoroutineScope()
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = CardShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier
             .fillMaxWidth()
@@ -254,7 +256,7 @@ fun OptionsCard(
                 Column(Modifier.padding(bottom = 12.dp)) {
                 // Users otherwise don't know these settings only take effect after a refresh
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
+                    shape = FieldShape,
                     color = MaterialTheme.colorScheme.secondaryContainer,
                     modifier = Modifier
                         .fillMaxWidth()

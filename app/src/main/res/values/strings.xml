@@ -34,6 +34,9 @@
     <string name="aboutFork">Renkin is an open-source fork of Alembicons.</string>
     <string name="aboutThanks">Huge thanks to its author for creating Alembicons — this app simply continues that great work.</string>
     <string name="aboutForkLink">View Alembicons on F-Droid</string>
+    <string name="githubUrl" translatable="false">https://github.com/renkindevbugs/Renkin</string>
+    <string name="viewOnGithub">View on GitHub</string>
+    <string name="aboutFeedback">Got an idea or a suggestion? Feel free to share it on GitHub — open it with the “View on GitHub” link under the app name above (suggestions and bug reports go in the “Issues” tab).</string>
     <string name="close">Close</string>
     <string name="packsSynced">Icon packs synced</string>
     <string name="appListRefreshed">Application list refreshed</string>
@@ -149,6 +152,18 @@
     <string name="crashLogCopied">Crash log copied</string>
     <string name="crashEmailCopied">Email copied</string>
     <string name="crashGithubUrl" translatable="false">https://github.com/renkindevbugs/Renkin/issues</string>
+    <string name="crashEmail" translatable="false">renkin.dev.bugs@gmail.com</string>
+    <string name="crashLogs">Crash logs</string>
+    <string name="crashLogsSubtitle">Crashes from the last 30 days are kept here; older ones are removed automatically.</string>
+    <string name="crashLogsEmpty">No crashes recorded</string>
+    <string name="crashLogsClearAll">Clear all</string>
+    <string name="crashLogsClearAllTitle">Delete all crash logs?</string>
+    <string name="crashLogsClearAllText">This permanently removes every stored crash log. This can\'t be undone.</string>
+    <string name="crashLogsReport">Report crash</string>
+    <string name="crashLogShare">Share</string>
+    <string name="crashLogDelete">Delete</string>
+    <string name="crashLogDeleted">Crash log deleted</string>
+    <string name="crashLogsCleared">All crash logs cleared</string>
     <string name="forceCrash">Force crash (debug)</string>
     <string name="watchDone">Done</string>
     <string name="newIconIn">New icon in</string>
@@ -190,4 +205,11 @@
     <string name="buildPreviewTitle">Pack preview</string>
     <string name="buildPreviewEmpty">No icons yet — assign some to your apps first</string>
     <string name="buildPreviewCount">%d icons</string>
+    <string name="refreshIcons">Refresh icons</string>
+    <string name="info">Info</string>
+    <string name="clear">Clear</string>
+    <string name="sort">Sort</string>
+    <string name="optionInfo">Option info</string>
+    <string name="sortAToZ">A → Z</string>
+    <string name="sortZToA">Z → A</string>
 </resources>

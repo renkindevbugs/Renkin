@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
@@ -63,6 +62,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.CardShape
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.data.UploadedImageStore
 import dev.alembiconsProject.alembicons.drawable.BitmapIconDrawable
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
@@ -205,7 +206,7 @@ fun UploadColumn(app: PackageInfoStruct,
 
                         // Editor lives in a rounded card for a cleaner, modern look
                         Surface(
-                            shape = RoundedCornerShape(20.dp),
+                            shape = CardShape,
                             color = MaterialTheme.colorScheme.surfaceContainer,
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -378,7 +379,7 @@ fun UploadColumn(app: PackageInfoStruct,
                 contentAlignment = Alignment.Center
             ) {
                 Surface(
-                    shape = RoundedCornerShape(28.dp),
+                    shape = DialogShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
                     Column(
@@ -399,42 +400,21 @@ fun UploadColumn(app: PackageInfoStruct,
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
-            shape = RoundedCornerShape(20.dp),
-            containerColor = MaterialTheme.colorScheme.background,
-            titleContentColor = MaterialTheme.colorScheme.outline,
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text(stringResource(R.string.deleteImage)) },
-            text = { Text(stringResource(R.string.deleteImageText)) },
-            confirmButton = {
-                IconButton(onClick = {
-                    view.performConfirmHaptic()
-                    showDeleteConfirm = false
-                    val toDelete = savedImages.filter { it.absolutePath in markedForDelete }
-                    selectionMode = false
-                    markedForDelete = emptySet()
-                    scope.launch {
-                        withContext(Dispatchers.IO) { toDelete.forEach { UploadedImageStore.delete(it) } }
-                        savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
-                        if (toDelete.any { it.absolutePath == selectedImagePath }) selectedImagePath = null
-                    }
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.Done,
-                        contentDescription = stringResource(R.string.confirm),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+        ConfirmDialog(
+            title = stringResource(R.string.deleteImage),
+            text = stringResource(R.string.deleteImageText),
+            onConfirm = {
+                showDeleteConfirm = false
+                val toDelete = savedImages.filter { it.absolutePath in markedForDelete }
+                selectionMode = false
+                markedForDelete = emptySet()
+                scope.launch {
+                    withContext(Dispatchers.IO) { toDelete.forEach { UploadedImageStore.delete(it) } }
+                    savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
+                    if (toDelete.any { it.absolutePath == selectedImagePath }) selectedImagePath = null
                 }
             },
-            dismissButton = {
-                IconButton(onClick = { showDeleteConfirm = false }) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.dismiss),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
+            onDismiss = { showDeleteConfirm = false }
         )
     }
 }

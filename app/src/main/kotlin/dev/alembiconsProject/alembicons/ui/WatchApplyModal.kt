@@ -47,8 +47,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.WatchViewModel
+import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.IconSuggestion
 import dev.alembiconsProject.alembicons.data.watch.IconSuggestionCandidate
@@ -81,14 +83,18 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
 
     LaunchedEffect(suggestionId) {
         val (s, c) = watchViewModel.loadSuggestion(suggestionId)
+        // Drop our own generated pack: a suggestion stored before the WatchChecker filter
+        // could still list it, and it must never be offered as an icon source. Filtering
+        // here covers the chips, the default selection and the generated preview at once.
+        val packCandidates = c.filter { it.iconPackPackage != IconPackBuilder.PACKAGE_NAME }
         suggestion = s
-        candidates = c
-        selectedPack = c.firstOrNull()?.iconPackPackage
+        candidates = packCandidates
+        selectedPack = packCandidates.firstOrNull()?.iconPackPackage
         loaded = true
         if (s == null) onDismiss() // already handled/deleted → nothing to show
     }
 
-    val apps = viewModel.appProvider.applicationList
+    val apps = viewModel.applicationList
     val app = suggestion?.let { s -> apps.find { it.packageName == s.packageName && it.activityName == s.activityName } }
 
     // (Re)generate the new icon for the selected pack
@@ -107,7 +113,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         newIcon = null
         newIcon = withContext(Dispatchers.Default) {
             val options = GenerationOptions.fromPreferences(prefs.data.first(), context, override = true)
-            viewModel.appProvider.getIconFromPackDrawable(targetApp, pack, candidate.drawableName, options)
+            viewModel.iconFromPack(targetApp, pack, candidate.drawableName, options)
         }
         generating = false
     }
@@ -115,10 +121,10 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     if (!loaded || suggestion == null) return
     // When opened cold from a notification the app list / packs may still be
     // loading; wait so the modal shows real icons instead of empty placeholders.
-    if (!viewModel.appProvider.applicationsLoaded || !viewModel.appProvider.iconPackLoaded) return
+    if (!viewModel.applicationsLoaded || !viewModel.iconPackLoaded) return
 
     AlertDialog(
-        shape = RoundedCornerShape(28.dp),
+        shape = DialogShape,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.watchApplyTitle)) },
@@ -155,7 +161,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     candidates.forEach { candidate ->
-                        val pack = packsName(viewModel.appProvider.iconPacks, candidate.iconPackPackage)
+                        val pack = packsName(viewModel.iconPacks, candidate.iconPackPackage)
                         FilterChip(
                             selected = selectedPack == candidate.iconPackPackage,
                             onClick = { selectedPack = candidate.iconPackPackage },
