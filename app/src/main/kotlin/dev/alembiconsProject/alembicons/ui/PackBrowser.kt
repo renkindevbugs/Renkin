@@ -118,11 +118,16 @@ fun PackIconsRow(
     var moreCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(iconPack.packageName, sortOrder, query, options) {
+    // The picked pack (primaryIconPack) doesn't change how a pack's preview icons render — the
+    // generator colourises by explicit pack name — so exclude it from the key. Otherwise picking
+    // an icon (which sets primaryIconPack) re-keys every visible row and flashes the loader.
+    val previewOptions = remember(options) { options.copy(primaryIconPack = "") }
+
+    LaunchedEffect(iconPack.packageName, sortOrder, query, previewOptions) {
         isLoading = true
         // The view model serves a cached result instantly (no suspension) when it has one, so
         // a row scrolled back into view shows immediately without a loading flash.
-        val result = viewModel.packRowPreviews(iconPack.packageName, sortOrder, query, options)
+        val result = viewModel.packRowPreviews(iconPack.packageName, sortOrder, query, previewOptions)
         iconPairs = result.previews
         moreCount = result.moreCount
         isLoading = false
