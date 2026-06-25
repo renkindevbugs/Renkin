@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -129,9 +130,9 @@ internal fun ComparisonHeader(
                     )
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(verticalAlignment = Alignment.Top) {
                     CurrentSlot(heroBitmap, flyIn, flyInEnter, 44.dp, showLabel = false)
-                    ComparisonArrow()
+                    ComparisonArrow(44.dp)
                     NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 44.dp, showLabel = false)
                 }
 
@@ -176,10 +177,10 @@ internal fun ComparisonHeader(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.Top
                 ) {
                     CurrentSlot(heroBitmap, flyIn, flyInEnter, 56.dp, showLabel = true)
-                    ComparisonArrow()
+                    ComparisonArrow(56.dp)
                     NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 56.dp, showLabel = true)
                 }
                 ApplyButton(
@@ -345,17 +346,26 @@ private fun NewSlot(
     }
 }
 
-/** Auto-mirrored arrow separating the current and new icon slots. */
+/**
+ * Auto-mirrored arrow separating the current and new icon slots. Sized to [iconSize] tall and
+ * centered within it, so it lines up with the middle of the icons rather than the middle of the
+ * whole slot column (which would sit lower, pulled down by the "Current"/"New" labels below).
+ */
 @Composable
-private fun ComparisonArrow() {
-    Icon(
-        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.outline,
+private fun ComparisonArrow(iconSize: Dp) {
+    Box(
         modifier = Modifier
-            .padding(horizontal = 12.dp)
-            .size(20.dp)
-    )
+            .height(iconSize)
+            .padding(horizontal = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.outline,
+            modifier = Modifier.size(20.dp)
+        )
+    }
 }
 
 /** Primary "apply" action; fires a confirmation haptic before [onConfirm]. */
