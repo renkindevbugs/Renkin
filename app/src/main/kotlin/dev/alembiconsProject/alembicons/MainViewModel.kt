@@ -19,13 +19,26 @@ import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.data.isSystemInDarkTheme
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
+import android.graphics.Bitmap
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
+import dev.alembiconsProject.alembicons.icon.creator.IconSortOrder
+import dev.alembiconsProject.alembicons.icon.creator.PACK_DETAIL_LIMIT
+import dev.alembiconsProject.alembicons.icon.creator.PACK_ROW_LIMIT
+import dev.alembiconsProject.alembicons.icon.creator.PackIconPreview
+import dev.alembiconsProject.alembicons.icon.creator.PackRowPreviews
+import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
-import dev.alembiconsProject.alembicons.ui.PackRowPreviews
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import javax.inject.Inject
+import kotlin.coroutines.coroutineContext
 
 /**
  * Owns the [ApplicationProvider] for the app's lifetime. The provider is injected (a Hilt
@@ -49,6 +62,23 @@ interface IconPreviewBuilder {
 
 // Roughly 30 preview bitmaps per row at ~96px ≈ 1 MB; 24 rows caps the browser cache near 25 MB.
 private const val PACK_ROW_PREVIEW_CACHE_MAX = 24
+
+// Previews only ever render at ~56-64dp; a 96px bitmap covers that on the highest densities while
+// keeping the full-pack grid (up to PACK_DETAIL_LIMIT items) within a sane memory budget — a full
+// 256px raster each would be ~100 MB for 400 icons.
+private const val PREVIEW_PX = 96
+
+private fun Bitmap.scaledPreview(max: Int = PREVIEW_PX): Bitmap {
+    val biggest = maxOf(width, height)
+    if (biggest <= max) return this
+    val scale = max.toFloat() / biggest
+    return Bitmap.createScaledBitmap(
+        this,
+        (width * scale).toInt().coerceAtLeast(1),
+        (height * scale).toInt().coerceAtLeast(1),
+        true
+    )
+}
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -250,7 +280,11 @@ class MainViewModel @Inject constructor(
     ): Map<ResourceDrawable, IconPackDrawable?> =
         appProvider.getIconPackIcons(iconPackName, options, drawables)
 
-    // ---- Icon-pack browser preview cache ----------------------------------------------
+    // ---- Icon-pack browser previews ---------------------------------------------------
+    // Enumerating a pack's drawables and rasterising their previews is the icon-pack browser's
+    // heavy work. It lives here (not in the composables) so the UI only talks to the view model,
+    // and so the row cache below can sit next to it.
+
     // Generating a pack row's preview bitmaps is expensive. Without a cache each row regenerated
     // them every time it scrolled back into view (a LazyColumn discards off-screen items, taking
     // their remembered state with them) — that's the loading flicker seen while scrolling the
@@ -263,12 +297,113 @@ class MainViewModel @Inject constructor(
                 size > PACK_ROW_PREVIEW_CACHE_MAX
         }
 
-    /** Cached preview bitmaps for an icon-pack browser row, or null if not generated yet. */
-    fun cachedPackRow(key: String): PackRowPreviews? = packRowPreviewCache[key]
+    private fun packRowCacheKey(
+        packageName: String,
+        sortOrder: IconSortOrder,
+        query: String,
+        options: GenerationOptions
+    ) = "$packageName|$sortOrder|$query|${options.hashCode()}"
 
-    /** Stores generated [previews] for an icon-pack browser row so scrolling back is instant. */
-    fun cachePackRow(key: String, previews: PackRowPreviews) {
-        packRowPreviewCache[key] = previews
+    /**
+     * The collapsed row previews for [packageName] (first [PACK_ROW_LIMIT] matches plus the
+     * "+N more" count). Returns the cached result instantly when present, otherwise generates
+     * and caches it. A malformed pack yields an empty row instead of crashing the browser.
+     */
+    suspend fun packRowPreviews(
+        packageName: String,
+        sortOrder: IconSortOrder,
+        query: String,
+        options: GenerationOptions
+    ): PackRowPreviews {
+        val key = packRowCacheKey(packageName, sortOrder, query, options)
+        packRowPreviewCache[key]?.let { return it }
+
+        val result = withContext(Dispatchers.Default) {
+            try {
+                val appMan = ApplicationManager(getApplication())
+                val sortedNames = filteredSortedPackNames(appMan, packageName, query, sortOrder)
+                val more = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
+                val pairs = loadPackIconPairs(appMan, packageName, options, sortedNames.take(PACK_ROW_LIMIT))
+                PackRowPreviews(pairs, more)
+            } catch (_: Exception) {
+                PackRowPreviews(emptyList(), 0)
+            }
+        }
+        packRowPreviewCache[key] = result
+        return result
+    }
+
+    /**
+     * Generates the full-pack grid previews (up to [PACK_DETAIL_LIMIT]) for [packageName],
+     * streaming them to [onChunk] a chunk at a time so the grid fills progressively instead of
+     * blocking. [onChunk] is invoked on the calling (main) thread. Not cached — the detail grid
+     * stays in composition while open, so it only loads once anyway.
+     */
+    suspend fun packDetailPreviews(
+        packageName: String,
+        sortOrder: IconSortOrder,
+        query: String,
+        options: GenerationOptions,
+        onChunk: (List<PackIconPreview>) -> Unit
+    ) {
+        val appMan = ApplicationManager(getApplication())
+        val sortedNames = withContext(Dispatchers.Default) {
+            try {
+                filteredSortedPackNames(appMan, packageName, query, sortOrder)
+            } catch (_: Exception) {
+                emptyList()
+            }
+        }
+        for (chunk in sortedNames.take(PACK_DETAIL_LIMIT).chunked(40)) {
+            coroutineContext.ensureActive()
+            val pairs = withContext(Dispatchers.Default) {
+                try {
+                    loadPackIconPairs(appMan, packageName, options, chunk)
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    // A malformed icon pack must not crash the browser
+                    emptyList()
+                }
+            }
+            onChunk(pairs)
+        }
+    }
+
+    /** Drawable names of [packageName] matching [query], sorted by [sortOrder]. */
+    private fun filteredSortedPackNames(
+        appMan: ApplicationManager,
+        packageName: String,
+        query: String,
+        sortOrder: IconSortOrder
+    ): List<String> {
+        val allNames = appMan.getIconPackDrawableNames(packageName)
+        val formattedQuery = query.lowercase().trim().replace(' ', '_')
+        val matching = if (formattedQuery.isEmpty()) {
+            allNames
+        } else {
+            allNames.filter { it.contains(formattedQuery) }
+        }
+        return when (sortOrder) {
+            IconSortOrder.NAME_ASC -> matching.sortedBy { it }
+            IconSortOrder.NAME_DESC -> matching.sortedByDescending { it }
+        }
+    }
+
+    /** Builds + rasterises the preview icons for the given drawable [names] of a pack. */
+    private suspend fun loadPackIconPairs(
+        appMan: ApplicationManager,
+        packageName: String,
+        options: GenerationOptions,
+        names: List<String>
+    ): List<PackIconPreview> {
+        val ids = appMan.getIconPackDrawableIds(packageName, names)
+        val drawables = appMan.getIconPackDrawables(packageName, ids)
+        val exportDrawables = iconPackIcons(packageName, options, drawables)
+        return exportDrawables.entries
+            .filter { it.value != null }
+            .distinctBy { it.key.resourceId }
+            .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap()) }
     }
 
     /** Clears every created icon (and persists the empty state). */
