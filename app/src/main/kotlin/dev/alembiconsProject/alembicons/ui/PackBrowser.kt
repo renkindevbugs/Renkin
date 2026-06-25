@@ -168,6 +168,21 @@ data class PackIconPreview(
     val preview: ImageBitmap
 )
 
+/**
+ * A generated icon-pack browser row ready to display: its preview icons plus how many further
+ * icons didn't fit the row (the "+N" chip). Cached in [MainViewModel] so a row that scrolls
+ * off-screen (and is discarded from composition) doesn't regenerate its bitmaps on the way back.
+ */
+data class PackRowPreviews(val previews: List<PackIconPreview>, val moreCount: Int)
+
+/** Cache key for a pack row's previews — distinct per pack, sort order, query and generation options. */
+fun packRowCacheKey(
+    packageName: String,
+    sortOrder: IconSortOrder,
+    query: String,
+    options: GenerationOptions
+) = "$packageName|$sortOrder|$query|${options.hashCode()}"
+
 // Previews only ever render at ~56-64dp; a 96px bitmap covers that on the highest
 // densities while keeping the full-pack grid (up to PACK_DETAIL_LIMIT items) within
 // a sane memory budget — a full 256px raster each would be ~100 MB for 400 icons.
@@ -230,21 +245,34 @@ fun PackIconsRow(
     var moreCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(iconPack.packageName, sortOrder, query) {
+    LaunchedEffect(iconPack.packageName, sortOrder, query, options) {
+        val cacheKey = packRowCacheKey(iconPack.packageName, sortOrder, query, options)
+        // Cache hit → show the previously generated previews instantly, no spinner, no regen.
+        viewModel.cachedPackRow(cacheKey)?.let { cached ->
+            iconPairs = cached.previews
+            moreCount = cached.moreCount
+            isLoading = false
+            onResult(cached.previews.isNotEmpty())
+            return@LaunchedEffect
+        }
         isLoading = true
+        // `more` is a local so the Compose state (moreCount) is only written on the main thread.
+        var more = 0
         val loaded = withContext(Dispatchers.Default) {
             try {
                 val appMan = ApplicationManager(context)
                 val sortedNames = filteredSortedPackNames(appMan, iconPack.packageName, query, sortOrder)
-                moreCount = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
+                more = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
                 loadPackIconPairs(appMan, viewModel, iconPack.packageName, options, sortedNames.take(PACK_ROW_LIMIT))
             } catch (_: Exception) {
                 // A malformed icon pack must not crash the browser
-                moreCount = 0
+                more = 0
                 emptyList()
             }
         }
+        moreCount = more
         iconPairs = loaded
+        viewModel.cachePackRow(cacheKey, PackRowPreviews(loaded, more))
         isLoading = false
         onResult(loaded.isNotEmpty())
     }

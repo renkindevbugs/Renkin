@@ -21,6 +21,7 @@ import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
+import dev.alembiconsProject.alembicons.ui.PackRowPreviews
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
@@ -45,6 +46,9 @@ interface IconPreviewBuilder {
 
     suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable
 }
+
+// Roughly 30 preview bitmaps per row at ~96px ≈ 1 MB; 24 rows caps the browser cache near 25 MB.
+private const val PACK_ROW_PREVIEW_CACHE_MAX = 24
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
@@ -245,6 +249,27 @@ class MainViewModel @Inject constructor(
         drawables: List<ResourceDrawable>
     ): Map<ResourceDrawable, IconPackDrawable?> =
         appProvider.getIconPackIcons(iconPackName, options, drawables)
+
+    // ---- Icon-pack browser preview cache ----------------------------------------------
+    // Generating a pack row's preview bitmaps is expensive. Without a cache each row regenerated
+    // them every time it scrolled back into view (a LazyColumn discards off-screen items, taking
+    // their remembered state with them) — that's the loading flicker seen while scrolling the
+    // multi-pack browser. The cache lives on the view model so it also survives reopening the
+    // dialog and rotation. Keyed by pack + sort + query + options so a different filter/option set
+    // gets a fresh entry; an LRU bound keeps memory sane. Touched only from the main thread.
+    private val packRowPreviewCache =
+        object : LinkedHashMap<String, PackRowPreviews>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PackRowPreviews>?) =
+                size > PACK_ROW_PREVIEW_CACHE_MAX
+        }
+
+    /** Cached preview bitmaps for an icon-pack browser row, or null if not generated yet. */
+    fun cachedPackRow(key: String): PackRowPreviews? = packRowPreviewCache[key]
+
+    /** Stores generated [previews] for an icon-pack browser row so scrolling back is instant. */
+    fun cachePackRow(key: String, previews: PackRowPreviews) {
+        packRowPreviewCache[key] = previews
+    }
 
     /** Clears every created icon (and persists the empty state). */
     fun clearIcons() {
