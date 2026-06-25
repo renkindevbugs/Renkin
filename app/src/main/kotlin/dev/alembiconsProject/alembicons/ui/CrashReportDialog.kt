@@ -35,8 +35,6 @@ import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.ui.theme.InnerShape
 import dev.alembiconsProject.alembicons.util.CrashReporter
 
-private const val DEV_EMAIL = "renkin.dev.bugs@gmail.com"
-
 /**
  * Shown once on launch after a crash. Fully offline: lets the user copy the log and either
  * email it (copy the address) or open a GitHub issue — nothing is sent automatically, so
@@ -50,6 +48,7 @@ fun CrashReportDialog(onDismiss: () -> Unit) {
     val toaster = LocalToaster.current
 
     val githubUrl = stringResource(R.string.crashGithubUrl)
+    val devEmail = stringResource(R.string.crashEmail)
     val logCopied = stringResource(R.string.crashLogCopied)
     val emailCopied = stringResource(R.string.crashEmailCopied)
 
@@ -88,13 +87,13 @@ fun CrashReportDialog(onDismiss: () -> Unit) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = DEV_EMAIL,
+                            text = devEmail,
                             style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
                             color = MaterialTheme.colorScheme.onSurface,
                             modifier = Modifier.weight(1f)
                         )
                         IconButton(onClick = {
-                            clipboard.setText(AnnotatedString(DEV_EMAIL))
+                            clipboard.setText(AnnotatedString(devEmail))
                             toaster.show(emailCopied)
                         }) {
                             Icon(

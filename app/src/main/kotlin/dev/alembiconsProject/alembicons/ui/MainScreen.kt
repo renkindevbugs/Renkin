@@ -22,7 +22,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
@@ -36,7 +35,6 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -621,14 +619,3 @@ fun SearchBar(
     }
 }
 
-/** A [DropdownMenuItem] that shows a check mark in the leading slot while [checked]. */
-@Composable
-private fun CheckableDropdownItem(text: String, checked: Boolean, onClick: () -> Unit) {
-    DropdownMenuItem(
-        text = { Text(text) },
-        onClick = onClick,
-        leadingIcon = if (checked) {
-            { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-        } else null
-    )
-}
