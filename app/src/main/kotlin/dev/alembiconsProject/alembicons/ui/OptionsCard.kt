@@ -37,7 +37,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Color
+import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -91,8 +91,8 @@ fun AppOptions(
     OptionsDialog(iconPacks, app, themed, onConfirm, onDismiss, onIconClear)
 }
 
-// The green used for icons added since the last build (matches the build-preview dot).
-private val addedColor = Color(0xFF34C759)
+// The green used for icons added since the last build (shares the added-green token).
+private val addedColor = AddedGreen
 
 /**
  * Segmented completion bar: blue = icons already in the last built pack, green = added
