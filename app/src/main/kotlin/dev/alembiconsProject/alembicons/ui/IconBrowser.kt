@@ -42,6 +42,7 @@ import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.TextType
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
+import dev.alembiconsProject.alembicons.icon.creator.IconSortOrder
 import kotlinx.coroutines.delay
 
 /**
@@ -252,5 +253,3 @@ fun CreateTab(
         }
     }
 }
-
-enum class IconSortOrder { NAME_ASC, NAME_DESC }

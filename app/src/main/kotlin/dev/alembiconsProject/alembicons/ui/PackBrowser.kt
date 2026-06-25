@@ -47,7 +47,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.stringResource
@@ -62,11 +61,10 @@ import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
-import dev.alembiconsProject.alembicons.packages.ApplicationManager
+import dev.alembiconsProject.alembicons.icon.creator.IconSortOrder
+import dev.alembiconsProject.alembicons.icon.creator.PackIconPreview
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.coroutineContext
 
 @Composable
 fun PackSectionHeader(iconPack: IconPack, onClick: (() -> Unit)? = null) {
@@ -132,91 +130,6 @@ private fun PackIcon(packageName: String, size: androidx.compose.ui.unit.Dp) {
     }
 }
 
-const val PACK_ROW_LIMIT = 30
-// Hard cap for the full-pack grid — huge packs (e.g. Arcticons) have thousands of icons
-// and eagerly generated previews for all of them would run out of memory.
-const val PACK_DETAIL_LIMIT = 400
-
-/** Drawable names of [packageName] matching [query], sorted by [sortOrder]. */
-private fun filteredSortedPackNames(
-    appMan: ApplicationManager,
-    packageName: String,
-    query: String,
-    sortOrder: IconSortOrder
-): List<String> {
-    val allNames = appMan.getIconPackDrawableNames(packageName)
-    val formattedQuery = query.lowercase().trim().replace(' ', '_')
-    val matching = if (formattedQuery.isEmpty()) {
-        allNames
-    } else {
-        allNames.filter { it.contains(formattedQuery) }
-    }
-    return when (sortOrder) {
-        IconSortOrder.NAME_ASC -> matching.sortedBy { it }
-        IconSortOrder.NAME_DESC -> matching.sortedByDescending { it }
-    }
-}
-
-/**
- * A pack icon ready to show: the source [resource] (passed back on tap) and a
- * [preview] bitmap rasterised once on a background thread. Rendering this bitmap
- * is far cheaper per frame than rebuilding a vector painter for every grid item.
- */
-data class PackIconPreview(
-    val resource: ResourceDrawable,
-    val drawable: IconPackDrawable,
-    val preview: ImageBitmap
-)
-
-/**
- * A generated icon-pack browser row ready to display: its preview icons plus how many further
- * icons didn't fit the row (the "+N" chip). Cached in [MainViewModel] so a row that scrolls
- * off-screen (and is discarded from composition) doesn't regenerate its bitmaps on the way back.
- */
-data class PackRowPreviews(val previews: List<PackIconPreview>, val moreCount: Int)
-
-/** Cache key for a pack row's previews — distinct per pack, sort order, query and generation options. */
-fun packRowCacheKey(
-    packageName: String,
-    sortOrder: IconSortOrder,
-    query: String,
-    options: GenerationOptions
-) = "$packageName|$sortOrder|$query|${options.hashCode()}"
-
-// Previews only ever render at ~56-64dp; a 96px bitmap covers that on the highest
-// densities while keeping the full-pack grid (up to PACK_DETAIL_LIMIT items) within
-// a sane memory budget — a full 256px raster each would be ~100 MB for 400 icons.
-private const val PREVIEW_PX = 96
-
-private fun Bitmap.scaledPreview(max: Int = PREVIEW_PX): Bitmap {
-    val biggest = maxOf(width, height)
-    if (biggest <= max) return this
-    val scale = max.toFloat() / biggest
-    return Bitmap.createScaledBitmap(
-        this,
-        (width * scale).toInt().coerceAtLeast(1),
-        (height * scale).toInt().coerceAtLeast(1),
-        true
-    )
-}
-
-/** Generates the preview icons for the given drawable [names] of a pack. */
-private suspend fun loadPackIconPairs(
-    appMan: ApplicationManager,
-    viewModel: MainViewModel,
-    packageName: String,
-    options: GenerationOptions,
-    names: List<String>
-): List<PackIconPreview> {
-    val ids = appMan.getIconPackDrawableIds(packageName, names)
-    val drawables = appMan.getIconPackDrawables(packageName, ids)
-    val exportDrawables = viewModel.iconPackIcons(packageName, options, drawables)
-    return exportDrawables.entries
-        .filter { it.value != null }
-        .distinctBy { it.key.resourceId }
-        .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap()) }
-}
-
 // Subtle green frame on the icon the user picked from this pack, so the selection is
 // visible on the grid itself (not just in the header). Matches the added-green elsewhere.
 private val selectedIconBorderColor = Color(0xFF34C759)
@@ -239,42 +152,20 @@ fun PackIconsRow(
     onResult: (hasMatches: Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
 ) {
-    val context = getCurrentContext()
     val viewModel: MainViewModel = hiltViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var moreCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(iconPack.packageName, sortOrder, query, options) {
-        val cacheKey = packRowCacheKey(iconPack.packageName, sortOrder, query, options)
-        // Cache hit → show the previously generated previews instantly, no spinner, no regen.
-        viewModel.cachedPackRow(cacheKey)?.let { cached ->
-            iconPairs = cached.previews
-            moreCount = cached.moreCount
-            isLoading = false
-            onResult(cached.previews.isNotEmpty())
-            return@LaunchedEffect
-        }
         isLoading = true
-        // `more` is a local so the Compose state (moreCount) is only written on the main thread.
-        var more = 0
-        val loaded = withContext(Dispatchers.Default) {
-            try {
-                val appMan = ApplicationManager(context)
-                val sortedNames = filteredSortedPackNames(appMan, iconPack.packageName, query, sortOrder)
-                more = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
-                loadPackIconPairs(appMan, viewModel, iconPack.packageName, options, sortedNames.take(PACK_ROW_LIMIT))
-            } catch (_: Exception) {
-                // A malformed icon pack must not crash the browser
-                more = 0
-                emptyList()
-            }
-        }
-        moreCount = more
-        iconPairs = loaded
-        viewModel.cachePackRow(cacheKey, PackRowPreviews(loaded, more))
+        // The view model serves a cached result instantly (no suspension) when it has one, so
+        // a row scrolled back into view shows immediately without a loading flash.
+        val result = viewModel.packRowPreviews(iconPack.packageName, sortOrder, query, options)
+        iconPairs = result.previews
+        moreCount = result.moreCount
         isLoading = false
-        onResult(loaded.isNotEmpty())
+        onResult(result.previews.isNotEmpty())
     }
 
     if (isLoading) {
@@ -357,7 +248,6 @@ fun PackDetailGrid(
     onCollapsedChange: (Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
 ) {
-    val context = getCurrentContext()
     val viewModel: MainViewModel = hiltViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
@@ -373,21 +263,9 @@ fun PackDetailGrid(
     LaunchedEffect(iconPack.packageName, sortOrder, query) {
         isLoading = true
         iconPairs = emptyList()
-        withContext(Dispatchers.Default) {
-            try {
-                val appMan = ApplicationManager(context)
-                val sortedNames = filteredSortedPackNames(appMan, iconPack.packageName, query, sortOrder)
-                // Load in chunks so the grid fills progressively instead of blocking
-                for (chunk in sortedNames.take(PACK_DETAIL_LIMIT).chunked(40)) {
-                    coroutineContext.ensureActive()
-                    val pairs = loadPackIconPairs(appMan, viewModel, iconPack.packageName, options, chunk)
-                    iconPairs = (iconPairs + pairs).distinctBy { it.resource.resourceId }
-                }
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // A malformed icon pack must not crash the browser
-            }
+        // The grid fills progressively as the view model streams chunks back on the main thread.
+        viewModel.packDetailPreviews(iconPack.packageName, sortOrder, query, options) { chunk ->
+            iconPairs = (iconPairs + chunk).distinctBy { it.resource.resourceId }
         }
         isLoading = false
     }
