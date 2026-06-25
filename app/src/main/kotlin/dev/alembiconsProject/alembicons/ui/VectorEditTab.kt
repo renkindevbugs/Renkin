@@ -173,7 +173,7 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
 
         val painter = rememberVectorPainter(editedVector.toImageVector())
         Surface(
-            shape = RoundedCornerShape(24.dp),
+            shape = CardShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh
         ) {
             Image(painter, null, Modifier

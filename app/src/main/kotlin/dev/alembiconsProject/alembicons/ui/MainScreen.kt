@@ -21,12 +21,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.AlertDialog
@@ -41,7 +39,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -402,7 +399,7 @@ fun ApplicationItem(
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                                 Icon(
                                     imageVector = Icons.Filled.Edit,
-                                    contentDescription = "Edit",
+                                    contentDescription = stringResource(R.string.edit),
                                     tint = MaterialTheme.colorScheme.onSecondaryContainer,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -456,7 +453,7 @@ fun RefreshButton() {
     }) {
         Icon(
             imageVector = Icons.Filled.Refresh,
-            contentDescription = "Refresh icons",
+            contentDescription = stringResource(R.string.refreshIcons),
             tint = MaterialTheme.colorScheme.primary
         )
     }
@@ -503,14 +500,14 @@ fun TitleBar(
             IconButton(onClick = { openInfo = true }) {
                 Icon(
                     imageVector = Icons.Filled.Info,
-                    contentDescription = "Info",
+                    contentDescription = stringResource(R.string.info),
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
             IconButton(onClick = { openSettings = true }) {
                 Icon(
                     imageVector = Icons.Filled.Settings,
-                    contentDescription = "Settings",
+                    contentDescription = stringResource(R.string.settings),
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
@@ -560,33 +557,14 @@ fun SearchBar(
         .fillMaxWidth()
         .padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically) {
-        OutlinedTextField(value = text,
+        SearchField(
+            value = text,
             onValueChange = {
                 text = it
                 onSearch(it)
             },
-            shape = CircleShape,
-            singleLine = true,
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Filled.Search,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )},
-            trailingIcon = {
-                if (text.isNotEmpty()) {
-                    IconButton(onClick = {
-                        text = ""
-                        onSearch(text)
-                    }) {
-                        Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = "Clear",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }},
-            modifier = Modifier.weight(1f))
+            modifier = Modifier.weight(1f)
+        )
         Box {
             IconButton(onClick = { showSortMenu = true }) {
                 Icon(

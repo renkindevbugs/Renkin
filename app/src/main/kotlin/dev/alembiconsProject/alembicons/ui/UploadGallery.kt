@@ -379,7 +379,7 @@ fun UploadColumn(app: PackageInfoStruct,
                 contentAlignment = Alignment.Center
             ) {
                 Surface(
-                    shape = RoundedCornerShape(28.dp),
+                    shape = DialogShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHigh
                 ) {
                     Column(
