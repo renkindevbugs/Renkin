@@ -190,6 +190,19 @@ class MainViewModel @Inject constructor(
     var buildStep by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * First-install timestamps (epoch millis) for [packageNames] — the data behind the
+     * "recently installed" sort. Looked up off the main thread; a package that's gone yields 0.
+     * The UI reads these here instead of touching PackageManager itself.
+     */
+    suspend fun installTimes(packageNames: List<String>): Map<String, Long> =
+        withContext(Dispatchers.IO) {
+            val pm = getApplication<Application>().packageManager
+            packageNames.associateWith { pkg ->
+                runCatching { pm.getPackageInfo(pkg, 0).firstInstallTime }.getOrDefault(0L)
+            }
+        }
+
     /** True if our generated icon pack is currently installed on the device. */
     private fun isIconPackInstalled(): Boolean = runCatching {
         getApplication<Application>().packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
