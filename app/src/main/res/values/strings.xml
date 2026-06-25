@@ -205,4 +205,11 @@
     <string name="buildPreviewTitle">Pack preview</string>
     <string name="buildPreviewEmpty">No icons yet — assign some to your apps first</string>
     <string name="buildPreviewCount">%d icons</string>
+    <string name="refreshIcons">Refresh icons</string>
+    <string name="info">Info</string>
+    <string name="clear">Clear</string>
+    <string name="sort">Sort</string>
+    <string name="optionInfo">Option info</string>
+    <string name="sortAToZ">A → Z</string>
+    <string name="sortZToA">Z → A</string>
 </resources>

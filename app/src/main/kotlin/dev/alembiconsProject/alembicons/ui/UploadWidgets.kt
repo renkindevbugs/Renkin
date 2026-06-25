@@ -137,7 +137,7 @@ fun ZoomSlider(value: Float, onChange: (newValue: Float) -> Unit) {
         }) {
             Icon(
                 imageVector = Icons.Filled.Clear,
-                contentDescription = "Clear",
+                contentDescription = stringResource(R.string.clear),
                 tint = MaterialTheme.colorScheme.primary
             )
         }

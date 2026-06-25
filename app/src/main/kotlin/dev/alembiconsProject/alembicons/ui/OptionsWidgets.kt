@@ -287,7 +287,7 @@ fun DefaultSwitchLayoutWithInfo(isChecked: Boolean, @StringRes label: Int, @Stri
         IconButton(onClick = { openInfo = true }, modifier = Modifier.size(28.dp)) {
             Icon(
                 imageVector = Icons.Filled.Info,
-                contentDescription = "Option info",
+                contentDescription = stringResource(R.string.optionInfo),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.size(18.dp)
             )
