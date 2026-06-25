@@ -66,7 +66,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -91,8 +90,6 @@ import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setEnumValue
-import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
-import androidx.compose.ui.platform.LocalDensity
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.WatchViewModel
@@ -353,18 +350,12 @@ fun ApplicationItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Converting the drawable is not free — cache it, and render at the on-screen
-            // size (56.dp) rather than full native resolution so scrolling new rows into
-            // view doesn't decode oversized bitmaps on the main thread (scroll jank).
-            val density = LocalDensity.current
-            val bitmap = remember(app.icon, density) {
-                val target = with(density) { 56.dp.roundToPx() }
-                val size = app.icon.intrinsicWidth.let { if (it in 1 until target) it else target }
-                app.icon.toSafeBitmapOrNull(size, size)
-            }
+            // Decoded once at the on-screen size (56.dp) by the shared helper, so scrolling
+            // new rows in doesn't decode oversized bitmaps on the main thread (scroll jank).
+            val bitmap = rememberAppBitmap(app, 56.dp)
             if (bitmap != null) {
                 Image(
-                    painter = BitmapPainter(bitmap.asImageBitmap()),
+                    painter = BitmapPainter(bitmap),
                     contentDescription = null,
                     modifier = Modifier
                         .size(56.dp)
