@@ -70,6 +70,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
+import dev.alembiconsProject.alembicons.packages.supportDynamicColors
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.theme.CardShape
 import dev.alembiconsProject.alembicons.ui.theme.DialogShape

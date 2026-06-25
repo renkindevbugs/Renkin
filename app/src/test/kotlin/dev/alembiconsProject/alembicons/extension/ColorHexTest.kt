@@ -1,4 +1,4 @@
-package dev.alembiconsProject.alembicons.ui
+package dev.alembiconsProject.alembicons.extension
 
 import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertEquals

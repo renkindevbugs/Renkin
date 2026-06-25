@@ -16,8 +16,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.alembiconsProject.alembicons.R
-import dev.alembiconsProject.alembicons.ui.toColor
-import dev.alembiconsProject.alembicons.ui.toHexString
+import dev.alembiconsProject.alembicons.extension.toColor
+import dev.alembiconsProject.alembicons.extension.toHexString
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlin.enums.enumEntries
