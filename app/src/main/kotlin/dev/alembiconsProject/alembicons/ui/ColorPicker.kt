@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.extension.alphaInt
 import dev.alembiconsProject.alembicons.extension.blueInt
 import dev.alembiconsProject.alembicons.extension.greenInt
@@ -22,7 +21,6 @@ import dev.alembiconsProject.alembicons.extension.toColor
 import dev.alembiconsProject.alembicons.extension.toHexString
 import dev.alembiconsProject.alembicons.extension.toNullableColor
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -119,10 +117,7 @@ fun ColorDialog(
 ) {
     val controller = rememberColorPickerController()
 
-    AlertDialog(
-        shape = DialogShape,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        titleContentColor = MaterialTheme.colorScheme.onSurface,
+    RenkinAlertDialog(
         onDismissRequest = onDismiss,
         text = {
             Column {

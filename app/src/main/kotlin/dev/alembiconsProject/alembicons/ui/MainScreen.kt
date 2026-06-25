@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -74,7 +73,6 @@ import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.packages.supportDynamicColors
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.theme.CardShape
-import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.data.AppFilterNoIconKey
 import dev.alembiconsProject.alembicons.data.AppSortOrderKey
 import dev.alembiconsProject.alembicons.data.BackgroundColorKey
@@ -257,9 +255,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
  */
 @Composable
 fun NewIconPackDialog(packLabel: String, onReload: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        shape = DialogShape,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    RenkinAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.newIconPackTitle)) },
         text = { Text(stringResource(R.string.newIconPackText, packLabel)) },

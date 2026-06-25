@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -55,7 +54,6 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
-import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
@@ -108,10 +106,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     }
 
     if (buildStep != null) {
-        AlertDialog(
-            shape = DialogShape,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
+        RenkinAlertDialog(
             onDismissRequest = {},
             icon = {
                 LoadingIndicator(color = MaterialTheme.colorScheme.primary)
