@@ -212,4 +212,6 @@
     <string name="optionInfo">Option info</string>
     <string name="sortAToZ">A → Z</string>
     <string name="sortZToA">Z → A</string>
+    <string name="iconPackBuildFailed">Couldn\'t build the icon pack</string>
+    <string name="iconPackInstallFailed">The icon pack wasn\'t installed</string>
 </resources>

@@ -1,7 +1,5 @@
 package dev.alembiconsProject.alembicons.apk
 
-import androidx.core.text.isDigitsOnly
-
 class Version {
     val versionCode: Long
     val versionName: String
@@ -21,15 +19,9 @@ class Version {
 
     companion object {
         private fun parseInternalVersionCode(versionName: String): Int {
-            val elements = versionName.split('.')
-
-            if (elements.isEmpty())
-                return -1
-
-            if (!elements[0].isDigitsOnly())
-                return -1
-
-            return elements[0].toInt()
+            // toIntOrNull guards empty / non-numeric names (e.g. a malformed installed pack),
+            // which would otherwise crash the build with NumberFormatException.
+            return versionName.split('.').firstOrNull()?.toIntOrNull() ?: -1
         }
 
         private fun createVersionName(versionCode: Long, internalVersionCode: Int): String {

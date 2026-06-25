@@ -44,7 +44,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +54,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
+import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
 import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
@@ -258,7 +258,7 @@ private fun BuildPreviewItem(app: PackageInfoStruct, changed: Boolean = false) {
                         .background(MaterialTheme.colorScheme.surfaceContainerLow)
                         .padding(2.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF34C759))
+                        .background(AddedGreen)
                 )
             }
         }

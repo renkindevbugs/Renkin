@@ -39,6 +39,12 @@ class VersionTest {
     }
 
     @Test
+    fun emptyVersionNameYieldsSentinelWithoutCrashing() {
+        // An empty name previously slipped past the digits check and crashed on toInt().
+        assertEquals(-1, Version(versionCode = 1L, versionName = "").internalVersionCode)
+    }
+
+    @Test
     fun internalVersionSurvivesNameRoundTrip() {
         val name = Version(versionCode = 9L, internalVersionCode = 2).versionName
         val reparsed = Version(versionCode = 9L, versionName = name)
