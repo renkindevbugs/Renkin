@@ -26,13 +26,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -91,7 +87,6 @@ internal fun WatchRuleEditor(
 
     var sortOrder by remember { mutableStateOf(AppSortOrder.NAME) }
     var filterNoIcon by remember { mutableStateOf(false) }
-    var showSortMenu by remember { mutableStateOf(false) }
 
     val viewModel: MainViewModel = hiltViewModel()
     // Looked up off the main thread via the view model (this was what made the editor take ~1s
@@ -181,42 +176,12 @@ internal fun WatchRuleEditor(
                     leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     modifier = Modifier.weight(1f)
                 )
-                Box {
-                    IconButton(onClick = { showSortMenu = true }) {
-                        Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.sortApps), tint = MaterialTheme.colorScheme.primary)
-                    }
-                    DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.sortByName)) },
-                            onClick = { sortOrder = AppSortOrder.NAME; showSortMenu = false },
-                            leadingIcon = if (sortOrder == AppSortOrder.NAME) {
-                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.sortByInstallDate)) },
-                            onClick = { sortOrder = AppSortOrder.INSTALL_DATE; showSortMenu = false },
-                            leadingIcon = if (sortOrder == AppSortOrder.INSTALL_DATE) {
-                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.filterAllApps)) },
-                            onClick = { filterNoIcon = false; showSortMenu = false },
-                            leadingIcon = if (!filterNoIcon) {
-                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.filterWithoutIcon)) },
-                            onClick = { filterNoIcon = true; showSortMenu = false },
-                            leadingIcon = if (filterNoIcon) {
-                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                    }
-                }
+                AppSortFilterMenu(
+                    sortOrder = sortOrder,
+                    filterNoIcon = filterNoIcon,
+                    onSortChange = { sortOrder = it },
+                    onFilterChange = { filterNoIcon = it }
+                )
             }
 
             HorizontalPager(
