@@ -152,6 +152,7 @@
     <string name="crashLogCopied">Crash log copied</string>
     <string name="crashEmailCopied">Email copied</string>
     <string name="crashGithubUrl" translatable="false">https://github.com/renkindevbugs/Renkin/issues</string>
+    <string name="crashEmail" translatable="false">renkin.dev.bugs@gmail.com</string>
     <string name="crashLogs">Crash logs</string>
     <string name="crashLogsSubtitle">Crashes from the last 30 days are kept here; older ones are removed automatically.</string>
     <string name="crashLogsEmpty">No crashes recorded</string>

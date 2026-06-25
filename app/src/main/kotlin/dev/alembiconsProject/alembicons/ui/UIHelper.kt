@@ -11,6 +11,12 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -111,6 +117,18 @@ class Toaster {
 /** The active [Toaster], provided at the root by MainActivity. */
 val LocalToaster = staticCompositionLocalOf<Toaster> {
     error("LocalToaster not provided")
+}
+
+/** A [DropdownMenuItem] that shows a check mark in the leading slot while [checked]. */
+@Composable
+fun CheckableDropdownItem(text: String, checked: Boolean, onClick: () -> Unit) {
+    DropdownMenuItem(
+        text = { Text(text) },
+        onClick = onClick,
+        leadingIcon = if (checked) {
+            { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
+        } else null
+    )
 }
 
 /**

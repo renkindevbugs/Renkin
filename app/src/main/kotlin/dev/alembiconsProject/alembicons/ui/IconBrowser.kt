@@ -18,10 +18,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -91,20 +89,12 @@ private fun IconSearchBar(
                 Icon(Icons.AutoMirrored.Filled.Sort, "Sort", tint = MaterialTheme.colorScheme.primary)
             }
             DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                DropdownMenuItem(
-                    text = { Text("A → Z") },
-                    onClick = { onSortOrderChange(IconSortOrder.NAME_ASC); showSortMenu = false },
-                    leadingIcon = if (sortOrder == IconSortOrder.NAME_ASC) {
-                        { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
-                DropdownMenuItem(
-                    text = { Text("Z → A") },
-                    onClick = { onSortOrderChange(IconSortOrder.NAME_DESC); showSortMenu = false },
-                    leadingIcon = if (sortOrder == IconSortOrder.NAME_DESC) {
-                        { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null
-                )
+                CheckableDropdownItem("A → Z", sortOrder == IconSortOrder.NAME_ASC) {
+                    onSortOrderChange(IconSortOrder.NAME_ASC); showSortMenu = false
+                }
+                CheckableDropdownItem("Z → A", sortOrder == IconSortOrder.NAME_DESC) {
+                    onSortOrderChange(IconSortOrder.NAME_DESC); showSortMenu = false
+                }
             }
         }
     }
