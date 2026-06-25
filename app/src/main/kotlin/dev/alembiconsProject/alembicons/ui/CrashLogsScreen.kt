@@ -28,7 +28,6 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -167,27 +166,16 @@ fun CrashLogsScreen(onDismiss: () -> Unit) {
     }
 
     if (confirmClearAll) {
-        AlertDialog(
-            shape = DialogShape,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            onDismissRequest = { confirmClearAll = false },
-            title = { Text(stringResource(R.string.crashLogsClearAllTitle)) },
-            text = { Text(stringResource(R.string.crashLogsClearAllText)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    CrashReporter.clearAll(context)
-                    confirmClearAll = false
-                    reloadTrigger++
-                    toaster.show(clearedMessage)
-                }) {
-                    Text(stringResource(R.string.confirm), color = MaterialTheme.colorScheme.error)
-                }
+        ConfirmDialog(
+            title = stringResource(R.string.crashLogsClearAllTitle),
+            text = stringResource(R.string.crashLogsClearAllText),
+            onConfirm = {
+                CrashReporter.clearAll(context)
+                confirmClearAll = false
+                reloadTrigger++
+                toaster.show(clearedMessage)
             },
-            dismissButton = {
-                TextButton(onClick = { confirmClearAll = false }) {
-                    Text(stringResource(R.string.dismiss))
-                }
-            }
+            onDismiss = { confirmClearAll = false }
         )
     }
 }

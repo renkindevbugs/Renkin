@@ -30,7 +30,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.SelectAll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FloatingActionButton
@@ -401,41 +400,21 @@ fun UploadColumn(app: PackageInfoStruct,
     }
 
     if (showDeleteConfirm) {
-        AlertDialog(
-            shape = DialogShape,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            onDismissRequest = { showDeleteConfirm = false },
-            title = { Text(stringResource(R.string.deleteImage)) },
-            text = { Text(stringResource(R.string.deleteImageText)) },
-            confirmButton = {
-                IconButton(onClick = {
-                    view.performConfirmHaptic()
-                    showDeleteConfirm = false
-                    val toDelete = savedImages.filter { it.absolutePath in markedForDelete }
-                    selectionMode = false
-                    markedForDelete = emptySet()
-                    scope.launch {
-                        withContext(Dispatchers.IO) { toDelete.forEach { UploadedImageStore.delete(it) } }
-                        savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
-                        if (toDelete.any { it.absolutePath == selectedImagePath }) selectedImagePath = null
-                    }
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.Done,
-                        contentDescription = stringResource(R.string.confirm),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+        ConfirmDialog(
+            title = stringResource(R.string.deleteImage),
+            text = stringResource(R.string.deleteImageText),
+            onConfirm = {
+                showDeleteConfirm = false
+                val toDelete = savedImages.filter { it.absolutePath in markedForDelete }
+                selectionMode = false
+                markedForDelete = emptySet()
+                scope.launch {
+                    withContext(Dispatchers.IO) { toDelete.forEach { UploadedImageStore.delete(it) } }
+                    savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
+                    if (toDelete.any { it.absolutePath == selectedImagePath }) selectedImagePath = null
                 }
             },
-            dismissButton = {
-                IconButton(onClick = { showDeleteConfirm = false }) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.dismiss),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
+            onDismiss = { showDeleteConfirm = false }
         )
     }
 }
