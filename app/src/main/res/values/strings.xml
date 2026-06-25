@@ -55,7 +55,6 @@
     <string name="buildingApk">Building apk …</string>
     <string name="signApk">Signing apk …</string>
     <string name="installApk">Installing apk …</string>
-    <string name="done">Done</string>
     <string name="followSystem">Follow System</string>
     <string name="darkMode">Dark Mode</string>
     <string name="lightMode">Light Mode</string>

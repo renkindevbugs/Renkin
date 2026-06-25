@@ -197,6 +197,9 @@ class MainViewModel @Inject constructor(
             try {
                 buildStep = ""
                 val pack = appProvider.buildAndSignIconPack(preferences) { buildStep = it }
+                // The system install is the slow part (2-3s) — show it as its own step so the
+                // dialog reflects what's happening instead of sitting on the last build step.
+                buildStep = getApplication<Application>().getString(R.string.installApk)
                 if (appProvider.installIconPack(pack)) {
                     _toastEvents.trySend(R.string.iconPackInstalled)
                     // The saved pack now matches the current icons → reset the change baseline.

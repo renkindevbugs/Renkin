@@ -236,7 +236,9 @@ class IconPackBuilder(
         textMethod(ctx.resources.getString(R.string.signApk))
         signApk(unsignedApk, signedApk)
 
-        textMethod(ctx.resources.getString(R.string.done))
+        // No "done" step here: building/signing is finished, but the (slower) system install
+        // still runs after this. MainViewModel sets the "Installing…" step for that phase, so
+        // the dialog doesn't misleadingly say "Done" while the install is still pending.
 
         return signedApk.toUri()
     }
