@@ -316,7 +316,7 @@ internal fun WatchRuleEditor(
                 Box(modifier = Modifier.padding(top = 8.dp)) {
                     TileRows(sortedPacks) { pack ->
                         val selected = selectedPacks.contains(pack.packageName)
-                        IconTile(rememberPackBitmap(pack.packageName), clipLabel(pack.applicationName, 13), selected) {
+                        IconTile(rememberPackIcon(pack.packageName), clipLabel(pack.applicationName, 13), selected) {
                             if (selected) selectedPacks.remove(pack.packageName)
                             else selectedPacks.add(pack.packageName)
                         }

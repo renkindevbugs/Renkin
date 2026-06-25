@@ -2,7 +2,6 @@
 
 package dev.alembiconsProject.alembicons.ui
 
-import android.graphics.Bitmap
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
@@ -46,7 +45,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -58,13 +56,10 @@ import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
-import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.icon.creator.IconSortOrder
 import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
 import dev.alembiconsProject.alembicons.icon.creator.PackIconPreview
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 @Composable
 fun PackSectionHeader(iconPack: IconPack, onClick: (() -> Unit)? = null) {
@@ -76,7 +71,7 @@ fun PackSectionHeader(iconPack: IconPack, onClick: (() -> Unit)? = null) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        PackIcon(iconPack.packageName, 24.dp)
+        PackIconImage(iconPack.packageName, 24.dp)
         Text(
             text = iconPack.applicationName,
             style = MaterialTheme.typography.titleSmall,
@@ -93,40 +88,6 @@ fun PackSectionHeader(iconPack: IconPack, onClick: (() -> Unit)? = null) {
                 modifier = Modifier.size(20.dp)
             )
         }
-    }
-}
-
-@Composable
-private fun PackIcon(packageName: String, size: androidx.compose.ui.unit.Dp) {
-    val context = getCurrentContext()
-    // Decode off the main thread — doing it in remember{} blocked the UI thread for
-    // every pack header while the editor dialog was opening
-    var packIcon by remember(packageName) { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(packageName) {
-        packIcon = withContext(Dispatchers.IO) {
-            try {
-                context.packageManager.getApplicationIcon(packageName).toSafeBitmapOrNull()
-            } catch (_: Exception) {
-                null
-            }
-        }
-    }
-
-    val icon = packIcon
-    if (icon != null) {
-        Image(
-            painter = BitmapPainter(icon.asImageBitmap()),
-            contentDescription = null,
-            modifier = Modifier
-                .size(size)
-                .clip(RoundedCornerShape(size / 4))
-        )
-    } else {
-        Surface(
-            modifier = Modifier.size(4.dp, size - 4.dp),
-            shape = RoundedCornerShape(2.dp),
-            color = MaterialTheme.colorScheme.primary
-        ) {}
     }
 }
 
@@ -281,7 +242,7 @@ fun PackDetailGrid(
             FilledTonalIconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.dismiss))
             }
-            PackIcon(iconPack.packageName, 28.dp)
+            PackIconImage(iconPack.packageName, 28.dp)
             Text(
                 text = iconPack.applicationName,
                 style = MaterialTheme.typography.titleMedium,

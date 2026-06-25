@@ -44,7 +44,7 @@ import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 fun InfoDialog(onDismiss: () -> Unit) {
     // The launcher icon is an adaptive (XML) icon, which painterResource can't load, so the
     // shared helper renders it via PackageManager -> bitmap instead.
-    val appIcon = rememberPackBitmap(LocalContext.current.packageName, 56.dp)
+    val appIcon = rememberPackIcon(LocalContext.current.packageName)
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = DialogShape,
