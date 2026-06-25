@@ -3,15 +3,22 @@ package dev.alembiconsProject.alembicons.icon.creator
 import android.app.Application
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.ColorFilter
+import android.graphics.PixelFormat
 import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import dev.alembiconsProject.alembicons.data.ImageEdit
+import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.TextType
 import dev.alembiconsProject.alembicons.drawable.BitmapIconDrawable
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
+import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -98,6 +105,36 @@ class IconGeneratorTest {
         val base = bitmapIcon()
         val result = generator(options(iconScale = 1f)).applyModifier(base, ImageEdit.NONE)
         assertSame(base, result)
+    }
+
+    @Test
+    fun malformedPackIconIsSkippedNotThrown() {
+        // A pack drawable that blows up while rasterising stands in for a malformed
+        // third-party pack icon. Generation must swallow it (skip the app) rather than
+        // letting the exception abort the whole refresh.
+        val throwing = object : Drawable() {
+            override fun draw(canvas: Canvas) = throw RuntimeException("malformed icon")
+            override fun setAlpha(alpha: Int) {}
+            override fun setColorFilter(colorFilter: ColorFilter?) {}
+            @Deprecated("Deprecated in Java")
+            override fun getOpacity() = PixelFormat.OPAQUE
+            override fun getIntrinsicWidth() = 100
+            override fun getIntrinsicHeight() = 100
+        }
+        val badApp = app()
+        val pack = IconPackContainer(
+            "",
+            mapOf(
+                InstalledApplication(badApp.packageName, badApp.activityName, 0)
+                    to ResourceDrawable(0, throwing)
+            )
+        )
+        val gen = IconGenerator(context, options(source = Source.ICON_PACK), pack, emptyPack)
+
+        var called = false
+        gen.generateIcons(listOf(badApp)) { _, _ -> called = true }
+
+        assertFalse("the malformed app should be skipped, not delivered", called)
     }
 
     @Test

@@ -41,11 +41,7 @@ class WatchChecker(context: Context) {
 
     suspend fun runCheck(): List<FiredSuggestion> = withContext(Dispatchers.Default) {
         val fired = mutableListOf<FiredSuggestion>()
-        // Our own generated pack only ever holds icons we just built, so it must never be
-        // a watch source (it would suggest the very icon the user already applied).
-        val installedPacks = appMan.getIconPacks()
-            .filter { it.packageName != IconPackBuilder.PACKAGE_NAME }
-            .associateBy { it.packageName }
+        val installedPacks = watchablePacks()
 
         for (rule in repo.getActiveRules()) {
             val packPackages = if (rule.rule.watchAllPacks) {
@@ -117,11 +113,7 @@ class WatchChecker(context: Context) {
      */
     suspend fun baselineRule(ruleId: Long) = withContext(Dispatchers.Default) {
         val rule = repo.getRule(ruleId) ?: return@withContext
-        // Our own generated pack only ever holds icons we just built, so it must never be
-        // a watch source (it would suggest the very icon the user already applied).
-        val installedPacks = appMan.getIconPacks()
-            .filter { it.packageName != IconPackBuilder.PACKAGE_NAME }
-            .associateBy { it.packageName }
+        val installedPacks = watchablePacks()
         val packPackages = if (rule.rule.watchAllPacks) {
             installedPacks.keys.toList()
         } else {
@@ -147,6 +139,15 @@ class WatchChecker(context: Context) {
             }
         }
     }
+
+    /**
+     * Installed icon packs eligible as watch sources, keyed by package name. Our own generated
+     * pack is excluded — it only ever holds icons we just built, so it would suggest the very
+     * icon the user already applied.
+     */
+    private fun watchablePacks() = appMan.getIconPacks()
+        .filter { it.packageName != IconPackBuilder.PACKAGE_NAME }
+        .associateBy { it.packageName }
 
     /** Resolves the (drawable name, content hash) a pack currently provides for an app, or nulls. */
     private fun resolveIcon(packPackage: String, installedApp: InstalledApplication): Pair<String?, String?> {
