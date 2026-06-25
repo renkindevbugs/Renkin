@@ -3,13 +3,6 @@
 package dev.alembiconsProject.alembicons.ui
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -57,6 +50,67 @@ import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import kotlinx.coroutines.delay
 
+/**
+ * The icon search field plus the A→Z / Z→A sort menu. Rendered as the first item of the
+ * pack list so it scrolls with the content (see CreateTab) rather than animating in and out.
+ */
+@Composable
+private fun IconSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    sortOrder: IconSortOrder,
+    onSortOrderChange: (IconSortOrder) -> Unit
+) {
+    var showSortMenu by remember { mutableStateOf(false) }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        OutlinedTextField(
+            value = query,
+            onValueChange = onQueryChange,
+            shape = CircleShape,
+            placeholder = { Text(stringResource(R.string.searchIcons)) },
+            leadingIcon = {
+                Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            },
+            trailingIcon = {
+                if (query.isNotEmpty()) {
+                    IconButton(onClick = { onQueryChange("") }) {
+                        Icon(Icons.Filled.Close, "Clear", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            },
+            singleLine = true,
+            modifier = Modifier.weight(1f)
+        )
+        Box {
+            IconButton(onClick = { showSortMenu = true }) {
+                Icon(Icons.AutoMirrored.Filled.Sort, "Sort", tint = MaterialTheme.colorScheme.primary)
+            }
+            DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                DropdownMenuItem(
+                    text = { Text("A → Z") },
+                    onClick = { onSortOrderChange(IconSortOrder.NAME_ASC); showSortMenu = false },
+                    leadingIcon = if (sortOrder == IconSortOrder.NAME_ASC) {
+                        { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
+                    } else null
+                )
+                DropdownMenuItem(
+                    text = { Text("Z → A") },
+                    onClick = { onSortOrderChange(IconSortOrder.NAME_DESC); showSortMenu = false },
+                    leadingIcon = if (sortOrder == IconSortOrder.NAME_DESC) {
+                        { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
+                    } else null
+                )
+            }
+        }
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+}
+
 @Composable
 fun CreateTab(
     source: Source,
@@ -79,7 +133,6 @@ fun CreateTab(
     // re-search (debouncedQuery already matches the preserved searchQuery).
     var debouncedQuery by remember { mutableStateOf(searchQuery) }
     var sortOrder by rememberSaveable { mutableStateOf(IconSortOrder.NAME_ASC) }
-    var showSortMenu by remember { mutableStateOf(false) }
     var expandedPack by remember { mutableStateOf<IconPack?>(null) }
     var collapsed by remember { mutableStateOf(false) }
     val distinctPacks = remember(iconPacks) { iconPacks.distinctBy { it.packageName } }
@@ -134,67 +187,6 @@ fun CreateTab(
     }
 
     Column(Modifier.fillMaxSize()) {
-        if (source == Source.ICON_PACK) {
-            // Search bar slides away while the icon list is scrolled to save space
-            // Reveal/hide the search bar with a soft, low-stiffness spring so it eases
-            // in gradually on scroll-up instead of snapping open all at once
-            AnimatedVisibility(
-                visible = !collapsed,
-                enter = expandVertically(spring(stiffness = Spring.StiffnessLow)) +
-                        fadeIn(spring(stiffness = Spring.StiffnessLow)),
-                exit = shrinkVertically(spring(stiffness = Spring.StiffnessMediumLow)) +
-                        fadeOut(spring(stiffness = Spring.StiffnessMediumLow))
-            ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { onSearchQueryChange(it) },
-                    shape = CircleShape,
-                    placeholder = { Text(stringResource(R.string.searchIcons)) },
-                    leadingIcon = {
-                        Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { onSearchQueryChange("") }) {
-                                Icon(Icons.Filled.Close, "Clear", tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    modifier = Modifier.weight(1f)
-                )
-                Box {
-                    IconButton(onClick = { showSortMenu = true }) {
-                        Icon(Icons.AutoMirrored.Filled.Sort, "Sort", tint = MaterialTheme.colorScheme.primary)
-                    }
-                    DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text("A → Z") },
-                            onClick = { sortOrder = IconSortOrder.NAME_ASC; showSortMenu = false },
-                            leadingIcon = if (sortOrder == IconSortOrder.NAME_ASC) {
-                                { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Z → A") },
-                            onClick = { sortOrder = IconSortOrder.NAME_DESC; showSortMenu = false },
-                            leadingIcon = if (sortOrder == IconSortOrder.NAME_DESC) {
-                                { Icon(Icons.Filled.Done, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                    }
-                }
-            }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-        }
-
         when (source) {
             Source.ICON_PACK -> {
                 val detailPack = expandedPack
@@ -227,6 +219,17 @@ fun CreateTab(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
+                        // The search bar is the first list item, so it scrolls away 1:1 with
+                        // the icons (perfectly smooth, no animation) and comes back only when
+                        // the list is scrolled all the way to the top.
+                        item(key = "search") {
+                            IconSearchBar(
+                                query = searchQuery,
+                                onQueryChange = onSearchQueryChange,
+                                sortOrder = sortOrder,
+                                onSortOrderChange = { sortOrder = it }
+                            )
+                        }
                         orderedPacks.forEach { pack ->
                             item(key = "${pack.packageName}_header") {
                                 Box(Modifier.animateItem()) {
