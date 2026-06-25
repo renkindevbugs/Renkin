@@ -190,6 +190,11 @@ class MainViewModel @Inject constructor(
     var buildStep by mutableStateOf<String?>(null)
         private set
 
+    /** True if our generated icon pack is currently installed on the device. */
+    private fun isIconPackInstalled(): Boolean = runCatching {
+        getApplication<Application>().packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
+    }.isSuccess
+
     /** Builds, signs and installs the icon pack, surfacing progress through [buildStep]. */
     fun build(preferences: Preferences) {
         if (buildStep != null) return
@@ -197,6 +202,12 @@ class MainViewModel @Inject constructor(
             try {
                 buildStep = ""
                 val pack = appProvider.buildAndSignIconPack(preferences) { buildStep = it }
+                // The system install is the slow part (2-3s) — show it as its own step so the
+                // dialog reflects what's happening. "Updating" when our pack is already
+                // installed, "Installing" for a first build.
+                buildStep = getApplication<Application>().getString(
+                    if (isIconPackInstalled()) R.string.buildUpdating else R.string.buildInstalling
+                )
                 if (appProvider.installIconPack(pack)) {
                     _toastEvents.trySend(R.string.iconPackInstalled)
                     // The saved pack now matches the current icons → reset the change baseline.
@@ -230,10 +241,7 @@ class MainViewModel @Inject constructor(
     fun deleteIconPack() {
         viewModelScope.launch {
             val context = getApplication<Application>()
-            val installed = runCatching {
-                context.packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
-            }.isSuccess
-            if (!installed) {
+            if (!isIconPackInstalled()) {
                 _toastEvents.trySend(R.string.iconPackNotInstalled)
                 return@launch
             }
