@@ -638,8 +638,9 @@ private fun DoneBadge() {
 
 
 /** App pill (icon + name) used on the active rule card. */
+/** A small rounded pill with a leading 18dp [icon] and an ellipsized [text] label. */
 @Composable
-private fun AppPill(app: PackageInfoStruct?, fallbackPackage: String) {
+private fun Pill(text: String, icon: @Composable () -> Unit) {
     Surface(
         shape = RoundedCornerShape(10.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHighest
@@ -648,32 +649,9 @@ private fun AppPill(app: PackageInfoStruct?, fallbackPackage: String) {
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AppIcon(app, fallbackPackage, 18.dp)
+            icon()
             Text(
-                text = app?.appName ?: fallbackPackage,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 6.dp)
-            )
-        }
-    }
-}
-
-/** Pack pill (icon + name) used in the "Watching" / "New icon in" rows. */
-@Composable
-private fun PackLabel(packPackage: String, name: String?) {
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceContainerHighest
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            PackIconImage(packPackage, 18.dp)
-            Text(
-                text = name ?: packPackage,
+                text = text,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
@@ -682,5 +660,16 @@ private fun PackLabel(packPackage: String, name: String?) {
             )
         }
     }
+}
+
+@Composable
+private fun AppPill(app: PackageInfoStruct?, fallbackPackage: String) {
+    Pill(app?.appName ?: fallbackPackage) { AppIcon(app, fallbackPackage, 18.dp) }
+}
+
+/** Pack pill (icon + name) used in the "Watching" / "New icon in" rows. */
+@Composable
+private fun PackLabel(packPackage: String, name: String?) {
+    Pill(name ?: packPackage) { PackIconImage(packPackage, 18.dp) }
 }
 
