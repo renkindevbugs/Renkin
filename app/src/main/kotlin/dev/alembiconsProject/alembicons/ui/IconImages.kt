@@ -1,13 +1,16 @@
 package dev.alembiconsProject.alembicons.ui
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
@@ -18,6 +21,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 // Shared low-level icon/bitmap rendering, reused anywhere an app or icon-pack icon is shown
 // (the app list, watch list/editor/apply modal, the about dialog, …). Decoding once here —
@@ -35,23 +40,6 @@ internal fun rememberAppBitmap(app: PackageInfoStruct, size: Dp = 54.dp): ImageB
         val target = with(density) { size.roundToPx() }
         val px = app.icon.intrinsicWidth.let { if (it in 1 until target) it else target }
         app.icon.toSafeBitmapOrNull(px, px)?.asImageBitmap()
-    }
-}
-
-/** A package's launcher icon as an [ImageBitmap], decoded to [size]. Null if the package is gone. */
-@Composable
-internal fun rememberPackBitmap(packPackage: String, size: Dp = 54.dp): ImageBitmap? {
-    val context = getCurrentContext()
-    val density = LocalDensity.current
-    return remember(packPackage, density, size) {
-        try {
-            val drawable = context.packageManager.getApplicationIcon(packPackage)
-            val target = with(density) { size.roundToPx() }
-            val px = drawable.intrinsicWidth.let { if (it in 1 until target) it else target }
-            drawable.toSafeBitmapOrNull(px, px)?.asImageBitmap()
-        } catch (_: Exception) {
-            null
-        }
     }
 }
 
@@ -77,25 +65,45 @@ internal fun AppIcon(app: PackageInfoStruct?, fallbackPackage: String, size: and
     }
 }
 
-// Pack icons appear as small chips repeated across many rule cards, and the LazyColumn
-// re-creates them on every scroll. Decode each pack icon once (small) and cache it
-// process-wide so scrolling doesn't keep hitting PackageManager / re-decoding bitmaps.
-private val packIconCache = mutableMapOf<String, ImageBitmap?>()
+// Pack icons appear as small chips repeated across many rows (the pack browser, watch lists,
+// the about dialog). Decode each once OFF the main thread (decoding in remember{} blocked the
+// UI while the editor dialog opened) and cache it process-wide, keyed by the pack's last-update
+// time so an updated or reinstalled pack is re-decoded instead of showing a stale icon.
+private const val PACK_ICON_PX = 96
 
-private fun packIconBitmap(context: android.content.Context, packPackage: String): ImageBitmap? =
-    packIconCache.getOrPut(packPackage) {
-        try {
-            context.packageManager.getApplicationIcon(packPackage)
-                .toSafeBitmapOrNull(72, 72)?.asImageBitmap()
-        } catch (_: Exception) {
-            null
+private data class CachedPackIcon(val stamp: Long, val bitmap: ImageBitmap?)
+private val packIconCache = mutableMapOf<String, CachedPackIcon>()
+
+/**
+ * The single shared pack-icon loader: a package's launcher icon as an [ImageBitmap], decoded
+ * once off the main thread and cached. Null until it has loaded (and if the package is gone).
+ */
+@Composable
+internal fun rememberPackIcon(packPackage: String): ImageBitmap? {
+    val context = getCurrentContext()
+    var icon by remember(packPackage) { mutableStateOf(packIconCache[packPackage]?.bitmap) }
+    LaunchedEffect(packPackage) {
+        icon = withContext(Dispatchers.IO) {
+            try {
+                val pm = context.packageManager
+                val stamp = pm.getPackageInfo(packPackage, 0).lastUpdateTime
+                packIconCache[packPackage]?.takeIf { it.stamp == stamp }?.let { return@withContext it.bitmap }
+                val bitmap = pm.getApplicationIcon(packPackage)
+                    .toSafeBitmapOrNull(PACK_ICON_PX, PACK_ICON_PX)?.asImageBitmap()
+                packIconCache[packPackage] = CachedPackIcon(stamp, bitmap)
+                bitmap
+            } catch (_: Exception) {
+                packIconCache[packPackage] = CachedPackIcon(0L, null)
+                null
+            }
         }
     }
+    return icon
+}
 
 @Composable
-internal fun PackIconImage(packPackage: String, size: androidx.compose.ui.unit.Dp) {
-    val context = getCurrentContext()
-    val bitmap = remember(packPackage) { packIconBitmap(context, packPackage) }
+internal fun PackIconImage(packPackage: String, size: Dp) {
+    val bitmap = rememberPackIcon(packPackage)
     if (bitmap != null) {
         Image(
             painter = BitmapPainter(bitmap),
@@ -107,8 +115,8 @@ internal fun PackIconImage(packPackage: String, size: androidx.compose.ui.unit.D
     } else {
         Surface(
             modifier = Modifier.size(size),
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primary
+            shape = RoundedCornerShape(size / 4),
+            color = MaterialTheme.colorScheme.surfaceVariant
         ) {}
     }
 }
