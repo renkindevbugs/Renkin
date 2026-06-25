@@ -5,7 +5,7 @@ import android.content.res.Resources.Theme
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.text.isDigitsOnly
-import dev.alembiconsProject.alembicons.ui.toColor
+import dev.alembiconsProject.alembicons.extension.toColor
 
 class ColorDecoder(val resources: Resources, private val defaultColor: Color = Color.Unspecified) {
     private fun decode(value: String): Color {

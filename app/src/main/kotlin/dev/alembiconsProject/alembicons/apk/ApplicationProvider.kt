@@ -23,8 +23,8 @@ import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
-import dev.alembiconsProject.alembicons.ui.supportDynamicColors
-import dev.alembiconsProject.alembicons.ui.toHexString
+import dev.alembiconsProject.alembicons.extension.toHexString
+import dev.alembiconsProject.alembicons.packages.supportDynamicColors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 

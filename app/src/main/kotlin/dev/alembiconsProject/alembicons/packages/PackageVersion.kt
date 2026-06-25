@@ -61,3 +61,6 @@ class PackageVersion {
         }
     }
 }
+
+/** Themed (dynamic-colour) icons are available on Android 12 (API 31) and newer. */
+fun supportDynamicColors(): Boolean = PackageVersion.is31OrMore()

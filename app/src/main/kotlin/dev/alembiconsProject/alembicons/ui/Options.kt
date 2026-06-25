@@ -3,7 +3,7 @@ package dev.alembiconsProject.alembicons.ui
 import androidx.compose.runtime.Composable
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.Source
-import dev.alembiconsProject.alembicons.packages.PackageVersion
+import dev.alembiconsProject.alembicons.packages.supportDynamicColors
 
 // Pure predicates that decide which option controls are relevant for a given source /
 // image-edit / themed combination. Shared by OptionsCard and the per-app options dialog.
@@ -44,10 +44,6 @@ fun isPathTracingEnabled(source: Source, imageEdit: ImageEdit): Boolean {
     }
 
     return false
-}
-
-fun supportDynamicColors(): Boolean {
-    return PackageVersion.is31OrMore()
 }
 
 fun showIconColor(primarySource: Source, primaryImageEdit: ImageEdit, secondarySource: Source, secondaryImageEdit: ImageEdit, themed: Boolean): Boolean {
