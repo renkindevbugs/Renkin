@@ -203,29 +203,14 @@ fun RemoveIconsButton() {
     }
 
     if (confirm) {
-        AlertDialog(
-            shape = DialogShape,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            onDismissRequest = { confirm = false },
-            title = { Text(stringResource(R.string.clearIconsTitle)) },
-            text = { Text(stringResource(R.string.clearIconsText)) },
-            confirmButton = {
-                TextButton(onClick = {
-                    view.performConfirmHaptic()
-                    confirm = false
-                    viewModel.clearIcons()
-                }) {
-                    Text(
-                        stringResource(R.string.confirm),
-                        color = MaterialTheme.colorScheme.error
-                    )
-                }
+        ConfirmDialog(
+            title = stringResource(R.string.clearIconsTitle),
+            text = stringResource(R.string.clearIconsText),
+            onConfirm = {
+                confirm = false
+                viewModel.clearIcons()
             },
-            dismissButton = {
-                TextButton(onClick = { confirm = false }) {
-                    Text(stringResource(R.string.dismiss))
-                }
-            }
+            onDismiss = { confirm = false }
         )
     }
 }

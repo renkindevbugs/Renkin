@@ -16,7 +16,6 @@ import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -495,39 +494,11 @@ private fun OptionsBottomBar(
 
 @Composable
 fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
-    val view = LocalView.current
-    AlertDialog(
-        shape = DialogShape,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        onDismissRequest = { onDismiss() },
-        title = { Text(stringResource(R.string.confirmClear)) },
-        text = {
-            Text(stringResource(R.string.confirmClearText))
-        },
-        confirmButton = {
-            IconButton(onClick = {
-                view.performConfirmHaptic()
-                onDismiss()
-                onIconClear()
-            }) {
-                Icon(
-                    imageVector = Icons.Filled.Done,
-                    contentDescription = stringResource(R.string.confirm),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        },
-        dismissButton = {
-            IconButton(onClick = {
-                onDismiss()
-            }) {
-                Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = stringResource(R.string.dismiss),
-                    tint = MaterialTheme.colorScheme.error
-                )
-            }
-        }
+    ConfirmDialog(
+        title = stringResource(R.string.confirmClear),
+        text = stringResource(R.string.confirmClearText),
+        onConfirm = onIconClear,
+        onDismiss = onDismiss
     )
 }
 

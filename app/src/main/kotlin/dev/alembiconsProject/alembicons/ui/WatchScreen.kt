@@ -80,7 +80,6 @@ import dev.alembiconsProject.alembicons.WatchViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.ui.theme.CardShape
-import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
@@ -190,7 +189,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
     }
 
     pendingDelete?.let { ruleId ->
-        ConfirmDeleteDialog(
+        ConfirmDialog(
             title = stringResource(R.string.deleteRuleTitle),
             text = stringResource(R.string.deleteRuleText),
             onDismiss = { pendingDelete = null },
@@ -202,7 +201,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
     }
 
     if (pendingDeleteAllCompleted) {
-        ConfirmDeleteDialog(
+        ConfirmDialog(
             title = stringResource(R.string.deleteAllCompletedTitle),
             text = stringResource(R.string.deleteAllCompletedText),
             onDismiss = { pendingDeleteAllCompleted = false },
@@ -217,28 +216,6 @@ fun WatchScreen(onDismiss: () -> Unit) {
     applySuggestionId?.let { sid ->
         WatchApplyModal(sid) { applySuggestionId = null }
     }
-}
-
-@Composable
-private fun ConfirmDeleteDialog(title: String, text: String, onDismiss: () -> Unit, onConfirm: () -> Unit) {
-    val view = LocalView.current
-    androidx.compose.material3.AlertDialog(
-        shape = DialogShape,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = { Text(text) },
-        confirmButton = {
-            IconButton(onClick = { view.performConfirmHaptic(); onConfirm() }) {
-                Icon(Icons.Filled.Check, stringResource(R.string.confirm), tint = MaterialTheme.colorScheme.primary)
-            }
-        },
-        dismissButton = {
-            IconButton(onClick = onDismiss) {
-                Icon(Icons.Filled.Close, stringResource(R.string.dismiss), tint = MaterialTheme.colorScheme.error)
-            }
-        }
-    )
 }
 
 // ---------------------------------------------------------------------------
