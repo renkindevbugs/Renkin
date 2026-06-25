@@ -46,7 +46,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.stringResource
@@ -62,6 +61,7 @@ import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.icon.creator.IconSortOrder
+import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
 import dev.alembiconsProject.alembicons.icon.creator.PackIconPreview
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -131,8 +131,8 @@ private fun PackIcon(packageName: String, size: androidx.compose.ui.unit.Dp) {
 }
 
 // Subtle green frame on the icon the user picked from this pack, so the selection is
-// visible on the grid itself (not just in the header). Matches the added-green elsewhere.
-private val selectedIconBorderColor = Color(0xFF34C759)
+// visible on the grid itself (not just in the header). Shares the added-green token.
+private val selectedIconBorderColor = AddedGreen
 
 @Composable
 private fun Modifier.selectedIconBorder(selected: Boolean): Modifier {

@@ -30,6 +30,7 @@ import dev.alembiconsProject.alembicons.icon.creator.PackIconPreview
 import dev.alembiconsProject.alembicons.icon.creator.PackRowPreviews
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
+import dev.alembiconsProject.alembicons.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -193,13 +194,26 @@ class MainViewModel @Inject constructor(
     fun build(preferences: Preferences) {
         if (buildStep != null) return
         viewModelScope.launch {
-            buildStep = ""
-            val pack = appProvider.buildAndSignIconPack(preferences) { buildStep = it }
-            buildStep = null
-            if (appProvider.installIconPack(pack)) {
-                _toastEvents.trySend(R.string.iconPackInstalled)
-                // The saved pack now matches the current icons → reset the change baseline.
-                builtKeys = appProvider.getSavedPackKeys()
+            try {
+                buildStep = ""
+                val pack = appProvider.buildAndSignIconPack(preferences) { buildStep = it }
+                if (appProvider.installIconPack(pack)) {
+                    _toastEvents.trySend(R.string.iconPackInstalled)
+                    // The saved pack now matches the current icons → reset the change baseline.
+                    builtKeys = appProvider.getSavedPackKeys()
+                } else {
+                    // install returned false: it failed or the user cancelled the system installer.
+                    _toastEvents.trySend(R.string.iconPackInstallFailed)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A build/sign failure must surface and still release the UI, not leave the
+                // (non-dismissable) progress dialog stuck on screen.
+                Log.error("MainViewModel", "Icon pack build failed", e)
+                _toastEvents.trySend(R.string.iconPackBuildFailed)
+            } finally {
+                buildStep = null
             }
         }
     }
