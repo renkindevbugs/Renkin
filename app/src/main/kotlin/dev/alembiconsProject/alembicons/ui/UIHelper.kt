@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +38,7 @@ import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.MainActivity
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.dataStore
+import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 
@@ -159,6 +161,35 @@ fun SearchField(
             }
         },
         modifier = modifier
+    )
+}
+
+/**
+ * Shared non-destructive dialog: every Renkin [AlertDialog] gets the same [DialogShape] on an
+ * elevated surface with the standard title colour, so callers only supply the content slots. For
+ * a destructive confirm use [ConfirmDialog] instead.
+ */
+@Composable
+fun RenkinAlertDialog(
+    onDismissRequest: () -> Unit,
+    confirmButton: @Composable () -> Unit = {},
+    modifier: Modifier = Modifier,
+    dismissButton: (@Composable () -> Unit)? = null,
+    icon: (@Composable () -> Unit)? = null,
+    title: (@Composable () -> Unit)? = null,
+    text: (@Composable () -> Unit)? = null
+) {
+    AlertDialog(
+        onDismissRequest = onDismissRequest,
+        confirmButton = confirmButton,
+        modifier = modifier,
+        dismissButton = dismissButton,
+        icon = icon,
+        title = title,
+        text = text,
+        shape = DialogShape,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+        titleContentColor = MaterialTheme.colorScheme.onSurface
     )
 }
 
