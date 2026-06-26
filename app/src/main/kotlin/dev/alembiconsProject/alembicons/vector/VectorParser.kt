@@ -15,14 +15,6 @@ import dev.alembiconsProject.alembicons.vector.brush.ReferenceBrush
 import dev.alembiconsProject.alembicons.xml.XmlNode
 
 class VectorParser(val resources: Resources, private val defaultColor: Color = Color.Unspecified) {
-    private val lineCapButt = 0
-    private val lineCapRound = 1
-    private val lineCapSquare = 2
-
-    private val lineJoinMiter = 0
-    private val lineJoinRound = 1
-    private val lineJoinBevel = 2
-
     private fun parse(node: XmlNode): ImageVector? {
         val vectorNode = node.findFirstTag("vector")
 
@@ -163,28 +155,6 @@ class VectorParser(val resources: Resources, private val defaultColor: Color = C
         }
     }
 
-    private fun parseCap(cap: Int): StrokeCap {
-        return when (cap) {
-            lineCapButt -> StrokeCap.Butt
-            lineCapRound -> StrokeCap.Round
-            lineCapSquare -> StrokeCap.Square
-            else -> StrokeCap.Butt
-        }
-    }
-
-    private fun parseJoin(join: Int): StrokeJoin {
-        return when (join) {
-            lineJoinMiter -> StrokeJoin.Miter
-            lineJoinRound -> StrokeJoin.Round
-            lineJoinBevel -> StrokeJoin.Bevel
-            else -> StrokeJoin.Bevel
-        }
-    }
-
-    private fun parseFill(fill: Int): PathFillType {
-        return if (fill == 0) PathFillType.NonZero else PathFillType.EvenOdd
-    }
-
     private fun parseColor(color: String?): Brush? {
         if (color.isNullOrBlank())
             return null
@@ -211,3 +181,33 @@ class VectorParser(val resources: Resources, private val defaultColor: Color = C
         }
     }
 }
+
+// android:strokeLineCap / strokeLineJoin values (0/1/2). Extracted to top level so the int →
+// enum mappings — and their absent-attribute defaults — are unit-testable.
+private const val LINE_CAP_BUTT = 0
+private const val LINE_CAP_ROUND = 1
+private const val LINE_CAP_SQUARE = 2
+
+private const val LINE_JOIN_MITER = 0
+private const val LINE_JOIN_ROUND = 1
+private const val LINE_JOIN_BEVEL = 2
+
+/** Maps a strokeLineCap value to [StrokeCap]; an absent/unknown value defaults to Butt (the Android default). */
+internal fun parseCap(cap: Int): StrokeCap = when (cap) {
+    LINE_CAP_BUTT -> StrokeCap.Butt
+    LINE_CAP_ROUND -> StrokeCap.Round
+    LINE_CAP_SQUARE -> StrokeCap.Square
+    else -> StrokeCap.Butt
+}
+
+/** Maps a strokeLineJoin value to [StrokeJoin]; an absent/unknown value defaults to Miter (the Android default). */
+internal fun parseJoin(join: Int): StrokeJoin = when (join) {
+    LINE_JOIN_MITER -> StrokeJoin.Miter
+    LINE_JOIN_ROUND -> StrokeJoin.Round
+    LINE_JOIN_BEVEL -> StrokeJoin.Bevel
+    else -> StrokeJoin.Miter
+}
+
+/** Maps a fillType value to [PathFillType]: 0 = non-zero (the default), anything else = even-odd. */
+internal fun parseFill(fill: Int): PathFillType =
+    if (fill == 0) PathFillType.NonZero else PathFillType.EvenOdd
