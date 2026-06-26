@@ -21,7 +21,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ImageNotSupported
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -47,7 +46,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
-import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.WatchViewModel
 import dev.alembiconsProject.alembicons.apk.IconPackBuilder
@@ -123,9 +121,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     // loading; wait so the modal shows real icons instead of empty placeholders.
     if (!viewModel.applicationsLoaded || !viewModel.iconPackLoaded) return
 
-    AlertDialog(
-        shape = DialogShape,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    RenkinAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.watchApplyTitle)) },
         text = {

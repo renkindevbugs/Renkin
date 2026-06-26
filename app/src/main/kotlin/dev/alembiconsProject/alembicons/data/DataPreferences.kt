@@ -16,8 +16,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.alembiconsProject.alembicons.R
-import dev.alembiconsProject.alembicons.ui.toColor
-import dev.alembiconsProject.alembicons.ui.toHexString
+import dev.alembiconsProject.alembicons.extension.toColor
+import dev.alembiconsProject.alembicons.extension.toHexString
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlin.enums.enumEntries
@@ -95,6 +95,23 @@ fun DataStore<Preferences>.getDefaultBackgroundColor(): Color {
 fun Preferences.getDefaultBackgroundColor(context: Context): Color {
     return if (isDarkModeEnabled(context)) Color.Black else Color.White
 }
+
+// Convenience: the configured icon / background colour, falling back to the theme default.
+// Bundles the key + matching default so callers don't repeat that pairing.
+
+@Composable
+fun DataStore<Preferences>.getIconColor(): Color =
+    getColorValue(IconColorKey, getDefaultIconColor())
+
+fun Preferences.getIconColor(context: Context): Color =
+    getColorValue(IconColorKey, getDefaultIconColor(context))
+
+@Composable
+fun DataStore<Preferences>.getBackgroundColor(): Color =
+    getColorValue(BackgroundColorKey, getDefaultBackgroundColor())
+
+fun Preferences.getBackgroundColor(context: Context): Color =
+    getColorValue(BackgroundColorKey, getDefaultBackgroundColor(context))
 
 //Preference type
 fun DataStore<Preferences>.getBooleanState(key: Preferences.Key<Boolean>): Flow<Boolean?> {

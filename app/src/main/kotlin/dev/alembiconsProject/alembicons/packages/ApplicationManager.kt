@@ -1,6 +1,5 @@
 package dev.alembiconsProject.alembicons.packages
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -462,17 +461,6 @@ class ApplicationManager(private val ctx: Context) {
     fun getPackageResourceXml(packageName: String, resourceId: Int): XmlResourceParser? {
         val res = getResources(packageName)
         return res?.getXmlOrNull(resourceId)
-    }
-
-    fun <T> changeManifestEnabledState(cls: Class<T>, enabled: Boolean) {
-        val state = if (enabled) {
-            PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-        } else {
-            PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-        }
-
-        val componentName = ComponentName(ctx, cls)
-        pm.setComponentEnabledSetting(componentName, state, PackageManager.DONT_KILL_APP)
     }
 
     fun getVersionCode(pack: PackageInfo): Long {

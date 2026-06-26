@@ -27,7 +27,6 @@ import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -52,6 +51,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -70,17 +70,15 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
+import dev.alembiconsProject.alembicons.packages.supportDynamicColors
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.theme.CardShape
-import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.data.AppFilterNoIconKey
 import dev.alembiconsProject.alembicons.data.AppSortOrderKey
-import dev.alembiconsProject.alembicons.data.BackgroundColorKey
+import dev.alembiconsProject.alembicons.data.getBackgroundColor
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.getBooleanValue
-import dev.alembiconsProject.alembicons.data.getColorValue
-import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
 import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
@@ -91,6 +89,49 @@ import dev.alembiconsProject.alembicons.WatchViewModel
 import kotlinx.coroutines.launch
 
 enum class AppSortOrder { NAME, INSTALL_DATE }
+
+/**
+ * Shared app sort/filter overflow: a sort icon button opening a menu with the two sort orders
+ * (name / recently installed) and the all-vs-without-icon filter. Used by the home app list and
+ * the watch-rule app picker so both look and behave identically.
+ */
+@Composable
+fun AppSortFilterMenu(
+    sortOrder: AppSortOrder,
+    filterNoIcon: Boolean,
+    onSortChange: (AppSortOrder) -> Unit,
+    onFilterChange: (Boolean) -> Unit
+) {
+    var showSortMenu by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { showSortMenu = true }) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Sort,
+                contentDescription = stringResource(R.string.sortApps),
+                tint = MaterialTheme.colorScheme.primary
+            )
+        }
+        DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+            CheckableDropdownItem(
+                text = stringResource(R.string.sortByName),
+                checked = sortOrder == AppSortOrder.NAME
+            ) { onSortChange(AppSortOrder.NAME); showSortMenu = false }
+            CheckableDropdownItem(
+                text = stringResource(R.string.sortByInstallDate),
+                checked = sortOrder == AppSortOrder.INSTALL_DATE
+            ) { onSortChange(AppSortOrder.INSTALL_DATE); showSortMenu = false }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            CheckableDropdownItem(
+                text = stringResource(R.string.filterAllApps),
+                checked = !filterNoIcon
+            ) { onFilterChange(false); showSortMenu = false }
+            CheckableDropdownItem(
+                text = stringResource(R.string.filterWithoutIcon),
+                checked = filterNoIcon
+            ) { onFilterChange(true); showSortMenu = false }
+        }
+    }
+}
 
 /**
  * True while the list is scrolling up (or sitting at the top). Used to expand the
@@ -212,9 +253,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
  */
 @Composable
 fun NewIconPackDialog(packLabel: String, onReload: () -> Unit, onDismiss: () -> Unit) {
-    AlertDialog(
-        shape = DialogShape,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    RenkinAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.newIconPackTitle)) },
         text = { Text(stringResource(R.string.newIconPackText, packLabel)) },
@@ -237,24 +276,19 @@ fun ApplicationList(
     listState: LazyListState = rememberLazyListState()
 ) {
     val viewModel: MainViewModel = hiltViewModel()
-    val pm = LocalContext.current.packageManager
     val applications = viewModel.applicationList
 
     // Read preferences once for the whole list — a DataStore subscription per row
     // causes visible scroll jank
     val prefs = getPreferences()
-    val bgColorValue = prefs.getColorValue(BackgroundColorKey, prefs.getDefaultBackgroundColor())
+    val bgColorValue = prefs.getBackgroundColor()
     val themed = prefs.getBooleanValue(ExportThemedKey)
 
-    // Install times do not change while the app runs; refresh only when the list grows/shrinks
-    val installTimes = remember(applications.size) {
-        applications.associate { app ->
-            app.packageName to try {
-                pm.getPackageInfo(app.packageName, 0).firstInstallTime
-            } catch (_: Exception) {
-                0L
-            }
-        }
+    // Install times do not change while the app runs; refresh only when the list grows/shrinks.
+    // Looked up off the main thread via the view model — until they arrive, INSTALL_DATE sort
+    // just shows the default order.
+    val installTimes by produceState(emptyMap<String, Long>(), applications.size) {
+        value = viewModel.installTimes(applications.map { it.packageName })
     }
 
     // Keep the original index — ApplicationItem edits the app list by position (via the VM).
@@ -543,7 +577,6 @@ fun SearchBar(
     onSearch: (String) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
-    var showSortMenu by remember { mutableStateOf(false) }
 
     // Back clears the query first; only once it's empty does back fall through to
     // the exit handler above (the keyboard, if open, is dismissed by the system first)
@@ -565,34 +598,7 @@ fun SearchBar(
             },
             modifier = Modifier.weight(1f)
         )
-        Box {
-            IconButton(onClick = { showSortMenu = true }) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.Sort,
-                    contentDescription = stringResource(R.string.sortApps),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-            DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                CheckableDropdownItem(
-                    text = stringResource(R.string.sortByName),
-                    checked = sortOrder == AppSortOrder.NAME
-                ) { onSortChange(AppSortOrder.NAME); showSortMenu = false }
-                CheckableDropdownItem(
-                    text = stringResource(R.string.sortByInstallDate),
-                    checked = sortOrder == AppSortOrder.INSTALL_DATE
-                ) { onSortChange(AppSortOrder.INSTALL_DATE); showSortMenu = false }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                CheckableDropdownItem(
-                    text = stringResource(R.string.filterAllApps),
-                    checked = !filterNoIcon
-                ) { onFilterChange(false); showSortMenu = false }
-                CheckableDropdownItem(
-                    text = stringResource(R.string.filterWithoutIcon),
-                    checked = filterNoIcon
-                ) { onFilterChange(true); showSortMenu = false }
-            }
-        }
+        AppSortFilterMenu(sortOrder, filterNoIcon, onSortChange, onFilterChange)
     }
     }
 }

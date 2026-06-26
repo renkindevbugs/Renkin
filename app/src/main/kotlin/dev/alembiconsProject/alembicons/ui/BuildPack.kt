@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -44,7 +43,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -55,7 +53,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
-import dev.alembiconsProject.alembicons.ui.theme.DialogShape
+import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
@@ -108,10 +106,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     }
 
     if (buildStep != null) {
-        AlertDialog(
-            shape = DialogShape,
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
+        RenkinAlertDialog(
             onDismissRequest = {},
             icon = {
                 LoadingIndicator(color = MaterialTheme.colorScheme.primary)
@@ -258,7 +253,7 @@ private fun BuildPreviewItem(app: PackageInfoStruct, changed: Boolean = false) {
                         .background(MaterialTheme.colorScheme.surfaceContainerLow)
                         .padding(2.dp)
                         .clip(CircleShape)
-                        .background(Color(0xFF34C759))
+                        .background(AddedGreen)
                 )
             }
         }

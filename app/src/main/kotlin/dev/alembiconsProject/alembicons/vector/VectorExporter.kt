@@ -8,7 +8,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.VectorGroup
 import androidx.compose.ui.graphics.vector.VectorPath
-import dev.alembiconsProject.alembicons.ui.toHexString
+import dev.alembiconsProject.alembicons.extension.toHexString
 import dev.alembiconsProject.alembicons.vector.PathExporter.Companion.toStringPath
 import dev.alembiconsProject.alembicons.vector.brush.ReferenceBrush
 import dev.alembiconsProject.alembicons.xml.file.BaseVectorXml

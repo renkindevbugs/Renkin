@@ -29,10 +29,7 @@ import dev.alembiconsProject.alembicons.data.WatchCheckIntervalKey
 import dev.alembiconsProject.alembicons.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.alembiconsProject.alembicons.data.getIntValue
 import dev.alembiconsProject.alembicons.apk.IconPackBuilder
-import dev.alembiconsProject.alembicons.data.watch.WatchRepository
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
-import dev.alembiconsProject.alembicons.service.BootCompletedReceiver
-import dev.alembiconsProject.alembicons.service.PackageAddedService
 import dev.alembiconsProject.alembicons.service.WatchWorker
 import dev.alembiconsProject.alembicons.util.CrashReporter
 import dev.alembiconsProject.alembicons.ui.*
@@ -70,18 +67,14 @@ class MainActivity : ComponentActivity() {
 
         handleWatchIntent(intent)
 
-        // Icon-watch: the daily safety-net check is always scheduled (version-gated,
-        // so it's near-free when nothing changed); the event-driven fast path needs the
-        // package receiver running, so start it when there are active watch rules.
+        // Icon-watch: schedule the periodic safety-net check (version-gated, so it's near-free
+        // when nothing changed). This is the only watch trigger — see WatchWorker.
         lifecycleScope.launch(Dispatchers.Default) {
             // KEEP so an already-running interval timer isn't reset on every launch; the
             // user's chosen interval is applied immediately (UPDATE) when they change it.
             val intervalMinutes = applicationContext.dataStore.data.first()
                 .getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)
             WatchWorker.schedulePeriodic(applicationContext, intervalMinutes)
-            if (WatchRepository(applicationContext).getActiveRules().isNotEmpty()) {
-                startPackageAddedService()
-            }
             // Drop crash logs older than the retention window (and migrate any legacy log).
             CrashReporter.prune(applicationContext)
         }
@@ -164,12 +157,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge(style, style)
     }
 
-    /** Starts the icon-watch package monitor and enables the boot receiver so it survives reboot. */
-    fun startPackageAddedService() {
-        startService(Intent(this, PackageAddedService::class.java))
-        ApplicationManager(this)
-            .changeManifestEnabledState(BootCompletedReceiver::class.java, true)
-    }
 
     companion object {
         const val ACTION_OPEN_SUGGESTION = "dev.alembiconsProject.alembicons.OPEN_SUGGESTION"

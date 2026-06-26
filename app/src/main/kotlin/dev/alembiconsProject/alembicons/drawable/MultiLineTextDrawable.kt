@@ -1,7 +1,6 @@
 package dev.alembiconsProject.alembicons.drawable
 
 import android.graphics.Canvas
-import android.graphics.ColorFilter
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
@@ -21,7 +20,7 @@ class MultiLineTextDrawable(
     , maxLines: Int
     , private val height: Int = 0
 ): BaseTextDrawable() {
-    private val paint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+    override val paint: TextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
     private val staticLayout: StaticLayout
 
     init {
@@ -45,31 +44,11 @@ class MultiLineTextDrawable(
 
     private fun adjustTextSize(text: String, minTextSize: Float, width: Int, maxLines: Int) {
         val words = text.split(' ')
-        val longestWord = getLongestWord(words, maxLines)
+        val longestWord = widestWord(words, maxLines) { textWidth(it) }
 
-        while (calculateTextWidth(longestWord) > width && paint.textSize > minTextSize) {
+        while (textWidth(longestWord) > width && paint.textSize > minTextSize) {
             paint.textSize -= 1
         }
-    }
-
-    private fun getLongestWord(words: List<String>, maxLines: Int): String {
-        if (words.size == 1) {
-            return words[0]
-        }
-
-        val wordsToShow = if (words.size > maxLines) {
-            words.slice(0 until maxLines)
-        } else {
-            words
-        }
-
-        val wordsSortedByWidth = wordsToShow.map { it to calculateTextWidth(it) }
-        wordsSortedByWidth.sortedByDescending { it.second }
-        return wordsSortedByWidth.first().first
-    }
-
-    private fun calculateTextWidth(text: String): Int {
-        return (paint.measureText(text, 0, text.length) + 0.5).toInt()
     }
 
     private fun calculateX(): Float {
@@ -86,11 +65,6 @@ class MultiLineTextDrawable(
         }
 
         return (bounds.height() - staticLayout.height) / 2F
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun getOpacity(): Int {
-        return paint.alpha
     }
 
     override fun getIntrinsicWidth(): Int {
@@ -126,12 +100,14 @@ class MultiLineTextDrawable(
             staticLayout.draw(this)
         }
     }
+}
 
-    override fun setAlpha(alpha: Int) {
-        paint.alpha = alpha
-    }
-
-    override fun setColorFilter(colorFilter: ColorFilter?) {
-        paint.colorFilter = colorFilter
-    }
+/**
+ * The widest of the first [maxLines] words by [widthOf] — the word the text must shrink to fit.
+ * Pure (no paint state) so it can be unit-tested; the drawable passes its text measurement in.
+ */
+internal fun widestWord(words: List<String>, maxLines: Int, widthOf: (String) -> Int): String {
+    if (words.size == 1) return words[0]
+    val wordsToShow = if (words.size > maxLines) words.slice(0 until maxLines) else words
+    return wordsToShow.maxByOrNull(widthOf) ?: wordsToShow.first()
 }

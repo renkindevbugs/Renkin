@@ -36,12 +36,13 @@ import dev.alembiconsProject.alembicons.drawable.haveMonochrome
 import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
 import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
 import dev.alembiconsProject.alembicons.extension.changeBackgroundColor
-import dev.alembiconsProject.alembicons.extension.clone
+import dev.alembiconsProject.alembicons.extension.emptyLike
 import dev.alembiconsProject.alembicons.extension.scaleFromCenter
 import dev.alembiconsProject.alembicons.icon.parser.IconParser
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.drawable.toImageVectorDrawable
+import dev.alembiconsProject.alembicons.util.Log
 import dev.alembiconsProject.alembicons.packages.PackageVersion
 import dev.alembiconsProject.alembicons.vector.PathConverter.Companion.toNodes
 import dev.alembiconsProject.alembicons.vector.VectorEditor.Companion.applyAndRemoveGroup
@@ -79,16 +80,22 @@ class IconGenerator(
             return
         }
 
-        val icon = generateIcon(
-            application,
-            options.primarySource,
-            options.primaryImageEdit,
-            options.primaryTextType,
-            primaryIconPackApplications,
-            customIcon
-        )
+        // A malformed pack drawable must not crash the preview — fall back to "no icon".
+        val icon = try {
+            generateIcon(
+                application,
+                options.primarySource,
+                options.primaryImageEdit,
+                options.primaryTextType,
+                primaryIconPackApplications,
+                customIcon
+            )?.let { applyAdjustments(it) }
+        } catch (e: Exception) {
+            Log.error("IconGenerator", "Failed to generate icon for ${application.packageName}", e)
+            null
+        }
 
-        onUpdate(application, icon?.let { applyAdjustments(it) })
+        onUpdate(application, icon)
     }
 
     fun generateIcons(applications: List<PackageInfoStruct>
@@ -102,22 +109,28 @@ class IconGenerator(
                 continue
             }
 
-            val icon = generateIcon(
-                app,
-                options.primarySource,
-                options.primaryImageEdit,
-                options.primaryTextType,
-                primaryIconPackApplications
-            )
-                ?: generateIcon(
+            // A malformed drawable in one (third-party) pack must not abort the whole refresh.
+            // Skip the offending app, leaving its current icon untouched, and carry on.
+            try {
+                val icon = generateIcon(
                     app,
-                    options.secondarySource,
-                    options.secondaryImageEdit,
-                    options.secondaryTextType,
-                    secondaryIconPackApplications
+                    options.primarySource,
+                    options.primaryImageEdit,
+                    options.primaryTextType,
+                    primaryIconPackApplications
                 )
+                    ?: generateIcon(
+                        app,
+                        options.secondarySource,
+                        options.secondaryImageEdit,
+                        options.secondaryTextType,
+                        secondaryIconPackApplications
+                    )
 
-            onUpdate(app, icon)
+                onUpdate(app, icon)
+            } catch (e: Exception) {
+                Log.error("IconGenerator", "Failed to generate icon for ${app.packageName}", e)
+            }
         }
     }
 
@@ -520,7 +533,7 @@ class IconGenerator(
     }
 
     private fun colorizeBitmap(icon: Bitmap, mode: PorterDuff.Mode): Bitmap {
-        val coloredIcon = icon.clone()
+        val coloredIcon = icon.emptyLike()
         val paint = Paint()
 
         paint.colorFilter = PorterDuffColorFilter(options.color, mode)

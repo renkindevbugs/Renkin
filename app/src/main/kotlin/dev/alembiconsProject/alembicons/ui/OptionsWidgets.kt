@@ -9,11 +9,11 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuBoxScope
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,7 +36,6 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
-import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.ui.theme.FieldShape
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.ImageEdit
@@ -67,19 +66,46 @@ fun ThemedIconsSwitch(useThemed: Boolean, onChange: (newValue: Boolean) -> Unit)
 
 @Composable
 fun SourceDropdown(@StringRes labelId: Int, source: Source, onChange: (newValue: Source) -> Unit) =
-    EnumDropdown(labelId, source, getSourceLabels(), onChange)
+    EnumDropdown(labelId, source, getSourceLabels(), onChange = onChange)
 
 @Composable
 fun ImageEditDropdown(@StringRes labelId: Int, type: ImageEdit, onChange: (newValue: ImageEdit) -> Unit) =
-    EnumDropdown(labelId, type, getImageEditLabels(), onChange)
+    EnumDropdown(labelId, type, getImageEditLabels(), onChange = onChange)
 
 @Composable
 fun TextTypeDropdown(@StringRes labelId: Int, type: TextType, onChange: (newValue: TextType) -> Unit) =
-    EnumDropdown(labelId, type, getTextTypeLabels(), onChange)
+    EnumDropdown(labelId, type, getTextTypeLabels(), onChange = onChange)
 
 /**
- * A read-only outlined dropdown over a fixed set of [labels]. The three option
- * dropdowns (source / image modifier / text type) only differ by their label map.
+ * The shared read-only anchor field for the exposed dropdowns: a labelled [OutlinedTextField]
+ * with the dropdown trailing chevron, anchored to its menu box. Used by [EnumDropdown] and
+ * [IconPackDropdown].
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ExposedDropdownMenuBoxScope.DropdownAnchorField(
+    @StringRes labelId: Int,
+    value: String,
+    expanded: Boolean
+) {
+    OutlinedTextField(
+        readOnly = true,
+        value = value,
+        onValueChange = { },
+        label = { Text(stringResource(labelId)) },
+        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+        shape = FieldShape,
+        colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+        modifier = Modifier
+            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+            .fillMaxWidth()
+    )
+}
+
+/**
+ * A read-only outlined dropdown over a fixed set of [labels]. The option dropdowns (source /
+ * image modifier / text type) and the settings theme picker only differ by their label map and
+ * outer [modifier].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +113,9 @@ fun <T> EnumDropdown(
     @StringRes labelId: Int,
     selected: T,
     labels: Map<T, String>,
+    modifier: Modifier = Modifier
+        .fillMaxWidth()
+        .padding(horizontal = 16.dp, vertical = 6.dp),
     onChange: (T) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -94,22 +123,9 @@ fun <T> EnumDropdown(
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+        modifier = modifier
     ) {
-        OutlinedTextField(
-            readOnly = true,
-            value = labels[selected] ?: "",
-            onValueChange = { },
-            label = { Text(stringResource(labelId)) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            shape = FieldShape,
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-            modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth()
-        )
+        DropdownAnchorField(labelId, labels[selected] ?: "", expanded)
         ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false }
@@ -160,22 +176,7 @@ fun IconPackDropdown(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
-        OutlinedTextField(
-            readOnly = true,
-            value = selectedOption.applicationName,
-            onValueChange = { },
-            label = { Text(stringResource(labelId)) },
-            trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(
-                    expanded = expanded
-                )
-            },
-            shape = FieldShape,
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-            modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth()
-        )
+        DropdownAnchorField(labelId, selectedOption.applicationName, expanded)
         ExposedDropdownMenu(
             expanded = expanded,
             onDismissRequest = {
@@ -219,9 +220,7 @@ fun IconPackDropdown(
 
 @Composable
 fun OptionInfoDialog(text: String, onDismiss: () -> Unit) {
-    AlertDialog(
-        shape = DialogShape,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    RenkinAlertDialog(
         onDismissRequest = { onDismiss() },
         title = { },
         text = {

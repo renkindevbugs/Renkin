@@ -5,7 +5,7 @@ import android.content.res.Resources.Theme
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.res.ResourcesCompat
 import androidx.core.text.isDigitsOnly
-import dev.alembiconsProject.alembicons.ui.toColor
+import dev.alembiconsProject.alembicons.extension.toColor
 
 class ColorDecoder(val resources: Resources, private val defaultColor: Color = Color.Unspecified) {
     private fun decode(value: String): Color {
@@ -17,12 +17,14 @@ class ColorDecoder(val resources: Resources, private val defaultColor: Color = C
             return parseResource(value)
         }
 
-        if (value.startsWith("rgb")) {
-            return parseRGB(value)
+        // "rgba" must be checked before "rgb" — it also starts with "rgb", so the broader
+        // check would otherwise swallow it and mis-parse the alpha channel.
+        if (value.startsWith("rgba")) {
+            return parseRgb(value, hasAlpha = true)
         }
 
-        if (value.startsWith("rgba")) {
-            return parseRBGA(value)
+        if (value.startsWith("rgb")) {
+            return parseRgb(value, hasAlpha = false)
         }
 
         return defaultColor
@@ -57,29 +59,20 @@ class ColorDecoder(val resources: Resources, private val defaultColor: Color = C
         return defaultColor
     }
 
-    private fun parseRGB(value: String): Color {
-        val rgb = value.substring(4, value.length - 1)
+    /**
+     * Parses an `rgb(r,g,b)` / `rgba(r,g,b,a)` colour. Reading the components between the
+     * parentheses (rather than a fixed offset) handles both prefixes without an off-by-one.
+     */
+    private fun parseRgb(value: String, hasAlpha: Boolean): Color {
+        val components = value.substringAfter('(').substringBefore(')')
+            .split(",")
+            .map { it.trim().toFloat() }
 
-        val elements = rgb.split(",")
-
-        val red = elements[0].toFloat()
-        val green = elements[1].toFloat()
-        val blue = elements[2].toFloat()
-
-        return Color(red, green, blue)
-    }
-
-    private fun parseRBGA(value: String): Color {
-        val rgb = value.substring(4, value.length - 2)
-
-        val elements = rgb.split(",")
-
-        val red = elements[0].toFloat()
-        val green = elements[1].toFloat()
-        val blue = elements[2].toFloat()
-        val alpha = elements[3].toFloat()
-
-        return Color(red, green, blue, alpha)
+        return if (hasAlpha) {
+            Color(components[0], components[1], components[2], components[3])
+        } else {
+            Color(components[0], components[1], components[2])
+        }
     }
 
     private fun Resources.getComposeColor(id: Int, theme: Theme?): Color {

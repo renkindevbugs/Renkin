@@ -37,8 +37,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.graphics.Color
+import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -51,6 +52,8 @@ import dev.alembiconsProject.alembicons.data.CalendarIconsKey
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IMAGE_EDIT_DEFAULT
 import dev.alembiconsProject.alembicons.data.IconColorKey
+import dev.alembiconsProject.alembicons.data.getIconColor
+import dev.alembiconsProject.alembicons.data.getBackgroundColor
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.IncludeVectorKey
 import dev.alembiconsProject.alembicons.data.MonochromeKey
@@ -66,9 +69,6 @@ import dev.alembiconsProject.alembicons.data.SecondarySourceKey
 import dev.alembiconsProject.alembicons.data.SecondaryTextTypeKey
 import dev.alembiconsProject.alembicons.data.TEXT_TYPE_DEFAULT
 import dev.alembiconsProject.alembicons.data.getBooleanValue
-import dev.alembiconsProject.alembicons.data.getColorValue
-import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
-import dev.alembiconsProject.alembicons.data.getDefaultIconColor
 import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
@@ -91,8 +91,8 @@ fun AppOptions(
     OptionsDialog(iconPacks, app, themed, onConfirm, onDismiss, onIconClear)
 }
 
-// The green used for icons added since the last build (matches the build-preview dot).
-private val addedColor = Color(0xFF34C759)
+// The green used for icons added since the last build (shares the added-green token).
+private val addedColor = AddedGreen
 
 /**
  * Segmented completion bar: blue = icons already in the last built pack, green = added
@@ -153,8 +153,8 @@ fun OptionsCard(
     var retrieveCalendarIcons by rememberSaveable { mutableStateOf(false) }
     var overrideIcon by rememberSaveable { mutableStateOf(false) }
 
-    val currentColor = prefs.getColorValue(IconColorKey, prefs.getDefaultIconColor())
-    val currentBgColor = prefs.getColorValue(BackgroundColorKey, prefs.getDefaultBackgroundColor())
+    val currentColor = prefs.getIconColor()
+    val currentBgColor = prefs.getBackgroundColor()
 
     primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
@@ -187,7 +187,7 @@ fun OptionsCard(
         Column {
             Row(modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = { expanded = !expanded })
+                .clickable(role = Role.Button, onClick = { expanded = !expanded })
                 .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Text(

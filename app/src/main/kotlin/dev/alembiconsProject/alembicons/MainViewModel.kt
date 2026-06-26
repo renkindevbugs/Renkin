@@ -30,6 +30,7 @@ import dev.alembiconsProject.alembicons.icon.creator.PackIconPreview
 import dev.alembiconsProject.alembicons.icon.creator.PackRowPreviews
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
+import dev.alembiconsProject.alembicons.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
@@ -189,17 +190,54 @@ class MainViewModel @Inject constructor(
     var buildStep by mutableStateOf<String?>(null)
         private set
 
+    /**
+     * First-install timestamps (epoch millis) for [packageNames] — the data behind the
+     * "recently installed" sort. Looked up off the main thread; a package that's gone yields 0.
+     * The UI reads these here instead of touching PackageManager itself.
+     */
+    suspend fun installTimes(packageNames: List<String>): Map<String, Long> =
+        withContext(Dispatchers.IO) {
+            val pm = getApplication<Application>().packageManager
+            packageNames.associateWith { pkg ->
+                runCatching { pm.getPackageInfo(pkg, 0).firstInstallTime }.getOrDefault(0L)
+            }
+        }
+
+    /** True if our generated icon pack is currently installed on the device. */
+    private fun isIconPackInstalled(): Boolean = runCatching {
+        getApplication<Application>().packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
+    }.isSuccess
+
     /** Builds, signs and installs the icon pack, surfacing progress through [buildStep]. */
     fun build(preferences: Preferences) {
         if (buildStep != null) return
         viewModelScope.launch {
-            buildStep = ""
-            val pack = appProvider.buildAndSignIconPack(preferences) { buildStep = it }
-            buildStep = null
-            if (appProvider.installIconPack(pack)) {
-                _toastEvents.trySend(R.string.iconPackInstalled)
-                // The saved pack now matches the current icons → reset the change baseline.
-                builtKeys = appProvider.getSavedPackKeys()
+            try {
+                buildStep = ""
+                val pack = appProvider.buildAndSignIconPack(preferences) { buildStep = it }
+                // The system install is the slow part (2-3s) — show it as its own step so the
+                // dialog reflects what's happening. "Updating" when our pack is already
+                // installed, "Installing" for a first build.
+                buildStep = getApplication<Application>().getString(
+                    if (isIconPackInstalled()) R.string.buildUpdating else R.string.buildInstalling
+                )
+                if (appProvider.installIconPack(pack)) {
+                    _toastEvents.trySend(R.string.iconPackInstalled)
+                    // The saved pack now matches the current icons → reset the change baseline.
+                    builtKeys = appProvider.getSavedPackKeys()
+                } else {
+                    // install returned false: it failed or the user cancelled the system installer.
+                    _toastEvents.trySend(R.string.iconPackInstallFailed)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // A build/sign failure must surface and still release the UI, not leave the
+                // (non-dismissable) progress dialog stuck on screen.
+                Log.error("MainViewModel", "Icon pack build failed", e)
+                _toastEvents.trySend(R.string.iconPackBuildFailed)
+            } finally {
+                buildStep = null
             }
         }
     }
@@ -216,10 +254,7 @@ class MainViewModel @Inject constructor(
     fun deleteIconPack() {
         viewModelScope.launch {
             val context = getApplication<Application>()
-            val installed = runCatching {
-                context.packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
-            }.isSuccess
-            if (!installed) {
+            if (!isIconPackInstalled()) {
                 _toastEvents.trySend(R.string.iconPackNotInstalled)
                 return@launch
             }

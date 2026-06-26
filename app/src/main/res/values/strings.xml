@@ -54,8 +54,8 @@
     <string name="writingElement">Writing icons, drawable.xml and appfilter.xml …</string>
     <string name="buildingApk">Building apk …</string>
     <string name="signApk">Signing apk …</string>
-    <string name="installApk">Installing apk …</string>
-    <string name="done">Done</string>
+    <string name="buildInstalling">Installing …</string>
+    <string name="buildUpdating">Updating …</string>
     <string name="followSystem">Follow System</string>
     <string name="darkMode">Dark Mode</string>
     <string name="lightMode">Light Mode</string>
@@ -212,4 +212,6 @@
     <string name="optionInfo">Option info</string>
     <string name="sortAToZ">A → Z</string>
     <string name="sortZToA">Z → A</string>
+    <string name="iconPackBuildFailed">Couldn\'t build the icon pack</string>
+    <string name="iconPackInstallFailed">The icon pack wasn\'t installed</string>
 </resources>

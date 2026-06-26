@@ -2,9 +2,6 @@
 
 package dev.alembiconsProject.alembicons.ui
 
-import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.drawable.BitmapDrawable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,6 +40,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.IconPreviewBuilder
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.extension.toInt
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.ImageEdit
@@ -50,6 +48,7 @@ import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.TextType
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
+import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -236,20 +235,10 @@ fun OptionsDialog(
         derivedStateOf { dialogTransition.isIdle && dialogTransition.currentState }
     }
 
+    // The comparison header's "current" hero. The shared helper handles the BitmapDrawable
+    // fast path and safely rasterises everything else (a broken icon yields null → placeholder).
     val heroBitmap = remember(app.icon) {
-        try {
-            val d = app.icon
-            if (d is BitmapDrawable) {
-                d.bitmap
-            } else {
-                val w = if (d.intrinsicWidth > 0) d.intrinsicWidth else 96
-                val h = if (d.intrinsicHeight > 0) d.intrinsicHeight else 96
-                val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                d.setBounds(0, 0, w, h)
-                d.draw(Canvas(bmp))
-                bmp
-            }
-        } catch (_: Exception) { null }
+        runCatching { app.icon.toSafeBitmapOrNull() }.getOrNull()
     }
 
     val generatingOptions = GenerationOptions(

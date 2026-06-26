@@ -5,24 +5,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ExposedDropdownMenuAnchorType
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -36,10 +28,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.BuildConfig
 import dev.alembiconsProject.alembicons.R
-import dev.alembiconsProject.alembicons.ui.theme.DialogShape
 import dev.alembiconsProject.alembicons.ui.theme.FieldShape
 import dev.alembiconsProject.alembicons.data.DARK_MODE_DEFAULT
-import dev.alembiconsProject.alembicons.data.DarkMode
 import dev.alembiconsProject.alembicons.data.DarkModeKey
 import dev.alembiconsProject.alembicons.data.getDarkModeLabels
 import dev.alembiconsProject.alembicons.data.getEnumValue
@@ -50,9 +40,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
-    AlertDialog(
-        shape = DialogShape,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+    RenkinAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.settings)) },
         text = {
@@ -73,59 +61,19 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DarkModeDropdown(prefs: DataStore<Preferences>) {
-    val darkModeLabels = getDarkModeLabels()
-    var expanded by remember { mutableStateOf(false) }
-    var selectedOption by remember { mutableStateOf(DarkMode.FOLLOW_SYSTEM) }
-
-    selectedOption = prefs.getEnumValue(DarkModeKey, DARK_MODE_DEFAULT)
     val scope = rememberCoroutineScope()
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = {
-            expanded = !expanded
-        },
+    val selected = prefs.getEnumValue(DarkModeKey, DARK_MODE_DEFAULT)
+    EnumDropdown(
+        labelId = R.string.theme,
+        selected = selected,
+        labels = getDarkModeLabels(),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 8.dp, vertical = 4.dp)
-    ) {
-        OutlinedTextField(
-            readOnly = true,
-            value = darkModeLabels[selectedOption]!!,
-            onValueChange = { },
-            label = { Text(stringResource(R.string.theme)) },
-            trailingIcon = {
-                ExposedDropdownMenuDefaults.TrailingIcon(
-                    expanded = expanded
-                )
-            },
-            shape = FieldShape,
-            colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
-            modifier = Modifier
-                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                .fillMaxWidth()
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = {
-                expanded = false
-            }
-        ) {
-            darkModeLabels.forEach { selectionOption ->
-                DropdownMenuItem(
-                    text = { Text(text = selectionOption.value) },
-                    onClick = {
-                        selectedOption = selectionOption.key
-                        expanded = false
-
-                        scope.launch { prefs.setEnumValue(DarkModeKey, selectionOption.key) }
-                    }
-                )
-            }
-        }
+    ) { mode ->
+        scope.launch { prefs.setEnumValue(DarkModeKey, mode) }
     }
 }
 
@@ -259,7 +207,7 @@ fun AppVersion() {
     Row(modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.End) {
         Text(
-            text = String.format(stringResource(R.string.version), BuildConfig.VERSION_NAME),
+            text = stringResource(R.string.version, BuildConfig.VERSION_NAME),
             fontSize = 12.sp
         )
     }

@@ -26,13 +26,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Sort
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -57,10 +53,13 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.theme.FieldShape
 import dev.alembiconsProject.alembicons.data.IconPack
@@ -68,8 +67,6 @@ import dev.alembiconsProject.alembicons.data.watch.AppComponent
 import dev.alembiconsProject.alembicons.data.watch.RuleWithDetails
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -91,21 +88,12 @@ internal fun WatchRuleEditor(
 
     var sortOrder by remember { mutableStateOf(AppSortOrder.NAME) }
     var filterNoIcon by remember { mutableStateOf(false) }
-    var showSortMenu by remember { mutableStateOf(false) }
 
-    val context = getCurrentContext()
-    // Reading first-install time hits PackageManager once per app; doing it for every
-    // app on the main thread was what made the editor take ~1s to open. Compute it off
-    // the main thread instead — until it arrives, INSTALL_DATE sort just shows the
-    // default order. (Times don't change at runtime, so this runs once per app set.)
+    val viewModel: MainViewModel = hiltViewModel()
+    // Looked up off the main thread via the view model (this was what made the editor take ~1s
+    // to open). Until they arrive, INSTALL_DATE sort just shows the default order.
     val installTimes by produceState(emptyMap<String, Long>(), apps) {
-        value = withContext(Dispatchers.IO) {
-            apps.associate { app ->
-                app.packageName to runCatching {
-                    context.packageManager.getPackageInfo(app.packageName, 0).firstInstallTime
-                }.getOrDefault(0L)
-            }
-        }
+        value = viewModel.installTimes(apps.map { it.packageName })
     }
 
     val sortedPacks = remember(packs) { packs.sortedBy { it.applicationName.lowercase() } }
@@ -189,42 +177,12 @@ internal fun WatchRuleEditor(
                     leadingIcon = { Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) },
                     modifier = Modifier.weight(1f)
                 )
-                Box {
-                    IconButton(onClick = { showSortMenu = true }) {
-                        Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.sortApps), tint = MaterialTheme.colorScheme.primary)
-                    }
-                    DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.sortByName)) },
-                            onClick = { sortOrder = AppSortOrder.NAME; showSortMenu = false },
-                            leadingIcon = if (sortOrder == AppSortOrder.NAME) {
-                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.sortByInstallDate)) },
-                            onClick = { sortOrder = AppSortOrder.INSTALL_DATE; showSortMenu = false },
-                            leadingIcon = if (sortOrder == AppSortOrder.INSTALL_DATE) {
-                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.filterAllApps)) },
-                            onClick = { filterNoIcon = false; showSortMenu = false },
-                            leadingIcon = if (!filterNoIcon) {
-                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.filterWithoutIcon)) },
-                            onClick = { filterNoIcon = true; showSortMenu = false },
-                            leadingIcon = if (filterNoIcon) {
-                                { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                            } else null
-                        )
-                    }
-                }
+                AppSortFilterMenu(
+                    sortOrder = sortOrder,
+                    filterNoIcon = filterNoIcon,
+                    onSortChange = { sortOrder = it },
+                    onFilterChange = { filterNoIcon = it }
+                )
             }
 
             HorizontalPager(
@@ -316,7 +274,7 @@ internal fun WatchRuleEditor(
                 Box(modifier = Modifier.padding(top = 8.dp)) {
                     TileRows(sortedPacks) { pack ->
                         val selected = selectedPacks.contains(pack.packageName)
-                        IconTile(rememberPackBitmap(pack.packageName), clipLabel(pack.applicationName, 13), selected) {
+                        IconTile(rememberPackIcon(pack.packageName), clipLabel(pack.applicationName, 13), selected) {
                             if (selected) selectedPacks.remove(pack.packageName)
                             else selectedPacks.add(pack.packageName)
                         }
@@ -370,7 +328,7 @@ private fun IconTile(
         modifier = Modifier
             .fillMaxWidth()
             .clip(FieldShape)
-            .clickable(onClick = onClick)
+            .clickable(role = Role.Button, onClick = onClick)
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,

@@ -1,7 +1,5 @@
 package dev.alembiconsProject.alembicons.ui
 
-import android.graphics.Color as AndroidColor
-import kotlin.math.roundToInt
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,9 +13,14 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import dev.alembiconsProject.alembicons.ui.theme.DialogShape
+import dev.alembiconsProject.alembicons.extension.alphaInt
+import dev.alembiconsProject.alembicons.extension.blueInt
+import dev.alembiconsProject.alembicons.extension.greenInt
+import dev.alembiconsProject.alembicons.extension.redInt
+import dev.alembiconsProject.alembicons.extension.toColor
+import dev.alembiconsProject.alembicons.extension.toHexString
+import dev.alembiconsProject.alembicons.extension.toNullableColor
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -34,7 +37,6 @@ import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -115,10 +117,7 @@ fun ColorDialog(
 ) {
     val controller = rememberColorPickerController()
 
-    AlertDialog(
-        shape = DialogShape,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-        titleContentColor = MaterialTheme.colorScheme.onSurface,
+    RenkinAlertDialog(
         onDismissRequest = onDismiss,
         text = {
             Column {
@@ -275,46 +274,6 @@ fun colorSaver() = Saver<MutableState<Color>, String>(
     save = { state -> state.value.toHexString() },
     restore = { value -> mutableStateOf(value.toColor()) }
 )
-
-fun Color.toHexString(): String {
-    return String.format(
-        "#%02x%02x%02x%02x", this.alphaInt, this.redInt, this.greenInt, this.blueInt
-    )
-}
-
-val Color.alphaInt: Int
-    get() = floatTo255Component(this.alpha)
-
-val Color.redInt: Int
-    get() = floatTo255Component(this.red)
-
-val Color.greenInt: Int
-    get() = floatTo255Component(this.green)
-
-val Color.blueInt: Int
-    get() = floatTo255Component(this.blue)
-
-private fun floatTo255Component(component: Float): Int {
-    // Round, not truncate: e.g. alpha 128/255 (≈0.50196) * 255 = 127.999… which would
-    // truncate to 127 (7f) and drift on every save/parse round-trip.
-    return (component * 255).roundToInt()
-}
-
-fun String.toColor(): Color {
-    return Color(AndroidColor.parseColor(this))
-}
-
-fun String.toNullableColor(): Color? {
-    return try {
-        this.toColor()
-    } catch (ex: IllegalArgumentException) {
-        null
-    }
-}
-
-fun Color.toInt(): Int {
-    return this.toArgb()
-}
 
 fun String.left(length: Int): String {
     if (this.isEmpty() || length < 0) {

@@ -1,7 +1,6 @@
 package dev.alembiconsProject.alembicons.drawable
 
 import android.graphics.Canvas
-import android.graphics.ColorFilter
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
@@ -16,7 +15,7 @@ class TextDrawable(
     , private val canvasWidth: Int = 0
     , private val canvasHeight: Int = 0
 ): BaseTextDrawable() {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+    override val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val _intrinsicWidth: Int
     private val _intrinsicHeight: Int
 
@@ -44,7 +43,7 @@ class TextDrawable(
     }
 
     private fun calculateIntrinsicWidth(): Int {
-        return (paint.measureText(text, 0, text.length) + 0.5).toInt()
+        return textWidth(text)
     }
 
     private fun calculateX(): Float {
@@ -65,11 +64,6 @@ class TextDrawable(
         return bounds.exactCenterY() - heightModifier
     }
 
-    @Deprecated("Deprecated in Java")
-    override fun getOpacity(): Int {
-        return paint.alpha
-    }
-
     override fun getIntrinsicWidth(): Int {
         return _intrinsicWidth
     }
@@ -86,13 +80,5 @@ class TextDrawable(
 
     override fun draw(canvas: Canvas) {
         canvas.drawText(text, 0, text.length, calculateX(), calculateY(), paint)
-    }
-
-    override fun setAlpha(alpha: Int) {
-        paint.alpha = alpha
-    }
-
-    override fun setColorFilter(colorFilter: ColorFilter?) {
-        paint.colorFilter = colorFilter
     }
 }
