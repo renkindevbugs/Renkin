@@ -249,13 +249,16 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    // Records that [app] was hand-edited this session (so the build preview marks it "changed").
+    // Clearing an icon (icon == null) is a removal, not a change, so it isn't recorded.
+    private fun markUpdated(app: PackageInfoStruct, icon: IconPackDrawable?) {
+        if (icon != null) updatedKeys = updatedKeys + "${app.packageName}/${app.activityName}"
+    }
+
     /** Assigns (or clears, when [icon] is null) the created icon for the app at [index]. */
     fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?) {
         appProvider.editApplication(index, app.changeExport(icon))
-        if (icon != null) {
-            val key = "${app.packageName}/${app.activityName}"
-            updatedKeys = updatedKeys + key
-        }
+        markUpdated(app, icon)
     }
 
     /**
@@ -277,10 +280,7 @@ class MainViewModel @Inject constructor(
             index,
             app.changeExport(icon).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
         )
-        if (icon != null) {
-            val key = "${app.packageName}/${app.activityName}"
-            updatedKeys = updatedKeys + key
-        }
+        markUpdated(app, icon)
     }
 
     /**
@@ -502,7 +502,7 @@ class MainViewModel @Inject constructor(
     suspend fun calendarWarnings(preferences: Preferences): List<ApplicationProvider.CalendarWarning> =
         appProvider.calendarWarnings(preferences)
 
-    /** Whether [prefix] is a genuine calendar day-rotation set in [packPackageName]. */
-    fun isCalendarPrefix(packPackageName: String, prefix: String): Boolean =
-        appProvider.isCalendarPrefix(packPackageName, prefix)
+    /** Of [prefixes], those that are genuine calendar day-rotation sets in [packPackageName]. */
+    suspend fun calendarPrefixesAmong(packPackageName: String, prefixes: List<String>): Set<String> =
+        appProvider.calendarPrefixesAmong(packPackageName, prefixes)
 }

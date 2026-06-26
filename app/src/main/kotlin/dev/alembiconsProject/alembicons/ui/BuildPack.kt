@@ -44,7 +44,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +55,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
+import dev.alembiconsProject.alembicons.ui.theme.ChangedOrange
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 
@@ -194,7 +195,7 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                         Text(
                             text = "+$newCount",
                             style = MaterialTheme.typography.labelLarge,
-                            color = Color(0xFF34C759),
+                            color = AddedGreen,
                             fontWeight = FontWeight.Bold
                         )
                     }
@@ -216,7 +217,7 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                             text = stringResource(R.string.calendarMissingDaysTitle),
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = FontWeight.SemiBold,
-                            color = Color(0xFFFF9500)
+                            color = ChangedOrange
                         )
                         calendarWarnings.forEach { warning ->
                             Text(
@@ -293,8 +294,8 @@ private fun BuildPreviewItem(
             }
             // Green = new (not in last build); orange = edited this session (was already built)
             val dotColor = when {
-                isNew -> Color(0xFF34C759)
-                isChanged -> Color(0xFFFF9500)
+                isNew -> AddedGreen
+                isChanged -> ChangedOrange
                 else -> null
             }
             if (dotColor != null) {

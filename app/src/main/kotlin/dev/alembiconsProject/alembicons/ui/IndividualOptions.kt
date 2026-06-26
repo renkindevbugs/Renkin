@@ -40,6 +40,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.IconPreviewBuilder
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.extension.calendarPrefixOrNull
 import dev.alembiconsProject.alembicons.extension.toInt
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.data.IconPack
@@ -383,7 +384,7 @@ fun OptionsDialog(
                                     draft.origin = IconOrigin.CREATE
                                     // Derive calendar prefix from the picked icon's name.
                                     // Any icon ending in _N is a valid calendar candidate.
-                                    val newPrefix = extractCalendarPrefix(drawableName)
+                                    val newPrefix = drawableName.calendarPrefixOrNull()
                                     calendarPrefix = newPrefix
                                     calendarPackName = if (newPrefix != null) pack.packageName else null
                                     // If calendar was enabled but the new icon can't rotate, disable it.
@@ -536,17 +537,6 @@ fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
         onConfirm = onIconClear,
         onDismiss = onDismiss
     )
-}
-
-
-/**
- * Strips the trailing digits from [drawableName] to get the rotation prefix.
- * `"bee_calendar_6"` → `"bee_calendar_"`, `"google_cal_26"` → `"google_cal_"`.
- * Returns null if the name doesn't end in 1–2 digits (not a calendar candidate).
- */
-private fun extractCalendarPrefix(drawableName: String): String? {
-    val match = Regex("^(.+_)\\d{1,2}$").matchEntire(drawableName) ?: return null
-    return match.groupValues[1]
 }
 
 /**

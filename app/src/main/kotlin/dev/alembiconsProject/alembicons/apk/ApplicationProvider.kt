@@ -250,9 +250,11 @@ class ApplicationProvider(private val context: Context) {
     /** Keys ("package/activity") of the apps stored in the last built/saved pack. */
     suspend fun getSavedPackKeys(): Set<String> = renkinPackStore.savedKeys()
 
-    /** Whether [prefix] is a genuine calendar day-rotation set in [packPackageName]. */
-    fun isCalendarPrefix(packPackageName: String, prefix: String): Boolean =
-        iconPackRepo.isCalendarPrefix(packPackageName, prefix)
+    /** Of [prefixes], those that are genuine calendar day-rotation sets in [packPackageName]. */
+    suspend fun calendarPrefixesAmong(packPackageName: String, prefixes: List<String>): Set<String> =
+        withContext(Dispatchers.Default) {
+            prefixes.filter { iconPackRepo.isCalendarPrefix(packPackageName, it) }.toSet()
+        }
 
     /** A calendar-enabled app whose source pack is missing some of the 1..31 day drawables. */
     data class CalendarWarning(val appName: String, val missingDays: Int)

@@ -58,6 +58,8 @@ import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
+import dev.alembiconsProject.alembicons.extension.calendarPrefixOrNull
+import dev.alembiconsProject.alembicons.extension.isCalendarDayName
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.icon.creator.IconSortOrder
 import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
@@ -122,14 +124,6 @@ fun PackIconsRow(
     var moreCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
 
-    // Badge only genuine calendar icons. Validate each distinct prefix once per pack (does the
-    // pack have a full month for it?) and cache, so badging stays cheap during recomposition.
-    val calendarPrefixCache = remember(iconPack.packageName) { mutableMapOf<String, Boolean>() }
-    fun PackIconPreview.isCalendarIcon(): Boolean {
-        val prefix = drawableName.calendarPrefixOrNull() ?: return false
-        return calendarPrefixCache.getOrPut(prefix) { viewModel.isCalendarPrefix(iconPack.packageName, prefix) }
-    }
-
     // The picked pack (primaryIconPack) doesn't change how a pack's preview icons render — the
     // generator colourises by explicit pack name — so exclude it from the key. Otherwise picking
     // an icon (which sets primaryIconPack) re-keys every visible row and flashes the loader.
@@ -145,6 +139,8 @@ fun PackIconsRow(
         isLoading = false
         onResult(result.previews.isNotEmpty())
     }
+
+    val calendarPrefixes = rememberCalendarPrefixes(iconPack, iconPairs)
 
     if (isLoading) {
         Box(
@@ -183,7 +179,7 @@ fun PackIconsRow(
                 PackIconItem(
                     item = item,
                     selected = item.resource.resourceId == selectedResourceId,
-                    isCalendarGroup = item.isCalendarIcon(),
+                    isCalendarGroup = item.drawableName.calendarPrefixOrNull() in calendarPrefixes,
                     inSelectedCalendarGroup = item.drawableName.inCalendarGroup(selectedCalendarPrefix),
                     onSelect = { onSelect(item.resource, item.drawable, item.drawableName) }
                 )
@@ -230,14 +226,6 @@ fun PackDetailGrid(
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    // Badge only genuine calendar icons. Validate each distinct prefix once per pack (does the
-    // pack have a full month for it?) and cache, so badging stays cheap during recomposition.
-    val calendarPrefixCache = remember(iconPack.packageName) { mutableMapOf<String, Boolean>() }
-    fun PackIconPreview.isCalendarIcon(): Boolean {
-        val prefix = drawableName.calendarPrefixOrNull() ?: return false
-        return calendarPrefixCache.getOrPut(prefix) { viewModel.isCalendarPrefix(iconPack.packageName, prefix) }
-    }
-
     val gridState = rememberLazyGridState()
     val gridScrolled by remember {
         derivedStateOf { gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 60 }
@@ -255,6 +243,8 @@ fun PackDetailGrid(
         }
         isLoading = false
     }
+
+    val calendarPrefixes = rememberCalendarPrefixes(iconPack, iconPairs)
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -313,7 +303,7 @@ fun PackDetailGrid(
                     PackIconItem(
                         item = item,
                         selected = item.resource.resourceId == selectedResourceId,
-                        isCalendarGroup = item.isCalendarIcon(),
+                        isCalendarGroup = item.drawableName.calendarPrefixOrNull() in calendarPrefixes,
                         inSelectedCalendarGroup = item.drawableName.inCalendarGroup(selectedCalendarPrefix),
                         modifier = Modifier.animateItem(),
                         size = 56.dp,
@@ -326,28 +316,29 @@ fun PackDetailGrid(
 }
 
 /**
- * True when this drawable name looks like it belongs to a day-rotating calendar set,
- * i.e. it ends with `_` followed by 1–2 digits (e.g. `google_cal_6`, `bee_calendar_26`).
- * Used to badge icons that CAN rotate — no restriction on what the user may pick.
- */
-private fun String.isCalendarCandidate(): Boolean =
-    isNotEmpty() && Regex("^.+_\\d{1,2}$").matches(this)
-
-/**
- * The day-rotation prefix of a drawable name, i.e. the name minus its trailing 1–2 digits
- * (`"google_cal_26"` → `"google_cal_"`), or null when it doesn't end in digits. Compared against
- * the pack's declared `<calendar>` prefixes so only genuine calendar icons are badged.
- */
-private fun String.calendarPrefixOrNull(): String? =
-    Regex("^(.+_)\\d{1,2}$").find(this)?.groupValues?.get(1)
-
-/**
  * True when this drawable name is a day in the selected calendar's rotation set, i.e. it shares
  * [prefix] and ends in 1–2 digits (e.g. prefix "bee_calendar_" matches "bee_calendar_26").
  * Null/blank prefix means no calendar icon is selected, so nothing is grouped.
  */
 private fun String.inCalendarGroup(prefix: String?): Boolean =
-    !prefix.isNullOrEmpty() && startsWith(prefix) && isCalendarCandidate()
+    !prefix.isNullOrEmpty() && startsWith(prefix) && isCalendarDayName()
+
+/**
+ * The prefixes among [iconPairs] that are genuine calendar rotation sets in [iconPack] (a full
+ * month exists, or the pack declares them), so only real calendars get badged — not anything
+ * whose name ends in a number. Validation runs off the main thread once per loaded set; badging
+ * is then a cheap membership test. Shared by the row preview and the detail grid.
+ */
+@Composable
+private fun rememberCalendarPrefixes(iconPack: IconPack, iconPairs: List<PackIconPreview>): Set<String> {
+    val viewModel: MainViewModel = hiltViewModel()
+    var prefixes by remember(iconPack.packageName) { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(iconPack.packageName, iconPairs) {
+        val candidates = iconPairs.mapNotNull { it.drawableName.calendarPrefixOrNull() }.distinct()
+        prefixes = viewModel.calendarPrefixesAmong(iconPack.packageName, candidates)
+    }
+    return prefixes
+}
 
 /**
  * A single icon slot used in both the row preview and the detail grid.
