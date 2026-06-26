@@ -75,12 +75,10 @@ import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.theme.CardShape
 import dev.alembiconsProject.alembicons.data.AppFilterNoIconKey
 import dev.alembiconsProject.alembicons.data.AppSortOrderKey
-import dev.alembiconsProject.alembicons.data.BackgroundColorKey
+import dev.alembiconsProject.alembicons.data.getBackgroundColor
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.getBooleanValue
-import dev.alembiconsProject.alembicons.data.getColorValue
-import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
 import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
@@ -283,7 +281,7 @@ fun ApplicationList(
     // Read preferences once for the whole list — a DataStore subscription per row
     // causes visible scroll jank
     val prefs = getPreferences()
-    val bgColorValue = prefs.getColorValue(BackgroundColorKey, prefs.getDefaultBackgroundColor())
+    val bgColorValue = prefs.getBackgroundColor()
     val themed = prefs.getBooleanValue(ExportThemedKey)
 
     // Install times do not change while the app runs; refresh only when the list grows/shrinks.

@@ -52,6 +52,8 @@ import dev.alembiconsProject.alembicons.data.CalendarIconsKey
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IMAGE_EDIT_DEFAULT
 import dev.alembiconsProject.alembicons.data.IconColorKey
+import dev.alembiconsProject.alembicons.data.getIconColor
+import dev.alembiconsProject.alembicons.data.getBackgroundColor
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.IncludeVectorKey
 import dev.alembiconsProject.alembicons.data.MonochromeKey
@@ -67,9 +69,6 @@ import dev.alembiconsProject.alembicons.data.SecondarySourceKey
 import dev.alembiconsProject.alembicons.data.SecondaryTextTypeKey
 import dev.alembiconsProject.alembicons.data.TEXT_TYPE_DEFAULT
 import dev.alembiconsProject.alembicons.data.getBooleanValue
-import dev.alembiconsProject.alembicons.data.getColorValue
-import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
-import dev.alembiconsProject.alembicons.data.getDefaultIconColor
 import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
@@ -154,8 +153,8 @@ fun OptionsCard(
     var retrieveCalendarIcons by rememberSaveable { mutableStateOf(false) }
     var overrideIcon by rememberSaveable { mutableStateOf(false) }
 
-    val currentColor = prefs.getColorValue(IconColorKey, prefs.getDefaultIconColor())
-    val currentBgColor = prefs.getColorValue(BackgroundColorKey, prefs.getDefaultBackgroundColor())
+    val currentColor = prefs.getIconColor()
+    val currentBgColor = prefs.getBackgroundColor()
 
     primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
