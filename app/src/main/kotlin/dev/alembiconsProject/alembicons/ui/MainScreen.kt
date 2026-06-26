@@ -66,6 +66,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
@@ -307,7 +308,9 @@ fun ApplicationList(
                 if (filterNoIcon) list.filter { it.value.createdIcon == null } else list
             }.let { list ->
                 // Filter before the LazyColumn so non-matching rows don't become empty items
-                if (filter.isEmpty()) list else list.filter { it.value.appName.contains(filter, true) }
+                if (filter.isEmpty()) list else list.filter {
+                    it.value.appName.contains(filter, true) || it.value.originalName.contains(filter, true)
+                }
             }
         }
     }
@@ -358,6 +361,13 @@ fun ApplicationItem(
     val syncWarning = stringResource(id = R.string.syncText)
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
+
+    // Closing the edit dialog (whose icon-search field had keyboard focus) otherwise lets the
+    // system hand focus to the home search field, popping the keyboard. Clear focus instead.
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(openAppOptions) {
+        if (!openAppOptions) focusManager.clearFocus(force = true)
+    }
 
     Surface(
         onClick = {

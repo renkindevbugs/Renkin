@@ -213,8 +213,9 @@ fun OptionsDialog(
     // Parcelable, so saving the list on stop crashes.
     var customIconList by remember { mutableStateOf<List<ResourceDrawable>>(listOf()) }
     // The Create tab's icon search. Hoisted here (not inside CreateTab) so it survives leaving
-    // and returning to the tab; it starts at the app name and resets per dialog (i.e. per edit).
-    var createSearchQuery by rememberSaveable { mutableStateOf(app.appName) }
+    // and returning to the tab; it starts at the app's non-localized name and resets per dialog
+    // (i.e. per edit) — icon packs name drawables in English, so the localized label rarely matches.
+    var createSearchQuery by rememberSaveable { mutableStateOf(app.originalName) }
     // The draft icon being built (create/upload/vector previews) and the generation logic
     // that produces it. See IconDraftState — keeps the dozen drawable states + the regen
     // effects out of this composable.
