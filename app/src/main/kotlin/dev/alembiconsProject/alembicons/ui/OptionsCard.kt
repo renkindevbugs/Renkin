@@ -39,6 +39,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -187,7 +188,7 @@ fun OptionsCard(
         Column {
             Row(modifier = Modifier
                 .fillMaxWidth()
-                .clickable(onClick = { expanded = !expanded })
+                .clickable(role = Role.Button, onClick = { expanded = !expanded })
                 .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Text(
