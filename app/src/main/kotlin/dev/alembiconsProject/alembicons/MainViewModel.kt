@@ -277,6 +277,10 @@ class MainViewModel @Inject constructor(
             index,
             app.changeExport(icon).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
         )
+        if (icon != null) {
+            val key = "${app.packageName}/${app.activityName}"
+            updatedKeys = updatedKeys + key
+        }
     }
 
     /**
