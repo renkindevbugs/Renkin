@@ -111,6 +111,12 @@ class MainViewModel @Inject constructor(
     var builtKeys by mutableStateOf<Set<String>>(emptySet())
         private set
 
+    // Keys whose icons were manually changed this session (via applyIcon with a non-null icon).
+    // Distinct from builtKeys: an app in both sets had an icon already and was re-edited.
+    // Reset after every successful build.
+    var updatedKeys by mutableStateOf<Set<String>>(emptySet())
+        private set
+
     // Set when opened from an icon-watch notification; the home screen shows the apply
     // modal for this suggestion.
     var pendingWatchSuggestionId by mutableStateOf<Long?>(null)
@@ -223,8 +229,9 @@ class MainViewModel @Inject constructor(
                 )
                 if (appProvider.installIconPack(pack)) {
                     _toastEvents.trySend(R.string.iconPackInstalled)
-                    // The saved pack now matches the current icons → reset the change baseline.
+                    // The saved pack now matches the current icons → reset both change baselines.
                     builtKeys = appProvider.getSavedPackKeys()
+                    updatedKeys = emptySet()
                 } else {
                     // install returned false: it failed or the user cancelled the system installer.
                     _toastEvents.trySend(R.string.iconPackInstallFailed)
@@ -245,6 +252,10 @@ class MainViewModel @Inject constructor(
     /** Assigns (or clears, when [icon] is null) the created icon for the app at [index]. */
     fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?) {
         appProvider.editApplication(index, app.changeExport(icon))
+        if (icon != null) {
+            val key = "${app.packageName}/${app.activityName}"
+            updatedKeys = updatedKeys + key
+        }
     }
 
     /**
@@ -456,8 +467,9 @@ class MainViewModel @Inject constructor(
     fun clearIcons() {
         viewModelScope.launch {
             appProvider.clearIcons()
-            // Saved pack is now empty → reset the change baseline so the bar clears too.
+            // Saved pack is now empty → reset both change baselines.
             builtKeys = appProvider.getSavedPackKeys()
+            updatedKeys = emptySet()
         }
     }
 }
