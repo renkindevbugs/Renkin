@@ -1,7 +1,6 @@
 package dev.alembiconsProject.alembicons.drawable
 
 import android.graphics.Canvas
-import android.graphics.ColorFilter
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
@@ -21,7 +20,7 @@ class MultiLineTextDrawable(
     , maxLines: Int
     , private val height: Int = 0
 ): BaseTextDrawable() {
-    private val paint = TextPaint(Paint.ANTI_ALIAS_FLAG)
+    override val paint: TextPaint = TextPaint(Paint.ANTI_ALIAS_FLAG)
     private val staticLayout: StaticLayout
 
     init {
@@ -47,7 +46,7 @@ class MultiLineTextDrawable(
         val words = text.split(' ')
         val longestWord = getLongestWord(words, maxLines)
 
-        while (calculateTextWidth(longestWord) > width && paint.textSize > minTextSize) {
+        while (textWidth(longestWord) > width && paint.textSize > minTextSize) {
             paint.textSize -= 1
         }
     }
@@ -63,13 +62,8 @@ class MultiLineTextDrawable(
             words
         }
 
-        val wordsSortedByWidth = wordsToShow.map { it to calculateTextWidth(it) }
-        wordsSortedByWidth.sortedByDescending { it.second }
-        return wordsSortedByWidth.first().first
-    }
-
-    private fun calculateTextWidth(text: String): Int {
-        return (paint.measureText(text, 0, text.length) + 0.5).toInt()
+        // The widest word is what has to fit, so size the text against it.
+        return wordsToShow.maxByOrNull { textWidth(it) } ?: wordsToShow.first()
     }
 
     private fun calculateX(): Float {
@@ -86,11 +80,6 @@ class MultiLineTextDrawable(
         }
 
         return (bounds.height() - staticLayout.height) / 2F
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun getOpacity(): Int {
-        return paint.alpha
     }
 
     override fun getIntrinsicWidth(): Int {
@@ -125,13 +114,5 @@ class MultiLineTextDrawable(
         canvas.withTranslation(calculateX(), calculateY()) {
             staticLayout.draw(this)
         }
-    }
-
-    override fun setAlpha(alpha: Int) {
-        paint.alpha = alpha
-    }
-
-    override fun setColorFilter(colorFilter: ColorFilter?) {
-        paint.colorFilter = colorFilter
     }
 }
