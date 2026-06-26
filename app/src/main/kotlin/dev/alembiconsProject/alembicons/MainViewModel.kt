@@ -252,8 +252,8 @@ class MainViewModel @Inject constructor(
      * prefix derived from the icon the user selected (e.g. `"google_cal_"`). Committed
      * immediately (independent of the edit dialog's Confirm).
      */
-    fun setCalendarEnabled(app: PackageInfoStruct, enabled: Boolean, calendarPrefix: String?) {
-        appProvider.setCalendar(app, enabled, calendarPrefix)
+    fun setCalendarEnabled(app: PackageInfoStruct, enabled: Boolean, calendarPrefix: String?, calendarPackName: String?) {
+        appProvider.setCalendar(app, enabled, calendarPrefix, calendarPackName)
     }
 
     /**

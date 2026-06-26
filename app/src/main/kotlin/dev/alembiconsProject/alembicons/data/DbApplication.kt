@@ -21,7 +21,8 @@ data class DbApplication(
     val isXml: Boolean,
     val drawable: String,
     @ColumnInfo(defaultValue = "0") val calendarEnabled: Boolean = false,
-    @ColumnInfo(defaultValue = "") val calendarPrefix: String = ""
+    @ColumnInfo(defaultValue = "") val calendarPrefix: String = "",
+    @ColumnInfo(defaultValue = "") val calendarPackName: String = ""
 )
 
 @Dao
@@ -50,7 +51,7 @@ interface RenkinPackDao {
 
 @Database(
     entities = [DbApplication::class],
-    version = 3
+    version = 4
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -71,6 +72,12 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN calendarPackName TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         // Physical file name stays "alchemiconPack" so existing installs keep their
         // saved generated icons across the rename.
         fun get(context: Context): RenkinPackDatabase {
@@ -79,7 +86,7 @@ abstract class RenkinPackDatabase : RoomDatabase() {
                     context.applicationContext,
                     RenkinPackDatabase::class.java,
                     "alchemiconPack"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
             }
         }
     }

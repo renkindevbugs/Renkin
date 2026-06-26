@@ -235,7 +235,9 @@ fun OptionsDialog(
     // Persisted in PackageInfoStruct so it survives dialog reopen. Non-null only when
     // the currently selected icon ends in _N (meaning day rotation is possible).
     var calendarPrefix by remember { mutableStateOf(app.calendarPrefix) }
-    val calendarPackName = iconPacks.find { it.packageName == iconPack }?.applicationName ?: ""
+    // Package name of the pack the calendar drawables come from (stored per-app in DB).
+    var calendarPackName by remember { mutableStateOf(app.calendarPackName) }
+    val calendarPackLabel = iconPacks.find { it.packageName == (calendarPackName ?: iconPack) }?.applicationName ?: ""
 
     // Slide the editor in from the right; closing plays the reverse animation
     // before the dialog window is actually dismissed
@@ -344,12 +346,12 @@ fun OptionsDialog(
                     visible = selectedTab == 0 && source == Source.ICON_PACK && calendarPrefix != null
                 ) {
                     CalendarCard(
-                        packName = calendarPackName,
+                        packName = calendarPackLabel,
                         calendarPrefix = calendarPrefix ?: "",
                         calendarEnabled = calendarEnabled,
                         onToggle = { enabled ->
                             calendarEnabled = enabled
-                            viewModel.setCalendarEnabled(app, enabled, calendarPrefix)
+                            viewModel.setCalendarEnabled(app, enabled, calendarPrefix, calendarPackName)
                         }
                     )
                 }
@@ -382,10 +384,11 @@ fun OptionsDialog(
                                     // Any icon ending in _N is a valid calendar candidate.
                                     val newPrefix = extractCalendarPrefix(drawableName)
                                     calendarPrefix = newPrefix
+                                    calendarPackName = if (newPrefix != null) pack.packageName else null
                                     // If calendar was enabled but the new icon can't rotate, disable it.
                                     if (newPrefix == null && calendarEnabled) {
                                         calendarEnabled = false
-                                        viewModel.setCalendarEnabled(app, false, null)
+                                        viewModel.setCalendarEnabled(app, false, null, null)
                                     }
                                 },
                                 onTextTypeChange = { textType = it; draft.origin = IconOrigin.CREATE },
