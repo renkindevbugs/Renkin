@@ -145,8 +145,9 @@ class ApplicationProvider(private val context: Context) {
             var perAppDrawables = emptyMap<String, android.graphics.drawable.Drawable>()
 
             applicationList
-                .filter { it.calendarEnabled && !it.calendarPrefix.isNullOrEmpty() && !it.calendarPackName.isNullOrEmpty() }
-                .groupBy { it.calendarPackName!! }
+                .filter { it.calendarEnabled && !it.calendarPrefix.isNullOrEmpty() }
+                .groupBy { it.calendarPackName?.takeIf { n -> n.isNotEmpty() } ?: primaryPackName }
+                .filter { (packName, _) -> packName.isNotEmpty() }
                 .forEach { (packName, apps) ->
                     val appsWithPrefixes = apps.map { it.toInstalledApplication() to it.calendarPrefix!! }
                     val (icons, drawables) = iconPackRepo.calendarDataForPrefixes(packName, appsWithPrefixes)
