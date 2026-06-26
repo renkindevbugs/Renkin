@@ -252,7 +252,7 @@ class MainViewModel @Inject constructor(
     // Records that [app] was hand-edited this session (so the build preview marks it "changed").
     // Clearing an icon (icon == null) is a removal, not a change, so it isn't recorded.
     private fun markUpdated(app: PackageInfoStruct, icon: IconPackDrawable?) {
-        if (icon != null) updatedKeys = updatedKeys + "${app.packageName}/${app.activityName}"
+        if (icon != null) updatedKeys = updatedKeys + app.key
     }
 
     /** Assigns (or clears, when [icon] is null) the created icon for the app at [index]. */

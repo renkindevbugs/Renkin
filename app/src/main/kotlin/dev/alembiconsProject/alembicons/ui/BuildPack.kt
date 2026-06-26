@@ -146,11 +146,11 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
     val themedApps = viewModel.applicationList
         .filter { it.createdIcon != null }
         .sortedWith(
-            compareByDescending<PackageInfoStruct> { "${it.packageName}/${it.activityName}" !in builtKeys }
-                .thenByDescending { "${it.packageName}/${it.activityName}" in updatedKeys }
+            compareByDescending<PackageInfoStruct> { it.key !in builtKeys }
+                .thenByDescending { it.key in updatedKeys }
                 .thenBy { it.appName.lowercase() }
         )
-    val newCount = themedApps.count { "${it.packageName}/${it.activityName}" !in builtKeys }
+    val newCount = themedApps.count { it.key !in builtKeys }
 
     // Warn (before building) about calendar apps whose source pack lacks some 1..31 day
     // drawables — those days fall back to a repeated icon instead of rotating.
@@ -247,8 +247,8 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(themedApps, key = { "${it.packageName}/${it.activityName}" }) { app ->
-                            val key = "${app.packageName}/${app.activityName}"
+                        items(themedApps, key = { it.key }) { app ->
+                            val key = app.key
                             BuildPreviewItem(
                                 app = app,
                                 isNew = key !in builtKeys,

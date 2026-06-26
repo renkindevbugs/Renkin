@@ -339,7 +339,7 @@ fun ApplicationList(
         item(key = "options") {
             OptionsCard(iconPacks)
         }
-        items(displayList, key = { "${it.value.packageName}/${it.value.activityName}" }) { indexedApp ->
+        items(displayList, key = { it.value.key }) { indexedApp ->
             ApplicationItem(iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue, Modifier.animateItem())
         }
     }

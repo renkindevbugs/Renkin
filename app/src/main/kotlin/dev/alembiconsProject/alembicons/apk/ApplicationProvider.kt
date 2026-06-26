@@ -145,8 +145,8 @@ class ApplicationProvider(private val context: Context) {
             var perAppDrawables = emptyMap<String, android.graphics.drawable.Drawable>()
 
             applicationList
-                .filter { it.calendarEnabled && !it.calendarPrefix.isNullOrEmpty() }
-                .groupBy { it.calendarPackName?.takeIf { n -> n.isNotEmpty() } ?: primaryPackName }
+                .filter { it.hasCalendarIcon }
+                .groupBy { it.calendarSourcePack(primaryPackName) }
                 .filter { (packName, _) -> packName.isNotEmpty() }
                 .forEach { (packName, apps) ->
                     val appsWithPrefixes = apps.map { it.toInstalledApplication() to it.calendarPrefix!! }
@@ -193,7 +193,7 @@ class ApplicationProvider(private val context: Context) {
         if (saved.isEmpty()) return
 
         for (app in applicationList.toList()) {
-            val entry = saved["${app.packageName}/${app.activityName}"] ?: continue
+            val entry = saved[app.key] ?: continue
             val updated = when {
                 entry.icon != null -> app.changeExport(entry.icon).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
                 else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
@@ -261,15 +261,16 @@ class ApplicationProvider(private val context: Context) {
 
     /**
      * Checks every calendar-enabled app against its source pack and reports those missing day
-     * drawables (which would repeat a fallback icon instead of rotating). Mirrors the grouping
-     * used by [buildAndSignIconPack] so the warning matches what the build will actually emit.
+     * drawables (which would repeat a fallback icon instead of rotating). Uses the same
+     * [PackageInfoStruct.hasCalendarIcon] / [PackageInfoStruct.calendarSourcePack] selection as
+     * [buildAndSignIconPack], so the warning matches what the build will actually emit.
      */
     suspend fun calendarWarnings(preferences: Preferences): List<CalendarWarning> = withContext(Dispatchers.Default) {
         val primaryPackName = preferences.getStringValue(PrimaryIconPackKey)
         applicationList
-            .filter { it.calendarEnabled && !it.calendarPrefix.isNullOrEmpty() }
+            .filter { it.hasCalendarIcon }
             .mapNotNull { app ->
-                val packName = app.calendarPackName?.takeIf { it.isNotEmpty() } ?: primaryPackName
+                val packName = app.calendarSourcePack(primaryPackName)
                 if (packName.isEmpty()) return@mapNotNull null
                 val missing = iconPackRepo.missingCalendarDays(packName, app.calendarPrefix!!)
                 if (missing.isNotEmpty()) CalendarWarning(app.appName, missing.size) else null

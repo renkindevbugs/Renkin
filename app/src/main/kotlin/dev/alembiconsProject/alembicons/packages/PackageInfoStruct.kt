@@ -34,11 +34,38 @@ class PackageInfoStruct(
         else -> 0
     }
 
-    fun changeExport(createdIcon: IconPackDrawable?): PackageInfoStruct =
+    // Single place that rebuilds the struct, so callers (changeExport/changeCalendar) only name
+    // the fields they touch — this isn't a data class (custom equals), so there's no copy().
+    // Every edit bumps internalVersion so the SnapshotStateList sees a distinct element.
+    private fun copyWith(
+        createdIcon: IconPackDrawable? = this.createdIcon,
+        calendarEnabled: Boolean = this.calendarEnabled,
+        calendarPrefix: String? = this.calendarPrefix,
+        calendarPackName: String? = this.calendarPackName
+    ): PackageInfoStruct =
         PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, originalName)
 
+    fun changeExport(createdIcon: IconPackDrawable?): PackageInfoStruct = copyWith(createdIcon = createdIcon)
+
     fun changeCalendar(calendarEnabled: Boolean, calendarPrefix: String? = this.calendarPrefix, calendarPackName: String? = this.calendarPackName): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, originalName)
+        copyWith(calendarEnabled = calendarEnabled, calendarPrefix = calendarPrefix, calendarPackName = calendarPackName)
+
+    /** True when this app opts into calendar day rotation with a usable prefix. */
+    val hasCalendarIcon: Boolean get() = calendarEnabled && !calendarPrefix.isNullOrEmpty()
+
+    /**
+     * The pack the calendar day drawables should load from: the one the user picked the icon from,
+     * falling back to [primaryPackName] (the global default) when no per-app pack was stored.
+     */
+    fun calendarSourcePack(primaryPackName: String): String =
+        calendarPackName?.takeIf { it.isNotEmpty() } ?: primaryPackName
+
+    /**
+     * Stable identity ("packageName/activityName") used to diff against the saved/built pack
+     * (builtKeys, updatedKeys) and as a LazyList item key. RenkinPackStore builds the same string
+     * from its DbApplication rows, so the two match.
+     */
+    val key: String get() = "$packageName/$activityName"
 
     fun getFileName(): String {
         return packageName.replace('.', '_')

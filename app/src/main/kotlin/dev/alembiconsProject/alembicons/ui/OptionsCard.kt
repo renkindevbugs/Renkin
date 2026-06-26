@@ -131,9 +131,9 @@ fun OptionsCard(
     val vm = hiltViewModel<MainViewModel>()
     val apps = vm.applicationList
     val builtKeys = vm.builtKeys
-    val builtCount = apps.count { it.createdIcon != null && "${it.packageName}/${it.activityName}" in builtKeys }
-    val addedCount = apps.count { it.createdIcon != null && "${it.packageName}/${it.activityName}" !in builtKeys }
-    val removedCount = apps.count { it.createdIcon == null && "${it.packageName}/${it.activityName}" in builtKeys }
+    val builtCount = apps.count { it.createdIcon != null && it.key in builtKeys }
+    val addedCount = apps.count { it.createdIcon != null && it.key !in builtKeys }
+    val removedCount = apps.count { it.createdIcon == null && it.key in builtKeys }
     val themedCount = builtCount + addedCount
     val totalCount = apps.size
 
