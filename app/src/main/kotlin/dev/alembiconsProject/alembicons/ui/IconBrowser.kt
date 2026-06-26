@@ -96,16 +96,15 @@ fun CreateTab(
     // this tab; it's seeded with the app name and reset per edit at the dialog level.
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
-    onIconSelect: (ResourceDrawable, IconPack) -> Unit,
+    // drawableName is the raw resource name (e.g. "bee_calendar_6") — used to derive the
+    // calendar prefix when the user opts into day rotation.
+    onIconSelect: (ResourceDrawable, IconPack, String) -> Unit,
     onTextTypeChange: (TextType) -> Unit,
     onCollapsedChange: (Boolean) -> Unit = {},
     contentReady: Boolean = true,
     // Resource id of the icon currently picked (from options.primaryIconPack), so the grid
     // can frame it. null = nothing picked yet.
-    selectedResourceId: Int? = null,
-    // When the selected pack has a <calendar> entry for this app, this is the prefix
-    // (e.g. "google_cal_"). Icons whose name starts with it are highlighted in the browser.
-    calendarPrefix: String? = null
+    selectedResourceId: Int? = null
 ) {
     // Seeded from the hoisted query so returning to the tab doesn't trigger a spurious
     // re-search (debouncedQuery already matches the preserved searchQuery).
@@ -175,10 +174,9 @@ fun CreateTab(
                         sortOrder = sortOrder,
                         query = debouncedQuery,
                         selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.primaryIconPack },
-                        calendarPrefix = calendarPrefix,
                         onBack = { expandedPack = null },
                         onCollapsedChange = { collapsed = it },
-                        onSelect = { resource, _ -> onIconSelect(resource, detailPack) }
+                        onSelect = { resource, _, drawableName -> onIconSelect(resource, detailPack, drawableName) }
                     )
                 } else if (!contentReady) {
                     // Hold off mounting the (heavy) pack browser until the dialog has
@@ -223,13 +221,12 @@ fun CreateTab(
                                         sortOrder = sortOrder,
                                         query = debouncedQuery,
                                         selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
-                                        calendarPrefix = calendarPrefix,
                                         onMore = { expandedPack = pack },
                                         onResult = { hasMatches ->
                                             packMatches = packMatches + (pack.packageName to hasMatches)
                                         }
-                                    ) { resource, _ ->
-                                        onIconSelect(resource, pack)
+                                    ) { resource, _, drawableName ->
+                                        onIconSelect(resource, pack, drawableName)
                                     }
                                 }
                             }

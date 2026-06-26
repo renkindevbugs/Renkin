@@ -138,15 +138,15 @@ class ApplicationProvider(private val context: Context) {
             val bgColor = preferences.getDefaultBackgroundColor(context)
             val primaryPackName = preferences.getStringValue(PrimaryIconPackKey)
 
-            // Per-app calendar: apps with calendarEnabled that aren't already covered by the
-            // global switch (global populates iconPackRepo.calendarIcon when the switch is on).
+            // Per-app calendar: apps with a user-chosen calendar prefix that aren't already
+            // covered by the global switch (global populates iconPackRepo.calendarIcon).
             val globalCalendarApps = iconPackRepo.calendarIcon.keys.map { it.packageName }.toSet()
-            val perAppCalendarApps = applicationList
-                .filter { it.calendarEnabled && it.packageName !in globalCalendarApps }
-                .map { it.toInstalledApplication() }
+            val perAppWithPrefixes = applicationList
+                .filter { it.calendarEnabled && !it.calendarPrefix.isNullOrEmpty() && it.packageName !in globalCalendarApps }
+                .map { it.toInstalledApplication() to it.calendarPrefix!! }
 
-            val (perAppIcons, perAppDrawables) = if (perAppCalendarApps.isNotEmpty() && primaryPackName.isNotEmpty()) {
-                iconPackRepo.calendarDataFor(primaryPackName, perAppCalendarApps)
+            val (perAppIcons, perAppDrawables) = if (perAppWithPrefixes.isNotEmpty() && primaryPackName.isNotEmpty()) {
+                iconPackRepo.calendarDataForPrefixes(primaryPackName, perAppWithPrefixes)
             } else {
                 emptyMap<InstalledApplication, String>() to emptyMap()
             }
@@ -189,24 +189,20 @@ class ApplicationProvider(private val context: Context) {
         for (app in applicationList.toList()) {
             val entry = saved["${app.packageName}/${app.activityName}"] ?: continue
             val updated = when {
-                entry.icon != null -> app.changeExport(entry.icon).changeCalendar(entry.calendarEnabled)
-                else -> app.changeCalendar(entry.calendarEnabled)
+                entry.icon != null -> app.changeExport(entry.icon).changeCalendar(entry.calendarEnabled, entry.calendarPrefix)
+                else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix)
             }
             editApplication(app, updated)
         }
     }
 
-    /** Sets or clears the calendar-day-icons flag for [app] and persists it. */
-    fun setCalendar(app: PackageInfoStruct, enabled: Boolean) {
+    /** Sets the calendar-day-icons flag and prefix for [app]. */
+    fun setCalendar(app: PackageInfoStruct, enabled: Boolean, calendarPrefix: String?) {
         val index = _applicationList.indexOfFirst {
             it.packageName == app.packageName && it.activityName == app.activityName
         }
-        if (index >= 0) editApplication(index, _applicationList[index].changeCalendar(enabled))
+        if (index >= 0) editApplication(index, _applicationList[index].changeCalendar(enabled, calendarPrefix))
     }
-
-    /** Returns the calendar prefix for [app] in [iconPackageName], or null if not supported. */
-    fun calendarPrefixFor(app: InstalledApplication, iconPackageName: String): String? =
-        iconPackRepo.calendarPrefixFor(app, iconPackageName)
 
     private suspend fun saveRenkinPack() = renkinPackStore.save(applicationList)
 

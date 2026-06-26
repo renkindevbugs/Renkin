@@ -110,23 +110,25 @@ class IconPackRepository(private val context: Context) {
 
     /**
      * Returns calendar icons (app→prefix map and prefix+day→drawable map) for the given
-     * [apps] in [iconPackageName], without touching the stored [calendarIcon] / [calendarIconsDrawable].
-     * Used during build for apps that opted in per-app, independently of the global switch.
+     * [appsWithPrefixes] in [iconPackageName]. The prefix is supplied by the caller — it was
+     * derived from the drawable name the user picked, so it doesn't depend on appfilter.xml
+     * having a `<calendar>` entry for that specific app.
      */
-    fun calendarDataFor(
+    fun calendarDataForPrefixes(
         iconPackageName: String,
-        apps: List<InstalledApplication>
+        appsWithPrefixes: List<Pair<InstalledApplication, String>>
     ): Pair<Map<InstalledApplication, String>, Map<String, Drawable>> {
-        if (apps.isEmpty()) return emptyMap<InstalledApplication, String>() to emptyMap()
-        val entry = appFilterElements.entries.find { it.key.packageName == iconPackageName }
-            ?: return emptyMap<InstalledApplication, String>() to emptyMap()
+        if (appsWithPrefixes.isEmpty()) return emptyMap<InstalledApplication, String>() to emptyMap()
 
-        val requestedComponents = apps.map { it.toComponentInfo() }.toSet()
-        val relevant = entry.value.filter { it is RawCalendar && it.component in requestedComponents }
+        val apps = appsWithPrefixes.map { it.first }
+        // Synthesise RawCalendar entries from the user-chosen prefixes (no appfilter lookup).
+        val fakeCalendars = appsWithPrefixes.map { (app, prefix) ->
+            RawCalendar(component = app.toComponentInfo(), prefix = prefix)
+        }
 
         val appMan = ApplicationManager(context)
-        val icons = appMan.getCalendarApplications(apps, relevant)
-        val drawables = appMan.getCalendarFromAppFilterElements(iconPackageName, relevant)
+        val icons = appMan.getCalendarApplications(apps, fakeCalendars)
+        val drawables = appMan.getCalendarFromAppFilterElements(iconPackageName, fakeCalendars)
         return icons to drawables
     }
 

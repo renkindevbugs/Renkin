@@ -86,8 +86,6 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.ui.text.font.FontWeight
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /** The source that produced the icon currently being previewed and confirmed. */
 internal enum class IconOrigin { CREATE, UPLOAD, VECTOR }
@@ -233,14 +231,11 @@ fun OptionsDialog(
 
     // Calendar day icons — committed immediately when toggled (independent of icon confirm).
     var calendarEnabled by rememberSaveable { mutableStateOf(app.calendarEnabled) }
-    // Non-null when the selected pack has a <calendar> entry for this app.
-    var calendarPrefix by remember { mutableStateOf<String?>(null) }
+    // Prefix derived from the selected icon's drawable name (e.g. "bee_calendar_").
+    // Persisted in PackageInfoStruct so it survives dialog reopen. Non-null only when
+    // the currently selected icon ends in _N (meaning day rotation is possible).
+    var calendarPrefix by remember { mutableStateOf(app.calendarPrefix) }
     val calendarPackName = iconPacks.find { it.packageName == iconPack }?.applicationName ?: ""
-
-    LaunchedEffect(iconPack) {
-        calendarPrefix = if (iconPack.isEmpty()) null
-        else withContext(Dispatchers.Default) { viewModel.calendarPrefixFor(app, iconPack) }
-    }
 
     // Slide the editor in from the right; closing plays the reverse animation
     // before the dialog window is actually dismissed
@@ -350,10 +345,11 @@ fun OptionsDialog(
                 ) {
                     CalendarCard(
                         packName = calendarPackName,
+                        calendarPrefix = calendarPrefix ?: "",
                         calendarEnabled = calendarEnabled,
                         onToggle = { enabled ->
                             calendarEnabled = enabled
-                            viewModel.setCalendarEnabled(app, enabled)
+                            viewModel.setCalendarEnabled(app, enabled, calendarPrefix)
                         }
                     )
                 }
@@ -378,16 +374,24 @@ fun OptionsDialog(
                                 textType = textType,
                                 searchQuery = createSearchQuery,
                                 onSearchQueryChange = { createSearchQuery = it },
-                                onIconSelect = { res, pack ->
+                                onIconSelect = { res, pack, drawableName ->
                                     customIconList = listOf(res)
                                     iconPack = pack.packageName
                                     draft.origin = IconOrigin.CREATE
+                                    // Derive calendar prefix from the picked icon's name.
+                                    // Any icon ending in _N is a valid calendar candidate.
+                                    val newPrefix = extractCalendarPrefix(drawableName)
+                                    calendarPrefix = newPrefix
+                                    // If calendar was enabled but the new icon can't rotate, disable it.
+                                    if (newPrefix == null && calendarEnabled) {
+                                        calendarEnabled = false
+                                        viewModel.setCalendarEnabled(app, false, null)
+                                    }
                                 },
                                 onTextTypeChange = { textType = it; draft.origin = IconOrigin.CREATE },
                                 onCollapsedChange = { headerCollapsed = it },
                                 contentReady = createTabReady,
-                                selectedResourceId = customIconList.firstOrNull()?.resourceId,
-                                calendarPrefix = calendarPrefix
+                                selectedResourceId = customIconList.firstOrNull()?.resourceId
                             )
                             1 -> UploadColumn(app = app) {
                                 draft.uploadBase = it
@@ -530,13 +534,23 @@ fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
 
 
 /**
- * Shows when the selected icon pack declares a `<calendar>` entry for the app being edited.
- * Lets the user opt in/out of including rotating day icons (1–31) in the generated pack,
- * without overriding the global "Retrieve Calendar Icons" switch.
+ * Strips the trailing digits from [drawableName] to get the rotation prefix.
+ * `"bee_calendar_6"` → `"bee_calendar_"`, `"google_cal_26"` → `"google_cal_"`.
+ * Returns null if the name doesn't end in 1–2 digits (not a calendar candidate).
+ */
+private fun extractCalendarPrefix(drawableName: String): String? {
+    val match = Regex("^(.+_)\\d{1,2}$").matchEntire(drawableName) ?: return null
+    return match.groupValues[1]
+}
+
+/**
+ * Shown when the selected icon ends in a number — the user can opt in to day rotation.
+ * Works with any icon from any pack regardless of which app it was designed for.
  */
 @Composable
 private fun CalendarCard(
     packName: String,
+    calendarPrefix: String,
     calendarEnabled: Boolean,
     onToggle: (Boolean) -> Unit
 ) {
@@ -565,13 +579,11 @@ private fun CalendarCard(
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
-                if (packName.isNotEmpty()) {
-                    Text(
-                        text = stringResource(R.string.calendarDayIconsDesc, packName),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
-                    )
-                }
+                Text(
+                    text = stringResource(R.string.calendarDayIconsDesc, calendarPrefix, packName),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                )
             }
             Switch(
                 checked = calendarEnabled,

@@ -13,7 +13,9 @@ class PackageInfoStruct(
     val iconID: Int,
     val createdIcon: IconPackDrawable? = null,
     val internalVersion: Int = 0,
-    val calendarEnabled: Boolean = false
+    val calendarEnabled: Boolean = false,
+    /** Drawable prefix used for calendar day rotation (e.g. `"google_cal_"`). Null = not set. */
+    val calendarPrefix: String? = null
 ) : Comparable<PackageInfoStruct> {
     override fun equals(other: Any?): Boolean {
         if (other is PackageInfoStruct) {
@@ -29,10 +31,10 @@ class PackageInfoStruct(
     }
 
     fun changeExport(createdIcon: IconPackDrawable?): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled)
+        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix)
 
-    fun changeCalendar(calendarEnabled: Boolean): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled)
+    fun changeCalendar(calendarEnabled: Boolean, calendarPrefix: String? = this.calendarPrefix): PackageInfoStruct =
+        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix)
 
     fun getFileName(): String {
         return packageName.replace('.', '_')

@@ -111,10 +111,9 @@ fun PackIconsRow(
     sortOrder: IconSortOrder,
     query: String = "",
     selectedResourceId: Int? = null,
-    calendarPrefix: String? = null,
     onMore: (() -> Unit)? = null,
     onResult: (hasMatches: Boolean) -> Unit = {},
-    onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
+    onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
@@ -174,8 +173,8 @@ fun PackIconsRow(
                 PackIconItem(
                     item = item,
                     selected = item.resource.resourceId == selectedResourceId,
-                    isCalendarGroup = calendarPrefix != null && item.drawableName.startsWith(calendarPrefix),
-                    onSelect = { onSelect(item.resource, item.drawable) }
+                    isCalendarGroup = item.drawableName.isCalendarCandidate(),
+                    onSelect = { onSelect(item.resource, item.drawable, item.drawableName) }
                 )
             }
             if (moreCount > 0 && onMore != null) {
@@ -210,10 +209,9 @@ fun PackDetailGrid(
     sortOrder: IconSortOrder,
     query: String,
     selectedResourceId: Int? = null,
-    calendarPrefix: String? = null,
     onBack: () -> Unit,
     onCollapsedChange: (Boolean) -> Unit = {},
-    onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
+    onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
@@ -294,16 +292,24 @@ fun PackDetailGrid(
                     PackIconItem(
                         item = item,
                         selected = item.resource.resourceId == selectedResourceId,
-                        isCalendarGroup = calendarPrefix != null && item.drawableName.startsWith(calendarPrefix),
+                        isCalendarGroup = item.drawableName.isCalendarCandidate(),
                         modifier = Modifier.animateItem(),
                         size = 56.dp,
-                        onSelect = { onSelect(item.resource, item.drawable) }
+                        onSelect = { onSelect(item.resource, item.drawable, item.drawableName) }
                     )
                 }
             }
         }
     }
 }
+
+/**
+ * True when this drawable name looks like it belongs to a day-rotating calendar set,
+ * i.e. it ends with `_` followed by 1–2 digits (e.g. `google_cal_6`, `bee_calendar_26`).
+ * Used to badge icons that CAN rotate — no restriction on what the user may pick.
+ */
+private fun String.isCalendarCandidate(): Boolean =
+    isNotEmpty() && Regex("^.+_\\d{1,2}$").matches(this)
 
 /**
  * A single icon slot used in both the row preview and the detail grid.
