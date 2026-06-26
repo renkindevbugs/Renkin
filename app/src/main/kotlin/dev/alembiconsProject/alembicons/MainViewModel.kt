@@ -248,6 +248,23 @@ class MainViewModel @Inject constructor(
     }
 
     /**
+     * Toggles the calendar-day-icons flag for [app]. Committed immediately (does not wait for
+     * the edit dialog's Confirm) because calendar is independent metadata, not an icon draft.
+     */
+    fun setCalendarEnabled(app: PackageInfoStruct, enabled: Boolean) {
+        appProvider.setCalendar(app, enabled)
+    }
+
+    /**
+     * Returns the calendar prefix for [app] in [iconPackageName] (e.g. `"google_cal_"`),
+     * or null if the pack doesn't have a calendar entry for this app.
+     */
+    suspend fun calendarPrefixFor(app: PackageInfoStruct, iconPackageName: String): String? =
+        withContext(Dispatchers.Default) {
+            appProvider.calendarPrefixFor(app.toInstalledApplication(), iconPackageName)
+        }
+
+    /**
      * Uninstalls the app's own generated icon pack. Emits a toast event for the outcome
      * (uninstalled / not installed); the system shows its own uninstall confirmation.
      */

@@ -69,7 +69,13 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -78,6 +84,10 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
+import androidx.compose.ui.text.font.FontWeight
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** The source that produced the icon currently being previewed and confirmed. */
 internal enum class IconOrigin { CREATE, UPLOAD, VECTOR }
@@ -221,6 +231,17 @@ fun OptionsDialog(
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
     var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
 
+    // Calendar day icons — committed immediately when toggled (independent of icon confirm).
+    var calendarEnabled by rememberSaveable { mutableStateOf(app.calendarEnabled) }
+    // Non-null when the selected pack has a <calendar> entry for this app.
+    var calendarPrefix by remember { mutableStateOf<String?>(null) }
+    val calendarPackName = iconPacks.find { it.packageName == iconPack }?.applicationName ?: ""
+
+    LaunchedEffect(iconPack) {
+        calendarPrefix = if (iconPack.isEmpty()) null
+        else withContext(Dispatchers.Default) { viewModel.calendarPrefixFor(app, iconPack) }
+    }
+
     // Slide the editor in from the right; closing plays the reverse animation
     // before the dialog window is actually dismissed
     val dialogTransition = remember { MutableTransitionState(false).apply { targetState = true } }
@@ -320,6 +341,21 @@ fun OptionsDialog(
                 // the other tabs get one right below the header
                 if (selectedTab != 0) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+
+                // Calendar card: visible only on Create tab with Icon Pack source when
+                // the selected pack declares a <calendar> entry for this app.
+                AnimatedVisibility(
+                    visible = selectedTab == 0 && source == Source.ICON_PACK && calendarPrefix != null
+                ) {
+                    CalendarCard(
+                        packName = calendarPackName,
+                        calendarEnabled = calendarEnabled,
+                        onToggle = { enabled ->
+                            calendarEnabled = enabled
+                            viewModel.setCalendarEnabled(app, enabled)
+                        }
+                    )
                 }
 
                 // Tab content
@@ -491,6 +527,58 @@ fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
     )
 }
 
+
+/**
+ * Shows when the selected icon pack declares a `<calendar>` entry for the app being edited.
+ * Lets the user opt in/out of including rotating day icons (1–31) in the generated pack,
+ * without overriding the global "Retrieve Calendar Icons" switch.
+ */
+@Composable
+private fun CalendarCard(
+    packName: String,
+    calendarEnabled: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Surface(
+        shape = dev.alembiconsProject.alembicons.ui.theme.CardShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.DateRange,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(22.dp)
+            )
+            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.calendarDayIcons),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                if (packName.isNotEmpty()) {
+                    Text(
+                        text = stringResource(R.string.calendarDayIconsDesc, packName),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                    )
+                }
+            }
+            Switch(
+                checked = calendarEnabled,
+                onCheckedChange = onToggle
+            )
+        }
+    }
+}
 
 @Composable
 private fun SourcePills(

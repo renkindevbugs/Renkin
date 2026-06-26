@@ -7,7 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.InstalledApplication
+import dev.alembiconsProject.alembicons.data.RawCalendar
 import dev.alembiconsProject.alembicons.data.RawElement
+import dev.alembiconsProject.alembicons.data.toComponentInfo
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import kotlinx.coroutines.Dispatchers
@@ -93,6 +95,39 @@ class IconPackRepository(private val context: Context) {
                 iconPackageName,
                 packApps
             )
+    }
+
+    /**
+     * Returns the calendar prefix for [app] in [iconPackageName] (e.g. `"google_cal_"`),
+     * or null if the pack doesn't declare a calendar entry for that app.
+     * Reads from the already-loaded [appFilterElements] — no I/O.
+     */
+    fun calendarPrefixFor(app: InstalledApplication, iconPackageName: String): String? {
+        val entry = appFilterElements.entries.find { it.key.packageName == iconPackageName } ?: return null
+        val component = app.toComponentInfo()
+        return entry.value.filterIsInstance<RawCalendar>().find { it.component == component }?.prefix
+    }
+
+    /**
+     * Returns calendar icons (app→prefix map and prefix+day→drawable map) for the given
+     * [apps] in [iconPackageName], without touching the stored [calendarIcon] / [calendarIconsDrawable].
+     * Used during build for apps that opted in per-app, independently of the global switch.
+     */
+    fun calendarDataFor(
+        iconPackageName: String,
+        apps: List<InstalledApplication>
+    ): Pair<Map<InstalledApplication, String>, Map<String, Drawable>> {
+        if (apps.isEmpty()) return emptyMap<InstalledApplication, String>() to emptyMap()
+        val entry = appFilterElements.entries.find { it.key.packageName == iconPackageName }
+            ?: return emptyMap<InstalledApplication, String>() to emptyMap()
+
+        val requestedComponents = apps.map { it.toComponentInfo() }.toSet()
+        val relevant = entry.value.filter { it is RawCalendar && it.component in requestedComponents }
+
+        val appMan = ApplicationManager(context)
+        val icons = appMan.getCalendarApplications(apps, relevant)
+        val drawables = appMan.getCalendarFromAppFilterElements(iconPackageName, relevant)
+        return icons to drawables
     }
 
     /** One representative icon per pack (the pack's own icon, or the app's icon in that pack). */

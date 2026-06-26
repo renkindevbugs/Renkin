@@ -12,7 +12,8 @@ class PackageInfoStruct(
     val icon: Drawable,
     val iconID: Int,
     val createdIcon: IconPackDrawable? = null,
-    val internalVersion: Int = 0
+    val internalVersion: Int = 0,
+    val calendarEnabled: Boolean = false
 ) : Comparable<PackageInfoStruct> {
     override fun equals(other: Any?): Boolean {
         if (other is PackageInfoStruct) {
@@ -27,11 +28,11 @@ class PackageInfoStruct(
         else -> 0
     }
 
-    fun changeExport(
-        createdIcon: IconPackDrawable?
-    ): PackageInfoStruct {
-        return PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1)
-    }
+    fun changeExport(createdIcon: IconPackDrawable?): PackageInfoStruct =
+        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled)
+
+    fun changeCalendar(calendarEnabled: Boolean): PackageInfoStruct =
+        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled)
 
     fun getFileName(): String {
         return packageName.replace('.', '_')

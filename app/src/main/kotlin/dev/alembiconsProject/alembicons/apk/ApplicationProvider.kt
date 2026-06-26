@@ -14,6 +14,7 @@ import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
+import dev.alembiconsProject.alembicons.data.SecondaryIconPackKey
 import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
 import dev.alembiconsProject.alembicons.data.getDefaultIconColor
@@ -135,12 +136,29 @@ class ApplicationProvider(private val context: Context) {
             val themed = preferences.getBooleanValue(ExportThemedKey)
             val iconColor = preferences.getDefaultIconColor(context)
             val bgColor = preferences.getDefaultBackgroundColor(context)
+            val primaryPackName = preferences.getStringValue(PrimaryIconPackKey)
+
+            // Per-app calendar: apps with calendarEnabled that aren't already covered by the
+            // global switch (global populates iconPackRepo.calendarIcon when the switch is on).
+            val globalCalendarApps = iconPackRepo.calendarIcon.keys.map { it.packageName }.toSet()
+            val perAppCalendarApps = applicationList
+                .filter { it.calendarEnabled && it.packageName !in globalCalendarApps }
+                .map { it.toInstalledApplication() }
+
+            val (perAppIcons, perAppDrawables) = if (perAppCalendarApps.isNotEmpty() && primaryPackName.isNotEmpty()) {
+                iconPackRepo.calendarDataFor(primaryPackName, perAppCalendarApps)
+            } else {
+                emptyMap<InstalledApplication, String>() to emptyMap()
+            }
+
+            val allCalendarIcons = iconPackRepo.calendarIcon + perAppIcons
+            val allCalendarDrawables = iconPackRepo.calendarIconsDrawable + perAppDrawables
 
             val iconPackGenerator = IconPackBuilder(
                 context,
                 applicationList,
-                iconPackRepo.calendarIcon,
-                iconPackRepo.calendarIconsDrawable
+                allCalendarIcons,
+                allCalendarDrawables
             )
             val canBeInstalled = iconPackGenerator.canBeInstalled() // must be called before build and sign
             val apk = iconPackGenerator.buildAndSign(themed, iconColor.toHexString(), bgColor.toHexString(), textMethod)
@@ -169,10 +187,26 @@ class ApplicationProvider(private val context: Context) {
         if (saved.isEmpty()) return
 
         for (app in applicationList.toList()) {
-            val icon = saved["${app.packageName}/${app.activityName}"] ?: continue
-            editApplication(app, app.changeExport(icon))
+            val entry = saved["${app.packageName}/${app.activityName}"] ?: continue
+            val updated = when {
+                entry.icon != null -> app.changeExport(entry.icon).changeCalendar(entry.calendarEnabled)
+                else -> app.changeCalendar(entry.calendarEnabled)
+            }
+            editApplication(app, updated)
         }
     }
+
+    /** Sets or clears the calendar-day-icons flag for [app] and persists it. */
+    fun setCalendar(app: PackageInfoStruct, enabled: Boolean) {
+        val index = _applicationList.indexOfFirst {
+            it.packageName == app.packageName && it.activityName == app.activityName
+        }
+        if (index >= 0) editApplication(index, _applicationList[index].changeCalendar(enabled))
+    }
+
+    /** Returns the calendar prefix for [app] in [iconPackageName], or null if not supported. */
+    fun calendarPrefixFor(app: InstalledApplication, iconPackageName: String): String? =
+        iconPackRepo.calendarPrefixFor(app, iconPackageName)
 
     private suspend fun saveRenkinPack() = renkinPackStore.save(applicationList)
 

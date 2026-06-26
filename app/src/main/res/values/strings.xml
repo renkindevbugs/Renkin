@@ -77,6 +77,8 @@
     <string name="iconPackOnly">Icon Pack Only</string>
     <string name="syncPacks">Sync icon packs</string>
     <string name="retrieveCalendarIcon">Retrieve calendar icons</string>
+    <string name="calendarDayIcons">Calendar day icons</string>
+    <string name="calendarDayIconsDesc">Available in %1$s · rotates with the date</string>
     <string name="iconsStillGenerated">Icons are still being generated</string>
     <string name="newIconPackTitle">New icon pack installed</string>
     <string name="newIconPackText">Reload Renkin to use \"%1$s\" for your icons.</string>
