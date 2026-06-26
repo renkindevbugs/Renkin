@@ -31,8 +31,10 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.MainActivity
@@ -190,6 +192,21 @@ fun RenkinAlertDialog(
         shape = DialogShape,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         titleContentColor = MaterialTheme.colorScheme.onSurface
+    )
+}
+
+/**
+ * A primary-coloured clickable text link that opens [url]. Carries a [Role.Button] semantic so
+ * TalkBack announces it as actionable instead of plain text.
+ */
+@Composable
+fun LinkText(text: String, url: String, modifier: Modifier = Modifier) {
+    val uriHandler = LocalUriHandler.current
+    Text(
+        text = text,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = modifier.clickable(role = Role.Button) { uriHandler.openUri(url) }
     )
 }
 

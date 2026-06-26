@@ -1,7 +1,6 @@
 package dev.alembiconsProject.alembicons.ui
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -32,7 +31,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.window.Dialog
@@ -58,7 +56,6 @@ fun InfoDialog(onDismiss: () -> Unit) {
                     .verticalScroll(rememberScrollState())
                     .padding(24.dp)
             ) {
-                val uriHandler = LocalUriHandler.current
                 val githubUrl = stringResource(R.string.githubUrl)
 
                 // Header — app icon + name, with a "View on GitHub" link right under the name
@@ -79,13 +76,10 @@ fun InfoDialog(onDismiss: () -> Unit) {
                             style = MaterialTheme.typography.headlineSmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
-                        Text(
+                        LinkText(
                             text = stringResource(R.string.viewOnGithub),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier
-                                .padding(top = 2.dp)
-                                .clickable { uriHandler.openUri(githubUrl) }
+                            url = githubUrl,
+                            modifier = Modifier.padding(top = 2.dp)
                         )
                     }
                 }
@@ -109,13 +103,10 @@ fun InfoDialog(onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                Text(
+                LinkText(
                     text = stringResource(R.string.aboutForkLink),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .padding(top = 2.dp)
-                        .clickable { uriHandler.openUri("https://f-droid.org/packages/com.kaanelloed.iconeration/") }
+                    url = "https://f-droid.org/packages/com.kaanelloed.iconeration/",
+                    modifier = Modifier.padding(top = 2.dp)
                 )
 
                 Spacer(Modifier.height(24.dp))
