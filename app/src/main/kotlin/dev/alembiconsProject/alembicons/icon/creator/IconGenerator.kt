@@ -36,7 +36,7 @@ import dev.alembiconsProject.alembicons.drawable.haveMonochrome
 import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
 import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
 import dev.alembiconsProject.alembicons.extension.changeBackgroundColor
-import dev.alembiconsProject.alembicons.extension.clone
+import dev.alembiconsProject.alembicons.extension.emptyLike
 import dev.alembiconsProject.alembicons.extension.scaleFromCenter
 import dev.alembiconsProject.alembicons.icon.parser.IconParser
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
@@ -533,7 +533,7 @@ class IconGenerator(
     }
 
     private fun colorizeBitmap(icon: Bitmap, mode: PorterDuff.Mode): Bitmap {
-        val coloredIcon = icon.clone()
+        val coloredIcon = icon.emptyLike()
         val paint = Paint()
 
         paint.colorFilter = PorterDuffColorFilter(options.color, mode)
