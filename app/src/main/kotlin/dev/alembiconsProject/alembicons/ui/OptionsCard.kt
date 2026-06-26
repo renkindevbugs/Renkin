@@ -84,7 +84,7 @@ fun AppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?) -> Unit,
+    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {

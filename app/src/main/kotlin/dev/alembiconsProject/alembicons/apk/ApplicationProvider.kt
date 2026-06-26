@@ -236,8 +236,11 @@ class ApplicationProvider(private val context: Context) {
 
     suspend fun clearIcons() = withContext(Dispatchers.Default) {
         // Snapshot copy: editApplication mutates the live list in place.
+        // Also reset calendar opt-ins: otherwise a calendar-enabled app is still persisted
+        // (RenkinPackStore keeps calendar rows even without an icon), so it lingers in the
+        // saved pack and the change bar counts it as a pending removal (a phantom "−1").
         for (app in applicationList.toList()) {
-            editApplication(app, app.changeExport(null))
+            editApplication(app, app.changeExport(null).changeCalendar(false, null, null))
         }
         // Persist the cleared state, otherwise the saved pack reloads the icons on the
         // next launch and "Remove icons" looks like it did nothing.
@@ -246,6 +249,30 @@ class ApplicationProvider(private val context: Context) {
 
     /** Keys ("package/activity") of the apps stored in the last built/saved pack. */
     suspend fun getSavedPackKeys(): Set<String> = renkinPackStore.savedKeys()
+
+    /** Whether [prefix] is a genuine calendar day-rotation set in [packPackageName]. */
+    fun isCalendarPrefix(packPackageName: String, prefix: String): Boolean =
+        iconPackRepo.isCalendarPrefix(packPackageName, prefix)
+
+    /** A calendar-enabled app whose source pack is missing some of the 1..31 day drawables. */
+    data class CalendarWarning(val appName: String, val missingDays: Int)
+
+    /**
+     * Checks every calendar-enabled app against its source pack and reports those missing day
+     * drawables (which would repeat a fallback icon instead of rotating). Mirrors the grouping
+     * used by [buildAndSignIconPack] so the warning matches what the build will actually emit.
+     */
+    suspend fun calendarWarnings(preferences: Preferences): List<CalendarWarning> = withContext(Dispatchers.Default) {
+        val primaryPackName = preferences.getStringValue(PrimaryIconPackKey)
+        applicationList
+            .filter { it.calendarEnabled && !it.calendarPrefix.isNullOrEmpty() }
+            .mapNotNull { app ->
+                val packName = app.calendarPackName?.takeIf { it.isNotEmpty() } ?: primaryPackName
+                if (packName.isEmpty()) return@mapNotNull null
+                val missing = iconPackRepo.missingCalendarDays(packName, app.calendarPrefix!!)
+                if (missing.isNotEmpty()) CalendarWarning(app.appName, missing.size) else null
+            }
+    }
 
     data class BuiltIconPack(
         val uri: Uri,

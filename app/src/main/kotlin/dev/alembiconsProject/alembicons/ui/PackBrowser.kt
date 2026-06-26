@@ -111,6 +111,8 @@ fun PackIconsRow(
     sortOrder: IconSortOrder,
     query: String = "",
     selectedResourceId: Int? = null,
+    // Prefix of the calendar icon picked from this pack, so its day-siblings are framed too.
+    selectedCalendarPrefix: String? = null,
     onMore: (() -> Unit)? = null,
     onResult: (hasMatches: Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
@@ -119,6 +121,14 @@ fun PackIconsRow(
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var moreCount by remember { mutableIntStateOf(0) }
     var isLoading by remember { mutableStateOf(true) }
+
+    // Badge only genuine calendar icons. Validate each distinct prefix once per pack (does the
+    // pack have a full month for it?) and cache, so badging stays cheap during recomposition.
+    val calendarPrefixCache = remember(iconPack.packageName) { mutableMapOf<String, Boolean>() }
+    fun PackIconPreview.isCalendarIcon(): Boolean {
+        val prefix = drawableName.calendarPrefixOrNull() ?: return false
+        return calendarPrefixCache.getOrPut(prefix) { viewModel.isCalendarPrefix(iconPack.packageName, prefix) }
+    }
 
     // The picked pack (primaryIconPack) doesn't change how a pack's preview icons render — the
     // generator colourises by explicit pack name — so exclude it from the key. Otherwise picking
@@ -173,7 +183,8 @@ fun PackIconsRow(
                 PackIconItem(
                     item = item,
                     selected = item.resource.resourceId == selectedResourceId,
-                    isCalendarGroup = item.drawableName.isCalendarCandidate(),
+                    isCalendarGroup = item.isCalendarIcon(),
+                    inSelectedCalendarGroup = item.drawableName.inCalendarGroup(selectedCalendarPrefix),
                     onSelect = { onSelect(item.resource, item.drawable, item.drawableName) }
                 )
             }
@@ -209,6 +220,8 @@ fun PackDetailGrid(
     sortOrder: IconSortOrder,
     query: String,
     selectedResourceId: Int? = null,
+    // Prefix of the calendar icon picked from this pack, so its day-siblings are framed too.
+    selectedCalendarPrefix: String? = null,
     onBack: () -> Unit,
     onCollapsedChange: (Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
@@ -216,6 +229,14 @@ fun PackDetailGrid(
     val viewModel: MainViewModel = hiltViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
+
+    // Badge only genuine calendar icons. Validate each distinct prefix once per pack (does the
+    // pack have a full month for it?) and cache, so badging stays cheap during recomposition.
+    val calendarPrefixCache = remember(iconPack.packageName) { mutableMapOf<String, Boolean>() }
+    fun PackIconPreview.isCalendarIcon(): Boolean {
+        val prefix = drawableName.calendarPrefixOrNull() ?: return false
+        return calendarPrefixCache.getOrPut(prefix) { viewModel.isCalendarPrefix(iconPack.packageName, prefix) }
+    }
 
     val gridState = rememberLazyGridState()
     val gridScrolled by remember {
@@ -292,7 +313,8 @@ fun PackDetailGrid(
                     PackIconItem(
                         item = item,
                         selected = item.resource.resourceId == selectedResourceId,
-                        isCalendarGroup = item.drawableName.isCalendarCandidate(),
+                        isCalendarGroup = item.isCalendarIcon(),
+                        inSelectedCalendarGroup = item.drawableName.inCalendarGroup(selectedCalendarPrefix),
                         modifier = Modifier.animateItem(),
                         size = 56.dp,
                         onSelect = { onSelect(item.resource, item.drawable, item.drawableName) }
@@ -312,6 +334,22 @@ private fun String.isCalendarCandidate(): Boolean =
     isNotEmpty() && Regex("^.+_\\d{1,2}$").matches(this)
 
 /**
+ * The day-rotation prefix of a drawable name, i.e. the name minus its trailing 1–2 digits
+ * (`"google_cal_26"` → `"google_cal_"`), or null when it doesn't end in digits. Compared against
+ * the pack's declared `<calendar>` prefixes so only genuine calendar icons are badged.
+ */
+private fun String.calendarPrefixOrNull(): String? =
+    Regex("^(.+_)\\d{1,2}$").find(this)?.groupValues?.get(1)
+
+/**
+ * True when this drawable name is a day in the selected calendar's rotation set, i.e. it shares
+ * [prefix] and ends in 1–2 digits (e.g. prefix "bee_calendar_" matches "bee_calendar_26").
+ * Null/blank prefix means no calendar icon is selected, so nothing is grouped.
+ */
+private fun String.inCalendarGroup(prefix: String?): Boolean =
+    !prefix.isNullOrEmpty() && startsWith(prefix) && isCalendarCandidate()
+
+/**
  * A single icon slot used in both the row preview and the detail grid.
  * Shows a subtle calendar badge (DateRange icon) when [isCalendarGroup] is true,
  * so the user can recognise which icons belong to the calendar day-rotation set.
@@ -322,6 +360,9 @@ private fun PackIconItem(
     selected: Boolean,
     isCalendarGroup: Boolean,
     modifier: Modifier = Modifier,
+    // True when this icon is a day-sibling (same prefix) of the calendar icon the user picked,
+    // so the whole rotation set is framed in the selection colour, not just the picked day.
+    inSelectedCalendarGroup: Boolean = false,
     size: androidx.compose.ui.unit.Dp = 64.dp,
     onSelect: () -> Unit
 ) {
@@ -335,9 +376,9 @@ private fun PackIconItem(
             contentDescription = null,
             modifier = Modifier
                 .fillMaxSize()
-                .selectedIconBorder(selected)
+                .selectedIconBorder(selected || inSelectedCalendarGroup)
                 .let { m ->
-                    if (isCalendarGroup && !selected) m.border(
+                    if (isCalendarGroup && !selected && !inSelectedCalendarGroup) m.border(
                         1.5.dp,
                         MaterialTheme.colorScheme.tertiary.copy(alpha = 0.55f),
                         RoundedCornerShape(16.dp)

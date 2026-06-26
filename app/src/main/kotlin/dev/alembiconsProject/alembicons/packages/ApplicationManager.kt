@@ -456,6 +456,12 @@ class ApplicationManager(private val ctx: Context) {
         return getResIcon(res, name, packName)
     }
 
+    /** Cheap existence check (resolves the resource id only; no drawable decode). */
+    fun hasDrawable(packName: String, name: String): Boolean {
+        val res = getResources(packName) ?: return false
+        return res.getIdentifierByName(name, "drawable", packName) > 0
+    }
+
     fun getResources(packageName: String): Resources? {
         return try {
             return pm.getResourcesForApplication(packageName)
