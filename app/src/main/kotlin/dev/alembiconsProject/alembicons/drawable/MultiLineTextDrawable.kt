@@ -44,26 +44,11 @@ class MultiLineTextDrawable(
 
     private fun adjustTextSize(text: String, minTextSize: Float, width: Int, maxLines: Int) {
         val words = text.split(' ')
-        val longestWord = getLongestWord(words, maxLines)
+        val longestWord = widestWord(words, maxLines) { textWidth(it) }
 
         while (textWidth(longestWord) > width && paint.textSize > minTextSize) {
             paint.textSize -= 1
         }
-    }
-
-    private fun getLongestWord(words: List<String>, maxLines: Int): String {
-        if (words.size == 1) {
-            return words[0]
-        }
-
-        val wordsToShow = if (words.size > maxLines) {
-            words.slice(0 until maxLines)
-        } else {
-            words
-        }
-
-        // The widest word is what has to fit, so size the text against it.
-        return wordsToShow.maxByOrNull { textWidth(it) } ?: wordsToShow.first()
     }
 
     private fun calculateX(): Float {
@@ -115,4 +100,14 @@ class MultiLineTextDrawable(
             staticLayout.draw(this)
         }
     }
+}
+
+/**
+ * The widest of the first [maxLines] words by [widthOf] — the word the text must shrink to fit.
+ * Pure (no paint state) so it can be unit-tested; the drawable passes its text measurement in.
+ */
+internal fun widestWord(words: List<String>, maxLines: Int, widthOf: (String) -> Int): String {
+    if (words.size == 1) return words[0]
+    val wordsToShow = if (words.size > maxLines) words.slice(0 until maxLines) else words
+    return wordsToShow.maxByOrNull(widthOf) ?: wordsToShow.first()
 }
