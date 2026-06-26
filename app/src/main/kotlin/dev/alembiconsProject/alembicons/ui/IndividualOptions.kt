@@ -386,7 +386,8 @@ fun OptionsDialog(
                                 onTextTypeChange = { textType = it; draft.origin = IconOrigin.CREATE },
                                 onCollapsedChange = { headerCollapsed = it },
                                 contentReady = createTabReady,
-                                selectedResourceId = customIconList.firstOrNull()?.resourceId
+                                selectedResourceId = customIconList.firstOrNull()?.resourceId,
+                                calendarPrefix = calendarPrefix
                             )
                             1 -> UploadColumn(app = app) {
                                 draft.uploadBase = it

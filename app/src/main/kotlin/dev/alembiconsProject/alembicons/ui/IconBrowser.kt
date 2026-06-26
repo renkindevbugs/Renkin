@@ -102,7 +102,10 @@ fun CreateTab(
     contentReady: Boolean = true,
     // Resource id of the icon currently picked (from options.primaryIconPack), so the grid
     // can frame it. null = nothing picked yet.
-    selectedResourceId: Int? = null
+    selectedResourceId: Int? = null,
+    // When the selected pack has a <calendar> entry for this app, this is the prefix
+    // (e.g. "google_cal_"). Icons whose name starts with it are highlighted in the browser.
+    calendarPrefix: String? = null
 ) {
     // Seeded from the hoisted query so returning to the tab doesn't trigger a spurious
     // re-search (debouncedQuery already matches the preserved searchQuery).
@@ -172,6 +175,7 @@ fun CreateTab(
                         sortOrder = sortOrder,
                         query = debouncedQuery,
                         selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.primaryIconPack },
+                        calendarPrefix = calendarPrefix,
                         onBack = { expandedPack = null },
                         onCollapsedChange = { collapsed = it },
                         onSelect = { resource, _ -> onIconSelect(resource, detailPack) }
@@ -219,6 +223,7 @@ fun CreateTab(
                                         sortOrder = sortOrder,
                                         query = debouncedQuery,
                                         selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
+                                        calendarPrefix = calendarPrefix,
                                         onMore = { expandedPack = pack },
                                         onResult = { hasMatches ->
                                             packMatches = packMatches + (pack.packageName to hasMatches)

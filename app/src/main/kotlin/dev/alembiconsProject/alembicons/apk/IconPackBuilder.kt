@@ -203,8 +203,12 @@ class IconPackBuilder(
                     }
                 }
 
-                drawableXml.item(appFileName)
-                appfilterXml.item(app.packageName, app.activityName, appFileName)
+                // When calendar day rotation is enabled, the <calendar> entry (written below)
+                // drives the launcher. A static <item> would override it, so we skip it.
+                if (!app.calendarEnabled) {
+                    drawableXml.item(appFileName)
+                    appfilterXml.item(app.packageName, app.activityName, appFileName)
+                }
             }
         }
 

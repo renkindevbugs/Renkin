@@ -450,12 +450,14 @@ class MainViewModel @Inject constructor(
         names: List<String>
     ): List<PackIconPreview> {
         val ids = appMan.getIconPackDrawableIds(packageName, names)
+        // names and ids are parallel lists (same order) — build id→name reverse lookup.
+        val idToName = names.zip(ids).associate { (name, id) -> id to name }
         val drawables = appMan.getIconPackDrawables(packageName, ids)
         val exportDrawables = iconPackIcons(packageName, options, drawables)
         return exportDrawables.entries
             .filter { it.value != null }
             .distinctBy { it.key.resourceId }
-            .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap()) }
+            .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap(), idToName[it.key.resourceId] ?: "") }
     }
 
     /** Clears every created icon (and persists the empty state). */
