@@ -96,6 +96,23 @@ fun Preferences.getDefaultBackgroundColor(context: Context): Color {
     return if (isDarkModeEnabled(context)) Color.Black else Color.White
 }
 
+// Convenience: the configured icon / background colour, falling back to the theme default.
+// Bundles the key + matching default so callers don't repeat that pairing.
+
+@Composable
+fun DataStore<Preferences>.getIconColor(): Color =
+    getColorValue(IconColorKey, getDefaultIconColor())
+
+fun Preferences.getIconColor(context: Context): Color =
+    getColorValue(IconColorKey, getDefaultIconColor(context))
+
+@Composable
+fun DataStore<Preferences>.getBackgroundColor(): Color =
+    getColorValue(BackgroundColorKey, getDefaultBackgroundColor())
+
+fun Preferences.getBackgroundColor(context: Context): Color =
+    getColorValue(BackgroundColorKey, getDefaultBackgroundColor(context))
+
 //Preference type
 fun DataStore<Preferences>.getBooleanState(key: Preferences.Key<Boolean>): Flow<Boolean?> {
     return getPreferenceFlow(key)

@@ -207,7 +207,7 @@ fun AppVersion() {
     Row(modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.End) {
         Text(
-            text = String.format(stringResource(R.string.version), BuildConfig.VERSION_NAME),
+            text = stringResource(R.string.version, BuildConfig.VERSION_NAME),
             fontSize = 12.sp
         )
     }

@@ -3,10 +3,8 @@ package dev.alembiconsProject.alembicons.icon.creator
 import android.content.Context
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.Preferences
-import dev.alembiconsProject.alembicons.data.BackgroundColorKey
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IMAGE_EDIT_DEFAULT
-import dev.alembiconsProject.alembicons.data.IconColorKey
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.IncludeVectorKey
 import dev.alembiconsProject.alembicons.data.MonochromeKey
@@ -24,9 +22,8 @@ import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.TEXT_TYPE_DEFAULT
 import dev.alembiconsProject.alembicons.data.TextType
 import dev.alembiconsProject.alembicons.data.getBooleanValue
-import dev.alembiconsProject.alembicons.data.getColorValue
-import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
-import dev.alembiconsProject.alembicons.data.getDefaultIconColor
+import dev.alembiconsProject.alembicons.data.getBackgroundColor
+import dev.alembiconsProject.alembicons.data.getIconColor
 import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getStringValue
 
@@ -70,8 +67,8 @@ data class GenerationOptions(
             context: Context,
             override: Boolean = preferences.getBooleanValue(OverrideIconKey)
         ): GenerationOptions {
-            val iconColor = preferences.getColorValue(IconColorKey, preferences.getDefaultIconColor(context))
-            val bgColor = preferences.getColorValue(BackgroundColorKey, preferences.getDefaultBackgroundColor(context))
+            val iconColor = preferences.getIconColor(context)
+            val bgColor = preferences.getBackgroundColor(context)
 
             return GenerationOptions(
                 primarySource = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT),
