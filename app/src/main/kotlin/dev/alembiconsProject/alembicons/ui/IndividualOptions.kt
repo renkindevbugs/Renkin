@@ -195,7 +195,7 @@ fun OptionsDialog(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?) -> Unit,
+    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
@@ -331,7 +331,7 @@ fun OptionsDialog(
                     previewLoading = draft.generating,
                     onDismiss = startClose,
                     onClear = { showConfirmClear = true },
-                    onConfirm = { onConfirm(draft.iconToConfirm) }
+                    onConfirm = { onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName) }
                 )
 
                 // The Create tab draws its own divider under the search bar;
@@ -394,7 +394,9 @@ fun OptionsDialog(
                                 onTextTypeChange = { textType = it; draft.origin = IconOrigin.CREATE },
                                 onCollapsedChange = { headerCollapsed = it },
                                 contentReady = createTabReady,
-                                selectedResourceId = customIconList.firstOrNull()?.resourceId
+                                selectedResourceId = customIconList.firstOrNull()?.resourceId,
+                                // Frame the rotation siblings only once the user has opted in.
+                                selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled }
                             )
                             1 -> UploadColumn(app = app) {
                                 draft.uploadBase = it

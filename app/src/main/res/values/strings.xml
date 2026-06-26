@@ -207,6 +207,8 @@
     <string name="buildPreviewTitle">Pack preview</string>
     <string name="buildPreviewEmpty">No icons yet — assign some to your apps first</string>
     <string name="buildPreviewCount">%d icons</string>
+    <string name="calendarMissingDaysTitle">Some calendar icons are incomplete</string>
+    <string name="calendarMissingDaysApp">%1$s: missing %2$d of 31 days</string>
     <string name="refreshIcons">Refresh icons</string>
     <string name="info">Info</string>
     <string name="clear">Clear</string>

@@ -104,7 +104,10 @@ fun CreateTab(
     contentReady: Boolean = true,
     // Resource id of the icon currently picked (from options.primaryIconPack), so the grid
     // can frame it. null = nothing picked yet.
-    selectedResourceId: Int? = null
+    selectedResourceId: Int? = null,
+    // Prefix of the picked calendar icon (e.g. "bee_calendar_"), so the grid frames the whole
+    // day-rotation set alongside the picked icon. null = no calendar icon selected.
+    selectedCalendarPrefix: String? = null
 ) {
     // Seeded from the hoisted query so returning to the tab doesn't trigger a spurious
     // re-search (debouncedQuery already matches the preserved searchQuery).
@@ -174,6 +177,7 @@ fun CreateTab(
                         sortOrder = sortOrder,
                         query = debouncedQuery,
                         selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.primaryIconPack },
+                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { detailPack.packageName == options.primaryIconPack },
                         onBack = { expandedPack = null },
                         onCollapsedChange = { collapsed = it },
                         onSelect = { resource, _, drawableName -> onIconSelect(resource, detailPack, drawableName) }
@@ -221,6 +225,7 @@ fun CreateTab(
                                         sortOrder = sortOrder,
                                         query = debouncedQuery,
                                         selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
+                                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.primaryIconPack },
                                         onMore = { expandedPack = pack },
                                         onResult = { hasMatches ->
                                             packMatches = packMatches + (pack.packageName to hasMatches)

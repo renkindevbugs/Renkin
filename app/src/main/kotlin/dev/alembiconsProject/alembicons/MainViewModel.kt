@@ -248,6 +248,27 @@ class MainViewModel @Inject constructor(
     }
 
     /**
+     * Applies the icon and the calendar selection together. The edit dialog tracks the
+     * calendar prefix/source-pack in local state as the user browses; persisting only the
+     * icon (via [applyIcon]) would leave the stored `<calendar>` prefix pointing at the
+     * previously chosen pack, so launchers that prefer `<calendar>` would keep showing the
+     * old icon. Setting both in one edit keeps the static `<item>` and `<calendar>` in sync.
+     */
+    fun applyIcon(
+        index: Int,
+        app: PackageInfoStruct,
+        icon: IconPackDrawable?,
+        calendarEnabled: Boolean,
+        calendarPrefix: String?,
+        calendarPackName: String?
+    ) {
+        appProvider.editApplication(
+            index,
+            app.changeExport(icon).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
+        )
+    }
+
+    /**
      * Toggles the calendar-day-icons flag for [app]. [calendarPrefix] is the drawable-name
      * prefix derived from the icon the user selected (e.g. `"google_cal_"`). Committed
      * immediately (independent of the edit dialog's Confirm).
@@ -460,4 +481,12 @@ class MainViewModel @Inject constructor(
             builtKeys = appProvider.getSavedPackKeys()
         }
     }
+
+    /** Calendar-enabled apps whose source pack is missing day drawables (shown before a build). */
+    suspend fun calendarWarnings(preferences: Preferences): List<ApplicationProvider.CalendarWarning> =
+        appProvider.calendarWarnings(preferences)
+
+    /** Whether [prefix] is a genuine calendar day-rotation set in [packPackageName]. */
+    fun isCalendarPrefix(packPackageName: String, prefix: String): Boolean =
+        appProvider.isCalendarPrefix(packPackageName, prefix)
 }

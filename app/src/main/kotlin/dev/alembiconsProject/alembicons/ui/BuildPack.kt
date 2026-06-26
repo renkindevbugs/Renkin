@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -43,6 +44,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -148,6 +150,14 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                 .thenBy { it.appName.lowercase() }
         )
 
+    // Warn (before building) about calendar apps whose source pack lacks some 1..31 day
+    // drawables — those days fall back to a repeated icon instead of rotating.
+    val preferences = getPreferences().getPreferencesValue()
+    var calendarWarnings by remember { mutableStateOf<List<dev.alembiconsProject.alembicons.apk.ApplicationProvider.CalendarWarning>>(emptyList()) }
+    LaunchedEffect(themedApps.size) {
+        calendarWarnings = viewModel.calendarWarnings(preferences)
+    }
+
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
@@ -186,6 +196,29 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                     )
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                if (calendarWarnings.isNotEmpty()) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.calendarMissingDaysTitle),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFFF9500)
+                        )
+                        calendarWarnings.forEach { warning ->
+                            Text(
+                                text = stringResource(R.string.calendarMissingDaysApp, warning.appName, warning.missingDays),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
 
                 if (themedApps.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
