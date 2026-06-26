@@ -8,8 +8,10 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.content.pm.PackageManager.ResolveInfoFlags
 import android.content.pm.ResolveInfo
+import android.content.res.Configuration
 import android.content.res.Resources
 import android.content.res.XmlResourceParser
+import java.util.Locale
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.os.UserManager
@@ -57,6 +59,7 @@ class ApplicationManager(private val ctx: Context) {
             if (usrApps.isNotEmpty()) {
                 for (app in usrApps) {
                     val appName = app.applicationInfo.loadLabel(pm).toString()
+                    val originalName = loadEnglishLabel(app.applicationInfo, appName)
                     val packageName = app.componentName.packageName
                     val activityName = app.componentName.className
                     val icon = app.applicationInfo.loadIcon(pm)
@@ -72,7 +75,8 @@ class ApplicationManager(private val ctx: Context) {
                         packageName,
                         activityName,
                         icon2,
-                        iconID
+                        iconID,
+                        originalName = originalName
                     )
 
                     if (!packInfoStructs.contains(packInfo))
@@ -82,6 +86,28 @@ class ApplicationManager(private val ctx: Context) {
         }
 
         return packInfoStructs.toTypedArray()
+    }
+
+    /**
+     * The app's English label. [ApplicationInfo.loadLabel] resolves the label against the
+     * package's own resources using the *device* locale, so a context with an English
+     * override doesn't change it. We instead read the label resource directly from a copy of
+     * the package's resources whose configuration is forced to English. Apps with a
+     * non-localized label (labelRes == 0) have no per-locale variant, so we fall back to
+     * [fallback] (the already-loaded localized label).
+     */
+    private fun loadEnglishLabel(appInfo: ApplicationInfo, fallback: String): String {
+        val labelRes = appInfo.labelRes
+        if (labelRes == 0) return fallback
+        return try {
+            val res = pm.getResourcesForApplication(appInfo)
+            val config = Configuration(res.configuration).also { it.setLocale(Locale.ENGLISH) }
+            @Suppress("DEPRECATION")
+            val englishRes = Resources(res.assets, res.displayMetrics, config)
+            englishRes.getString(labelRes)
+        } catch (e: Exception) {
+            fallback
+        }
     }
 
     fun getIconPacks(): List<IconPack> {
