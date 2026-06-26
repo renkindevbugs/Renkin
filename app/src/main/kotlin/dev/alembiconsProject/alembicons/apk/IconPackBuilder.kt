@@ -203,6 +203,9 @@ class IconPackBuilder(
                     }
                 }
 
+                // Write the static <item> even when calendarEnabled — launchers that don't
+                // support <calendar> (e.g. OxygenOS) need it as a fallback. Launchers that
+                // do support <calendar> (MIUI, POCO) will prefer the <calendar> entry below.
                 drawableXml.item(appFileName)
                 appfilterXml.item(app.packageName, app.activityName, appFileName)
             }

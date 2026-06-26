@@ -96,7 +96,9 @@ fun CreateTab(
     // this tab; it's seeded with the app name and reset per edit at the dialog level.
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
-    onIconSelect: (ResourceDrawable, IconPack) -> Unit,
+    // drawableName is the raw resource name (e.g. "bee_calendar_6") — used to derive the
+    // calendar prefix when the user opts into day rotation.
+    onIconSelect: (ResourceDrawable, IconPack, String) -> Unit,
     onTextTypeChange: (TextType) -> Unit,
     onCollapsedChange: (Boolean) -> Unit = {},
     contentReady: Boolean = true,
@@ -174,7 +176,7 @@ fun CreateTab(
                         selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.primaryIconPack },
                         onBack = { expandedPack = null },
                         onCollapsedChange = { collapsed = it },
-                        onSelect = { resource, _ -> onIconSelect(resource, detailPack) }
+                        onSelect = { resource, _, drawableName -> onIconSelect(resource, detailPack, drawableName) }
                     )
                 } else if (!contentReady) {
                     // Hold off mounting the (heavy) pack browser until the dialog has
@@ -223,8 +225,8 @@ fun CreateTab(
                                         onResult = { hasMatches ->
                                             packMatches = packMatches + (pack.packageName to hasMatches)
                                         }
-                                    ) { resource, _ ->
-                                        onIconSelect(resource, pack)
+                                    ) { resource, _, drawableName ->
+                                        onIconSelect(resource, pack, drawableName)
                                     }
                                 }
                             }

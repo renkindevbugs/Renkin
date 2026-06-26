@@ -7,7 +7,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.InstalledApplication
+import dev.alembiconsProject.alembicons.data.RawCalendar
 import dev.alembiconsProject.alembicons.data.RawElement
+import dev.alembiconsProject.alembicons.data.toComponentInfo
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import kotlinx.coroutines.Dispatchers
@@ -93,6 +95,61 @@ class IconPackRepository(private val context: Context) {
                 iconPackageName,
                 packApps
             )
+    }
+
+    /**
+     * Returns the calendar prefix for [app] in [iconPackageName] (e.g. `"google_cal_"`),
+     * or null if the pack doesn't declare a calendar entry for that app.
+     * Reads from the already-loaded [appFilterElements] — no I/O.
+     */
+    fun calendarPrefixFor(app: InstalledApplication, iconPackageName: String): String? {
+        val entry = appFilterElements.entries.find { it.key.packageName == iconPackageName } ?: return null
+        val component = app.toComponentInfo()
+        return entry.value.filterIsInstance<RawCalendar>().find { it.component == component }?.prefix
+    }
+
+    /**
+     * Returns calendar icons (app→prefix map and prefix+day→drawable map) for the given
+     * [appsWithPrefixes] in [iconPackageName]. The prefix is supplied by the caller — it was
+     * derived from the drawable name the user picked, so it doesn't depend on appfilter.xml
+     * having a `<calendar>` entry for that specific app.
+     */
+    fun calendarDataForPrefixes(
+        iconPackageName: String,
+        appsWithPrefixes: List<Pair<InstalledApplication, String>>
+    ): Pair<Map<InstalledApplication, String>, Map<String, Drawable>> {
+        if (appsWithPrefixes.isEmpty()) return emptyMap<InstalledApplication, String>() to emptyMap()
+
+        val apps = appsWithPrefixes.map { it.first }
+        // Synthesise RawCalendar entries from the user-chosen prefixes (no appfilter lookup).
+        val fakeCalendars = appsWithPrefixes.map { (app, prefix) ->
+            RawCalendar(component = app.toComponentInfo(), prefix = prefix)
+        }
+
+        val appMan = ApplicationManager(context)
+        val icons = appMan.getCalendarApplications(apps, fakeCalendars)
+        val raw = appMan.getCalendarFromAppFilterElements(iconPackageName, fakeCalendars)
+
+        // Fill missing calendar days so the icon appears on every date, even when the
+        // source pack only has drawables for the app the icon was *designed* for.
+        // Step 1: some packs zero-pad names (prefix01..prefix09); try that for any gap.
+        // Step 2: any day still missing gets the first drawable found for that prefix.
+        val filled = raw.toMutableMap()
+        for ((_, prefix) in appsWithPrefixes) {
+            for (i in 1..31) {
+                val key = prefix + i
+                if (key !in filled) {
+                    val padded = appMan.getDrawableByName(iconPackageName, prefix + i.toString().padStart(2, '0'))
+                    if (padded != null) filled[key] = padded
+                }
+            }
+            val fallback = filled.entries.firstOrNull { it.key.startsWith(prefix) }?.value
+            if (fallback != null) {
+                for (i in 1..31) filled.putIfAbsent(prefix + i, fallback)
+            }
+        }
+
+        return icons to filled
     }
 
     /** One representative icon per pack (the pack's own icon, or the app's icon in that pack). */

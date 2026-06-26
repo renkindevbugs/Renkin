@@ -4,6 +4,7 @@ package dev.alembiconsProject.alembicons.ui
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -111,7 +113,7 @@ fun PackIconsRow(
     selectedResourceId: Int? = null,
     onMore: (() -> Unit)? = null,
     onResult: (hasMatches: Boolean) -> Unit = {},
-    onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
+    onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
@@ -168,14 +170,11 @@ fun PackIconsRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             itemsIndexed(iconPairs, key = { _, item -> item.resource.resourceId }) { _, item ->
-                Image(
-                    bitmap = item.preview,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .selectedIconBorder(item.resource.resourceId == selectedResourceId)
-                        .padding(4.dp)
-                        .tappableIcon { onSelect(item.resource, item.drawable) }
+                PackIconItem(
+                    item = item,
+                    selected = item.resource.resourceId == selectedResourceId,
+                    isCalendarGroup = item.drawableName.isCalendarCandidate(),
+                    onSelect = { onSelect(item.resource, item.drawable, item.drawableName) }
                 )
             }
             if (moreCount > 0 && onMore != null) {
@@ -212,7 +211,7 @@ fun PackDetailGrid(
     selectedResourceId: Int? = null,
     onBack: () -> Unit,
     onCollapsedChange: (Boolean) -> Unit = {},
-    onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
+    onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
@@ -290,17 +289,77 @@ fun PackDetailGrid(
                 contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 16.dp)
             ) {
                 items(iconPairs, key = { it.resource.resourceId }) { item ->
-                    Image(
-                        bitmap = item.preview,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .animateItem()
-                            .padding(4.dp)
-                            .size(56.dp)
-                            .selectedIconBorder(item.resource.resourceId == selectedResourceId)
-                            .tappableIcon { onSelect(item.resource, item.drawable) }
+                    PackIconItem(
+                        item = item,
+                        selected = item.resource.resourceId == selectedResourceId,
+                        isCalendarGroup = item.drawableName.isCalendarCandidate(),
+                        modifier = Modifier.animateItem(),
+                        size = 56.dp,
+                        onSelect = { onSelect(item.resource, item.drawable, item.drawableName) }
                     )
                 }
+            }
+        }
+    }
+}
+
+/**
+ * True when this drawable name looks like it belongs to a day-rotating calendar set,
+ * i.e. it ends with `_` followed by 1–2 digits (e.g. `google_cal_6`, `bee_calendar_26`).
+ * Used to badge icons that CAN rotate — no restriction on what the user may pick.
+ */
+private fun String.isCalendarCandidate(): Boolean =
+    isNotEmpty() && Regex("^.+_\\d{1,2}$").matches(this)
+
+/**
+ * A single icon slot used in both the row preview and the detail grid.
+ * Shows a subtle calendar badge (DateRange icon) when [isCalendarGroup] is true,
+ * so the user can recognise which icons belong to the calendar day-rotation set.
+ */
+@Composable
+private fun PackIconItem(
+    item: PackIconPreview,
+    selected: Boolean,
+    isCalendarGroup: Boolean,
+    modifier: Modifier = Modifier,
+    size: androidx.compose.ui.unit.Dp = 64.dp,
+    onSelect: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .padding(4.dp)
+    ) {
+        Image(
+            bitmap = item.preview,
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .selectedIconBorder(selected)
+                .let { m ->
+                    if (isCalendarGroup && !selected) m.border(
+                        1.5.dp,
+                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.55f),
+                        RoundedCornerShape(16.dp)
+                    ) else m
+                }
+                .tappableIcon(onSelect)
+        )
+        if (isCalendarGroup) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(16.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.tertiaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.DateRange,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                    modifier = Modifier.size(10.dp)
+                )
             }
         }
     }

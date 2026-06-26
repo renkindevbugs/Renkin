@@ -425,6 +425,11 @@ class ApplicationManager(private val ctx: Context) {
         return getResIcon(res, resourceId)
     }
 
+    fun getDrawableByName(packName: String, name: String): Drawable? {
+        val res = getResources(packName) ?: return null
+        return getResIcon(res, name, packName)
+    }
+
     fun getResources(packageName: String): Resources? {
         return try {
             return pm.getResourcesForApplication(packageName)

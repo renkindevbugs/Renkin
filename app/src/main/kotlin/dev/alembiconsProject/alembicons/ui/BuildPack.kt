@@ -52,8 +52,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.ui.graphics.Color
 import dev.alembiconsProject.alembicons.MainViewModel
-import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
@@ -139,14 +139,16 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
 fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
     val viewModel: MainViewModel = hiltViewModel()
     val builtKeys = viewModel.builtKeys
-    // Icons added since the last build (not yet in the saved pack) float to the top so
-    // the user sees what's new without scrolling; the rest stay alphabetical
+    val updatedKeys = viewModel.updatedKeys
+    // Sort: new (never built) first → changed (edited this session) second → rest alphabetical.
     val themedApps = viewModel.applicationList
         .filter { it.createdIcon != null }
         .sortedWith(
             compareByDescending<PackageInfoStruct> { "${it.packageName}/${it.activityName}" !in builtKeys }
+                .thenByDescending { "${it.packageName}/${it.activityName}" in updatedKeys }
                 .thenBy { it.appName.lowercase() }
         )
+    val newCount = themedApps.count { "${it.packageName}/${it.activityName}" !in builtKeys }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -175,10 +177,18 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                     Text(
                         text = stringResource(R.string.buildPreviewTitle),
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
+                    if (newCount > 0) {
+                        Text(
+                            text = "+$newCount",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = Color(0xFF34C759),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                     Text(
                         text = stringResource(R.string.buildPreviewCount, themedApps.size),
                         style = MaterialTheme.typography.labelLarge,
@@ -205,9 +215,11 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         items(themedApps, key = { "${it.packageName}/${it.activityName}" }) { app ->
+                            val key = "${app.packageName}/${app.activityName}"
                             BuildPreviewItem(
                                 app = app,
-                                changed = "${app.packageName}/${app.activityName}" !in builtKeys
+                                isNew = key !in builtKeys,
+                                isChanged = key in builtKeys && key in updatedKeys
                             )
                         }
                     }
@@ -231,7 +243,11 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
 }
 
 @Composable
-private fun BuildPreviewItem(app: PackageInfoStruct, changed: Boolean = false) {
+private fun BuildPreviewItem(
+    app: PackageInfoStruct,
+    isNew: Boolean = false,
+    isChanged: Boolean = false
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
             app.createdIcon?.let { icon ->
@@ -243,8 +259,13 @@ private fun BuildPreviewItem(app: PackageInfoStruct, changed: Boolean = false) {
                         .clip(RoundedCornerShape(14.dp))
                 )
             }
-            // Green dot marks icons changed this session so they're easy to spot
-            if (changed) {
+            // Green = new (not in last build); orange = edited this session (was already built)
+            val dotColor = when {
+                isNew -> Color(0xFF34C759)
+                isChanged -> Color(0xFFFF9500)
+                else -> null
+            }
+            if (dotColor != null) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -253,7 +274,7 @@ private fun BuildPreviewItem(app: PackageInfoStruct, changed: Boolean = false) {
                         .background(MaterialTheme.colorScheme.surfaceContainerLow)
                         .padding(2.dp)
                         .clip(CircleShape)
-                        .background(AddedGreen)
+                        .background(dotColor)
                 )
             }
         }

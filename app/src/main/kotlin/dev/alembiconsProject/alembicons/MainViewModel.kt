@@ -111,6 +111,12 @@ class MainViewModel @Inject constructor(
     var builtKeys by mutableStateOf<Set<String>>(emptySet())
         private set
 
+    // Keys whose icons were manually changed this session (via applyIcon with a non-null icon).
+    // Distinct from builtKeys: an app in both sets had an icon already and was re-edited.
+    // Reset after every successful build.
+    var updatedKeys by mutableStateOf<Set<String>>(emptySet())
+        private set
+
     // Set when opened from an icon-watch notification; the home screen shows the apply
     // modal for this suggestion.
     var pendingWatchSuggestionId by mutableStateOf<Long?>(null)
@@ -223,8 +229,9 @@ class MainViewModel @Inject constructor(
                 )
                 if (appProvider.installIconPack(pack)) {
                     _toastEvents.trySend(R.string.iconPackInstalled)
-                    // The saved pack now matches the current icons → reset the change baseline.
+                    // The saved pack now matches the current icons → reset both change baselines.
                     builtKeys = appProvider.getSavedPackKeys()
+                    updatedKeys = emptySet()
                 } else {
                     // install returned false: it failed or the user cancelled the system installer.
                     _toastEvents.trySend(R.string.iconPackInstallFailed)
@@ -245,6 +252,19 @@ class MainViewModel @Inject constructor(
     /** Assigns (or clears, when [icon] is null) the created icon for the app at [index]. */
     fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?) {
         appProvider.editApplication(index, app.changeExport(icon))
+        if (icon != null) {
+            val key = "${app.packageName}/${app.activityName}"
+            updatedKeys = updatedKeys + key
+        }
+    }
+
+    /**
+     * Toggles the calendar-day-icons flag for [app]. [calendarPrefix] is the drawable-name
+     * prefix derived from the icon the user selected (e.g. `"google_cal_"`). Committed
+     * immediately (independent of the edit dialog's Confirm).
+     */
+    fun setCalendarEnabled(app: PackageInfoStruct, enabled: Boolean, calendarPrefix: String?, calendarPackName: String?) {
+        appProvider.setCalendar(app, enabled, calendarPrefix, calendarPackName)
     }
 
     /**
@@ -433,20 +453,23 @@ class MainViewModel @Inject constructor(
         names: List<String>
     ): List<PackIconPreview> {
         val ids = appMan.getIconPackDrawableIds(packageName, names)
+        // names and ids are parallel lists (same order) — build id→name reverse lookup.
+        val idToName = names.zip(ids).associate { (name, id) -> id to name }
         val drawables = appMan.getIconPackDrawables(packageName, ids)
         val exportDrawables = iconPackIcons(packageName, options, drawables)
         return exportDrawables.entries
             .filter { it.value != null }
             .distinctBy { it.key.resourceId }
-            .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap()) }
+            .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap(), idToName[it.key.resourceId] ?: "") }
     }
 
     /** Clears every created icon (and persists the empty state). */
     fun clearIcons() {
         viewModelScope.launch {
             appProvider.clearIcons()
-            // Saved pack is now empty → reset the change baseline so the bar clears too.
+            // Saved pack is now empty → reset both change baselines.
             builtKeys = appProvider.getSavedPackKeys()
+            updatedKeys = emptySet()
         }
     }
 }
