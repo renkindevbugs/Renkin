@@ -13,7 +13,7 @@ import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 
 fun Bitmap.changeBackgroundColor(color: Int): Bitmap {
-    val newBitmap = this.clone()
+    val newBitmap = this.emptyLike()
     val canvas = Canvas(newBitmap)
     canvas.drawColor(color)
     canvas.drawBitmap(this, 0F, 0F, null)
@@ -37,7 +37,11 @@ fun Bitmap.scaleFromCenter(scale: Float): Bitmap {
     return result
 }
 
-fun Bitmap.clone(): Bitmap {
+/**
+ * A new **blank** bitmap matching this one's size, config and density — NOT a pixel copy.
+ * Meant as a fresh canvas to composite onto (a background, a colour-filtered redraw, …).
+ */
+fun Bitmap.emptyLike(): Bitmap {
     val newBitmap = Bitmap.createBitmap(width, height, config!!)
     newBitmap.density = density
     return newBitmap
