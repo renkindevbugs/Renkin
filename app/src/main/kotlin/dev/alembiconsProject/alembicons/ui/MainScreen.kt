@@ -363,10 +363,14 @@ fun ApplicationItem(
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
 
     // Closing the edit dialog (whose icon-search field had keyboard focus) otherwise lets the
-    // system hand focus to the home search field, popping the keyboard. Clear focus instead.
+    // system hand focus to the home search field, popping the keyboard. Clear focus only on the
+    // actual open→close transition — not on initial composition, or filtering the list (which
+    // recomposes rows) would clear the search field's focus after every keystroke.
     val focusManager = LocalFocusManager.current
+    var wasOptionsOpen by remember { mutableStateOf(false) }
     LaunchedEffect(openAppOptions) {
-        if (!openAppOptions) focusManager.clearFocus(force = true)
+        if (wasOptionsOpen && !openAppOptions) focusManager.clearFocus(force = true)
+        wasOptionsOpen = openAppOptions
     }
 
     Surface(
