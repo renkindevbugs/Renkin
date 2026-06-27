@@ -213,10 +213,43 @@ class IconGenerator(
         application: PackageInfoStruct,
         imageEdit: ImageEdit): IconPackDrawable? {
 
+        // Monochrome variant: recolor the app's own <monochrome> layer directly — tint it with
+        // the chosen foreground over the chosen background. No path-tracing (that produces line
+        // art, issue #81), so this only runs for the plain (NONE) modifier.
+        if (options.monochrome && imageEdit == ImageEdit.NONE && hasMonochromeLayer(application)) {
+            return generateMonochrome(application)
+        }
+
         val bitmapIcon = getAppIconBitmap(application) ?: return null
         val parsedIcon = parseApplicationIcon(application)
 
         return generateImage(bitmapIcon, parsedIcon, imageEdit, PorterDuff.Mode.MULTIPLY)
+    }
+
+    /** True when [application]'s launcher icon ships a Material You `<monochrome>` layer (API 33+). */
+    private fun hasMonochromeLayer(application: PackageInfoStruct): Boolean {
+        val icon = application.icon
+        return icon.isAdaptiveIconDrawable() && (icon as AdaptiveIconDrawable).haveMonochrome()
+    }
+
+    private fun generateMonochrome(application: PackageInfoStruct): IconPackDrawable? {
+        // getAppIconBitmap returns the monochrome silhouette here (options.monochrome is set).
+        val mask = getAppIconBitmap(application) ?: return null
+        return getDefaultBitmapIcon(recolorMonochrome(mask))
+    }
+
+    /**
+     * Paints [options.color] through the monochrome alpha mask (SRC_IN keeps the silhouette's
+     * shape, replaces its colour) and composites it over [options.bgColor]. The background is
+     * always applied — unlike [colorizeBitmap] — because the mask itself is transparent.
+     */
+    private fun recolorMonochrome(mask: Bitmap): Bitmap {
+        val tinted = mask.emptyLike()
+        val paint = Paint().apply {
+            colorFilter = PorterDuffColorFilter(options.color, PorterDuff.Mode.SRC_IN)
+        }
+        Canvas(tinted).drawBitmap(mask, 0F, 0F, paint)
+        return tinted.changeBackgroundColor(options.bgColor)
     }
 
     /**

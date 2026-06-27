@@ -3,6 +3,11 @@
 package dev.alembiconsProject.alembicons.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -107,7 +112,13 @@ fun CreateTab(
     selectedResourceId: Int? = null,
     // Prefix of the picked calendar icon (e.g. "bee_calendar_"), so the grid frames the whole
     // day-rotation set alongside the picked icon. null = no calendar icon selected.
-    selectedCalendarPrefix: String? = null
+    selectedCalendarPrefix: String? = null,
+    // Whether this app ships a Material You <monochrome> layer, so the Application Icon source
+    // can offer the recolourable Monochrome variant (and disable it otherwise).
+    appHasMonochrome: Boolean = false,
+    // Switches the Application Icon variant between the full-colour icon (false) and the
+    // recoloured monochrome layer (true). Mirrors options.monochrome.
+    onMonochromeChange: (Boolean) -> Unit = {}
 ) {
     // Seeded from the hoisted query so returning to the tab doesn't trigger a spurious
     // re-search (debouncedQuery already matches the preserved searchQuery).
@@ -239,15 +250,11 @@ fun CreateTab(
                     }
                 }
             }
-            Source.APPLICATION_ICON -> Box(
-                Modifier.fillMaxSize(), contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = stringResource(R.string.applicationIcon),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
+            Source.APPLICATION_ICON -> ApplicationIconVariant(
+                monochrome = options.monochrome,
+                appHasMonochrome = appHasMonochrome,
+                onMonochromeChange = onMonochromeChange
+            )
             Source.APPLICATION_NAME -> Column(
                 Modifier
                     .fillMaxSize()
@@ -258,5 +265,86 @@ fun CreateTab(
             }
             else -> {}
         }
+    }
+}
+
+/**
+ * Application Icon source options: pick between the app's full-colour icon and its recoloured
+ * Material You monochrome layer. The Monochrome choice is disabled when the app ships no
+ * `<monochrome>` layer; its colours are edited in the Modifier tab.
+ */
+@Composable
+private fun ApplicationIconVariant(
+    monochrome: Boolean,
+    appHasMonochrome: Boolean,
+    onMonochromeChange: (Boolean) -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.iconVariant),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+        ) {
+            VariantSegment(
+                label = stringResource(R.string.variantDefault),
+                selected = !monochrome,
+                enabled = true,
+                modifier = Modifier.weight(1f)
+            ) { onMonochromeChange(false) }
+            VariantSegment(
+                label = stringResource(R.string.variantMonochrome),
+                selected = monochrome,
+                enabled = appHasMonochrome,
+                modifier = Modifier.weight(1f)
+            ) { onMonochromeChange(true) }
+        }
+        val hint = when {
+            !appHasMonochrome -> stringResource(R.string.monochromeUnavailable)
+            monochrome -> stringResource(R.string.monochromeRecolorHint)
+            else -> stringResource(R.string.variantDefaultHint)
+        }
+        Text(
+            text = hint,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 10.dp)
+        )
+    }
+}
+
+@Composable
+private fun VariantSegment(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
+    val fg = when {
+        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        selected -> MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Box(
+        modifier = modifier
+            .background(bg)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelLarge, color = fg)
     }
 }

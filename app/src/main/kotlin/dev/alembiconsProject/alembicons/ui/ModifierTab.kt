@@ -168,7 +168,11 @@ internal fun ModifierTab(
             }
         }
 
-        if (imageEdit != ImageEdit.NONE) {
+        // The icon colour applies whenever the image is recoloured: any modifier, or the
+        // Application Icon → Monochrome variant (which tints the monochrome layer).
+        val recolours = imageEdit != ImageEdit.NONE ||
+            (source == Source.APPLICATION_ICON && useMonochrome)
+        if (recolours) {
             Surface(
                 onClick = { colorPickerOpen = true },
                 shape = CardShape,

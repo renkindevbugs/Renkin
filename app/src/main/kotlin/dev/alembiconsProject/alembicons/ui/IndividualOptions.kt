@@ -47,7 +47,10 @@ import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.TextType
+import android.graphics.drawable.AdaptiveIconDrawable
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
+import dev.alembiconsProject.alembicons.drawable.haveMonochrome
+import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
@@ -261,6 +264,12 @@ fun OptionsDialog(
         runCatching { app.icon.toSafeBitmapOrNull() }.getOrNull()
     }
 
+    // Whether the app ships a Material You <monochrome> layer, enabling the Monochrome variant.
+    val appHasMonochrome = remember(app.icon) {
+        val icon = app.icon
+        icon.isAdaptiveIconDrawable() && (icon as AdaptiveIconDrawable).haveMonochrome()
+    }
+
     val generatingOptions = GenerationOptions(
         source, imageEdit, textType, iconPack,
         iconColor.toInt(), 0, useVector, useMonochrome, themed, override = true,
@@ -398,7 +407,9 @@ fun OptionsDialog(
                                 contentReady = createTabReady,
                                 selectedResourceId = customIconList.firstOrNull()?.resourceId,
                                 // Frame the rotation siblings only once the user has opted in.
-                                selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled }
+                                selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },
+                                appHasMonochrome = appHasMonochrome,
+                                onMonochromeChange = { useMonochrome = it }
                             )
                             1 -> UploadColumn(app = app) {
                                 draft.uploadBase = it
