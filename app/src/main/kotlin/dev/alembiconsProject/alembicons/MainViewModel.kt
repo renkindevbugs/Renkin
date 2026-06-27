@@ -19,6 +19,7 @@ import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.data.isSystemInDarkTheme
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
+import dev.alembiconsProject.alembicons.extension.normalizeIconSearchQuery
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -465,7 +466,7 @@ class MainViewModel @Inject constructor(
         sortOrder: IconSortOrder
     ): List<String> {
         val allNames = appMan.getIconPackDrawableNames(packageName)
-        val formattedQuery = query.lowercase().trim().replace(' ', '_')
+        val formattedQuery = query.normalizeIconSearchQuery()
         val matching = if (formattedQuery.isEmpty()) {
             allNames
         } else {
