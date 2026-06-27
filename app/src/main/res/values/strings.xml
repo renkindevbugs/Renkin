@@ -213,8 +213,10 @@
     <string name="variantDefault">Default</string>
     <string name="variantMonochrome">Monochrome</string>
     <string name="variantDefaultHint">Uses the app\'s normal icon, unchanged.</string>
-    <string name="monochromeRecolorHint">Uses the app\'s monochrome icon. Set its colors in the Modifier tab.</string>
+    <string name="monochromeRecolorHint">Uses the app\'s monochrome icon, recolored to your choice.</string>
     <string name="monochromeUnavailable">This app has no monochrome icon, so it can\'t be recolored.</string>
+    <string name="matchSystemTheme">Match system theme</string>
+    <string name="matchSystemThemeHint">Tint with your wallpaper colors, like Android\'s themed icons. Turn off to pick colors in the Modifier tab.</string>
     <string name="refreshIcons">Refresh icons</string>
     <string name="info">Info</string>
     <string name="clear">Clear</string>

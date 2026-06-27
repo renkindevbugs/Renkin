@@ -48,9 +48,11 @@ import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.TextType
 import android.graphics.drawable.AdaptiveIconDrawable
+import androidx.compose.ui.platform.LocalContext
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.haveMonochrome
 import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
+import dev.alembiconsProject.alembicons.packages.supportDynamicColors
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
@@ -211,6 +213,9 @@ fun OptionsDialog(
     var textType by rememberSaveable { mutableStateOf(TextType.FULL_NAME) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
+    // Monochrome variant only: tint with the live Material You system palette (matches the native
+    // themed icon) instead of the manual colour below. Defaults on so it looks native out of the box.
+    var matchSystemTheme by rememberSaveable { mutableStateOf(true) }
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
     var iconPack by rememberSaveable { mutableStateOf(iconPacks.firstOrNull()?.packageName ?: "") }
     // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
@@ -270,9 +275,22 @@ fun OptionsDialog(
         icon.isAdaptiveIconDrawable() && (icon as AdaptiveIconDrawable).haveMonochrome()
     }
 
+    // Monochrome variant tinted to match the system theme: resolve the live Material You accent
+    // (light foreground over dark background, the same stops the themed export uses).
+    val isMonochromeVariant = source == Source.APPLICATION_ICON && useMonochrome
+    val systemThemeColors = rememberSystemThemeColors()
+    val useSystemTheme = isMonochromeVariant && matchSystemTheme && systemThemeColors != null
+    val effectiveColor = if (useSystemTheme) systemThemeColors!!.first else iconColor
+    // Background only applies to the monochrome variant; other sources keep the transparent default.
+    val effectiveBgColor = when {
+        useSystemTheme -> systemThemeColors!!.second
+        isMonochromeVariant -> Color.Black
+        else -> Color.Transparent
+    }
+
     val generatingOptions = GenerationOptions(
         source, imageEdit, textType, iconPack,
-        iconColor.toInt(), 0, useVector, useMonochrome, themed, override = true,
+        effectiveColor.toInt(), effectiveBgColor.toInt(), useVector, useMonochrome, themed, override = true,
         edgeLowThreshold = edgeThreshold,
         edgeHighThreshold = edgeThreshold * 3f,
         edgeGaussianRadius = edgeSmoothing,
@@ -409,7 +427,10 @@ fun OptionsDialog(
                                 // Frame the rotation siblings only once the user has opted in.
                                 selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },
                                 appHasMonochrome = appHasMonochrome,
-                                onMonochromeChange = { useMonochrome = it }
+                                onMonochromeChange = { useMonochrome = it },
+                                matchSystemTheme = matchSystemTheme,
+                                systemThemeAvailable = systemThemeColors != null,
+                                onMatchSystemThemeChange = { matchSystemTheme = it }
                             )
                             1 -> UploadColumn(app = app) {
                                 draft.uploadBase = it
@@ -537,6 +558,21 @@ private fun OptionsBottomBar(
                 }
             }
         )
+    }
+}
+
+/**
+ * The live Material You system palette (foreground over background), or null on Android < 12
+ * where dynamic colours don't exist. Matches the accent stops the themed icon export uses, so a
+ * monochrome icon tinted with these looks like the OS's own themed icon.
+ */
+@Composable
+private fun rememberSystemThemeColors(): Pair<Color, Color>? {
+    if (!supportDynamicColors()) return null
+    val context = LocalContext.current
+    return remember {
+        Color(context.resources.getColor(android.R.color.system_accent1_100, context.theme)) to
+            Color(context.resources.getColor(android.R.color.system_accent1_800, context.theme))
     }
 }
 

@@ -28,6 +28,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -118,7 +119,12 @@ fun CreateTab(
     appHasMonochrome: Boolean = false,
     // Switches the Application Icon variant between the full-colour icon (false) and the
     // recoloured monochrome layer (true). Mirrors options.monochrome.
-    onMonochromeChange: (Boolean) -> Unit = {}
+    onMonochromeChange: (Boolean) -> Unit = {},
+    // Monochrome variant: tint with the live system palette (true) vs a manual colour (false).
+    matchSystemTheme: Boolean = true,
+    // False on Android < 12 (no dynamic colours), which hides the system-theme switch.
+    systemThemeAvailable: Boolean = false,
+    onMatchSystemThemeChange: (Boolean) -> Unit = {}
 ) {
     // Seeded from the hoisted query so returning to the tab doesn't trigger a spurious
     // re-search (debouncedQuery already matches the preserved searchQuery).
@@ -253,7 +259,10 @@ fun CreateTab(
             Source.APPLICATION_ICON -> ApplicationIconVariant(
                 monochrome = options.monochrome,
                 appHasMonochrome = appHasMonochrome,
-                onMonochromeChange = onMonochromeChange
+                onMonochromeChange = onMonochromeChange,
+                matchSystemTheme = matchSystemTheme,
+                systemThemeAvailable = systemThemeAvailable,
+                onMatchSystemThemeChange = onMatchSystemThemeChange
             )
             Source.APPLICATION_NAME -> Column(
                 Modifier
@@ -277,7 +286,10 @@ fun CreateTab(
 private fun ApplicationIconVariant(
     monochrome: Boolean,
     appHasMonochrome: Boolean,
-    onMonochromeChange: (Boolean) -> Unit
+    onMonochromeChange: (Boolean) -> Unit,
+    matchSystemTheme: Boolean,
+    systemThemeAvailable: Boolean,
+    onMatchSystemThemeChange: (Boolean) -> Unit
 ) {
     Column(
         Modifier
@@ -321,6 +333,30 @@ private fun ApplicationIconVariant(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 10.dp)
         )
+
+        // Only meaningful for the Monochrome variant on Android 12+ (dynamic colours).
+        if (monochrome && appHasMonochrome && systemThemeAvailable) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.matchSystemTheme),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                    Text(
+                        text = stringResource(R.string.matchSystemThemeHint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Switch(checked = matchSystemTheme, onCheckedChange = onMatchSystemThemeChange)
+            }
+        }
     }
 }
 
