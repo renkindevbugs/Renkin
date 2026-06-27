@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -64,10 +65,32 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.animation.EnterTransition
+import kotlin.math.roundToInt
+
+/**
+ * Collapses a composable's height and fades it by [fraction] (1 = full, 0 = gone), re-measured each
+ * frame so it tracks the scroll pixel-by-pixel instead of snapping like AnimatedVisibility.
+ */
+private fun Modifier.collapsibleHeight(fraction: Float): Modifier =
+    this
+        .graphicsLayer { alpha = fraction }
+        .clipToBounds()
+        .layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            val height = (placeable.height * fraction).roundToInt()
+            layout(placeable.width, height) { placeable.place(0, 0) }
+        }
 
 @Composable
 internal fun ComparisonHeader(
@@ -78,9 +101,12 @@ internal fun ComparisonHeader(
     onDismiss: () -> Unit,
     onClear: () -> Unit,
     onConfirm: () -> Unit,
-    // Once the icon list is scrolled, the header shrinks to just the icons + arrow + Apply,
-    // dropping the app bar (close/name/overflow) and the Current/New labels to free vertical space.
-    collapsed: Boolean = false
+    // Drives the app bar's enter-always collapse (pixel-tied to the icon list's scroll). Null on
+    // wide screens, where the header is a single static row.
+    scrollBehavior: TopAppBarScrollBehavior? = null,
+    // How much of the Current/New labels to show: 1 = full (list at the very top), 0 = gone. Pixel-
+    // tied to the list's distance from the top, so the labels only return when scrolled fully up.
+    labelExpand: Float = 1f
 ) {
     // Both icons fly up into their slots when the dialog opens
     val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
@@ -133,9 +159,9 @@ internal fun ComparisonHeader(
                 }
 
                 Row(verticalAlignment = Alignment.Top) {
-                    CurrentSlot(heroBitmap, flyIn, flyInEnter, 44.dp, showLabel = false)
+                    CurrentSlot(heroBitmap, flyIn, flyInEnter, 44.dp, labelExpand = 0f)
                     ComparisonArrow(44.dp)
-                    NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 44.dp, showLabel = false)
+                    NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 44.dp, labelExpand = 0f)
                 }
 
                 Row(
@@ -153,39 +179,33 @@ internal fun ComparisonHeader(
         // holding the comparison + Apply. Scrolling the icon list hides the Current/New labels —
         // the icons keep their size — so Apply rises tight under them. The label show/hide and
         // the resulting height change animate smoothly (AnimatedVisibility inside each slot).
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 6.dp)
-        ) {
-            // The app bar slides/fades away once the list is scrolled, leaving only the
-            // comparison card; scrolling back up brings it back. Its bottom padding (the gap
-            // above the card) collapses with it, so nothing is left hanging when hidden.
-            AnimatedVisibility(visible = !collapsed) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 4.dp, end = 4.dp, bottom = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    CloseButton(onDismiss)
+        Column(Modifier.fillMaxWidth()) {
+            // Real Material top app bar so its collapse is pixel-tied to the scroll (enter-always):
+            // scrolling down slides it up out of view, scrolling up pulls it straight back, and you
+            // can stop mid-way. Transparent — the dialog surface shows through — and no status-bar
+            // inset of its own (the dialog already applies statusBarsPadding).
+            TopAppBar(
+                title = {
                     Text(
                         text = appName,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(start = 4.dp)
+                        overflow = TextOverflow.Ellipsis
                     )
-                    OverflowMenu(onClear)
-                }
-            }
+                },
+                navigationIcon = { CloseButton(onDismiss) },
+                actions = { OverflowMenu(onClear) },
+                scrollBehavior = scrollBehavior,
+                windowInsets = WindowInsets(0),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    scrolledContainerColor = Color.Transparent
+                )
+            )
 
             ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 6.dp),
                 shape = CardShape,
                 colors = CardDefaults.elevatedCardColors(
                     containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -201,9 +221,9 @@ internal fun ComparisonHeader(
                         horizontalArrangement = Arrangement.Center,
                         verticalAlignment = Alignment.Top
                     ) {
-                        CurrentSlot(heroBitmap, flyIn, flyInEnter, 56.dp, showLabel = !collapsed)
+                        CurrentSlot(heroBitmap, flyIn, flyInEnter, 56.dp, labelExpand = labelExpand)
                         ComparisonArrow(56.dp)
-                        NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 56.dp, showLabel = !collapsed)
+                        NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 56.dp, labelExpand = labelExpand)
                     }
                     ApplyButton(
                         onConfirm,
@@ -272,7 +292,7 @@ private fun CurrentSlot(
     flyIn: MutableTransitionState<Boolean>,
     flyInEnter: EnterTransition,
     size: Dp,
-    showLabel: Boolean
+    labelExpand: Float
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
@@ -296,16 +316,14 @@ private fun CurrentSlot(
                 }
             }
         }
-        // Animated so scrolling the list eases the label (and the height below it) away,
-        // letting Apply rise smoothly instead of snapping.
-        AnimatedVisibility(visible = showLabel) {
-            Text(
-                text = stringResource(R.string.iconCurrent),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
+        // Pixel-tied to the scroll: the label's height and opacity track [labelExpand], so it
+        // shrinks/fades away as the list leaves the top and Apply rises smoothly with it.
+        Text(
+            text = stringResource(R.string.iconCurrent),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.collapsibleHeight(labelExpand).padding(top = 4.dp)
+        )
     }
 }
 
@@ -317,7 +335,7 @@ private fun NewSlot(
     flyIn: MutableTransitionState<Boolean>,
     flyInEnter: EnterTransition,
     size: Dp,
-    showLabel: Boolean
+    labelExpand: Float
 ) {
     val borderColor = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -360,14 +378,12 @@ private fun NewSlot(
                 }
             }
         }
-        AnimatedVisibility(visible = showLabel) {
-            Text(
-                text = stringResource(R.string.iconNew),
-                style = MaterialTheme.typography.labelSmall,
-                color = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp)
-            )
-        }
+        Text(
+            text = stringResource(R.string.iconNew),
+            style = MaterialTheme.typography.labelSmall,
+            color = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.collapsibleHeight(labelExpand).padding(top = 4.dp)
+        )
     }
 }
 

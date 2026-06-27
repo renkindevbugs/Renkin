@@ -21,7 +21,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,7 +39,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -215,20 +214,13 @@ fun PackDetailGrid(
     // Prefix of the calendar icon picked from this pack, so its day-siblings are framed too.
     selectedCalendarPrefix: String? = null,
     onBack: () -> Unit,
-    onCollapsedChange: (Boolean) -> Unit = {},
+    // Hoisted by the dialog so it can fade the comparison labels by the grid's distance from top.
+    gridState: LazyGridState,
     onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
-
-    val gridState = rememberLazyGridState()
-    val gridScrolled by remember {
-        derivedStateOf { gridState.firstVisibleItemIndex > 0 || gridState.firstVisibleItemScrollOffset > 60 }
-    }
-    LaunchedEffect(gridScrolled) {
-        onCollapsedChange(gridScrolled)
-    }
 
     LaunchedEffect(iconPack.packageName, sortOrder, query) {
         isLoading = true

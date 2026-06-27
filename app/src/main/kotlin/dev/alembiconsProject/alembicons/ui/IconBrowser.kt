@@ -24,7 +24,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -39,7 +40,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -105,6 +105,12 @@ fun CreateTab(
     iconPacks: List<IconPack>,
     options: GenerationOptions,
     textType: TextType,
+    // The pack list and single-pack grid scroll states + which pack is expanded, hoisted by the
+    // dialog so it can fade the comparison labels by whichever list is showing.
+    listState: LazyListState,
+    gridState: LazyGridState,
+    expandedPack: IconPack?,
+    onExpandedPackChange: (IconPack?) -> Unit,
     // How many stored icons came from each pack, keyed by package name. Packs the user takes
     // from most often sort higher (after packs that actually have an icon for the query).
     packUsage: Map<String, Int> = emptyMap(),
@@ -116,7 +122,6 @@ fun CreateTab(
     // calendar prefix when the user opts into day rotation.
     onIconSelect: (ResourceDrawable, IconPack, String) -> Unit,
     onTextTypeChange: (TextType) -> Unit,
-    onCollapsedChange: (Boolean) -> Unit = {},
     contentReady: Boolean = true,
     // Resource id of the icon currently picked (from options.primaryIconPack), so the grid
     // can frame it. null = nothing picked yet.
@@ -145,8 +150,6 @@ fun CreateTab(
     // re-search (debouncedQuery already matches the preserved searchQuery).
     var debouncedQuery by remember { mutableStateOf(searchQuery) }
     var sortOrder by rememberSaveable { mutableStateOf(IconSortOrder.NAME_ASC) }
-    var expandedPack by remember { mutableStateOf<IconPack?>(null) }
-    var collapsed by remember { mutableStateOf(false) }
     // Base order: most-used packs first (usage is the tiebreaker once query matches settle below).
     val distinctPacks = remember(iconPacks, packUsage) {
         iconPacks.distinctBy { it.packageName }.sortedByDescending { packUsage[it.packageName] ?: 0 }
@@ -156,11 +159,6 @@ fun CreateTab(
     // The order actually shown. Updated only once the results settle so the list
     // doesn't shuffle on every pack that finishes loading.
     var orderedPacks by remember(distinctPacks) { mutableStateOf(distinctPacks) }
-
-    val listState = rememberLazyListState()
-    val listScrolled by remember {
-        derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 60 }
-    }
 
     LaunchedEffect(searchQuery) {
         if (searchQuery != debouncedQuery) {
@@ -194,16 +192,8 @@ fun CreateTab(
         }
     }
 
-    LaunchedEffect(listScrolled, expandedPack) {
-        if (expandedPack == null) collapsed = listScrolled
-    }
-
-    LaunchedEffect(collapsed, source) {
-        onCollapsedChange(collapsed && source == Source.ICON_PACK)
-    }
-
     BackHandler(enabled = expandedPack != null) {
-        expandedPack = null
+        onExpandedPackChange(null)
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -218,8 +208,8 @@ fun CreateTab(
                         query = debouncedQuery,
                         selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.primaryIconPack },
                         selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { detailPack.packageName == options.primaryIconPack },
-                        onBack = { expandedPack = null },
-                        onCollapsedChange = { collapsed = it },
+                        gridState = gridState,
+                        onBack = { onExpandedPackChange(null) },
                         onSelect = { resource, _, drawableName -> onIconSelect(resource, detailPack, drawableName) }
                     )
                 } else if (!contentReady) {
@@ -254,7 +244,7 @@ fun CreateTab(
                         orderedPacks.forEach { pack ->
                             item(key = "${pack.packageName}_header") {
                                 Box(Modifier.animateItem()) {
-                                    PackSectionHeader(pack) { expandedPack = pack }
+                                    PackSectionHeader(pack) { onExpandedPackChange(pack) }
                                 }
                             }
                             item(key = "${pack.packageName}_icons") {
@@ -266,7 +256,7 @@ fun CreateTab(
                                         query = debouncedQuery,
                                         selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
                                         selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.primaryIconPack },
-                                        onMore = { expandedPack = pack },
+                                        onMore = { onExpandedPackChange(pack) },
                                         onResult = { hasMatches ->
                                             packMatches = packMatches + (pack.packageName to hasMatches)
                                         }
