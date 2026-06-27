@@ -239,20 +239,19 @@ class IconGenerator(
         // wrapping a vector), so we can't rely on getAppIconBitmap's Bitmap/Vector-only path.
         val mono = (icon as AdaptiveIconDrawable).monochrome?.mutate() ?: return null
 
-        // Rasterise the raw silhouette: the layer's own paths carry alpha, the rest is transparent.
+        // Rasterise the raw silhouette at the layer's natural size: the monochrome is already a
+        // full-bleed 108dp layer with its artwork in the inner safe zone, which is exactly what an
+        // adaptive foreground expects — so (unlike the old flat export) we must NOT scale it up, or
+        // the launcher would render it oversized.
         val size = 432
         val mask = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         mono.setTintList(null)
         mono.setBounds(0, 0, size, size)
         mono.draw(Canvas(mask))
 
-        // The monochrome artwork only fills the inner 72/108 safe zone, so scale it up to fill the
-        // frame like a normal icon (same factor used for adaptive foregrounds, #80).
-        val filled = mask.scaleFromCenter(adaptiveIconScale)
-
         // Export as an adaptive icon so the launcher masks it to its own shape (circle, squircle, …)
         // like every other icon — a plain bitmap would be shown as a bare square instead.
-        return BitmapIconDrawable(ctx.resources, recolorMonochrome(filled), exportAsAdaptiveIcon = true)
+        return BitmapIconDrawable(ctx.resources, recolorMonochrome(mask), exportAsAdaptiveIcon = true)
     }
 
     /**
