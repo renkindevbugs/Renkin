@@ -733,7 +733,16 @@ class IconGenerator(
             canvas.scale(scale, scale, src.width / 2f, src.height / 2f)
             canvas.drawBitmap(src, 0f, 0f, null)
         }
-        return BitmapIconDrawable(ctx.resources, out)
+        // Carry over the source's adaptive-export flag and preview zoom (e.g. the monochrome
+        // variant, which renders its in-app preview at the launcher's safe-zone scale). Without
+        // this the Modifier scale would reset both, shrinking the monochrome preview back to 1:1.
+        val source = icon as? BitmapIconDrawable
+        return BitmapIconDrawable(
+            ctx.resources,
+            out,
+            exportAsAdaptiveIcon = source?.isAdaptiveIcon() ?: false,
+            previewScale = source?.previewScale ?: 1f
+        )
     }
 
     /**

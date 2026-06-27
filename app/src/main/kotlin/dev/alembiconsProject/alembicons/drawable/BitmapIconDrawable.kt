@@ -23,7 +23,7 @@ import dev.alembiconsProject.alembicons.extension.toBase64
 class BitmapIconDrawable(
     val drawable: BitmapDrawable,
     private val exportAsAdaptiveIcon: Boolean = false,
-    private val previewScale: Float = 1f
+    val previewScale: Float = 1f
 ) :
     IconPackDrawable() {
     constructor(bitmap: Bitmap, exportAsAdaptiveIcon: Boolean = false, previewScale: Float = 1f) : this(
