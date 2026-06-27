@@ -209,6 +209,15 @@
     <string name="buildPreviewCount">%d icons</string>
     <string name="calendarMissingDaysTitle">Some calendar icons are incomplete</string>
     <string name="calendarMissingDaysApp">%1$s: missing %2$d of 31 days</string>
+    <string name="iconVariant">Icon variant</string>
+    <string name="variantDefault">Default</string>
+    <string name="variantMonochrome">Monochrome</string>
+    <string name="variantDefaultHint">Uses the app\'s normal icon, unchanged.</string>
+    <string name="monochromeRecolorHint">Uses the app\'s monochrome icon, recolored to your choice.</string>
+    <string name="monochromeUnavailable">This app has no monochrome icon, so it can\'t be recolored.</string>
+    <string name="monochromeColors">Color</string>
+    <string name="monochromeColorsHint">Wallpaper colors that match Android\'s themed icons. Pick Custom to choose your own in the Modifier tab.</string>
+    <string name="custom">Custom</string>
     <string name="refreshIcons">Refresh icons</string>
     <string name="info">Info</string>
     <string name="clear">Clear</string>

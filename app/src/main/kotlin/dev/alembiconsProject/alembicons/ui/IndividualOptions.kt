@@ -47,7 +47,12 @@ import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.TextType
+import android.graphics.drawable.AdaptiveIconDrawable
+import androidx.compose.ui.platform.LocalContext
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
+import dev.alembiconsProject.alembicons.drawable.haveMonochrome
+import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
+import dev.alembiconsProject.alembicons.packages.supportDynamicColors
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
@@ -208,7 +213,12 @@ fun OptionsDialog(
     var textType by rememberSaveable { mutableStateOf(TextType.FULL_NAME) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
+    // Monochrome variant: which colour scheme tints the icon. 0..schemes-1 pick a wallpaper-derived
+    // Material You scheme (foreground+background); the last index is Custom (manual colour below).
+    var monochromeScheme by rememberSaveable { mutableIntStateOf(0) }
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
+    // Background for the monochrome variant's Custom scheme (the system schemes carry their own).
+    var customBgColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.Black) }
     var iconPack by rememberSaveable { mutableStateOf(iconPacks.firstOrNull()?.packageName ?: "") }
     // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
     // Parcelable, so saving the list on stop crashes.
@@ -261,9 +271,28 @@ fun OptionsDialog(
         runCatching { app.icon.toSafeBitmapOrNull() }.getOrNull()
     }
 
+    // Whether the app ships a Material You <monochrome> layer, enabling the Monochrome variant.
+    val appHasMonochrome = remember(app.icon) {
+        val icon = app.icon
+        icon.isAdaptiveIconDrawable() && (icon as AdaptiveIconDrawable).haveMonochrome()
+    }
+
+    // Monochrome variant colours: a wallpaper-derived scheme (foreground+background) or Custom.
+    val isMonochromeVariant = source == Source.APPLICATION_ICON && useMonochrome
+    val monochromeSchemes = rememberMonochromeSchemes()
+    val isCustomScheme = monochromeScheme >= monochromeSchemes.size
+    val scheme = monochromeSchemes.getOrNull(monochromeScheme)
+    val effectiveColor = if (isMonochromeVariant && !isCustomScheme) scheme!!.first else iconColor
+    // Background only applies to the monochrome variant; other sources keep the transparent default.
+    val effectiveBgColor = when {
+        isMonochromeVariant && !isCustomScheme -> scheme!!.second
+        isMonochromeVariant -> customBgColor
+        else -> Color.Transparent
+    }
+
     val generatingOptions = GenerationOptions(
         source, imageEdit, textType, iconPack,
-        iconColor.toInt(), 0, useVector, useMonochrome, themed, override = true,
+        effectiveColor.toInt(), effectiveBgColor.toInt(), useVector, useMonochrome, themed, override = true,
         edgeLowThreshold = edgeThreshold,
         edgeHighThreshold = edgeThreshold * 3f,
         edgeGaussianRadius = edgeSmoothing,
@@ -398,7 +427,16 @@ fun OptionsDialog(
                                 contentReady = createTabReady,
                                 selectedResourceId = customIconList.firstOrNull()?.resourceId,
                                 // Frame the rotation siblings only once the user has opted in.
-                                selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled }
+                                selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },
+                                appHasMonochrome = appHasMonochrome,
+                                onMonochromeChange = { useMonochrome = it },
+                                monochromeSchemes = monochromeSchemes,
+                                selectedScheme = monochromeScheme,
+                                onSchemeChange = { monochromeScheme = it },
+                                customForeground = iconColor,
+                                customBackground = customBgColor,
+                                onCustomForegroundChange = { iconColor = it },
+                                onCustomBackgroundChange = { customBgColor = it }
                             )
                             1 -> UploadColumn(app = app) {
                                 draft.uploadBase = it
@@ -525,6 +563,30 @@ private fun OptionsBottomBar(
                     Text(stringResource(R.string.modifierTab), color = disabledTint)
                 }
             }
+        )
+    }
+}
+
+/**
+ * Wallpaper-derived colour schemes (foreground over background) for tinting the monochrome icon,
+ * pulled from the live Material You palette — the three accent hues plus a neutral, and an inverted
+ * accent. These harmonise with the user's wallpaper, like Android's own themed-icon colours. On
+ * Android < 12 (no dynamic colours) it falls back to plain light-on-dark / dark-on-light.
+ */
+@Composable
+private fun rememberMonochromeSchemes(): List<Pair<Color, Color>> {
+    if (!supportDynamicColors()) {
+        return listOf(Color.White to Color.Black, Color.Black to Color.White)
+    }
+    val context = LocalContext.current
+    return remember {
+        fun c(id: Int) = Color(context.resources.getColor(id, context.theme))
+        listOf(
+            c(android.R.color.system_accent1_100) to c(android.R.color.system_accent1_800),
+            c(android.R.color.system_accent2_100) to c(android.R.color.system_accent2_800),
+            c(android.R.color.system_accent3_100) to c(android.R.color.system_accent3_800),
+            c(android.R.color.system_neutral1_100) to c(android.R.color.system_neutral1_800),
+            c(android.R.color.system_accent1_800) to c(android.R.color.system_accent1_100)
         )
     }
 }
