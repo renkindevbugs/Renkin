@@ -392,13 +392,17 @@ fun ApplicationList(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BadgeTooltip(text: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = { PlainTooltip { Text(text) } },
-        state = rememberTooltipState(),
-        modifier = modifier
-    ) {
-        content()
+    // [modifier] (the badge's alignment) goes on a wrapping Box that sizes to the badge — putting
+    // it on TooltipBox directly leaves the badge centered. TooltipDefaults' position provider then
+    // keeps the popup inside the window on its own.
+    Box(modifier) {
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            tooltip = { PlainTooltip { Text(text) } },
+            state = rememberTooltipState()
+        ) {
+            content()
+        }
     }
 }
 
