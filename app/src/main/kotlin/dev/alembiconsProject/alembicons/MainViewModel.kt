@@ -88,6 +88,9 @@ class MainViewModel @Inject constructor(
     private val appProvider: ApplicationProvider
 ) : AndroidViewModel(application), IconPreviewBuilder {
 
+    // One shared manager for the pack-preview lookups, instead of a fresh instance per call.
+    private val appMan by lazy { ApplicationManager(getApplication()) }
+
     // ---- Model state exposed to the UI (read-only) -------------------------------
     // The UI observes these instead of reaching through to ApplicationProvider, so the
     // view model stays the single point of contact with the model layer. Each is backed
@@ -408,7 +411,6 @@ class MainViewModel @Inject constructor(
 
         val result = withContext(Dispatchers.Default) {
             try {
-                val appMan = ApplicationManager(getApplication())
                 val sortedNames = filteredSortedPackNames(appMan, packageName, query, sortOrder)
                 val more = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
                 val pairs = loadPackIconPairs(appMan, packageName, options, sortedNames.take(PACK_ROW_LIMIT))
@@ -434,7 +436,6 @@ class MainViewModel @Inject constructor(
         options: GenerationOptions,
         onChunk: (List<PackIconPreview>) -> Unit
     ) {
-        val appMan = ApplicationManager(getApplication())
         val sortedNames = withContext(Dispatchers.Default) {
             try {
                 filteredSortedPackNames(appMan, packageName, query, sortOrder)

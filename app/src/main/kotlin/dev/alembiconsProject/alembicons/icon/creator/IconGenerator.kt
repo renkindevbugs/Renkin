@@ -41,6 +41,7 @@ import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
 import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
 import dev.alembiconsProject.alembicons.extension.changeBackgroundColor
 import dev.alembiconsProject.alembicons.extension.emptyLike
+import dev.alembiconsProject.alembicons.extension.newArgbBitmap
 import dev.alembiconsProject.alembicons.extension.scaleFromCenter
 import dev.alembiconsProject.alembicons.icon.parser.IconParser
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
@@ -72,6 +73,7 @@ class IconGenerator(
     private val fallbackPackName: String = ""
 ) {
     private val adaptiveIconScale = 1.5f // 108dp / 72dp
+    private val appMan by lazy { ApplicationManager(ctx) }
 
     fun generateIcon(application: PackageInfoStruct,
                      onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String) -> Unit) {
@@ -175,7 +177,6 @@ class IconGenerator(
         val packName = fallbackPackName
         if (packName.isEmpty()) return null
 
-        val appMan = ApplicationManager(ctx)
         fun load(name: String?): Bitmap? = name?.let { appMan.getDrawableByName(packName, it)?.toSafeBitmapOrNull() }
 
         // Pick a back deterministically per app so the choice is stable across rebuilds.
@@ -320,10 +321,9 @@ class IconGenerator(
         // adaptive foreground expects — so (unlike the old flat export) we must NOT scale it up, or
         // the launcher would render it oversized.
         val size = 432
-        val mask = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         mono.setTintList(null)
         mono.setBounds(0, 0, size, size)
-        mono.draw(Canvas(mask))
+        val mask = newArgbBitmap(size, size) { mono.draw(it) }
 
         // Export as an adaptive icon so the launcher masks it to its own shape (circle, squircle, …)
         // like every other icon — a plain bitmap would be shown as a bare square instead. previewScale
@@ -396,8 +396,6 @@ class IconGenerator(
     }
 
     private fun parseApplicationIcon(application: PackageInfoStruct): Drawable? {
-        val appMan = ApplicationManager(ctx)
-
         if (isVectorDrawable(application.icon) && options.vector) {
             val res = appMan.getResources(application.packageName) ?: return null
             return IconParser.parseDrawable(res, application.icon, application.iconID)
@@ -689,7 +687,7 @@ class IconGenerator(
     private fun parseIconPackXML(iconPackName: String, iconDrawable: ResourceDrawable): Drawable? {
         if (!isVectorDrawable(iconDrawable.drawable)) return null
 
-        val res = ApplicationManager(ctx).getResources(iconPackName) ?: return null
+        val res = appMan.getResources(iconPackName) ?: return null
         val icon = IconParser.parseDrawable(res, iconDrawable.drawable, iconDrawable.resourceId)
 
         if (!icon.isAdaptiveIconDrawable()) return null
@@ -731,11 +729,20 @@ class IconGenerator(
         val src = icon.toBitmap()
         if (src.width <= 0 || src.height <= 0) return icon
 
-        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(out)
-        canvas.scale(scale, scale, src.width / 2f, src.height / 2f)
-        canvas.drawBitmap(src, 0f, 0f, null)
-        return BitmapIconDrawable(ctx.resources, out)
+        val out = newArgbBitmap(src.width, src.height) { canvas ->
+            canvas.scale(scale, scale, src.width / 2f, src.height / 2f)
+            canvas.drawBitmap(src, 0f, 0f, null)
+        }
+        // Carry over the source's adaptive-export flag and preview zoom (e.g. the monochrome
+        // variant, which renders its in-app preview at the launcher's safe-zone scale). Without
+        // this the Modifier scale would reset both, shrinking the monochrome preview back to 1:1.
+        val source = icon as? BitmapIconDrawable
+        return BitmapIconDrawable(
+            ctx.resources,
+            out,
+            exportAsAdaptiveIcon = source?.isAdaptiveIcon() ?: false,
+            previewScale = source?.previewScale ?: 1f
+        )
     }
 
     /**
