@@ -177,6 +177,13 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
     val listState = rememberLazyListState()
 
+    // Scrolling the app list drops the search field's focus (and so dismisses the keyboard),
+    // instead of leaving the cursor blinking over the list.
+    val focusManager = LocalFocusManager.current
+    LaunchedEffect(listState.isScrollInProgress) {
+        if (listState.isScrollInProgress) focusManager.clearFocus()
+    }
+
     val prefs = getPreferences()
     val scope = rememberCoroutineScope()
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
@@ -683,12 +690,14 @@ fun SearchBar(
     onSearch: (String) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
+    val focusManager = LocalFocusManager.current
 
-    // Back clears the query first; only once it's empty does back fall through to
-    // the exit handler above (the keyboard, if open, is dismissed by the system first)
+    // Back clears the query and drops focus first; only once it's empty does back fall through
+    // to the exit handler above.
     BackHandler(enabled = text.isNotEmpty()) {
         text = ""
         onSearch("")
+        focusManager.clearFocus()
     }
 
     Surface(color = containerColor, modifier = Modifier.fillMaxWidth()) {
