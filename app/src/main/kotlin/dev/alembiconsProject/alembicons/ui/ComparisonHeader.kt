@@ -77,7 +77,10 @@ internal fun ComparisonHeader(
     previewLoading: Boolean,
     onDismiss: () -> Unit,
     onClear: () -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
+    // Once the icon list is scrolled, the header shrinks to just the icons + arrow + Apply,
+    // dropping the app bar (close/name/overflow) and the Current/New labels to free vertical space.
+    collapsed: Boolean = false
 ) {
     // Both icons fly up into their slots when the dialog opens
     val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
@@ -92,20 +95,19 @@ internal fun ComparisonHeader(
     // single row; on phones it stacks into two tiers so nothing gets cramped.
     val wide = LocalConfiguration.current.screenWidthDp >= 600
 
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-        shape = CardShape,
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
-        )
-    ) {
-        if (wide) {
-            // Single compact row — close + name on the left, comparison icons
-            // centered, apply + overflow on the right. Left and right clusters
-            // share equal weight so the icons land dead-center; a long name gets
-            // ellipsised before it can reach them.
+    if (wide) {
+        // Single compact row — close + name on the left, comparison icons centered, apply +
+        // overflow on the right. Left and right clusters share equal weight so the icons land
+        // dead-center; a long name gets ellipsised before it can reach them.
+        ElevatedCard(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp),
+            shape = CardShape,
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
+            )
+        ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -145,50 +147,71 @@ internal fun ComparisonHeader(
                     OverflowMenu(onClear)
                 }
             }
-        } else {
-            // Tier 1 — app bar: close, name, overflow (destructive reset lives here)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 8.dp, end = 8.dp, top = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                CloseButton(onDismiss)
-                Text(
-                    text = appName,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
+        }
+    } else {
+        // Phones: the app bar (close / name / overflow) sits on its own, separate from the card
+        // holding the comparison + Apply. Scrolling the icon list hides the Current/New labels —
+        // the icons keep their size — so Apply rises tight under them. The label show/hide and
+        // the resulting height change animate smoothly (AnimatedVisibility inside each slot).
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            // The app bar slides/fades away once the list is scrolled, leaving only the
+            // comparison card; scrolling back up brings it back. Its bottom padding (the gap
+            // above the card) collapses with it, so nothing is left hanging when hidden.
+            AnimatedVisibility(visible = !collapsed) {
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 4.dp)
-                )
-                OverflowMenu(onClear)
+                        .fillMaxWidth()
+                        .padding(start = 4.dp, end = 4.dp, bottom = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    CloseButton(onDismiss)
+                    Text(
+                        text = appName,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 4.dp)
+                    )
+                    OverflowMenu(onClear)
+                }
             }
 
-            // Tier 2 — comparison hero (Current → New) with Apply as primary action
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 12.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.Top
-                ) {
-                    CurrentSlot(heroBitmap, flyIn, flyInEnter, 56.dp, showLabel = true)
-                    ComparisonArrow(56.dp)
-                    NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 56.dp, showLabel = true)
-                }
-                ApplyButton(
-                    onConfirm,
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(top = 12.dp)
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = CardShape,
+                colors = CardDefaults.elevatedCardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh
                 )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        CurrentSlot(heroBitmap, flyIn, flyInEnter, 56.dp, showLabel = !collapsed)
+                        ComparisonArrow(56.dp)
+                        NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 56.dp, showLabel = !collapsed)
+                    }
+                    ApplyButton(
+                        onConfirm,
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp)
+                    )
+                }
             }
         }
     }
@@ -273,7 +296,9 @@ private fun CurrentSlot(
                 }
             }
         }
-        if (showLabel) {
+        // Animated so scrolling the list eases the label (and the height below it) away,
+        // letting Apply rise smoothly instead of snapping.
+        AnimatedVisibility(visible = showLabel) {
             Text(
                 text = stringResource(R.string.iconCurrent),
                 style = MaterialTheme.typography.labelSmall,
@@ -335,7 +360,7 @@ private fun NewSlot(
                 }
             }
         }
-        if (showLabel) {
+        AnimatedVisibility(visible = showLabel) {
             Text(
                 text = stringResource(R.string.iconNew),
                 style = MaterialTheme.typography.labelSmall,
