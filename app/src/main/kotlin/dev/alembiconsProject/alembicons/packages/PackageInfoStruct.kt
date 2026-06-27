@@ -19,7 +19,12 @@ class PackageInfoStruct(
     /** Package name of the icon pack the calendar drawables come from. Null = not set. */
     val calendarPackName: String? = null,
     /** Non-localized (English) app name for search matching. Falls back to [appName] if unavailable. */
-    val originalName: String = appName
+    val originalName: String = appName,
+    /**
+     * True when [createdIcon] was produced by the pack's fallback styling (neither pack themed this
+     * app), not a real pack match. Transient — recomputed on refresh, not persisted.
+     */
+    val isFallback: Boolean = false
 ) : Comparable<PackageInfoStruct> {
     override fun equals(other: Any?): Boolean {
         if (other is PackageInfoStruct) {
@@ -41,11 +46,13 @@ class PackageInfoStruct(
         createdIcon: IconPackDrawable? = this.createdIcon,
         calendarEnabled: Boolean = this.calendarEnabled,
         calendarPrefix: String? = this.calendarPrefix,
-        calendarPackName: String? = this.calendarPackName
+        calendarPackName: String? = this.calendarPackName,
+        isFallback: Boolean = this.isFallback
     ): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, originalName)
+        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, originalName, isFallback)
 
-    fun changeExport(createdIcon: IconPackDrawable?): PackageInfoStruct = copyWith(createdIcon = createdIcon)
+    fun changeExport(createdIcon: IconPackDrawable?, isFallback: Boolean = false): PackageInfoStruct =
+        copyWith(createdIcon = createdIcon, isFallback = isFallback)
 
     fun changeCalendar(calendarEnabled: Boolean, calendarPrefix: String? = this.calendarPrefix, calendarPackName: String? = this.calendarPackName): PackageInfoStruct =
         copyWith(calendarEnabled = calendarEnabled, calendarPrefix = calendarPrefix, calendarPackName = calendarPackName)

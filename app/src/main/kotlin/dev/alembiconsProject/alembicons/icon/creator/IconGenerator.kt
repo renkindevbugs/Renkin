@@ -73,7 +73,7 @@ class IconGenerator(
 
     fun generateIcon(application: PackageInfoStruct,
                      onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?) -> Unit) {
-        generateIcons(listOf(application), onUpdate)
+        generateIcons(listOf(application)) { app, icon, _ -> onUpdate(app, icon) }
     }
 
     fun generateIcon(application: PackageInfoStruct,
@@ -106,7 +106,7 @@ class IconGenerator(
     }
 
     fun generateIcons(applications: List<PackageInfoStruct>
-                      , onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?) -> Unit) {
+                      , onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?, isFallback: Boolean) -> Unit) {
         if (options.primarySource == Source.NONE) {
             return
         }
@@ -119,7 +119,7 @@ class IconGenerator(
             // A malformed drawable in one (third-party) pack must not abort the whole refresh.
             // Skip the offending app, leaving its current icon untouched, and carry on.
             try {
-                val icon = generateIcon(
+                val matched = generateIcon(
                     app,
                     options.primarySource,
                     options.primaryImageEdit,
@@ -133,10 +133,14 @@ class IconGenerator(
                         options.secondaryTextType,
                         secondaryIconPackApplications
                     )
-                    // Neither pack themes this app — give it the primary pack's fallback styling.
-                    ?: generateFallback(app)
 
-                onUpdate(app, icon)
+                if (matched != null) {
+                    onUpdate(app, matched, false)
+                } else {
+                    // Neither pack themes this app — give it the primary pack's fallback styling.
+                    val fallback = generateFallback(app)
+                    onUpdate(app, fallback, fallback != null)
+                }
             } catch (e: Exception) {
                 Log.error("IconGenerator", "Failed to generate icon for ${app.packageName}", e)
             }

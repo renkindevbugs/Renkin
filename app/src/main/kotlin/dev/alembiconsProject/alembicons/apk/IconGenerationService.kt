@@ -83,7 +83,7 @@ class IconGenerationService(
     suspend fun refreshIcons(
         applications: List<PackageInfoStruct>,
         options: GenerationOptions,
-        onResult: (PackageInfoStruct, IconPackDrawable?) -> Unit
+        onResult: (PackageInfoStruct, IconPackDrawable?, isFallback: Boolean) -> Unit
     ) = withContext(Dispatchers.Default) {
         val builder = buildGenerator(options)
         builder.generateIcons(applications, onResult)

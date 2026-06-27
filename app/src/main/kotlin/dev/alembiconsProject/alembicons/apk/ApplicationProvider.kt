@@ -107,8 +107,8 @@ class ApplicationProvider(private val context: Context) {
 
         // Iterate a snapshot copy: the callback edits the live list in place, and iterating
         // the SnapshotStateList itself while mutating it would throw.
-        iconGenService.refreshIcons(applicationList.toList(), opt) { application, icon ->
-            editApplication(application, application.changeExport(icon))
+        iconGenService.refreshIcons(applicationList.toList(), opt) { application, icon, isFallback ->
+            editApplication(application, application.changeExport(icon, isFallback))
         }
     }
 

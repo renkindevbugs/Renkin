@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
@@ -102,8 +103,10 @@ enum class AppSortOrder { NAME, INSTALL_DATE }
 fun AppSortFilterMenu(
     sortOrder: AppSortOrder,
     filterNoIcon: Boolean,
+    filterFallback: Boolean = false,
     onSortChange: (AppSortOrder) -> Unit,
-    onFilterChange: (Boolean) -> Unit
+    onFilterChange: (Boolean) -> Unit,
+    onFallbackFilterChange: (Boolean) -> Unit = {}
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
     Box {
@@ -126,12 +129,16 @@ fun AppSortFilterMenu(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             CheckableDropdownItem(
                 text = stringResource(R.string.filterAllApps),
-                checked = !filterNoIcon
-            ) { onFilterChange(false); showSortMenu = false }
+                checked = !filterNoIcon && !filterFallback
+            ) { onFilterChange(false); onFallbackFilterChange(false); showSortMenu = false }
             CheckableDropdownItem(
                 text = stringResource(R.string.filterWithoutIcon),
                 checked = filterNoIcon
             ) { onFilterChange(true); showSortMenu = false }
+            CheckableDropdownItem(
+                text = stringResource(R.string.filterFallback),
+                checked = filterFallback
+            ) { onFallbackFilterChange(true); showSortMenu = false }
         }
     }
 }
@@ -169,6 +176,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val scope = rememberCoroutineScope()
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
     val filterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
+    // Transient (not a pref): fallback flags only exist after a refresh, so the filter resets too.
+    var filterFallback by remember { mutableStateOf(false) }
 
     // Require a second back press to leave. Registered here (before the search bar),
     // so the search bar's clear-on-back handler takes priority while it has text.
@@ -235,11 +244,19 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 containerColor = headerColor,
                 sortOrder = sortOrder,
                 filterNoIcon = filterNoIcon,
+                filterFallback = filterFallback,
                 onSortChange = { scope.launch { prefs.setEnumValue(AppSortOrderKey, it) } },
-                onFilterChange = { scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, it) } },
+                onFilterChange = {
+                    filterFallback = false
+                    scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, it) }
+                },
+                onFallbackFilterChange = {
+                    filterFallback = it
+                    if (it) scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
+                },
                 onSearch = { packageFilter = it }
             )
-            ApplicationList(iconPacks, packageFilter, sortOrder, filterNoIcon, listState)
+            ApplicationList(iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, listState)
         }
     }
 
@@ -276,6 +293,7 @@ fun ApplicationList(
     filter: String,
     sortOrder: AppSortOrder,
     filterNoIcon: Boolean,
+    filterFallback: Boolean = false,
     listState: LazyListState = rememberLazyListState()
 ) {
     val viewModel: MainViewModel = hiltViewModel()
@@ -298,14 +316,18 @@ fun ApplicationList(
     // derivedStateOf so it recomputes when the list's contents change (applicationList is a
     // SnapshotStateList edited in place, so its instance identity never changes) while still
     // caching across unrelated recompositions. Recreated when the sort/filter inputs change.
-    val displayList by remember(sortOrder, filterNoIcon, filter, installTimes) {
+    val displayList by remember(sortOrder, filterNoIcon, filterFallback, filter, installTimes) {
         derivedStateOf {
             when (sortOrder) {
                 AppSortOrder.NAME -> applications.withIndex().toList()
                 AppSortOrder.INSTALL_DATE -> applications.withIndex()
                     .sortedByDescending { installTimes[it.value.packageName] ?: 0L }
             }.let { list ->
-                if (filterNoIcon) list.filter { it.value.createdIcon == null } else list
+                when {
+                    filterFallback -> list.filter { it.value.isFallback }
+                    filterNoIcon -> list.filter { it.value.createdIcon == null }
+                    else -> list
+                }
             }.let { list ->
                 // Filter before the LazyColumn so non-matching rows don't become empty items
                 if (filter.isEmpty()) list else list.filter {
@@ -317,7 +339,7 @@ fun ApplicationList(
 
     // Keyed items make LazyColumn follow the previously visible app to its new
     // position when the order changes — jump back to the top instead
-    LaunchedEffect(sortOrder, filterNoIcon) {
+    LaunchedEffect(sortOrder, filterNoIcon, filterFallback) {
         listState.scrollToItem(0)
     }
 
@@ -476,6 +498,24 @@ fun ApplicationItem(
                         )
                     }
                 }
+                // Fallback badge: this icon came from the pack's fallback styling, not a real match.
+                if (app.isFallback) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .size(18.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.tertiaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.AutoFixHigh,
+                            contentDescription = stringResource(R.string.fallbackIcon),
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                            modifier = Modifier.size(11.dp)
+                        )
+                    }
+                }
             }
         }
     }
@@ -606,9 +646,11 @@ fun TitleBar(
 fun SearchBar(
     sortOrder: AppSortOrder,
     filterNoIcon: Boolean,
+    filterFallback: Boolean = false,
     containerColor: Color = MaterialTheme.colorScheme.background,
     onSortChange: (AppSortOrder) -> Unit,
     onFilterChange: (Boolean) -> Unit,
+    onFallbackFilterChange: (Boolean) -> Unit = {},
     onSearch: (String) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
@@ -633,7 +675,7 @@ fun SearchBar(
             },
             modifier = Modifier.weight(1f)
         )
-        AppSortFilterMenu(sortOrder, filterNoIcon, onSortChange, onFilterChange)
+        AppSortFilterMenu(sortOrder, filterNoIcon, filterFallback, onSortChange, onFilterChange, onFallbackFilterChange)
     }
     }
 }
