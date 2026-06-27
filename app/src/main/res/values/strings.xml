@@ -117,6 +117,9 @@
     <string name="filterAllApps">All apps</string>
     <string name="filterFallback">Fallback icons</string>
     <string name="fallbackIcon">Fallback icon</string>
+    <string name="fallbackBadgeTooltip">Fallback icon — neither pack had this app, so it uses the pack\'s default styling</string>
+    <string name="calendarBadgeTooltip">Calendar icon — changes to match the day of the month</string>
+    <string name="calendarGroupTooltip">Calendar icon — rotates through the days of the month</string>
     <string name="fallbackCount">%d use a fallback icon</string>
     <string name="fallbackStyling">Fallback styling</string>
     <string name="fallbackNone">None</string>
