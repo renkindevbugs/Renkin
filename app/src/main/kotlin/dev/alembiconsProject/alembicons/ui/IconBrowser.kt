@@ -13,7 +13,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -128,7 +131,12 @@ fun CreateTab(
     monochromeSchemes: List<Pair<Color, Color>> = emptyList(),
     // Index of the chosen scheme; == monochromeSchemes.size means the Custom (manual colour) option.
     selectedScheme: Int = 0,
-    onSchemeChange: (Int) -> Unit = {}
+    onSchemeChange: (Int) -> Unit = {},
+    // Custom-scheme foreground/background, edited inline when the Custom swatch is selected.
+    customForeground: Color = Color.White,
+    customBackground: Color = Color.Black,
+    onCustomForegroundChange: (Color) -> Unit = {},
+    onCustomBackgroundChange: (Color) -> Unit = {}
 ) {
     // Seeded from the hoisted query so returning to the tab doesn't trigger a spurious
     // re-search (debouncedQuery already matches the preserved searchQuery).
@@ -266,7 +274,11 @@ fun CreateTab(
                 onMonochromeChange = onMonochromeChange,
                 schemes = monochromeSchemes,
                 selectedScheme = selectedScheme,
-                onSchemeChange = onSchemeChange
+                onSchemeChange = onSchemeChange,
+                customForeground = customForeground,
+                customBackground = customBackground,
+                onCustomForegroundChange = onCustomForegroundChange,
+                onCustomBackgroundChange = onCustomBackgroundChange
             )
             Source.APPLICATION_NAME -> Column(
                 Modifier
@@ -293,8 +305,14 @@ private fun ApplicationIconVariant(
     onMonochromeChange: (Boolean) -> Unit,
     schemes: List<Pair<Color, Color>>,
     selectedScheme: Int,
-    onSchemeChange: (Int) -> Unit
+    onSchemeChange: (Int) -> Unit,
+    customForeground: Color,
+    customBackground: Color,
+    onCustomForegroundChange: (Color) -> Unit,
+    onCustomBackgroundChange: (Color) -> Unit
 ) {
+    var fgPickerOpen by remember { mutableStateOf(false) }
+    var bgPickerOpen by remember { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxSize()
@@ -354,7 +372,7 @@ private fun ApplicationIconVariant(
                         selected = selectedScheme == index
                     ) { onSchemeChange(index) }
                 }
-                // Custom: the trailing swatch opens manual colour control in the Modifier tab.
+                // Custom: foreground/background chosen with the inline pickers below.
                 SchemeSwatch(
                     foreground = MaterialTheme.colorScheme.onSurface,
                     background = MaterialTheme.colorScheme.surfaceVariant,
@@ -362,11 +380,66 @@ private fun ApplicationIconVariant(
                     selected = selectedScheme >= schemes.size
                 ) { onSchemeChange(schemes.size) }
             }
+
+            if (selectedScheme >= schemes.size) {
+                Spacer(Modifier.height(12.dp))
+                ColorRow(stringResource(R.string.iconColor), customForeground) { fgPickerOpen = true }
+                Spacer(Modifier.height(8.dp))
+                ColorRow(stringResource(R.string.backgroundColor), customBackground) { bgPickerOpen = true }
+            } else {
+                Text(
+                    text = stringResource(R.string.monochromeColorsHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 10.dp)
+                )
+            }
+        }
+    }
+
+    if (fgPickerOpen) {
+        ColorDialog(
+            onDismiss = { fgPickerOpen = false },
+            currentlySelected = customForeground,
+            onColorSelected = onCustomForegroundChange
+        )
+    }
+    if (bgPickerOpen) {
+        ColorDialog(
+            onDismiss = { bgPickerOpen = false },
+            currentlySelected = customBackground,
+            onColorSelected = onCustomBackgroundChange
+        )
+    }
+}
+
+/** A tappable colour row: label on the left, a circular swatch of [color] on the right. */
+@Composable
+private fun ColorRow(label: String, color: Color, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text(
-                text = stringResource(R.string.monochromeColorsHint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 10.dp)
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Box(
+                Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(color)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
             )
         }
     }

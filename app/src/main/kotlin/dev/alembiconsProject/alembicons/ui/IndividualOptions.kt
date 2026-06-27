@@ -432,7 +432,11 @@ fun OptionsDialog(
                                 onMonochromeChange = { useMonochrome = it },
                                 monochromeSchemes = monochromeSchemes,
                                 selectedScheme = monochromeScheme,
-                                onSchemeChange = { monochromeScheme = it }
+                                onSchemeChange = { monochromeScheme = it },
+                                customForeground = iconColor,
+                                customBackground = customBgColor,
+                                onCustomForegroundChange = { iconColor = it },
+                                onCustomBackgroundChange = { customBgColor = it }
                             )
                             1 -> UploadColumn(app = app) {
                                 draft.uploadBase = it
@@ -442,9 +446,6 @@ fun OptionsDialog(
                                 source = source,
                                 imageEdit = imageEdit,
                                 iconColor = iconColor,
-                                // Background colour control only for the monochrome variant's Custom
-                                // scheme — system schemes carry their own background.
-                                backgroundColor = customBgColor.takeIf { isMonochromeVariant && isCustomScheme },
                                 useVector = useVector,
                                 useMonochrome = useMonochrome,
                                 edgeThreshold = edgeThreshold,
@@ -453,7 +454,6 @@ fun OptionsDialog(
                                 iconScale = iconScale,
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
-                                onBackgroundColorChange = { customBgColor = it },
                                 onVectorChange = { useVector = it },
                                 onMonochromeChange = { useMonochrome = it },
                                 onEdgeThresholdChange = { edgeThreshold = it },

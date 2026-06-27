@@ -48,8 +48,6 @@ internal fun ModifierTab(
     source: Source,
     imageEdit: ImageEdit,
     iconColor: Color,
-    // Non-null only when a background colour applies (monochrome Custom scheme); shows a bg row.
-    backgroundColor: Color? = null,
     useVector: Boolean,
     useMonochrome: Boolean,
     edgeThreshold: Float,
@@ -58,7 +56,6 @@ internal fun ModifierTab(
     iconScale: Float,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
-    onBackgroundColorChange: (Color) -> Unit = {},
     onVectorChange: (Boolean) -> Unit,
     onMonochromeChange: (Boolean) -> Unit,
     onEdgeThresholdChange: (Float) -> Unit,
@@ -68,7 +65,6 @@ internal fun ModifierTab(
 ) {
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
-    var bgPickerOpen by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -172,11 +168,7 @@ internal fun ModifierTab(
             }
         }
 
-        // The icon colour applies whenever the image is recoloured: any modifier, or the
-        // Application Icon → Monochrome variant (which tints the monochrome layer).
-        val recolours = imageEdit != ImageEdit.NONE ||
-            (source == Source.APPLICATION_ICON && useMonochrome)
-        if (recolours) {
+        if (imageEdit != ImageEdit.NONE) {
             Surface(
                 onClick = { colorPickerOpen = true },
                 shape = CardShape,
@@ -198,35 +190,6 @@ internal fun ModifierTab(
                     Surface(
                         shape = CircleShape,
                         color = iconColor,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier.size(28.dp)
-                    ) {}
-                }
-            }
-        }
-
-        if (backgroundColor != null) {
-            Surface(
-                onClick = { bgPickerOpen = true },
-                shape = CardShape,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.backgroundColor),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Surface(
-                        shape = CircleShape,
-                        color = backgroundColor,
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                         modifier = Modifier.size(28.dp)
                     ) {}
@@ -296,11 +259,4 @@ internal fun ModifierTab(
         )
     }
 
-    if (bgPickerOpen && backgroundColor != null) {
-        ColorDialog(
-            onDismiss = { bgPickerOpen = false },
-            currentlySelected = backgroundColor,
-            onColorSelected = { onBackgroundColorChange(it) }
-        )
-    }
 }
