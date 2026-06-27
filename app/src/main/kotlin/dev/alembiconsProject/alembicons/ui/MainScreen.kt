@@ -323,22 +323,10 @@ fun ApplicationList(
     // caching across unrelated recompositions. Recreated when the sort/filter inputs change.
     val displayList by remember(sortOrder, filterNoIcon, filterFallback, filter, installTimes) {
         derivedStateOf {
-            when (sortOrder) {
-                AppSortOrder.NAME -> applications.withIndex().toList()
-                AppSortOrder.INSTALL_DATE -> applications.withIndex()
-                    .sortedByDescending { installTimes[it.value.packageName] ?: 0L }
-            }.let { list ->
-                when {
-                    filterFallback -> list.filter { it.value.isFallback }
-                    filterNoIcon -> list.filter { it.value.createdIcon == null }
-                    else -> list
-                }
-            }.let { list ->
-                // Filter before the LazyColumn so non-matching rows don't become empty items
-                if (filter.isEmpty()) list else list.filter {
-                    it.value.appName.contains(filter, true) || it.value.originalName.contains(filter, true)
-                }
-            }
+            // withIndex() first so each app keeps its original position; the shared pipeline then
+            // filters and sorts the wrappers (selector pulls the app out of each IndexedValue).
+            applications.withIndex().toList()
+                .sortedFilteredApps(filter, filterNoIcon, filterFallback, sortOrder, installTimes) { it.value }
         }
     }
 

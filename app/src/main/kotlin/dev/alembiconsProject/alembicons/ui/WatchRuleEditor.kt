@@ -29,7 +29,6 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -101,14 +100,7 @@ internal fun WatchRuleEditor(
 
     val sortedPacks = remember(packs) { packs.sortedBy { it.applicationName.lowercase() } }
     val filteredApps = remember(apps, query, sortOrder, filterNoIcon, filterFallback, installTimes) {
-        var seq = apps.asSequence()
-        if (query.isNotBlank()) seq = seq.filter { it.appName.contains(query.trim(), ignoreCase = true) }
-        if (filterFallback) seq = seq.filter { it.isFallback }
-        else if (filterNoIcon) seq = seq.filter { it.createdIcon == null }
-        when (sortOrder) {
-            AppSortOrder.NAME -> seq.sortedBy { it.appName.lowercase() }
-            AppSortOrder.INSTALL_DATE -> seq.sortedByDescending { installTimes[it.packageName] ?: 0L }
-        }.toList()
+        apps.sortedFilteredApps(query, filterNoIcon, filterFallback, sortOrder, installTimes) { it }
     }
     // 3 rows × 3 columns per page → a horizontally paged grid with dots
     val appPages = filteredApps.chunked(9)
@@ -450,28 +442,6 @@ private fun RemovableChip(
                     modifier = Modifier.size(14.dp)
                 )
             }
-        }
-    }
-}
-
-/** Centered icon + message shown when a list/grid has no items (e.g. an empty filter result). */
-@Composable
-internal fun EmptyState(icon: ImageVector, text: String, modifier: Modifier = Modifier) {
-    Box(modifier, contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.outline,
-                modifier = Modifier.size(48.dp)
-            )
-            Spacer(Modifier.height(12.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
         }
     }
 }

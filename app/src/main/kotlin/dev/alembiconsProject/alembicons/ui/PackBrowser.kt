@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -158,18 +159,13 @@ fun PackIconsRow(
             )
         }
     } else if (iconPairs.isEmpty()) {
-        Box(
+        // Thin inline slot for a single pack — no icon, just the message.
+        EmptyState(
+            text = stringResource(R.string.noIconsFound),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(80.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = stringResource(R.string.noIconsFound),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
+                .height(80.dp)
+        )
     } else {
         LazyRow(
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
@@ -285,13 +281,12 @@ fun PackDetailGrid(
             )
         }
         if (!isLoading && iconPairs.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = stringResource(R.string.noIconsFound),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            }
+            // Full grid area is empty — show the icon + message like the home/watch empty states.
+            EmptyState(
+                icon = Icons.Filled.SearchOff,
+                text = stringResource(R.string.noIconsFound),
+                modifier = Modifier.fillMaxSize()
+            )
         } else {
             LazyVerticalGrid(
                 state = gridState,
