@@ -246,7 +246,11 @@ class IconGenerator(
         mono.setBounds(0, 0, size, size)
         mono.draw(Canvas(mask))
 
-        return getDefaultBitmapIcon(recolorMonochrome(mask))
+        // The monochrome artwork only fills the inner 72/108 safe zone, so scale it up to fill the
+        // frame like a normal icon (same factor used for adaptive foregrounds, #80).
+        val filled = mask.scaleFromCenter(adaptiveIconScale)
+
+        return getDefaultBitmapIcon(recolorMonochrome(filled))
     }
 
     /**
