@@ -65,9 +65,11 @@ class IconGenerator(
     private val options: GenerationOptions,
     private val primaryIconPackApplications: IconPackContainer,
     private val secondaryIconPackApplications: IconPackContainer,
-    // The primary pack's classic fallback styling, applied to apps neither pack themes so they
-    // inherit the pack's uniform look instead of staying raw (issue #121). Empty = no fallback.
-    private val primaryFallback: IconPackFallback = IconPackFallback()
+    // The classic fallback styling applied to apps neither pack themes so they inherit a uniform
+    // look instead of staying raw (issue #121). Empty = no fallback. [fallbackPackName] is the pack
+    // those drawables (iconback/mask/upon) load from.
+    private val primaryFallback: IconPackFallback = IconPackFallback(),
+    private val fallbackPackName: String = ""
 ) {
     private val adaptiveIconScale = 1.5f // 108dp / 72dp
 
@@ -156,7 +158,7 @@ class IconGenerator(
      */
     private fun generateFallback(app: PackageInfoStruct): IconPackDrawable? {
         if (primaryFallback.isEmpty) return null
-        val packName = options.primaryIconPack
+        val packName = fallbackPackName
         if (packName.isEmpty()) return null
 
         val appMan = ApplicationManager(ctx)

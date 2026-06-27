@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +51,9 @@ import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.BackgroundColorKey
 import dev.alembiconsProject.alembicons.data.CalendarIconsKey
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
+import dev.alembiconsProject.alembicons.data.FALLBACK_SOURCE_DEFAULT
+import dev.alembiconsProject.alembicons.data.FallbackSource
+import dev.alembiconsProject.alembicons.data.FallbackSourceKey
 import dev.alembiconsProject.alembicons.data.IMAGE_EDIT_DEFAULT
 import dev.alembiconsProject.alembicons.data.IconColorKey
 import dev.alembiconsProject.alembicons.data.getIconColor
@@ -154,6 +158,7 @@ fun OptionsCard(
     var useThemed by rememberSaveable { mutableStateOf(false) }
     var retrieveCalendarIcons by rememberSaveable { mutableStateOf(false) }
     var overrideIcon by rememberSaveable { mutableStateOf(false) }
+    var fallbackSource by rememberSaveable { mutableStateOf(FALLBACK_SOURCE_DEFAULT) }
 
     val currentColor = prefs.getIconColor()
     val currentBgColor = prefs.getBackgroundColor()
@@ -171,6 +176,7 @@ fun OptionsCard(
     useThemed = prefs.getBooleanValue(ExportThemedKey)
     retrieveCalendarIcons = prefs.getBooleanValue(CalendarIconsKey)
     overrideIcon = prefs.getBooleanValue(OverrideIconKey)
+    fallbackSource = prefs.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT)
 
     val pathTracing = isPathTracingEnabled(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit)
     val showIconColor = showIconColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
@@ -340,6 +346,17 @@ fun OptionsCard(
                         CalendarIconsKey, it) } }
                 }
 
+                // Fallback styling for apps neither pack themes — only when a pack source exists.
+                val primaryIsPack = isIconPackSelected(primarySource, primaryIconPack)
+                val secondaryIsPack = isIconPackSelected(secondarySource, secondaryIconPack)
+                if (primaryIsPack || secondaryIsPack) {
+                    FallbackSourceSelector(
+                        selected = fallbackSource,
+                        primaryEnabled = primaryIsPack,
+                        secondaryEnabled = secondaryIsPack
+                    ) { scope.launch { prefs.setEnumValue(FallbackSourceKey, it) } }
+                }
+
                 if (showIconColor) {
                     ColorButton(stringResource(R.string.iconColor), currentColor) { scope.launch { prefs.setColorValue(
                         IconColorKey, it) } }
@@ -362,5 +379,55 @@ fun OptionsCard(
                 }
             }
         }
+    }
+}
+
+/**
+ * Segmented selector for which pack's fallback styling unthemed apps inherit (None / Primary /
+ * Secondary). Primary/Secondary are disabled unless that source is a configured icon pack.
+ */
+@Composable
+private fun FallbackSourceSelector(
+    selected: FallbackSource,
+    primaryEnabled: Boolean,
+    secondaryEnabled: Boolean,
+    onChange: (FallbackSource) -> Unit
+) {
+    Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Text(
+            text = stringResource(R.string.fallbackStyling),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 6.dp, start = 4.dp)
+        )
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+        ) {
+            FallbackSegment(stringResource(R.string.fallbackNone), selected == FallbackSource.NONE, true, Modifier.weight(1f)) { onChange(FallbackSource.NONE) }
+            FallbackSegment(stringResource(R.string.fallbackPrimary), selected == FallbackSource.PRIMARY, primaryEnabled, Modifier.weight(1f)) { onChange(FallbackSource.PRIMARY) }
+            FallbackSegment(stringResource(R.string.fallbackSecondary), selected == FallbackSource.SECONDARY, secondaryEnabled, Modifier.weight(1f)) { onChange(FallbackSource.SECONDARY) }
+        }
+    }
+}
+
+@Composable
+private fun FallbackSegment(label: String, selected: Boolean, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
+    val fg = when {
+        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        selected -> MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Box(
+        modifier
+            .background(bg)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelLarge, color = fg)
     }
 }

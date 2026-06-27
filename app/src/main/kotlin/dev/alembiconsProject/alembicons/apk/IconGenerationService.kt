@@ -4,6 +4,7 @@ import android.content.Context
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
+import dev.alembiconsProject.alembicons.data.FallbackSource
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.icon.creator.IconGenerator
@@ -92,8 +93,14 @@ class IconGenerationService(
     private fun buildGenerator(options: GenerationOptions): IconGenerator {
         val pack1 = IconPackContainer(options.primaryIconPack, iconPackRepo.getAppDrawables(options.primaryIconPack))
         val pack2 = IconPackContainer(options.secondaryIconPack, iconPackRepo.getAppDrawables(options.secondaryIconPack))
-        val fallback = iconPackRepo.getIconPackFallback(options.primaryIconPack)
-        return IconGenerator(context, options, pack1, pack2, fallback)
+        // The pack whose fallback styling unthemed apps inherit, per the user's choice.
+        val fallbackPack = when (options.fallbackSource) {
+            FallbackSource.PRIMARY -> options.primaryIconPack
+            FallbackSource.SECONDARY -> options.secondaryIconPack
+            FallbackSource.NONE -> ""
+        }
+        val fallback = iconPackRepo.getIconPackFallback(fallbackPack)
+        return IconGenerator(context, options, pack1, pack2, fallback, fallbackPack)
     }
 
     suspend fun getIconPackIcons(
