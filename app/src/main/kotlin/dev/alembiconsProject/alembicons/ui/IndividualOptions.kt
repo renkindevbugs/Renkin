@@ -376,7 +376,8 @@ fun OptionsDialog(
                             else -> ""
                         }
                         onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, confirmedSourcePack)
-                    }
+                    },
+                    collapsed = headerCollapsed
                 )
 
                 // The Create tab draws its own divider under the search bar;
