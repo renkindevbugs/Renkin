@@ -4,6 +4,9 @@ import android.content.Context
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.Preferences
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
+import dev.alembiconsProject.alembicons.data.FALLBACK_SOURCE_DEFAULT
+import dev.alembiconsProject.alembicons.data.FallbackSource
+import dev.alembiconsProject.alembicons.data.FallbackSourceKey
 import dev.alembiconsProject.alembicons.data.IMAGE_EDIT_DEFAULT
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.IncludeVectorKey
@@ -51,7 +54,9 @@ data class GenerationOptions(
     val secondaryIconPack: String = "",
     // Per-icon adjustments from the Modifier tab (not part of the bulk preferences).
     // iconScale 1f = unchanged; < 1f pads the icon inside its frame.
-    val iconScale: Float = 1f
+    val iconScale: Float = 1f,
+    // Which pack's fallback styling to give apps neither pack themes (NONE = leave them raw).
+    val fallbackSource: FallbackSource = FallbackSource.NONE
 ) {
     companion object {
         /**
@@ -84,7 +89,8 @@ data class GenerationOptions(
                 vector = preferences.getBooleanValue(IncludeVectorKey),
                 monochrome = preferences.getBooleanValue(MonochromeKey),
                 themed = preferences.getBooleanValue(ExportThemedKey),
-                override = override
+                override = override,
+                fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT)
             )
         }
     }

@@ -21,6 +21,7 @@ import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.RawCalendar
 import dev.alembiconsProject.alembicons.data.RawDynamicClock
 import dev.alembiconsProject.alembicons.data.RawElement
+import dev.alembiconsProject.alembicons.data.IconPackFallback
 import dev.alembiconsProject.alembicons.data.RawItem
 import dev.alembiconsProject.alembicons.data.toComponentInfo
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
@@ -125,6 +126,46 @@ class ApplicationManager(private val ctx: Context) {
         }
 
         return emptyList()
+    }
+
+    /**
+     * Parses the pack's classic fallback styling (`<iconback>`, `<iconmask>`, `<iconupon>`,
+     * `<scale>`) used to give a uniform look to apps the pack doesn't theme. Returns an empty
+     * [IconPackFallback] when the pack declares none.
+     */
+    fun getIconPackFallback(iconPackName: String): IconPackFallback {
+        val res = getResources(iconPackName) ?: return IconPackFallback()
+        val xmlParser = getAppfilter(res, iconPackName) ?: return IconPackFallback()
+
+        val backs = mutableListOf<String>()
+        var mask: String? = null
+        var upon: String? = null
+        var scale = 1f
+
+        // Collects every imgN attribute (img1, img2, …) an iconback/mask/upon tag declares.
+        fun images(): List<String> = buildList {
+            var i = 1
+            while (true) {
+                val v = xmlParser.getAttributeValue(null, "img$i") ?: break
+                add(v)
+                i++
+            }
+        }
+
+        var type = xmlParser.eventType
+        while (type != XmlPullParser.END_DOCUMENT) {
+            if (type == XmlPullParser.START_TAG) {
+                when (xmlParser.name) {
+                    "iconback" -> backs.addAll(images())
+                    "iconmask" -> mask = images().firstOrNull() ?: mask
+                    "iconupon" -> upon = images().firstOrNull() ?: upon
+                    "scale" -> xmlParser.getAttributeValue(null, "factor")?.toFloatOrNull()?.let { scale = it }
+                }
+            }
+            type = xmlParser.next()
+        }
+
+        return IconPackFallback(backs, mask, upon, scale)
     }
 
     fun getDrawableFromAppFilterElements(iconPackName: String, applications: List<InstalledApplication>, elements: List<RawElement>): Map<InstalledApplication, ResourceDrawable> {
