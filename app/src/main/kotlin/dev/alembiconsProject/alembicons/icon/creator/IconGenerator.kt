@@ -233,8 +233,19 @@ class IconGenerator(
     }
 
     private fun generateMonochrome(application: PackageInfoStruct): IconPackDrawable? {
-        // getAppIconBitmap returns the monochrome silhouette here (options.monochrome is set).
-        val mask = getAppIconBitmap(application) ?: return null
+        val icon = application.icon
+        if (!icon.isAdaptiveIconDrawable()) return null
+        // Read the monochrome layer directly — it may be any Drawable type (often an InsetDrawable
+        // wrapping a vector), so we can't rely on getAppIconBitmap's Bitmap/Vector-only path.
+        val mono = (icon as AdaptiveIconDrawable).monochrome?.mutate() ?: return null
+
+        // Rasterise the raw silhouette: the layer's own paths carry alpha, the rest is transparent.
+        val size = 432
+        val mask = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        mono.setTintList(null)
+        mono.setBounds(0, 0, size, size)
+        mono.draw(Canvas(mask))
+
         return getDefaultBitmapIcon(recolorMonochrome(mask))
     }
 
