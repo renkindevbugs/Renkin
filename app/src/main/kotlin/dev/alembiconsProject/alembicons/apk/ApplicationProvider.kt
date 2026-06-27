@@ -14,6 +14,8 @@ import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
+import dev.alembiconsProject.alembicons.data.FallbackSource
+import dev.alembiconsProject.alembicons.data.SecondaryIconPackKey
 import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
 import dev.alembiconsProject.alembicons.data.getDefaultIconColor
@@ -83,8 +85,8 @@ class ApplicationProvider(private val context: Context) {
     suspend fun refreshIcon(application: PackageInfoStruct, preferences: Preferences) = withContext(Dispatchers.Default) {
         // A newly installed app always gets its icon (re)generated
         val genOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
-        iconGenService.refreshIcon(application, genOptions) { app, icon ->
-            editApplication(app, app.changeExport(icon))
+        iconGenService.refreshIcon(application, genOptions) { app, icon, sourcePack ->
+            editApplication(app, app.changeExport(icon, sourcePackName = sourcePack))
         }
     }
 
@@ -106,8 +108,8 @@ class ApplicationProvider(private val context: Context) {
 
         // Iterate a snapshot copy: the callback edits the live list in place, and iterating
         // the SnapshotStateList itself while mutating it would throw.
-        iconGenService.refreshIcons(applicationList.toList(), opt) { application, icon ->
-            editApplication(application, application.changeExport(icon))
+        iconGenService.refreshIcons(applicationList.toList(), opt) { application, icon, isFallback, sourcePack ->
+            editApplication(application, application.changeExport(icon, isFallback, sourcePack))
         }
     }
 
@@ -135,12 +137,35 @@ class ApplicationProvider(private val context: Context) {
             val themed = preferences.getBooleanValue(ExportThemedKey)
             val iconColor = preferences.getDefaultIconColor(context)
             val bgColor = preferences.getDefaultBackgroundColor(context)
+            val primaryPackName = preferences.getStringValue(PrimaryIconPackKey)
+
+            // Per-app calendar: group opted-in apps by which pack they chose their icon from,
+            // then load the day-1..31 drawables from THAT pack (not the global primary).
+            // Per-app entries override global calendar for the same app.
+            var perAppIcons = emptyMap<InstalledApplication, String>()
+            var perAppDrawables = emptyMap<String, android.graphics.drawable.Drawable>()
+
+            applicationList
+                .filter { it.hasCalendarIcon }
+                .groupBy { it.calendarSourcePack(primaryPackName) }
+                .filter { (packName, _) -> packName.isNotEmpty() }
+                .forEach { (packName, apps) ->
+                    val appsWithPrefixes = apps.map { it.toInstalledApplication() to it.calendarPrefix!! }
+                    val (icons, drawables) = iconPackRepo.calendarDataForPrefixes(packName, appsWithPrefixes)
+                    perAppIcons = perAppIcons + icons
+                    perAppDrawables = perAppDrawables + drawables
+                }
+
+            // Global calendar for apps that did NOT opt in per-app
+            val perAppPackages = perAppIcons.keys.map { it.packageName }.toSet()
+            val allCalendarIcons = iconPackRepo.calendarIcon.filter { it.key.packageName !in perAppPackages } + perAppIcons
+            val allCalendarDrawables = iconPackRepo.calendarIconsDrawable + perAppDrawables
 
             val iconPackGenerator = IconPackBuilder(
                 context,
                 applicationList,
-                iconPackRepo.calendarIcon,
-                iconPackRepo.calendarIconsDrawable
+                allCalendarIcons,
+                allCalendarDrawables
             )
             val canBeInstalled = iconPackGenerator.canBeInstalled() // must be called before build and sign
             val apk = iconPackGenerator.buildAndSign(themed, iconColor.toHexString(), bgColor.toHexString(), textMethod)
@@ -169,9 +194,21 @@ class ApplicationProvider(private val context: Context) {
         if (saved.isEmpty()) return
 
         for (app in applicationList.toList()) {
-            val icon = saved["${app.packageName}/${app.activityName}"] ?: continue
-            editApplication(app, app.changeExport(icon))
+            val entry = saved[app.key] ?: continue
+            val updated = when {
+                entry.icon != null -> app.changeExport(entry.icon, sourcePackName = entry.sourcePackName).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
+                else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
+            }
+            editApplication(app, updated)
         }
+    }
+
+    /** Sets the calendar-day-icons flag, prefix, and source pack for [app]. */
+    fun setCalendar(app: PackageInfoStruct, enabled: Boolean, calendarPrefix: String?, calendarPackName: String?) {
+        val index = _applicationList.indexOfFirst {
+            it.packageName == app.packageName && it.activityName == app.activityName
+        }
+        if (index >= 0) editApplication(index, _applicationList[index].changeCalendar(enabled, calendarPrefix, calendarPackName))
     }
 
     private suspend fun saveRenkinPack() = renkinPackStore.save(applicationList)
@@ -200,8 +237,11 @@ class ApplicationProvider(private val context: Context) {
 
     suspend fun clearIcons() = withContext(Dispatchers.Default) {
         // Snapshot copy: editApplication mutates the live list in place.
+        // Also reset calendar opt-ins: otherwise a calendar-enabled app is still persisted
+        // (RenkinPackStore keeps calendar rows even without an icon), so it lingers in the
+        // saved pack and the change bar counts it as a pending removal (a phantom "−1").
         for (app in applicationList.toList()) {
-            editApplication(app, app.changeExport(null))
+            editApplication(app, app.changeExport(null).changeCalendar(false, null, null))
         }
         // Persist the cleared state, otherwise the saved pack reloads the icons on the
         // next launch and "Remove icons" looks like it did nothing.
@@ -210,6 +250,56 @@ class ApplicationProvider(private val context: Context) {
 
     /** Keys ("package/activity") of the apps stored in the last built/saved pack. */
     suspend fun getSavedPackKeys(): Set<String> = renkinPackStore.savedKeys()
+
+    /**
+     * Live count of icons taken from each pack, from the in-memory app list — so the per-app
+     * picker reflects icons the moment they're assigned (generated or hand-picked), not only
+     * after a build persists them. The list is seeded from the DB on startup, so saved counts
+     * survive restarts too. Keyed by pack package name; non-pack icons (empty source) are skipped.
+     */
+    fun packUsageCounts(): Map<String, Int> =
+        applicationList
+            .mapNotNull { it.sourcePackName?.takeIf { source -> source.isNotEmpty() } }
+            .groupingBy { it }
+            .eachCount()
+
+    /**
+     * A few sample icons styled with [fallbackSource]'s fallback, for the Options preview so the
+     * user sees the look before building. Empty when NONE or the source pack declares no fallback.
+     */
+    suspend fun fallbackPreview(preferences: Preferences, fallbackSource: FallbackSource): List<IconPackDrawable> =
+        withContext(Dispatchers.Default) {
+            if (fallbackSource == FallbackSource.NONE) return@withContext emptyList()
+            val options = GenerationOptions.fromPreferences(preferences, context).copy(fallbackSource = fallbackSource)
+            iconGenService.fallbackPreview(options, applicationList.take(4))
+        }
+
+    /** Of [prefixes], those that are genuine calendar day-rotation sets in [packPackageName]. */
+    suspend fun calendarPrefixesAmong(packPackageName: String, prefixes: List<String>): Set<String> =
+        withContext(Dispatchers.Default) {
+            prefixes.filter { iconPackRepo.isCalendarPrefix(packPackageName, it) }.toSet()
+        }
+
+    /** A calendar-enabled app whose source pack is missing some of the 1..31 day drawables. */
+    data class CalendarWarning(val appName: String, val missingDays: Int)
+
+    /**
+     * Checks every calendar-enabled app against its source pack and reports those missing day
+     * drawables (which would repeat a fallback icon instead of rotating). Uses the same
+     * [PackageInfoStruct.hasCalendarIcon] / [PackageInfoStruct.calendarSourcePack] selection as
+     * [buildAndSignIconPack], so the warning matches what the build will actually emit.
+     */
+    suspend fun calendarWarnings(preferences: Preferences): List<CalendarWarning> = withContext(Dispatchers.Default) {
+        val primaryPackName = preferences.getStringValue(PrimaryIconPackKey)
+        applicationList
+            .filter { it.hasCalendarIcon }
+            .mapNotNull { app ->
+                val packName = app.calendarSourcePack(primaryPackName)
+                if (packName.isEmpty()) return@mapNotNull null
+                val missing = iconPackRepo.missingCalendarDays(packName, app.calendarPrefix!!)
+                if (missing.isNotEmpty()) CalendarWarning(app.appName, missing.size) else null
+            }
+    }
 
     data class BuiltIconPack(
         val uri: Uri,

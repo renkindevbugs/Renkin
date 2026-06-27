@@ -19,6 +19,7 @@ import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.data.isSystemInDarkTheme
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
+import dev.alembiconsProject.alembicons.extension.normalizeIconSearchQuery
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -87,6 +88,9 @@ class MainViewModel @Inject constructor(
     private val appProvider: ApplicationProvider
 ) : AndroidViewModel(application), IconPreviewBuilder {
 
+    // One shared manager for the pack-preview lookups, instead of a fresh instance per call.
+    private val appMan by lazy { ApplicationManager(getApplication()) }
+
     // ---- Model state exposed to the UI (read-only) -------------------------------
     // The UI observes these instead of reaching through to ApplicationProvider, so the
     // view model stays the single point of contact with the model layer. Each is backed
@@ -109,6 +113,12 @@ class MainViewModel @Inject constructor(
     // whose app no longer has an icon is "removed". Reloaded after each successful build,
     // so the change state is a diff against what was actually built (survives refresh).
     var builtKeys by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    // Keys whose icons were manually changed this session (via applyIcon with a non-null icon).
+    // Distinct from builtKeys: an app in both sets had an icon already and was re-edited.
+    // Reset after every successful build.
+    var updatedKeys by mutableStateOf<Set<String>>(emptySet())
         private set
 
     // Set when opened from an icon-watch notification; the home screen shows the apply
@@ -223,8 +233,9 @@ class MainViewModel @Inject constructor(
                 )
                 if (appProvider.installIconPack(pack)) {
                     _toastEvents.trySend(R.string.iconPackInstalled)
-                    // The saved pack now matches the current icons → reset the change baseline.
+                    // The saved pack now matches the current icons → reset both change baselines.
                     builtKeys = appProvider.getSavedPackKeys()
+                    updatedKeys = emptySet()
                 } else {
                     // install returned false: it failed or the user cancelled the system installer.
                     _toastEvents.trySend(R.string.iconPackInstallFailed)
@@ -242,9 +253,54 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Assigns (or clears, when [icon] is null) the created icon for the app at [index]. */
-    fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?) {
-        appProvider.editApplication(index, app.changeExport(icon))
+    // Records that [app] was hand-edited this session (so the build preview marks it "changed").
+    // Clearing an icon (icon == null) is a removal, not a change, so it isn't recorded.
+    private fun markUpdated(app: PackageInfoStruct, icon: IconPackDrawable?) {
+        if (icon != null) updatedKeys = updatedKeys + app.key
+    }
+
+    /**
+     * Assigns (or clears, when [icon] is null) the created icon for the app at [index].
+     * [sourcePackName] is the pack the icon was taken from (null/empty when not from a pack).
+     */
+    fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String? = null) {
+        appProvider.editApplication(index, app.changeExport(icon, sourcePackName = sourcePackName))
+        markUpdated(app, icon)
+    }
+
+    /**
+     * Applies the icon and the calendar selection together. The edit dialog tracks the
+     * calendar prefix/source-pack in local state as the user browses; persisting only the
+     * icon (via [applyIcon]) would leave the stored `<calendar>` prefix pointing at the
+     * previously chosen pack, so launchers that prefer `<calendar>` would keep showing the
+     * old icon. Setting both in one edit keeps the static `<item>` and `<calendar>` in sync.
+     */
+    fun applyIcon(
+        index: Int,
+        app: PackageInfoStruct,
+        icon: IconPackDrawable?,
+        calendarEnabled: Boolean,
+        calendarPrefix: String?,
+        calendarPackName: String?,
+        sourcePackName: String?
+    ) {
+        appProvider.editApplication(
+            index,
+            app.changeExport(icon, sourcePackName = sourcePackName).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
+        )
+        markUpdated(app, icon)
+    }
+
+    /** Live count of icons taken from each pack — orders the per-app icon picker. */
+    fun packUsageCounts(): Map<String, Int> = appProvider.packUsageCounts()
+
+    /**
+     * Toggles the calendar-day-icons flag for [app]. [calendarPrefix] is the drawable-name
+     * prefix derived from the icon the user selected (e.g. `"google_cal_"`). Committed
+     * immediately (independent of the edit dialog's Confirm).
+     */
+    fun setCalendarEnabled(app: PackageInfoStruct, enabled: Boolean, calendarPrefix: String?, calendarPackName: String?) {
+        appProvider.setCalendar(app, enabled, calendarPrefix, calendarPackName)
     }
 
     /**
@@ -355,7 +411,6 @@ class MainViewModel @Inject constructor(
 
         val result = withContext(Dispatchers.Default) {
             try {
-                val appMan = ApplicationManager(getApplication())
                 val sortedNames = filteredSortedPackNames(appMan, packageName, query, sortOrder)
                 val more = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
                 val pairs = loadPackIconPairs(appMan, packageName, options, sortedNames.take(PACK_ROW_LIMIT))
@@ -381,7 +436,6 @@ class MainViewModel @Inject constructor(
         options: GenerationOptions,
         onChunk: (List<PackIconPreview>) -> Unit
     ) {
-        val appMan = ApplicationManager(getApplication())
         val sortedNames = withContext(Dispatchers.Default) {
             try {
                 filteredSortedPackNames(appMan, packageName, query, sortOrder)
@@ -413,7 +467,7 @@ class MainViewModel @Inject constructor(
         sortOrder: IconSortOrder
     ): List<String> {
         val allNames = appMan.getIconPackDrawableNames(packageName)
-        val formattedQuery = query.lowercase().trim().replace(' ', '_')
+        val formattedQuery = query.normalizeIconSearchQuery()
         val matching = if (formattedQuery.isEmpty()) {
             allNames
         } else {
@@ -433,20 +487,35 @@ class MainViewModel @Inject constructor(
         names: List<String>
     ): List<PackIconPreview> {
         val ids = appMan.getIconPackDrawableIds(packageName, names)
+        // names and ids are parallel lists (same order) — build id→name reverse lookup.
+        val idToName = names.zip(ids).associate { (name, id) -> id to name }
         val drawables = appMan.getIconPackDrawables(packageName, ids)
         val exportDrawables = iconPackIcons(packageName, options, drawables)
         return exportDrawables.entries
             .filter { it.value != null }
             .distinctBy { it.key.resourceId }
-            .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap()) }
+            .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap(), idToName[it.key.resourceId] ?: "") }
     }
 
     /** Clears every created icon (and persists the empty state). */
     fun clearIcons() {
         viewModelScope.launch {
             appProvider.clearIcons()
-            // Saved pack is now empty → reset the change baseline so the bar clears too.
+            // Saved pack is now empty → reset both change baselines.
             builtKeys = appProvider.getSavedPackKeys()
+            updatedKeys = emptySet()
         }
     }
+
+    /** Calendar-enabled apps whose source pack is missing day drawables (shown before a build). */
+    suspend fun calendarWarnings(preferences: Preferences): List<ApplicationProvider.CalendarWarning> =
+        appProvider.calendarWarnings(preferences)
+
+    /** Of [prefixes], those that are genuine calendar day-rotation sets in [packPackageName]. */
+    suspend fun calendarPrefixesAmong(packPackageName: String, prefixes: List<String>): Set<String> =
+        appProvider.calendarPrefixesAmong(packPackageName, prefixes)
+
+    /** Sample icons showing the fallback styling for [fallbackSource], for the Options preview. */
+    suspend fun fallbackPreview(preferences: Preferences, fallbackSource: dev.alembiconsProject.alembicons.data.FallbackSource) =
+        appProvider.fallbackPreview(preferences, fallbackSource)
 }

@@ -22,7 +22,9 @@ const val PACK_DETAIL_LIMIT = 400
 data class PackIconPreview(
     val resource: ResourceDrawable,
     val drawable: IconPackDrawable,
-    val preview: ImageBitmap
+    val preview: ImageBitmap,
+    /** Raw drawable name in the pack (e.g. `"google_cal_14"`). Empty when unknown. */
+    val drawableName: String = ""
 )
 
 /**

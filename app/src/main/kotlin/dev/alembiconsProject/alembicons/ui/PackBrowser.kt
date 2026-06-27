@@ -4,6 +4,7 @@ package dev.alembiconsProject.alembicons.ui
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +28,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -56,6 +59,8 @@ import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
+import dev.alembiconsProject.alembicons.extension.calendarPrefixOrNull
+import dev.alembiconsProject.alembicons.extension.isCalendarDayName
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.icon.creator.IconSortOrder
 import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
@@ -109,9 +114,11 @@ fun PackIconsRow(
     sortOrder: IconSortOrder,
     query: String = "",
     selectedResourceId: Int? = null,
+    // Prefix of the calendar icon picked from this pack, so its day-siblings are framed too.
+    selectedCalendarPrefix: String? = null,
     onMore: (() -> Unit)? = null,
     onResult: (hasMatches: Boolean) -> Unit = {},
-    onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
+    onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
@@ -134,6 +141,8 @@ fun PackIconsRow(
         onResult(result.previews.isNotEmpty())
     }
 
+    val calendarPrefixes = rememberCalendarPrefixes(iconPack, iconPairs)
+
     if (isLoading) {
         Box(
             modifier = Modifier
@@ -150,32 +159,25 @@ fun PackIconsRow(
             )
         }
     } else if (iconPairs.isEmpty()) {
-        Box(
+        // Thin inline slot for a single pack — no icon, just the message.
+        EmptyState(
+            text = stringResource(R.string.noIconsFound),
             modifier = Modifier
                 .fillMaxWidth()
-                .height(80.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = stringResource(R.string.noIconsFound),
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                style = MaterialTheme.typography.bodySmall
-            )
-        }
+                .height(80.dp)
+        )
     } else {
         LazyRow(
             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             itemsIndexed(iconPairs, key = { _, item -> item.resource.resourceId }) { _, item ->
-                Image(
-                    bitmap = item.preview,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(64.dp)
-                        .selectedIconBorder(item.resource.resourceId == selectedResourceId)
-                        .padding(4.dp)
-                        .tappableIcon { onSelect(item.resource, item.drawable) }
+                PackIconItem(
+                    item = item,
+                    selected = item.resource.resourceId == selectedResourceId,
+                    isCalendarGroup = item.drawableName.calendarPrefixOrNull() in calendarPrefixes,
+                    inSelectedCalendarGroup = item.drawableName.inCalendarGroup(selectedCalendarPrefix),
+                    onSelect = { onSelect(item.resource, item.drawable, item.drawableName) }
                 )
             }
             if (moreCount > 0 && onMore != null) {
@@ -210,9 +212,11 @@ fun PackDetailGrid(
     sortOrder: IconSortOrder,
     query: String,
     selectedResourceId: Int? = null,
+    // Prefix of the calendar icon picked from this pack, so its day-siblings are framed too.
+    selectedCalendarPrefix: String? = null,
     onBack: () -> Unit,
     onCollapsedChange: (Boolean) -> Unit = {},
-    onSelect: (ResourceDrawable, IconPackDrawable) -> Unit
+    onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
@@ -235,6 +239,8 @@ fun PackDetailGrid(
         }
         isLoading = false
     }
+
+    val calendarPrefixes = rememberCalendarPrefixes(iconPack, iconPairs)
 
     Column(Modifier.fillMaxSize()) {
         Row(
@@ -275,13 +281,12 @@ fun PackDetailGrid(
             )
         }
         if (!isLoading && iconPairs.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    text = stringResource(R.string.noIconsFound),
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                    style = MaterialTheme.typography.bodyLarge
-                )
-            }
+            // Full grid area is empty — show the icon + message like the home/watch empty states.
+            EmptyState(
+                icon = Icons.Filled.SearchOff,
+                text = stringResource(R.string.noIconsFound),
+                modifier = Modifier.fillMaxSize()
+            )
         } else {
             LazyVerticalGrid(
                 state = gridState,
@@ -290,15 +295,97 @@ fun PackDetailGrid(
                 contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 16.dp)
             ) {
                 items(iconPairs, key = { it.resource.resourceId }) { item ->
-                    Image(
-                        bitmap = item.preview,
+                    PackIconItem(
+                        item = item,
+                        selected = item.resource.resourceId == selectedResourceId,
+                        isCalendarGroup = item.drawableName.calendarPrefixOrNull() in calendarPrefixes,
+                        inSelectedCalendarGroup = item.drawableName.inCalendarGroup(selectedCalendarPrefix),
+                        modifier = Modifier.animateItem(),
+                        size = 56.dp,
+                        onSelect = { onSelect(item.resource, item.drawable, item.drawableName) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * True when this drawable name is a day in the selected calendar's rotation set, i.e. it shares
+ * [prefix] and ends in 1–2 digits (e.g. prefix "bee_calendar_" matches "bee_calendar_26").
+ * Null/blank prefix means no calendar icon is selected, so nothing is grouped.
+ */
+private fun String.inCalendarGroup(prefix: String?): Boolean =
+    !prefix.isNullOrEmpty() && startsWith(prefix) && isCalendarDayName()
+
+/**
+ * The prefixes among [iconPairs] that are genuine calendar rotation sets in [iconPack] (a full
+ * month exists, or the pack declares them), so only real calendars get badged — not anything
+ * whose name ends in a number. Validation runs off the main thread once per loaded set; badging
+ * is then a cheap membership test. Shared by the row preview and the detail grid.
+ */
+@Composable
+private fun rememberCalendarPrefixes(iconPack: IconPack, iconPairs: List<PackIconPreview>): Set<String> {
+    val viewModel: MainViewModel = hiltViewModel()
+    var prefixes by remember(iconPack.packageName) { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(iconPack.packageName, iconPairs) {
+        val candidates = iconPairs.mapNotNull { it.drawableName.calendarPrefixOrNull() }.distinct()
+        prefixes = viewModel.calendarPrefixesAmong(iconPack.packageName, candidates)
+    }
+    return prefixes
+}
+
+/**
+ * A single icon slot used in both the row preview and the detail grid.
+ * Shows a subtle calendar badge (DateRange icon) when [isCalendarGroup] is true,
+ * so the user can recognise which icons belong to the calendar day-rotation set.
+ */
+@Composable
+private fun PackIconItem(
+    item: PackIconPreview,
+    selected: Boolean,
+    isCalendarGroup: Boolean,
+    modifier: Modifier = Modifier,
+    // True when this icon is a day-sibling (same prefix) of the calendar icon the user picked,
+    // so the whole rotation set is framed in the selection colour, not just the picked day.
+    inSelectedCalendarGroup: Boolean = false,
+    size: androidx.compose.ui.unit.Dp = 64.dp,
+    onSelect: () -> Unit
+) {
+    Box(
+        modifier = modifier
+            .size(size)
+            .padding(4.dp)
+    ) {
+        Image(
+            bitmap = item.preview,
+            contentDescription = null,
+            modifier = Modifier
+                .fillMaxSize()
+                .selectedIconBorder(selected || inSelectedCalendarGroup)
+                .let { m ->
+                    if (isCalendarGroup && !selected && !inSelectedCalendarGroup) m.border(
+                        1.5.dp,
+                        MaterialTheme.colorScheme.tertiary.copy(alpha = 0.55f),
+                        RoundedCornerShape(16.dp)
+                    ) else m
+                }
+                .tappableIcon(onSelect)
+        )
+        if (isCalendarGroup) {
+            BadgeTooltip(stringResource(R.string.calendarGroupTooltip), Modifier.align(Alignment.TopEnd)) {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.tertiaryContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.DateRange,
                         contentDescription = null,
-                        modifier = Modifier
-                            .animateItem()
-                            .padding(4.dp)
-                            .size(56.dp)
-                            .selectedIconBorder(item.resource.resourceId == selectedResourceId)
-                            .tappableIcon { onSelect(item.resource, item.drawable) }
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                        modifier = Modifier.size(10.dp)
                     )
                 }
             }

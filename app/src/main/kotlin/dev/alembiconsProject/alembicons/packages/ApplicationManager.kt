@@ -8,8 +8,10 @@ import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.content.pm.PackageManager.ResolveInfoFlags
 import android.content.pm.ResolveInfo
+import android.content.res.Configuration
 import android.content.res.Resources
 import android.content.res.XmlResourceParser
+import java.util.Locale
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.os.UserManager
@@ -19,6 +21,7 @@ import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.RawCalendar
 import dev.alembiconsProject.alembicons.data.RawDynamicClock
 import dev.alembiconsProject.alembicons.data.RawElement
+import dev.alembiconsProject.alembicons.data.IconPackFallback
 import dev.alembiconsProject.alembicons.data.RawItem
 import dev.alembiconsProject.alembicons.data.toComponentInfo
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
@@ -57,6 +60,7 @@ class ApplicationManager(private val ctx: Context) {
             if (usrApps.isNotEmpty()) {
                 for (app in usrApps) {
                     val appName = app.applicationInfo.loadLabel(pm).toString()
+                    val originalName = loadEnglishLabel(app.applicationInfo, appName)
                     val packageName = app.componentName.packageName
                     val activityName = app.componentName.className
                     val icon = app.applicationInfo.loadIcon(pm)
@@ -72,7 +76,8 @@ class ApplicationManager(private val ctx: Context) {
                         packageName,
                         activityName,
                         icon2,
-                        iconID
+                        iconID,
+                        originalName = originalName
                     )
 
                     if (!packInfoStructs.contains(packInfo))
@@ -82,6 +87,28 @@ class ApplicationManager(private val ctx: Context) {
         }
 
         return packInfoStructs.toTypedArray()
+    }
+
+    /**
+     * The app's English label. [ApplicationInfo.loadLabel] resolves the label against the
+     * package's own resources using the *device* locale, so a context with an English
+     * override doesn't change it. We instead read the label resource directly from a copy of
+     * the package's resources whose configuration is forced to English. Apps with a
+     * non-localized label (labelRes == 0) have no per-locale variant, so we fall back to
+     * [fallback] (the already-loaded localized label).
+     */
+    private fun loadEnglishLabel(appInfo: ApplicationInfo, fallback: String): String {
+        val labelRes = appInfo.labelRes
+        if (labelRes == 0) return fallback
+        return try {
+            val res = pm.getResourcesForApplication(appInfo)
+            val config = Configuration(res.configuration).also { it.setLocale(Locale.ENGLISH) }
+            @Suppress("DEPRECATION")
+            val englishRes = Resources(res.assets, res.displayMetrics, config)
+            englishRes.getString(labelRes)
+        } catch (e: Exception) {
+            fallback
+        }
     }
 
     fun getIconPacks(): List<IconPack> {
@@ -99,6 +126,46 @@ class ApplicationManager(private val ctx: Context) {
         }
 
         return emptyList()
+    }
+
+    /**
+     * Parses the pack's classic fallback styling (`<iconback>`, `<iconmask>`, `<iconupon>`,
+     * `<scale>`) used to give a uniform look to apps the pack doesn't theme. Returns an empty
+     * [IconPackFallback] when the pack declares none.
+     */
+    fun getIconPackFallback(iconPackName: String): IconPackFallback {
+        val res = getResources(iconPackName) ?: return IconPackFallback()
+        val xmlParser = getAppfilter(res, iconPackName) ?: return IconPackFallback()
+
+        val backs = mutableListOf<String>()
+        var mask: String? = null
+        var upon: String? = null
+        var scale = 1f
+
+        // Collects every imgN attribute (img1, img2, …) an iconback/mask/upon tag declares.
+        fun images(): List<String> = buildList {
+            var i = 1
+            while (true) {
+                val v = xmlParser.getAttributeValue(null, "img$i") ?: break
+                add(v)
+                i++
+            }
+        }
+
+        var type = xmlParser.eventType
+        while (type != XmlPullParser.END_DOCUMENT) {
+            if (type == XmlPullParser.START_TAG) {
+                when (xmlParser.name) {
+                    "iconback" -> backs.addAll(images())
+                    "iconmask" -> mask = images().firstOrNull() ?: mask
+                    "iconupon" -> upon = images().firstOrNull() ?: upon
+                    "scale" -> xmlParser.getAttributeValue(null, "factor")?.toFloatOrNull()?.let { scale = it }
+                }
+            }
+            type = xmlParser.next()
+        }
+
+        return IconPackFallback(backs, mask, upon, scale)
     }
 
     fun getDrawableFromAppFilterElements(iconPackName: String, applications: List<InstalledApplication>, elements: List<RawElement>): Map<InstalledApplication, ResourceDrawable> {
@@ -423,6 +490,17 @@ class ApplicationManager(private val ctx: Context) {
     fun getResIcon(packageName: String, resourceId: Int): Drawable? {
         val res = getResources(packageName) ?: return null
         return getResIcon(res, resourceId)
+    }
+
+    fun getDrawableByName(packName: String, name: String): Drawable? {
+        val res = getResources(packName) ?: return null
+        return getResIcon(res, name, packName)
+    }
+
+    /** Cheap existence check (resolves the resource id only; no drawable decode). */
+    fun hasDrawable(packName: String, name: String): Boolean {
+        val res = getResources(packName) ?: return false
+        return res.getIdentifierByName(name, "drawable", packName) > 0
     }
 
     fun getResources(packageName: String): Resources? {

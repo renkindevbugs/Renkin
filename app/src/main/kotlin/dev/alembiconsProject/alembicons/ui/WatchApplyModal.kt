@@ -190,7 +190,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                                 it.packageName == targetApp.packageName && it.activityName == targetApp.activityName
                             }
                             if (index >= 0) {
-                                viewModel.applyIcon(index, targetApp, icon)
+                                viewModel.applyIcon(index, targetApp, icon, sourcePackName = selectedPack)
                             }
                             // Applying handles the rule, so remove it (cascades the suggestion)
                             suggestion?.ruleId?.let { ruleId -> watchViewModel.deleteRule(ruleId) }

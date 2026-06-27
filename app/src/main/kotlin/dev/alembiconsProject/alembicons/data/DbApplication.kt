@@ -1,6 +1,7 @@
 package dev.alembiconsProject.alembicons.data
 
 import android.content.Context
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Delete
@@ -9,6 +10,8 @@ import androidx.room.Insert
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Entity(primaryKeys = ["packageName", "activityName"])
 data class DbApplication(
@@ -16,7 +19,14 @@ data class DbApplication(
     val activityName: String,
     val isAdaptiveIcon: Boolean,
     val isXml: Boolean,
-    val drawable: String
+    val drawable: String,
+    @ColumnInfo(defaultValue = "0") val calendarEnabled: Boolean = false,
+    @ColumnInfo(defaultValue = "") val calendarPrefix: String = "",
+    @ColumnInfo(defaultValue = "") val calendarPackName: String = "",
+    // Package name of the icon pack this icon was taken from (empty when the icon doesn't
+    // come from a pack — app-icon, app-name, upload, hand-edited vector or fallback styling).
+    // Used to order packs by how often they're used in the per-app icon picker.
+    @ColumnInfo(defaultValue = "") val sourcePackName: String = ""
 )
 
 @Dao
@@ -45,7 +55,7 @@ interface RenkinPackDao {
 
 @Database(
     entities = [DbApplication::class],
-    version = 1
+    version = 5
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -53,6 +63,30 @@ abstract class RenkinPackDatabase : RoomDatabase() {
     companion object {
         @Volatile
         private var instance: RenkinPackDatabase? = null
+
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN calendarEnabled INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN calendarPrefix TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN calendarPackName TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN sourcePackName TEXT NOT NULL DEFAULT ''")
+            }
+        }
 
         // Physical file name stays "alchemiconPack" so existing installs keep their
         // saved generated icons across the rename.
@@ -62,7 +96,7 @@ abstract class RenkinPackDatabase : RoomDatabase() {
                     context.applicationContext,
                     RenkinPackDatabase::class.java,
                     "alchemiconPack"
-                ).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
             }
         }
     }

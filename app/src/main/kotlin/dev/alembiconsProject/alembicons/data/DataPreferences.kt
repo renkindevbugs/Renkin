@@ -42,6 +42,7 @@ private const val APP_SORT_ORDER_NAME = "APP_SORT_ORDER"
 private const val APP_FILTER_NO_ICON_NAME = "APP_FILTER_NO_ICON"
 private const val WATCH_CHECK_INTERVAL_NAME = "WATCH_CHECK_INTERVAL_MINUTES"
 private const val LAST_WATCH_CHECK_AT_NAME = "LAST_WATCH_CHECK_AT"
+private const val FALLBACK_SOURCE_NAME = "FALLBACK_SOURCE"
 
 // Icon-watch periodic check interval, in minutes. 24h by default; the debug build can
 // lower it (min 15, WorkManager's periodic floor) to test the watcher quickly.
@@ -51,6 +52,7 @@ val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
 val SOURCE_DEFAULT = Source.NONE
 val IMAGE_EDIT_DEFAULT = ImageEdit.NONE
 val TEXT_TYPE_DEFAULT = TextType.FULL_NAME
+val FALLBACK_SOURCE_DEFAULT = FallbackSource.NONE
 
 val DarkModeKey = intPreferencesKey(DARK_MODE_NAME)
 val IncludeVectorKey = booleanPreferencesKey(INCLUDE_VECTOR_NAME)
@@ -68,6 +70,7 @@ val SecondarySourceKey = intPreferencesKey(SECONDARY_SOURCE_NAME)
 val SecondaryImageEditKey = intPreferencesKey(SECONDARY_IMAGE_EDIT_NAME)
 val SecondaryTextTypeKey = intPreferencesKey(SECONDARY_TEXT_TYPE_NAME)
 val SecondaryIconPackKey = stringPreferencesKey(SECONDARY_ICON_PACK_NAME)
+val FallbackSourceKey = intPreferencesKey(FALLBACK_SOURCE_NAME)
 val AppSortOrderKey = intPreferencesKey(APP_SORT_ORDER_NAME)
 val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
 val WatchCheckIntervalKey = intPreferencesKey(WATCH_CHECK_INTERVAL_NAME)
@@ -308,6 +311,11 @@ enum class DarkMode {
 
 enum class Source {
     NONE, ICON_PACK, APPLICATION_ICON, APPLICATION_NAME
+}
+
+/** Which pack's fallback styling to apply to apps neither pack themes (issue #121). */
+enum class FallbackSource {
+    NONE, PRIMARY, SECONDARY
 }
 
 enum class ImageEdit {

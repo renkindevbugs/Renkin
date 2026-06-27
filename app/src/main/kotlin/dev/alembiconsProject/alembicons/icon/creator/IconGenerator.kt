@@ -6,6 +6,8 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
@@ -32,11 +34,14 @@ import dev.alembiconsProject.alembicons.drawable.ImageVectorDrawable
 import dev.alembiconsProject.alembicons.drawable.InsetIconDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.drawable.foregroundVectorOrNull
+import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
+import dev.alembiconsProject.alembicons.data.IconPackFallback
 import dev.alembiconsProject.alembicons.drawable.haveMonochrome
 import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
 import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
 import dev.alembiconsProject.alembicons.extension.changeBackgroundColor
 import dev.alembiconsProject.alembicons.extension.emptyLike
+import dev.alembiconsProject.alembicons.extension.newArgbBitmap
 import dev.alembiconsProject.alembicons.extension.scaleFromCenter
 import dev.alembiconsProject.alembicons.icon.parser.IconParser
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
@@ -60,13 +65,19 @@ class IconGenerator(
     private val ctx: Context,
     private val options: GenerationOptions,
     private val primaryIconPackApplications: IconPackContainer,
-    private val secondaryIconPackApplications: IconPackContainer
+    private val secondaryIconPackApplications: IconPackContainer,
+    // The classic fallback styling applied to apps neither pack themes so they inherit a uniform
+    // look instead of staying raw (issue #121). Empty = no fallback. [fallbackPackName] is the pack
+    // those drawables (iconback/mask/upon) load from.
+    private val primaryFallback: IconPackFallback = IconPackFallback(),
+    private val fallbackPackName: String = ""
 ) {
     private val adaptiveIconScale = 1.5f // 108dp / 72dp
+    private val appMan by lazy { ApplicationManager(ctx) }
 
     fun generateIcon(application: PackageInfoStruct,
-                     onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?) -> Unit) {
-        generateIcons(listOf(application), onUpdate)
+                     onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String) -> Unit) {
+        generateIcons(listOf(application)) { app, icon, _, source -> onUpdate(app, icon, source) }
     }
 
     fun generateIcon(application: PackageInfoStruct,
@@ -99,7 +110,7 @@ class IconGenerator(
     }
 
     fun generateIcons(applications: List<PackageInfoStruct>
-                      , onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?) -> Unit) {
+                      , onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?, isFallback: Boolean, sourcePackName: String) -> Unit) {
         if (options.primarySource == Source.NONE) {
             return
         }
@@ -112,14 +123,18 @@ class IconGenerator(
             // A malformed drawable in one (third-party) pack must not abort the whole refresh.
             // Skip the offending app, leaving its current icon untouched, and carry on.
             try {
-                val icon = generateIcon(
+                val primary = generateIcon(
                     app,
                     options.primarySource,
                     options.primaryImageEdit,
                     options.primaryTextType,
                     primaryIconPackApplications
                 )
-                    ?: generateIcon(
+
+                if (primary != null) {
+                    onUpdate(app, primary, false, sourcePackNameFor(options.primarySource, primaryIconPackApplications))
+                } else {
+                    val secondary = generateIcon(
                         app,
                         options.secondarySource,
                         options.secondaryImageEdit,
@@ -127,11 +142,73 @@ class IconGenerator(
                         secondaryIconPackApplications
                     )
 
-                onUpdate(app, icon)
+                    if (secondary != null) {
+                        onUpdate(app, secondary, false, sourcePackNameFor(options.secondarySource, secondaryIconPackApplications))
+                    } else {
+                        // Neither pack themes this app — give it the primary pack's fallback styling.
+                        // The result isn't a real pack icon, so it carries no source pack.
+                        val fallback = generateFallback(app)
+                        onUpdate(app, fallback, fallback != null, "")
+                    }
+                }
             } catch (e: Exception) {
                 Log.error("IconGenerator", "Failed to generate icon for ${app.packageName}", e)
             }
         }
+    }
+
+    // The pack an icon should be credited to: only icon-pack sources count, the others
+    // (app icon, app name) don't come from a pack and so report an empty source.
+    private fun sourcePackNameFor(source: Source, iconPack: IconPackContainer): String =
+        if (source == Source.ICON_PACK) iconPack.iconPackName else ""
+
+    /**
+     * Composites the primary pack's classic fallback styling onto [app]'s own icon so an app
+     * neither pack themes still inherits the pack's uniform frame: draw the iconback, the original
+     * icon scaled down to sit inside it, cut everything outside the iconmask shape, then draw the
+     * iconupon overlay. Exported as a plain bitmap so the baked pack shape survives (the launcher
+     * doesn't re-mask legacy icons). Returns null when the pack declares no fallback.
+     */
+    /** Public entry for previewing the fallback styling on a sample app (Options card). */
+    fun fallbackIcon(app: PackageInfoStruct): IconPackDrawable? = generateFallback(app)
+
+    private fun generateFallback(app: PackageInfoStruct): IconPackDrawable? {
+        if (primaryFallback.isEmpty) return null
+        val packName = fallbackPackName
+        if (packName.isEmpty()) return null
+
+        fun load(name: String?): Bitmap? = name?.let { appMan.getDrawableByName(packName, it)?.toSafeBitmapOrNull() }
+
+        // Pick a back deterministically per app so the choice is stable across rebuilds.
+        val back = primaryFallback.backs
+            .takeIf { it.isNotEmpty() }
+            ?.let { it[(app.packageName.hashCode() and Int.MAX_VALUE) % it.size] }
+            ?.let { load(it) }
+        val mask = load(primaryFallback.mask)
+        val upon = load(primaryFallback.upon)
+        val original = getIconBitmap(app.icon) ?: return null
+
+        val size = back?.width ?: original.width
+        val full = Rect(0, 0, size, size)
+        val result = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+
+        if (back != null) canvas.drawBitmap(back, null, full, null)
+
+        // The app's own icon, scaled down (by the pack's factor) to sit inside the frame.
+        val inner = (size * primaryFallback.scale).toInt().coerceAtLeast(1)
+        val offset = (size - inner) / 2
+        canvas.drawBitmap(original, null, Rect(offset, offset, offset + inner, offset + inner), Paint(Paint.FILTER_BITMAP_FLAG))
+
+        // Clip to the pack's shape: DST_OUT removes wherever the mask is opaque (outside the shape).
+        if (mask != null) {
+            val paint = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT) }
+            canvas.drawBitmap(mask, null, full, paint)
+        }
+
+        if (upon != null) canvas.drawBitmap(upon, null, full, null)
+
+        return BitmapIconDrawable(ctx.resources, result)
     }
 
     /**
@@ -213,10 +290,61 @@ class IconGenerator(
         application: PackageInfoStruct,
         imageEdit: ImageEdit): IconPackDrawable? {
 
+        // Monochrome variant: recolor the app's own <monochrome> layer directly — tint it with
+        // the chosen foreground over the chosen background. No path-tracing (that produces line
+        // art, issue #81), so this only runs for the plain (NONE) modifier.
+        if (options.monochrome && imageEdit == ImageEdit.NONE && hasMonochromeLayer(application)) {
+            return generateMonochrome(application)
+        }
+
         val bitmapIcon = getAppIconBitmap(application) ?: return null
         val parsedIcon = parseApplicationIcon(application)
 
         return generateImage(bitmapIcon, parsedIcon, imageEdit, PorterDuff.Mode.MULTIPLY)
+    }
+
+    /** True when [application]'s launcher icon ships a Material You `<monochrome>` layer (API 33+). */
+    private fun hasMonochromeLayer(application: PackageInfoStruct): Boolean {
+        val icon = application.icon
+        return icon.isAdaptiveIconDrawable() && (icon as AdaptiveIconDrawable).haveMonochrome()
+    }
+
+    private fun generateMonochrome(application: PackageInfoStruct): IconPackDrawable? {
+        val icon = application.icon
+        if (!icon.isAdaptiveIconDrawable()) return null
+        // Read the monochrome layer directly — it may be any Drawable type (often an InsetDrawable
+        // wrapping a vector), so we can't rely on getAppIconBitmap's Bitmap/Vector-only path.
+        val mono = (icon as AdaptiveIconDrawable).monochrome?.mutate() ?: return null
+
+        // Rasterise the raw silhouette at the layer's natural size: the monochrome is already a
+        // full-bleed 108dp layer with its artwork in the inner safe zone, which is exactly what an
+        // adaptive foreground expects — so (unlike the old flat export) we must NOT scale it up, or
+        // the launcher would render it oversized.
+        val size = 432
+        mono.setTintList(null)
+        mono.setBounds(0, 0, size, size)
+        val mask = newArgbBitmap(size, size) { mono.draw(it) }
+
+        // Export as an adaptive icon so the launcher masks it to its own shape (circle, squircle, …)
+        // like every other icon — a plain bitmap would be shown as a bare square instead. previewScale
+        // zooms only the flat in-app preview to match the launcher's safe-zone zoom (export stays 1:1).
+        return BitmapIconDrawable(
+            ctx.resources, recolorMonochrome(mask), exportAsAdaptiveIcon = true, previewScale = adaptiveIconScale
+        )
+    }
+
+    /**
+     * Paints [options.color] through the monochrome alpha mask (SRC_IN keeps the silhouette's
+     * shape, replaces its colour) and composites it over [options.bgColor]. The background is
+     * always applied — unlike [colorizeBitmap] — because the mask itself is transparent.
+     */
+    private fun recolorMonochrome(mask: Bitmap): Bitmap {
+        val tinted = mask.emptyLike()
+        val paint = Paint().apply {
+            colorFilter = PorterDuffColorFilter(options.color, PorterDuff.Mode.SRC_IN)
+        }
+        Canvas(tinted).drawBitmap(mask, 0F, 0F, paint)
+        return tinted.changeBackgroundColor(options.bgColor)
     }
 
     /**
@@ -268,8 +396,6 @@ class IconGenerator(
     }
 
     private fun parseApplicationIcon(application: PackageInfoStruct): Drawable? {
-        val appMan = ApplicationManager(ctx)
-
         if (isVectorDrawable(application.icon) && options.vector) {
             val res = appMan.getResources(application.packageName) ?: return null
             return IconParser.parseDrawable(res, application.icon, application.iconID)
@@ -561,7 +687,7 @@ class IconGenerator(
     private fun parseIconPackXML(iconPackName: String, iconDrawable: ResourceDrawable): Drawable? {
         if (!isVectorDrawable(iconDrawable.drawable)) return null
 
-        val res = ApplicationManager(ctx).getResources(iconPackName) ?: return null
+        val res = appMan.getResources(iconPackName) ?: return null
         val icon = IconParser.parseDrawable(res, iconDrawable.drawable, iconDrawable.resourceId)
 
         if (!icon.isAdaptiveIconDrawable()) return null
@@ -603,11 +729,20 @@ class IconGenerator(
         val src = icon.toBitmap()
         if (src.width <= 0 || src.height <= 0) return icon
 
-        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(out)
-        canvas.scale(scale, scale, src.width / 2f, src.height / 2f)
-        canvas.drawBitmap(src, 0f, 0f, null)
-        return BitmapIconDrawable(ctx.resources, out)
+        val out = newArgbBitmap(src.width, src.height) { canvas ->
+            canvas.scale(scale, scale, src.width / 2f, src.height / 2f)
+            canvas.drawBitmap(src, 0f, 0f, null)
+        }
+        // Carry over the source's adaptive-export flag and preview zoom (e.g. the monochrome
+        // variant, which renders its in-app preview at the launcher's safe-zone scale). Without
+        // this the Modifier scale would reset both, shrinking the monochrome preview back to 1:1.
+        val source = icon as? BitmapIconDrawable
+        return BitmapIconDrawable(
+            ctx.resources,
+            out,
+            exportAsAdaptiveIcon = source?.isAdaptiveIcon() ?: false,
+            previewScale = source?.previewScale ?: 1f
+        )
     }
 
     /**

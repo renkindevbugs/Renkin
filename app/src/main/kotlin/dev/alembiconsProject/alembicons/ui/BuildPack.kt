@@ -36,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,8 +54,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.MainViewModel
-import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
+import dev.alembiconsProject.alembicons.ui.theme.ChangedOrange
 import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 
@@ -139,14 +141,24 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
 fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
     val viewModel: MainViewModel = hiltViewModel()
     val builtKeys = viewModel.builtKeys
-    // Icons added since the last build (not yet in the saved pack) float to the top so
-    // the user sees what's new without scrolling; the rest stay alphabetical
+    val updatedKeys = viewModel.updatedKeys
+    // Sort: new (never built) first → changed (edited this session) second → rest alphabetical.
     val themedApps = viewModel.applicationList
         .filter { it.createdIcon != null }
         .sortedWith(
-            compareByDescending<PackageInfoStruct> { "${it.packageName}/${it.activityName}" !in builtKeys }
+            compareByDescending<PackageInfoStruct> { it.key !in builtKeys }
+                .thenByDescending { it.key in updatedKeys }
                 .thenBy { it.appName.lowercase() }
         )
+    val newCount = themedApps.count { it.key !in builtKeys }
+
+    // Warn (before building) about calendar apps whose source pack lacks some 1..31 day
+    // drawables — those days fall back to a repeated icon instead of rotating.
+    val preferences = getPreferences().getPreferencesValue()
+    var calendarWarnings by remember { mutableStateOf<List<dev.alembiconsProject.alembicons.apk.ApplicationProvider.CalendarWarning>>(emptyList()) }
+    LaunchedEffect(themedApps.size) {
+        calendarWarnings = viewModel.calendarWarnings(preferences)
+    }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -175,10 +187,18 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                     Text(
                         text = stringResource(R.string.buildPreviewTitle),
                         style = MaterialTheme.typography.titleMedium,
-                        fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                        fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
+                    if (newCount > 0) {
+                        Text(
+                            text = "+$newCount",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = AddedGreen,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                     Text(
                         text = stringResource(R.string.buildPreviewCount, themedApps.size),
                         style = MaterialTheme.typography.labelLarge,
@@ -186,6 +206,29 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                     )
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                if (calendarWarnings.isNotEmpty()) {
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.calendarMissingDaysTitle),
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = ChangedOrange
+                        )
+                        calendarWarnings.forEach { warning ->
+                            Text(
+                                text = stringResource(R.string.calendarMissingDaysApp, warning.appName, warning.missingDays),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
 
                 if (themedApps.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
@@ -204,10 +247,12 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        items(themedApps, key = { "${it.packageName}/${it.activityName}" }) { app ->
+                        items(themedApps, key = { it.key }) { app ->
+                            val key = app.key
                             BuildPreviewItem(
                                 app = app,
-                                changed = "${app.packageName}/${app.activityName}" !in builtKeys
+                                isNew = key !in builtKeys,
+                                isChanged = key in builtKeys && key in updatedKeys
                             )
                         }
                     }
@@ -231,7 +276,11 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
 }
 
 @Composable
-private fun BuildPreviewItem(app: PackageInfoStruct, changed: Boolean = false) {
+private fun BuildPreviewItem(
+    app: PackageInfoStruct,
+    isNew: Boolean = false,
+    isChanged: Boolean = false
+) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box {
             app.createdIcon?.let { icon ->
@@ -243,8 +292,13 @@ private fun BuildPreviewItem(app: PackageInfoStruct, changed: Boolean = false) {
                         .clip(RoundedCornerShape(14.dp))
                 )
             }
-            // Green dot marks icons changed this session so they're easy to spot
-            if (changed) {
+            // Green = new (not in last build); orange = edited this session (was already built)
+            val dotColor = when {
+                isNew -> AddedGreen
+                isChanged -> ChangedOrange
+                else -> null
+            }
+            if (dotColor != null) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -253,7 +307,7 @@ private fun BuildPreviewItem(app: PackageInfoStruct, changed: Boolean = false) {
                         .background(MaterialTheme.colorScheme.surfaceContainerLow)
                         .padding(2.dp)
                         .clip(CircleShape)
-                        .background(AddedGreen)
+                        .background(dotColor)
                 )
             }
         }

@@ -6,8 +6,11 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -29,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -50,6 +54,9 @@ import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.data.BackgroundColorKey
 import dev.alembiconsProject.alembicons.data.CalendarIconsKey
 import dev.alembiconsProject.alembicons.data.ExportThemedKey
+import dev.alembiconsProject.alembicons.data.FALLBACK_SOURCE_DEFAULT
+import dev.alembiconsProject.alembicons.data.FallbackSource
+import dev.alembiconsProject.alembicons.data.FallbackSourceKey
 import dev.alembiconsProject.alembicons.data.IMAGE_EDIT_DEFAULT
 import dev.alembiconsProject.alembicons.data.IconColorKey
 import dev.alembiconsProject.alembicons.data.getIconColor
@@ -70,6 +77,7 @@ import dev.alembiconsProject.alembicons.data.SecondaryTextTypeKey
 import dev.alembiconsProject.alembicons.data.TEXT_TYPE_DEFAULT
 import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getEnumValue
+import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setColorValue
@@ -84,7 +92,7 @@ fun AppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?) -> Unit,
+    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
@@ -131,11 +139,13 @@ fun OptionsCard(
     val vm = hiltViewModel<MainViewModel>()
     val apps = vm.applicationList
     val builtKeys = vm.builtKeys
-    val builtCount = apps.count { it.createdIcon != null && "${it.packageName}/${it.activityName}" in builtKeys }
-    val addedCount = apps.count { it.createdIcon != null && "${it.packageName}/${it.activityName}" !in builtKeys }
-    val removedCount = apps.count { it.createdIcon == null && "${it.packageName}/${it.activityName}" in builtKeys }
+    val builtCount = apps.count { it.createdIcon != null && it.key in builtKeys }
+    val addedCount = apps.count { it.createdIcon != null && it.key !in builtKeys }
+    val removedCount = apps.count { it.createdIcon == null && it.key in builtKeys }
     val themedCount = builtCount + addedCount
     val totalCount = apps.size
+    // How many of the themed icons came from the pack's fallback styling, not a real match.
+    val fallbackCount = apps.count { it.createdIcon != null && it.isFallback }
 
     var expanded by remember { mutableStateOf(false) }
 
@@ -152,6 +162,7 @@ fun OptionsCard(
     var useThemed by rememberSaveable { mutableStateOf(false) }
     var retrieveCalendarIcons by rememberSaveable { mutableStateOf(false) }
     var overrideIcon by rememberSaveable { mutableStateOf(false) }
+    var fallbackSource by rememberSaveable { mutableStateOf(FALLBACK_SOURCE_DEFAULT) }
 
     val currentColor = prefs.getIconColor()
     val currentBgColor = prefs.getBackgroundColor()
@@ -169,6 +180,7 @@ fun OptionsCard(
     useThemed = prefs.getBooleanValue(ExportThemedKey)
     retrieveCalendarIcons = prefs.getBooleanValue(CalendarIconsKey)
     overrideIcon = prefs.getBooleanValue(OverrideIconKey)
+    fallbackSource = prefs.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT)
 
     val pathTracing = isPathTracingEnabled(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit)
     val showIconColor = showIconColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
@@ -245,6 +257,16 @@ fun OptionsCard(
                     }
                     Spacer(Modifier.height(6.dp))
                     ChangeBar(totalCount, builtCount, addedCount, removedCount)
+                    // Fallback icons look themed but weren't a real pack match — call out the
+                    // count so a full bar isn't mistaken for "every app was found".
+                    if (fallbackCount > 0) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.fallbackCount, fallbackCount),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
@@ -328,6 +350,26 @@ fun OptionsCard(
                         CalendarIconsKey, it) } }
                 }
 
+                // Fallback styling for apps neither pack themes — only when a pack source exists.
+                val primaryIsPack = isIconPackSelected(primarySource, primaryIconPack)
+                val secondaryIsPack = isIconPackSelected(secondarySource, secondaryIconPack)
+                if (primaryIsPack || secondaryIsPack) {
+                    FallbackSourceSelector(
+                        selected = fallbackSource,
+                        primaryEnabled = primaryIsPack,
+                        secondaryEnabled = secondaryIsPack
+                    ) { scope.launch { prefs.setEnumValue(FallbackSourceKey, it) } }
+
+                    val fallbackPack = when (fallbackSource) {
+                        FallbackSource.PRIMARY -> primaryIconPack
+                        FallbackSource.SECONDARY -> secondaryIconPack
+                        FallbackSource.NONE -> ""
+                    }
+                    if (fallbackSource != FallbackSource.NONE && fallbackPack.isNotEmpty()) {
+                        FallbackPreview(fallbackSource, fallbackPack)
+                    }
+                }
+
                 if (showIconColor) {
                     ColorButton(stringResource(R.string.iconColor), currentColor) { scope.launch { prefs.setColorValue(
                         IconColorKey, it) } }
@@ -348,6 +390,90 @@ fun OptionsCard(
 
                 ThemedIconsSwitch(useThemed) { scope.launch { prefs.setBooleanValue(ExportThemedKey, it) } }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Segmented selector for which pack's fallback styling unthemed apps inherit (None / Primary /
+ * Secondary). Primary/Secondary are disabled unless that source is a configured icon pack.
+ */
+@Composable
+private fun FallbackSourceSelector(
+    selected: FallbackSource,
+    primaryEnabled: Boolean,
+    secondaryEnabled: Boolean,
+    onChange: (FallbackSource) -> Unit
+) {
+    Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
+        Text(
+            text = stringResource(R.string.fallbackStyling),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 6.dp, start = 4.dp)
+        )
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+        ) {
+            FallbackSegment(stringResource(R.string.fallbackNone), selected == FallbackSource.NONE, true, Modifier.weight(1f)) { onChange(FallbackSource.NONE) }
+            FallbackSegment(stringResource(R.string.fallbackPrimary), selected == FallbackSource.PRIMARY, primaryEnabled, Modifier.weight(1f)) { onChange(FallbackSource.PRIMARY) }
+            FallbackSegment(stringResource(R.string.fallbackSecondary), selected == FallbackSource.SECONDARY, secondaryEnabled, Modifier.weight(1f)) { onChange(FallbackSource.SECONDARY) }
+        }
+    }
+}
+
+@Composable
+private fun FallbackSegment(label: String, selected: Boolean, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
+    val fg = when {
+        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        selected -> MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Box(
+        modifier
+            .background(bg)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelLarge, color = fg)
+    }
+}
+
+/**
+ * Live sample of the chosen fallback styling applied to a few of the user's app icons, so the
+ * uniform frame is visible before building. Keyed on the source + pack, so it refreshes when the
+ * user switches Primary/Secondary or changes the pack.
+ */
+@Composable
+private fun FallbackPreview(fallbackSource: FallbackSource, fallbackPack: String) {
+    val vm = hiltViewModel<MainViewModel>()
+    val preferences = getPreferences().getPreferencesValue()
+    val previews by produceState<List<IconPackDrawable>>(emptyList(), fallbackSource, fallbackPack, preferences) {
+        value = vm.fallbackPreview(preferences, fallbackSource)
+    }
+    if (previews.isEmpty()) return
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Text(
+            text = stringResource(R.string.fallbackPreviewLabel),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 6.dp, start = 4.dp)
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            previews.forEach { icon ->
+                Image(
+                    painter = icon.getPainter(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
             }
         }
     }

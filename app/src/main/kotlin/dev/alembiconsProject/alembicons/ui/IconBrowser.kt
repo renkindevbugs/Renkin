@@ -3,7 +3,20 @@
 package dev.alembiconsProject.alembicons.ui
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Surface
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -92,17 +105,41 @@ fun CreateTab(
     iconPacks: List<IconPack>,
     options: GenerationOptions,
     textType: TextType,
+    // How many stored icons came from each pack, keyed by package name. Packs the user takes
+    // from most often sort higher (after packs that actually have an icon for the query).
+    packUsage: Map<String, Int> = emptyMap(),
     // Hoisted by the dialog so the typed (or cleared) query survives leaving and returning to
     // this tab; it's seeded with the app name and reset per edit at the dialog level.
     searchQuery: String,
     onSearchQueryChange: (String) -> Unit,
-    onIconSelect: (ResourceDrawable, IconPack) -> Unit,
+    // drawableName is the raw resource name (e.g. "bee_calendar_6") — used to derive the
+    // calendar prefix when the user opts into day rotation.
+    onIconSelect: (ResourceDrawable, IconPack, String) -> Unit,
     onTextTypeChange: (TextType) -> Unit,
     onCollapsedChange: (Boolean) -> Unit = {},
     contentReady: Boolean = true,
     // Resource id of the icon currently picked (from options.primaryIconPack), so the grid
     // can frame it. null = nothing picked yet.
-    selectedResourceId: Int? = null
+    selectedResourceId: Int? = null,
+    // Prefix of the picked calendar icon (e.g. "bee_calendar_"), so the grid frames the whole
+    // day-rotation set alongside the picked icon. null = no calendar icon selected.
+    selectedCalendarPrefix: String? = null,
+    // Whether this app ships a Material You <monochrome> layer, so the Application Icon source
+    // can offer the recolourable Monochrome variant (and disable it otherwise).
+    appHasMonochrome: Boolean = false,
+    // Switches the Application Icon variant between the full-colour icon (false) and the
+    // recoloured monochrome layer (true). Mirrors options.monochrome.
+    onMonochromeChange: (Boolean) -> Unit = {},
+    // Wallpaper-derived colour schemes (foreground, background) offered for the monochrome variant.
+    monochromeSchemes: List<Pair<Color, Color>> = emptyList(),
+    // Index of the chosen scheme; == monochromeSchemes.size means the Custom (manual colour) option.
+    selectedScheme: Int = 0,
+    onSchemeChange: (Int) -> Unit = {},
+    // Custom-scheme foreground/background, edited inline when the Custom swatch is selected.
+    customForeground: Color = Color.White,
+    customBackground: Color = Color.Black,
+    onCustomForegroundChange: (Color) -> Unit = {},
+    onCustomBackgroundChange: (Color) -> Unit = {}
 ) {
     // Seeded from the hoisted query so returning to the tab doesn't trigger a spurious
     // re-search (debouncedQuery already matches the preserved searchQuery).
@@ -110,12 +147,15 @@ fun CreateTab(
     var sortOrder by rememberSaveable { mutableStateOf(IconSortOrder.NAME_ASC) }
     var expandedPack by remember { mutableStateOf<IconPack?>(null) }
     var collapsed by remember { mutableStateOf(false) }
-    val distinctPacks = remember(iconPacks) { iconPacks.distinctBy { it.packageName } }
+    // Base order: most-used packs first (usage is the tiebreaker once query matches settle below).
+    val distinctPacks = remember(iconPacks, packUsage) {
+        iconPacks.distinctBy { it.packageName }.sortedByDescending { packUsage[it.packageName] ?: 0 }
+    }
     // packageName -> whether the pack has icons matching the current query
     var packMatches by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     // The order actually shown. Updated only once the results settle so the list
     // doesn't shuffle on every pack that finishes loading.
-    var orderedPacks by remember(iconPacks) { mutableStateOf(distinctPacks) }
+    var orderedPacks by remember(distinctPacks) { mutableStateOf(distinctPacks) }
 
     val listState = rememberLazyListState()
     val listScrolled by remember {
@@ -140,7 +180,12 @@ fun CreateTab(
     LaunchedEffect(packMatches) {
         if (packMatches.isEmpty()) return@LaunchedEffect
         delay(450)
-        val newOrder = distinctPacks.sortedByDescending { packMatches[it.packageName] != false }
+        // Packs that have a matching icon float to the top; among equals, the most-used pack wins
+        // (distinctPacks is already usage-ordered, so this is a stable tiebreaker).
+        val newOrder = distinctPacks.sortedWith(
+            compareByDescending<IconPack> { packMatches[it.packageName] != false }
+                .thenByDescending { packUsage[it.packageName] ?: 0 }
+        )
         if (newOrder.map { it.packageName } != orderedPacks.map { it.packageName }) {
             val atTop = listState.firstVisibleItemIndex == 0 &&
                 listState.firstVisibleItemScrollOffset == 0
@@ -172,9 +217,10 @@ fun CreateTab(
                         sortOrder = sortOrder,
                         query = debouncedQuery,
                         selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.primaryIconPack },
+                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { detailPack.packageName == options.primaryIconPack },
                         onBack = { expandedPack = null },
                         onCollapsedChange = { collapsed = it },
-                        onSelect = { resource, _ -> onIconSelect(resource, detailPack) }
+                        onSelect = { resource, _, drawableName -> onIconSelect(resource, detailPack, drawableName) }
                     )
                 } else if (!contentReady) {
                     // Hold off mounting the (heavy) pack browser until the dialog has
@@ -219,12 +265,13 @@ fun CreateTab(
                                         sortOrder = sortOrder,
                                         query = debouncedQuery,
                                         selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
+                                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.primaryIconPack },
                                         onMore = { expandedPack = pack },
                                         onResult = { hasMatches ->
                                             packMatches = packMatches + (pack.packageName to hasMatches)
                                         }
-                                    ) { resource, _ ->
-                                        onIconSelect(resource, pack)
+                                    ) { resource, _, drawableName ->
+                                        onIconSelect(resource, pack, drawableName)
                                     }
                                 }
                             }
@@ -232,15 +279,18 @@ fun CreateTab(
                     }
                 }
             }
-            Source.APPLICATION_ICON -> Box(
-                Modifier.fillMaxSize(), contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = stringResource(R.string.applicationIcon),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                )
-            }
+            Source.APPLICATION_ICON -> ApplicationIconVariant(
+                monochrome = options.monochrome,
+                appHasMonochrome = appHasMonochrome,
+                onMonochromeChange = onMonochromeChange,
+                schemes = monochromeSchemes,
+                selectedScheme = selectedScheme,
+                onSchemeChange = onSchemeChange,
+                customForeground = customForeground,
+                customBackground = customBackground,
+                onCustomForegroundChange = onCustomForegroundChange,
+                onCustomBackgroundChange = onCustomBackgroundChange
+            )
             Source.APPLICATION_NAME -> Column(
                 Modifier
                     .fillMaxSize()
@@ -251,5 +301,219 @@ fun CreateTab(
             }
             else -> {}
         }
+    }
+}
+
+/**
+ * Application Icon source options: pick between the app's full-colour icon and its recoloured
+ * Material You monochrome layer. The Monochrome choice is disabled when the app ships no
+ * `<monochrome>` layer; its colours are edited in the Modifier tab.
+ */
+@Composable
+private fun ApplicationIconVariant(
+    monochrome: Boolean,
+    appHasMonochrome: Boolean,
+    onMonochromeChange: (Boolean) -> Unit,
+    schemes: List<Pair<Color, Color>>,
+    selectedScheme: Int,
+    onSchemeChange: (Int) -> Unit,
+    customForeground: Color,
+    customBackground: Color,
+    onCustomForegroundChange: (Color) -> Unit,
+    onCustomBackgroundChange: (Color) -> Unit
+) {
+    var fgPickerOpen by remember { mutableStateOf(false) }
+    var bgPickerOpen by remember { mutableStateOf(false) }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Text(
+            text = stringResource(R.string.iconVariant),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
+        ) {
+            VariantSegment(
+                label = stringResource(R.string.variantDefault),
+                selected = !monochrome,
+                enabled = true,
+                modifier = Modifier.weight(1f)
+            ) { onMonochromeChange(false) }
+            VariantSegment(
+                label = stringResource(R.string.variantMonochrome),
+                selected = monochrome,
+                enabled = appHasMonochrome,
+                modifier = Modifier.weight(1f)
+            ) { onMonochromeChange(true) }
+        }
+        val hint = when {
+            !appHasMonochrome -> stringResource(R.string.monochromeUnavailable)
+            monochrome -> stringResource(R.string.monochromeRecolorHint)
+            else -> stringResource(R.string.variantDefaultHint)
+        }
+        Text(
+            text = hint,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 10.dp)
+        )
+
+        if (monochrome && appHasMonochrome) {
+            Text(
+                text = stringResource(R.string.monochromeColors),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 20.dp, bottom = 10.dp)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                schemes.forEachIndexed { index, (fg, bg) ->
+                    SchemeSwatch(
+                        foreground = fg,
+                        background = bg,
+                        custom = false,
+                        selected = selectedScheme == index
+                    ) { onSchemeChange(index) }
+                }
+                // Custom: foreground/background chosen with the inline pickers below.
+                SchemeSwatch(
+                    foreground = MaterialTheme.colorScheme.onSurface,
+                    background = MaterialTheme.colorScheme.surfaceVariant,
+                    custom = true,
+                    selected = selectedScheme >= schemes.size
+                ) { onSchemeChange(schemes.size) }
+            }
+
+            if (selectedScheme >= schemes.size) {
+                Spacer(Modifier.height(12.dp))
+                ColorRow(stringResource(R.string.iconColor), customForeground) { fgPickerOpen = true }
+                Spacer(Modifier.height(8.dp))
+                ColorRow(stringResource(R.string.backgroundColor), customBackground) { bgPickerOpen = true }
+            } else {
+                Text(
+                    text = stringResource(R.string.monochromeColorsHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 10.dp)
+                )
+            }
+        }
+    }
+
+    if (fgPickerOpen) {
+        ColorDialog(
+            onDismiss = { fgPickerOpen = false },
+            currentlySelected = customForeground,
+            onColorSelected = onCustomForegroundChange
+        )
+    }
+    if (bgPickerOpen) {
+        ColorDialog(
+            onDismiss = { bgPickerOpen = false },
+            currentlySelected = customBackground,
+            onColorSelected = onCustomBackgroundChange
+        )
+    }
+}
+
+/** A tappable colour row: label on the left, a circular swatch of [color] on the right. */
+@Composable
+private fun ColorRow(label: String, color: Color, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Box(
+                Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(color)
+                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
+            )
+        }
+    }
+}
+
+/** A colour-scheme chip: the background tile with a foreground dot, or a palette glyph for Custom. */
+@Composable
+private fun SchemeSwatch(
+    foreground: Color,
+    background: Color,
+    custom: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val ring = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(background)
+            .border(if (selected) 2.dp else 0.5.dp, ring, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (custom) {
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                contentDescription = stringResource(R.string.custom),
+                tint = foreground,
+                modifier = Modifier.size(20.dp)
+            )
+        } else {
+            Box(
+                Modifier
+                    .size(20.dp)
+                    .clip(CircleShape)
+                    .background(foreground)
+            )
+        }
+    }
+}
+
+@Composable
+private fun VariantSegment(
+    label: String,
+    selected: Boolean,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
+    val fg = when {
+        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+        selected -> MaterialTheme.colorScheme.onSecondaryContainer
+        else -> MaterialTheme.colorScheme.onSurface
+    }
+    Box(
+        modifier = modifier
+            .background(bg)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(vertical = 12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(text = label, style = MaterialTheme.typography.labelLarge, color = fg)
     }
 }

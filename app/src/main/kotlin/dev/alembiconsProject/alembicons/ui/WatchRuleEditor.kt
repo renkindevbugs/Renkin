@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -88,6 +89,7 @@ internal fun WatchRuleEditor(
 
     var sortOrder by remember { mutableStateOf(AppSortOrder.NAME) }
     var filterNoIcon by remember { mutableStateOf(false) }
+    var filterFallback by remember { mutableStateOf(false) }
 
     val viewModel: MainViewModel = hiltViewModel()
     // Looked up off the main thread via the view model (this was what made the editor take ~1s
@@ -97,14 +99,8 @@ internal fun WatchRuleEditor(
     }
 
     val sortedPacks = remember(packs) { packs.sortedBy { it.applicationName.lowercase() } }
-    val filteredApps = remember(apps, query, sortOrder, filterNoIcon, installTimes) {
-        var seq = apps.asSequence()
-        if (query.isNotBlank()) seq = seq.filter { it.appName.contains(query.trim(), ignoreCase = true) }
-        if (filterNoIcon) seq = seq.filter { it.createdIcon == null }
-        when (sortOrder) {
-            AppSortOrder.NAME -> seq.sortedBy { it.appName.lowercase() }
-            AppSortOrder.INSTALL_DATE -> seq.sortedByDescending { installTimes[it.packageName] ?: 0L }
-        }.toList()
+    val filteredApps = remember(apps, query, sortOrder, filterNoIcon, filterFallback, installTimes) {
+        apps.sortedFilteredApps(query, filterNoIcon, filterFallback, sortOrder, installTimes) { it }
     }
     // 3 rows × 3 columns per page → a horizontally paged grid with dots
     val appPages = filteredApps.chunked(9)
@@ -115,7 +111,7 @@ internal fun WatchRuleEditor(
         (((appPages.firstOrNull()?.size ?: 0) + 2) / 3).coerceIn(1, 3)
     } else 3
     val gridHeight = (visibleRows * 112 + (visibleRows - 1) * 8).dp
-    LaunchedEffect(query, sortOrder, filterNoIcon) {
+    LaunchedEffect(query, sortOrder, filterNoIcon, filterFallback) {
         if (pagerState.currentPage != 0) pagerState.scrollToPage(0)
     }
 
@@ -180,11 +176,23 @@ internal fun WatchRuleEditor(
                 AppSortFilterMenu(
                     sortOrder = sortOrder,
                     filterNoIcon = filterNoIcon,
+                    filterFallback = filterFallback,
                     onSortChange = { sortOrder = it },
-                    onFilterChange = { filterNoIcon = it }
+                    onFilterChange = { filterNoIcon = it; filterFallback = false },
+                    onFallbackFilterChange = { filterFallback = it; if (it) filterNoIcon = false }
                 )
             }
 
+            if (filteredApps.isEmpty()) {
+                EmptyState(
+                    icon = Icons.Filled.SearchOff,
+                    text = stringResource(R.string.noAppsFound),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(gridHeight)
+                        .padding(top = 10.dp)
+                )
+            } else
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier

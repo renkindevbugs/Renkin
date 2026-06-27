@@ -67,6 +67,10 @@ val md_theme_dark_scrim = Color(0xFF000000)
 
 val seed = Color(0xFFC85028)
 
-// Marks icons added or changed since the last build — the selection frame in the icon
-// browser, the change dot in the build preview, and the green segment of the change bar.
+// Marks icons added since the last build — the selection frame in the icon browser, the
+// "new" dot in the build preview, and the green segment of the change bar.
 val AddedGreen = Color(0xFF34C759)
+
+// Marks icons changed (re-edited) since the last build, and the calendar "missing days"
+// warning — distinct from AddedGreen so "new" and "changed" read differently in the preview.
+val ChangedOrange = Color(0xFFFF9500)

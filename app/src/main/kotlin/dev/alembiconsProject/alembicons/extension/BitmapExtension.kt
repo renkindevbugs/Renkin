@@ -12,6 +12,16 @@ import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
 
+/**
+ * Creates a blank ARGB_8888 bitmap of [width]×[height], runs [draw] on a Canvas backed by it and
+ * returns the bitmap — wrapping the repeated `createBitmap(...) + Canvas(it)` compositing boilerplate.
+ */
+inline fun newArgbBitmap(width: Int, height: Int, draw: (Canvas) -> Unit): Bitmap {
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    draw(Canvas(bitmap))
+    return bitmap
+}
+
 fun Bitmap.changeBackgroundColor(color: Int): Bitmap {
     val newBitmap = this.emptyLike()
     val canvas = Canvas(newBitmap)

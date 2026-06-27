@@ -4,6 +4,7 @@ import android.content.Context
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
+import dev.alembiconsProject.alembicons.data.FallbackSource
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.icon.creator.IconGenerator
@@ -40,6 +41,8 @@ class IconGenerationService(
         builder.generateIcon(application, customIcon) { _, newIcon ->
             icon = newIcon
         }
+        // Note: this single-pack preview path keeps the 2-arg callback (no source pack tracking)
+        // because its result is a transient preview, never persisted.
 
         icon
     }
@@ -73,7 +76,7 @@ class IconGenerationService(
     suspend fun refreshIcon(
         application: PackageInfoStruct,
         options: GenerationOptions,
-        onResult: (PackageInfoStruct, IconPackDrawable?) -> Unit
+        onResult: (PackageInfoStruct, IconPackDrawable?, sourcePackName: String) -> Unit
     ) = withContext(Dispatchers.Default) {
         val builder = buildGenerator(options)
         builder.generateIcon(application, onResult)
@@ -83,16 +86,32 @@ class IconGenerationService(
     suspend fun refreshIcons(
         applications: List<PackageInfoStruct>,
         options: GenerationOptions,
-        onResult: (PackageInfoStruct, IconPackDrawable?) -> Unit
+        onResult: (PackageInfoStruct, IconPackDrawable?, isFallback: Boolean, sourcePackName: String) -> Unit
     ) = withContext(Dispatchers.Default) {
         val builder = buildGenerator(options)
         builder.generateIcons(applications, onResult)
     }
 
+    /** Previews the fallback styling for [options]' source on each of [samples]. */
+    suspend fun fallbackPreview(
+        options: GenerationOptions,
+        samples: List<PackageInfoStruct>
+    ): List<IconPackDrawable> = withContext(Dispatchers.Default) {
+        val builder = buildGenerator(options)
+        samples.mapNotNull { builder.fallbackIcon(it) }
+    }
+
     private fun buildGenerator(options: GenerationOptions): IconGenerator {
         val pack1 = IconPackContainer(options.primaryIconPack, iconPackRepo.getAppDrawables(options.primaryIconPack))
         val pack2 = IconPackContainer(options.secondaryIconPack, iconPackRepo.getAppDrawables(options.secondaryIconPack))
-        return IconGenerator(context, options, pack1, pack2)
+        // The pack whose fallback styling unthemed apps inherit, per the user's choice.
+        val fallbackPack = when (options.fallbackSource) {
+            FallbackSource.PRIMARY -> options.primaryIconPack
+            FallbackSource.SECONDARY -> options.secondaryIconPack
+            FallbackSource.NONE -> ""
+        }
+        val fallback = iconPackRepo.getIconPackFallback(fallbackPack)
+        return IconGenerator(context, options, pack1, pack2, fallback, fallbackPack)
     }
 
     suspend fun getIconPackIcons(

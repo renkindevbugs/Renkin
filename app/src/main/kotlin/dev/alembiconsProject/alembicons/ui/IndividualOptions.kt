@@ -40,13 +40,19 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.alembiconsProject.alembicons.IconPreviewBuilder
 import dev.alembiconsProject.alembicons.MainViewModel
 import dev.alembiconsProject.alembicons.R
+import dev.alembiconsProject.alembicons.extension.calendarPrefixOrNull
 import dev.alembiconsProject.alembicons.extension.toInt
 import dev.alembiconsProject.alembicons.packages.PackageInfoStruct
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.TextType
+import android.graphics.drawable.AdaptiveIconDrawable
+import androidx.compose.ui.platform.LocalContext
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
+import dev.alembiconsProject.alembicons.drawable.haveMonochrome
+import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
+import dev.alembiconsProject.alembicons.packages.supportDynamicColors
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
 import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
@@ -69,7 +75,13 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -78,6 +90,8 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Switch
+import androidx.compose.ui.text.font.FontWeight
 
 /** The source that produced the icon currently being previewed and confirmed. */
 internal enum class IconOrigin { CREATE, UPLOAD, VECTOR }
@@ -187,7 +201,7 @@ fun OptionsDialog(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?) -> Unit,
+    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
@@ -199,14 +213,24 @@ fun OptionsDialog(
     var textType by rememberSaveable { mutableStateOf(TextType.FULL_NAME) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
+    // Monochrome variant: which colour scheme tints the icon. 0..schemes-1 pick a wallpaper-derived
+    // Material You scheme (foreground+background); the last index is Custom (manual colour below).
+    var monochromeScheme by rememberSaveable { mutableIntStateOf(0) }
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
+    // Background for the monochrome variant's Custom scheme (the system schemes carry their own).
+    var customBgColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.Black) }
     var iconPack by rememberSaveable { mutableStateOf(iconPacks.firstOrNull()?.packageName ?: "") }
     // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
     // Parcelable, so saving the list on stop crashes.
     var customIconList by remember { mutableStateOf<List<ResourceDrawable>>(listOf()) }
     // The Create tab's icon search. Hoisted here (not inside CreateTab) so it survives leaving
-    // and returning to the tab; it starts at the app name and resets per dialog (i.e. per edit).
-    var createSearchQuery by rememberSaveable { mutableStateOf(app.appName) }
+    // and returning to the tab; it starts at the app's non-localized name and resets per dialog
+    // (i.e. per edit) — icon packs name drawables in English, so the localized label rarely matches.
+    var createSearchQuery by rememberSaveable { mutableStateOf(app.originalName) }
+    // How often each pack has been used so far, so the icon-pack list can put the user's
+    // most-used packs near the top. Loaded once when the dialog opens.
+    var packUsage by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    LaunchedEffect(Unit) { packUsage = viewModel.packUsageCounts() }
     // The draft icon being built (create/upload/vector previews) and the generation logic
     // that produces it. See IconDraftState — keeps the dozen drawable states + the regen
     // effects out of this composable.
@@ -220,6 +244,16 @@ fun OptionsDialog(
     var edgeSmoothing by rememberSaveable { mutableFloatStateOf(2f) }
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
     var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
+
+    // Calendar day icons — committed immediately when toggled (independent of icon confirm).
+    var calendarEnabled by rememberSaveable { mutableStateOf(app.calendarEnabled) }
+    // Prefix derived from the selected icon's drawable name (e.g. "bee_calendar_").
+    // Persisted in PackageInfoStruct so it survives dialog reopen. Non-null only when
+    // the currently selected icon ends in _N (meaning day rotation is possible).
+    var calendarPrefix by remember { mutableStateOf(app.calendarPrefix) }
+    // Package name of the pack the calendar drawables come from (stored per-app in DB).
+    var calendarPackName by remember { mutableStateOf(app.calendarPackName) }
+    val calendarPackLabel = iconPacks.find { it.packageName == (calendarPackName ?: iconPack) }?.applicationName ?: ""
 
     // Slide the editor in from the right; closing plays the reverse animation
     // before the dialog window is actually dismissed
@@ -241,9 +275,28 @@ fun OptionsDialog(
         runCatching { app.icon.toSafeBitmapOrNull() }.getOrNull()
     }
 
+    // Whether the app ships a Material You <monochrome> layer, enabling the Monochrome variant.
+    val appHasMonochrome = remember(app.icon) {
+        val icon = app.icon
+        icon.isAdaptiveIconDrawable() && (icon as AdaptiveIconDrawable).haveMonochrome()
+    }
+
+    // Monochrome variant colours: a wallpaper-derived scheme (foreground+background) or Custom.
+    val isMonochromeVariant = source == Source.APPLICATION_ICON && useMonochrome
+    val monochromeSchemes = rememberMonochromeSchemes()
+    val isCustomScheme = monochromeScheme >= monochromeSchemes.size
+    val scheme = monochromeSchemes.getOrNull(monochromeScheme)
+    val effectiveColor = if (isMonochromeVariant && !isCustomScheme) scheme!!.first else iconColor
+    // Background only applies to the monochrome variant; other sources keep the transparent default.
+    val effectiveBgColor = when {
+        isMonochromeVariant && !isCustomScheme -> scheme!!.second
+        isMonochromeVariant -> customBgColor
+        else -> Color.Transparent
+    }
+
     val generatingOptions = GenerationOptions(
         source, imageEdit, textType, iconPack,
-        iconColor.toInt(), 0, useVector, useMonochrome, themed, override = true,
+        effectiveColor.toInt(), effectiveBgColor.toInt(), useVector, useMonochrome, themed, override = true,
         edgeLowThreshold = edgeThreshold,
         edgeHighThreshold = edgeThreshold * 3f,
         edgeGaussianRadius = edgeSmoothing,
@@ -313,13 +366,39 @@ fun OptionsDialog(
                     previewLoading = draft.generating,
                     onDismiss = startClose,
                     onClear = { showConfirmClear = true },
-                    onConfirm = { onConfirm(draft.iconToConfirm) }
+                    onConfirm = {
+                        // Credit the icon to a pack only when it actually came from one: the Create
+                        // tab's Icon Pack source. A fresh pick uses the picked pack; keeping the
+                        // existing icon keeps its stored source. Upload/vector/text/app-icon = none.
+                        val confirmedSourcePack = when {
+                            draft.origin == IconOrigin.CREATE && source == Source.ICON_PACK ->
+                                if (customIconList.isNotEmpty()) iconPack else app.sourcePackName ?: ""
+                            else -> ""
+                        }
+                        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, confirmedSourcePack)
+                    }
                 )
 
                 // The Create tab draws its own divider under the search bar;
                 // the other tabs get one right below the header
                 if (selectedTab != 0) {
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+
+                // Calendar card: visible only on Create tab with Icon Pack source when
+                // the selected pack declares a <calendar> entry for this app.
+                AnimatedVisibility(
+                    visible = selectedTab == 0 && source == Source.ICON_PACK && calendarPrefix != null
+                ) {
+                    CalendarCard(
+                        packName = calendarPackLabel,
+                        calendarPrefix = calendarPrefix ?: "",
+                        calendarEnabled = calendarEnabled,
+                        onToggle = { enabled ->
+                            calendarEnabled = enabled
+                            viewModel.setCalendarEnabled(app, enabled, calendarPrefix, calendarPackName)
+                        }
+                    )
                 }
 
                 // Tab content
@@ -340,17 +419,39 @@ fun OptionsDialog(
                                 iconPacks = iconPacks,
                                 options = generatingOptions,
                                 textType = textType,
+                                packUsage = packUsage,
                                 searchQuery = createSearchQuery,
                                 onSearchQueryChange = { createSearchQuery = it },
-                                onIconSelect = { res, pack ->
+                                onIconSelect = { res, pack, drawableName ->
                                     customIconList = listOf(res)
                                     iconPack = pack.packageName
                                     draft.origin = IconOrigin.CREATE
+                                    // Derive calendar prefix from the picked icon's name.
+                                    // Any icon ending in _N is a valid calendar candidate.
+                                    val newPrefix = drawableName.calendarPrefixOrNull()
+                                    calendarPrefix = newPrefix
+                                    calendarPackName = if (newPrefix != null) pack.packageName else null
+                                    // If calendar was enabled but the new icon can't rotate, disable it.
+                                    if (newPrefix == null && calendarEnabled) {
+                                        calendarEnabled = false
+                                        viewModel.setCalendarEnabled(app, false, null, null)
+                                    }
                                 },
                                 onTextTypeChange = { textType = it; draft.origin = IconOrigin.CREATE },
                                 onCollapsedChange = { headerCollapsed = it },
                                 contentReady = createTabReady,
-                                selectedResourceId = customIconList.firstOrNull()?.resourceId
+                                selectedResourceId = customIconList.firstOrNull()?.resourceId,
+                                // Frame the rotation siblings only once the user has opted in.
+                                selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },
+                                appHasMonochrome = appHasMonochrome,
+                                onMonochromeChange = { useMonochrome = it },
+                                monochromeSchemes = monochromeSchemes,
+                                selectedScheme = monochromeScheme,
+                                onSchemeChange = { monochromeScheme = it },
+                                customForeground = iconColor,
+                                customBackground = customBgColor,
+                                onCustomForegroundChange = { iconColor = it },
+                                onCustomBackgroundChange = { customBgColor = it }
                             )
                             1 -> UploadColumn(app = app) {
                                 draft.uploadBase = it
@@ -481,6 +582,30 @@ private fun OptionsBottomBar(
     }
 }
 
+/**
+ * Wallpaper-derived colour schemes (foreground over background) for tinting the monochrome icon,
+ * pulled from the live Material You palette — the three accent hues plus a neutral, and an inverted
+ * accent. These harmonise with the user's wallpaper, like Android's own themed-icon colours. On
+ * Android < 12 (no dynamic colours) it falls back to plain light-on-dark / dark-on-light.
+ */
+@Composable
+private fun rememberMonochromeSchemes(): List<Pair<Color, Color>> {
+    if (!supportDynamicColors()) {
+        return listOf(Color.White to Color.Black, Color.Black to Color.White)
+    }
+    val context = LocalContext.current
+    return remember {
+        fun c(id: Int) = Color(context.resources.getColor(id, context.theme))
+        listOf(
+            c(android.R.color.system_accent1_100) to c(android.R.color.system_accent1_800),
+            c(android.R.color.system_accent2_100) to c(android.R.color.system_accent2_800),
+            c(android.R.color.system_accent3_100) to c(android.R.color.system_accent3_800),
+            c(android.R.color.system_neutral1_100) to c(android.R.color.system_neutral1_800),
+            c(android.R.color.system_accent1_800) to c(android.R.color.system_accent1_100)
+        )
+    }
+}
+
 @Composable
 fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
     ConfirmDialog(
@@ -491,6 +616,55 @@ fun ConfirmClearDialog(onDismiss: () -> Unit, onIconClear: () -> Unit) {
     )
 }
 
+/**
+ * Shown when the selected icon ends in a number — the user can opt in to day rotation.
+ * Works with any icon from any pack regardless of which app it was designed for.
+ */
+@Composable
+private fun CalendarCard(
+    packName: String,
+    calendarPrefix: String,
+    calendarEnabled: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Surface(
+        shape = dev.alembiconsProject.alembicons.ui.theme.CardShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.DateRange,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(22.dp)
+            )
+            androidx.compose.foundation.layout.Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.calendarDayIcons),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = stringResource(R.string.calendarDayIconsDesc, calendarPrefix, packName),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
+                )
+            }
+            Switch(
+                checked = calendarEnabled,
+                onCheckedChange = onToggle
+            )
+        }
+    }
+}
 
 @Composable
 private fun SourcePills(

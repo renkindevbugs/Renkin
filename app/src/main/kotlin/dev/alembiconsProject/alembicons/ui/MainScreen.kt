@@ -18,13 +18,17 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.Badge
@@ -33,6 +37,10 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -64,6 +72,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
@@ -99,8 +108,10 @@ enum class AppSortOrder { NAME, INSTALL_DATE }
 fun AppSortFilterMenu(
     sortOrder: AppSortOrder,
     filterNoIcon: Boolean,
+    filterFallback: Boolean = false,
     onSortChange: (AppSortOrder) -> Unit,
-    onFilterChange: (Boolean) -> Unit
+    onFilterChange: (Boolean) -> Unit,
+    onFallbackFilterChange: (Boolean) -> Unit = {}
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
     Box {
@@ -123,12 +134,16 @@ fun AppSortFilterMenu(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             CheckableDropdownItem(
                 text = stringResource(R.string.filterAllApps),
-                checked = !filterNoIcon
-            ) { onFilterChange(false); showSortMenu = false }
+                checked = !filterNoIcon && !filterFallback
+            ) { onFilterChange(false); onFallbackFilterChange(false); showSortMenu = false }
             CheckableDropdownItem(
                 text = stringResource(R.string.filterWithoutIcon),
                 checked = filterNoIcon
             ) { onFilterChange(true); showSortMenu = false }
+            CheckableDropdownItem(
+                text = stringResource(R.string.filterFallback),
+                checked = filterFallback
+            ) { onFallbackFilterChange(true); showSortMenu = false }
         }
     }
 }
@@ -166,6 +181,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val scope = rememberCoroutineScope()
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
     val filterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
+    // Transient (not a pref): fallback flags only exist after a refresh, so the filter resets too.
+    var filterFallback by remember { mutableStateOf(false) }
 
     // Require a second back press to leave. Registered here (before the search bar),
     // so the search bar's clear-on-back handler takes priority while it has text.
@@ -232,11 +249,19 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 containerColor = headerColor,
                 sortOrder = sortOrder,
                 filterNoIcon = filterNoIcon,
+                filterFallback = filterFallback,
                 onSortChange = { scope.launch { prefs.setEnumValue(AppSortOrderKey, it) } },
-                onFilterChange = { scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, it) } },
+                onFilterChange = {
+                    filterFallback = false
+                    scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, it) }
+                },
+                onFallbackFilterChange = {
+                    filterFallback = it
+                    if (it) scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
+                },
                 onSearch = { packageFilter = it }
             )
-            ApplicationList(iconPacks, packageFilter, sortOrder, filterNoIcon, listState)
+            ApplicationList(iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, listState)
         }
     }
 
@@ -273,6 +298,7 @@ fun ApplicationList(
     filter: String,
     sortOrder: AppSortOrder,
     filterNoIcon: Boolean,
+    filterFallback: Boolean = false,
     listState: LazyListState = rememberLazyListState()
 ) {
     val viewModel: MainViewModel = hiltViewModel()
@@ -295,24 +321,18 @@ fun ApplicationList(
     // derivedStateOf so it recomputes when the list's contents change (applicationList is a
     // SnapshotStateList edited in place, so its instance identity never changes) while still
     // caching across unrelated recompositions. Recreated when the sort/filter inputs change.
-    val displayList by remember(sortOrder, filterNoIcon, filter, installTimes) {
+    val displayList by remember(sortOrder, filterNoIcon, filterFallback, filter, installTimes) {
         derivedStateOf {
-            when (sortOrder) {
-                AppSortOrder.NAME -> applications.withIndex().toList()
-                AppSortOrder.INSTALL_DATE -> applications.withIndex()
-                    .sortedByDescending { installTimes[it.value.packageName] ?: 0L }
-            }.let { list ->
-                if (filterNoIcon) list.filter { it.value.createdIcon == null } else list
-            }.let { list ->
-                // Filter before the LazyColumn so non-matching rows don't become empty items
-                if (filter.isEmpty()) list else list.filter { it.value.appName.contains(filter, true) }
-            }
+            // withIndex() first so each app keeps its original position; the shared pipeline then
+            // filters and sorts the wrappers (selector pulls the app out of each IndexedValue).
+            applications.withIndex().toList()
+                .sortedFilteredApps(filter, filterNoIcon, filterFallback, sortOrder, installTimes) { it.value }
         }
     }
 
     // Keyed items make LazyColumn follow the previously visible app to its new
     // position when the order changes — jump back to the top instead
-    LaunchedEffect(sortOrder, filterNoIcon) {
+    LaunchedEffect(sortOrder, filterNoIcon, filterFallback) {
         listState.scrollToItem(0)
     }
 
@@ -334,8 +354,42 @@ fun ApplicationList(
         item(key = "options") {
             OptionsCard(iconPacks)
         }
-        items(displayList, key = { "${it.value.packageName}/${it.value.activityName}" }) { indexedApp ->
-            ApplicationItem(iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue, Modifier.animateItem())
+        if (displayList.isEmpty()) {
+            // A filter/search matched nothing — say so instead of leaving a blank gap.
+            item(key = "empty") {
+                EmptyState(
+                    icon = Icons.Filled.SearchOff,
+                    text = stringResource(R.string.noAppsFound),
+                    modifier = Modifier
+                        .fillParentMaxHeight(0.6f)
+                        .fillMaxWidth()
+                )
+            }
+        } else {
+            items(displayList, key = { it.value.key }) { indexedApp ->
+                ApplicationItem(iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue, Modifier.animateItem())
+            }
+        }
+    }
+}
+
+/**
+ * Wraps a small badge so long-pressing (or hovering) it shows a plain tooltip explaining what it
+ * means — the badges are otherwise cryptic. [modifier] carries the badge's alignment in its parent.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun BadgeTooltip(text: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    // [modifier] (the badge's alignment) goes on a wrapping Box that sizes to the badge — putting
+    // it on TooltipBox directly leaves the badge centered. TooltipDefaults' position provider then
+    // keeps the popup inside the window on its own.
+    Box(modifier) {
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            tooltip = { PlainTooltip { Text(text) } },
+            state = rememberTooltipState()
+        ) {
+            content()
         }
     }
 }
@@ -356,6 +410,17 @@ fun ApplicationItem(
     val syncWarning = stringResource(id = R.string.syncText)
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
+
+    // Closing the edit dialog (whose icon-search field had keyboard focus) otherwise lets the
+    // system hand focus to the home search field, popping the keyboard. Clear focus only on the
+    // actual open→close transition — not on initial composition, or filtering the list (which
+    // recomposes rows) would clear the search field's focus after every keystroke.
+    val focusManager = LocalFocusManager.current
+    var wasOptionsOpen by remember { mutableStateOf(false) }
+    LaunchedEffect(openAppOptions) {
+        if (wasOptionsOpen && !openAppOptions) focusManager.clearFocus(force = true)
+        wasOptionsOpen = openAppOptions
+    }
 
     Surface(
         onClick = {
@@ -441,6 +506,45 @@ fun ApplicationItem(
                         }
                     }
                 }
+                // Calendar day badge: shows today's date so the user can see the icon rotates.
+                if (app.calendarEnabled) {
+                    val today = remember { java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_MONTH) }
+                    BadgeTooltip(stringResource(R.string.calendarBadgeTooltip), Modifier.align(Alignment.BottomEnd)) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = today.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
+                    }
+                }
+                // Fallback badge: this icon came from the pack's fallback styling, not a real match.
+                if (app.isFallback) {
+                    BadgeTooltip(stringResource(R.string.fallbackBadgeTooltip), Modifier.align(Alignment.TopStart)) {
+                        Box(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.tertiaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AutoFixHigh,
+                                contentDescription = stringResource(R.string.fallbackIcon),
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -462,8 +566,8 @@ fun OpenAppOptions(
 ) {
     val viewModel: MainViewModel = hiltViewModel()
 
-    AppOptions(iconPacks, app, themed, { icon ->
-        viewModel.applyIcon(index, app, icon)
+    AppOptions(iconPacks, app, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName ->
+        viewModel.applyIcon(index, app, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName)
         onDismiss()
     }, {
         onDismiss()
@@ -571,9 +675,11 @@ fun TitleBar(
 fun SearchBar(
     sortOrder: AppSortOrder,
     filterNoIcon: Boolean,
+    filterFallback: Boolean = false,
     containerColor: Color = MaterialTheme.colorScheme.background,
     onSortChange: (AppSortOrder) -> Unit,
     onFilterChange: (Boolean) -> Unit,
+    onFallbackFilterChange: (Boolean) -> Unit = {},
     onSearch: (String) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
@@ -598,7 +704,7 @@ fun SearchBar(
             },
             modifier = Modifier.weight(1f)
         )
-        AppSortFilterMenu(sortOrder, filterNoIcon, onSortChange, onFilterChange)
+        AppSortFilterMenu(sortOrder, filterNoIcon, filterFallback, onSortChange, onFilterChange, onFallbackFilterChange)
     }
     }
 }
