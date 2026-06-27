@@ -117,6 +117,7 @@
     <string name="filterAllApps">All apps</string>
     <string name="filterFallback">Fallback icons</string>
     <string name="fallbackIcon">Fallback icon</string>
+    <string name="fallbackCount">%d use a fallback icon</string>
     <string name="addImages">Add images</string>
     <string name="yourImages">Your images</string>
     <string name="deleteImage">Delete images</string>

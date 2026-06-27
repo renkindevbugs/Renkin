@@ -456,7 +456,7 @@ private fun RemovableChip(
 
 /** Centered icon + message shown when a list/grid has no items (e.g. an empty filter result). */
 @Composable
-private fun EmptyState(icon: ImageVector, text: String, modifier: Modifier = Modifier) {
+internal fun EmptyState(icon: ImageVector, text: String, modifier: Modifier = Modifier) {
     Box(modifier, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(

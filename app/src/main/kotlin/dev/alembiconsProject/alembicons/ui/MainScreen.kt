@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.Badge
@@ -361,8 +362,21 @@ fun ApplicationList(
         item(key = "options") {
             OptionsCard(iconPacks)
         }
-        items(displayList, key = { it.value.key }) { indexedApp ->
-            ApplicationItem(iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue, Modifier.animateItem())
+        if (displayList.isEmpty()) {
+            // A filter/search matched nothing — say so instead of leaving a blank gap.
+            item(key = "empty") {
+                EmptyState(
+                    icon = Icons.Filled.SearchOff,
+                    text = stringResource(R.string.noAppsFound),
+                    modifier = Modifier
+                        .fillParentMaxHeight(0.6f)
+                        .fillMaxWidth()
+                )
+            }
+        } else {
+            items(displayList, key = { it.value.key }) { indexedApp ->
+                ApplicationItem(iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue, Modifier.animateItem())
+            }
         }
     }
 }

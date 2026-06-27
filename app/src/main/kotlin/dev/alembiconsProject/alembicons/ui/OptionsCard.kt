@@ -136,6 +136,8 @@ fun OptionsCard(
     val removedCount = apps.count { it.createdIcon == null && it.key in builtKeys }
     val themedCount = builtCount + addedCount
     val totalCount = apps.size
+    // How many of the themed icons came from the pack's fallback styling, not a real match.
+    val fallbackCount = apps.count { it.createdIcon != null && it.isFallback }
 
     var expanded by remember { mutableStateOf(false) }
 
@@ -245,6 +247,16 @@ fun OptionsCard(
                     }
                     Spacer(Modifier.height(6.dp))
                     ChangeBar(totalCount, builtCount, addedCount, removedCount)
+                    // Fallback icons look themed but weren't a real pack match — call out the
+                    // count so a full bar isn't mistaken for "every app was found".
+                    if (fallbackCount > 0) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = stringResource(R.string.fallbackCount, fallbackCount),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
 
