@@ -85,8 +85,8 @@ class ApplicationProvider(private val context: Context) {
     suspend fun refreshIcon(application: PackageInfoStruct, preferences: Preferences) = withContext(Dispatchers.Default) {
         // A newly installed app always gets its icon (re)generated
         val genOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
-        iconGenService.refreshIcon(application, genOptions) { app, icon ->
-            editApplication(app, app.changeExport(icon))
+        iconGenService.refreshIcon(application, genOptions) { app, icon, sourcePack ->
+            editApplication(app, app.changeExport(icon, sourcePackName = sourcePack))
         }
     }
 
@@ -108,8 +108,8 @@ class ApplicationProvider(private val context: Context) {
 
         // Iterate a snapshot copy: the callback edits the live list in place, and iterating
         // the SnapshotStateList itself while mutating it would throw.
-        iconGenService.refreshIcons(applicationList.toList(), opt) { application, icon, isFallback ->
-            editApplication(application, application.changeExport(icon, isFallback))
+        iconGenService.refreshIcons(applicationList.toList(), opt) { application, icon, isFallback, sourcePack ->
+            editApplication(application, application.changeExport(icon, isFallback, sourcePack))
         }
     }
 
@@ -196,7 +196,7 @@ class ApplicationProvider(private val context: Context) {
         for (app in applicationList.toList()) {
             val entry = saved[app.key] ?: continue
             val updated = when {
-                entry.icon != null -> app.changeExport(entry.icon).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
+                entry.icon != null -> app.changeExport(entry.icon, sourcePackName = entry.sourcePackName).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
                 else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
             }
             editApplication(app, updated)
@@ -250,6 +250,18 @@ class ApplicationProvider(private val context: Context) {
 
     /** Keys ("package/activity") of the apps stored in the last built/saved pack. */
     suspend fun getSavedPackKeys(): Set<String> = renkinPackStore.savedKeys()
+
+    /**
+     * Live count of icons taken from each pack, from the in-memory app list — so the per-app
+     * picker reflects icons the moment they're assigned (generated or hand-picked), not only
+     * after a build persists them. The list is seeded from the DB on startup, so saved counts
+     * survive restarts too. Keyed by pack package name; non-pack icons (empty source) are skipped.
+     */
+    fun packUsageCounts(): Map<String, Int> =
+        applicationList
+            .mapNotNull { it.sourcePackName?.takeIf { source -> source.isNotEmpty() } }
+            .groupingBy { it }
+            .eachCount()
 
     /**
      * A few sample icons styled with [fallbackSource]'s fallback, for the Options preview so the

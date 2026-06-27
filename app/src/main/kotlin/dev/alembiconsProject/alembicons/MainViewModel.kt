@@ -255,9 +255,12 @@ class MainViewModel @Inject constructor(
         if (icon != null) updatedKeys = updatedKeys + app.key
     }
 
-    /** Assigns (or clears, when [icon] is null) the created icon for the app at [index]. */
-    fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?) {
-        appProvider.editApplication(index, app.changeExport(icon))
+    /**
+     * Assigns (or clears, when [icon] is null) the created icon for the app at [index].
+     * [sourcePackName] is the pack the icon was taken from (null/empty when not from a pack).
+     */
+    fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String? = null) {
+        appProvider.editApplication(index, app.changeExport(icon, sourcePackName = sourcePackName))
         markUpdated(app, icon)
     }
 
@@ -274,14 +277,18 @@ class MainViewModel @Inject constructor(
         icon: IconPackDrawable?,
         calendarEnabled: Boolean,
         calendarPrefix: String?,
-        calendarPackName: String?
+        calendarPackName: String?,
+        sourcePackName: String?
     ) {
         appProvider.editApplication(
             index,
-            app.changeExport(icon).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
+            app.changeExport(icon, sourcePackName = sourcePackName).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
         )
         markUpdated(app, icon)
     }
+
+    /** Live count of icons taken from each pack — orders the per-app icon picker. */
+    fun packUsageCounts(): Map<String, Int> = appProvider.packUsageCounts()
 
     /**
      * Toggles the calendar-day-icons flag for [app]. [calendarPrefix] is the drawable-name

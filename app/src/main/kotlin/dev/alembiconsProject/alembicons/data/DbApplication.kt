@@ -22,7 +22,11 @@ data class DbApplication(
     val drawable: String,
     @ColumnInfo(defaultValue = "0") val calendarEnabled: Boolean = false,
     @ColumnInfo(defaultValue = "") val calendarPrefix: String = "",
-    @ColumnInfo(defaultValue = "") val calendarPackName: String = ""
+    @ColumnInfo(defaultValue = "") val calendarPackName: String = "",
+    // Package name of the icon pack this icon was taken from (empty when the icon doesn't
+    // come from a pack — app-icon, app-name, upload, hand-edited vector or fallback styling).
+    // Used to order packs by how often they're used in the per-app icon picker.
+    @ColumnInfo(defaultValue = "") val sourcePackName: String = ""
 )
 
 @Dao
@@ -51,7 +55,7 @@ interface RenkinPackDao {
 
 @Database(
     entities = [DbApplication::class],
-    version = 4
+    version = 5
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -78,6 +82,12 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN sourcePackName TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         // Physical file name stays "alchemiconPack" so existing installs keep their
         // saved generated icons across the rename.
         fun get(context: Context): RenkinPackDatabase {
@@ -86,7 +96,7 @@ abstract class RenkinPackDatabase : RoomDatabase() {
                     context.applicationContext,
                     RenkinPackDatabase::class.java,
                     "alchemiconPack"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
             }
         }
     }

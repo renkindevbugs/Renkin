@@ -201,7 +201,7 @@ fun OptionsDialog(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?) -> Unit,
+    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
@@ -227,6 +227,10 @@ fun OptionsDialog(
     // and returning to the tab; it starts at the app's non-localized name and resets per dialog
     // (i.e. per edit) — icon packs name drawables in English, so the localized label rarely matches.
     var createSearchQuery by rememberSaveable { mutableStateOf(app.originalName) }
+    // How often each pack has been used so far, so the icon-pack list can put the user's
+    // most-used packs near the top. Loaded once when the dialog opens.
+    var packUsage by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
+    LaunchedEffect(Unit) { packUsage = viewModel.packUsageCounts() }
     // The draft icon being built (create/upload/vector previews) and the generation logic
     // that produces it. See IconDraftState — keeps the dozen drawable states + the regen
     // effects out of this composable.
@@ -362,7 +366,17 @@ fun OptionsDialog(
                     previewLoading = draft.generating,
                     onDismiss = startClose,
                     onClear = { showConfirmClear = true },
-                    onConfirm = { onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName) }
+                    onConfirm = {
+                        // Credit the icon to a pack only when it actually came from one: the Create
+                        // tab's Icon Pack source. A fresh pick uses the picked pack; keeping the
+                        // existing icon keeps its stored source. Upload/vector/text/app-icon = none.
+                        val confirmedSourcePack = when {
+                            draft.origin == IconOrigin.CREATE && source == Source.ICON_PACK ->
+                                if (customIconList.isNotEmpty()) iconPack else app.sourcePackName ?: ""
+                            else -> ""
+                        }
+                        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, confirmedSourcePack)
+                    }
                 )
 
                 // The Create tab draws its own divider under the search bar;
@@ -405,6 +419,7 @@ fun OptionsDialog(
                                 iconPacks = iconPacks,
                                 options = generatingOptions,
                                 textType = textType,
+                                packUsage = packUsage,
                                 searchQuery = createSearchQuery,
                                 onSearchQueryChange = { createSearchQuery = it },
                                 onIconSelect = { res, pack, drawableName ->

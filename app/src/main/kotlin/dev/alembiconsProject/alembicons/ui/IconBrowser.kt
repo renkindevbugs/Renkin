@@ -105,6 +105,9 @@ fun CreateTab(
     iconPacks: List<IconPack>,
     options: GenerationOptions,
     textType: TextType,
+    // How many stored icons came from each pack, keyed by package name. Packs the user takes
+    // from most often sort higher (after packs that actually have an icon for the query).
+    packUsage: Map<String, Int> = emptyMap(),
     // Hoisted by the dialog so the typed (or cleared) query survives leaving and returning to
     // this tab; it's seeded with the app name and reset per edit at the dialog level.
     searchQuery: String,
@@ -144,12 +147,15 @@ fun CreateTab(
     var sortOrder by rememberSaveable { mutableStateOf(IconSortOrder.NAME_ASC) }
     var expandedPack by remember { mutableStateOf<IconPack?>(null) }
     var collapsed by remember { mutableStateOf(false) }
-    val distinctPacks = remember(iconPacks) { iconPacks.distinctBy { it.packageName } }
+    // Base order: most-used packs first (usage is the tiebreaker once query matches settle below).
+    val distinctPacks = remember(iconPacks, packUsage) {
+        iconPacks.distinctBy { it.packageName }.sortedByDescending { packUsage[it.packageName] ?: 0 }
+    }
     // packageName -> whether the pack has icons matching the current query
     var packMatches by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
     // The order actually shown. Updated only once the results settle so the list
     // doesn't shuffle on every pack that finishes loading.
-    var orderedPacks by remember(iconPacks) { mutableStateOf(distinctPacks) }
+    var orderedPacks by remember(distinctPacks) { mutableStateOf(distinctPacks) }
 
     val listState = rememberLazyListState()
     val listScrolled by remember {
@@ -174,7 +180,12 @@ fun CreateTab(
     LaunchedEffect(packMatches) {
         if (packMatches.isEmpty()) return@LaunchedEffect
         delay(450)
-        val newOrder = distinctPacks.sortedByDescending { packMatches[it.packageName] != false }
+        // Packs that have a matching icon float to the top; among equals, the most-used pack wins
+        // (distinctPacks is already usage-ordered, so this is a stable tiebreaker).
+        val newOrder = distinctPacks.sortedWith(
+            compareByDescending<IconPack> { packMatches[it.packageName] != false }
+                .thenByDescending { packUsage[it.packageName] ?: 0 }
+        )
         if (newOrder.map { it.packageName } != orderedPacks.map { it.packageName }) {
             val atTop = listState.firstVisibleItemIndex == 0 &&
                 listState.firstVisibleItemScrollOffset == 0
