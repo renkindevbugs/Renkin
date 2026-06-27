@@ -41,6 +41,7 @@ import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
 import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
 import dev.alembiconsProject.alembicons.extension.changeBackgroundColor
 import dev.alembiconsProject.alembicons.extension.emptyLike
+import dev.alembiconsProject.alembicons.extension.newArgbBitmap
 import dev.alembiconsProject.alembicons.extension.scaleFromCenter
 import dev.alembiconsProject.alembicons.icon.parser.IconParser
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
@@ -320,10 +321,9 @@ class IconGenerator(
         // adaptive foreground expects — so (unlike the old flat export) we must NOT scale it up, or
         // the launcher would render it oversized.
         val size = 432
-        val mask = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         mono.setTintList(null)
         mono.setBounds(0, 0, size, size)
-        mono.draw(Canvas(mask))
+        val mask = newArgbBitmap(size, size) { mono.draw(it) }
 
         // Export as an adaptive icon so the launcher masks it to its own shape (circle, squircle, …)
         // like every other icon — a plain bitmap would be shown as a bare square instead. previewScale
@@ -729,10 +729,10 @@ class IconGenerator(
         val src = icon.toBitmap()
         if (src.width <= 0 || src.height <= 0) return icon
 
-        val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(out)
-        canvas.scale(scale, scale, src.width / 2f, src.height / 2f)
-        canvas.drawBitmap(src, 0f, 0f, null)
+        val out = newArgbBitmap(src.width, src.height) { canvas ->
+            canvas.scale(scale, scale, src.width / 2f, src.height / 2f)
+            canvas.drawBitmap(src, 0f, 0f, null)
+        }
         return BitmapIconDrawable(ctx.resources, out)
     }
 
