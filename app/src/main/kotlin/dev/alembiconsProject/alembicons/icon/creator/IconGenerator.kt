@@ -250,8 +250,11 @@ class IconGenerator(
         mono.draw(Canvas(mask))
 
         // Export as an adaptive icon so the launcher masks it to its own shape (circle, squircle, …)
-        // like every other icon — a plain bitmap would be shown as a bare square instead.
-        return BitmapIconDrawable(ctx.resources, recolorMonochrome(mask), exportAsAdaptiveIcon = true)
+        // like every other icon — a plain bitmap would be shown as a bare square instead. previewScale
+        // zooms only the flat in-app preview to match the launcher's safe-zone zoom (export stays 1:1).
+        return BitmapIconDrawable(
+            ctx.resources, recolorMonochrome(mask), exportAsAdaptiveIcon = true, previewScale = adaptiveIconScale
+        )
     }
 
     /**
