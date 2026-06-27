@@ -156,6 +156,9 @@ class IconGenerator(
      * iconupon overlay. Exported as a plain bitmap so the baked pack shape survives (the launcher
      * doesn't re-mask legacy icons). Returns null when the pack declares no fallback.
      */
+    /** Public entry for previewing the fallback styling on a sample app (Options card). */
+    fun fallbackIcon(app: PackageInfoStruct): IconPackDrawable? = generateFallback(app)
+
     private fun generateFallback(app: PackageInfoStruct): IconPackDrawable? {
         if (primaryFallback.isEmpty) return null
         val packName = fallbackPackName

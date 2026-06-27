@@ -90,6 +90,15 @@ class IconGenerationService(
         builder.generateIcons(applications, onResult)
     }
 
+    /** Previews the fallback styling for [options]' source on each of [samples]. */
+    suspend fun fallbackPreview(
+        options: GenerationOptions,
+        samples: List<PackageInfoStruct>
+    ): List<IconPackDrawable> = withContext(Dispatchers.Default) {
+        val builder = buildGenerator(options)
+        samples.mapNotNull { builder.fallbackIcon(it) }
+    }
+
     private fun buildGenerator(options: GenerationOptions): IconGenerator {
         val pack1 = IconPackContainer(options.primaryIconPack, iconPackRepo.getAppDrawables(options.primaryIconPack))
         val pack2 = IconPackContainer(options.secondaryIconPack, iconPackRepo.getAppDrawables(options.secondaryIconPack))

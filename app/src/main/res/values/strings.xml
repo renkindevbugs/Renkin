@@ -122,6 +122,7 @@
     <string name="calendarGroupTooltip">Calendar icon — rotates through the days of the month</string>
     <string name="fallbackCount">%d use a fallback icon</string>
     <string name="fallbackStyling">Fallback styling</string>
+    <string name="fallbackPreviewLabel">Preview</string>
     <string name="fallbackNone">None</string>
     <string name="fallbackPrimary">Primary</string>
     <string name="fallbackSecondary">Secondary</string>

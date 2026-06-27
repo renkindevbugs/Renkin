@@ -14,6 +14,7 @@ import dev.alembiconsProject.alembicons.data.ExportThemedKey
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
+import dev.alembiconsProject.alembicons.data.FallbackSource
 import dev.alembiconsProject.alembicons.data.SecondaryIconPackKey
 import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getDefaultBackgroundColor
@@ -249,6 +250,17 @@ class ApplicationProvider(private val context: Context) {
 
     /** Keys ("package/activity") of the apps stored in the last built/saved pack. */
     suspend fun getSavedPackKeys(): Set<String> = renkinPackStore.savedKeys()
+
+    /**
+     * A few sample icons styled with [fallbackSource]'s fallback, for the Options preview so the
+     * user sees the look before building. Empty when NONE or the source pack declares no fallback.
+     */
+    suspend fun fallbackPreview(preferences: Preferences, fallbackSource: FallbackSource): List<IconPackDrawable> =
+        withContext(Dispatchers.Default) {
+            if (fallbackSource == FallbackSource.NONE) return@withContext emptyList()
+            val options = GenerationOptions.fromPreferences(preferences, context).copy(fallbackSource = fallbackSource)
+            iconGenService.fallbackPreview(options, applicationList.take(4))
+        }
 
     /** Of [prefixes], those that are genuine calendar day-rotation sets in [packPackageName]. */
     suspend fun calendarPrefixesAmong(packPackageName: String, prefixes: List<String>): Set<String> =
