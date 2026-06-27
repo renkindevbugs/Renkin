@@ -250,7 +250,9 @@ class IconGenerator(
         // frame like a normal icon (same factor used for adaptive foregrounds, #80).
         val filled = mask.scaleFromCenter(adaptiveIconScale)
 
-        return getDefaultBitmapIcon(recolorMonochrome(filled))
+        // Export as an adaptive icon so the launcher masks it to its own shape (circle, squircle, …)
+        // like every other icon — a plain bitmap would be shown as a bare square instead.
+        return BitmapIconDrawable(ctx.resources, recolorMonochrome(filled), exportAsAdaptiveIcon = true)
     }
 
     /**
