@@ -37,6 +37,10 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -381,6 +385,27 @@ fun ApplicationList(
     }
 }
 
+/**
+ * Wraps a small badge so long-pressing (or hovering) it shows a plain tooltip explaining what it
+ * means — the badges are otherwise cryptic. [modifier] carries the badge's alignment in its parent.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun BadgeTooltip(text: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    // [modifier] (the badge's alignment) goes on a wrapping Box that sizes to the badge — putting
+    // it on TooltipBox directly leaves the badge centered. TooltipDefaults' position provider then
+    // keeps the popup inside the window on its own.
+    Box(modifier) {
+        TooltipBox(
+            positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+            tooltip = { PlainTooltip { Text(text) } },
+            state = rememberTooltipState()
+        ) {
+            content()
+        }
+    }
+}
+
 @Composable
 fun ApplicationItem(
     iconPacks: List<IconPack>,
@@ -496,38 +521,40 @@ fun ApplicationItem(
                 // Calendar day badge: shows today's date so the user can see the icon rotates.
                 if (app.calendarEnabled) {
                     val today = remember { java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_MONTH) }
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .size(20.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = today.toString(),
-                            style = MaterialTheme.typography.labelSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
+                    BadgeTooltip(stringResource(R.string.calendarBadgeTooltip), Modifier.align(Alignment.BottomEnd)) {
+                        Box(
+                            modifier = Modifier
+                                .size(20.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.primary),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = today.toString(),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
+                        }
                     }
                 }
                 // Fallback badge: this icon came from the pack's fallback styling, not a real match.
                 if (app.isFallback) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .size(18.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.tertiaryContainer),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.AutoFixHigh,
-                            contentDescription = stringResource(R.string.fallbackIcon),
-                            tint = MaterialTheme.colorScheme.onTertiaryContainer,
-                            modifier = Modifier.size(11.dp)
-                        )
+                    BadgeTooltip(stringResource(R.string.fallbackBadgeTooltip), Modifier.align(Alignment.TopStart)) {
+                        Box(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.tertiaryContainer),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.AutoFixHigh,
+                                contentDescription = stringResource(R.string.fallbackIcon),
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
                     }
                 }
             }
