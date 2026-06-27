@@ -217,6 +217,8 @@ fun OptionsDialog(
     // Material You scheme (foreground+background); the last index is Custom (manual colour below).
     var monochromeScheme by rememberSaveable { mutableIntStateOf(0) }
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
+    // Background for the monochrome variant's Custom scheme (the system schemes carry their own).
+    var customBgColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.Black) }
     var iconPack by rememberSaveable { mutableStateOf(iconPacks.firstOrNull()?.packageName ?: "") }
     // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
     // Parcelable, so saving the list on stop crashes.
@@ -284,7 +286,7 @@ fun OptionsDialog(
     // Background only applies to the monochrome variant; other sources keep the transparent default.
     val effectiveBgColor = when {
         isMonochromeVariant && !isCustomScheme -> scheme!!.second
-        isMonochromeVariant -> Color.Black
+        isMonochromeVariant -> customBgColor
         else -> Color.Transparent
     }
 
@@ -440,6 +442,9 @@ fun OptionsDialog(
                                 source = source,
                                 imageEdit = imageEdit,
                                 iconColor = iconColor,
+                                // Background colour control only for the monochrome variant's Custom
+                                // scheme — system schemes carry their own background.
+                                backgroundColor = customBgColor.takeIf { isMonochromeVariant && isCustomScheme },
                                 useVector = useVector,
                                 useMonochrome = useMonochrome,
                                 edgeThreshold = edgeThreshold,
@@ -448,6 +453,7 @@ fun OptionsDialog(
                                 iconScale = iconScale,
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
+                                onBackgroundColorChange = { customBgColor = it },
                                 onVectorChange = { useVector = it },
                                 onMonochromeChange = { useMonochrome = it },
                                 onEdgeThresholdChange = { edgeThreshold = it },

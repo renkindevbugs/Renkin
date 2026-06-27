@@ -48,6 +48,8 @@ internal fun ModifierTab(
     source: Source,
     imageEdit: ImageEdit,
     iconColor: Color,
+    // Non-null only when a background colour applies (monochrome Custom scheme); shows a bg row.
+    backgroundColor: Color? = null,
     useVector: Boolean,
     useMonochrome: Boolean,
     edgeThreshold: Float,
@@ -56,6 +58,7 @@ internal fun ModifierTab(
     iconScale: Float,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
+    onBackgroundColorChange: (Color) -> Unit = {},
     onVectorChange: (Boolean) -> Unit,
     onMonochromeChange: (Boolean) -> Unit,
     onEdgeThresholdChange: (Float) -> Unit,
@@ -65,6 +68,7 @@ internal fun ModifierTab(
 ) {
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
+    var bgPickerOpen by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -201,6 +205,35 @@ internal fun ModifierTab(
             }
         }
 
+        if (backgroundColor != null) {
+            Surface(
+                onClick = { bgPickerOpen = true },
+                shape = CardShape,
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.backgroundColor),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Surface(
+                        shape = CircleShape,
+                        color = backgroundColor,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                        modifier = Modifier.size(28.dp)
+                    ) {}
+                }
+            }
+        }
+
         if (isPathTracingEnabled(source, imageEdit)) {
             Surface(
                 shape = CardShape,
@@ -260,6 +293,14 @@ internal fun ModifierTab(
             onDismiss = { colorPickerOpen = false },
             currentlySelected = iconColor,
             onColorSelected = { onColorChange(it) }
+        )
+    }
+
+    if (bgPickerOpen && backgroundColor != null) {
+        ColorDialog(
+            onDismiss = { bgPickerOpen = false },
+            currentlySelected = backgroundColor,
+            onColorSelected = { onBackgroundColorChange(it) }
         )
     }
 }
