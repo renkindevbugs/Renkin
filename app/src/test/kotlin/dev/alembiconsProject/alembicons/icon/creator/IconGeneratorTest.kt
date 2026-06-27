@@ -80,7 +80,7 @@ class IconGeneratorTest {
     private fun generateOnce(options: GenerationOptions, app: PackageInfoStruct): IconPackDrawable? {
         var result: IconPackDrawable? = null
         var called = false
-        generator(options).generateIcon(app) { _, icon ->
+        generator(options).generateIcon(app) { _, icon, _ ->
             called = true
             result = icon
         }
@@ -132,7 +132,7 @@ class IconGeneratorTest {
         val gen = IconGenerator(context, options(source = Source.ICON_PACK), pack, emptyPack)
 
         var called = false
-        gen.generateIcons(listOf(badApp)) { _, _ -> called = true }
+        gen.generateIcons(listOf(badApp)) { _, _, _, _ -> called = true }
 
         assertFalse("the malformed app should be skipped, not delivered", called)
     }

@@ -18,6 +18,12 @@ class PackageInfoStruct(
     val calendarPrefix: String? = null,
     /** Package name of the icon pack the calendar drawables come from. Null = not set. */
     val calendarPackName: String? = null,
+    /**
+     * Package name of the icon pack [createdIcon] was taken from. Null/empty when the icon
+     * isn't from a pack (app-icon, app-name, upload, hand-edited vector or fallback styling).
+     * Persisted so packs can be ordered by how often they're used in the per-app picker.
+     */
+    val sourcePackName: String? = null,
     /** Non-localized (English) app name for search matching. Falls back to [appName] if unavailable. */
     val originalName: String = appName,
     /**
@@ -47,12 +53,15 @@ class PackageInfoStruct(
         calendarEnabled: Boolean = this.calendarEnabled,
         calendarPrefix: String? = this.calendarPrefix,
         calendarPackName: String? = this.calendarPackName,
+        sourcePackName: String? = this.sourcePackName,
         isFallback: Boolean = this.isFallback
     ): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, originalName, isFallback)
+        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback)
 
-    fun changeExport(createdIcon: IconPackDrawable?, isFallback: Boolean = false): PackageInfoStruct =
-        copyWith(createdIcon = createdIcon, isFallback = isFallback)
+    // Clearing the icon (createdIcon == null) also drops the recorded source pack, so a removed
+    // icon never lingers in the usage counts.
+    fun changeExport(createdIcon: IconPackDrawable?, isFallback: Boolean = false, sourcePackName: String? = this.sourcePackName): PackageInfoStruct =
+        copyWith(createdIcon = createdIcon, isFallback = isFallback, sourcePackName = if (createdIcon == null) null else sourcePackName)
 
     fun changeCalendar(calendarEnabled: Boolean, calendarPrefix: String? = this.calendarPrefix, calendarPackName: String? = this.calendarPackName): PackageInfoStruct =
         copyWith(calendarEnabled = calendarEnabled, calendarPrefix = calendarPrefix, calendarPackName = calendarPackName)

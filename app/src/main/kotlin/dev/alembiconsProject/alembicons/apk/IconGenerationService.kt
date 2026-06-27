@@ -41,6 +41,8 @@ class IconGenerationService(
         builder.generateIcon(application, customIcon) { _, newIcon ->
             icon = newIcon
         }
+        // Note: this single-pack preview path keeps the 2-arg callback (no source pack tracking)
+        // because its result is a transient preview, never persisted.
 
         icon
     }
@@ -74,7 +76,7 @@ class IconGenerationService(
     suspend fun refreshIcon(
         application: PackageInfoStruct,
         options: GenerationOptions,
-        onResult: (PackageInfoStruct, IconPackDrawable?) -> Unit
+        onResult: (PackageInfoStruct, IconPackDrawable?, sourcePackName: String) -> Unit
     ) = withContext(Dispatchers.Default) {
         val builder = buildGenerator(options)
         builder.generateIcon(application, onResult)
@@ -84,7 +86,7 @@ class IconGenerationService(
     suspend fun refreshIcons(
         applications: List<PackageInfoStruct>,
         options: GenerationOptions,
-        onResult: (PackageInfoStruct, IconPackDrawable?, isFallback: Boolean) -> Unit
+        onResult: (PackageInfoStruct, IconPackDrawable?, isFallback: Boolean, sourcePackName: String) -> Unit
     ) = withContext(Dispatchers.Default) {
         val builder = buildGenerator(options)
         builder.generateIcons(applications, onResult)

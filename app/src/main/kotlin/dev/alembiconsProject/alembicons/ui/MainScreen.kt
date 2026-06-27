@@ -578,8 +578,8 @@ fun OpenAppOptions(
 ) {
     val viewModel: MainViewModel = hiltViewModel()
 
-    AppOptions(iconPacks, app, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName ->
-        viewModel.applyIcon(index, app, icon, calendarEnabled, calendarPrefix, calendarPackName)
+    AppOptions(iconPacks, app, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName ->
+        viewModel.applyIcon(index, app, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName)
         onDismiss()
     }, {
         onDismiss()

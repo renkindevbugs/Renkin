@@ -74,8 +74,8 @@ class IconGenerator(
     private val adaptiveIconScale = 1.5f // 108dp / 72dp
 
     fun generateIcon(application: PackageInfoStruct,
-                     onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?) -> Unit) {
-        generateIcons(listOf(application)) { app, icon, _ -> onUpdate(app, icon) }
+                     onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String) -> Unit) {
+        generateIcons(listOf(application)) { app, icon, _, source -> onUpdate(app, icon, source) }
     }
 
     fun generateIcon(application: PackageInfoStruct,
@@ -108,7 +108,7 @@ class IconGenerator(
     }
 
     fun generateIcons(applications: List<PackageInfoStruct>
-                      , onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?, isFallback: Boolean) -> Unit) {
+                      , onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?, isFallback: Boolean, sourcePackName: String) -> Unit) {
         if (options.primarySource == Source.NONE) {
             return
         }
@@ -121,14 +121,18 @@ class IconGenerator(
             // A malformed drawable in one (third-party) pack must not abort the whole refresh.
             // Skip the offending app, leaving its current icon untouched, and carry on.
             try {
-                val matched = generateIcon(
+                val primary = generateIcon(
                     app,
                     options.primarySource,
                     options.primaryImageEdit,
                     options.primaryTextType,
                     primaryIconPackApplications
                 )
-                    ?: generateIcon(
+
+                if (primary != null) {
+                    onUpdate(app, primary, false, sourcePackNameFor(options.primarySource, primaryIconPackApplications))
+                } else {
+                    val secondary = generateIcon(
                         app,
                         options.secondarySource,
                         options.secondaryImageEdit,
@@ -136,18 +140,25 @@ class IconGenerator(
                         secondaryIconPackApplications
                     )
 
-                if (matched != null) {
-                    onUpdate(app, matched, false)
-                } else {
-                    // Neither pack themes this app — give it the primary pack's fallback styling.
-                    val fallback = generateFallback(app)
-                    onUpdate(app, fallback, fallback != null)
+                    if (secondary != null) {
+                        onUpdate(app, secondary, false, sourcePackNameFor(options.secondarySource, secondaryIconPackApplications))
+                    } else {
+                        // Neither pack themes this app — give it the primary pack's fallback styling.
+                        // The result isn't a real pack icon, so it carries no source pack.
+                        val fallback = generateFallback(app)
+                        onUpdate(app, fallback, fallback != null, "")
+                    }
                 }
             } catch (e: Exception) {
                 Log.error("IconGenerator", "Failed to generate icon for ${app.packageName}", e)
             }
         }
     }
+
+    // The pack an icon should be credited to: only icon-pack sources count, the others
+    // (app icon, app name) don't come from a pack and so report an empty source.
+    private fun sourcePackNameFor(source: Source, iconPack: IconPackContainer): String =
+        if (source == Source.ICON_PACK) iconPack.iconPackName else ""
 
     /**
      * Composites the primary pack's classic fallback styling onto [app]'s own icon so an app
