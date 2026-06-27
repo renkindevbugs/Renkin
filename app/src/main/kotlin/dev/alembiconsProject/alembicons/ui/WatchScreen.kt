@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
@@ -28,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -43,10 +43,13 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FloatingToolbarDefaults
+import androidx.compose.material3.HorizontalFloatingToolbar
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -68,6 +71,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -222,7 +226,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
 // Rule list (Completed on top so it's the first thing the user can clear, then Active)
 // ---------------------------------------------------------------------------
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun WatchRuleList(
     rules: List<RuleWithDetails>,
@@ -240,6 +244,18 @@ private fun WatchRuleList(
 ) {
     val completed = rules.filter { it.rule.completed }
     val active = rules.filter { !it.rule.completed }
+
+    // Single-selected active rule. Its Edit/Delete actions live in the bottom floating toolbar
+    // instead of on every card; tapping an active card selects/deselects it. Completed rules are
+    // never selectable (they keep their own apply/delete behaviour).
+    var selectedId by remember { mutableStateOf<Long?>(null) }
+    val selectedRule = active.find { it.rule.id == selectedId }
+    // Drop a stale selection if the rule was deleted or completed since it was picked.
+    LaunchedEffect(active) {
+        if (selectedId != null && active.none { it.rule.id == selectedId }) selectedId = null
+    }
+    // Back deselects before it would close the screen.
+    BackHandler(enabled = selectedId != null) { selectedId = null }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
@@ -340,8 +356,10 @@ private fun WatchRuleList(
                             Box(Modifier.animateItem()) {
                                 ActiveRuleCard(
                                     rule, apps, packs,
-                                    onEdit = { onEdit(rule) },
-                                    onDelete = { onDelete(rule.rule.id) }
+                                    selected = rule.rule.id == selectedId,
+                                    onClick = {
+                                        selectedId = if (selectedId == rule.rule.id) null else rule.rule.id
+                                    }
                                 )
                             }
                         }
@@ -350,18 +368,40 @@ private fun WatchRuleList(
             }
         }
 
+        // Bottom expandable floating toolbar. Collapsed (nothing selected) it's just the centered
+        // "+" that adds a rule; selecting an active rule expands it — Edit on the left, Delete and
+        // Deselect on the right — all acting on that rule.
         val view = LocalView.current
-        FloatingActionButton(
-            onClick = { view.performTapHaptic(); onAdd() },
-            shape = RoundedCornerShape(18.dp),
-            containerColor = MaterialTheme.colorScheme.primary,
+        HorizontalFloatingToolbar(
+            expanded = selectedRule != null,
+            leadingContent = {
+                IconButton(onClick = { selectedRule?.let(onEdit) }) {
+                    Icon(Icons.Filled.Edit, stringResource(R.string.edit))
+                }
+            },
+            trailingContent = {
+                IconButton(onClick = { selectedRule?.let { onDelete(it.rule.id) } }) {
+                    Icon(
+                        Icons.Filled.Delete,
+                        stringResource(R.string.deleteRule),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            },
+            content = {
+                FilledIconButton(
+                    onClick = { view.performTapHaptic(); selectedId = null; onAdd() },
+                    modifier = Modifier.width(64.dp)
+                ) {
+                    Icon(Icons.Filled.Add, stringResource(R.string.addWatchRule))
+                }
+            },
             modifier = Modifier
-                .align(Alignment.BottomEnd)
+                .align(Alignment.BottomCenter)
                 .navigationBarsPadding()
-                .padding(20.dp)
-        ) {
-            Icon(Icons.Filled.Add, stringResource(R.string.addWatchRule))
-        }
+                .offset(y = -FloatingToolbarDefaults.ScreenOffset)
+                .zIndex(1f)
+        )
     }
 }
 
@@ -449,14 +489,17 @@ private fun ActiveRuleCard(
     rule: RuleWithDetails,
     apps: List<PackageInfoStruct>,
     packs: List<IconPack>,
-    onEdit: () -> Unit,
-    onDelete: () -> Unit
+    selected: Boolean,
+    onClick: () -> Unit
 ) {
     Surface(
+        onClick = onClick,
         shape = CardShape,
         // A clear step above the screen background (surfaceContainerLow) so the card's bounds
         // are visible; inner pills go one step higher again to stay distinct.
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
+        // Frame the selected rule so it's obvious which one the toolbar acts on.
+        border = if (selected) BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(Modifier.padding(12.dp)) {
@@ -510,32 +553,6 @@ private fun ActiveRuleCard(
                         val pack = packs.find { it.packageName == rp.iconPackPackage }
                         PackLabel(rp.iconPackPackage, pack?.applicationName)
                     }
-                }
-            }
-
-            // Actions at the bottom, right-aligned: delete sits to the left of the edit
-            // pill so the apps and pack tags above can use the card's full width.
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = onDelete, modifier = Modifier.size(40.dp)) {
-                    Icon(
-                        Icons.Filled.Delete, stringResource(R.string.deleteRule),
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-                FilledTonalButton(
-                    onClick = onEdit,
-                    contentPadding = PaddingValues(start = 16.dp, end = 20.dp, top = 8.dp, bottom = 8.dp)
-                ) {
-                    Icon(Icons.Filled.Edit, null, modifier = Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text(stringResource(R.string.edit))
                 }
             }
         }
