@@ -213,9 +213,9 @@ fun OptionsDialog(
     var textType by rememberSaveable { mutableStateOf(TextType.FULL_NAME) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
-    // Monochrome variant only: tint with the live Material You system palette (matches the native
-    // themed icon) instead of the manual colour below. Defaults on so it looks native out of the box.
-    var matchSystemTheme by rememberSaveable { mutableStateOf(true) }
+    // Monochrome variant: which colour scheme tints the icon. 0..schemes-1 pick a wallpaper-derived
+    // Material You scheme (foreground+background); the last index is Custom (manual colour below).
+    var monochromeScheme by rememberSaveable { mutableIntStateOf(0) }
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
     var iconPack by rememberSaveable { mutableStateOf(iconPacks.firstOrNull()?.packageName ?: "") }
     // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
@@ -275,15 +275,15 @@ fun OptionsDialog(
         icon.isAdaptiveIconDrawable() && (icon as AdaptiveIconDrawable).haveMonochrome()
     }
 
-    // Monochrome variant tinted to match the system theme: resolve the live Material You accent
-    // (light foreground over dark background, the same stops the themed export uses).
+    // Monochrome variant colours: a wallpaper-derived scheme (foreground+background) or Custom.
     val isMonochromeVariant = source == Source.APPLICATION_ICON && useMonochrome
-    val systemThemeColors = rememberSystemThemeColors()
-    val useSystemTheme = isMonochromeVariant && matchSystemTheme && systemThemeColors != null
-    val effectiveColor = if (useSystemTheme) systemThemeColors!!.first else iconColor
+    val monochromeSchemes = rememberMonochromeSchemes()
+    val isCustomScheme = monochromeScheme >= monochromeSchemes.size
+    val scheme = monochromeSchemes.getOrNull(monochromeScheme)
+    val effectiveColor = if (isMonochromeVariant && !isCustomScheme) scheme!!.first else iconColor
     // Background only applies to the monochrome variant; other sources keep the transparent default.
     val effectiveBgColor = when {
-        useSystemTheme -> systemThemeColors!!.second
+        isMonochromeVariant && !isCustomScheme -> scheme!!.second
         isMonochromeVariant -> Color.Black
         else -> Color.Transparent
     }
@@ -428,9 +428,9 @@ fun OptionsDialog(
                                 selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },
                                 appHasMonochrome = appHasMonochrome,
                                 onMonochromeChange = { useMonochrome = it },
-                                matchSystemTheme = matchSystemTheme,
-                                systemThemeAvailable = systemThemeColors != null,
-                                onMatchSystemThemeChange = { matchSystemTheme = it }
+                                monochromeSchemes = monochromeSchemes,
+                                selectedScheme = monochromeScheme,
+                                onSchemeChange = { monochromeScheme = it }
                             )
                             1 -> UploadColumn(app = app) {
                                 draft.uploadBase = it
@@ -562,17 +562,26 @@ private fun OptionsBottomBar(
 }
 
 /**
- * The live Material You system palette (foreground over background), or null on Android < 12
- * where dynamic colours don't exist. Matches the accent stops the themed icon export uses, so a
- * monochrome icon tinted with these looks like the OS's own themed icon.
+ * Wallpaper-derived colour schemes (foreground over background) for tinting the monochrome icon,
+ * pulled from the live Material You palette — the three accent hues plus a neutral, and an inverted
+ * accent. These harmonise with the user's wallpaper, like Android's own themed-icon colours. On
+ * Android < 12 (no dynamic colours) it falls back to plain light-on-dark / dark-on-light.
  */
 @Composable
-private fun rememberSystemThemeColors(): Pair<Color, Color>? {
-    if (!supportDynamicColors()) return null
+private fun rememberMonochromeSchemes(): List<Pair<Color, Color>> {
+    if (!supportDynamicColors()) {
+        return listOf(Color.White to Color.Black, Color.Black to Color.White)
+    }
     val context = LocalContext.current
     return remember {
-        Color(context.resources.getColor(android.R.color.system_accent1_100, context.theme)) to
-            Color(context.resources.getColor(android.R.color.system_accent1_800, context.theme))
+        fun c(id: Int) = Color(context.resources.getColor(id, context.theme))
+        listOf(
+            c(android.R.color.system_accent1_100) to c(android.R.color.system_accent1_800),
+            c(android.R.color.system_accent2_100) to c(android.R.color.system_accent2_800),
+            c(android.R.color.system_accent3_100) to c(android.R.color.system_accent3_800),
+            c(android.R.color.system_neutral1_100) to c(android.R.color.system_neutral1_800),
+            c(android.R.color.system_accent1_800) to c(android.R.color.system_accent1_100)
+        )
     }
 }
 

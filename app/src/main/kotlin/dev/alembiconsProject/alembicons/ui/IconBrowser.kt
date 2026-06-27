@@ -6,9 +6,14 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -28,7 +33,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -120,11 +124,11 @@ fun CreateTab(
     // Switches the Application Icon variant between the full-colour icon (false) and the
     // recoloured monochrome layer (true). Mirrors options.monochrome.
     onMonochromeChange: (Boolean) -> Unit = {},
-    // Monochrome variant: tint with the live system palette (true) vs a manual colour (false).
-    matchSystemTheme: Boolean = true,
-    // False on Android < 12 (no dynamic colours), which hides the system-theme switch.
-    systemThemeAvailable: Boolean = false,
-    onMatchSystemThemeChange: (Boolean) -> Unit = {}
+    // Wallpaper-derived colour schemes (foreground, background) offered for the monochrome variant.
+    monochromeSchemes: List<Pair<Color, Color>> = emptyList(),
+    // Index of the chosen scheme; == monochromeSchemes.size means the Custom (manual colour) option.
+    selectedScheme: Int = 0,
+    onSchemeChange: (Int) -> Unit = {}
 ) {
     // Seeded from the hoisted query so returning to the tab doesn't trigger a spurious
     // re-search (debouncedQuery already matches the preserved searchQuery).
@@ -260,9 +264,9 @@ fun CreateTab(
                 monochrome = options.monochrome,
                 appHasMonochrome = appHasMonochrome,
                 onMonochromeChange = onMonochromeChange,
-                matchSystemTheme = matchSystemTheme,
-                systemThemeAvailable = systemThemeAvailable,
-                onMatchSystemThemeChange = onMatchSystemThemeChange
+                schemes = monochromeSchemes,
+                selectedScheme = selectedScheme,
+                onSchemeChange = onSchemeChange
             )
             Source.APPLICATION_NAME -> Column(
                 Modifier
@@ -287,9 +291,9 @@ private fun ApplicationIconVariant(
     monochrome: Boolean,
     appHasMonochrome: Boolean,
     onMonochromeChange: (Boolean) -> Unit,
-    matchSystemTheme: Boolean,
-    systemThemeAvailable: Boolean,
-    onMatchSystemThemeChange: (Boolean) -> Unit
+    schemes: List<Pair<Color, Color>>,
+    selectedScheme: Int,
+    onSchemeChange: (Int) -> Unit
 ) {
     Column(
         Modifier
@@ -334,28 +338,73 @@ private fun ApplicationIconVariant(
             modifier = Modifier.padding(top = 10.dp)
         )
 
-        // Only meaningful for the Monochrome variant on Android 12+ (dynamic colours).
-        if (monochrome && appHasMonochrome && systemThemeAvailable) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = stringResource(R.string.matchSystemTheme),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = stringResource(R.string.matchSystemThemeHint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+        if (monochrome && appHasMonochrome) {
+            Text(
+                text = stringResource(R.string.monochromeColors),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 20.dp, bottom = 10.dp)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                schemes.forEachIndexed { index, (fg, bg) ->
+                    SchemeSwatch(
+                        foreground = fg,
+                        background = bg,
+                        custom = false,
+                        selected = selectedScheme == index
+                    ) { onSchemeChange(index) }
                 }
-                Switch(checked = matchSystemTheme, onCheckedChange = onMatchSystemThemeChange)
+                // Custom: the trailing swatch opens manual colour control in the Modifier tab.
+                SchemeSwatch(
+                    foreground = MaterialTheme.colorScheme.onSurface,
+                    background = MaterialTheme.colorScheme.surfaceVariant,
+                    custom = true,
+                    selected = selectedScheme >= schemes.size
+                ) { onSchemeChange(schemes.size) }
             }
+            Text(
+                text = stringResource(R.string.monochromeColorsHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 10.dp)
+            )
+        }
+    }
+}
+
+/** A colour-scheme chip: the background tile with a foreground dot, or a palette glyph for Custom. */
+@Composable
+private fun SchemeSwatch(
+    foreground: Color,
+    background: Color,
+    custom: Boolean,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val ring = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    Box(
+        modifier = Modifier
+            .size(44.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(background)
+            .border(if (selected) 2.dp else 0.5.dp, ring, RoundedCornerShape(12.dp))
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        if (custom) {
+            Icon(
+                imageVector = Icons.Filled.Edit,
+                contentDescription = stringResource(R.string.custom),
+                tint = foreground,
+                modifier = Modifier.size(20.dp)
+            )
+        } else {
+            Box(
+                Modifier
+                    .size(20.dp)
+                    .clip(CircleShape)
+                    .background(foreground)
+            )
         }
     }
 }
