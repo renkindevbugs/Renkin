@@ -91,13 +91,12 @@ class IconPackRepository(private val context: Context) {
     }
 
     fun retrieveCalendarIcons(iconPackageName: String) {
-        val appMan = ApplicationManager(context)
         val entry = appFilterElements.entries.find { it.key.packageName == iconPackageName }
 
         val packApps = entry?.value ?: listOf()
-        calendarIcon = appMan.getCalendarApplications(installedApplications, packApps)
+        calendarIcon = appManager.getCalendarApplications(installedApplications, packApps)
         calendarIconsDrawable =
-            appMan.getCalendarFromAppFilterElements(
+            appManager.getCalendarFromAppFilterElements(
                 iconPackageName,
                 packApps
             )
@@ -158,9 +157,8 @@ class IconPackRepository(private val context: Context) {
             RawCalendar(component = app.toComponentInfo(), prefix = prefix)
         }
 
-        val appMan = ApplicationManager(context)
-        val icons = appMan.getCalendarApplications(apps, fakeCalendars)
-        val raw = appMan.getCalendarFromAppFilterElements(iconPackageName, fakeCalendars)
+        val icons = appManager.getCalendarApplications(apps, fakeCalendars)
+        val raw = appManager.getCalendarFromAppFilterElements(iconPackageName, fakeCalendars)
 
         // Fill missing calendar days so the icon appears on every date, even when the
         // source pack only has drawables for the app the icon was *designed* for.
@@ -171,7 +169,7 @@ class IconPackRepository(private val context: Context) {
             for (i in 1..31) {
                 val key = prefix + i
                 if (key !in filled) {
-                    val padded = appMan.getDrawableByName(iconPackageName, prefix + i.toString().padStart(2, '0'))
+                    val padded = appManager.getDrawableByName(iconPackageName, prefix + i.toString().padStart(2, '0'))
                     if (padded != null) filled[key] = padded
                 }
             }
