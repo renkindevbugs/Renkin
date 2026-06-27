@@ -72,6 +72,7 @@ class IconGenerator(
     private val fallbackPackName: String = ""
 ) {
     private val adaptiveIconScale = 1.5f // 108dp / 72dp
+    private val appMan by lazy { ApplicationManager(ctx) }
 
     fun generateIcon(application: PackageInfoStruct,
                      onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String) -> Unit) {
@@ -175,7 +176,6 @@ class IconGenerator(
         val packName = fallbackPackName
         if (packName.isEmpty()) return null
 
-        val appMan = ApplicationManager(ctx)
         fun load(name: String?): Bitmap? = name?.let { appMan.getDrawableByName(packName, it)?.toSafeBitmapOrNull() }
 
         // Pick a back deterministically per app so the choice is stable across rebuilds.
@@ -396,8 +396,6 @@ class IconGenerator(
     }
 
     private fun parseApplicationIcon(application: PackageInfoStruct): Drawable? {
-        val appMan = ApplicationManager(ctx)
-
         if (isVectorDrawable(application.icon) && options.vector) {
             val res = appMan.getResources(application.packageName) ?: return null
             return IconParser.parseDrawable(res, application.icon, application.iconID)
@@ -689,7 +687,7 @@ class IconGenerator(
     private fun parseIconPackXML(iconPackName: String, iconDrawable: ResourceDrawable): Drawable? {
         if (!isVectorDrawable(iconDrawable.drawable)) return null
 
-        val res = ApplicationManager(ctx).getResources(iconPackName) ?: return null
+        val res = appMan.getResources(iconPackName) ?: return null
         val icon = IconParser.parseDrawable(res, iconDrawable.drawable, iconDrawable.resourceId)
 
         if (!icon.isAdaptiveIconDrawable()) return null
