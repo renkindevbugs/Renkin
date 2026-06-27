@@ -178,6 +178,7 @@
     <string name="edit">Edit</string>
     <string name="appsToWatch">Apps to watch</string>
     <string name="searchApps">Search apps</string>
+    <string name="noAppsFound">No apps found</string>
     <string name="swipeForMore">swipe for more</string>
     <string name="watchAllPacksLabel">Watch all icon packs</string>
     <string name="iconPacksToCheck">Icon packs to check</string>
