@@ -225,43 +225,44 @@ fun CreateTab(
                         )
                     }
                 } else {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 16.dp)
-                    ) {
-                        // The search bar is the first list item, so it scrolls away 1:1 with
-                        // the icons (perfectly smooth, no animation) and comes back only when
-                        // the list is scrolled all the way to the top.
-                        item(key = "search") {
-                            IconSearchBar(
-                                query = searchQuery,
-                                onQueryChange = onSearchQueryChange,
-                                sortOrder = sortOrder,
-                                onSortOrderChange = { sortOrder = it }
-                            )
-                        }
-                        orderedPacks.forEach { pack ->
-                            item(key = "${pack.packageName}_header") {
-                                Box(Modifier.animateItem()) {
-                                    PackSectionHeader(pack) { onExpandedPackChange(pack) }
+                    Column(Modifier.fillMaxSize()) {
+                        // Pinned above the list (not a list item): reordering or scrolling the pack
+                        // list must not touch the focused search field. As a list item it shared the
+                        // LazyColumn's relayout, and a reshuffle/scrollToItem mid-typing desynced the
+                        // IME — dropped key presses and a cursor that jumped to the start.
+                        IconSearchBar(
+                            query = searchQuery,
+                            onQueryChange = onSearchQueryChange,
+                            sortOrder = sortOrder,
+                            onSortOrderChange = { sortOrder = it }
+                        )
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(bottom = 16.dp)
+                        ) {
+                            orderedPacks.forEach { pack ->
+                                item(key = "${pack.packageName}_header") {
+                                    Box(Modifier.animateItem()) {
+                                        PackSectionHeader(pack) { onExpandedPackChange(pack) }
+                                    }
                                 }
-                            }
-                            item(key = "${pack.packageName}_icons") {
-                                Box(Modifier.animateItem()) {
-                                    PackIconsRow(
-                                        iconPack = pack,
-                                        options = options,
-                                        sortOrder = sortOrder,
-                                        query = debouncedQuery,
-                                        selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
-                                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.primaryIconPack },
-                                        onMore = { onExpandedPackChange(pack) },
-                                        onResult = { hasMatches ->
-                                            packMatches = packMatches + (pack.packageName to hasMatches)
+                                item(key = "${pack.packageName}_icons") {
+                                    Box(Modifier.animateItem()) {
+                                        PackIconsRow(
+                                            iconPack = pack,
+                                            options = options,
+                                            sortOrder = sortOrder,
+                                            query = debouncedQuery,
+                                            selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
+                                            selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.primaryIconPack },
+                                            onMore = { onExpandedPackChange(pack) },
+                                            onResult = { hasMatches ->
+                                                packMatches = packMatches + (pack.packageName to hasMatches)
+                                            }
+                                        ) { resource, _, drawableName ->
+                                            onIconSelect(resource, pack, drawableName)
                                         }
-                                    ) { resource, _, drawableName ->
-                                        onIconSelect(resource, pack, drawableName)
                                     }
                                 }
                             }
