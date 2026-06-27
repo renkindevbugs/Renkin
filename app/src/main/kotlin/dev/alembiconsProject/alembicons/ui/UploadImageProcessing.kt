@@ -3,10 +3,10 @@ package dev.alembiconsProject.alembicons.ui
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.net.Uri
+import dev.alembiconsProject.alembicons.extension.newArgbBitmap
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color.Companion.Red
 import androidx.compose.ui.graphics.Path
@@ -30,9 +30,7 @@ internal fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
 
         if (svg != null) {
             if (svg.documentWidth > 0 && svg.documentHeight > 0) {
-                bitmap = Bitmap.createBitmap(svg.documentWidth.toInt(), svg.documentHeight.toInt(), Bitmap.Config.ARGB_8888)
-                val canvas = Canvas(bitmap)
-                svg.renderToCanvas(canvas)
+                bitmap = newArgbBitmap(svg.documentWidth.toInt(), svg.documentHeight.toInt()) { svg.renderToCanvas(it) }
             }
         }
     }
@@ -60,15 +58,11 @@ internal fun zoomBitmap(image: Bitmap, zoomLevel: Float): Bitmap {
     val x = (image.width - (image.width * zoomLevel)) / 2
     val y = (image.height - (image.height * zoomLevel)) / 2
 
-    val zoomedImage = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888)
     val mtx = Matrix()
     mtx.postScale(zoomLevel, zoomLevel)
     mtx.postTranslate(x, y)
 
-    val canvas = Canvas(zoomedImage)
-    canvas.drawBitmap(image, mtx, Paint())
-
-    return zoomedImage
+    return newArgbBitmap(image.width, image.height) { it.drawBitmap(image, mtx, Paint()) }
 }
 
 internal fun squareBitmap(image: Bitmap): Bitmap {
@@ -77,18 +71,13 @@ internal fun squareBitmap(image: Bitmap): Bitmap {
     }
 
     val size = max(image.width, image.height)
-    val squaredImage = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
-
     val x = (size - image.width) / 2f
     val y = (size - image.height) / 2f
 
     val mtx = Matrix()
     mtx.postTranslate(x, y)
 
-    val canvas = Canvas(squaredImage)
-    canvas.drawBitmap(image, mtx, Paint())
-
-    return squaredImage
+    return newArgbBitmap(size, size) { it.drawBitmap(image, mtx, Paint()) }
 }
 
 internal fun createMask(image: Bitmap): Bitmap {
@@ -114,9 +103,5 @@ internal fun createMask(image: Bitmap): Bitmap {
     paint.color = Red.toArgb()
     paint.style = Paint.Style.FILL
 
-    val mask = Bitmap.createBitmap(image.width, image.height, Bitmap.Config.ARGB_8888)
-    val maskCanvas = Canvas(mask)
-    maskCanvas.drawPath(path.asAndroidPath(), paint)
-
-    return mask
+    return newArgbBitmap(image.width, image.height) { it.drawPath(path.asAndroidPath(), paint) }
 }
