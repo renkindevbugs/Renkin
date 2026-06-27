@@ -92,7 +92,8 @@ class IconGenerationService(
     private fun buildGenerator(options: GenerationOptions): IconGenerator {
         val pack1 = IconPackContainer(options.primaryIconPack, iconPackRepo.getAppDrawables(options.primaryIconPack))
         val pack2 = IconPackContainer(options.secondaryIconPack, iconPackRepo.getAppDrawables(options.secondaryIconPack))
-        return IconGenerator(context, options, pack1, pack2)
+        val fallback = iconPackRepo.getIconPackFallback(options.primaryIconPack)
+        return IconGenerator(context, options, pack1, pack2, fallback)
     }
 
     suspend fun getIconPackIcons(

@@ -6,6 +6,8 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
+import android.graphics.PorterDuffXfermode
+import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
@@ -32,6 +34,8 @@ import dev.alembiconsProject.alembicons.drawable.ImageVectorDrawable
 import dev.alembiconsProject.alembicons.drawable.InsetIconDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.drawable.foregroundVectorOrNull
+import dev.alembiconsProject.alembicons.drawable.toSafeBitmapOrNull
+import dev.alembiconsProject.alembicons.data.IconPackFallback
 import dev.alembiconsProject.alembicons.drawable.haveMonochrome
 import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
 import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
@@ -60,7 +64,10 @@ class IconGenerator(
     private val ctx: Context,
     private val options: GenerationOptions,
     private val primaryIconPackApplications: IconPackContainer,
-    private val secondaryIconPackApplications: IconPackContainer
+    private val secondaryIconPackApplications: IconPackContainer,
+    // The primary pack's classic fallback styling, applied to apps neither pack themes so they
+    // inherit the pack's uniform look instead of staying raw (issue #121). Empty = no fallback.
+    private val primaryFallback: IconPackFallback = IconPackFallback()
 ) {
     private val adaptiveIconScale = 1.5f // 108dp / 72dp
 
@@ -126,12 +133,61 @@ class IconGenerator(
                         options.secondaryTextType,
                         secondaryIconPackApplications
                     )
+                    // Neither pack themes this app — give it the primary pack's fallback styling.
+                    ?: generateFallback(app)
 
                 onUpdate(app, icon)
             } catch (e: Exception) {
                 Log.error("IconGenerator", "Failed to generate icon for ${app.packageName}", e)
             }
         }
+    }
+
+    /**
+     * Composites the primary pack's classic fallback styling onto [app]'s own icon so an app
+     * neither pack themes still inherits the pack's uniform frame: draw the iconback, the original
+     * icon scaled down to sit inside it, cut everything outside the iconmask shape, then draw the
+     * iconupon overlay. Exported as a plain bitmap so the baked pack shape survives (the launcher
+     * doesn't re-mask legacy icons). Returns null when the pack declares no fallback.
+     */
+    private fun generateFallback(app: PackageInfoStruct): IconPackDrawable? {
+        if (primaryFallback.isEmpty) return null
+        val packName = options.primaryIconPack
+        if (packName.isEmpty()) return null
+
+        val appMan = ApplicationManager(ctx)
+        fun load(name: String?): Bitmap? = name?.let { appMan.getDrawableByName(packName, it)?.toSafeBitmapOrNull() }
+
+        // Pick a back deterministically per app so the choice is stable across rebuilds.
+        val back = primaryFallback.backs
+            .takeIf { it.isNotEmpty() }
+            ?.let { it[(app.packageName.hashCode() and Int.MAX_VALUE) % it.size] }
+            ?.let { load(it) }
+        val mask = load(primaryFallback.mask)
+        val upon = load(primaryFallback.upon)
+        val original = getIconBitmap(app.icon) ?: return null
+
+        val size = back?.width ?: original.width
+        val full = Rect(0, 0, size, size)
+        val result = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+
+        if (back != null) canvas.drawBitmap(back, null, full, null)
+
+        // The app's own icon, scaled down (by the pack's factor) to sit inside the frame.
+        val inner = (size * primaryFallback.scale).toInt().coerceAtLeast(1)
+        val offset = (size - inner) / 2
+        canvas.drawBitmap(original, null, Rect(offset, offset, offset + inner, offset + inner), Paint(Paint.FILTER_BITMAP_FLAG))
+
+        // Clip to the pack's shape: DST_OUT removes wherever the mask is opaque (outside the shape).
+        if (mask != null) {
+            val paint = Paint().apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_OUT) }
+            canvas.drawBitmap(mask, null, full, paint)
+        }
+
+        if (upon != null) canvas.drawBitmap(upon, null, full, null)
+
+        return BitmapIconDrawable(ctx.resources, result)
     }
 
     /**

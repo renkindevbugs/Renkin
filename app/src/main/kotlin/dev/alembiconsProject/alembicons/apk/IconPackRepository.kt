@@ -61,6 +61,12 @@ class IconPackRepository(private val context: Context) {
         iconPackLoaded = true
     }
 
+    /** The pack's classic fallback styling (iconback/mask/upon/scale) for unthemed apps. */
+    fun getIconPackFallback(iconPack: String): dev.alembiconsProject.alembicons.data.IconPackFallback {
+        if (iconPack == "") return dev.alembiconsProject.alembicons.data.IconPackFallback()
+        return appManager.getIconPackFallback(iconPack)
+    }
+
     /** Drawables every installed app has in [iconPack], keyed by app. */
     fun getAppDrawables(iconPack: String): Map<InstalledApplication, ResourceDrawable> {
         if (iconPack == "") return emptyMap()
