@@ -6,9 +6,11 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +32,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -74,6 +77,7 @@ import dev.alembiconsProject.alembicons.data.SecondaryTextTypeKey
 import dev.alembiconsProject.alembicons.data.TEXT_TYPE_DEFAULT
 import dev.alembiconsProject.alembicons.data.getBooleanValue
 import dev.alembiconsProject.alembicons.data.getEnumValue
+import dev.alembiconsProject.alembicons.data.getPreferencesValue
 import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.data.setBooleanValue
 import dev.alembiconsProject.alembicons.data.setColorValue
@@ -355,6 +359,15 @@ fun OptionsCard(
                         primaryEnabled = primaryIsPack,
                         secondaryEnabled = secondaryIsPack
                     ) { scope.launch { prefs.setEnumValue(FallbackSourceKey, it) } }
+
+                    val fallbackPack = when (fallbackSource) {
+                        FallbackSource.PRIMARY -> primaryIconPack
+                        FallbackSource.SECONDARY -> secondaryIconPack
+                        FallbackSource.NONE -> ""
+                    }
+                    if (fallbackSource != FallbackSource.NONE && fallbackPack.isNotEmpty()) {
+                        FallbackPreview(fallbackSource, fallbackPack)
+                    }
                 }
 
                 if (showIconColor) {
@@ -429,5 +442,39 @@ private fun FallbackSegment(label: String, selected: Boolean, enabled: Boolean, 
         contentAlignment = Alignment.Center
     ) {
         Text(text = label, style = MaterialTheme.typography.labelLarge, color = fg)
+    }
+}
+
+/**
+ * Live sample of the chosen fallback styling applied to a few of the user's app icons, so the
+ * uniform frame is visible before building. Keyed on the source + pack, so it refreshes when the
+ * user switches Primary/Secondary or changes the pack.
+ */
+@Composable
+private fun FallbackPreview(fallbackSource: FallbackSource, fallbackPack: String) {
+    val vm = hiltViewModel<MainViewModel>()
+    val preferences = getPreferences().getPreferencesValue()
+    val previews by produceState<List<IconPackDrawable>>(emptyList(), fallbackSource, fallbackPack, preferences) {
+        value = vm.fallbackPreview(preferences, fallbackSource)
+    }
+    if (previews.isEmpty()) return
+    Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+        Text(
+            text = stringResource(R.string.fallbackPreviewLabel),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = 6.dp, start = 4.dp)
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            previews.forEach { icon ->
+                Image(
+                    painter = icon.getPainter(),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                )
+            }
+        }
     }
 }

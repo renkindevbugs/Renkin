@@ -505,4 +505,8 @@ class MainViewModel @Inject constructor(
     /** Of [prefixes], those that are genuine calendar day-rotation sets in [packPackageName]. */
     suspend fun calendarPrefixesAmong(packPackageName: String, prefixes: List<String>): Set<String> =
         appProvider.calendarPrefixesAmong(packPackageName, prefixes)
+
+    /** Sample icons showing the fallback styling for [fallbackSource], for the Options preview. */
+    suspend fun fallbackPreview(preferences: Preferences, fallbackSource: dev.alembiconsProject.alembicons.data.FallbackSource) =
+        appProvider.fallbackPreview(preferences, fallbackSource)
 }
