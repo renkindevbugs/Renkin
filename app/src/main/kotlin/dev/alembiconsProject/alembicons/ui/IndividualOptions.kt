@@ -91,10 +91,22 @@ import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 
 /** The source that produced the icon currently being previewed and confirmed. */
 internal enum class IconOrigin { CREATE, UPLOAD, VECTOR }
+
+/**
+ * How fully the comparison labels should show given a list's top position: 1 at the very top,
+ * fading to 0 over the first 120px of scroll (and 0 once past the first item).
+ */
+private fun topFraction(firstVisibleItemIndex: Int, firstVisibleItemScrollOffset: Int): Float =
+    if (firstVisibleItemIndex > 0) 0f
+    else (1f - firstVisibleItemScrollOffset / 120f).coerceIn(0f, 1f)
 
 /**
  * Holds the draft icon being built in the options dialog and the logic that (re)generates
@@ -239,7 +251,25 @@ fun OptionsDialog(
     // keeps the user's paths instead of disposing the editor and resetting them.
     val vectorEditState = remember { VectorEditState() }
     var showConfirmClear by remember { mutableStateOf(false) }
-    var headerCollapsed by remember { mutableStateOf(false) }
+    // Enter-always app bar: the header (close / name / overflow) collapses pixel-by-pixel as the
+    // icon list scrolls down and slides back in on scroll up.
+    val headerScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    // The pack list and the single-pack grid states + which pack is expanded, hoisted so the header
+    // can fade the Current/New labels by whichever list is showing — by its exact distance from the
+    // very top (over the first 120px). Unlike the enter-always app bar, the labels only return when
+    // scrolled fully up, not on any upward scroll mid-list.
+    val iconListState = rememberLazyListState()
+    val iconGridState = rememberLazyGridState()
+    var expandedPack by remember { mutableStateOf<IconPack?>(null) }
+    val labelExpand by remember {
+        derivedStateOf {
+            when {
+                selectedTab != 0 || source != Source.ICON_PACK -> 1f
+                expandedPack != null -> topFraction(iconGridState.firstVisibleItemIndex, iconGridState.firstVisibleItemScrollOffset)
+                else -> topFraction(iconListState.firstVisibleItemIndex, iconListState.firstVisibleItemScrollOffset)
+            }
+        }
+    }
     var edgeThreshold by rememberSaveable { mutableFloatStateOf(2.5f) }
     var edgeSmoothing by rememberSaveable { mutableFloatStateOf(2f) }
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
@@ -321,7 +351,8 @@ fun OptionsDialog(
     val selectIconMessage = stringResource(R.string.selectIconFirst)
 
     LaunchedEffect(selectedTab) {
-        if (selectedTab != 0) headerCollapsed = false
+        // Leaving the icon-pack list re-expands the app bar (other tabs barely scroll).
+        if (selectedTab != 0) headerScrollBehavior.state.heightOffset = 0f
         // Modifiers live only in the Modifier tab — leaving it starts the next visit clean
         if (selectedTab != 2) {
             imageEdit = ImageEdit.NONE
@@ -355,6 +386,7 @@ fun OptionsDialog(
                 Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
+                    .nestedScroll(headerScrollBehavior.nestedScrollConnection)
             ) {
             Column(Modifier.fillMaxSize()) {
                 // Sticky comparison header — close/delete/apply live in the same row
@@ -377,7 +409,8 @@ fun OptionsDialog(
                         }
                         onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, confirmedSourcePack)
                     },
-                    collapsed = headerCollapsed
+                    scrollBehavior = headerScrollBehavior,
+                    labelExpand = labelExpand
                 )
 
                 // The Create tab draws its own divider under the search bar;
@@ -420,6 +453,10 @@ fun OptionsDialog(
                                 iconPacks = iconPacks,
                                 options = generatingOptions,
                                 textType = textType,
+                                listState = iconListState,
+                                gridState = iconGridState,
+                                expandedPack = expandedPack,
+                                onExpandedPackChange = { expandedPack = it },
                                 packUsage = packUsage,
                                 searchQuery = createSearchQuery,
                                 onSearchQueryChange = { createSearchQuery = it },
@@ -439,7 +476,6 @@ fun OptionsDialog(
                                     }
                                 },
                                 onTextTypeChange = { textType = it; draft.origin = IconOrigin.CREATE },
-                                onCollapsedChange = { headerCollapsed = it },
                                 contentReady = createTabReady,
                                 selectedResourceId = customIconList.firstOrNull()?.resourceId,
                                 // Frame the rotation siblings only once the user has opted in.
