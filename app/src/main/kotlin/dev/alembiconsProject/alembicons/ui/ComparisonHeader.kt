@@ -18,7 +18,6 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -83,8 +82,6 @@ internal fun ComparisonHeader(
     onDismiss: () -> Unit,
     onClear: () -> Unit,
     onConfirm: () -> Unit,
-    // Sends the current preview icon to an external editor (overflow menu).
-    onEditExternally: () -> Unit,
     // Drives the app bar's enter-always collapse (pixel-tied to the icon list's scroll). Null on
     // wide screens, where the header is a single static row.
     scrollBehavior: TopAppBarScrollBehavior? = null,
@@ -154,7 +151,7 @@ internal fun ComparisonHeader(
                     horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)
                 ) {
                     ApplyButton(onConfirm)
-                    OverflowMenu(onClear, onEditExternally)
+                    OverflowMenu(onClear)
                 }
             }
         }
@@ -177,7 +174,7 @@ internal fun ComparisonHeader(
                     )
                 },
                 navigationIcon = { CloseButton(onDismiss) },
-                actions = { OverflowMenu(onClear, onEditExternally) },
+                actions = { OverflowMenu(onClear) },
                 scrollBehavior = scrollBehavior,
                 windowInsets = WindowInsets(0),
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -235,7 +232,7 @@ private fun CloseButton(onDismiss: () -> Unit) {
 
 /** Overflow menu holding the destructive "reset to default" action. */
 @Composable
-private fun OverflowMenu(onClear: () -> Unit, onEditExternally: () -> Unit) {
+private fun OverflowMenu(onClear: () -> Unit) {
     var menuOpen by remember { mutableStateOf(false) }
     Box {
         IconButton(onClick = { menuOpen = true }, modifier = Modifier.size(40.dp)) {
@@ -246,16 +243,6 @@ private fun OverflowMenu(onClear: () -> Unit, onEditExternally: () -> Unit) {
             )
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            DropdownMenuItem(
-                text = { Text(stringResource(R.string.editInAnotherApp)) },
-                leadingIcon = {
-                    Icon(imageVector = Icons.AutoMirrored.Filled.OpenInNew, contentDescription = null)
-                },
-                onClick = {
-                    menuOpen = false
-                    onEditExternally()
-                }
-            )
             DropdownMenuItem(
                 text = {
                     Text(

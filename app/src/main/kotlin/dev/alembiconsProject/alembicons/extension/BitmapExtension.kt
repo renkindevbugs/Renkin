@@ -11,6 +11,7 @@ import android.graphics.drawable.Drawable
 import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
+import kotlin.math.roundToInt
 
 /**
  * Creates a blank ARGB_8888 bitmap of [width]×[height], runs [draw] on a Canvas backed by it and
@@ -111,6 +112,59 @@ fun Bitmap.removeBackground(tolerance: Float): Bitmap {
         if (i < (h - 1) * w) consider(i + w, rr, rg, rb)
     }
 
+    return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
+}
+
+/**
+ * Re-centres the icon: finds the bounding box of the non-transparent pixels and moves it to the
+ * middle of a same-size canvas. Fixes artwork that an external editor left off-centre (e.g. after a
+ * background erase that trimmed one side). Returns the original when there's no opaque content.
+ */
+fun Bitmap.centeredContent(): Bitmap {
+    val w = width
+    val h = height
+    if (w <= 0 || h <= 0) return this
+    val px = IntArray(w * h)
+    getPixels(px, 0, w, 0, 0, w, h)
+
+    var left = w; var top = h; var right = -1; var bottom = -1
+    for (y in 0 until h) for (x in 0 until w) {
+        if ((px[y * w + x] ushr 24) >= 16) {
+            if (x < left) left = x
+            if (x > right) right = x
+            if (y < top) top = y
+            if (y > bottom) bottom = y
+        }
+    }
+    if (right < left) return this
+
+    val cw = right - left + 1
+    val ch = bottom - top + 1
+    val destLeft = (w - cw) / 2
+    val destTop = (h - ch) / 2
+    // Copy the content block (a pure move, no scaling) onto a fresh transparent canvas.
+    val out = IntArray(w * h)
+    for (y in 0 until ch) for (x in 0 until cw) {
+        out[(destTop + y) * w + (destLeft + x)] = px[(top + y) * w + (left + x)]
+    }
+    return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
+}
+
+/** Shifts the whole image by ([dx], [dy]) whole pixels; content pushed off the edge is dropped. */
+fun Bitmap.translated(dx: Float, dy: Float): Bitmap {
+    val idx = dx.roundToInt()
+    val idy = dy.roundToInt()
+    if (idx == 0 && idy == 0) return this
+    val w = width
+    val h = height
+    val px = IntArray(w * h)
+    getPixels(px, 0, w, 0, 0, w, h)
+    val out = IntArray(w * h)
+    for (y in 0 until h) for (x in 0 until w) {
+        val sx = x - idx
+        val sy = y - idy
+        if (sx in 0 until w && sy in 0 until h) out[y * w + x] = px[sy * w + sx]
+    }
     return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
 }
 

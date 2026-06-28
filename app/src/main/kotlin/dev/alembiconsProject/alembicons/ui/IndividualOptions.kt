@@ -275,6 +275,9 @@ fun OptionsDialog(
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
     var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
     var bgRemovalTolerance by rememberSaveable { mutableFloatStateOf(0.1f) }
+    var autoCenter by rememberSaveable { mutableStateOf(false) }
+    var iconOffsetX by rememberSaveable { mutableFloatStateOf(0f) }
+    var iconOffsetY by rememberSaveable { mutableFloatStateOf(0f) }
 
     // Calendar day icons — committed immediately when toggled (independent of icon confirm).
     var calendarEnabled by rememberSaveable { mutableStateOf(app.calendarEnabled) }
@@ -333,7 +336,10 @@ fun OptionsDialog(
         edgeGaussianRadius = edgeSmoothing,
         edgeContrastNormalized = edgeContrast,
         iconScale = iconScale,
-        bgRemovalTolerance = bgRemovalTolerance
+        bgRemovalTolerance = bgRemovalTolerance,
+        autoCenter = autoCenter,
+        iconOffsetX = iconOffsetX,
+        iconOffsetY = iconOffsetY
     )
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
@@ -411,11 +417,6 @@ fun OptionsDialog(
                             else -> ""
                         }
                         onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, confirmedSourcePack)
-                    },
-                    onEditExternally = {
-                        val bitmap = draft.iconToConfirm?.toBitmap()
-                        if (bitmap != null) shareIconForEditing(context, bitmap)
-                        else snackbarScope.launch { snackbarHostState.showSnackbar(selectIconMessage) }
                     },
                     scrollBehavior = headerScrollBehavior,
                     labelExpand = labelExpand
@@ -517,6 +518,9 @@ fun OptionsDialog(
                                 edgeContrast = edgeContrast,
                                 iconScale = iconScale,
                                 bgRemovalTolerance = bgRemovalTolerance,
+                                autoCenter = autoCenter,
+                                iconOffsetX = iconOffsetX,
+                                iconOffsetY = iconOffsetY,
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },
@@ -525,7 +529,15 @@ fun OptionsDialog(
                                 onEdgeSmoothingChange = { edgeSmoothing = it },
                                 onEdgeContrastChange = { edgeContrast = it },
                                 onIconScaleChange = { iconScale = it },
-                                onBgRemovalToleranceChange = { bgRemovalTolerance = it }
+                                onBgRemovalToleranceChange = { bgRemovalTolerance = it },
+                                onAutoCenterChange = { autoCenter = it },
+                                onIconOffsetXChange = { iconOffsetX = it },
+                                onIconOffsetYChange = { iconOffsetY = it },
+                                onEditExternally = {
+                                    val bitmap = draft.iconToConfirm?.toBitmap()
+                                    if (bitmap != null) shareIconForEditing(context, bitmap)
+                                    else snackbarScope.launch { snackbarHostState.showSnackbar(selectIconMessage) }
+                                }
                             )
                             else -> PrepareEditVector(app, vectorEditState) {
                                 draft.vectorIcon = it

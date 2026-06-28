@@ -148,7 +148,11 @@
     <string name="edgeContrast">Normalize contrast</string>
     <string name="removeBackground">Remove background</string>
     <string name="editInAnotherApp">Edit in another app</string>
+    <string name="openInImageToolbox">Open in ImageToolbox</string>
     <string name="sharedImageAdded">Image added to your uploads</string>
+    <string name="centerIcon">Center</string>
+    <string name="positionHorizontal">Horizontal position</string>
+    <string name="positionVertical">Vertical position</string>
     <string name="removeBackgroundTolerance">Tolerance</string>
     <string name="removeBackgroundHint">Erases the flat background colour around the icon, working inward from the edges. Raise the tolerance for backgrounds with a slight gradient.</string>
     <string name="optionsHint">These options apply to all apps at once. After changing them, tap the refresh button in the top bar to regenerate the icons.</string>
