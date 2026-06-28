@@ -57,7 +57,7 @@ data class GenerationOptions(
     val iconScale: Float = 1f,
     // Colour-distance tolerance (0..1) for the Remove background modifier — how far a pixel's colour
     // can be from the border background colour and still be erased.
-    val bgRemovalTolerance: Float = 0.15f,
+    val bgRemovalTolerance: Float = 0.1f,
     // Which pack's fallback styling to give apps neither pack themes (NONE = leave them raw).
     val fallbackSource: FallbackSource = FallbackSource.NONE
 ) {

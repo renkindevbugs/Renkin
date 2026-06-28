@@ -23,11 +23,13 @@ inline fun newArgbBitmap(width: Int, height: Int, draw: (Canvas) -> Unit): Bitma
 }
 
 /**
- * Erases the flat background around an icon, fully on-device. Reads the background colour from the
- * opaque border pixels, then flood-fills inward from every edge, clearing any connected pixel whose
- * colour is within [tolerance] (0..1, a fraction of the max RGB distance) of that background — so a
- * solid (or slightly graded) backdrop is removed while the centred glyph, not connected to the
- * border in that colour, is kept. Returns the original if the border is already transparent.
+ * Erases the background around an icon, fully on-device. Floods inward from the edges: it crosses
+ * any transparent padding for free, reads the background colour from the first opaque "shoreline" it
+ * reaches (the most common such colour), then keeps growing into opaque pixels — but only while each
+ * step stays within [tolerance] of the colour it came from. Comparing against the *neighbour* (not a
+ * single fixed colour) lets a gradient background be followed, while a hard glyph edge (a large
+ * colour jump) stops the fill, so the inner artwork survives. [tolerance] is 0..1, a fraction of the
+ * max RGB distance. Returns the original when there's no opaque content reachable from the border.
  */
 fun Bitmap.removeBackground(tolerance: Float): Bitmap {
     val w = width
@@ -37,54 +39,76 @@ fun Bitmap.removeBackground(tolerance: Float): Bitmap {
     val pixels = IntArray(w * h)
     getPixels(pixels, 0, w, 0, 0, w, h)
 
-    // Reference background colour = the most common opaque border colour. The mode (not the
-    // average) so a glyph that reaches the edge can't pull the reference off the real background.
-    val borderCounts = HashMap<Int, Int>()
-    fun sample(i: Int) {
+    val thresholdSq = (tolerance.coerceIn(0f, 1f) * 441.673f).let { it * it } // 441.673 = sqrt(3*255^2)
+
+    fun isTransparent(c: Int) = (c ushr 24) < 16
+    fun distSq(c: Int, rr: Int, rg: Int, rb: Int): Float {
+        val dr = ((c shr 16) and 0xFF) - rr
+        val dg = ((c shr 8) and 0xFF) - rg
+        val db = (c and 0xFF) - rb
+        return (dr * dr + dg * dg + db * db).toFloat()
+    }
+
+    // Pass A — flood the border-connected transparent region and tally the opaque "shoreline" it
+    // touches (and any opaque border pixels). The most common shoreline colour is the background.
+    val seenA = BooleanArray(w * h)
+    val stackA = ArrayDeque<Int>()
+    val shoreline = HashMap<Int, Int>()
+    fun visitA(i: Int) {
+        if (seenA[i]) return
+        seenA[i] = true
         val c = pixels[i]
-        if ((c ushr 24) < 16) return
-        val rgb = c and 0x00FFFFFF
-        borderCounts[rgb] = (borderCounts[rgb] ?: 0) + 1
+        if (isTransparent(c)) stackA.addLast(i)
+        else { val rgb = c and 0x00FFFFFF; shoreline[rgb] = (shoreline[rgb] ?: 0) + 1 }
     }
-    for (x in 0 until w) { sample(x); sample((h - 1) * w + x) }
-    for (y in 1 until h - 1) { sample(y * w); sample(y * w + w - 1) }
-    if (borderCounts.isEmpty()) return this
-
-    val reference = borderCounts.maxByOrNull { it.value }!!.key
-    val refR = (reference shr 16) and 0xFF
-    val refG = (reference shr 8) and 0xFF
-    val refB = reference and 0xFF
-    val maxDistance = 441.673f // sqrt(3 * 255^2)
-    val thresholdSq = (tolerance.coerceIn(0f, 1f) * maxDistance).let { it * it }
-
-    fun isBackground(c: Int): Boolean {
-        if ((c ushr 24) < 16) return true
-        val dr = ((c shr 16) and 0xFF) - refR
-        val dg = ((c shr 8) and 0xFF) - refG
-        val db = (c and 0xFF) - refB
-        return (dr * dr + dg * dg + db * db).toFloat() <= thresholdSq
-    }
-
-    val out = pixels.copyOf()
-    val visited = BooleanArray(w * h)
-    val stack = ArrayDeque<Int>()
-    fun push(i: Int) {
-        if (!visited[i] && isBackground(pixels[i])) {
-            visited[i] = true
-            stack.addLast(i)
-        }
-    }
-    for (x in 0 until w) { push(x); push((h - 1) * w + x) }
-    for (y in 0 until h) { push(y * w); push(y * w + w - 1) }
-
-    while (stack.isNotEmpty()) {
-        val i = stack.removeLast()
-        out[i] = 0
+    for (x in 0 until w) { visitA(x); visitA((h - 1) * w + x) }
+    for (y in 0 until h) { visitA(y * w); visitA(y * w + w - 1) }
+    while (stackA.isNotEmpty()) {
+        val i = stackA.removeLast()
         val x = i % w
-        if (x > 0) push(i - 1)
-        if (x < w - 1) push(i + 1)
-        if (i >= w) push(i - w)
-        if (i < (h - 1) * w) push(i + w)
+        if (x > 0) visitA(i - 1)
+        if (x < w - 1) visitA(i + 1)
+        if (i >= w) visitA(i - w)
+        if (i < (h - 1) * w) visitA(i + w)
+    }
+    if (shoreline.isEmpty()) return this
+
+    val ref = shoreline.maxByOrNull { it.value }!!.key
+    val refR = (ref shr 16) and 0xFF
+    val refG = (ref shr 8) and 0xFF
+    val refB = ref and 0xFF
+
+    // Pass B — clear the background. Seed from the border (transparent, or opaque matching the
+    // reference), then grow: transparent neighbours are always cleared; an opaque neighbour is
+    // cleared only if it's within tolerance of the colour it was reached from (the reference when
+    // crossing from transparent, otherwise the current pixel's own colour — following a gradient).
+    val out = pixels.copyOf()
+    val seenB = BooleanArray(w * h)
+    val stackB = ArrayDeque<Int>()
+    fun clearBg(i: Int) {
+        if (seenB[i]) return
+        seenB[i] = true
+        out[i] = 0
+        stackB.addLast(i)
+    }
+    fun consider(j: Int, rr: Int, rg: Int, rb: Int) {
+        if (seenB[j]) return
+        val cj = pixels[j]
+        if (isTransparent(cj) || distSq(cj, rr, rg, rb) <= thresholdSq) clearBg(j)
+    }
+    for (x in 0 until w) { consider(x, refR, refG, refB); consider((h - 1) * w + x, refR, refG, refB) }
+    for (y in 0 until h) { consider(y * w, refR, refG, refB); consider(y * w + w - 1, refR, refG, refB) }
+    while (stackB.isNotEmpty()) {
+        val i = stackB.removeLast()
+        val ci = pixels[i]
+        val rr: Int; val rg: Int; val rb: Int
+        if (isTransparent(ci)) { rr = refR; rg = refG; rb = refB }
+        else { rr = (ci shr 16) and 0xFF; rg = (ci shr 8) and 0xFF; rb = ci and 0xFF }
+        val x = i % w
+        if (x > 0) consider(i - 1, rr, rg, rb)
+        if (x < w - 1) consider(i + 1, rr, rg, rb)
+        if (i >= w) consider(i - w, rr, rg, rb)
+        if (i < (h - 1) * w) consider(i + w, rr, rg, rb)
     }
 
     return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)

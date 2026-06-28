@@ -274,7 +274,7 @@ fun OptionsDialog(
     var edgeSmoothing by rememberSaveable { mutableFloatStateOf(2f) }
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
     var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
-    var bgRemovalTolerance by rememberSaveable { mutableFloatStateOf(0.15f) }
+    var bgRemovalTolerance by rememberSaveable { mutableFloatStateOf(0.1f) }
 
     // Calendar day icons — committed immediately when toggled (independent of icon confirm).
     var calendarEnabled by rememberSaveable { mutableStateOf(app.calendarEnabled) }

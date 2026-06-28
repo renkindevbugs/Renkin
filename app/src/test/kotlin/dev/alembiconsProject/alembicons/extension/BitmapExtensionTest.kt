@@ -12,6 +12,9 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [33])
 class BitmapExtensionTest {
 
+    private val blue = 0xFF0000FF.toInt()
+    private val red = 0xFFFF0000.toInt()
+
     private fun bitmapOf(w: Int, h: Int, pixels: IntArray): Bitmap =
         Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888).apply { setPixels(pixels, 0, w, 0, 0, w, h) }
 
@@ -20,42 +23,42 @@ class BitmapExtensionTest {
 
     @Test
     fun removeBackground_clearsFlatBorderAndKeepsCentre() {
-        val blue = 0xFF0000FF.toInt()
-        val red = 0xFFFF0000.toInt()
         val w = 4; val h = 4
         val px = IntArray(w * h) { blue }
-        // 2x2 red block in the middle, surrounded by blue.
         px[1 * w + 1] = red; px[1 * w + 2] = red; px[2 * w + 1] = red; px[2 * w + 2] = red
 
         val out = bitmapOf(w, h, px).removeBackground(0.1f).pixels()
 
-        // The blue background (connected to the border) is erased.
         assertEquals(0, out[0])
         assertEquals(0, out[w - 1])
-        assertEquals(0, out[(h - 1) * w])
-        // The centred glyph survives.
         assertEquals(red, out[1 * w + 1])
         assertEquals(red, out[2 * w + 2])
     }
 
     @Test
-    fun removeBackground_alreadyTransparentBorder_keepsContent() {
-        val red = 0xFFFF0000.toInt()
-        val w = 3; val h = 3
-        val px = IntArray(w * h) { 0 }
-        px[1 * w + 1] = red
+    fun removeBackground_crossesTransparentPaddingAndStripsFrame() {
+        // Transparent padding -> blue frame -> red glyph: the frame (reached across the padding) is
+        // erased, the inner glyph survives. This is the adaptive-icon shape the flat version missed.
+        val t = 0
+        val w = 5; val h = 5
+        val px = intArrayOf(
+            t, t, t, t, t,
+            t, blue, blue, blue, t,
+            t, blue, red, blue, t,
+            t, blue, blue, blue, t,
+            t, t, t, t, t,
+        )
 
-        val out = bitmapOf(w, h, px).removeBackground(0.2f).pixels()
+        val out = bitmapOf(w, h, px).removeBackground(0.1f).pixels()
 
-        assertEquals(red, out[1 * w + 1])
-        assertEquals(0, out[0])
+        assertEquals(0, out[0])            // padding
+        assertEquals(0, out[1 * w + 1])    // frame erased
+        assertEquals(red, out[2 * w + 2])  // glyph kept
     }
 
     @Test
-    fun removeBackground_glyphTouchingDifferentColourSurvives() {
-        // A red glyph that reaches the edge must not be erased — only the blue background is.
-        val blue = 0xFF0000FF.toInt()
-        val red = 0xFFFF0000.toInt()
+    fun removeBackground_glyphTouchingEdgeSurvives() {
+        // A red stripe that reaches the top/bottom edge must not be erased — only the blue is.
         val w = 3; val h = 3
         val px = intArrayOf(
             blue, red, blue,
@@ -65,10 +68,26 @@ class BitmapExtensionTest {
 
         val out = bitmapOf(w, h, px).removeBackground(0.1f).pixels()
 
-        // Blue columns erased, red stripe (top/bottom touch the edge) kept.
         assertEquals(0, out[0])
         assertEquals(red, out[1])
         assertEquals(red, out[1 * w + 1])
         assertEquals(red, out[2 * w + 1])
+    }
+
+    @Test
+    fun removeBackground_followsAGradientButStopsAtTheGlyph() {
+        // A horizontal blue gradient background with a red glyph column in the middle. Neighbour-wise
+        // tolerance follows the gradient across, the hard red edge stops it.
+        val w = 7; val h = 1
+        val px = IntArray(w) { x ->
+            if (x == 3) red else (0xFF000000.toInt() or (200 + x * 5)) // blue ramp 200..230
+        }
+
+        val out = bitmapOf(w, h, px).removeBackground(0.05f).pixels()
+
+        assertEquals(0, out[0])  // gradient start erased
+        assertEquals(0, out[2])  // ...followed across
+        assertEquals(red, out[3]) // glyph kept
+        assertEquals(0, out[6])  // gradient end erased from the other side
     }
 }
