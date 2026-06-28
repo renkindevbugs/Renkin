@@ -2,6 +2,7 @@
 
 package dev.alembiconsProject.alembicons.ui
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -60,6 +61,8 @@ internal fun ModifierTab(
     autoCenter: Boolean,
     iconOffsetX: Float,
     iconOffsetY: Float,
+    // The current preview icon, shown in the position tool to visualise its margins.
+    centerPreview: Bitmap?,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
@@ -76,6 +79,7 @@ internal fun ModifierTab(
 ) {
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
+    var centerDialogOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val toolboxInstalled = remember { imageToolboxInstalled(context) }
 
@@ -329,43 +333,33 @@ internal fun ModifierTab(
                     valueRange = 0.5f..1.5f,
                     track = { SliderDefaults.CenteredTrack(sliderState = it) }
                 )
+            }
+        }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.centerIcon),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Switch(checked = autoCenter, onCheckedChange = { onAutoCenterChange(it) })
-                }
-                // Manual nudge after centring, for fine-tuning off-centre artwork.
+        // Position: opens a visual tool (like the colour picker) showing the icon's margins.
+        Surface(
+            onClick = { centerDialogOpen = true },
+            shape = CardShape,
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = stringResource(R.string.positionHorizontal),
+                    text = stringResource(R.string.position),
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
                 )
-                Slider(
-                    value = iconOffsetX,
-                    onValueChange = { onIconOffsetXChange(it) },
-                    valueRange = -0.5f..0.5f,
-                    track = { SliderDefaults.CenteredTrack(sliderState = it) }
-                )
+                val adjusted = autoCenter || iconOffsetX != 0f || iconOffsetY != 0f
                 Text(
-                    text = stringResource(R.string.positionVertical),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Slider(
-                    value = iconOffsetY,
-                    onValueChange = { onIconOffsetYChange(it) },
-                    valueRange = -0.5f..0.5f,
-                    track = { SliderDefaults.CenteredTrack(sliderState = it) }
+                    text = if (adjusted) stringResource(R.string.positionCustom) else stringResource(R.string.positionDefault),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
         }
@@ -379,4 +373,16 @@ internal fun ModifierTab(
         )
     }
 
+    if (centerDialogOpen) {
+        CenterDialog(
+            iconBitmap = centerPreview,
+            autoCenter = autoCenter,
+            offsetX = iconOffsetX,
+            offsetY = iconOffsetY,
+            onAutoCenterChange = onAutoCenterChange,
+            onOffsetXChange = onIconOffsetXChange,
+            onOffsetYChange = onIconOffsetYChange,
+            onDismiss = { centerDialogOpen = false }
+        )
+    }
 }

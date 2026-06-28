@@ -521,6 +521,7 @@ fun OptionsDialog(
                                 autoCenter = autoCenter,
                                 iconOffsetX = iconOffsetX,
                                 iconOffsetY = iconOffsetY,
+                                centerPreview = remember(draft.iconToConfirm) { draft.iconToConfirm?.toBitmap() },
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },
