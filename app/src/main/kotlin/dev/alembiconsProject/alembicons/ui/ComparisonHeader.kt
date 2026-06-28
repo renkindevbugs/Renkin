@@ -69,29 +69,10 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
-import androidx.compose.ui.layout.layout
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.animation.EnterTransition
-import kotlin.math.roundToInt
-
-/**
- * Collapses a composable's height and fades it by [fraction] (1 = full, 0 = gone), re-measured each
- * frame so it tracks the scroll pixel-by-pixel instead of snapping like AnimatedVisibility.
- */
-private fun Modifier.collapsibleHeight(fraction: Float): Modifier =
-    this
-        .graphicsLayer { alpha = fraction }
-        .clipToBounds()
-        .layout { measurable, constraints ->
-            val placeable = measurable.measure(constraints)
-            val height = (placeable.height * fraction).roundToInt()
-            layout(placeable.width, height) { placeable.place(0, 0) }
-        }
-
 @Composable
 internal fun ComparisonHeader(
     heroBitmap: Bitmap?,
@@ -322,7 +303,7 @@ private fun CurrentSlot(
             text = stringResource(R.string.iconCurrent),
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.collapsibleHeight(labelExpand).padding(top = 4.dp)
+            modifier = Modifier.collapsibleHeight { labelExpand }.padding(top = 4.dp)
         )
     }
 }
@@ -382,7 +363,7 @@ private fun NewSlot(
             text = stringResource(R.string.iconNew),
             style = MaterialTheme.typography.labelSmall,
             color = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.collapsibleHeight(labelExpand).padding(top = 4.dp)
+            modifier = Modifier.collapsibleHeight { labelExpand }.padding(top = 4.dp)
         )
     }
 }

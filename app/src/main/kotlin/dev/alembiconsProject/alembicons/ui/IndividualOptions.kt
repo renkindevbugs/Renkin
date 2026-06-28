@@ -457,6 +457,10 @@ fun OptionsDialog(
                                 gridState = iconGridState,
                                 expandedPack = expandedPack,
                                 onExpandedPackChange = { expandedPack = it },
+                                // Same enter-always scroll behaviour as the app bar collapses the
+                                // pinned search bar pixel-by-pixel (read in the layout phase, so the
+                                // pack list isn't recomposed each frame).
+                                searchBarExpand = { 1f - headerScrollBehavior.state.collapsedFraction },
                                 packUsage = packUsage,
                                 searchQuery = createSearchQuery,
                                 onSearchQueryChange = { createSearchQuery = it },

@@ -111,6 +111,9 @@ fun CreateTab(
     gridState: LazyGridState,
     expandedPack: IconPack?,
     onExpandedPackChange: (IconPack?) -> Unit,
+    // How much of the pinned search bar to show: 1 = full, 0 = collapsed. A lambda (read in the
+    // layout/draw phase) so the enter-always collapse re-lays-out only the bar, not the whole list.
+    searchBarExpand: () -> Float = { 1f },
     // How many stored icons came from each pack, keyed by package name. Packs the user takes
     // from most often sort higher (after packs that actually have an icon for the query).
     packUsage: Map<String, Int> = emptyMap(),
@@ -229,13 +232,16 @@ fun CreateTab(
                         // Pinned above the list (not a list item): reordering or scrolling the pack
                         // list must not touch the focused search field. As a list item it shared the
                         // LazyColumn's relayout, and a reshuffle/scrollToItem mid-typing desynced the
-                        // IME — dropped key presses and a cursor that jumped to the start.
-                        IconSearchBar(
-                            query = searchQuery,
-                            onQueryChange = onSearchQueryChange,
-                            sortOrder = sortOrder,
-                            onSortOrderChange = { sortOrder = it }
-                        )
+                        // IME — dropped key presses and a cursor that jumped to the start. It still
+                        // collapses pixel-by-pixel with the scroll (enter-always) via collapsibleHeight.
+                        Box(Modifier.collapsibleHeight(searchBarExpand)) {
+                            IconSearchBar(
+                                query = searchQuery,
+                                onQueryChange = onSearchQueryChange,
+                                sortOrder = sortOrder,
+                                onSortOrderChange = { sortOrder = it }
+                            )
+                        }
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize(),

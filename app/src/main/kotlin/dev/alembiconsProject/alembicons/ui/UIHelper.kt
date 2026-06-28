@@ -37,7 +37,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
+import kotlin.math.roundToInt
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
@@ -227,6 +230,21 @@ fun LinkText(text: String, url: String, modifier: Modifier = Modifier) {
         modifier = modifier.clickable(role = Role.Button) { uriHandler.openUri(url) }
     )
 }
+
+/**
+ * Collapses a composable's height and fades it by [fraction] (1 = full, 0 = gone), re-measured each
+ * frame so it tracks the scroll pixel-by-pixel instead of snapping like AnimatedVisibility.
+ * [fraction] is a lambda read only in the draw / layout phases, so a value that changes every scroll
+ * frame re-lays-out this element without recomposing the caller (cheap even over a heavy list).
+ */
+fun Modifier.collapsibleHeight(fraction: () -> Float): Modifier =
+    graphicsLayer { alpha = fraction() }
+        .clipToBounds()
+        .layout { measurable, constraints ->
+            val placeable = measurable.measure(constraints)
+            val height = (placeable.height * fraction()).roundToInt()
+            layout(placeable.width, height) { placeable.place(0, 0) }
+        }
 
 /**
  * Centered message shown when a list/grid has no items (e.g. an empty filter result). Pass an
