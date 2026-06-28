@@ -6,11 +6,13 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.Rect
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.util.Base64
 import java.io.ByteArrayOutputStream
 import java.security.MessageDigest
+import kotlin.math.roundToInt
 
 /**
  * Creates a blank ARGB_8888 bitmap of [width]×[height], runs [draw] on a Canvas backed by it and
@@ -111,6 +113,69 @@ fun Bitmap.removeBackground(tolerance: Float): Bitmap {
         if (i < (h - 1) * w) consider(i + w, rr, rg, rb)
     }
 
+    return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
+}
+
+/** Bounding box of the non-transparent pixels (right/bottom exclusive), or null when fully transparent. */
+fun Bitmap.contentBounds(): Rect? {
+    val w = width
+    val h = height
+    if (w <= 0 || h <= 0) return null
+    val px = IntArray(w * h)
+    getPixels(px, 0, w, 0, 0, w, h)
+
+    var left = w; var top = h; var right = -1; var bottom = -1
+    for (y in 0 until h) for (x in 0 until w) {
+        if ((px[y * w + x] ushr 24) >= 16) {
+            if (x < left) left = x
+            if (x > right) right = x
+            if (y < top) top = y
+            if (y > bottom) bottom = y
+        }
+    }
+    if (right < left) return null
+    return Rect(left, top, right + 1, bottom + 1)
+}
+
+/**
+ * Re-centres the icon: moves the content bounding box ([contentBounds]) to the middle of a same-size
+ * canvas. Fixes artwork an external editor left off-centre (e.g. a background erase that trimmed one
+ * side). Returns the original when there's no opaque content.
+ */
+fun Bitmap.centeredContent(): Bitmap {
+    val bounds = contentBounds() ?: return this
+    val w = width
+    val h = height
+    val px = IntArray(w * h)
+    getPixels(px, 0, w, 0, 0, w, h)
+
+    val cw = bounds.width()
+    val ch = bounds.height()
+    val destLeft = (w - cw) / 2
+    val destTop = (h - ch) / 2
+    // Copy the content block (a pure move, no scaling) onto a fresh transparent canvas.
+    val out = IntArray(w * h)
+    for (y in 0 until ch) for (x in 0 until cw) {
+        out[(destTop + y) * w + (destLeft + x)] = px[(bounds.top + y) * w + (bounds.left + x)]
+    }
+    return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
+}
+
+/** Shifts the whole image by ([dx], [dy]) whole pixels; content pushed off the edge is dropped. */
+fun Bitmap.translated(dx: Float, dy: Float): Bitmap {
+    val idx = dx.roundToInt()
+    val idy = dy.roundToInt()
+    if (idx == 0 && idy == 0) return this
+    val w = width
+    val h = height
+    val px = IntArray(w * h)
+    getPixels(px, 0, w, 0, 0, w, h)
+    val out = IntArray(w * h)
+    for (y in 0 until h) for (x in 0 until w) {
+        val sx = x - idx
+        val sy = y - idy
+        if (sx in 0 until w && sy in 0 until h) out[y * w + x] = px[sy * w + sx]
+    }
     return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
 }
 

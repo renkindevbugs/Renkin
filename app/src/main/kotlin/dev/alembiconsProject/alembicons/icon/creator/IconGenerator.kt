@@ -39,8 +39,10 @@ import dev.alembiconsProject.alembicons.data.IconPackFallback
 import dev.alembiconsProject.alembicons.drawable.haveMonochrome
 import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
 import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
+import dev.alembiconsProject.alembicons.extension.centeredContent
 import dev.alembiconsProject.alembicons.extension.changeBackgroundColor
 import dev.alembiconsProject.alembicons.extension.emptyLike
+import dev.alembiconsProject.alembicons.extension.translated
 import dev.alembiconsProject.alembicons.extension.newArgbBitmap
 import dev.alembiconsProject.alembicons.extension.removeBackground
 import dev.alembiconsProject.alembicons.extension.scaleFromCenter
@@ -719,35 +721,35 @@ class IconGenerator(
     }
 
     /**
-     * Applies the per-icon Modifier-tab adjustments (currently just scale) on top of an
-     * already-built icon. No-op with the default (iconScale=1f), so it's safe to run on
-     * every generation path.
+     * Applies the per-icon Modifier-tab adjustments — re-centre, manual offset and scale, in that
+     * order — on top of an already-built icon. No-op with the defaults, so it's safe to run on every
+     * generation path. Rasterises once (works for bitmaps and vectors alike) and carries over the
+     * source's adaptive-export flag and preview zoom (e.g. the monochrome variant), so the scale
+     * doesn't reset the launcher safe-zone preview.
      */
     private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {
-        if (options.iconScale != 1f) return scaleIcon(icon, options.iconScale)
-        return icon
-    }
+        val centerOrOffset = options.autoCenter || options.iconOffsetX != 0f || options.iconOffsetY != 0f
+        if (!centerOrOffset && options.iconScale == 1f) return icon
 
-    /**
-     * Scales the icon around its centre. < 1f shrinks it (transparent padding around it),
-     * > 1f zooms in (cropping to the original frame). Rasterises, since it must work for
-     * bitmaps and vectors alike.
-     */
-    private fun scaleIcon(icon: IconPackDrawable, scale: Float): IconPackDrawable {
-        val src = icon.toBitmap()
-        if (src.width <= 0 || src.height <= 0) return icon
+        var bitmap = icon.toBitmap()
+        if (bitmap.width <= 0 || bitmap.height <= 0) return icon
 
-        val out = newArgbBitmap(src.width, src.height) { canvas ->
-            canvas.scale(scale, scale, src.width / 2f, src.height / 2f)
-            canvas.drawBitmap(src, 0f, 0f, null)
+        if (options.autoCenter) bitmap = bitmap.centeredContent()
+        if (options.iconOffsetX != 0f || options.iconOffsetY != 0f) {
+            bitmap = bitmap.translated(options.iconOffsetX * bitmap.width, options.iconOffsetY * bitmap.height)
         }
-        // Carry over the source's adaptive-export flag and preview zoom (e.g. the monochrome
-        // variant, which renders its in-app preview at the launcher's safe-zone scale). Without
-        // this the Modifier scale would reset both, shrinking the monochrome preview back to 1:1.
+        if (options.iconScale != 1f) {
+            val src = bitmap
+            bitmap = newArgbBitmap(src.width, src.height) { canvas ->
+                canvas.scale(options.iconScale, options.iconScale, src.width / 2f, src.height / 2f)
+                canvas.drawBitmap(src, 0f, 0f, null)
+            }
+        }
+
         val source = icon as? BitmapIconDrawable
         return BitmapIconDrawable(
             ctx.resources,
-            out,
+            bitmap,
             exportAsAdaptiveIcon = source?.isAdaptiveIcon() ?: false,
             previewScale = source?.previewScale ?: 1f
         )

@@ -75,6 +75,18 @@ class BitmapExtensionTest {
     }
 
     @Test
+    fun centeredContent_movesOffCentreArtworkToTheMiddle() {
+        val w = 4; val h = 4
+        val px = IntArray(w * h)
+        px[0] = red // single opaque pixel in the top-left corner
+
+        val out = bitmapOf(w, h, px).centeredContent().pixels()
+
+        assertEquals(0, out[0])           // corner cleared
+        assertEquals(red, out[1 * w + 1]) // content moved to the centre
+    }
+
+    @Test
     fun removeBackground_followsAGradientButStopsAtTheGlyph() {
         // A horizontal blue gradient background with a red glyph column in the middle. Neighbour-wise
         // tolerance follows the gradient across, the hard red edge stops it.

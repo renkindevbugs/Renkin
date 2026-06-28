@@ -2,6 +2,7 @@
 
 package dev.alembiconsProject.alembicons.ui
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -27,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
@@ -55,6 +58,11 @@ internal fun ModifierTab(
     edgeContrast: Boolean,
     iconScale: Float,
     bgRemovalTolerance: Float,
+    autoCenter: Boolean,
+    iconOffsetX: Float,
+    iconOffsetY: Float,
+    // The current preview icon, shown in the position tool to visualise its margins.
+    centerPreview: Bitmap?,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
@@ -63,10 +71,17 @@ internal fun ModifierTab(
     onEdgeSmoothingChange: (Float) -> Unit,
     onEdgeContrastChange: (Boolean) -> Unit,
     onIconScaleChange: (Float) -> Unit,
-    onBgRemovalToleranceChange: (Float) -> Unit
+    onBgRemovalToleranceChange: (Float) -> Unit,
+    onAutoCenterChange: (Boolean) -> Unit,
+    onIconOffsetXChange: (Float) -> Unit,
+    onIconOffsetYChange: (Float) -> Unit,
+    onEditExternally: () -> Unit
 ) {
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
+    var centerDialogOpen by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val toolboxInstalled = remember { imageToolboxInstalled(context) }
 
     Column(
         modifier = Modifier
@@ -75,6 +90,36 @@ internal fun ModifierTab(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        // Hand the current icon off to an external editor (ImageToolbox if installed) for tools we
+        // don't have. The edited image comes back via "share to Renkin" into the Upload tab.
+        Surface(
+            onClick = onEditExternally,
+            shape = CardShape,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.OpenInNew,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer
+                )
+                Text(
+                    text = if (toolboxInstalled) stringResource(R.string.openInImageToolbox)
+                        else stringResource(R.string.editInAnotherApp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+        }
+
         Text(
             text = stringResource(R.string.imageEdit),
             style = MaterialTheme.typography.titleSmall,
@@ -290,6 +335,34 @@ internal fun ModifierTab(
                 )
             }
         }
+
+        // Position: opens a visual tool (like the colour picker) showing the icon's margins.
+        Surface(
+            onClick = { centerDialogOpen = true },
+            shape = CardShape,
+            color = MaterialTheme.colorScheme.surfaceContainer,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.position),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                val adjusted = autoCenter || iconOffsetX != 0f || iconOffsetY != 0f
+                Text(
+                    text = if (adjusted) stringResource(R.string.positionCustom) else stringResource(R.string.positionDefault),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
     }
 
     if (colorPickerOpen) {
@@ -300,4 +373,16 @@ internal fun ModifierTab(
         )
     }
 
+    if (centerDialogOpen) {
+        CenterDialog(
+            iconBitmap = centerPreview,
+            autoCenter = autoCenter,
+            offsetX = iconOffsetX,
+            offsetY = iconOffsetY,
+            onAutoCenterChange = onAutoCenterChange,
+            onOffsetXChange = onIconOffsetXChange,
+            onOffsetYChange = onIconOffsetYChange,
+            onDismiss = { centerDialogOpen = false }
+        )
+    }
 }

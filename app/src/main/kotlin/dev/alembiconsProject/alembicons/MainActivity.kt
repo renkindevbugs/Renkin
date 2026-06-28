@@ -3,7 +3,10 @@ package dev.alembiconsProject.alembicons
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ActivityInfo
+import android.net.Uri
 import android.os.Bundle
+import android.widget.Toast
+import androidx.core.content.IntentCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -24,6 +27,7 @@ import androidx.lifecycle.lifecycleScope
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import dev.alembiconsProject.alembicons.data.UploadedImageStore
 import dev.alembiconsProject.alembicons.data.isDarkModeEnabled
 import dev.alembiconsProject.alembicons.data.WatchCheckIntervalKey
 import dev.alembiconsProject.alembicons.data.WATCH_CHECK_INTERVAL_DEFAULT
@@ -66,6 +70,7 @@ class MainActivity : ComponentActivity() {
         }
 
         handleWatchIntent(intent)
+        handleSharedImage(intent)
 
         // Icon-watch: schedule the periodic safety-net check (version-gated, so it's near-free
         // when nothing changed). This is the only watch trigger — see WatchWorker.
@@ -118,6 +123,7 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         handleWatchIntent(intent)
+        handleSharedImage(intent)
     }
 
     override fun onStart() {
@@ -146,6 +152,24 @@ class MainActivity : ComponentActivity() {
         if (intent?.action == ACTION_OPEN_SUGGESTION) {
             val id = intent.getLongExtra(EXTRA_SUGGESTION_ID, -1L)
             if (id >= 0) viewModel.setPendingWatchSuggestion(id)
+        }
+    }
+
+    /**
+     * An image shared back from an external editor (the SEND intent-filter): decode it and store it
+     * in the upload gallery, so the user can pick it as an icon from the edit dialog's Upload tab.
+     */
+    private fun handleSharedImage(intent: Intent?) {
+        if (intent?.action != Intent.ACTION_SEND) return
+        if (intent.type?.startsWith("image/") != true) return
+        val uri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java) ?: return
+
+        lifecycleScope.launch(Dispatchers.IO) {
+            val bitmap = getBitmapFromURI(applicationContext, uri) ?: return@launch
+            UploadedImageStore.save(applicationContext, bitmap)
+            withContext(Dispatchers.Main) {
+                Toast.makeText(this@MainActivity, R.string.sharedImageAdded, Toast.LENGTH_LONG).show()
+            }
         }
     }
 
