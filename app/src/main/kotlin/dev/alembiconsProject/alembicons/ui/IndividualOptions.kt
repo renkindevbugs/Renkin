@@ -351,6 +351,7 @@ fun OptionsDialog(
     val snackbarHostState = remember { SnackbarHostState() }
     val snackbarScope = rememberCoroutineScope()
     val selectIconMessage = stringResource(R.string.selectIconFirst)
+    val context = LocalContext.current
 
     LaunchedEffect(selectedTab) {
         // Leaving the icon-pack list re-expands the app bar (other tabs barely scroll).
@@ -410,6 +411,11 @@ fun OptionsDialog(
                             else -> ""
                         }
                         onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, confirmedSourcePack)
+                    },
+                    onEditExternally = {
+                        val bitmap = draft.iconToConfirm?.toBitmap()
+                        if (bitmap != null) shareIconForEditing(context, bitmap)
+                        else snackbarScope.launch { snackbarHostState.showSnackbar(selectIconMessage) }
                     },
                     scrollBehavior = headerScrollBehavior,
                     labelExpand = labelExpand
