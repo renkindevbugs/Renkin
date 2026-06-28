@@ -274,6 +274,7 @@ fun OptionsDialog(
     var edgeSmoothing by rememberSaveable { mutableFloatStateOf(2f) }
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
     var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
+    var bgRemovalTolerance by rememberSaveable { mutableFloatStateOf(0.15f) }
 
     // Calendar day icons — committed immediately when toggled (independent of icon confirm).
     var calendarEnabled by rememberSaveable { mutableStateOf(app.calendarEnabled) }
@@ -331,7 +332,8 @@ fun OptionsDialog(
         edgeHighThreshold = edgeThreshold * 3f,
         edgeGaussianRadius = edgeSmoothing,
         edgeContrastNormalized = edgeContrast,
-        iconScale = iconScale
+        iconScale = iconScale,
+        bgRemovalTolerance = bgRemovalTolerance
     )
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
@@ -508,6 +510,7 @@ fun OptionsDialog(
                                 edgeSmoothing = edgeSmoothing,
                                 edgeContrast = edgeContrast,
                                 iconScale = iconScale,
+                                bgRemovalTolerance = bgRemovalTolerance,
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },
@@ -515,7 +518,8 @@ fun OptionsDialog(
                                 onEdgeThresholdChange = { edgeThreshold = it },
                                 onEdgeSmoothingChange = { edgeSmoothing = it },
                                 onEdgeContrastChange = { edgeContrast = it },
-                                onIconScaleChange = { iconScale = it }
+                                onIconScaleChange = { iconScale = it },
+                                onBgRemovalToleranceChange = { bgRemovalTolerance = it }
                             )
                             else -> PrepareEditVector(app, vectorEditState) {
                                 draft.vectorIcon = it
