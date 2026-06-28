@@ -136,17 +136,9 @@ class IconPackBuilder(
 
         val vectorBrush = ReferenceBrush("@color/icon_color")
 
-        // Components that have a <calendar> entry. Smart Launcher (and others) prefer a static
-        // <item> over <calendar> when both target the same component, which suppresses day
-        // rotation. So we skip the static <item> for these and let <calendar> drive the icon.
-        val calendarComponents = calendarIcons.keys
-            .map { it.packageName to it.activityName }
-            .toSet()
-
         for (app in apps) {
             if (app.createdIcon != null) {
                 val appFileName = app.getFileName()
-                val isCalendarApp = (app.packageName to app.activityName) in calendarComponents
 
                 val exportAsAdaptive = themed || app.createdIcon.isAdaptiveIcon()
                 if (exportAsAdaptive && PackageVersion.is26OrMore()) {
@@ -213,11 +205,12 @@ class IconPackBuilder(
 
                 // Register the drawable so it shows in the pack's drawable list.
                 drawableXml.item(appFileName)
-                // Skip the static <item> mapping for calendar apps: it would otherwise win over
-                // the <calendar> entry in launchers that prefer <item>, killing day rotation.
-                if (!isCalendarApp) {
-                    appfilterXml.item(app.packageName, app.activityName, appFileName)
-                }
+                // Always write the static <item> mapping (the user's chosen icon), including for
+                // calendar apps, so launchers that don't support <calendar> show that icon instead
+                // of the app's default. Calendar-supporting launchers still rotate via the
+                // <calendar> entry below; only launchers that prefer <item> over <calendar> (e.g.
+                // Smart Launcher) fall back to the static icon without rotating.
+                appfilterXml.item(app.packageName, app.activityName, appFileName)
             }
         }
 
