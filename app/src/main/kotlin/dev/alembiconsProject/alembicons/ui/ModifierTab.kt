@@ -54,6 +54,7 @@ internal fun ModifierTab(
     edgeSmoothing: Float,
     edgeContrast: Boolean,
     iconScale: Float,
+    bgRemovalTolerance: Float,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
@@ -61,7 +62,8 @@ internal fun ModifierTab(
     onEdgeThresholdChange: (Float) -> Unit,
     onEdgeSmoothingChange: (Float) -> Unit,
     onEdgeContrastChange: (Boolean) -> Unit,
-    onIconScaleChange: (Float) -> Unit
+    onIconScaleChange: (Float) -> Unit,
+    onBgRemovalToleranceChange: (Float) -> Unit
 ) {
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
@@ -168,7 +170,46 @@ internal fun ModifierTab(
             }
         }
 
-        if (imageEdit != ImageEdit.NONE) {
+        if (imageEdit == ImageEdit.REMOVE_BACKGROUND) {
+            Surface(
+                shape = CardShape,
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.removeBackgroundTolerance),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = "${(bgRemovalTolerance * 100).roundToInt()}%",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Slider(
+                        value = bgRemovalTolerance,
+                        onValueChange = { onBgRemovalToleranceChange(it) },
+                        valueRange = 0f..0.5f
+                    )
+                    Text(
+                        text = stringResource(R.string.removeBackgroundHint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // The icon colour only applies to the recolouring edits; Remove background keeps the
+        // original pixels, so it has no colour control.
+        if (imageEdit != ImageEdit.NONE && imageEdit != ImageEdit.REMOVE_BACKGROUND) {
             Surface(
                 onClick = { colorPickerOpen = true },
                 shape = CardShape,

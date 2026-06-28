@@ -55,6 +55,9 @@ data class GenerationOptions(
     // Per-icon adjustments from the Modifier tab (not part of the bulk preferences).
     // iconScale 1f = unchanged; < 1f pads the icon inside its frame.
     val iconScale: Float = 1f,
+    // Colour-distance tolerance (0..1) for the Remove background modifier — how far a pixel's colour
+    // can be from the border background colour and still be erased.
+    val bgRemovalTolerance: Float = 0.1f,
     // Which pack's fallback styling to give apps neither pack themes (NONE = leave them raw).
     val fallbackSource: FallbackSource = FallbackSource.NONE
 ) {

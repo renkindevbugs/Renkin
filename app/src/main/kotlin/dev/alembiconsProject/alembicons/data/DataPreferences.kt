@@ -273,7 +273,8 @@ fun getImageEditLabels(): Map<ImageEdit, String> {
     return mapOf(ImageEdit.NONE to stringResource(id = R.string.none)
         , ImageEdit.PATH to stringResource(id = R.string.pathDetection)
         , ImageEdit.EDGE to stringResource(id = R.string.edgeDetection)
-        , ImageEdit.COLORIZE to stringResource(id = R.string.colorize))
+        , ImageEdit.COLORIZE to stringResource(id = R.string.colorize)
+        , ImageEdit.REMOVE_BACKGROUND to stringResource(id = R.string.removeBackground))
 }
 
 @Composable
@@ -319,7 +320,8 @@ enum class FallbackSource {
 }
 
 enum class ImageEdit {
-    NONE, PATH, EDGE, COLORIZE
+    // REMOVE_BACKGROUND stays last so existing stored ordinals (persisted by index) keep their value.
+    NONE, PATH, EDGE, COLORIZE, REMOVE_BACKGROUND
 }
 
 enum class TextType {

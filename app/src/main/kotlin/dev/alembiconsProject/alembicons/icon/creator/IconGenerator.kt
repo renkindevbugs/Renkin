@@ -42,6 +42,7 @@ import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
 import dev.alembiconsProject.alembicons.extension.changeBackgroundColor
 import dev.alembiconsProject.alembicons.extension.emptyLike
 import dev.alembiconsProject.alembicons.extension.newArgbBitmap
+import dev.alembiconsProject.alembicons.extension.removeBackground
 import dev.alembiconsProject.alembicons.extension.scaleFromCenter
 import dev.alembiconsProject.alembicons.icon.parser.IconParser
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
@@ -238,6 +239,7 @@ class IconGenerator(
                 }
                 ImageEdit.PATH -> generatePathTracing(copy.toBitmap(), null)
                 ImageEdit.EDGE -> generateCannyEdgeDetection(copy.toBitmap(), null)
+                ImageEdit.REMOVE_BACKGROUND -> generateRemoveBackground(copy.toBitmap())
             }
         }
 
@@ -366,7 +368,13 @@ class IconGenerator(
             ImageEdit.PATH -> generatePathTracing(bitmapIcon, parsedIcon)
             ImageEdit.EDGE -> generateCannyEdgeDetection(bitmapIcon, parsedIcon)
             ImageEdit.COLORIZE -> colorizeImage(bitmapIcon, parsedIcon, mode)
+            ImageEdit.REMOVE_BACKGROUND -> generateRemoveBackground(bitmapIcon)
         }
+    }
+
+    /** Strips the flat background colour around the icon, keeping the cleaned glyph. */
+    private fun generateRemoveBackground(bitmapIcon: Bitmap): IconPackDrawable {
+        return getDefaultBitmapIcon(bitmapIcon.removeBackground(options.bgRemovalTolerance))
     }
 
     private fun generateText(applicationName: String, textType: TextType): IconPackDrawable {
