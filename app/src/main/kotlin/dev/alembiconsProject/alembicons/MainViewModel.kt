@@ -205,6 +205,13 @@ class MainViewModel @Inject constructor(
         private set
 
     /**
+     * (done, total) while the builder writes the per-app icons — the long phase — so the build
+     * dialog can show a determinate bar; null during the other (indeterminate) steps.
+     */
+    var buildProgress by mutableStateOf<Pair<Int, Int>?>(null)
+        private set
+
+    /**
      * First-install timestamps (epoch millis) for [packageNames] — the data behind the
      * "recently installed" sort. Looked up off the main thread; a package that's gone yields 0.
      * The UI reads these here instead of touching PackageManager itself.
@@ -239,7 +246,12 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 buildStep = ""
-                val pack = appProvider.buildAndSignIconPack(preferences) { buildStep = it }
+                val pack = appProvider.buildAndSignIconPack(
+                    preferences,
+                    // A new step ends the per-app phase, so the bar goes back to indeterminate.
+                    textMethod = { buildStep = it; buildProgress = null },
+                    progressMethod = { done, total -> buildProgress = done to total }
+                )
                 // The system install is the slow part (2-3s) — show it as its own step so the
                 // dialog reflects what's happening. "Updating" when our pack is already
                 // installed, "Installing" for a first build. Decided before installing, so it
@@ -268,6 +280,7 @@ class MainViewModel @Inject constructor(
                 _toastEvents.trySend(R.string.iconPackBuildFailed)
             } finally {
                 buildStep = null
+                buildProgress = null
             }
         }
     }

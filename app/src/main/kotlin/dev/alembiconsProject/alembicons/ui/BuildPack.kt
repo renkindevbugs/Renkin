@@ -31,6 +31,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -115,15 +116,35 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
             },
             title = { Text(stringResource(id = R.string.iconPack)) },
             text = {
-                // Show only the current step, crossfading between them, instead of an
-                // ever-growing log
-                Crossfade(targetState = buildStep, label = "buildStep") { step ->
-                    Text(
-                        text = step ?: "",
-                        textAlign = TextAlign.Center,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    // Show only the current step, crossfading between them, instead of an
+                    // ever-growing log
+                    Crossfade(targetState = buildStep, label = "buildStep") { step ->
+                        Text(
+                            text = step ?: "",
+                            textAlign = TextAlign.Center,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                    // The per-app phase is the long one — show it as a determinate bar with a
+                    // count so the dialog visibly moves instead of sitting on one step text.
+                    val progress = viewModel.buildProgress
+                    if (progress != null) {
+                        val (done, total) = progress
+                        LinearWavyProgressIndicator(
+                            progress = { if (total == 0) 0f else done / total.toFloat() },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp)
+                        )
+                        Text(
+                            text = "$done / $total",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp)
+                        )
+                    }
                 }
             },
             confirmButton = { }

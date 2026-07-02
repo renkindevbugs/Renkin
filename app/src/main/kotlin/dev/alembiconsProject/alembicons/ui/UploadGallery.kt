@@ -36,6 +36,9 @@ import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -79,6 +82,8 @@ const val MIME_TYPE_IMAGE = "image/*"
 
 @Composable
 fun UploadColumn(app: PackageInfoStruct,
+                 // The edit dialog's snackbar surface — deleting images offers Undo through it.
+                 snackbarHostState: SnackbarHostState,
                  onChange: (icon: IconPackDrawable?) -> Unit) {
     var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
     var zoomLevel by rememberSaveable { mutableFloatStateOf(1f) }
@@ -88,7 +93,6 @@ fun UploadColumn(app: PackageInfoStruct,
     var mask by remember { mutableStateOf(null as Bitmap?) }
     var selectionMode by remember { mutableStateOf(false) }
     var markedForDelete by remember { mutableStateOf<Set<String>>(emptySet()) }
-    var showDeleteConfirm by remember { mutableStateOf(false) }
     var isUploading by remember { mutableStateOf(false) }
     val maxSize = 500
 
@@ -98,6 +102,33 @@ fun UploadColumn(app: PackageInfoStruct,
     val toaster = LocalToaster.current
     val view = LocalView.current
     val uploadErrorMessage = stringResource(R.string.uploadImageError)
+    val deletedMessage = stringResource(R.string.imagesDeleted)
+    val undoLabel = stringResource(R.string.undo)
+
+    // Deleting hides the images and offers Undo; the files are only removed from disk when the
+    // snackbar goes away without the action. A new delete flushes the previous pending one.
+    fun deleteMarked() {
+        val toDelete = savedImages.filter { it.absolutePath in markedForDelete }
+        selectionMode = false
+        markedForDelete = emptySet()
+        if (toDelete.isEmpty()) return
+        savedImages = savedImages - toDelete.toSet()
+        if (toDelete.any { it.absolutePath == selectedImagePath }) selectedImagePath = null
+        snackbarHostState.currentSnackbarData?.dismiss()
+        scope.launch {
+            val result = snackbarHostState.showSnackbar(
+                message = String.format(deletedMessage, toDelete.size),
+                actionLabel = undoLabel,
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) {
+                // The files never left the disk — reload the gallery and they're back.
+                savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
+            } else {
+                withContext(Dispatchers.IO) { toDelete.forEach { UploadedImageStore.delete(it) } }
+            }
+        }
+    }
 
     LaunchedEffect(Unit) {
         savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
@@ -348,7 +379,7 @@ fun UploadColumn(app: PackageInfoStruct,
                     }
                 }
                 FloatingActionButton(
-                    onClick = { if (markedForDelete.isNotEmpty()) showDeleteConfirm = true },
+                    onClick = { deleteMarked() },
                     shape = RoundedCornerShape(18.dp),
                     containerColor = MaterialTheme.colorScheme.errorContainer,
                     contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -399,22 +430,4 @@ fun UploadColumn(app: PackageInfoStruct,
         }
     }
 
-    if (showDeleteConfirm) {
-        ConfirmDialog(
-            title = stringResource(R.string.deleteImage),
-            text = stringResource(R.string.deleteImageText),
-            onConfirm = {
-                showDeleteConfirm = false
-                val toDelete = savedImages.filter { it.absolutePath in markedForDelete }
-                selectionMode = false
-                markedForDelete = emptySet()
-                scope.launch {
-                    withContext(Dispatchers.IO) { toDelete.forEach { UploadedImageStore.delete(it) } }
-                    savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
-                    if (toDelete.any { it.absolutePath == selectedImagePath }) selectedImagePath = null
-                }
-            },
-            onDismiss = { showDeleteConfirm = false }
-        )
-    }
 }

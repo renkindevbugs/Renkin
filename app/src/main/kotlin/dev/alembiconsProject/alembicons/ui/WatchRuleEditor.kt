@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -134,12 +135,14 @@ internal fun WatchRuleEditor(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
+            val view = LocalView.current
             DisabledExplanation(
                 enabled = canSave,
                 message = stringResource(R.string.watchSaveDisabledHint)
             ) {
                 Button(
                     onClick = {
+                        view.performConfirmHaptic()
                         onSave(selectedApps.toList(), watchAll, selectedPacks.toList())
                     },
                     enabled = canSave,

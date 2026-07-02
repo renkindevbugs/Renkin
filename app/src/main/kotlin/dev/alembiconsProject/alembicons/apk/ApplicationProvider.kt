@@ -132,7 +132,11 @@ class ApplicationProvider(private val context: Context) {
     suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =
         iconGenService.applyModifier(icon, options)
 
-    suspend fun buildAndSignIconPack(preferences: Preferences, textMethod: (text: String) -> Unit): BuiltIconPack =
+    suspend fun buildAndSignIconPack(
+        preferences: Preferences,
+        textMethod: (text: String) -> Unit,
+        progressMethod: (done: Int, total: Int) -> Unit = { _, _ -> }
+    ): BuiltIconPack =
         withContext(Dispatchers.Default) {
             val themed = preferences.getBooleanValue(ExportThemedKey)
             val iconColor = preferences.getDefaultIconColor(context)
@@ -168,7 +172,7 @@ class ApplicationProvider(private val context: Context) {
                 allCalendarDrawables
             )
             val canBeInstalled = iconPackGenerator.canBeInstalled() // must be called before build and sign
-            val apk = iconPackGenerator.buildAndSign(themed, iconColor.toHexString(), bgColor.toHexString(), textMethod)
+            val apk = iconPackGenerator.buildAndSign(themed, iconColor.toHexString(), bgColor.toHexString(), textMethod, progressMethod)
 
             BuiltIconPack(apk, iconPackGenerator.getIconPackName(), canBeInstalled)
         }

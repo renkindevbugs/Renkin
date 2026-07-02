@@ -91,7 +91,15 @@ class IconPackBuilder(
         return iconPackName
     }
 
-    fun buildAndSign(themed: Boolean, iconColor: String, backgroundColor: String, textMethod: (text: String) -> Unit): Uri {
+    fun buildAndSign(
+        themed: Boolean,
+        iconColor: String,
+        backgroundColor: String,
+        textMethod: (text: String) -> Unit,
+        // Reports per-app progress while the icons are written (done, total), so the build
+        // dialog can show a determinate bar for the longest phase.
+        progressMethod: (done: Int, total: Int) -> Unit = { _, _ -> }
+    ): Uri {
         val apkModule = ApkModule()
         val tableBlock = TableBlock()
         val manifest = AndroidManifestBlock()
@@ -136,8 +144,11 @@ class IconPackBuilder(
 
         val vectorBrush = ReferenceBrush("@color/icon_color")
 
+        val totalIcons = apps.count { it.createdIcon != null }
+        var doneIcons = 0
         for (app in apps) {
             if (app.createdIcon != null) {
+                progressMethod(doneIcons++, totalIcons)
                 val appFileName = app.getFileName()
 
                 val exportAsAdaptive = themed || app.createdIcon.isAdaptiveIcon()

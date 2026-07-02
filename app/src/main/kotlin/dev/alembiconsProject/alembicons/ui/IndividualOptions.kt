@@ -352,6 +352,7 @@ fun OptionsDialog(
     val snackbarScope = rememberCoroutineScope()
     val selectIconMessage = stringResource(R.string.selectIconFirst)
     val context = LocalContext.current
+    val view = LocalView.current
 
     LaunchedEffect(selectedTab) {
         // Leaving the icon-pack list re-expands the app bar (other tabs barely scroll).
@@ -410,6 +411,7 @@ fun OptionsDialog(
                                 if (customIconList.isNotEmpty()) iconPack else app.sourcePackName ?: ""
                             else -> ""
                         }
+                        view.performConfirmHaptic()
                         onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, confirmedSourcePack)
                     },
                     scrollBehavior = headerScrollBehavior,
@@ -497,7 +499,7 @@ fun OptionsDialog(
                                 onCustomForegroundChange = { iconColor = it },
                                 onCustomBackgroundChange = { customBgColor = it }
                             )
-                            1 -> UploadColumn(app = app) {
+                            1 -> UploadColumn(app = app, snackbarHostState = snackbarHostState) {
                                 draft.uploadBase = it
                                 if (it != null) draft.origin = IconOrigin.UPLOAD
                             }

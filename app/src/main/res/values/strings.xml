@@ -133,7 +133,8 @@
     <string name="addImages">Add images</string>
     <string name="yourImages">Your images</string>
     <string name="deleteImage">Delete images</string>
-    <string name="deleteImageText">Remove the selected images from your gallery?</string>
+    <string name="imagesDeleted">Deleted %1$d image(s)</string>
+    <string name="undo">Undo</string>
     <string name="noImagesYet">Nothing in your gallery yet</string>
     <string name="galleryEmptyHint">Tap the + button to add images</string>
     <string name="selectAll">Select all</string>
