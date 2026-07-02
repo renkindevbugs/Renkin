@@ -190,8 +190,12 @@ class MainViewModel @Inject constructor(
 
         viewModelScope.launch {
             isRefreshing = true
-            appProvider.refreshIcons(preferences)
-            isRefreshing = false
+            try {
+                appProvider.refreshIcons(preferences)
+            } finally {
+                // Without this a failed refresh would leave the spinner on forever and block builds.
+                isRefreshing = false
+            }
         }
         return true
     }

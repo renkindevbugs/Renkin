@@ -20,10 +20,25 @@ import kotlin.math.max
 // Bitmap/SVG helpers shared by UploadColumn (UploadGallery.kt). internal so the upload
 // composables in the same module can call them after the split.
 
+// Imported images end up as icons, so anything bigger than this per side is wasted RAM — a 48 MP
+// camera photo would otherwise materialise as a ~190 MB ARGB_8888 bitmap and risk an OOM.
+private const val MAX_IMPORT_SIZE = 1024
+
 internal fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
     val contentResolver = context.contentResolver
 
-    var bitmap = contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it) }
+    // Bounds-only pass first, so a huge photo is downsampled during decode instead of after it.
+    val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, boundsOptions) }
+    val decodeOptions = BitmapFactory.Options().apply {
+        inSampleSize = 1
+        while (boundsOptions.outWidth / (inSampleSize * 2) >= MAX_IMPORT_SIZE
+            && boundsOptions.outHeight / (inSampleSize * 2) >= MAX_IMPORT_SIZE) {
+            inSampleSize *= 2
+        }
+    }
+
+    var bitmap = contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, decodeOptions) }
 
     if (bitmap == null) {
         val svg = contentResolver.openInputStream(uri).use { decodeSVGSteam(it) }
