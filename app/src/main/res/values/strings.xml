@@ -135,6 +135,10 @@
     <string name="deleteImage">Delete images</string>
     <string name="imagesDeleted">Deleted %1$d image(s)</string>
     <string name="undo">Undo</string>
+    <string name="packUsageTitle">Icon pack usage</string>
+    <string name="sortIconsHeader">Icons</string>
+    <string name="sortPacksHeader">Icon packs</string>
+    <string name="sortByUsage">Most used</string>
     <string name="noImagesYet">Nothing in your gallery yet</string>
     <string name="galleryEmptyHint">Tap the + button to add images</string>
     <string name="selectAll">Select all</string>
