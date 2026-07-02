@@ -12,11 +12,18 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.alembiconsProject.alembicons.apk.ApkUninstaller
 import dev.alembiconsProject.alembicons.apk.ApplicationProvider
 import dev.alembiconsProject.alembicons.apk.IconPackBuilder
+import dev.alembiconsProject.alembicons.data.BuiltPrimaryIconPackKey
+import dev.alembiconsProject.alembicons.data.BuiltPrimarySourceKey
 import dev.alembiconsProject.alembicons.data.IconPack
 import dev.alembiconsProject.alembicons.data.InstalledApplication
 import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
+import dev.alembiconsProject.alembicons.data.PrimarySourceKey
+import dev.alembiconsProject.alembicons.data.SOURCE_DEFAULT
+import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getStringValue
 import dev.alembiconsProject.alembicons.data.isSystemInDarkTheme
+import dev.alembiconsProject.alembicons.data.setEnumValue
+import dev.alembiconsProject.alembicons.data.setStringValue
 import dev.alembiconsProject.alembicons.drawable.IconPackDrawable
 import dev.alembiconsProject.alembicons.drawable.ResourceDrawable
 import dev.alembiconsProject.alembicons.extension.normalizeIconSearchQuery
@@ -267,6 +274,11 @@ class MainViewModel @Inject constructor(
                     // The saved pack now matches the current icons → reset both change baselines.
                     builtKeys = appProvider.getSavedPackKeys()
                     updatedKeys = emptySet()
+                    // The hero pick only sticks once built: record what was built so startup
+                    // can restore it over any later, unbuilt pick.
+                    val store = getApplication<Application>().dataStore
+                    store.setEnumValue(BuiltPrimarySourceKey, preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT))
+                    store.setStringValue(BuiltPrimaryIconPackKey, preferences.getStringValue(PrimaryIconPackKey))
                 } else {
                     // install returned false: it failed or the user cancelled the system installer.
                     _toastEvents.trySend(R.string.iconPackInstallFailed)
@@ -296,7 +308,8 @@ class MainViewModel @Inject constructor(
      * [sourcePackName] is the pack the icon was taken from (null/empty when not from a pack).
      */
     fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String? = null) {
-        appProvider.editApplication(index, app.changeExport(icon, sourcePackName = sourcePackName))
+        // Hand-picked icons are locked immediately: a refresh never replaces them.
+        appProvider.editApplication(index, app.changeExport(icon, sourcePackName = sourcePackName, isRefreshMade = false))
         markUpdated(app, icon)
     }
 
@@ -318,7 +331,7 @@ class MainViewModel @Inject constructor(
     ) {
         appProvider.editApplication(
             index,
-            app.changeExport(icon, sourcePackName = sourcePackName).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
+            app.changeExport(icon, sourcePackName = sourcePackName, isRefreshMade = false).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
         )
         markUpdated(app, icon)
     }
@@ -528,6 +541,9 @@ class MainViewModel @Inject constructor(
             .distinctBy { it.key.resourceId }
             .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap(), idToName[it.key.resourceId] ?: "") }
     }
+
+    /** Clears only the unsaved bulk-refresh icons — see ApplicationProvider.clearRefreshedIcons. */
+    fun clearRefreshedIcons() = appProvider.clearRefreshedIcons()
 
     /** Clears every created icon (and persists the empty state). */
     fun clearIcons() {

@@ -87,7 +87,7 @@
     <string name="newIconPackTitle">New icon pack installed</string>
     <string name="newIconPackText">Reload Renkin to use \"%1$s\" for your icons.</string>
     <string name="reload">Reload</string>
-    <string name="overrideIcon">Override icon</string>
+    <string name="overrideIcon">Refresh replaces existing icons</string>
     <string name="deleteIconPack">Uninstall icon pack</string>
     <string name="iconPackUninstalled">Renkin Pack uninstalled</string>
     <string name="refreshApplicationList">Refresh application list</string>
@@ -137,6 +137,13 @@
     <string name="undo">Undo</string>
     <string name="packUsageTitle">Icon pack usage</string>
     <string name="statsButton">Statistics</string>
+    <string name="advancedOptions">Advanced options</string>
+    <string name="heroPackLabel">Icon pack</string>
+    <string name="chooseYourPack">Choose your icon pack</string>
+    <string name="choosePackTitle">Choose an icon pack</string>
+    <string name="sourceOwnIcons">Use each app\'s own icon</string>
+    <string name="sourceTextIcons">Text icons</string>
+    <string name="packUsedCount">%1$d used</string>
     <string name="packUsageEmpty">No icon packs installed</string>
     <string name="sortIconsHeader">Icons</string>
     <string name="sortPacksHeader">Icon packs</string>

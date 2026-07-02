@@ -26,11 +26,20 @@ import androidx.lifecycle.lifecycleScope
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
+import dev.alembiconsProject.alembicons.data.BuiltPrimaryIconPackKey
+import dev.alembiconsProject.alembicons.data.BuiltPrimarySourceKey
+import dev.alembiconsProject.alembicons.data.PrimaryIconPackKey
+import dev.alembiconsProject.alembicons.data.PrimarySourceKey
+import dev.alembiconsProject.alembicons.data.SOURCE_DEFAULT
 import dev.alembiconsProject.alembicons.data.UploadedImageStore
 import dev.alembiconsProject.alembicons.data.isDarkModeEnabled
 import dev.alembiconsProject.alembicons.data.WatchCheckIntervalKey
 import dev.alembiconsProject.alembicons.data.WATCH_CHECK_INTERVAL_DEFAULT
+import dev.alembiconsProject.alembicons.data.getEnumValue
 import dev.alembiconsProject.alembicons.data.getIntValue
+import dev.alembiconsProject.alembicons.data.getStringValue
+import dev.alembiconsProject.alembicons.data.setEnumValue
+import dev.alembiconsProject.alembicons.data.setStringValue
 import dev.alembiconsProject.alembicons.apk.IconPackBuilder
 import dev.alembiconsProject.alembicons.packages.ApplicationManager
 import dev.alembiconsProject.alembicons.service.WatchWorker
@@ -78,6 +87,19 @@ class MainActivity : ComponentActivity() {
         // Icon-watch: schedule the periodic safety-net check (version-gated, so it's near-free
         // when nothing changed). This is the only watch trigger — see WatchWorker.
         lifecycleScope.launch(Dispatchers.Default) {
+            // A hero-card pack pick only sticks once it's built: restore the last-built primary
+            // source/pack over any unbuilt pick from the previous session. Missing built keys =
+            // legacy or fresh install — leave the current selection alone.
+            val startupPrefs = applicationContext.dataStore.data.first()
+            if (startupPrefs.contains(BuiltPrimarySourceKey)) {
+                applicationContext.dataStore.setEnumValue(
+                    PrimarySourceKey, startupPrefs.getEnumValue(BuiltPrimarySourceKey, SOURCE_DEFAULT)
+                )
+                applicationContext.dataStore.setStringValue(
+                    PrimaryIconPackKey, startupPrefs.getStringValue(BuiltPrimaryIconPackKey)
+                )
+            }
+
             // KEEP so an already-running interval timer isn't reset on every launch; the
             // user's chosen interval is applied immediately (UPDATE) when they change it.
             val intervalMinutes = applicationContext.dataStore.data.first()

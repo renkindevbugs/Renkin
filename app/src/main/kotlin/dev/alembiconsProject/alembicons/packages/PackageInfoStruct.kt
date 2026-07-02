@@ -30,7 +30,13 @@ class PackageInfoStruct(
      * True when [createdIcon] was produced by the pack's fallback styling (neither pack themed this
      * app), not a real pack match. Transient — recomputed on refresh, not persisted.
      */
-    val isFallback: Boolean = false
+    val isFallback: Boolean = false,
+    /**
+     * True when [createdIcon] came from a bulk refresh and hasn't been built/saved yet — the only
+     * icons a later refresh may replace. Hand-picked icons, and anything loaded from the DB
+     * (i.e. built or saved), are locked. Transient: not persisted, so a restart locks everything.
+     */
+    val isRefreshMade: Boolean = false
 ) : Comparable<PackageInfoStruct> {
     override fun equals(other: Any?): Boolean {
         if (other is PackageInfoStruct) {
@@ -54,14 +60,28 @@ class PackageInfoStruct(
         calendarPrefix: String? = this.calendarPrefix,
         calendarPackName: String? = this.calendarPackName,
         sourcePackName: String? = this.sourcePackName,
-        isFallback: Boolean = this.isFallback
+        isFallback: Boolean = this.isFallback,
+        isRefreshMade: Boolean = this.isRefreshMade
     ): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback)
+        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade)
 
-    // Clearing the icon (createdIcon == null) also drops the recorded source pack, so a removed
-    // icon never lingers in the usage counts.
-    fun changeExport(createdIcon: IconPackDrawable?, isFallback: Boolean = false, sourcePackName: String? = this.sourcePackName): PackageInfoStruct =
-        copyWith(createdIcon = createdIcon, isFallback = isFallback, sourcePackName = if (createdIcon == null) null else sourcePackName)
+    // Clearing the icon (createdIcon == null) also drops the recorded source pack and the
+    // refresh-made flag, so a removed icon never lingers in the usage counts.
+    fun changeExport(
+        createdIcon: IconPackDrawable?,
+        isFallback: Boolean = false,
+        sourcePackName: String? = this.sourcePackName,
+        isRefreshMade: Boolean = this.isRefreshMade
+    ): PackageInfoStruct =
+        copyWith(
+            createdIcon = createdIcon,
+            isFallback = isFallback,
+            sourcePackName = if (createdIcon == null) null else sourcePackName,
+            isRefreshMade = if (createdIcon == null) false else isRefreshMade
+        )
+
+    /** The built/saved copy of this icon: identical, but no longer refresh-replaceable. */
+    fun locked(): PackageInfoStruct = copyWith(isRefreshMade = false)
 
     fun changeCalendar(calendarEnabled: Boolean, calendarPrefix: String? = this.calendarPrefix, calendarPackName: String? = this.calendarPackName): PackageInfoStruct =
         copyWith(calendarEnabled = calendarEnabled, calendarPrefix = calendarPrefix, calendarPackName = calendarPackName)

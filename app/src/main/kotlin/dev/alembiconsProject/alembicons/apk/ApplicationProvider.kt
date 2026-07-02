@@ -86,7 +86,7 @@ class ApplicationProvider(private val context: Context) {
         // A newly installed app always gets its icon (re)generated
         val genOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
         iconGenService.refreshIcon(application, genOptions) { app, icon, sourcePack ->
-            editApplication(app, app.changeExport(icon, sourcePackName = sourcePack))
+            editApplication(app, app.changeExport(icon, sourcePackName = sourcePack, isRefreshMade = true))
         }
     }
 
@@ -109,7 +109,7 @@ class ApplicationProvider(private val context: Context) {
         // Iterate a snapshot copy: the callback edits the live list in place, and iterating
         // the SnapshotStateList itself while mutating it would throw.
         iconGenService.refreshIcons(applicationList.toList(), opt) { application, icon, isFallback, sourcePack ->
-            editApplication(application, application.changeExport(icon, isFallback, sourcePack))
+            editApplication(application, application.changeExport(icon, isFallback, sourcePack, isRefreshMade = true))
         }
     }
 
@@ -189,6 +189,11 @@ class ApplicationProvider(private val context: Context) {
         }
 
         saveRenkinPack()
+        // Saving locks the whole set in: from now on a refresh replaces none of these icons
+        // (the user clears icons or hand-edits to change them).
+        for (app in applicationList.toList()) {
+            if (app.isRefreshMade) editApplication(app, app.locked())
+        }
 
         success
     }
@@ -200,6 +205,8 @@ class ApplicationProvider(private val context: Context) {
         for (app in applicationList.toList()) {
             val entry = saved[app.key] ?: continue
             val updated = when {
+                // Loaded from the DB = built/saved before, so it arrives locked (isRefreshMade
+                // defaults to false): a refresh won't replace it.
                 entry.icon != null -> app.changeExport(entry.icon, sourcePackName = entry.sourcePackName).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
                 else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
             }
@@ -238,6 +245,18 @@ class ApplicationProvider(private val context: Context) {
 
     suspend fun getIconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
         iconPackRepo.getDropdownIcons(application)
+
+    /**
+     * Clears only the unsaved bulk-refresh icons (isRefreshMade); hand-picked and built/saved
+     * icons stay. Used when the primary source is set to None: whatever the refresh produced
+     * and nothing has locked in yet simply goes away. Nothing is persisted — these icons were
+     * never saved.
+     */
+    fun clearRefreshedIcons() {
+        for (app in applicationList.toList()) {
+            if (app.isRefreshMade) editApplication(app, app.changeExport(null))
+        }
+    }
 
     suspend fun clearIcons() = withContext(Dispatchers.Default) {
         // Snapshot copy: editApplication mutates the live list in place.
