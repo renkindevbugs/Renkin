@@ -5,6 +5,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import dev.alembiconsProject.alembicons.data.IconPack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilledTonalButton
@@ -48,6 +54,7 @@ fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
                 DarkModeDropdown(prefs)
                 SyncButton()
                 RefreshApplicationListButton()
+                StatsButton()
                 RemoveIconsButton()
                 DeleteIconPackButton()
                 CrashLogsButton()
@@ -107,6 +114,88 @@ fun RefreshApplicationListButton() {
     ) {
         Text(stringResource(R.string.refreshApplicationList))
     }
+}
+
+/** Opens the icon-pack usage stats modal. */
+@Composable
+fun StatsButton() {
+    var showStats by rememberSaveable { mutableStateOf(false) }
+
+    Button(
+        onClick = { showStats = true },
+        shape = FieldShape,
+        modifier = settingsButtonModifier
+    ) {
+        Text(stringResource(R.string.statsButton))
+    }
+
+    if (showStats) {
+        PackUsageDialog(onDismiss = { showStats = false })
+    }
+}
+
+/**
+ * Per-pack usage stats: how many stored icons were taken from each installed pack, so
+ * heavy-lifter packs and never-used packs are both visible at a glance. Counts are read when
+ * the modal opens, so they reflect the icons at the moment of looking.
+ */
+@Composable
+private fun PackUsageDialog(onDismiss: () -> Unit) {
+    val viewModel: MainViewModel = hiltViewModel()
+    val packs = viewModel.iconPacks.distinctBy { it.packageName }
+    val usage = remember { viewModel.packUsageCounts() }
+    val max = (usage.values.maxOrNull() ?: 0).coerceAtLeast(1)
+
+    RenkinAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.packUsageTitle)) },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (packs.isEmpty()) {
+                    Text(
+                        text = stringResource(R.string.packUsageEmpty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                packs
+                    .map { it to (usage[it.packageName] ?: 0) }
+                    .sortedWith(compareByDescending<Pair<IconPack, Int>> { it.second }
+                        .thenBy { it.first.applicationName.lowercase() })
+                    .forEach { (pack, count) ->
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(
+                                    text = pack.applicationName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (count == 0) MaterialTheme.colorScheme.onSurfaceVariant
+                                        else MaterialTheme.colorScheme.onSurface
+                                )
+                                LinearProgressIndicator(
+                                    progress = { count / max.toFloat() },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 3.dp)
+                                )
+                            }
+                            Text(
+                                text = "$count",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = if (count == 0) MaterialTheme.colorScheme.onSurfaceVariant
+                                    else MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(start = 12.dp)
+                            )
+                        }
+                    }
+            }
+        }
+    )
 }
 
 @Composable

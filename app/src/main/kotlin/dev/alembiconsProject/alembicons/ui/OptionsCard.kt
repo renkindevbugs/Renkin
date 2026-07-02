@@ -22,11 +22,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -392,84 +389,8 @@ fun OptionsCard(
                 }
 
                 ThemedIconsSwitch(useThemed) { scope.launch { prefs.setBooleanValue(ExportThemedKey, it) } }
-
-                if (iconPacks.isNotEmpty()) {
-                    PackUsageStats(iconPacks)
-                }
                 }
             }
-        }
-    }
-}
-
-/**
- * Collapsible per-pack usage stats: how many stored icons were taken from each installed pack,
- * so heavy-lifter packs and never-used packs are both visible at a glance. The counts are read
- * on expand, so they reflect the icons at the moment of looking.
- */
-@Composable
-private fun PackUsageStats(iconPacks: List<IconPack>) {
-    val vm = hiltViewModel<MainViewModel>()
-    var expanded by rememberSaveable { mutableStateOf(false) }
-
-    Column(Modifier.padding(horizontal = 12.dp, vertical = 4.dp)) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { expanded = !expanded }
-                .padding(vertical = 8.dp, horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = stringResource(R.string.packUsageTitle),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            Icon(
-                imageVector = if (expanded) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        if (expanded) {
-            val usage = remember(expanded) { vm.packUsageCounts() }
-            val max = (usage.values.maxOrNull() ?: 0).coerceAtLeast(1)
-            iconPacks.distinctBy { it.packageName }
-                .map { it to (usage[it.packageName] ?: 0) }
-                .sortedWith(compareByDescending<Pair<IconPack, Int>> { it.second }
-                    .thenBy { it.first.applicationName.lowercase() })
-                .forEach { (pack, count) ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 4.dp, horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = pack.applicationName,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = if (count == 0) MaterialTheme.colorScheme.onSurfaceVariant
-                                    else MaterialTheme.colorScheme.onSurface
-                            )
-                            LinearProgressIndicator(
-                                progress = { count / max.toFloat() },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 3.dp)
-                            )
-                        }
-                        Text(
-                            text = "$count",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = if (count == 0) MaterialTheme.colorScheme.onSurfaceVariant
-                                else MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(start = 12.dp)
-                        )
-                    }
-                }
         }
     }
 }
