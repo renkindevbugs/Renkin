@@ -86,7 +86,7 @@ class ApplicationProvider(private val context: Context) {
         // A newly installed app always gets its icon (re)generated
         val genOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
         iconGenService.refreshIcon(application, genOptions) { app, icon, sourcePack ->
-            editApplication(app, app.changeExport(icon, sourcePackName = sourcePack))
+            editApplication(app, app.changeExport(icon, sourcePackName = sourcePack, isCustomIcon = false))
         }
     }
 
@@ -109,7 +109,7 @@ class ApplicationProvider(private val context: Context) {
         // Iterate a snapshot copy: the callback edits the live list in place, and iterating
         // the SnapshotStateList itself while mutating it would throw.
         iconGenService.refreshIcons(applicationList.toList(), opt) { application, icon, isFallback, sourcePack ->
-            editApplication(application, application.changeExport(icon, isFallback, sourcePack))
+            editApplication(application, application.changeExport(icon, isFallback, sourcePack, isCustomIcon = false))
         }
     }
 
@@ -200,7 +200,7 @@ class ApplicationProvider(private val context: Context) {
         for (app in applicationList.toList()) {
             val entry = saved[app.key] ?: continue
             val updated = when {
-                entry.icon != null -> app.changeExport(entry.icon, sourcePackName = entry.sourcePackName).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
+                entry.icon != null -> app.changeExport(entry.icon, sourcePackName = entry.sourcePackName, isCustomIcon = entry.isCustomIcon).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
                 else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
             }
             editApplication(app, updated)

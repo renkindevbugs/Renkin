@@ -41,7 +41,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import dev.alembiconsProject.alembicons.ui.theme.AddedGreen
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -99,53 +98,11 @@ fun AppOptions(
     OptionsDialog(iconPacks, app, themed, onConfirm, onDismiss, onIconClear)
 }
 
-// The green used for icons added since the last build (shares the added-green token).
-private val addedColor = AddedGreen
-
-/**
- * Segmented completion bar: blue = icons already in the last built pack, green = added
- * since (pending build), red = removed since. Material 3 has no multi-colour progress
- * bar, so this is a small custom one with the same rounded look.
- */
-@Composable
-private fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
-    val builtF by animateFloatAsState(if (total > 0) built / total.toFloat() else 0f, label = "builtFrac")
-    val addedF by animateFloatAsState(if (total > 0) added / total.toFloat() else 0f, label = "addedFrac")
-    val removedF by animateFloatAsState(if (total > 0) removed / total.toFloat() else 0f, label = "removedFrac")
-    val rest = (1f - builtF - addedF - removedF).coerceAtLeast(0f)
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(8.dp)
-            .clip(RoundedCornerShape(50))
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-    ) {
-        if (builtF > 0f) Box(Modifier.fillMaxHeight().weight(builtF).background(MaterialTheme.colorScheme.primary))
-        if (addedF > 0f) Box(Modifier.fillMaxHeight().weight(addedF).background(addedColor))
-        if (removedF > 0f) Box(Modifier.fillMaxHeight().weight(removedF).background(MaterialTheme.colorScheme.error))
-        if (rest > 0f) Spacer(Modifier.weight(rest))
-    }
-}
-
 @Composable
 fun OptionsCard(
     iconPacks: List<IconPack>
 ) {
     val prefs = getPreferences()
-
-    // Completion progress across all apps (updates live as icons are assigned/cleared).
-    // The bar is a diff against the last built pack: blue = already built, green = added
-    // since (pending build), red = removed since. builtKeys updates after each build.
-    val vm = hiltViewModel<MainViewModel>()
-    val apps = vm.applicationList
-    val builtKeys = vm.builtKeys
-    val builtCount = apps.count { it.createdIcon != null && it.key in builtKeys }
-    val addedCount = apps.count { it.createdIcon != null && it.key !in builtKeys }
-    val removedCount = apps.count { it.createdIcon == null && it.key in builtKeys }
-    val themedCount = builtCount + addedCount
-    val totalCount = apps.size
-    // How many of the themed icons came from the pack's fallback styling, not a real match.
-    val fallbackCount = apps.count { it.createdIcon != null && it.isFallback }
 
     var expanded by remember { mutableStateOf(false) }
 
@@ -203,7 +160,7 @@ fun OptionsCard(
                 .padding(horizontal = 16.dp, vertical = 12.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = stringResource(id = R.string.options),
+                    text = stringResource(id = R.string.advancedOptions),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -220,54 +177,6 @@ fun OptionsCard(
                     tint = MaterialTheme.colorScheme.primary,
                     modifier = Modifier.rotate(chevronRotation)
                 )
-            }
-
-            // Always-visible completion progress, so the user sees how much is left
-            if (totalCount > 0) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 12.dp)
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = stringResource(R.string.completionProgress, themedCount, totalCount),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f)
-                        )
-                        // Pending changes since the last build, mirroring the bar colours
-                        if (addedCount > 0) {
-                            Text(
-                                text = "+$addedCount",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = addedColor
-                            )
-                        }
-                        if (removedCount > 0) {
-                            Text(
-                                text = " −$removedCount",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-                    ChangeBar(totalCount, builtCount, addedCount, removedCount)
-                    // Fallback icons look themed but weren't a real pack match — call out the
-                    // count so a full bar isn't mistaken for "every app was found".
-                    if (fallbackCount > 0) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            text = stringResource(R.string.fallbackCount, fallbackCount),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
             }
 
             AnimatedVisibility(
@@ -303,13 +212,8 @@ fun OptionsCard(
                     }
                 }
 
-                SourceDropdown(R.string.primarySource, primarySource) { scope.launch { prefs.setEnumValue(PrimarySourceKey, it) } }
-
-                if (needIconPack(primarySource)) {
-                    IconPackDropdown(R.string.primaryIconPack, iconPacks, primaryIconPack, null) { scope.launch { prefs.setStringValue(
-                        PrimaryIconPackKey, it.packageName) } }
-                }
-
+                // The primary source/pack itself is picked in the hero card on the home screen;
+                // only its tweaks (image modifier, text type) live here.
                 if (needImageEdit(primarySource)) {
                     ImageEditDropdown(R.string.primaryImageEdit, primaryImageEdit) { scope.launch { prefs.setEnumValue(
                         PrimaryImageEditKey, it) } }

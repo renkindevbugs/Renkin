@@ -296,7 +296,7 @@ class MainViewModel @Inject constructor(
      * [sourcePackName] is the pack the icon was taken from (null/empty when not from a pack).
      */
     fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String? = null) {
-        appProvider.editApplication(index, app.changeExport(icon, sourcePackName = sourcePackName))
+        appProvider.editApplication(index, app.changeExport(icon, sourcePackName = sourcePackName, isCustomIcon = true))
         markUpdated(app, icon)
     }
 
@@ -318,7 +318,7 @@ class MainViewModel @Inject constructor(
     ) {
         appProvider.editApplication(
             index,
-            app.changeExport(icon, sourcePackName = sourcePackName).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
+            app.changeExport(icon, sourcePackName = sourcePackName, isCustomIcon = true).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
         )
         markUpdated(app, icon)
     }

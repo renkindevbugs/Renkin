@@ -381,6 +381,9 @@ fun ApplicationList(
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         // Scrolls away with the list — only the search bar stays pinned
+        item(key = "hero") {
+            HeroPackCard(iconPacks)
+        }
         item(key = "options") {
             OptionsCard(iconPacks)
         }

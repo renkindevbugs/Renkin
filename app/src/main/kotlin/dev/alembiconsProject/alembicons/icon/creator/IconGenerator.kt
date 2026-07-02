@@ -772,7 +772,9 @@ class IconGenerator(
     }
 
     private fun applicationShouldBeSkipped(app: PackageInfoStruct): Boolean {
-        return !options.override && app.createdIcon != null
+        // Bulk-generated icons are refreshed freely (e.g. after switching packs); only icons the
+        // user picked by hand are protected — and even those give way when override is on.
+        return !options.override && app.isCustomIcon
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
