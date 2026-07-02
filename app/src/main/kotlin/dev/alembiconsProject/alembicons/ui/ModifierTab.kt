@@ -5,15 +5,18 @@ package dev.alembiconsProject.alembicons.ui
 import android.graphics.Bitmap
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
@@ -22,18 +25,22 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.SplitButtonDefaults
 import androidx.compose.material3.SplitButtonLayout
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,20 +48,54 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.alembiconsProject.alembicons.R
 import dev.alembiconsProject.alembicons.ui.theme.CardShape
 import dev.alembiconsProject.alembicons.data.ImageEdit
 import dev.alembiconsProject.alembicons.data.Source
 import dev.alembiconsProject.alembicons.data.getImageEditLabels
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.Surface
 import kotlin.math.roundToInt
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.ui.text.font.FontWeight
+
+/**
+ * The Modifier tab's per-icon adjustment state (edge tuning, background-removal tolerance, scale,
+ * position), bundled so it travels as one object instead of eight value+callback parameter pairs.
+ * Plain Compose state; [Saver] keeps it across process death.
+ */
+@Stable
+internal class AdjustmentState {
+    var edgeThreshold by mutableFloatStateOf(2.5f)
+    var edgeSmoothing by mutableFloatStateOf(2f)
+    var edgeContrast by mutableStateOf(false)
+    var iconScale by mutableFloatStateOf(1f)
+    var bgRemovalTolerance by mutableFloatStateOf(0.1f)
+    // Auto-center is UI state only: switching it on computes the offsets below (the pipeline's
+    // single source of truth for position); dragging a position slider switches it back off.
+    var autoCenter by mutableStateOf(false)
+    var iconOffsetX by mutableFloatStateOf(0f)
+    var iconOffsetY by mutableFloatStateOf(0f)
+
+    companion object {
+        val Saver = listSaver<AdjustmentState, Any>(
+            save = {
+                listOf(it.edgeThreshold, it.edgeSmoothing, it.edgeContrast, it.iconScale,
+                    it.bgRemovalTolerance, it.autoCenter, it.iconOffsetX, it.iconOffsetY)
+            },
+            restore = { saved ->
+                AdjustmentState().apply {
+                    edgeThreshold = saved[0] as Float
+                    edgeSmoothing = saved[1] as Float
+                    edgeContrast = saved[2] as Boolean
+                    iconScale = saved[3] as Float
+                    bgRemovalTolerance = saved[4] as Float
+                    autoCenter = saved[5] as Boolean
+                    iconOffsetX = saved[6] as Float
+                    iconOffsetY = saved[7] as Float
+                }
+            }
+        )
+    }
+}
 
 @Composable
 internal fun ModifierTab(
@@ -63,28 +104,13 @@ internal fun ModifierTab(
     iconColor: Color,
     useVector: Boolean,
     useMonochrome: Boolean,
-    edgeThreshold: Float,
-    edgeSmoothing: Float,
-    edgeContrast: Boolean,
-    iconScale: Float,
-    bgRemovalTolerance: Float,
-    autoCenter: Boolean,
-    iconOffsetX: Float,
-    iconOffsetY: Float,
+    adjustments: AdjustmentState,
     // The current preview icon, shown in the position tool to visualise its margins.
     centerPreview: Bitmap?,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
     onMonochromeChange: (Boolean) -> Unit,
-    onEdgeThresholdChange: (Float) -> Unit,
-    onEdgeSmoothingChange: (Float) -> Unit,
-    onEdgeContrastChange: (Boolean) -> Unit,
-    onIconScaleChange: (Float) -> Unit,
-    onBgRemovalToleranceChange: (Float) -> Unit,
-    onAutoCenterChange: (Boolean) -> Unit,
-    onIconOffsetXChange: (Float) -> Unit,
-    onIconOffsetYChange: (Float) -> Unit,
     // Hands the current icon to an external editor; true = ImageToolbox, false = user-picked app.
     onEditExternally: (toolbox: Boolean) -> Unit
 ) {
@@ -110,33 +136,12 @@ internal fun ModifierTab(
 
         editLabels.forEach { (edit, label) ->
             val selected = imageEdit == edit
-            Surface(
+            OptionCard(
+                label = label,
+                selected = selected,
                 onClick = { onImageEditChange(edit) },
-                shape = CardShape,
-                color = if (selected) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceContainer
-                },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = label,
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = if (selected) {
-                            MaterialTheme.colorScheme.onPrimaryContainer
-                        } else {
-                            MaterialTheme.colorScheme.onSurface
-                        },
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (selected) {
+                trailing = if (selected) {
+                    {
                         Icon(
                             imageVector = Icons.Filled.Done,
                             contentDescription = null,
@@ -144,116 +149,67 @@ internal fun ModifierTab(
                             modifier = Modifier.size(20.dp)
                         )
                     }
-                }
-            }
+                } else null
+            )
         }
 
         if (imageEdit == ImageEdit.EDGE) {
-            Surface(
-                shape = CardShape,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    // Detail: inverse of the Canny threshold — right = more edges kept
-                    val detail = 1f - (edgeThreshold - 0.5f) / 4.5f
+            OptionGroup {
+                // Detail: inverse of the Canny threshold — right = more edges kept
+                LabeledSlider(
+                    label = stringResource(R.string.edgeDetail),
+                    value = (1f - (adjustments.edgeThreshold - 0.5f) / 4.5f).coerceIn(0f, 1f),
+                    onValueChange = { adjustments.edgeThreshold = 0.5f + (1f - it) * 4.5f },
+                    valueRange = 0f..1f
+                )
+                LabeledSlider(
+                    label = stringResource(R.string.edgeSmoothing),
+                    value = adjustments.edgeSmoothing,
+                    onValueChange = { adjustments.edgeSmoothing = it },
+                    valueRange = 0.5f..4f
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Text(
-                        text = stringResource(R.string.edgeDetail),
+                        text = stringResource(R.string.edgeContrast),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f)
                     )
-                    Slider(
-                        value = detail.coerceIn(0f, 1f),
-                        onValueChange = { onEdgeThresholdChange(0.5f + (1f - it) * 4.5f) },
-                        valueRange = 0f..1f
+                    Switch(
+                        checked = adjustments.edgeContrast,
+                        onCheckedChange = { adjustments.edgeContrast = it }
                     )
-                    Text(
-                        text = stringResource(R.string.edgeSmoothing),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Slider(
-                        value = edgeSmoothing,
-                        onValueChange = { onEdgeSmoothingChange(it) },
-                        valueRange = 0.5f..4f
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.edgeContrast),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Switch(
-                            checked = edgeContrast,
-                            onCheckedChange = { onEdgeContrastChange(it) }
-                        )
-                    }
                 }
             }
         }
 
         if (imageEdit == ImageEdit.REMOVE_BACKGROUND) {
-            Surface(
-                shape = CardShape,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = stringResource(R.string.removeBackgroundTolerance),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            text = "${(bgRemovalTolerance * 100).roundToInt()}%",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                    Slider(
-                        value = bgRemovalTolerance,
-                        onValueChange = { onBgRemovalToleranceChange(it) },
-                        valueRange = 0f..0.5f
-                    )
-                    Text(
-                        text = stringResource(R.string.removeBackgroundHint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+            OptionGroup {
+                LabeledSlider(
+                    label = stringResource(R.string.removeBackgroundTolerance),
+                    value = adjustments.bgRemovalTolerance,
+                    onValueChange = { adjustments.bgRemovalTolerance = it },
+                    valueRange = 0f..0.5f,
+                    valueLabel = "${(adjustments.bgRemovalTolerance * 100).roundToInt()}%"
+                )
+                Text(
+                    text = stringResource(R.string.removeBackgroundHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
 
         // The icon colour only applies to the recolouring edits; Remove background keeps the
         // original pixels, so it has no colour control.
         if (imageEdit != ImageEdit.NONE && imageEdit != ImageEdit.REMOVE_BACKGROUND) {
-            Surface(
+            OptionCard(
+                label = stringResource(R.string.iconColor),
                 onClick = { colorPickerOpen = true },
-                shape = CardShape,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.iconColor),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
+                trailing = {
                     Surface(
                         shape = CircleShape,
                         color = iconColor,
@@ -261,7 +217,7 @@ internal fun ModifierTab(
                         modifier = Modifier.size(28.dp)
                     ) {}
                 }
-            }
+            )
         }
 
         if (isPathTracingEnabled(source, imageEdit)) {
@@ -284,66 +240,31 @@ internal fun ModifierTab(
             fontWeight = FontWeight.SemiBold,
             color = MaterialTheme.colorScheme.onSurface
         )
-        Surface(
-            shape = CardShape,
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.iconScale),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Text(
-                        text = "${(iconScale * 100).roundToInt()}%",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                // Range centred on 1.0: left shrinks (padding), right enlarges (zoom).
-                // Official M3 centered track fills from the middle outwards.
-                Slider(
-                    value = iconScale,
-                    onValueChange = { onIconScaleChange(it) },
-                    valueRange = 0.5f..1.5f,
-                    track = { SliderDefaults.CenteredTrack(sliderState = it) }
-                )
-            }
+        OptionGroup {
+            // Range centred on 1.0: left shrinks (padding), right enlarges (zoom).
+            LabeledSlider(
+                label = stringResource(R.string.iconScale),
+                value = adjustments.iconScale,
+                onValueChange = { adjustments.iconScale = it },
+                valueRange = 0.5f..1.5f,
+                valueLabel = "${(adjustments.iconScale * 100).roundToInt()}%",
+                centered = true
+            )
         }
 
         // Position: opens a visual tool (like the colour picker) showing the icon's margins.
-        Surface(
+        OptionCard(
+            label = stringResource(R.string.position),
             onClick = { centerDialogOpen = true },
-            shape = CardShape,
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 14.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.position),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                val adjusted = iconOffsetX != 0f || iconOffsetY != 0f
+            trailing = {
+                val adjusted = adjustments.iconOffsetX != 0f || adjustments.iconOffsetY != 0f
                 Text(
                     text = if (adjusted) stringResource(R.string.positionCustom) else stringResource(R.string.positionDefault),
                     style = MaterialTheme.typography.labelLarge,
                     color = MaterialTheme.colorScheme.primary
                 )
             }
-        }
+        )
 
         // External editor hand-off, at the end: the in-app tools above come first. A split button:
         // the main action opens ImageToolbox (or its Play Store page when not installed), the arrow
@@ -417,12 +338,7 @@ internal fun ModifierTab(
     if (centerDialogOpen) {
         CenterDialog(
             iconBitmap = centerPreview,
-            autoCenter = autoCenter,
-            offsetX = iconOffsetX,
-            offsetY = iconOffsetY,
-            onAutoCenterChange = onAutoCenterChange,
-            onOffsetXChange = onIconOffsetXChange,
-            onOffsetYChange = onIconOffsetYChange,
+            adjustments = adjustments,
             onDismiss = { centerDialogOpen = false }
         )
     }

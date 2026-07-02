@@ -16,8 +16,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -68,12 +66,7 @@ private data class BlueprintColors(
 @Composable
 internal fun CenterDialog(
     iconBitmap: Bitmap?,
-    autoCenter: Boolean,
-    offsetX: Float,
-    offsetY: Float,
-    onAutoCenterChange: (Boolean) -> Unit,
-    onOffsetXChange: (Float) -> Unit,
-    onOffsetYChange: (Float) -> Unit,
+    adjustments: AdjustmentState,
     onDismiss: () -> Unit
 ) {
     val bounds = remember(iconBitmap) { iconBitmap?.contentBounds() }
@@ -124,50 +117,42 @@ internal fun CenterDialog(
                         modifier = Modifier.weight(1f)
                     )
                     Switch(
-                        checked = autoCenter,
+                        checked = adjustments.autoCenter,
                         onCheckedChange = { on ->
-                            onAutoCenterChange(on)
+                            adjustments.autoCenter = on
                             // Auto-centre only computes the sliders: nudge the current offsets by
                             // whatever is needed to put the content box in the middle. The sliders
                             // move to show it, and the pipeline stays offset-only.
                             if (on && iconBitmap != null && bounds != null) {
                                 val dx = ((iconBitmap.width - bounds.width()) / 2f - bounds.left) / iconBitmap.width
                                 val dy = ((iconBitmap.height - bounds.height()) / 2f - bounds.top) / iconBitmap.height
-                                onOffsetXChange((offsetX + dx).coerceIn(-0.5f, 0.5f))
-                                onOffsetYChange((offsetY + dy).coerceIn(-0.5f, 0.5f))
+                                adjustments.iconOffsetX = (adjustments.iconOffsetX + dx).coerceIn(-0.5f, 0.5f)
+                                adjustments.iconOffsetY = (adjustments.iconOffsetY + dy).coerceIn(-0.5f, 0.5f)
                             }
                         }
                     )
                 }
 
-                Text(
-                    text = stringResource(R.string.positionHorizontal),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Slider(
-                    value = offsetX,
+                LabeledSlider(
+                    label = stringResource(R.string.positionHorizontal),
+                    value = adjustments.iconOffsetX,
                     onValueChange = {
-                        onOffsetXChange(it)
+                        adjustments.iconOffsetX = it
                         // A manual nudge means the user takes over — auto-centre no longer holds.
-                        onAutoCenterChange(false)
+                        adjustments.autoCenter = false
                     },
                     valueRange = -0.5f..0.5f,
-                    track = { SliderDefaults.CenteredTrack(sliderState = it) }
+                    centered = true
                 )
-                Text(
-                    text = stringResource(R.string.positionVertical),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Slider(
-                    value = offsetY,
+                LabeledSlider(
+                    label = stringResource(R.string.positionVertical),
+                    value = adjustments.iconOffsetY,
                     onValueChange = {
-                        onOffsetYChange(it)
-                        onAutoCenterChange(false)
+                        adjustments.iconOffsetY = it
+                        adjustments.autoCenter = false
                     },
                     valueRange = -0.5f..0.5f,
-                    track = { SliderDefaults.CenteredTrack(sliderState = it) }
+                    centered = true
                 )
             }
         }

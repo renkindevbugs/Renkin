@@ -1,6 +1,5 @@
 package dev.alembiconsProject.alembicons.ui
 
-import android.widget.Toast
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.horizontalScroll
@@ -71,6 +70,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     val watchViewModel: WatchViewModel = hiltViewModel()
     val prefs = getPreferences()
     val view = LocalView.current
+    val toaster = LocalToaster.current
 
     var suggestion by remember(suggestionId) { mutableStateOf<IconSuggestion?>(null) }
     var candidates by remember(suggestionId) { mutableStateOf<List<IconSuggestionCandidate>>(emptyList()) }
@@ -198,7 +198,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                                 }
                                 // Applying handles the rule, so remove it (cascades the suggestion)
                                 suggestion?.ruleId?.let { ruleId -> watchViewModel.deleteRule(ruleId) }
-                                Toast.makeText(context, applyToast, Toast.LENGTH_LONG).show()
+                                toaster.show(applyToast)
                             }
                             onDismiss()
                         },

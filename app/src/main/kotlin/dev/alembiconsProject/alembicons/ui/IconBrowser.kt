@@ -2,7 +2,6 @@
 
 package dev.alembiconsProject.alembicons.ui
 
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,7 +11,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -335,19 +333,13 @@ private fun ApplicationIconVariant(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(bottom = 8.dp)
         )
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-        ) {
-            VariantSegment(
+        SegmentedRow {
+            SegmentCell(
                 label = stringResource(R.string.variantDefault),
                 selected = !monochrome,
-                enabled = true,
                 modifier = Modifier.weight(1f)
             ) { onMonochromeChange(false) }
-            VariantSegment(
+            SegmentCell(
                 label = stringResource(R.string.variantMonochrome),
                 selected = monochrome,
                 enabled = appHasMonochrome,
@@ -493,33 +485,3 @@ private fun SchemeSwatch(
     }
 }
 
-@Composable
-private fun VariantSegment(
-    label: String,
-    selected: Boolean,
-    enabled: Boolean,
-    modifier: Modifier = Modifier,
-    // Toast shown when the segment is tapped while disabled, so the dead tap explains itself.
-    disabledHint: String? = null,
-    onClick: () -> Unit
-) {
-    val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
-    val fg = when {
-        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-        selected -> MaterialTheme.colorScheme.onSecondaryContainer
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-    val context = LocalContext.current
-    Box(
-        modifier = modifier
-            .background(bg)
-            .clickable {
-                if (enabled) onClick()
-                else disabledHint?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
-            }
-            .padding(vertical = 12.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = label, style = MaterialTheme.typography.labelLarge, color = fg)
-    }
-}

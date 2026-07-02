@@ -1,7 +1,5 @@
 package dev.alembiconsProject.alembicons.ui
 
-import android.widget.Toast
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
@@ -415,43 +413,15 @@ private fun FallbackSourceSelector(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(bottom = 6.dp, start = 4.dp)
         )
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp))
-        ) {
-            FallbackSegment(stringResource(R.string.fallbackNone), selected == FallbackSource.NONE, true, Modifier.weight(1f)) { onChange(FallbackSource.NONE) }
-            FallbackSegment(stringResource(R.string.fallbackPrimary), selected == FallbackSource.PRIMARY, primaryEnabled, Modifier.weight(1f)) { onChange(FallbackSource.PRIMARY) }
-            FallbackSegment(stringResource(R.string.fallbackSecondary), selected == FallbackSource.SECONDARY, secondaryEnabled, Modifier.weight(1f)) { onChange(FallbackSource.SECONDARY) }
+        val disabledHint = stringResource(R.string.fallbackDisabledHint)
+        SegmentedRow {
+            SegmentCell(stringResource(R.string.fallbackNone), selected == FallbackSource.NONE, Modifier.weight(1f)) { onChange(FallbackSource.NONE) }
+            SegmentCell(stringResource(R.string.fallbackPrimary), selected == FallbackSource.PRIMARY, Modifier.weight(1f), primaryEnabled, disabledHint) { onChange(FallbackSource.PRIMARY) }
+            SegmentCell(stringResource(R.string.fallbackSecondary), selected == FallbackSource.SECONDARY, Modifier.weight(1f), secondaryEnabled, disabledHint) { onChange(FallbackSource.SECONDARY) }
         }
     }
 }
 
-@Composable
-private fun FallbackSegment(label: String, selected: Boolean, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
-    val fg = when {
-        !enabled -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
-        selected -> MaterialTheme.colorScheme.onSecondaryContainer
-        else -> MaterialTheme.colorScheme.onSurface
-    }
-    // Disabled segments still catch the tap and explain themselves (that pack isn't configured).
-    val context = LocalContext.current
-    val disabledHint = stringResource(R.string.fallbackDisabledHint)
-    Box(
-        modifier
-            .background(bg)
-            .clickable {
-                if (enabled) onClick()
-                else Toast.makeText(context, disabledHint, Toast.LENGTH_LONG).show()
-            }
-            .padding(vertical = 10.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(text = label, style = MaterialTheme.typography.labelLarge, color = fg)
-    }
-}
 
 /**
  * Live sample of the chosen fallback styling applied to a few of the user's app icons, so the

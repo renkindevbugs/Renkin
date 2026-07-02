@@ -270,16 +270,9 @@ fun OptionsDialog(
             }
         }
     }
-    var edgeThreshold by rememberSaveable { mutableFloatStateOf(2.5f) }
-    var edgeSmoothing by rememberSaveable { mutableFloatStateOf(2f) }
-    var edgeContrast by rememberSaveable { mutableStateOf(false) }
-    var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
-    var bgRemovalTolerance by rememberSaveable { mutableFloatStateOf(0.1f) }
-    // Auto-center is UI state only: switching it on computes the offsets below (the pipeline's
-    // single source of truth for position); dragging a position slider switches it back off.
-    var autoCenter by rememberSaveable { mutableStateOf(false) }
-    var iconOffsetX by rememberSaveable { mutableFloatStateOf(0f) }
-    var iconOffsetY by rememberSaveable { mutableFloatStateOf(0f) }
+    // The Modifier tab's adjustment values (edge tuning, scale, tolerance, position), bundled in
+    // one saveable holder instead of eight loose rememberSaveables + callback pairs.
+    val adjustments = rememberSaveable(saver = AdjustmentState.Saver) { AdjustmentState() }
 
     // Calendar day icons — committed immediately when toggled (independent of icon confirm).
     var calendarEnabled by rememberSaveable { mutableStateOf(app.calendarEnabled) }
@@ -333,14 +326,14 @@ fun OptionsDialog(
     val generatingOptions = GenerationOptions(
         source, imageEdit, textType, iconPack,
         effectiveColor.toInt(), effectiveBgColor.toInt(), useVector, useMonochrome, themed, override = true,
-        edgeLowThreshold = edgeThreshold,
-        edgeHighThreshold = edgeThreshold * 3f,
-        edgeGaussianRadius = edgeSmoothing,
-        edgeContrastNormalized = edgeContrast,
-        iconScale = iconScale,
-        bgRemovalTolerance = bgRemovalTolerance,
-        iconOffsetX = iconOffsetX,
-        iconOffsetY = iconOffsetY
+        edgeLowThreshold = adjustments.edgeThreshold,
+        edgeHighThreshold = adjustments.edgeThreshold * 3f,
+        edgeGaussianRadius = adjustments.edgeSmoothing,
+        edgeContrastNormalized = adjustments.edgeContrast,
+        iconScale = adjustments.iconScale,
+        bgRemovalTolerance = adjustments.bgRemovalTolerance,
+        iconOffsetX = adjustments.iconOffsetX,
+        iconOffsetY = adjustments.iconOffsetY
     )
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
@@ -514,27 +507,12 @@ fun OptionsDialog(
                                 iconColor = iconColor,
                                 useVector = useVector,
                                 useMonochrome = useMonochrome,
-                                edgeThreshold = edgeThreshold,
-                                edgeSmoothing = edgeSmoothing,
-                                edgeContrast = edgeContrast,
-                                iconScale = iconScale,
-                                bgRemovalTolerance = bgRemovalTolerance,
-                                autoCenter = autoCenter,
-                                iconOffsetX = iconOffsetX,
-                                iconOffsetY = iconOffsetY,
+                                adjustments = adjustments,
                                 centerPreview = remember(draft.iconToConfirm) { draft.iconToConfirm?.toBitmap() },
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },
                                 onMonochromeChange = { useMonochrome = it },
-                                onEdgeThresholdChange = { edgeThreshold = it },
-                                onEdgeSmoothingChange = { edgeSmoothing = it },
-                                onEdgeContrastChange = { edgeContrast = it },
-                                onIconScaleChange = { iconScale = it },
-                                onBgRemovalToleranceChange = { bgRemovalTolerance = it },
-                                onAutoCenterChange = { autoCenter = it },
-                                onIconOffsetXChange = { iconOffsetX = it },
-                                onIconOffsetYChange = { iconOffsetY = it },
                                 onEditExternally = { toolbox ->
                                     val bitmap = draft.iconToConfirm?.toBitmap()
                                     when {

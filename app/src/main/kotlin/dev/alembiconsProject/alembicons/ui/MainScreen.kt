@@ -1,6 +1,5 @@
 package dev.alembiconsProject.alembicons.ui
 
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -228,7 +227,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
             activity.finish()
         } else {
             lastBackPress = now
-            Toast.makeText(context, pressBackMessage, Toast.LENGTH_SHORT).show()
+            toaster.show(pressBackMessage)
         }
     }
 

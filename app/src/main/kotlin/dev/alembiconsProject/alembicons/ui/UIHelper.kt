@@ -258,7 +258,7 @@ fun DisabledExplanation(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
-    val context = LocalContext.current
+    val toaster = LocalToaster.current
     Box(modifier) {
         content()
         if (!enabled) {
@@ -268,7 +268,7 @@ fun DisabledExplanation(
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
-                    ) { Toast.makeText(context, message, Toast.LENGTH_LONG).show() }
+                    ) { toaster.show(message) }
             )
         }
     }
