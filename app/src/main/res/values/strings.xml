@@ -155,6 +155,8 @@
     <string name="positionVertical">Vertical position</string>
     <string name="position">Position</string>
     <string name="positionDefault">Default</string>
+    <string name="positionStyleBlueprint">Blueprint</string>
+    <string name="positionStyleTheme">Material</string>
     <string name="positionCustom">Custom</string>
     <string name="done">Done</string>
     <string name="removeBackgroundTolerance">Tolerance</string>
