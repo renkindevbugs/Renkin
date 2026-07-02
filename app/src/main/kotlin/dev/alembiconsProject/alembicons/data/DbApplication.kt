@@ -53,9 +53,11 @@ interface RenkinPackDao {
     fun deleteAllApplications()
 }
 
+// Version 7 has the same schema as version 5: 6 briefly added an isCustomIcon column during
+// development (never released), so 7 exists only to give both 5 and 6 a forward path.
 @Database(
     entities = [DbApplication::class],
-    version = 5
+    version = 7
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -88,6 +90,35 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        // 5 and 7 are schema-identical (see the @Database note), so this is a version-stamp bump.
+        private val MIGRATION_5_7 = object : Migration(5, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {}
+        }
+
+        // 6 was a development-only schema with an extra isCustomIcon column; rebuild the table
+        // without it (SQLite can't reliably drop columns on older APIs).
+        private val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `DbApplication_new` (`packageName` TEXT NOT NULL, " +
+                        "`activityName` TEXT NOT NULL, `isAdaptiveIcon` INTEGER NOT NULL, " +
+                        "`isXml` INTEGER NOT NULL, `drawable` TEXT NOT NULL, " +
+                        "`calendarEnabled` INTEGER NOT NULL DEFAULT 0, " +
+                        "`calendarPrefix` TEXT NOT NULL DEFAULT '', " +
+                        "`calendarPackName` TEXT NOT NULL DEFAULT '', " +
+                        "`sourcePackName` TEXT NOT NULL DEFAULT '', " +
+                        "PRIMARY KEY(`packageName`, `activityName`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `DbApplication_new` SELECT packageName, activityName, " +
+                        "isAdaptiveIcon, isXml, drawable, calendarEnabled, calendarPrefix, " +
+                        "calendarPackName, sourcePackName FROM `DbApplication`"
+                )
+                db.execSQL("DROP TABLE `DbApplication`")
+                db.execSQL("ALTER TABLE `DbApplication_new` RENAME TO `DbApplication`")
+            }
+        }
+
         // Physical file name stays "alchemiconPack" so existing installs keep their
         // saved generated icons across the rename.
         fun get(context: Context): RenkinPackDatabase {
@@ -96,7 +127,7 @@ abstract class RenkinPackDatabase : RoomDatabase() {
                     context.applicationContext,
                     RenkinPackDatabase::class.java,
                     "alchemiconPack"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_7, MIGRATION_6_7).build().also { instance = it }
             }
         }
     }
