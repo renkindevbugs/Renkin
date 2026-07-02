@@ -362,7 +362,12 @@ private fun PackIconItem(
                         RoundedCornerShape(16.dp)
                     ) else m
                 }
+                // Neutral tile behind every icon so light artwork stays visible on the light
+                // theme (and dark artwork on the dark one) instead of blending into the page.
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant)
                 .tappableIcon(onSelect)
+                .padding(5.dp)
         )
         if (isCalendarGroup) {
             BadgeTooltip(stringResource(R.string.calendarGroupTooltip), Modifier.align(Alignment.TopEnd)) {
