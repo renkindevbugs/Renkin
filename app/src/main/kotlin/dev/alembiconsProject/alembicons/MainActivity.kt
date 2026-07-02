@@ -5,7 +5,6 @@ import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Bundle
-import android.widget.Toast
 import androidx.core.content.IntentCompat
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -50,6 +49,10 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "se
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
 
+    // Activity-scoped (not remember-ed in composition) so non-compose code — e.g. the share
+    // receiver in handleSharedImage — can queue toasts through the same single ToastHost.
+    private val toaster = Toaster()
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -88,7 +91,6 @@ class MainActivity : ComponentActivity() {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
             edgeToEdge(darkMode)
 
-            val toaster = remember { Toaster() }
             // Detected once per launch: if the previous session crashed, offer the log for
             // manual reporting (copy / email / GitHub) — nothing is sent automatically.
             var crashPending by remember { mutableStateOf(CrashReporter.hasNewCrash(this@MainActivity)) }
@@ -167,9 +169,7 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) {
             val bitmap = getBitmapFromURI(applicationContext, uri) ?: return@launch
             UploadedImageStore.save(applicationContext, bitmap)
-            withContext(Dispatchers.Main) {
-                Toast.makeText(this@MainActivity, R.string.sharedImageAdded, Toast.LENGTH_LONG).show()
-            }
+            toaster.show(getString(R.string.sharedImageAdded))
         }
     }
 

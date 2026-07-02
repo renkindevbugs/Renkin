@@ -3,7 +3,6 @@
 package dev.alembiconsProject.alembicons.ui
 
 import android.text.format.DateUtils
-import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
@@ -95,6 +94,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
     val context = getCurrentContext()
     val viewModel: MainViewModel = hiltViewModel()
     val watchViewModel: WatchViewModel = hiltViewModel()
+    val toaster = LocalToaster.current
 
     val rules by watchViewModel.rules.collectAsState()
     val apps = viewModel.applicationList
@@ -175,7 +175,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
                                 } else {
                                     context.getString(R.string.watchRefreshFound, found)
                                 }
-                                Toast.makeText(context, msg, Toast.LENGTH_SHORT).show()
+                                toaster.show(msg)
                             }
                         },
                         onClose = onDismiss,
