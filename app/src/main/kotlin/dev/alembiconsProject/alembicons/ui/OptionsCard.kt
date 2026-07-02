@@ -1,5 +1,7 @@
 package dev.alembiconsProject.alembicons.ui
 
+import android.widget.Toast
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.expandVertically
@@ -434,10 +436,16 @@ private fun FallbackSegment(label: String, selected: Boolean, enabled: Boolean, 
         selected -> MaterialTheme.colorScheme.onSecondaryContainer
         else -> MaterialTheme.colorScheme.onSurface
     }
+    // Disabled segments still catch the tap and explain themselves (that pack isn't configured).
+    val context = LocalContext.current
+    val disabledHint = stringResource(R.string.fallbackDisabledHint)
     Box(
         modifier
             .background(bg)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable {
+                if (enabled) onClick()
+                else Toast.makeText(context, disabledHint, Toast.LENGTH_LONG).show()
+            }
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {

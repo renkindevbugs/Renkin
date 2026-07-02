@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -23,11 +22,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -66,9 +61,9 @@ private data class BlueprintColors(
  * Visual positioning tool (opened from the Modifier tab's Adjustments), drawn like a technical
  * blueprint: the icon's content bounding box is hatched, and double-headed measurement arrows on the
  * horizontal / vertical axes show the pixel distance from the artwork to each canvas edge (real
- * bitmap pixels, so the numbers match the export). Auto-centre snaps the artwork to the middle; the
- * sliders nudge it manually. All three feed the same modifier pipeline as the other adjustments.
- * A chip row toggles between a classic navy blueprint look and the app's Material colours.
+ * bitmap pixels, so the numbers match the export). The offsets are the only position mechanism:
+ * switching auto-centre on computes the slider values that centre the artwork (both axes), and
+ * dragging a slider manually flips the switch back off.
  */
 @Composable
 internal fun CenterDialog(
@@ -82,16 +77,8 @@ internal fun CenterDialog(
     onDismiss: () -> Unit
 ) {
     val bounds = remember(iconBitmap) { iconBitmap?.contentBounds() }
-    var navyStyle by rememberSaveable { mutableStateOf(true) }
 
-    val colors = if (navyStyle) BlueprintColors(
-        background = Color(0xFF0E2138),
-        grid = Color(0xFF1C3652),
-        frame = Color(0xFF4A739F),
-        line = Color(0xFFCFE3F7),
-        box = Color(0xFFE8F1FB),
-        hatch = Color(0xFF3F6A99)
-    ) else BlueprintColors(
+    val colors = BlueprintColors(
         background = MaterialTheme.colorScheme.surfaceVariant,
         grid = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f),
         frame = MaterialTheme.colorScheme.outline,
@@ -126,19 +113,6 @@ internal fun CenterDialog(
                     }
                 }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = navyStyle,
-                        onClick = { navyStyle = true },
-                        label = { Text(stringResource(R.string.positionStyleBlueprint)) }
-                    )
-                    FilterChip(
-                        selected = !navyStyle,
-                        onClick = { navyStyle = false },
-                        label = { Text(stringResource(R.string.positionStyleTheme)) }
-                    )
-                }
-
                 Row(
                     modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -149,7 +123,21 @@ internal fun CenterDialog(
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
-                    Switch(checked = autoCenter, onCheckedChange = onAutoCenterChange)
+                    Switch(
+                        checked = autoCenter,
+                        onCheckedChange = { on ->
+                            onAutoCenterChange(on)
+                            // Auto-centre only computes the sliders: nudge the current offsets by
+                            // whatever is needed to put the content box in the middle. The sliders
+                            // move to show it, and the pipeline stays offset-only.
+                            if (on && iconBitmap != null && bounds != null) {
+                                val dx = ((iconBitmap.width - bounds.width()) / 2f - bounds.left) / iconBitmap.width
+                                val dy = ((iconBitmap.height - bounds.height()) / 2f - bounds.top) / iconBitmap.height
+                                onOffsetXChange((offsetX + dx).coerceIn(-0.5f, 0.5f))
+                                onOffsetYChange((offsetY + dy).coerceIn(-0.5f, 0.5f))
+                            }
+                        }
+                    )
                 }
 
                 Text(
@@ -159,7 +147,11 @@ internal fun CenterDialog(
                 )
                 Slider(
                     value = offsetX,
-                    onValueChange = onOffsetXChange,
+                    onValueChange = {
+                        onOffsetXChange(it)
+                        // A manual nudge means the user takes over — auto-centre no longer holds.
+                        onAutoCenterChange(false)
+                    },
                     valueRange = -0.5f..0.5f,
                     track = { SliderDefaults.CenteredTrack(sliderState = it) }
                 )
@@ -170,7 +162,10 @@ internal fun CenterDialog(
                 )
                 Slider(
                     value = offsetY,
-                    onValueChange = onOffsetYChange,
+                    onValueChange = {
+                        onOffsetYChange(it)
+                        onAutoCenterChange(false)
+                    },
                     valueRange = -0.5f..0.5f,
                     track = { SliderDefaults.CenteredTrack(sliderState = it) }
                 )

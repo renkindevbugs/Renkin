@@ -116,7 +116,12 @@ fun Bitmap.removeBackground(tolerance: Float): Bitmap {
     return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
 }
 
-/** Bounding box of the non-transparent pixels (right/bottom exclusive), or null when fully transparent. */
+/**
+ * Bounding box of the visible content (right/bottom exclusive), or null when fully transparent.
+ * Noise-tolerant: a row/column only counts as content when it holds more than ~1.5% opaque pixels,
+ * so a stray speck (an antialias fringe, background-removal leftovers) doesn't inflate the box to
+ * pixels the eye can't see.
+ */
 fun Bitmap.contentBounds(): Rect? {
     val w = width
     val h = height
@@ -124,41 +129,20 @@ fun Bitmap.contentBounds(): Rect? {
     val px = IntArray(w * h)
     getPixels(px, 0, w, 0, 0, w, h)
 
-    var left = w; var top = h; var right = -1; var bottom = -1
+    val colCounts = IntArray(w)
+    val rowCounts = IntArray(h)
     for (y in 0 until h) for (x in 0 until w) {
-        if ((px[y * w + x] ushr 24) >= 16) {
-            if (x < left) left = x
-            if (x > right) right = x
-            if (y < top) top = y
-            if (y > bottom) bottom = y
-        }
+        if ((px[y * w + x] ushr 24) >= 16) { colCounts[x]++; rowCounts[y]++ }
     }
-    if (right < left) return null
+    // ~1.5% of the line, but never less than one pixel (tiny bitmaps keep exact behaviour).
+    val colFloor = h / 64 + 1
+    val rowFloor = w / 64 + 1
+    val left = colCounts.indexOfFirst { it >= colFloor }
+    val top = rowCounts.indexOfFirst { it >= rowFloor }
+    if (left < 0 || top < 0) return null
+    val right = colCounts.indexOfLast { it >= colFloor }
+    val bottom = rowCounts.indexOfLast { it >= rowFloor }
     return Rect(left, top, right + 1, bottom + 1)
-}
-
-/**
- * Re-centres the icon: moves the content bounding box ([contentBounds]) to the middle of a same-size
- * canvas. Fixes artwork an external editor left off-centre (e.g. a background erase that trimmed one
- * side). Returns the original when there's no opaque content.
- */
-fun Bitmap.centeredContent(): Bitmap {
-    val bounds = contentBounds() ?: return this
-    val w = width
-    val h = height
-    val px = IntArray(w * h)
-    getPixels(px, 0, w, 0, 0, w, h)
-
-    val cw = bounds.width()
-    val ch = bounds.height()
-    val destLeft = (w - cw) / 2
-    val destTop = (h - ch) / 2
-    // Copy the content block (a pure move, no scaling) onto a fresh transparent canvas.
-    val out = IntArray(w * h)
-    for (y in 0 until ch) for (x in 0 until cw) {
-        out[(destTop + y) * w + (destLeft + x)] = px[(bounds.top + y) * w + (bounds.left + x)]
-    }
-    return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
 }
 
 /** Shifts the whole image by ([dx], [dy]) whole pixels; content pushed off the edge is dropped. */

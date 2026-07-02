@@ -75,15 +75,45 @@ class BitmapExtensionTest {
     }
 
     @Test
-    fun centeredContent_movesOffCentreArtworkToTheMiddle() {
+    fun contentBounds_findsOffCentreArtwork() {
         val w = 4; val h = 4
         val px = IntArray(w * h)
         px[0] = red // single opaque pixel in the top-left corner
 
-        val out = bitmapOf(w, h, px).centeredContent().pixels()
+        val bounds = bitmapOf(w, h, px).contentBounds()!!
 
-        assertEquals(0, out[0])           // corner cleared
-        assertEquals(red, out[1 * w + 1]) // content moved to the centre
+        assertEquals(0, bounds.left)
+        assertEquals(1, bounds.right)
+        assertEquals(0, bounds.top)
+        assertEquals(1, bounds.bottom)
+    }
+
+    @Test
+    fun contentBounds_ignoresStraySpecks() {
+        // A solid 40×40 block in the middle of 128×128, plus a lone speck at the left edge. The
+        // bounds must hug the block — the speck is noise the eye can't see, and would otherwise
+        // make auto-centring skew towards it.
+        val w = 128; val h = 128
+        val px = IntArray(w * h)
+        for (y in 44 until 84) for (x in 44 until 84) px[y * w + x] = red
+        px[60 * w] = blue // stray speck at x=0
+
+        val bounds = bitmapOf(w, h, px).contentBounds()!!
+
+        assertEquals(44, bounds.left)
+        assertEquals(84, bounds.right)
+    }
+
+    @Test
+    fun translated_movesContentAndDropsOffEdgePixels() {
+        val w = 4; val h = 4
+        val px = IntArray(w * h)
+        px[0] = red // top-left corner
+
+        val out = bitmapOf(w, h, px).translated(1f, 1f).pixels()
+
+        assertEquals(0, out[0])           // old position cleared
+        assertEquals(red, out[1 * w + 1]) // moved by (1,1)
     }
 
     @Test

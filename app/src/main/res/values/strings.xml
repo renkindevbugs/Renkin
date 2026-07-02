@@ -155,8 +155,12 @@
     <string name="positionVertical">Vertical position</string>
     <string name="position">Position</string>
     <string name="positionDefault">Default</string>
-    <string name="positionStyleBlueprint">Blueprint</string>
-    <string name="positionStyleTheme">Material</string>
+    <string name="installImageToolbox">Get ImageToolbox</string>
+    <string name="externalEditorTitle">Or open in an editor</string>
+    <string name="buildDisabledHint">Nothing to build yet — give at least one app an icon first</string>
+    <string name="fallbackDisabledHint">Set that icon pack in the options above first</string>
+    <string name="watchSaveDisabledHint">Pick at least one app and an icon pack (or enable all packs) first</string>
+    <string name="watchApplyDisabledHint">The new icon hasn\'t loaded yet</string>
     <string name="positionCustom">Custom</string>
     <string name="done">Done</string>
     <string name="removeBackgroundTolerance">Tolerance</string>
