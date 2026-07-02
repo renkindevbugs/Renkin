@@ -534,10 +534,13 @@ fun OptionsDialog(
                                 onAutoCenterChange = { autoCenter = it },
                                 onIconOffsetXChange = { iconOffsetX = it },
                                 onIconOffsetYChange = { iconOffsetY = it },
-                                onEditExternally = {
+                                onEditExternally = { toolbox ->
                                     val bitmap = draft.iconToConfirm?.toBitmap()
-                                    if (bitmap != null) shareIconForEditing(context, bitmap)
-                                    else snackbarScope.launch { snackbarHostState.showSnackbar(selectIconMessage) }
+                                    when {
+                                        bitmap == null -> snackbarScope.launch { snackbarHostState.showSnackbar(selectIconMessage) }
+                                        toolbox -> openInImageToolbox(context, bitmap)
+                                        else -> editInAnotherApp(context, bitmap)
+                                    }
                                 }
                             )
                             else -> PrepareEditVector(app, vectorEditState) {

@@ -259,16 +259,22 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                Button(
-                    onClick = onBuild,
+                DisabledExplanation(
                     enabled = themedApps.isNotEmpty(),
+                    message = stringResource(R.string.buildDisabledHint),
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(16.dp)
                 ) {
-                    Icon(Icons.Filled.Build, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.buildIconPack))
+                    Button(
+                        onClick = onBuild,
+                        enabled = themedApps.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Filled.Build, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.buildIconPack))
+                    }
                 }
             }
         }

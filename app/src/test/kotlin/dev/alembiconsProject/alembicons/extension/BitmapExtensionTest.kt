@@ -87,6 +87,26 @@ class BitmapExtensionTest {
     }
 
     @Test
+    fun contentBounds_ignoresStraySpecksAndCenteringDropsThem() {
+        // A solid 40×40 block in the middle of 128×128, plus a lone speck at the left edge. The
+        // bounds must hug the block (the speck is noise), and auto-centring must drop the speck.
+        val w = 128; val h = 128
+        val px = IntArray(w * h)
+        for (y in 44 until 84) for (x in 44 until 84) px[y * w + x] = red
+        px[60 * w] = blue // stray speck at x=0
+
+        val bitmap = bitmapOf(w, h, px)
+        val bounds = bitmap.contentBounds()!!
+
+        assertEquals(44, bounds.left)
+        assertEquals(84, bounds.right)
+
+        val centered = bitmap.centeredContent().pixels()
+        assertEquals(0, centered[60 * w])          // speck dropped
+        assertEquals(red, centered[64 * w + 64])   // block centred
+    }
+
+    @Test
     fun removeBackground_followsAGradientButStopsAtTheGlyph() {
         // A horizontal blue gradient background with a red glyph column in the middle. Neighbour-wise
         // tolerance follows the gradient across, the hard red edge stops it.

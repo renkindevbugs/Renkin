@@ -2,6 +2,7 @@
 
 package dev.alembiconsProject.alembicons.ui
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -11,6 +12,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Spacer
@@ -349,6 +351,7 @@ private fun ApplicationIconVariant(
                 label = stringResource(R.string.variantMonochrome),
                 selected = monochrome,
                 enabled = appHasMonochrome,
+                disabledHint = stringResource(R.string.monochromeUnavailable),
                 modifier = Modifier.weight(1f)
             ) { onMonochromeChange(true) }
         }
@@ -496,6 +499,8 @@ private fun VariantSegment(
     selected: Boolean,
     enabled: Boolean,
     modifier: Modifier = Modifier,
+    // Toast shown when the segment is tapped while disabled, so the dead tap explains itself.
+    disabledHint: String? = null,
     onClick: () -> Unit
 ) {
     val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
@@ -504,10 +509,14 @@ private fun VariantSegment(
         selected -> MaterialTheme.colorScheme.onSecondaryContainer
         else -> MaterialTheme.colorScheme.onSurface
     }
+    val context = LocalContext.current
     Box(
         modifier = modifier
             .background(bg)
-            .clickable(enabled = enabled, onClick = onClick)
+            .clickable {
+                if (enabled) onClick()
+                else disabledHint?.let { Toast.makeText(context, it, Toast.LENGTH_LONG).show() }
+            }
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {

@@ -134,14 +134,19 @@ internal fun WatchRuleEditor(
                 fontWeight = FontWeight.SemiBold,
                 modifier = Modifier.weight(1f)
             )
-            Button(
-                onClick = {
-                    onSave(selectedApps.toList(), watchAll, selectedPacks.toList())
-                },
+            DisabledExplanation(
                 enabled = canSave,
-                shape = RoundedCornerShape(14.dp)
+                message = stringResource(R.string.watchSaveDisabledHint)
             ) {
-                Text(stringResource(R.string.save))
+                Button(
+                    onClick = {
+                        onSave(selectedApps.toList(), watchAll, selectedPacks.toList())
+                    },
+                    enabled = canSave,
+                    shape = RoundedCornerShape(14.dp)
+                ) {
+                    Text(stringResource(R.string.save))
+                }
             }
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

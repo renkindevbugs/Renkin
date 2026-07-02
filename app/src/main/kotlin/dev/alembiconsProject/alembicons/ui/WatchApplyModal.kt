@@ -180,27 +180,32 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                     Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
                 }
                 val applyToast = stringResource(R.string.watchApplyToast)
-                FilledIconButton(
-                    onClick = {
-                        view.performConfirmHaptic()
-                        val icon = newIcon
-                        val targetApp = app
-                        if (icon != null && targetApp != null) {
-                            val index = apps.indexOfFirst {
-                                it.packageName == targetApp.packageName && it.activityName == targetApp.activityName
-                            }
-                            if (index >= 0) {
-                                viewModel.applyIcon(index, targetApp, icon, sourcePackName = selectedPack)
-                            }
-                            // Applying handles the rule, so remove it (cascades the suggestion)
-                            suggestion?.ruleId?.let { ruleId -> watchViewModel.deleteRule(ruleId) }
-                            Toast.makeText(context, applyToast, Toast.LENGTH_LONG).show()
-                        }
-                        onDismiss()
-                    },
-                    enabled = newIcon != null && app != null
+                DisabledExplanation(
+                    enabled = newIcon != null && app != null,
+                    message = stringResource(R.string.watchApplyDisabledHint)
                 ) {
-                    Icon(Icons.Filled.Check, stringResource(R.string.confirm))
+                    FilledIconButton(
+                        onClick = {
+                            view.performConfirmHaptic()
+                            val icon = newIcon
+                            val targetApp = app
+                            if (icon != null && targetApp != null) {
+                                val index = apps.indexOfFirst {
+                                    it.packageName == targetApp.packageName && it.activityName == targetApp.activityName
+                                }
+                                if (index >= 0) {
+                                    viewModel.applyIcon(index, targetApp, icon, sourcePackName = selectedPack)
+                                }
+                                // Applying handles the rule, so remove it (cascades the suggestion)
+                                suggestion?.ruleId?.let { ruleId -> watchViewModel.deleteRule(ruleId) }
+                                Toast.makeText(context, applyToast, Toast.LENGTH_LONG).show()
+                            }
+                            onDismiss()
+                        },
+                        enabled = newIcon != null && app != null
+                    ) {
+                        Icon(Icons.Filled.Check, stringResource(R.string.confirm))
+                    }
                 }
             }
         }

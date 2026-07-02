@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -23,11 +22,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -68,7 +63,6 @@ private data class BlueprintColors(
  * horizontal / vertical axes show the pixel distance from the artwork to each canvas edge (real
  * bitmap pixels, so the numbers match the export). Auto-centre snaps the artwork to the middle; the
  * sliders nudge it manually. All three feed the same modifier pipeline as the other adjustments.
- * A chip row toggles between a classic navy blueprint look and the app's Material colours.
  */
 @Composable
 internal fun CenterDialog(
@@ -82,16 +76,8 @@ internal fun CenterDialog(
     onDismiss: () -> Unit
 ) {
     val bounds = remember(iconBitmap) { iconBitmap?.contentBounds() }
-    var navyStyle by rememberSaveable { mutableStateOf(true) }
 
-    val colors = if (navyStyle) BlueprintColors(
-        background = Color(0xFF0E2138),
-        grid = Color(0xFF1C3652),
-        frame = Color(0xFF4A739F),
-        line = Color(0xFFCFE3F7),
-        box = Color(0xFFE8F1FB),
-        hatch = Color(0xFF3F6A99)
-    ) else BlueprintColors(
+    val colors = BlueprintColors(
         background = MaterialTheme.colorScheme.surfaceVariant,
         grid = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f),
         frame = MaterialTheme.colorScheme.outline,
@@ -124,19 +110,6 @@ internal fun CenterDialog(
                             drawBlueprint(iconBitmap, bounds, colors, textMeasurer)
                         }
                     }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = navyStyle,
-                        onClick = { navyStyle = true },
-                        label = { Text(stringResource(R.string.positionStyleBlueprint)) }
-                    )
-                    FilterChip(
-                        selected = !navyStyle,
-                        onClick = { navyStyle = false },
-                        label = { Text(stringResource(R.string.positionStyleTheme)) }
-                    )
                 }
 
                 Row(

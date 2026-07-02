@@ -247,6 +247,34 @@ fun Modifier.collapsibleHeight(fraction: () -> Float): Modifier =
         }
 
 /**
+ * Explains a disabled control on tap: while [enabled] is false, a transparent overlay catches the
+ * tap (a disabled button swallows it) and shows [message] as a toast, so the user learns what to do
+ * instead of getting a dead button. Wrap the button and keep passing [enabled] to it for the visuals.
+ */
+@Composable
+fun DisabledExplanation(
+    enabled: Boolean,
+    message: String,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val context = LocalContext.current
+    Box(modifier) {
+        content()
+        if (!enabled) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { Toast.makeText(context, message, Toast.LENGTH_LONG).show() }
+            )
+        }
+    }
+}
+
+/**
  * Centered message shown when a list/grid has no items (e.g. an empty filter result). Pass an
  * [icon] for large empty areas (full screen / grid); omit it for thin inline slots (a single
  * pack's preview row) where a 48dp glyph wouldn't fit. Shared by the app list, watch editor and
