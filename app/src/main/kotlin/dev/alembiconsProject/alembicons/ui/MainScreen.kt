@@ -219,6 +219,30 @@ fun MainColumn(iconPacks: List<IconPack>) {
         )
     }
 
+    // Post-build next steps: launchers need a nudge to pick up a (re)built pack, and the nudge
+    // differs between a first install (pick the pack) and an update (switch away and back).
+    val buildOutcome = viewModel.buildOutcome
+    if (buildOutcome != null) {
+        RenkinAlertDialog(
+            onDismissRequest = { viewModel.dismissBuildOutcome() },
+            title = {
+                Text(stringResource(
+                    if (buildOutcome == MainViewModel.BuildOutcome.UPDATE) R.string.buildUpdatedTitle
+                    else R.string.buildInstalledTitle
+                ))
+            },
+            text = {
+                Text(stringResource(
+                    if (buildOutcome == MainViewModel.BuildOutcome.UPDATE) R.string.buildUpdatedText
+                    else R.string.buildInstalledText
+                ))
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissBuildOutcome() }) { Text(stringResource(R.string.ok)) }
+            }
+        )
+    }
+
     val pressBackMessage = stringResource(R.string.pressBackToExit)
     var lastBackPress by remember { mutableStateOf(0L) }
     BackHandler {

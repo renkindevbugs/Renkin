@@ -222,6 +222,17 @@ class MainViewModel @Inject constructor(
         getApplication<Application>().packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
     }.isSuccess
 
+    /**
+     * Shown as a dialog after a successful build+install: FIRST_INSTALL tells the user to pick
+     * "Renkin Pack" in the launcher, UPDATE explains the switch-away-and-back launcher refresh.
+     * null = no dialog pending.
+     */
+    enum class BuildOutcome { FIRST_INSTALL, UPDATE }
+    var buildOutcome by mutableStateOf<BuildOutcome?>(null)
+        private set
+
+    fun dismissBuildOutcome() { buildOutcome = null }
+
     /** Builds, signs and installs the icon pack, surfacing progress through [buildStep]. */
     fun build(preferences: Preferences) {
         if (buildStep != null) return
@@ -231,12 +242,16 @@ class MainViewModel @Inject constructor(
                 val pack = appProvider.buildAndSignIconPack(preferences) { buildStep = it }
                 // The system install is the slow part (2-3s) — show it as its own step so the
                 // dialog reflects what's happening. "Updating" when our pack is already
-                // installed, "Installing" for a first build.
+                // installed, "Installing" for a first build. Decided before installing, so it
+                // also tells us which follow-up instructions dialog to show afterwards.
+                val wasUpdate = isIconPackInstalled()
                 buildStep = getApplication<Application>().getString(
-                    if (isIconPackInstalled()) R.string.buildUpdating else R.string.buildInstalling
+                    if (wasUpdate) R.string.buildUpdating else R.string.buildInstalling
                 )
                 if (appProvider.installIconPack(pack)) {
-                    _toastEvents.trySend(R.string.iconPackInstalled)
+                    // The next-steps dialog replaces the old "installed!" toast: what to do in
+                    // the launcher differs between a first install and an update.
+                    buildOutcome = if (wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL
                     // The saved pack now matches the current icons → reset both change baselines.
                     builtKeys = appProvider.getSavedPackKeys()
                     updatedKeys = emptySet()
