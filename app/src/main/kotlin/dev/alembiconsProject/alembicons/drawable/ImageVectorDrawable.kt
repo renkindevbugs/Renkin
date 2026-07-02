@@ -122,8 +122,13 @@ class ImageVectorDrawable(imageVector: ImageVector): IconPackDrawable() {
     override fun toBitmap(): Bitmap {
         val bmp = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
-        this.resizeTo(256F, 256F).center()
-        this.renderToCanvas(canvas)
+        // Rasterise a copy: resizeTo/center mutate the vector in place, and this drawable also
+        // backs the live preview painter — mutating it here would shift/zoom the previewed icon
+        // further on every rasterisation (the Position tool and the external-editor hand-off
+        // both call toBitmap on the previewed icon).
+        val copy = ImageVectorDrawable(toImageVector())
+        copy.resizeTo(256F, 256F).center()
+        copy.renderToCanvas(canvas)
         return bmp
     }
 

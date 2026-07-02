@@ -64,7 +64,11 @@
     <string name="firstLetter">First Letter</string>
     <string name="twoLetters">Two Letters</string>
     <string name="applicationName">Application Name</string>
-    <string name="iconPackInstalled">The icon pack has been successfully installed!</string>
+    <string name="ok">OK</string>
+    <string name="buildInstalledTitle">Icon pack installed</string>
+    <string name="buildInstalledText">The icon pack was installed as “Renkin Pack”. Select it as the icon pack in your launcher’s settings to see your icons.</string>
+    <string name="buildUpdatedTitle">Icon pack updated</string>
+    <string name="buildUpdatedText">Launchers cache icons, so the changes may not show right away. In your launcher’s settings, switch to another icon pack and then back to “Renkin Pack” to refresh them.</string>
     <string name="editVector">Vector</string>
     <string name="badPathFormat">Incorrect path format</string>
     <string name="emptyPath">Empty path created</string>

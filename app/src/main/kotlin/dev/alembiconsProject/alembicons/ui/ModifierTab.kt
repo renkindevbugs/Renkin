@@ -3,6 +3,7 @@
 package dev.alembiconsProject.alembicons.ui
 
 import android.graphics.Bitmap
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
@@ -134,101 +135,109 @@ internal fun ModifierTab(
             color = MaterialTheme.colorScheme.onSurface
         )
 
+        // Selecting an edit expands its settings inside the same envelope surface as its card,
+        // so the controls visually belong to the chosen option instead of floating below the list.
         editLabels.forEach { (edit, label) ->
             val selected = imageEdit == edit
-            OptionCard(
-                label = label,
-                selected = selected,
-                onClick = { onImageEditChange(edit) },
-                trailing = if (selected) {
-                    {
-                        Icon(
-                            imageVector = Icons.Filled.Done,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                            modifier = Modifier.size(20.dp)
-                        )
+            val envelope by animateColorAsState(
+                if (selected) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
+                label = "editEnvelope"
+            )
+            Surface(shape = CardShape, color = envelope, modifier = Modifier.fillMaxWidth()) {
+                Column {
+                    OptionCard(
+                        label = label,
+                        selected = selected,
+                        onClick = { onImageEditChange(edit) },
+                        trailing = if (selected) {
+                            {
+                                Icon(
+                                    imageVector = Icons.Filled.Done,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        } else null
+                    )
+                    androidx.compose.animation.AnimatedVisibility(visible = selected) {
+                        Column(
+                            modifier = Modifier.padding(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            when (edit) {
+                                ImageEdit.EDGE -> {
+                                    OptionGroup {
+                                        // Detail: inverse of the Canny threshold — right = more edges kept
+                                        LabeledSlider(
+                                            label = stringResource(R.string.edgeDetail),
+                                            value = (1f - (adjustments.edgeThreshold - 0.5f) / 4.5f).coerceIn(0f, 1f),
+                                            onValueChange = { adjustments.edgeThreshold = 0.5f + (1f - it) * 4.5f },
+                                            valueRange = 0f..1f
+                                        )
+                                        LabeledSlider(
+                                            label = stringResource(R.string.edgeSmoothing),
+                                            value = adjustments.edgeSmoothing,
+                                            onValueChange = { adjustments.edgeSmoothing = it },
+                                            valueRange = 0.5f..4f
+                                        )
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = stringResource(R.string.edgeContrast),
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                                modifier = Modifier.weight(1f)
+                                            )
+                                            Switch(
+                                                checked = adjustments.edgeContrast,
+                                                onCheckedChange = { adjustments.edgeContrast = it }
+                                            )
+                                        }
+                                    }
+                                    IconColorCard(iconColor) { colorPickerOpen = true }
+                                }
+
+                                ImageEdit.PATH -> {
+                                    if (isPathTracingEnabled(source, imageEdit)) {
+                                        Surface(
+                                            shape = CardShape,
+                                            color = MaterialTheme.colorScheme.surfaceContainer,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                                                VectorSwitch(useVector) { onVectorChange(it) }
+                                                MonochromeSwitch(useMonochrome) { onMonochromeChange(it) }
+                                            }
+                                        }
+                                    }
+                                    IconColorCard(iconColor) { colorPickerOpen = true }
+                                }
+
+                                ImageEdit.COLORIZE -> IconColorCard(iconColor) { colorPickerOpen = true }
+
+                                ImageEdit.REMOVE_BACKGROUND -> OptionGroup {
+                                    // Remove background keeps the original pixels, so no colour control.
+                                    LabeledSlider(
+                                        label = stringResource(R.string.removeBackgroundTolerance),
+                                        value = adjustments.bgRemovalTolerance,
+                                        onValueChange = { adjustments.bgRemovalTolerance = it },
+                                        valueRange = 0f..0.5f,
+                                        valueLabel = "${(adjustments.bgRemovalTolerance * 100).roundToInt()}%"
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.removeBackgroundHint),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+
+                                ImageEdit.NONE -> {}
+                            }
+                        }
                     }
-                } else null
-            )
-        }
-
-        if (imageEdit == ImageEdit.EDGE) {
-            OptionGroup {
-                // Detail: inverse of the Canny threshold — right = more edges kept
-                LabeledSlider(
-                    label = stringResource(R.string.edgeDetail),
-                    value = (1f - (adjustments.edgeThreshold - 0.5f) / 4.5f).coerceIn(0f, 1f),
-                    onValueChange = { adjustments.edgeThreshold = 0.5f + (1f - it) * 4.5f },
-                    valueRange = 0f..1f
-                )
-                LabeledSlider(
-                    label = stringResource(R.string.edgeSmoothing),
-                    value = adjustments.edgeSmoothing,
-                    onValueChange = { adjustments.edgeSmoothing = it },
-                    valueRange = 0.5f..4f
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.edgeContrast),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Switch(
-                        checked = adjustments.edgeContrast,
-                        onCheckedChange = { adjustments.edgeContrast = it }
-                    )
-                }
-            }
-        }
-
-        if (imageEdit == ImageEdit.REMOVE_BACKGROUND) {
-            OptionGroup {
-                LabeledSlider(
-                    label = stringResource(R.string.removeBackgroundTolerance),
-                    value = adjustments.bgRemovalTolerance,
-                    onValueChange = { adjustments.bgRemovalTolerance = it },
-                    valueRange = 0f..0.5f,
-                    valueLabel = "${(adjustments.bgRemovalTolerance * 100).roundToInt()}%"
-                )
-                Text(
-                    text = stringResource(R.string.removeBackgroundHint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        // The icon colour only applies to the recolouring edits; Remove background keeps the
-        // original pixels, so it has no colour control.
-        if (imageEdit != ImageEdit.NONE && imageEdit != ImageEdit.REMOVE_BACKGROUND) {
-            OptionCard(
-                label = stringResource(R.string.iconColor),
-                onClick = { colorPickerOpen = true },
-                trailing = {
-                    Surface(
-                        shape = CircleShape,
-                        color = iconColor,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                        modifier = Modifier.size(28.dp)
-                    ) {}
-                }
-            )
-        }
-
-        if (isPathTracingEnabled(source, imageEdit)) {
-            Surface(
-                shape = CardShape,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
-                    VectorSwitch(useVector) { onVectorChange(it) }
-                    MonochromeSwitch(useMonochrome) { onMonochromeChange(it) }
                 }
             }
         }
@@ -342,4 +351,21 @@ internal fun ModifierTab(
             onDismiss = { centerDialogOpen = false }
         )
     }
+}
+
+/** The recolouring edits' colour row: opens the picker, shows the current colour as a swatch. */
+@Composable
+private fun IconColorCard(iconColor: Color, onClick: () -> Unit) {
+    OptionCard(
+        label = stringResource(R.string.iconColor),
+        onClick = onClick,
+        trailing = {
+            Surface(
+                shape = CircleShape,
+                color = iconColor,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.size(28.dp)
+            ) {}
+        }
+    )
 }
