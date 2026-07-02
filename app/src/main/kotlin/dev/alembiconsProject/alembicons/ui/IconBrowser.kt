@@ -42,9 +42,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.hilt.navigation.compose.hiltViewModel
+import dev.alembiconsProject.alembicons.MainViewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -58,16 +61,32 @@ import dev.alembiconsProject.alembicons.icon.creator.GenerationOptions
 import dev.alembiconsProject.alembicons.icon.creator.IconSortOrder
 import kotlinx.coroutines.delay
 
+/** How the pack list itself is ordered (the icons inside sort by [IconSortOrder]). */
+enum class PackSortOrder { USAGE, NAME, INSTALL_DATE }
+
+/** Muted section label inside the sort menu, separating the icon sort from the pack sort. */
+@Composable
+private fun SortMenuHeader(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+    )
+}
+
 /**
- * The icon search field plus the A→Z / Z→A sort menu. Rendered as the first item of the
- * pack list so it scrolls with the content (see CreateTab) rather than animating in and out.
+ * The icon search field plus the sort menu: icon order (A→Z / Z→A) and pack order
+ * (most used / name / recently installed). Pinned above the pack list (see CreateTab).
  */
 @Composable
 private fun IconSearchBar(
     query: String,
     onQueryChange: (String) -> Unit,
     sortOrder: IconSortOrder,
-    onSortOrderChange: (IconSortOrder) -> Unit
+    onSortOrderChange: (IconSortOrder) -> Unit,
+    packSortOrder: PackSortOrder,
+    onPackSortOrderChange: (PackSortOrder) -> Unit
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
     Row(
@@ -87,11 +106,23 @@ private fun IconSearchBar(
                 Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.sort), tint = MaterialTheme.colorScheme.primary)
             }
             DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+                SortMenuHeader(stringResource(R.string.sortIconsHeader))
                 CheckableDropdownItem(stringResource(R.string.sortAToZ), sortOrder == IconSortOrder.NAME_ASC) {
                     onSortOrderChange(IconSortOrder.NAME_ASC); showSortMenu = false
                 }
                 CheckableDropdownItem(stringResource(R.string.sortZToA), sortOrder == IconSortOrder.NAME_DESC) {
                     onSortOrderChange(IconSortOrder.NAME_DESC); showSortMenu = false
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                SortMenuHeader(stringResource(R.string.sortPacksHeader))
+                CheckableDropdownItem(stringResource(R.string.sortByUsage), packSortOrder == PackSortOrder.USAGE) {
+                    onPackSortOrderChange(PackSortOrder.USAGE); showSortMenu = false
+                }
+                CheckableDropdownItem(stringResource(R.string.sortByName), packSortOrder == PackSortOrder.NAME) {
+                    onPackSortOrderChange(PackSortOrder.NAME); showSortMenu = false
+                }
+                CheckableDropdownItem(stringResource(R.string.sortByInstallDate), packSortOrder == PackSortOrder.INSTALL_DATE) {
+                    onPackSortOrderChange(PackSortOrder.INSTALL_DATE); showSortMenu = false
                 }
             }
         }
@@ -153,9 +184,23 @@ fun CreateTab(
     // re-search (debouncedQuery already matches the preserved searchQuery).
     var debouncedQuery by remember { mutableStateOf(searchQuery) }
     var sortOrder by rememberSaveable { mutableStateOf(IconSortOrder.NAME_ASC) }
-    // Base order: most-used packs first (usage is the tiebreaker once query matches settle below).
-    val distinctPacks = remember(iconPacks, packUsage) {
-        iconPacks.distinctBy { it.packageName }.sortedByDescending { packUsage[it.packageName] ?: 0 }
+    var packSort by rememberSaveable { mutableStateOf(PackSortOrder.USAGE) }
+    // Pack first-install times, fetched only once the recently-installed sort is chosen.
+    val viewModel: MainViewModel = hiltViewModel()
+    val packInstallTimes by produceState(emptyMap<String, Long>(), packSort, iconPacks) {
+        if (packSort == PackSortOrder.INSTALL_DATE && value.isEmpty()) {
+            value = viewModel.installTimes(iconPacks.map { it.packageName })
+        }
+    }
+    // Base order per the chosen pack sort; most-used is the default (usage stays the tiebreaker
+    // once query matches settle below).
+    val distinctPacks = remember(iconPacks, packUsage, packSort, packInstallTimes) {
+        val base = iconPacks.distinctBy { it.packageName }
+        when (packSort) {
+            PackSortOrder.USAGE -> base.sortedByDescending { packUsage[it.packageName] ?: 0 }
+            PackSortOrder.NAME -> base.sortedBy { it.applicationName.lowercase() }
+            PackSortOrder.INSTALL_DATE -> base.sortedByDescending { packInstallTimes[it.packageName] ?: 0L }
+        }
     }
     // packageName -> whether the pack has icons matching the current query
     var packMatches by remember { mutableStateOf<Map<String, Boolean>>(emptyMap()) }
@@ -181,11 +226,12 @@ fun CreateTab(
     LaunchedEffect(packMatches) {
         if (packMatches.isEmpty()) return@LaunchedEffect
         delay(450)
-        // Packs that have a matching icon float to the top; among equals, the most-used pack wins
-        // (distinctPacks is already usage-ordered, so this is a stable tiebreaker).
+        // Packs that have a matching icon float to the top; among equals, the chosen pack sort
+        // (distinctPacks' order) is the stable tiebreaker.
+        val baseIndex = distinctPacks.withIndex().associate { it.value.packageName to it.index }
         val newOrder = distinctPacks.sortedWith(
             compareByDescending<IconPack> { packMatches[it.packageName] != false }
-                .thenByDescending { packUsage[it.packageName] ?: 0 }
+                .thenBy { baseIndex[it.packageName] ?: Int.MAX_VALUE }
         )
         if (newOrder.map { it.packageName } != orderedPacks.map { it.packageName }) {
             val atTop = listState.firstVisibleItemIndex == 0 &&
@@ -239,7 +285,9 @@ fun CreateTab(
                                 query = searchQuery,
                                 onQueryChange = onSearchQueryChange,
                                 sortOrder = sortOrder,
-                                onSortOrderChange = { sortOrder = it }
+                                onSortOrderChange = { sortOrder = it },
+                                packSortOrder = packSort,
+                                onPackSortOrderChange = { packSort = it }
                             )
                         }
                         LazyColumn(
