@@ -43,6 +43,8 @@ private const val APP_FILTER_NO_ICON_NAME = "APP_FILTER_NO_ICON"
 private const val WATCH_CHECK_INTERVAL_NAME = "WATCH_CHECK_INTERVAL_MINUTES"
 private const val LAST_WATCH_CHECK_AT_NAME = "LAST_WATCH_CHECK_AT"
 private const val FALLBACK_SOURCE_NAME = "FALLBACK_SOURCE"
+private const val BUILT_PRIMARY_SOURCE_NAME = "BUILT_PRIMARY_SOURCE"
+private const val BUILT_PRIMARY_ICON_PACK_NAME = "BUILT_PRIMARY_ICON_PACK"
 
 // Icon-watch periodic check interval, in minutes. 24h by default; the debug build can
 // lower it (min 15, WorkManager's periodic floor) to test the watcher quickly.
@@ -66,6 +68,11 @@ val PrimarySourceKey = intPreferencesKey(PRIMARY_SOURCE_NAME)
 val PrimaryImageEditKey = intPreferencesKey(PRIMARY_IMAGE_EDIT_NAME)
 val PrimaryTextTypeKey = intPreferencesKey(PRIMARY_TEXT_TYPE_NAME)
 val PrimaryIconPackKey = stringPreferencesKey(PRIMARY_ICON_PACK_NAME)
+// The primary source/pack as of the last successful build. Startup restores these over any
+// unbuilt hero-card pick, so the pick only "sticks" once it's built. Absent on legacy/fresh
+// installs — startup then leaves the current primary selection untouched.
+val BuiltPrimarySourceKey = intPreferencesKey(BUILT_PRIMARY_SOURCE_NAME)
+val BuiltPrimaryIconPackKey = stringPreferencesKey(BUILT_PRIMARY_ICON_PACK_NAME)
 val SecondarySourceKey = intPreferencesKey(SECONDARY_SOURCE_NAME)
 val SecondaryImageEditKey = intPreferencesKey(SECONDARY_IMAGE_EDIT_NAME)
 val SecondaryTextTypeKey = intPreferencesKey(SECONDARY_TEXT_TYPE_NAME)

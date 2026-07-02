@@ -98,7 +98,6 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
 
     var sheetOpen by remember { mutableStateOf(false) }
 
-    val hasChoice = source != Source.NONE
     Surface(
         onClick = { sheetOpen = true },
         shape = CardShape,
@@ -151,7 +150,9 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
                 )
             }
 
-            if (hasChoice && totalCount > 0) {
+            // The progress reflects the stored icons, which exist independently of the current
+            // source pick — so it stays visible even with None selected.
+            if (totalCount > 0) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
