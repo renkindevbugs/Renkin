@@ -55,9 +55,8 @@ data class GenerationOptions(
     // Per-icon adjustments from the Modifier tab (not part of the bulk preferences).
     // iconScale 1f = unchanged; < 1f pads the icon inside its frame.
     val iconScale: Float = 1f,
-    // Re-centre the icon's content (auto-crop transparent margins, then centre) before offset/scale.
-    val autoCenter: Boolean = false,
-    // Manual nudge as a fraction of the icon size: -0.5..0.5. Applied after [autoCenter].
+    // Position nudge as a fraction of the icon size: -0.5..0.5. Auto-centre in the Position dialog
+    // just computes these, so the offsets are the single source of truth for the icon's position.
     val iconOffsetX: Float = 0f,
     val iconOffsetY: Float = 0f,
     // Colour-distance tolerance (0..1) for the Remove background modifier — how far a pixel's colour

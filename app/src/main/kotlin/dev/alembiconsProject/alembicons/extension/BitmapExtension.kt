@@ -145,30 +145,6 @@ fun Bitmap.contentBounds(): Rect? {
     return Rect(left, top, right + 1, bottom + 1)
 }
 
-/**
- * Re-centres the icon: moves the content bounding box ([contentBounds]) to the middle of a same-size
- * canvas. Fixes artwork an external editor left off-centre (e.g. a background erase that trimmed one
- * side). Returns the original when there's no opaque content.
- */
-fun Bitmap.centeredContent(): Bitmap {
-    val bounds = contentBounds() ?: return this
-    val w = width
-    val h = height
-    val px = IntArray(w * h)
-    getPixels(px, 0, w, 0, 0, w, h)
-
-    val cw = bounds.width()
-    val ch = bounds.height()
-    val destLeft = (w - cw) / 2
-    val destTop = (h - ch) / 2
-    // Copy the content block (a pure move, no scaling) onto a fresh transparent canvas.
-    val out = IntArray(w * h)
-    for (y in 0 until ch) for (x in 0 until cw) {
-        out[(destTop + y) * w + (destLeft + x)] = px[(bounds.top + y) * w + (bounds.left + x)]
-    }
-    return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)
-}
-
 /** Shifts the whole image by ([dx], [dy]) whole pixels; content pushed off the edge is dropped. */
 fun Bitmap.translated(dx: Float, dy: Float): Bitmap {
     val idx = dx.roundToInt()

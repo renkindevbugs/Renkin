@@ -275,6 +275,8 @@ fun OptionsDialog(
     var edgeContrast by rememberSaveable { mutableStateOf(false) }
     var iconScale by rememberSaveable { mutableFloatStateOf(1f) }
     var bgRemovalTolerance by rememberSaveable { mutableFloatStateOf(0.1f) }
+    // Auto-center is UI state only: switching it on computes the offsets below (the pipeline's
+    // single source of truth for position); dragging a position slider switches it back off.
     var autoCenter by rememberSaveable { mutableStateOf(false) }
     var iconOffsetX by rememberSaveable { mutableFloatStateOf(0f) }
     var iconOffsetY by rememberSaveable { mutableFloatStateOf(0f) }
@@ -337,7 +339,6 @@ fun OptionsDialog(
         edgeContrastNormalized = edgeContrast,
         iconScale = iconScale,
         bgRemovalTolerance = bgRemovalTolerance,
-        autoCenter = autoCenter,
         iconOffsetX = iconOffsetX,
         iconOffsetY = iconOffsetY
     )

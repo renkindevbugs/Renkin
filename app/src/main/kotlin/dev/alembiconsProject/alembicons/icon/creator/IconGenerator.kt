@@ -39,7 +39,6 @@ import dev.alembiconsProject.alembicons.data.IconPackFallback
 import dev.alembiconsProject.alembicons.drawable.haveMonochrome
 import dev.alembiconsProject.alembicons.drawable.isAdaptiveIconDrawable
 import dev.alembiconsProject.alembicons.drawable.shrinkIfBiggerThan
-import dev.alembiconsProject.alembicons.extension.centeredContent
 import dev.alembiconsProject.alembicons.extension.changeBackgroundColor
 import dev.alembiconsProject.alembicons.extension.emptyLike
 import dev.alembiconsProject.alembicons.extension.translated
@@ -721,21 +720,20 @@ class IconGenerator(
     }
 
     /**
-     * Applies the per-icon Modifier-tab adjustments — re-centre, manual offset and scale, in that
-     * order — on top of an already-built icon. No-op with the defaults, so it's safe to run on every
-     * generation path. Rasterises once (works for bitmaps and vectors alike) and carries over the
-     * source's adaptive-export flag and preview zoom (e.g. the monochrome variant), so the scale
-     * doesn't reset the launcher safe-zone preview.
+     * Applies the per-icon Modifier-tab adjustments — position offset, then scale — on top of an
+     * already-built icon. No-op with the defaults, so it's safe to run on every generation path.
+     * Rasterises once (works for bitmaps and vectors alike) and carries over the source's
+     * adaptive-export flag and preview zoom (e.g. the monochrome variant), so the scale doesn't
+     * reset the launcher safe-zone preview.
      */
     private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {
-        val centerOrOffset = options.autoCenter || options.iconOffsetX != 0f || options.iconOffsetY != 0f
-        if (!centerOrOffset && options.iconScale == 1f) return icon
+        val offset = options.iconOffsetX != 0f || options.iconOffsetY != 0f
+        if (!offset && options.iconScale == 1f) return icon
 
         var bitmap = icon.toBitmap()
         if (bitmap.width <= 0 || bitmap.height <= 0) return icon
 
-        if (options.autoCenter) bitmap = bitmap.centeredContent()
-        if (options.iconOffsetX != 0f || options.iconOffsetY != 0f) {
+        if (offset) {
             bitmap = bitmap.translated(options.iconOffsetX * bitmap.width, options.iconOffsetY * bitmap.height)
         }
         if (options.iconScale != 1f) {

@@ -336,7 +336,7 @@ internal fun ModifierTab(
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.weight(1f)
                 )
-                val adjusted = autoCenter || iconOffsetX != 0f || iconOffsetY != 0f
+                val adjusted = iconOffsetX != 0f || iconOffsetY != 0f
                 Text(
                     text = if (adjusted) stringResource(R.string.positionCustom) else stringResource(R.string.positionDefault),
                     style = MaterialTheme.typography.labelLarge,
@@ -349,8 +349,15 @@ internal fun ModifierTab(
         // the main action opens ImageToolbox (or its Play Store page when not installed), the arrow
         // reveals "Edit in another app". The edited image comes back via "share to Renkin" into the
         // Upload tab.
+        Text(
+            text = stringResource(R.string.externalEditorTitle),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(top = 8.dp)
+        )
         var editorMenuOpen by remember { mutableStateOf(false) }
-        Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 8.dp)) {
+        Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp)) {
             SplitButtonLayout(
                 leadingButton = {
                     SplitButtonDefaults.LeadingButton(

@@ -61,8 +61,9 @@ private data class BlueprintColors(
  * Visual positioning tool (opened from the Modifier tab's Adjustments), drawn like a technical
  * blueprint: the icon's content bounding box is hatched, and double-headed measurement arrows on the
  * horizontal / vertical axes show the pixel distance from the artwork to each canvas edge (real
- * bitmap pixels, so the numbers match the export). Auto-centre snaps the artwork to the middle; the
- * sliders nudge it manually. All three feed the same modifier pipeline as the other adjustments.
+ * bitmap pixels, so the numbers match the export). The offsets are the only position mechanism:
+ * switching auto-centre on computes the slider values that centre the artwork (both axes), and
+ * dragging a slider manually flips the switch back off.
  */
 @Composable
 internal fun CenterDialog(
@@ -122,7 +123,21 @@ internal fun CenterDialog(
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )
-                    Switch(checked = autoCenter, onCheckedChange = onAutoCenterChange)
+                    Switch(
+                        checked = autoCenter,
+                        onCheckedChange = { on ->
+                            onAutoCenterChange(on)
+                            // Auto-centre only computes the sliders: nudge the current offsets by
+                            // whatever is needed to put the content box in the middle. The sliders
+                            // move to show it, and the pipeline stays offset-only.
+                            if (on && iconBitmap != null && bounds != null) {
+                                val dx = ((iconBitmap.width - bounds.width()) / 2f - bounds.left) / iconBitmap.width
+                                val dy = ((iconBitmap.height - bounds.height()) / 2f - bounds.top) / iconBitmap.height
+                                onOffsetXChange((offsetX + dx).coerceIn(-0.5f, 0.5f))
+                                onOffsetYChange((offsetY + dy).coerceIn(-0.5f, 0.5f))
+                            }
+                        }
+                    )
                 }
 
                 Text(
@@ -132,7 +147,11 @@ internal fun CenterDialog(
                 )
                 Slider(
                     value = offsetX,
-                    onValueChange = onOffsetXChange,
+                    onValueChange = {
+                        onOffsetXChange(it)
+                        // A manual nudge means the user takes over — auto-centre no longer holds.
+                        onAutoCenterChange(false)
+                    },
                     valueRange = -0.5f..0.5f,
                     track = { SliderDefaults.CenteredTrack(sliderState = it) }
                 )
@@ -143,7 +162,10 @@ internal fun CenterDialog(
                 )
                 Slider(
                     value = offsetY,
-                    onValueChange = onOffsetYChange,
+                    onValueChange = {
+                        onOffsetYChange(it)
+                        onAutoCenterChange(false)
+                    },
                     valueRange = -0.5f..0.5f,
                     track = { SliderDefaults.CenteredTrack(sliderState = it) }
                 )
