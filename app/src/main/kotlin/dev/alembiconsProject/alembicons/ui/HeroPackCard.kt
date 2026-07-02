@@ -5,19 +5,20 @@ package dev.alembiconsProject.alembicons.ui
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -208,9 +209,15 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
                 scope.launch {
                     prefs.setEnumValue(PrimarySourceKey, newSource)
                     if (newPackage != null) prefs.setStringValue(PrimaryIconPackKey, newPackage)
-                    // Auto-refresh with the just-written preferences, so the pick takes effect
-                    // without knowing about the refresh button. Hand-picked icons are safe.
-                    viewModel.refresh(prefs.data.first())
+                    if (newSource == Source.NONE) {
+                        // No source: the unsaved refresh output goes away; locked icons stay.
+                        viewModel.clearRefreshedIcons()
+                    } else {
+                        // Auto-refresh with the just-written preferences, so the pick takes
+                        // effect without knowing about the refresh button. Hand-picked and
+                        // built icons are safe.
+                        viewModel.refresh(prefs.data.first())
+                    }
                 }
             }
         )
@@ -230,20 +237,19 @@ private fun PackPickerSheet(
     val usage = remember { viewModel.packUsageCounts() }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        // Scrollable: with many installed packs the list is taller than the sheet.
-        Column(
-            Modifier
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = 16.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.choosePackTitle),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-            )
-            iconPacks.distinctBy { it.packageName }.forEach { pack ->
+        // LazyColumn (not Column+verticalScroll): with many packs the list is taller than the
+        // sheet, and the lazy list's nested-scroll handoff to the sheet is smooth at the edges.
+        LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
+            item {
+                Text(
+                    text = stringResource(R.string.choosePackTitle),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                )
+            }
+            items(iconPacks.distinctBy { it.packageName }, key = { it.packageName }) { pack ->
                 val selected = selectedSource == Source.ICON_PACK && pack.packageName == selectedPackage
                 PickerRow(
                     title = pack.applicationName,
@@ -254,23 +260,37 @@ private fun PackPickerSheet(
                     selected = selected
                 ) { onPick(Source.ICON_PACK, pack.packageName) }
             }
-
-            HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
-                color = MaterialTheme.colorScheme.outlineVariant
-            )
-            PickerRow(
-                title = stringResource(R.string.sourceOwnIcons),
-                subtitle = null,
-                icon = null,
-                selected = selectedSource == Source.APPLICATION_ICON
-            ) { onPick(Source.APPLICATION_ICON, null) }
-            PickerRow(
-                title = stringResource(R.string.sourceTextIcons),
-                subtitle = null,
-                icon = null,
-                selected = selectedSource == Source.APPLICATION_NAME
-            ) { onPick(Source.APPLICATION_NAME, null) }
+            item {
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+            }
+            item {
+                // None: no source at all — picking it also discards the unsaved refresh output.
+                PickerRow(
+                    title = stringResource(R.string.none),
+                    subtitle = null,
+                    icon = null,
+                    selected = selectedSource == Source.NONE
+                ) { onPick(Source.NONE, null) }
+            }
+            item {
+                PickerRow(
+                    title = stringResource(R.string.sourceOwnIcons),
+                    subtitle = null,
+                    icon = null,
+                    selected = selectedSource == Source.APPLICATION_ICON
+                ) { onPick(Source.APPLICATION_ICON, null) }
+            }
+            item {
+                PickerRow(
+                    title = stringResource(R.string.sourceTextIcons),
+                    subtitle = null,
+                    icon = null,
+                    selected = selectedSource == Source.APPLICATION_NAME
+                ) { onPick(Source.APPLICATION_NAME, null) }
+            }
         }
     }
 }

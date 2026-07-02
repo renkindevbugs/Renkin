@@ -530,6 +530,9 @@ class MainViewModel @Inject constructor(
             .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap(), idToName[it.key.resourceId] ?: "") }
     }
 
+    /** Clears only the unsaved bulk-refresh icons — see ApplicationProvider.clearRefreshedIcons. */
+    fun clearRefreshedIcons() = appProvider.clearRefreshedIcons()
+
     /** Clears every created icon (and persists the empty state). */
     fun clearIcons() {
         viewModelScope.launch {

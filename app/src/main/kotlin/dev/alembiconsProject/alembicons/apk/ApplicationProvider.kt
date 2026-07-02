@@ -246,6 +246,18 @@ class ApplicationProvider(private val context: Context) {
     suspend fun getIconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
         iconPackRepo.getDropdownIcons(application)
 
+    /**
+     * Clears only the unsaved bulk-refresh icons (isRefreshMade); hand-picked and built/saved
+     * icons stay. Used when the primary source is set to None: whatever the refresh produced
+     * and nothing has locked in yet simply goes away. Nothing is persisted — these icons were
+     * never saved.
+     */
+    fun clearRefreshedIcons() {
+        for (app in applicationList.toList()) {
+            if (app.isRefreshMade) editApplication(app, app.changeExport(null))
+        }
+    }
+
     suspend fun clearIcons() = withContext(Dispatchers.Default) {
         // Snapshot copy: editApplication mutates the live list in place.
         // Also reset calendar opt-ins: otherwise a calendar-enabled app is still persisted
