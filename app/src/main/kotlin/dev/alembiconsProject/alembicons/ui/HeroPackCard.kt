@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -69,7 +71,7 @@ import kotlinx.coroutines.withContext
  * chosen pack (or a choose-your-pack call to action), the completion progress with the built /
  * added / removed diff bar, and opens the pack picker sheet on tap. Picking writes the same
  * primary source/pack preferences the options card used to own, then auto-refreshes the icons —
- * hand-picked icons survive that refresh (see PackageInfoStruct.isCustomIcon).
+ * hand-picked and already-built icons survive that refresh (see PackageInfoStruct.isRefreshMade).
  */
 @Composable
 fun HeroPackCard(iconPacks: List<IconPack>) {
@@ -228,7 +230,12 @@ private fun PackPickerSheet(
     val usage = remember { viewModel.packUsageCounts() }
 
     ModalBottomSheet(onDismissRequest = onDismiss) {
-        Column(Modifier.padding(bottom = 16.dp)) {
+        // Scrollable: with many installed packs the list is taller than the sheet.
+        Column(
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 16.dp)
+        ) {
             Text(
                 text = stringResource(R.string.choosePackTitle),
                 style = MaterialTheme.typography.titleMedium,

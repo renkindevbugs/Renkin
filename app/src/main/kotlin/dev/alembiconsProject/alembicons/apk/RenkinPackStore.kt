@@ -21,7 +21,7 @@ import kotlinx.coroutines.withContext
 class RenkinPackStore(private val context: Context) {
     private val repo = RenkinPackRepository(context)
 
-    data class SavedEntry(val icon: IconPackDrawable?, val calendarEnabled: Boolean, val calendarPrefix: String?, val calendarPackName: String?, val sourcePackName: String?, val isCustomIcon: Boolean)
+    data class SavedEntry(val icon: IconPackDrawable?, val calendarEnabled: Boolean, val calendarPrefix: String?, val calendarPackName: String?, val sourcePackName: String?)
 
     /** Loads the saved icons + calendar flags, keyed by "package/activity". */
     suspend fun load(defaultColor: Color): Map<String, SavedEntry> = withContext(Dispatchers.Default) {
@@ -39,8 +39,7 @@ class RenkinPackStore(private val context: Context) {
                 dbApp.calendarEnabled,
                 dbApp.calendarPrefix.ifEmpty { null },
                 dbApp.calendarPackName.ifEmpty { null },
-                dbApp.sourcePackName.ifEmpty { null },
-                dbApp.isCustomIcon
+                dbApp.sourcePackName.ifEmpty { null }
             )
         }
     }
@@ -59,8 +58,7 @@ class RenkinPackStore(private val context: Context) {
                 app.calendarEnabled,
                 app.calendarPrefix ?: "",
                 app.calendarPackName ?: "",
-                app.sourcePackName ?: "",
-                app.isCustomIcon
+                app.sourcePackName ?: ""
             )
         }
         repo.replaceAll(dbApps)

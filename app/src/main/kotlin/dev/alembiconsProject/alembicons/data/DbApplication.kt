@@ -26,10 +26,7 @@ data class DbApplication(
     // Package name of the icon pack this icon was taken from (empty when the icon doesn't
     // come from a pack — app-icon, app-name, upload, hand-edited vector or fallback styling).
     // Used to order packs by how often they're used in the per-app icon picker.
-    @ColumnInfo(defaultValue = "") val sourcePackName: String = "",
-    // True when the user picked this icon by hand in the edit dialog (as opposed to the bulk
-    // refresh). Hand-picked icons survive a refresh unless "override" is enabled.
-    @ColumnInfo(defaultValue = "0") val isCustomIcon: Boolean = false
+    @ColumnInfo(defaultValue = "") val sourcePackName: String = ""
 )
 
 @Dao
@@ -58,7 +55,7 @@ interface RenkinPackDao {
 
 @Database(
     entities = [DbApplication::class],
-    version = 6
+    version = 5
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -91,12 +88,6 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
-        private val MIGRATION_5_6 = object : Migration(5, 6) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE DbApplication ADD COLUMN isCustomIcon INTEGER NOT NULL DEFAULT 0")
-            }
-        }
-
         // Physical file name stays "alchemiconPack" so existing installs keep their
         // saved generated icons across the rename.
         fun get(context: Context): RenkinPackDatabase {
@@ -105,7 +96,7 @@ abstract class RenkinPackDatabase : RoomDatabase() {
                     context.applicationContext,
                     RenkinPackDatabase::class.java,
                     "alchemiconPack"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build().also { instance = it }
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build().also { instance = it }
             }
         }
     }
