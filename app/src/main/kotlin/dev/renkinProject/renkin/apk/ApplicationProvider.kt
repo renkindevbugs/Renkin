@@ -9,11 +9,17 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.data.ActiveProfileIdKey
 import dev.renkinProject.renkin.data.CalendarIconsKey
+import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
+import dev.renkinProject.renkin.data.Profile
+import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.restoreProfilePrefs
+import dev.renkinProject.renkin.data.snapshotProfilePrefs
 import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.data.SecondaryIconPackKey
 import dev.renkinProject.renkin.data.getBooleanValue
@@ -27,7 +33,10 @@ import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.packages.supportDynamicColors
+import dev.renkinProject.renkin.dataStore
+import androidx.datastore.preferences.core.edit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 class ApplicationProvider(private val context: Context) {
@@ -43,11 +52,19 @@ class ApplicationProvider(private val context: Context) {
     val iconPackLoaded: Boolean get() = iconPackRepo.iconPackLoaded
     var applicationsLoaded: Boolean by mutableStateOf(false)
         private set
+    /** True once apps, packs and the saved icons have all loaded (profile switches are safe). */
+    var startupComplete: Boolean by mutableStateOf(false)
+        private set
 
     var defaultColor: Color = Color.Unspecified
 
     private val renkinPackStore = RenkinPackStore(context)
+    private val packRepo = RenkinPackRepository(context)
     private val iconPackRepo = IconPackRepository(context)
+
+    /** The profile whose icons/preferences are active. Set before the saved pack loads. */
+    var activeProfileId: Long by mutableStateOf(DEFAULT_PROFILE_ID)
+        private set
     private val iconGenService = IconGenerationService(context, iconPackRepo)
 
     private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
@@ -70,7 +87,12 @@ class ApplicationProvider(private val context: Context) {
     suspend fun initializeIconPacks() = iconPackRepo.load()
 
     suspend fun initializeRenkinPack() {
+        activeProfileId = context.dataStore.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         loadRenkinPack()
+        // MainViewModel's startup calls the initialize* steps individually (not initialize()),
+        // and this one runs last of the two that profile switching depends on (apps + saved
+        // icons) — so THIS is where switching becomes safe, not initialize().
+        startupComplete = true
     }
 
     suspend fun retrieveOtherIcons(preferences: Preferences) = withContext(Dispatchers.Default) {
@@ -165,11 +187,16 @@ class ApplicationProvider(private val context: Context) {
             val allCalendarIcons = iconPackRepo.calendarIcon.filter { it.key.packageName !in perAppPackages } + perAppIcons
             val allCalendarDrawables = iconPackRepo.calendarIconsDrawable + perAppDrawables
 
+            // Each profile builds its own pack: a per-profile package name (side-by-side
+            // installs) and the user's chosen launcher label.
+            val profile = packRepo.profile(activeProfileId)
             val iconPackGenerator = IconPackBuilder(
                 context,
                 applicationList,
                 allCalendarIcons,
-                allCalendarDrawables
+                allCalendarDrawables,
+                packPackageName = packPackageNameFor(activeProfileId),
+                packLabel = profile?.packLabel?.ifEmpty { profile.name } ?: "Renkin Pack"
             )
             val canBeInstalled = iconPackGenerator.canBeInstalled() // must be called before build and sign
             val apk = iconPackGenerator.buildAndSign(themed, iconColor.toHexString(), bgColor.toHexString(), textMethod, progressMethod)
@@ -194,12 +221,31 @@ class ApplicationProvider(private val context: Context) {
         for (app in applicationList.toList()) {
             if (app.isRefreshMade) editApplication(app, app.locked())
         }
+        // A successful build IS the pack — the save matches it. A failed/cancelled install
+        // leaves the save marked as not yet built.
+        packRepo.profile(activeProfileId)?.let {
+            packRepo.updateProfile(it.copy(hasUnbuiltChanges = !success))
+        }
 
         success
     }
 
+    /**
+     * Persists the active profile's icons without building (offered before switching away).
+     * Locks the refresh output like a build does and marks the profile as saved-but-not-built.
+     */
+    suspend fun saveActiveProfileIcons() = withContext(Dispatchers.Default) {
+        saveRenkinPack()
+        for (app in applicationList.toList()) {
+            if (app.isRefreshMade) editApplication(app, app.locked())
+        }
+        packRepo.profile(activeProfileId)?.let {
+            packRepo.updateProfile(it.copy(hasUnbuiltChanges = true))
+        }
+    }
+
     private suspend fun loadRenkinPack() {
-        val saved = renkinPackStore.load(defaultColor)
+        val saved = renkinPackStore.load(activeProfileId, defaultColor)
         if (saved.isEmpty()) return
 
         for (app in applicationList.toList()) {
@@ -222,7 +268,7 @@ class ApplicationProvider(private val context: Context) {
         if (index >= 0) editApplication(index, _applicationList[index].changeCalendar(enabled, calendarPrefix, calendarPackName))
     }
 
-    private suspend fun saveRenkinPack() = renkinPackStore.save(applicationList)
+    private suspend fun saveRenkinPack() = renkinPackStore.save(activeProfileId, applicationList)
 
     suspend fun forceSync() {
         if (iconPackRepo.iconPackLoaded) {
@@ -272,7 +318,55 @@ class ApplicationProvider(private val context: Context) {
     }
 
     /** Keys ("package/activity") of the apps stored in the last built/saved pack. */
-    suspend fun getSavedPackKeys(): Set<String> = renkinPackStore.savedKeys()
+    suspend fun getSavedPackKeys(): Set<String> = renkinPackStore.savedKeys(activeProfileId)
+
+    // ---- Profiles -----------------------------------------------------------------
+
+    fun profilesFlow() = packRepo.profilesFlow()
+
+    suspend fun activeProfile(): Profile? = packRepo.profile(activeProfileId)
+
+    /** The package name the active profile's pack builds under (base pack for the default). */
+    suspend fun activePackPackageName(): String = packPackageNameFor(activeProfileId)
+
+    private fun packPackageNameFor(profileId: Long): String =
+        if (profileId == DEFAULT_PROFILE_ID) IconPackBuilder.PACKAGE_NAME
+        else "${IconPackBuilder.PACKAGE_NAME}.p$profileId"
+
+    /** Creates a profile and returns its id. */
+    suspend fun createProfile(name: String, description: String, packLabel: String): Long =
+        packRepo.createProfile(Profile(name = name, description = description, packLabel = packLabel))
+
+    /** Deletes [id] (never the default) and its icons; switches to the default first if active. */
+    suspend fun deleteProfile(id: Long) {
+        if (id == DEFAULT_PROFILE_ID) return
+        if (id == activeProfileId) switchProfile(DEFAULT_PROFILE_ID)
+        packRepo.deleteProfile(id)
+    }
+
+    /**
+     * Switches the active profile: snapshots the leaving profile's generation preferences,
+     * restores the target's, and swaps the in-memory icons for the target's saved set. For the
+     * leaving profile this behaves like an app restart — unbuilt edits are not persisted.
+     */
+    suspend fun switchProfile(newProfileId: Long) = withContext(Dispatchers.Default) {
+        if (newProfileId == activeProfileId) return@withContext
+        val target = packRepo.profile(newProfileId) ?: return@withContext
+        val store = context.dataStore
+
+        packRepo.profile(activeProfileId)?.let { leaving ->
+            packRepo.updateProfile(leaving.copy(prefsSnapshot = store.data.first().snapshotProfilePrefs()))
+        }
+        store.restoreProfilePrefs(target.prefsSnapshot)
+        store.edit { it[ActiveProfileIdKey] = newProfileId }
+        activeProfileId = newProfileId
+
+        // Reset the in-memory icons and load the target profile's saved set.
+        for (app in applicationList.toList()) {
+            editApplication(app, app.changeExport(null).changeCalendar(false, null, null))
+        }
+        loadRenkinPack()
+    }
 
     /**
      * Live count of icons taken from each pack, from the in-memory app list — so the per-app

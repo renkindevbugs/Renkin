@@ -11,7 +11,6 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApplicationProvider
-import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.IconPack
@@ -44,7 +43,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.coroutines.coroutineContext
@@ -134,6 +135,27 @@ class MainViewModel @Inject constructor(
         private set
 
     fun setPendingWatchSuggestion(id: Long) { pendingWatchSuggestionId = id }
+
+    /**
+     * Opens a watch suggestion from its notification: switches to the profile that owns it
+     * first (auto-saving the active profile's unsaved work — the user opted into that), then
+     * shows the apply modal. Waits out a cold start so the switch doesn't race initialization.
+     */
+    fun openSuggestionInProfile(suggestionId: Long, profileId: Long) {
+        viewModelScope.launch {
+            // Cold start from a notification: the app list / saved icons may still be loading.
+            withTimeoutOrNull(10_000) {
+                while (!appProvider.startupComplete) delay(50)
+            }
+            if (profileId > 0 && profileId != appProvider.activeProfileId && appProvider.startupComplete) {
+                if (hasUnsavedChanges()) appProvider.saveActiveProfileIcons()
+                appProvider.switchProfile(profileId)
+                builtKeys = appProvider.getSavedPackKeys()
+                updatedKeys = emptySet()
+            }
+            pendingWatchSuggestionId = suggestionId
+        }
+    }
 
     fun clearPendingWatchSuggestion() { pendingWatchSuggestionId = null }
 
@@ -231,9 +253,9 @@ class MainViewModel @Inject constructor(
             }
         }
 
-    /** True if our generated icon pack is currently installed on the device. */
-    private fun isIconPackInstalled(): Boolean = runCatching {
-        getApplication<Application>().packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
+    /** True if the active profile's generated icon pack is currently installed on the device. */
+    private suspend fun isIconPackInstalled(): Boolean = runCatching {
+        getApplication<Application>().packageManager.getPackageInfo(appProvider.activePackPackageName(), 0)
     }.isSuccess
 
     /**
@@ -242,7 +264,9 @@ class MainViewModel @Inject constructor(
      * null = no dialog pending.
      */
     enum class BuildOutcome { FIRST_INSTALL, UPDATE }
-    var buildOutcome by mutableStateOf<BuildOutcome?>(null)
+    /** Outcome + the launcher label of the pack that was just built, for the dialog text. */
+    data class BuildOutcomeInfo(val outcome: BuildOutcome, val packLabel: String)
+    var buildOutcome by mutableStateOf<BuildOutcomeInfo?>(null)
         private set
 
     fun dismissBuildOutcome() { buildOutcome = null }
@@ -270,7 +294,11 @@ class MainViewModel @Inject constructor(
                 if (appProvider.installIconPack(pack)) {
                     // The next-steps dialog replaces the old "installed!" toast: what to do in
                     // the launcher differs between a first install and an update.
-                    buildOutcome = if (wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL
+                    val label = appProvider.activeProfile()?.let { it.packLabel.ifEmpty { it.name } } ?: "Renkin Pack"
+                    buildOutcome = BuildOutcomeInfo(
+                        if (wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL,
+                        label
+                    )
                     // The saved pack now matches the current icons → reset both change baselines.
                     builtKeys = appProvider.getSavedPackKeys()
                     updatedKeys = emptySet()
@@ -359,7 +387,7 @@ class MainViewModel @Inject constructor(
                 _toastEvents.trySend(R.string.iconPackNotInstalled)
                 return@launch
             }
-            if (ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)) {
+            if (ApkUninstaller(context).uninstall(appProvider.activePackPackageName())) {
                 _toastEvents.trySend(R.string.iconPackUninstalled)
             }
         }
@@ -544,6 +572,57 @@ class MainViewModel @Inject constructor(
 
     /** Clears only the unsaved bulk-refresh icons — see ApplicationProvider.clearRefreshedIcons. */
     fun clearRefreshedIcons() = appProvider.clearRefreshedIcons()
+
+    // ---- Profiles -----------------------------------------------------------------
+
+    /** All profiles for the switcher (default first). */
+    val profiles = appProvider.profilesFlow()
+
+    val activeProfileId: Long get() = appProvider.activeProfileId
+
+    /**
+     * True when the active profile has changes its saved set doesn't: unsaved refresh output,
+     * hand edits from this session, or removals against the saved pack. Drives the
+     * save-before-switch prompt.
+     */
+    fun hasUnsavedChanges(): Boolean {
+        val apps = appProvider.applicationList
+        if (updatedKeys.isNotEmpty()) return true
+        if (apps.any { it.isRefreshMade }) return true
+        val iconKeys = apps.filter { it.createdIcon != null }.map { it.key }.toSet()
+        return builtKeys.any { it !in iconKeys }
+    }
+
+    /** Switches the active profile (prefs snapshot + icon set swap), optionally saving first. */
+    fun switchProfile(id: Long, saveFirst: Boolean = false) {
+        viewModelScope.launch {
+            if (saveFirst) appProvider.saveActiveProfileIcons()
+            appProvider.switchProfile(id)
+            // The change baselines belong to the profile's own saved pack.
+            builtKeys = appProvider.getSavedPackKeys()
+            updatedKeys = emptySet()
+        }
+    }
+
+    /** Creates a profile and switches straight to it, optionally saving the current one first. */
+    fun createProfile(name: String, description: String, packLabel: String, saveFirst: Boolean = false) {
+        viewModelScope.launch {
+            if (saveFirst) appProvider.saveActiveProfileIcons()
+            val id = appProvider.createProfile(name, description, packLabel)
+            appProvider.switchProfile(id)
+            builtKeys = appProvider.getSavedPackKeys()
+            updatedKeys = emptySet()
+        }
+    }
+
+    /** Deletes a profile (never the default); switches to the default first when active. */
+    fun deleteProfile(id: Long) {
+        viewModelScope.launch {
+            appProvider.deleteProfile(id)
+            builtKeys = appProvider.getSavedPackKeys()
+            updatedKeys = emptySet()
+        }
+    }
 
     /** Clears every created icon (and persists the empty state). */
     fun clearIcons() {

@@ -20,7 +20,11 @@ data class WatchRule(
     val watchAllPacks: Boolean = false,
     val completed: Boolean = false,
     val createdAt: Long = System.currentTimeMillis(),
-    val completedAt: Long? = null
+    val completedAt: Long? = null,
+    // Which profile owns this rule: the UI lists only the active profile's rules, while the
+    // checker runs every profile's. Baselines (watch_state) stay shared — a pack's icon for
+    // an app is a fact about the pack, not about any profile.
+    @androidx.room.ColumnInfo(defaultValue = "1") val profileId: Long = 1
 )
 
 @Entity(tableName = "watch_rule_app", primaryKeys = ["ruleId", "packageName", "activityName"])

@@ -83,6 +83,54 @@ val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
 val WatchCheckIntervalKey = intPreferencesKey(WATCH_CHECK_INTERVAL_NAME)
 val LastWatchCheckAtKey = longPreferencesKey(LAST_WATCH_CHECK_AT_NAME)
 
+// Which profile's icons/preferences are active. Profiles snapshot/restore the keys below.
+val ActiveProfileIdKey = longPreferencesKey("ACTIVE_PROFILE_ID")
+
+/**
+ * The generation preferences that belong to a profile — captured into [Profile.prefsSnapshot]
+ * when switching away and restored when switching back, so profiles don't influence each other.
+ * App-level settings (dark mode, watch interval, sort/filter) intentionally stay global.
+ */
+val ProfilePrefKeys: List<Preferences.Key<*>> = listOf(
+    PrimarySourceKey, PrimaryImageEditKey, PrimaryTextTypeKey, PrimaryIconPackKey,
+    SecondarySourceKey, SecondaryImageEditKey, SecondaryTextTypeKey, SecondaryIconPackKey,
+    IncludeVectorKey, MonochromeKey, ExportThemedKey, IconColorKey, BackgroundColorKey,
+    CalendarIconsKey, OverrideIconKey, FallbackSourceKey,
+    BuiltPrimarySourceKey, BuiltPrimaryIconPackKey
+)
+
+/** Serializes the profile-scoped preferences into a JSON snapshot (see [ProfilePrefKeys]). */
+fun Preferences.snapshotProfilePrefs(): String {
+    val json = org.json.JSONObject()
+    for (key in ProfilePrefKeys) {
+        this[key]?.let { json.put(key.name, it) }
+    }
+    return json.toString()
+}
+
+/**
+ * Restores a [snapshotProfilePrefs] JSON into the store: present keys are written back, absent
+ * ones removed — a fresh profile starts from the defaults.
+ */
+suspend fun DataStore<Preferences>.restoreProfilePrefs(snapshot: String) {
+    val json = if (snapshot.isEmpty()) org.json.JSONObject() else org.json.JSONObject(snapshot)
+    edit { prefs ->
+        for (key in ProfilePrefKeys) {
+            if (json.has(key.name)) {
+                @Suppress("UNCHECKED_CAST")
+                when (val value = json.get(key.name)) {
+                    is Boolean -> prefs[key as Preferences.Key<Boolean>] = value
+                    is Int -> prefs[key as Preferences.Key<Int>] = value
+                    is Long -> prefs[key as Preferences.Key<Int>] = value.toInt()
+                    is String -> prefs[key as Preferences.Key<String>] = value
+                }
+            } else {
+                prefs.remove(key)
+            }
+        }
+    }
+}
+
 @Composable
 fun DataStore<Preferences>.getPreferencesValue(): Preferences {
     return data.collectAsState(initial = emptyPreferences()).value

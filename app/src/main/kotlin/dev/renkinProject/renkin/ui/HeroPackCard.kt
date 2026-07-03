@@ -30,6 +30,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -97,6 +98,10 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
     val fallbackCount = apps.count { it.createdIcon != null && it.isFallback }
 
     var sheetOpen by remember { mutableStateOf(false) }
+
+    // Saved-but-not-built marker for the active profile (set by the save-before-switch flow).
+    val profiles by viewModel.profiles.collectAsState(initial = emptyList())
+    val activeProfile = profiles.find { it.id == viewModel.activeProfileId }
 
     Surface(
         onClick = { sheetOpen = true },
@@ -193,6 +198,14 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
                         text = stringResource(R.string.fallbackCount, fallbackCount),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
+                    )
+                }
+                if (activeProfile?.hasUnbuiltChanges == true) {
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.unbuiltChanges),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.tertiary
                     )
                 }
             }

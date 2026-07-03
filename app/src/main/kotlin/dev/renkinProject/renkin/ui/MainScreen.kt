@@ -223,18 +223,18 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // differs between a first install (pick the pack) and an update (switch away and back).
     val buildOutcome = viewModel.buildOutcome
     if (buildOutcome != null) {
+        val isUpdate = buildOutcome.outcome == MainViewModel.BuildOutcome.UPDATE
         RenkinAlertDialog(
             onDismissRequest = { viewModel.dismissBuildOutcome() },
             title = {
                 Text(stringResource(
-                    if (buildOutcome == MainViewModel.BuildOutcome.UPDATE) R.string.buildUpdatedTitle
-                    else R.string.buildInstalledTitle
+                    if (isUpdate) R.string.buildUpdatedTitle else R.string.buildInstalledTitle
                 ))
             },
             text = {
                 Text(stringResource(
-                    if (buildOutcome == MainViewModel.BuildOutcome.UPDATE) R.string.buildUpdatedText
-                    else R.string.buildInstalledText
+                    if (isUpdate) R.string.buildUpdatedText else R.string.buildInstalledText,
+                    buildOutcome.packLabel
                 ))
             },
             confirmButton = {
@@ -651,7 +651,7 @@ fun TitleBar(
             titleContentColor = MaterialTheme.colorScheme.primary,
         ),
         title = {
-            Text(stringResource(id = R.string.app_name))
+            ProfileSwitcherTitle()
         },
         actions = {
             RefreshButton()
