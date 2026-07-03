@@ -1,11 +1,11 @@
-.class public final Ldev/alembiconsProject/renkinpack/R;
+.class public final Ldev/renkinProject/renkinpack/R;
 .super Ljava/lang/Object;
 
 
 # annotations
 .annotation system Ldalvik/annotation/MemberClasses;
     value = {
-        Ldev/alembiconsProject/renkinpack/R$layout;
+        Ldev/renkinProject/renkinpack/R$layout;
     }
 .end annotation
 
