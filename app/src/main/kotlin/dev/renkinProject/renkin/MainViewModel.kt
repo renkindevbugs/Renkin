@@ -150,6 +150,10 @@ class MainViewModel @Inject constructor(
                 while (!appProvider.startupComplete) delay(50)
             }
             if (profileId > 0 && profileId != appProvider.activeProfileId && appProvider.startupComplete) {
+                // The profile may have been deleted since the notification fired. Dropping the
+                // suggestion (instead of showing it) stops it from being applied to whatever
+                // profile happens to be active.
+                if (!appProvider.profileExists(profileId)) return@launch
                 performSwitch(profileId, saveFirst = hasUnsavedChanges())
             }
             pendingWatchSuggestionId = suggestionId

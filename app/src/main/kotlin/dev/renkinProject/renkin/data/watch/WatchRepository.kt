@@ -72,6 +72,12 @@ class WatchRepository(private val db: WatchDatabase) {
         dao.pruneOrphanStates()
     }
 
+    /**
+     * Deletes every rule owned by [profileId] — called when the profile itself is deleted, so
+     * the worker stops firing notifications for a profile that no longer exists.
+     */
+    suspend fun deleteRulesForProfile(profileId: Long) = deleteRules(dao.ruleIdsForProfile(profileId))
+
     /** Deletes several rules (and everything hanging off them) in one transaction. */
     suspend fun deleteRules(ruleIds: List<Long>) = db.withTransaction {
         ruleIds.forEach { ruleId ->
