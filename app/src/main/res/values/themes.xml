@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The pack-preview window: the system draws the real wallpaper behind it (the launcher
+         trick — no permission needed, the app never reads the wallpaper bitmap). Must be an
+         activity theme: WindowManager only reliably honours windowShowWallpaper on activity
+         windows, not on dialogs. -->
+    <style name="Theme.Renkin.WallpaperPreview" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowShowWallpaper">true</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+    </style>
+</resources>
