@@ -31,7 +31,10 @@ data class Profile(
     // Launcher-visible label of this profile's built pack (e.g. "Renkin Dark").
     @ColumnInfo(defaultValue = "") val packLabel: String = "",
     // JSON snapshot of the generation preferences, captured when switching away.
-    @ColumnInfo(defaultValue = "") val prefsSnapshot: String = ""
+    @ColumnInfo(defaultValue = "") val prefsSnapshot: String = "",
+    // True when the profile's icons were saved (e.g. before switching away) but not built
+    // into the pack APK since — the UI marks these so the save isn't mistaken for a build.
+    @ColumnInfo(defaultValue = "0") val hasUnbuiltChanges: Boolean = false
 )
 
 @Entity(primaryKeys = ["packageName", "activityName", "profileId"])
@@ -89,9 +92,10 @@ interface ProfileDao {
 // Version 7 has the same schema as version 5: 6 briefly added an isCustomIcon column during
 // development (never released), so 7 exists only to give both 5 and 6 a forward path.
 // Version 8 adds profiles: the Profile table plus DbApplication.profileId (part of the PK).
+// Version 9 adds Profile.hasUnbuiltChanges (saved-but-not-built marker).
 @Database(
     entities = [DbApplication::class, Profile::class],
-    version = 8
+    version = 9
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -185,6 +189,12 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE Profile ADD COLUMN hasUnbuiltChanges INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         // The default profile row must exist even on a fresh database (migrations don't run there).
         private val seedDefaultProfile = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -200,7 +210,7 @@ abstract class RenkinPackDatabase : RoomDatabase() {
                     context.applicationContext,
                     RenkinPackDatabase::class.java,
                     "alchemiconPack"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_7, MIGRATION_6_7, MIGRATION_7_8)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_7, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .addCallback(seedDefaultProfile)
                     .build().also { instance = it }
             }

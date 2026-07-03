@@ -51,6 +51,9 @@ fun ProfileSwitcherTitle() {
     var menuOpen by remember { mutableStateOf(false) }
     var createOpen by rememberSaveable { mutableStateOf(false) }
     var pendingDelete by remember { mutableStateOf<Profile?>(null) }
+    // Switch target (or create request) held while the save-before-switch prompt is up.
+    var pendingSwitch by remember { mutableStateOf<Long?>(null) }
+    var pendingCreate by remember { mutableStateOf<Triple<String, String, String>?>(null) }
 
     Box {
         Row(
@@ -81,6 +84,13 @@ fun ProfileSwitcherTitle() {
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
+                            if (profile.hasUnbuiltChanges) {
+                                Text(
+                                    text = stringResource(R.string.unbuiltChanges),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = MaterialTheme.colorScheme.tertiary
+                                )
+                            }
                         }
                     },
                     leadingIcon = if (profile.id == activeId) {
@@ -102,7 +112,11 @@ fun ProfileSwitcherTitle() {
                     } else null,
                     onClick = {
                         menuOpen = false
-                        if (profile.id != activeId) viewModel.switchProfile(profile.id)
+                        if (profile.id != activeId) {
+                            // Unsaved work on the current profile? Offer to save it first.
+                            if (viewModel.hasUnsavedChanges()) pendingSwitch = profile.id
+                            else viewModel.switchProfile(profile.id)
+                        }
                     }
                 )
             }
@@ -122,9 +136,34 @@ fun ProfileSwitcherTitle() {
         CreateProfileDialog(
             onCreate = { name, description, packLabel ->
                 createOpen = false
-                viewModel.createProfile(name, description, packLabel)
+                if (viewModel.hasUnsavedChanges()) pendingCreate = Triple(name, description, packLabel)
+                else viewModel.createProfile(name, description, packLabel)
             },
             onDismiss = { createOpen = false }
+        )
+    }
+
+    // Save-before-switch prompt: Save keeps the current profile's icons without building
+    // (marked "not built yet"), Don't save discards them; tapping outside cancels the switch.
+    if (pendingSwitch != null || pendingCreate != null) {
+        RenkinAlertDialog(
+            onDismissRequest = { pendingSwitch = null; pendingCreate = null },
+            title = { Text(stringResource(R.string.saveBeforeSwitchTitle)) },
+            text = { Text(stringResource(R.string.saveBeforeSwitchText)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = true) }
+                    pendingCreate?.let { (n, d, l) -> viewModel.createProfile(n, d, l, saveFirst = true) }
+                    pendingSwitch = null; pendingCreate = null
+                }) { Text(stringResource(R.string.saveAction)) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = false) }
+                    pendingCreate?.let { (n, d, l) -> viewModel.createProfile(n, d, l, saveFirst = false) }
+                    pendingSwitch = null; pendingCreate = null
+                }) { Text(stringResource(R.string.discardAction)) }
+            }
         )
     }
 

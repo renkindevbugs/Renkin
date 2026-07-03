@@ -241,7 +241,9 @@ class MainViewModel @Inject constructor(
      * null = no dialog pending.
      */
     enum class BuildOutcome { FIRST_INSTALL, UPDATE }
-    var buildOutcome by mutableStateOf<BuildOutcome?>(null)
+    /** Outcome + the launcher label of the pack that was just built, for the dialog text. */
+    data class BuildOutcomeInfo(val outcome: BuildOutcome, val packLabel: String)
+    var buildOutcome by mutableStateOf<BuildOutcomeInfo?>(null)
         private set
 
     fun dismissBuildOutcome() { buildOutcome = null }
@@ -269,7 +271,11 @@ class MainViewModel @Inject constructor(
                 if (appProvider.installIconPack(pack)) {
                     // The next-steps dialog replaces the old "installed!" toast: what to do in
                     // the launcher differs between a first install and an update.
-                    buildOutcome = if (wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL
+                    val label = appProvider.activeProfile()?.let { it.packLabel.ifEmpty { it.name } } ?: "Renkin Pack"
+                    buildOutcome = BuildOutcomeInfo(
+                        if (wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL,
+                        label
+                    )
                     // The saved pack now matches the current icons → reset both change baselines.
                     builtKeys = appProvider.getSavedPackKeys()
                     updatedKeys = emptySet()
@@ -551,9 +557,23 @@ class MainViewModel @Inject constructor(
 
     val activeProfileId: Long get() = appProvider.activeProfileId
 
-    /** Switches the active profile (prefs snapshot + icon set swap). */
-    fun switchProfile(id: Long) {
+    /**
+     * True when the active profile has changes its saved set doesn't: unsaved refresh output,
+     * hand edits from this session, or removals against the saved pack. Drives the
+     * save-before-switch prompt.
+     */
+    fun hasUnsavedChanges(): Boolean {
+        val apps = appProvider.applicationList
+        if (updatedKeys.isNotEmpty()) return true
+        if (apps.any { it.isRefreshMade }) return true
+        val iconKeys = apps.filter { it.createdIcon != null }.map { it.key }.toSet()
+        return builtKeys.any { it !in iconKeys }
+    }
+
+    /** Switches the active profile (prefs snapshot + icon set swap), optionally saving first. */
+    fun switchProfile(id: Long, saveFirst: Boolean = false) {
         viewModelScope.launch {
+            if (saveFirst) appProvider.saveActiveProfileIcons()
             appProvider.switchProfile(id)
             // The change baselines belong to the profile's own saved pack.
             builtKeys = appProvider.getSavedPackKeys()
@@ -561,9 +581,10 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Creates a profile and switches straight to it. */
-    fun createProfile(name: String, description: String, packLabel: String) {
+    /** Creates a profile and switches straight to it, optionally saving the current one first. */
+    fun createProfile(name: String, description: String, packLabel: String, saveFirst: Boolean = false) {
         viewModelScope.launch {
+            if (saveFirst) appProvider.saveActiveProfileIcons()
             val id = appProvider.createProfile(name, description, packLabel)
             appProvider.switchProfile(id)
             builtKeys = appProvider.getSavedPackKeys()

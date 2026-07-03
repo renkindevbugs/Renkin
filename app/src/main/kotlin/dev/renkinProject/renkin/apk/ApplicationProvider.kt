@@ -214,8 +214,27 @@ class ApplicationProvider(private val context: Context) {
         for (app in applicationList.toList()) {
             if (app.isRefreshMade) editApplication(app, app.locked())
         }
+        // A successful build IS the pack — the save matches it. A failed/cancelled install
+        // leaves the save marked as not yet built.
+        packRepo.profile(activeProfileId)?.let {
+            packRepo.updateProfile(it.copy(hasUnbuiltChanges = !success))
+        }
 
         success
+    }
+
+    /**
+     * Persists the active profile's icons without building (offered before switching away).
+     * Locks the refresh output like a build does and marks the profile as saved-but-not-built.
+     */
+    suspend fun saveActiveProfileIcons() = withContext(Dispatchers.Default) {
+        saveRenkinPack()
+        for (app in applicationList.toList()) {
+            if (app.isRefreshMade) editApplication(app, app.locked())
+        }
+        packRepo.profile(activeProfileId)?.let {
+            packRepo.updateProfile(it.copy(hasUnbuiltChanges = true))
+        }
     }
 
     private suspend fun loadRenkinPack() {
