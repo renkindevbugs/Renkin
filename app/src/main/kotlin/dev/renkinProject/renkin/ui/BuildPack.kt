@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -239,7 +240,7 @@ fun BuildPackPreviewContent(
                         color = MaterialTheme.colorScheme.outline
                     )
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider()
 
                 if (calendarWarnings.isNotEmpty()) {
                     Column(
@@ -261,7 +262,7 @@ fun BuildPackPreviewContent(
                             )
                         }
                     }
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider()
                 }
                 }
 
@@ -277,9 +278,14 @@ fun BuildPackPreviewContent(
                         )
                     }
                 } else {
+                    val previewGridState = rememberLazyGridState()
                     LazyVerticalGrid(
+                        state = previewGridState,
                         columns = GridCells.Adaptive(72.dp),
-                        modifier = Modifier.weight(1f).fillMaxWidth(),
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth()
+                            .drawVerticalScrollbar(previewGridState),
                         contentPadding = PaddingValues(12.dp),
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -301,7 +307,7 @@ fun BuildPackPreviewContent(
                         .background(MaterialTheme.colorScheme.surfaceContainerLow)
                         .navigationBarsPadding()
                 ) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider()
                     DisabledExplanation(
                         enabled = themedApps.isNotEmpty(),
                         message = stringResource(R.string.buildDisabledHint),

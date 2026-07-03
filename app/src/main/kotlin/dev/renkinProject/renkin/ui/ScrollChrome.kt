@@ -76,9 +76,12 @@ fun Modifier.drawVerticalScrollbar(state: LazyListState, topInset: Dp = 0.dp): M
     }
 }
 
-/** Grid variant of [drawVerticalScrollbar]; [spanCount] is the grid's fixed column count. */
+/**
+ * Grid variant of [drawVerticalScrollbar]; [spanCount] is the grid's fixed column count, or 0
+ * (the default) to derive it from the widest visible row — for adaptive-column grids.
+ */
 @Composable
-fun Modifier.drawVerticalScrollbar(state: LazyGridState, spanCount: Int, topInset: Dp = 0.dp): Modifier {
+fun Modifier.drawVerticalScrollbar(state: LazyGridState, spanCount: Int = 0, topInset: Dp = 0.dp): Modifier {
     val alpha by scrollbarAlpha(state.isScrollInProgress)
     val color = MaterialTheme.colorScheme.onSurfaceVariant
     val insetPx = with(androidx.compose.ui.platform.LocalDensity.current) { topInset.toPx() }
@@ -88,12 +91,14 @@ fun Modifier.drawVerticalScrollbar(state: LazyGridState, spanCount: Int, topInse
         val info = state.layoutInfo
         val items = info.visibleItemsInfo
         if (items.isEmpty() || info.totalItemsCount <= items.size) return@drawWithContent
-        val visibleRows = items.map { it.index / spanCount }.distinct().size
+        val span = if (spanCount > 0) spanCount
+            else items.groupingBy { it.offset.y }.eachCount().values.max()
+        val visibleRows = items.map { it.index / span }.distinct().size
         val avgRow = items.maxOf { it.offset.y + it.size.height }.minus(items.first().offset.y) / visibleRows.toFloat()
         if (avgRow <= 0f) return@drawWithContent
-        val totalRows = (info.totalItemsCount + spanCount - 1) / spanCount
+        val totalRows = (info.totalItemsCount + span - 1) / span
         val totalHeight = avgRow * totalRows
-        val scrolled = (state.firstVisibleItemIndex / spanCount) * avgRow + state.firstVisibleItemScrollOffset
+        val scrolled = (state.firstVisibleItemIndex / span) * avgRow + state.firstVisibleItemScrollOffset
         drawScrollbarThumb(alpha, color, insetPx, totalHeight, scrolled)
     }
 }

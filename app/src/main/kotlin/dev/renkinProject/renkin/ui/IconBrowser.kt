@@ -36,7 +36,6 @@ import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -102,7 +101,7 @@ internal fun IconSortMenuButton(
             CheckableDropdownItem(stringResource(R.string.sortZToA), sortOrder == IconSortOrder.NAME_DESC) {
                 onSortOrderChange(IconSortOrder.NAME_DESC); showSortMenu = false
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider()
             SortMenuHeader(stringResource(R.string.sortPacksHeader))
             CheckableDropdownItem(stringResource(R.string.sortByUsage), packSortOrder == PackSortOrder.USAGE) {
                 onPackSortOrderChange(PackSortOrder.USAGE); showSortMenu = false
@@ -276,12 +275,10 @@ fun CreateTab(
                     // Hold off mounting the (heavy) pack browser until the dialog has
                     // finished opening, so the open animation stays smooth
                     Box(Modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) {
-                        LinearWavyProgressIndicator(
-                            modifier = Modifier
+                        WavyLoadingBar(
+                            Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 32.dp),
-                            color = MaterialTheme.colorScheme.primary,
-                            trackColor = MaterialTheme.colorScheme.surfaceVariant
+                                .padding(horizontal = 32.dp)
                         )
                     }
                 } else {

@@ -120,7 +120,7 @@ fun ProfileSwitcherTitle() {
                     }
                 )
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider()
             DropdownMenuItem(
                 text = { Text(stringResource(R.string.createProfile)) },
                 leadingIcon = { Icon(Icons.Filled.Add, null, tint = MaterialTheme.colorScheme.primary) },

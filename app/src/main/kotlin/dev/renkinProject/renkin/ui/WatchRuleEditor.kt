@@ -152,7 +152,7 @@ internal fun WatchRuleEditor(
                 }
             }
         }
-        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+        HorizontalDivider()
 
         Column(
             Modifier
