@@ -6,12 +6,16 @@ import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import dagger.hilt.android.AndroidEntryPoint
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.isDarkModeEnabled
 import dev.renkinProject.renkin.ui.BuildPackPreviewContent
+import dev.renkinProject.renkin.ui.LocalToaster
+import dev.renkinProject.renkin.ui.ToastHost
+import dev.renkinProject.renkin.ui.Toaster
 import dev.renkinProject.renkin.ui.theme.RenkinTheme
 import javax.inject.Inject
 
@@ -32,6 +36,8 @@ import javax.inject.Inject
 class WallpaperPreviewActivity : ComponentActivity() {
     @Inject
     lateinit var appProvider: ApplicationProvider
+
+    private val toaster = Toaster()
 
     companion object {
         const val EXTRA_BUILT_KEYS = "builtKeys"
@@ -56,18 +62,23 @@ class WallpaperPreviewActivity : ComponentActivity() {
             val style = SystemBarStyle.auto(Color.Transparent.toArgb(), Color.Transparent.toArgb()) { darkMode }
             enableEdgeToEdge(style, style)
 
-            RenkinTheme(darkMode) {
-                BuildPackPreviewContent(
-                    applications = appProvider.applicationList,
-                    builtKeys = builtKeys,
-                    updatedKeys = updatedKeys,
-                    loadCalendarWarnings = { preferences -> appProvider.calendarWarnings(preferences) },
-                    onDismiss = { finish() },
-                    onBuild = {
-                        setResult(RESULT_OK)
-                        finish()
-                    }
-                )
+            // Own Toaster: the preview content (DisabledExplanation) reads LocalToaster, which is
+            // otherwise only provided by MainActivity's composition.
+            CompositionLocalProvider(LocalToaster provides toaster) {
+                RenkinTheme(darkMode) {
+                    BuildPackPreviewContent(
+                        applications = appProvider.applicationList,
+                        builtKeys = builtKeys,
+                        updatedKeys = updatedKeys,
+                        loadCalendarWarnings = { preferences -> appProvider.calendarWarnings(preferences) },
+                        onDismiss = { finish() },
+                        onBuild = {
+                            setResult(RESULT_OK)
+                            finish()
+                        }
+                    )
+                    ToastHost(toaster)
+                }
             }
         }
     }
