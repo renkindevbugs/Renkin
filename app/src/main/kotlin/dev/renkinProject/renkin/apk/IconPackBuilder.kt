@@ -59,17 +59,22 @@ class IconPackBuilder(
     private val ctx: Context,
     private val apps: List<PackageInfoStruct>,
     private val calendarIcons: Map<InstalledApplication, String>,
-    private val calendarIconsDrawable: Map<String, Drawable>
+    private val calendarIconsDrawable: Map<String, Drawable>,
+    // Per-profile pack identity: the package the APK installs under (profiles append a suffix,
+    // so several packs coexist) and the launcher-visible label. The dex classes keep the base
+    // package regardless — Android doesn't require an app's id to match its class packages.
+    private val packPackageName: String = PACKAGE_NAME,
+    private val packLabel: String = "Renkin Pack"
 ) {
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
     private val keyStoreFile = ctx.filesDir.resolve("renkinpack.keystore")
 
-    private val iconPackName = PACKAGE_NAME
+    private val iconPackName = packPackageName
 
     companion object {
-        /** Package id of the generated Renkin icon pack. */
+        /** Base package id of the generated Renkin icon pack (profiles append ".p<id>"). */
         const val PACKAGE_NAME = "dev.renkinProject.renkinpack"
     }
     private val newInternalVersionCode = 0
@@ -126,7 +131,7 @@ class IconPackBuilder(
         manifest.platformBuildVersionName = framework.versionName
 
         setSdkVersions(manifest.manifestElement, minSdkVersion, framework.versionCode)
-        manifest.setApplicationLabel("Renkin Pack")
+        manifest.setApplicationLabel(packLabel)
 
         createMainActivity(manifest)
 
@@ -580,6 +585,6 @@ class IconPackBuilder(
         val pwd = "s3cur3p@ssw0rd"
 
         val dtl = ApkUtils.KeyStoreDetails(keyStoreFile, pwd, "alias", pwd)
-        ApkUtils.signApk(file, outFile, "Renkin Pack", dtl)
+        ApkUtils.signApk(file, outFile, packLabel, dtl)
     }
 }

@@ -11,7 +11,6 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApplicationProvider
-import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.IconPack
@@ -231,9 +230,9 @@ class MainViewModel @Inject constructor(
             }
         }
 
-    /** True if our generated icon pack is currently installed on the device. */
-    private fun isIconPackInstalled(): Boolean = runCatching {
-        getApplication<Application>().packageManager.getPackageInfo(IconPackBuilder.PACKAGE_NAME, 0)
+    /** True if the active profile's generated icon pack is currently installed on the device. */
+    private suspend fun isIconPackInstalled(): Boolean = runCatching {
+        getApplication<Application>().packageManager.getPackageInfo(appProvider.activePackPackageName(), 0)
     }.isSuccess
 
     /**
@@ -359,7 +358,7 @@ class MainViewModel @Inject constructor(
                 _toastEvents.trySend(R.string.iconPackNotInstalled)
                 return@launch
             }
-            if (ApkUninstaller(context).uninstall(IconPackBuilder.PACKAGE_NAME)) {
+            if (ApkUninstaller(context).uninstall(appProvider.activePackPackageName())) {
                 _toastEvents.trySend(R.string.iconPackUninstalled)
             }
         }
@@ -544,6 +543,42 @@ class MainViewModel @Inject constructor(
 
     /** Clears only the unsaved bulk-refresh icons — see ApplicationProvider.clearRefreshedIcons. */
     fun clearRefreshedIcons() = appProvider.clearRefreshedIcons()
+
+    // ---- Profiles -----------------------------------------------------------------
+
+    /** All profiles for the switcher (default first). */
+    val profiles = appProvider.profilesFlow()
+
+    val activeProfileId: Long get() = appProvider.activeProfileId
+
+    /** Switches the active profile (prefs snapshot + icon set swap). */
+    fun switchProfile(id: Long) {
+        viewModelScope.launch {
+            appProvider.switchProfile(id)
+            // The change baselines belong to the profile's own saved pack.
+            builtKeys = appProvider.getSavedPackKeys()
+            updatedKeys = emptySet()
+        }
+    }
+
+    /** Creates a profile and switches straight to it. */
+    fun createProfile(name: String, description: String, packLabel: String) {
+        viewModelScope.launch {
+            val id = appProvider.createProfile(name, description, packLabel)
+            appProvider.switchProfile(id)
+            builtKeys = appProvider.getSavedPackKeys()
+            updatedKeys = emptySet()
+        }
+    }
+
+    /** Deletes a profile (never the default); switches to the default first when active. */
+    fun deleteProfile(id: Long) {
+        viewModelScope.launch {
+            appProvider.deleteProfile(id)
+            builtKeys = appProvider.getSavedPackKeys()
+            updatedKeys = emptySet()
+        }
+    }
 
     /** Clears every created icon (and persists the empty state). */
     fun clearIcons() {

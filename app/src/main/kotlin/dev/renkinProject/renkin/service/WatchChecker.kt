@@ -146,7 +146,7 @@ class WatchChecker(context: Context) {
      * icon the user already applied.
      */
     private fun watchablePacks() = appMan.getIconPacks()
-        .filter { it.packageName != IconPackBuilder.PACKAGE_NAME }
+        .filter { !it.packageName.startsWith(IconPackBuilder.PACKAGE_NAME) }
         .associateBy { it.packageName }
 
     /** Resolves the (drawable name, content hash) a pack currently provides for an app, or nulls. */

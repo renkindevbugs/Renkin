@@ -44,7 +44,8 @@ class IconPackRepository(private val context: Context) {
         iconPackLoaded = false
         // Drop our own generated pack — it only ever holds icons we just built, so offering
         // it as an icon source (or a watch target) is pointless and just clutters the lists.
-        iconPacks = appManager.getIconPacks().filter { it.packageName != IconPackBuilder.PACKAGE_NAME }
+        // startsWith: profile packs share the base package with a ".p<id>" suffix.
+        iconPacks = appManager.getIconPacks().filter { !it.packageName.startsWith(IconPackBuilder.PACKAGE_NAME) }
         loadAppFilterElements()
     }
 

@@ -651,7 +651,7 @@ fun TitleBar(
             titleContentColor = MaterialTheme.colorScheme.primary,
         ),
         title = {
-            Text(stringResource(id = R.string.app_name))
+            ProfileSwitcherTitle()
         },
         actions = {
             RefreshButton()

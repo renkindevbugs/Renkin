@@ -23,9 +23,9 @@ class RenkinPackStore(private val context: Context) {
 
     data class SavedEntry(val icon: IconPackDrawable?, val calendarEnabled: Boolean, val calendarPrefix: String?, val calendarPackName: String?, val sourcePackName: String?)
 
-    /** Loads the saved icons + calendar flags, keyed by "package/activity". */
-    suspend fun load(defaultColor: Color): Map<String, SavedEntry> = withContext(Dispatchers.Default) {
-        repo.getAll().associate { dbApp ->
+    /** Loads [profileId]'s saved icons + calendar flags, keyed by "package/activity". */
+    suspend fun load(profileId: Long, defaultColor: Color): Map<String, SavedEntry> = withContext(Dispatchers.Default) {
+        repo.getAll(profileId).associate { dbApp ->
             val icon: IconPackDrawable? = when {
                 dbApp.drawable.isEmpty() -> null
                 dbApp.isXml -> {
@@ -44,8 +44,8 @@ class RenkinPackStore(private val context: Context) {
         }
     }
 
-    /** Replaces the stored set with the created icons and calendar flags of [apps]. */
-    suspend fun save(apps: List<PackageInfoStruct>) = withContext(Dispatchers.Default) {
+    /** Replaces [profileId]'s stored set with the created icons and calendar flags of [apps]. */
+    suspend fun save(profileId: Long, apps: List<PackageInfoStruct>) = withContext(Dispatchers.Default) {
         val dbApps = apps.mapNotNull { app ->
             val icon = app.createdIcon
             if (icon == null && !app.calendarEnabled) return@mapNotNull null
@@ -58,14 +58,15 @@ class RenkinPackStore(private val context: Context) {
                 app.calendarEnabled,
                 app.calendarPrefix ?: "",
                 app.calendarPackName ?: "",
-                app.sourcePackName ?: ""
+                app.sourcePackName ?: "",
+                profileId
             )
         }
-        repo.replaceAll(dbApps)
+        repo.replaceAll(profileId, dbApps)
     }
 
-    /** Keys ("package/activity") of the apps in the last built/saved pack. */
-    suspend fun savedKeys(): Set<String> = withContext(Dispatchers.Default) {
-        repo.getAll().map { "${it.packageName}/${it.activityName}" }.toSet()
+    /** Keys ("package/activity") of the apps in [profileId]'s last built/saved pack. */
+    suspend fun savedKeys(profileId: Long): Set<String> = withContext(Dispatchers.Default) {
+        repo.getAll(profileId).map { "${it.packageName}/${it.activityName}" }.toSet()
     }
 }

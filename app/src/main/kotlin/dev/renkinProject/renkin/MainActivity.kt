@@ -164,7 +164,7 @@ class MainActivity : ComponentActivity() {
             val installed = ApplicationManager(this@MainActivity).getIconPacks()
             val loaded = viewModel.iconPacks.map { it.packageName }.toSet()
             val newPack = installed.firstOrNull {
-                it.packageName != IconPackBuilder.PACKAGE_NAME && it.packageName !in loaded
+                !it.packageName.startsWith(IconPackBuilder.PACKAGE_NAME) && it.packageName !in loaded
             } ?: return@launch
             withContext(Dispatchers.Main) {
                 viewModel.onIconPackInstalled(newPack.packageName, newPack.applicationName)
