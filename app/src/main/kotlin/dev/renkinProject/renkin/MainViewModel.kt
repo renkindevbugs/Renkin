@@ -14,6 +14,8 @@ import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.data.RawItem
+import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimarySourceKey
@@ -462,8 +464,9 @@ class MainViewModel @Inject constructor(
         packageName: String,
         sortOrder: IconSortOrder,
         query: String,
-        options: GenerationOptions
-    ) = "$packageName|$sortOrder|$query|${options.hashCode()}"
+        options: GenerationOptions,
+        component: InstalledApplication?
+    ) = "$packageName|$sortOrder|$query|${options.hashCode()}|${component?.packageName ?: ""}"
 
     /**
      * The collapsed row previews for [packageName] (first [PACK_ROW_LIMIT] matches plus the
@@ -474,14 +477,18 @@ class MainViewModel @Inject constructor(
         packageName: String,
         sortOrder: IconSortOrder,
         query: String,
-        options: GenerationOptions
+        options: GenerationOptions,
+        // When set, the icons the pack's appfilter maps to this app component are prepended to
+        // the results regardless of the name query — packs identify apps by component, so the
+        // designated icon is found even when its drawable name has nothing to do with the app name.
+        component: InstalledApplication? = null
     ): PackRowPreviews {
-        val key = packRowCacheKey(packageName, sortOrder, query, options)
+        val key = packRowCacheKey(packageName, sortOrder, query, options, component)
         packRowPreviewCache[key]?.let { return it }
 
         val result = withContext(Dispatchers.Default) {
             try {
-                val sortedNames = filteredSortedPackNames(appMan, packageName, query, sortOrder)
+                val sortedNames = filteredSortedPackNames(appMan, packageName, query, sortOrder, component)
                 val more = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
                 val pairs = loadPackIconPairs(appMan, packageName, options, sortedNames.take(PACK_ROW_LIMIT))
                 PackRowPreviews(pairs, more)
@@ -504,11 +511,13 @@ class MainViewModel @Inject constructor(
         sortOrder: IconSortOrder,
         query: String,
         options: GenerationOptions,
+        // Same component-mapped prepending as packRowPreviews.
+        component: InstalledApplication? = null,
         onChunk: (List<PackIconPreview>) -> Unit
     ) {
         val sortedNames = withContext(Dispatchers.Default) {
             try {
-                filteredSortedPackNames(appMan, packageName, query, sortOrder)
+                filteredSortedPackNames(appMan, packageName, query, sortOrder, component)
             } catch (_: Exception) {
                 emptyList()
             }
@@ -529,12 +538,16 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Drawable names of [packageName] matching [query], sorted by [sortOrder]. */
+    /**
+     * Drawable names of [packageName] matching [query], sorted by [sortOrder]. Icons the pack's
+     * appfilter maps to [component] come first, independent of the query (see packRowPreviews).
+     */
     private fun filteredSortedPackNames(
         appMan: ApplicationManager,
         packageName: String,
         query: String,
-        sortOrder: IconSortOrder
+        sortOrder: IconSortOrder,
+        component: InstalledApplication? = null
     ): List<String> {
         val allNames = appMan.getIconPackDrawableNames(packageName)
         val formattedQuery = query.normalizeIconSearchQuery()
@@ -543,10 +556,26 @@ class MainViewModel @Inject constructor(
         } else {
             allNames.filter { it.contains(formattedQuery) }
         }
-        return when (sortOrder) {
+        val sorted = when (sortOrder) {
             IconSortOrder.NAME_ASC -> matching.sortedBy { it }
             IconSortOrder.NAME_DESC -> matching.sortedByDescending { it }
         }
+        val componentNames = component?.let { componentDrawableNames(appMan, packageName, it) }.orEmpty()
+        return componentNames + (sorted - componentNames.toSet())
+    }
+
+    /** The drawable names [packageName]'s appfilter assigns to [component] (usually 0 or 1). */
+    private fun componentDrawableNames(
+        appMan: ApplicationManager,
+        packageName: String,
+        component: InstalledApplication
+    ): List<String> {
+        val componentInfo = component.toComponentInfo()
+        return appMan.getAppFilterRawElements(packageName, listOf(component))
+            .filterIsInstance<RawItem>()
+            .filter { it.component == componentInfo }
+            .mapNotNull { it.drawableLink }
+            .distinct()
     }
 
     /** Builds + rasterises the preview icons for the given drawable [names] of a pack. */

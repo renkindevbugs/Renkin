@@ -445,10 +445,11 @@ fun OptionsDialog(
                             )
                         }
                     } else null,
-                    onNavigateBack = if (packBrowsing) {
-                        // Inside a pack the arrow returns to the pack list; at the list it closes.
-                        { if (expandedPack != null) expandedPack = null else startClose() }
-                    } else null,
+                    // Unified chrome: every tab uses the back arrow. Inside a pack it returns
+                    // to the pack list; everywhere else it closes the dialog.
+                    onNavigateBack = {
+                        if (packBrowsing && expandedPack != null) expandedPack = null else startClose()
+                    },
                     showProgress = packBrowsing && createBusy
                 )
 
@@ -501,6 +502,11 @@ fun OptionsDialog(
                                 onBusyChange = { createBusy = it },
                                 packUsage = packUsage,
                                 searchQuery = createSearchQuery,
+                                // Component matching only while the query is the untouched default
+                                // (the app's name); a custom query = pure text search.
+                                componentMatch = if (createSearchQuery == app.originalName) {
+                                    app.toInstalledApplication()
+                                } else null,
                                 onIconSelect = { res, pack, drawableName ->
                                     customIconList = listOf(res)
                                     iconPack = pack.packageName

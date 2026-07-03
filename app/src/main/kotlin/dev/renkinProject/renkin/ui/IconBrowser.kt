@@ -55,6 +55,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.drawable.ResourceDrawable
@@ -139,6 +140,11 @@ fun CreateTab(
     // Hoisted by the dialog: the top-bar search field edits it there; it's seeded with the app
     // name and reset per edit at the dialog level.
     searchQuery: String,
+    // The edited app's component while the query is still the default (untouched app name):
+    // each pack then shows its appfilter-designated icon for this app first, even when the
+    // drawable's name has nothing in common with the app name. Typing a custom query turns
+    // this off (null) and the search becomes pure text matching.
+    componentMatch: InstalledApplication? = null,
     // drawableName is the raw resource name (e.g. "bee_calendar_6") — used to derive the
     // calendar prefix when the user opts into day rotation.
     onIconSelect: (ResourceDrawable, IconPack, String) -> Unit,
@@ -245,6 +251,7 @@ fun CreateTab(
                         options = options,
                         sortOrder = sortOrder,
                         query = debouncedQuery,
+                        component = componentMatch,
                         onLoadingChange = trackLoad,
                         selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.primaryIconPack },
                         selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { detailPack.packageName == options.primaryIconPack },
@@ -284,6 +291,7 @@ fun CreateTab(
                                             options = options,
                                             sortOrder = sortOrder,
                                             query = debouncedQuery,
+                                            component = componentMatch,
                                             onLoadingChange = trackLoad,
                                             selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
                                             selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.primaryIconPack },
