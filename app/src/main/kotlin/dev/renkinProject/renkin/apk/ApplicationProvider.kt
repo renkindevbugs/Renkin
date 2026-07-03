@@ -73,7 +73,6 @@ class ApplicationProvider(private val context: Context) {
         initializeApplications()
         initializeIconPacks()
         initializeRenkinPack()
-        startupComplete = true
     }
 
     suspend fun initializeApplications() = withContext(Dispatchers.Default) {
@@ -90,6 +89,10 @@ class ApplicationProvider(private val context: Context) {
     suspend fun initializeRenkinPack() {
         activeProfileId = context.dataStore.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         loadRenkinPack()
+        // MainViewModel's startup calls the initialize* steps individually (not initialize()),
+        // and this one runs last of the two that profile switching depends on (apps + saved
+        // icons) — so THIS is where switching becomes safe, not initialize().
+        startupComplete = true
     }
 
     suspend fun retrieveOtherIcons(preferences: Preferences) = withContext(Dispatchers.Default) {
