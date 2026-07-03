@@ -10,3 +10,5 @@
 local.properties
 app/release
 .kotlin
+# Local reference clone of Mihon (https://github.com/mihonapp/mihon), for UI inspiration only - never committed
+mihon-reference/
