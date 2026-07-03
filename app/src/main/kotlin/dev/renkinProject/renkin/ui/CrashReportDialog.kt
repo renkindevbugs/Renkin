@@ -14,7 +14,6 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -26,7 +25,6 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -36,9 +34,10 @@ import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.util.CrashReporter
 
 /**
- * Shown once on launch after a crash. Fully offline: lets the user copy the log and either
- * email it (copy the address) or open a GitHub issue — nothing is sent automatically, so
- * the app needs no internet permission. [onDismiss] is expected to clear the stored log.
+ * Shown once on launch after a crash. Fully offline: lets the user copy the log and open a
+ * GitHub issue — nothing is sent automatically, so the app needs no internet permission.
+ * [onDismiss] is expected to clear the stored log; the log stays reachable in
+ * Settings → Crash logs either way.
  */
 @Composable
 fun CrashReportDialog(onDismiss: () -> Unit) {
@@ -48,9 +47,7 @@ fun CrashReportDialog(onDismiss: () -> Unit) {
     val toaster = LocalToaster.current
 
     val githubUrl = stringResource(R.string.crashGithubUrl)
-    val devEmail = stringResource(R.string.crashEmail)
     val logCopied = stringResource(R.string.crashLogCopied)
-    val emailCopied = stringResource(R.string.crashEmailCopied)
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -71,40 +68,6 @@ fun CrashReportDialog(onDismiss: () -> Unit) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-
-                Spacer(Modifier.height(20.dp))
-                SectionLabel(stringResource(R.string.crashEmailLabel))
-                Spacer(Modifier.height(8.dp))
-                // Code-block style chip: the address in monospace + a copy action.
-                Surface(
-                    shape = InnerShape,
-                    color = MaterialTheme.colorScheme.surfaceContainerHighest
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = devEmail,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontFamily = FontFamily.Monospace),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        IconButton(onClick = {
-                            clipboard.setText(AnnotatedString(devEmail))
-                            toaster.show(emailCopied)
-                        }) {
-                            Icon(
-                                imageVector = Icons.Filled.ContentCopy,
-                                contentDescription = stringResource(R.string.crashEmailCopied),
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-                    }
-                }
 
                 Spacer(Modifier.height(20.dp))
                 SectionLabel(stringResource(R.string.crashGithubLabel))
@@ -155,7 +118,7 @@ fun CrashReportDialog(onDismiss: () -> Unit) {
                         Text(stringResource(R.string.crashCopyLog))
                     }
                     TextButton(onClick = onDismiss) {
-                        Text(stringResource(R.string.dismiss))
+                        Text(stringResource(R.string.crashLater))
                     }
                 }
             }
