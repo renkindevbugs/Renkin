@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -217,10 +218,11 @@ fun CreateTab(
         orderedPacks = distinctPacks
     }
 
-    // Reorder once the match results settle (not on every pack) and pin the user
-    // to the top so packs floating up don't push them down
-    LaunchedEffect(packMatches) {
-        if (packMatches.isEmpty()) return@LaunchedEffect
+    // Reorder once the match results settle: never while a visible row is still loading (the
+    // list must not move under the user without a loading indicator on screen), and only after
+    // a short settle so one straggler pack doesn't shuffle the list repeatedly.
+    LaunchedEffect(packMatches, busy) {
+        if (packMatches.isEmpty() || busy) return@LaunchedEffect
         delay(450)
         // Packs that have a matching icon float to the top; among equals, the chosen pack sort
         // (distinctPacks' order) is the stable tiebreaker.
@@ -230,10 +232,17 @@ fun CreateTab(
                 .thenBy { baseIndex[it.packageName] ?: Int.MAX_VALUE }
         )
         if (newOrder.map { it.packageName } != orderedPacks.map { it.packageName }) {
-            val atTop = listState.firstVisibleItemIndex == 0 &&
-                listState.firstVisibleItemScrollOffset == 0
+            // Mihon-style anchoring: keep the viewport at the same on-screen position instead of
+            // following the pack that was at the top (Lazy lists re-anchor by key by default, which
+            // dragged the user down whenever "their" pack sank in the new order).
+            val index = listState.firstVisibleItemIndex
+            val offset = listState.firstVisibleItemScrollOffset
             orderedPacks = newOrder
-            if (atTop) listState.scrollToItem(0)
+            if (index == 0 && offset == 0) {
+                listState.scrollToItem(0)
+            } else {
+                listState.requestScrollToItem(index, offset)
+            }
         }
     }
 
@@ -278,30 +287,27 @@ fun CreateTab(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(bottom = 16.dp)
                         ) {
-                            orderedPacks.forEach { pack ->
-                                item(key = "${pack.packageName}_header") {
-                                    Box(Modifier.animateItem()) {
-                                        PackSectionHeader(pack) { onExpandedPackChange(pack) }
-                                    }
-                                }
-                                item(key = "${pack.packageName}_icons") {
-                                    Box(Modifier.animateItem()) {
-                                        PackIconsRow(
-                                            iconPack = pack,
-                                            options = options,
-                                            sortOrder = sortOrder,
-                                            query = debouncedQuery,
-                                            component = componentMatch,
-                                            onLoadingChange = trackLoad,
-                                            selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
-                                            selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.primaryIconPack },
-                                            onMore = { onExpandedPackChange(pack) },
-                                            onResult = { hasMatches ->
-                                                packMatches = packMatches + (pack.packageName to hasMatches)
-                                            }
-                                        ) { resource, _, drawableName ->
-                                            onIconSelect(resource, pack, drawableName)
+                            // One item per pack (header + icons together), like Mihon's source rows:
+                            // a single animateItem moves the whole section as one unit instead of the
+                            // header and the icon row springing independently.
+                            items(orderedPacks, key = { it.packageName }) { pack ->
+                                Column(Modifier.animateItem()) {
+                                    PackSectionHeader(pack) { onExpandedPackChange(pack) }
+                                    PackIconsRow(
+                                        iconPack = pack,
+                                        options = options,
+                                        sortOrder = sortOrder,
+                                        query = debouncedQuery,
+                                        component = componentMatch,
+                                        onLoadingChange = trackLoad,
+                                        selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
+                                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.primaryIconPack },
+                                        onMore = { onExpandedPackChange(pack) },
+                                        onResult = { hasMatches ->
+                                            packMatches = packMatches + (pack.packageName to hasMatches)
                                         }
+                                    ) { resource, _, drawableName ->
+                                        onIconSelect(resource, pack, drawableName)
                                     }
                                 }
                             }
