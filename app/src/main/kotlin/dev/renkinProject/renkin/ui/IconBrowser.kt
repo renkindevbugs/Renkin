@@ -120,6 +120,9 @@ internal fun IconSortMenuButton(
 @Composable
 fun CreateTab(
     source: Source,
+    // Top inset of the overlaid header (Mihon-style scroll-under chrome): lazy lists apply it as
+    // contentPadding so they can scroll beneath the header; static content pads normally.
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     iconPacks: List<IconPack>,
     options: GenerationOptions,
     textType: TextType,
@@ -256,6 +259,7 @@ fun CreateTab(
                 val detailPack = expandedPack
                 if (detailPack != null) {
                     PackDetailGrid(
+                        contentPadding = contentPadding,
                         iconPack = detailPack,
                         options = options,
                         sortOrder = sortOrder,
@@ -271,7 +275,7 @@ fun CreateTab(
                 } else if (!contentReady) {
                     // Hold off mounting the (heavy) pack browser until the dialog has
                     // finished opening, so the open animation stays smooth
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(Modifier.fillMaxSize().padding(contentPadding), contentAlignment = Alignment.Center) {
                         LinearWavyProgressIndicator(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -282,10 +286,13 @@ fun CreateTab(
                     }
                 } else {
                     Column(Modifier.fillMaxSize()) {
+                        val headerInset = contentPadding.calculateTopPadding()
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(bottom = 16.dp)
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .drawVerticalScrollbar(listState, topInset = headerInset),
+                            contentPadding = PaddingValues(top = headerInset, bottom = 16.dp)
                         ) {
                             // One item per pack (header + icons together), like Mihon's source rows:
                             // a single animateItem moves the whole section as one unit instead of the
@@ -315,7 +322,7 @@ fun CreateTab(
                     }
                 }
             }
-            Source.APPLICATION_ICON -> ApplicationIconVariant(
+            Source.APPLICATION_ICON -> Box(Modifier.fillMaxSize().padding(contentPadding)) { ApplicationIconVariant(
                 monochrome = options.monochrome,
                 appHasMonochrome = appHasMonochrome,
                 onMonochromeChange = onMonochromeChange,
@@ -326,10 +333,11 @@ fun CreateTab(
                 customBackground = customBackground,
                 onCustomForegroundChange = onCustomForegroundChange,
                 onCustomBackgroundChange = onCustomBackgroundChange
-            )
+            ) }
             Source.APPLICATION_NAME -> Column(
                 Modifier
                     .fillMaxSize()
+                    .padding(contentPadding)
                     .verticalScroll(rememberScrollState())
                     .padding(16.dp)
             ) {

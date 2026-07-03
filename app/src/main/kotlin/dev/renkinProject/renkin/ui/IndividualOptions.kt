@@ -57,7 +57,9 @@ import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
@@ -401,6 +403,21 @@ fun OptionsDialog(
             Column(Modifier.fillMaxSize()) {
                 // The Create tab's icon-pack browser gets the Mihon-style search bar chrome.
                 val packBrowsing = selectedTab == 0 && source == Source.ICON_PACK
+                // Mihon-style scroll-under chrome: the header overlays the tab content instead of
+                // stacking above it, so the enter-always bar collapse only moves the header — the
+                // content keeps its size and just scrolls beneath, which keeps flings smooth.
+                OverlayHeaderLayout(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    header = {
+                // Opaque header background: content scrolling underneath must not show through
+                // the transparent app bar or around the comparison card.
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                ) {
                 // Sticky comparison header — close/delete/apply live in the same row
                 // and the icons shrink while the icon list is scrolled
                 ComparisonHeader(
@@ -474,9 +491,9 @@ fun OptionsDialog(
                         }
                     )
                 }
-
-                // Tab content
-                Box(modifier = Modifier.weight(1f)) {
+                }
+                    }
+                ) { headerPadding ->
                     AnimatedContent(
                         targetState = selectedTab,
                         transitionSpec = {
@@ -490,6 +507,7 @@ fun OptionsDialog(
                         when (tab) {
                             0 -> CreateTab(
                                 source = source,
+                                contentPadding = headerPadding,
                                 iconPacks = iconPacks,
                                 options = generatingOptions,
                                 textType = textType,
@@ -537,11 +555,14 @@ fun OptionsDialog(
                                 onCustomForegroundChange = { iconColor = it },
                                 onCustomBackgroundChange = { customBgColor = it }
                             )
-                            1 -> UploadColumn(app = app, snackbarHostState = snackbarHostState) {
-                                draft.uploadBase = it
-                                if (it != null) draft.origin = IconOrigin.UPLOAD
+                            // The static tabs don't scroll under the header — plain top padding.
+                            1 -> Box(Modifier.fillMaxSize().padding(headerPadding)) {
+                                UploadColumn(app = app, snackbarHostState = snackbarHostState) {
+                                    draft.uploadBase = it
+                                    if (it != null) draft.origin = IconOrigin.UPLOAD
+                                }
                             }
-                            2 -> ModifierTab(
+                            2 -> Box(Modifier.fillMaxSize().padding(headerPadding)) { ModifierTab(
                                 source = source,
                                 imageEdit = imageEdit,
                                 iconColor = iconColor,
@@ -561,10 +582,12 @@ fun OptionsDialog(
                                         else -> editInAnotherApp(context, bitmap)
                                     }
                                 }
-                            )
-                            else -> PrepareEditVector(app, vectorEditState) {
-                                draft.vectorIcon = it
-                                if (it != null) draft.origin = IconOrigin.VECTOR
+                            ) }
+                            else -> Box(Modifier.fillMaxSize().padding(headerPadding)) {
+                                PrepareEditVector(app, vectorEditState) {
+                                    draft.vectorIcon = it
+                                    if (it != null) draft.origin = IconOrigin.VECTOR
+                                }
                             }
                         }
                     }
