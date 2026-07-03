@@ -148,10 +148,7 @@ class MainViewModel @Inject constructor(
                 while (!appProvider.startupComplete) delay(50)
             }
             if (profileId > 0 && profileId != appProvider.activeProfileId && appProvider.startupComplete) {
-                if (hasUnsavedChanges()) appProvider.saveActiveProfileIcons()
-                appProvider.switchProfile(profileId)
-                builtKeys = appProvider.getSavedPackKeys()
-                updatedKeys = emptySet()
+                performSwitch(profileId, saveFirst = hasUnsavedChanges())
             }
             pendingWatchSuggestionId = suggestionId
         }
@@ -401,7 +398,7 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Reloads apps, icon packs and the saved Alchemicon pack from scratch. */
+    /** Reloads apps, icon packs and the saved Renkin pack from scratch. */
     fun refreshApps() {
         viewModelScope.launch {
             appProvider.initialize()
@@ -593,25 +590,31 @@ class MainViewModel @Inject constructor(
         return builtKeys.any { it !in iconKeys }
     }
 
+    /**
+     * Re-reads the change baselines from the (just switched or just saved) profile's stored
+     * pack — every operation that changes which saved set is current ends with this.
+     */
+    private suspend fun resetChangeBaselines() {
+        builtKeys = appProvider.getSavedPackKeys()
+        updatedKeys = emptySet()
+    }
+
+    /** Saves the active profile if asked, switches to [id], and refreshes the baselines. */
+    private suspend fun performSwitch(id: Long, saveFirst: Boolean) {
+        if (saveFirst) appProvider.saveActiveProfileIcons()
+        appProvider.switchProfile(id)
+        resetChangeBaselines()
+    }
+
     /** Switches the active profile (prefs snapshot + icon set swap), optionally saving first. */
     fun switchProfile(id: Long, saveFirst: Boolean = false) {
-        viewModelScope.launch {
-            if (saveFirst) appProvider.saveActiveProfileIcons()
-            appProvider.switchProfile(id)
-            // The change baselines belong to the profile's own saved pack.
-            builtKeys = appProvider.getSavedPackKeys()
-            updatedKeys = emptySet()
-        }
+        viewModelScope.launch { performSwitch(id, saveFirst) }
     }
 
     /** Creates a profile and switches straight to it, optionally saving the current one first. */
     fun createProfile(name: String, description: String, packLabel: String, saveFirst: Boolean = false) {
         viewModelScope.launch {
-            if (saveFirst) appProvider.saveActiveProfileIcons()
-            val id = appProvider.createProfile(name, description, packLabel)
-            appProvider.switchProfile(id)
-            builtKeys = appProvider.getSavedPackKeys()
-            updatedKeys = emptySet()
+            performSwitch(appProvider.createProfile(name, description, packLabel), saveFirst)
         }
     }
 
@@ -619,8 +622,7 @@ class MainViewModel @Inject constructor(
     fun deleteProfile(id: Long) {
         viewModelScope.launch {
             appProvider.deleteProfile(id)
-            builtKeys = appProvider.getSavedPackKeys()
-            updatedKeys = emptySet()
+            resetChangeBaselines()
         }
     }
 
@@ -629,8 +631,7 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             appProvider.clearIcons()
             // Saved pack is now empty → reset both change baselines.
-            builtKeys = appProvider.getSavedPackKeys()
-            updatedKeys = emptySet()
+            resetChangeBaselines()
         }
     }
 

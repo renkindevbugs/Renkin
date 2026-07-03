@@ -202,14 +202,14 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
-        // Physical file name stays "alchemiconPack" so existing installs keep their
-        // saved generated icons across the rename.
+        // Fresh physical file name: the app id changed to dev.renkinProject.renkin, so there
+        // are no existing installs whose data a rename could strand.
         fun get(context: Context): RenkinPackDatabase {
             return instance ?: synchronized(this) {
                 instance ?: Room.databaseBuilder(
                     context.applicationContext,
                     RenkinPackDatabase::class.java,
-                    "alchemiconPack"
+                    "renkinPack"
                 ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_7, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
                     .addCallback(seedDefaultProfile)
                     .build().also { instance = it }
