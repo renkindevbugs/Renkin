@@ -23,6 +23,13 @@ class AdaptiveIconXml: InsetWrapperXml() {
         endBackground()
     }
 
+    /** The themed-icon layer: launchers tint its alpha silhouette with the wallpaper colours. */
+    fun monochrome(value: String) {
+        startTag("monochrome")
+        attribute("drawable", value, androidNamespace)
+        endTag("monochrome")
+    }
+
     fun startForeground() {
         startTag("foreground")
     }

@@ -551,13 +551,16 @@ class IconPackBuilder(
         createBitmapResource(apkModule, packageBlock, R.drawable.xxhdpi_ic_launcher_round, "ic_launcher_round", "xxhdpi", "mipmap")
         createBitmapResource(apkModule, packageBlock, R.drawable.xxxhdpi_ic_launcher_round, "ic_launcher_round", "xxxhdpi", "mipmap")
 
-        // Renkin Pack icon: raster foreground + background layers (from Icon Kitchen)
+        // Renkin Pack icon: raster foreground + background layers (from Icon Kitchen), plus the
+        // alpha-glyph monochrome layer so the pack's own icon follows Material You theming.
         createBitmapResource(apkModule, packageBlock, R.drawable.renkinpack_ic_launcher_foreground, "ic_launcher_foreground")
         createBitmapResource(apkModule, packageBlock, R.drawable.renkinpack_ic_launcher_background, "ic_launcher_background")
+        createBitmapResource(apkModule, packageBlock, R.drawable.renkinpack_ic_launcher_monochrome, "ic_launcher_monochrome")
 
         val launcher = AdaptiveIconXml()
         launcher.foreground("ic_launcher")
         launcher.background("@drawable/ic_launcher_background")
+        launcher.monochrome("@drawable/ic_launcher_monochrome")
 
         createXmlDrawableResource(apkModule, packageBlock, launcher, "ic_launcher", "anydpi-v26", "mipmap")
         createXmlDrawableResource(apkModule, packageBlock, launcher, "ic_launcher_round", "anydpi-v26", "mipmap")
