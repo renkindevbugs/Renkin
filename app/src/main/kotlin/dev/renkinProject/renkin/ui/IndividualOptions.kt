@@ -56,6 +56,7 @@ import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.HorizontalDivider
@@ -239,6 +240,11 @@ fun OptionsDialog(
     // and returning to the tab; it starts at the app's non-localized name and resets per dialog
     // (i.e. per edit) — icon packs name drawables in English, so the localized label rarely matches.
     var createSearchQuery by rememberSaveable { mutableStateOf(app.originalName) }
+    // Sorts live in the top bar's menu (Mihon-style bar), so they're dialog state like the query.
+    var iconSortOrder by rememberSaveable { mutableStateOf(IconSortOrder.NAME_ASC) }
+    var packSortOrder by rememberSaveable { mutableStateOf(PackSortOrder.USAGE) }
+    // True while the pack rows are still loading/resolving the query — the bar's activity line.
+    var createBusy by remember { mutableStateOf(false) }
     // How often each pack has been used so far, so the icon-pack list can put the user's
     // most-used packs near the top. Loaded once when the dialog opens.
     var packUsage by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
@@ -393,6 +399,8 @@ fun OptionsDialog(
                     .nestedScroll(headerScrollBehavior.nestedScrollConnection)
             ) {
             Column(Modifier.fillMaxSize()) {
+                // The Create tab's icon-pack browser gets the Mihon-style search bar chrome.
+                val packBrowsing = selectedTab == 0 && source == Source.ICON_PACK
                 // Sticky comparison header — close/delete/apply live in the same row
                 // and the icons shrink while the icon list is scrolled
                 ComparisonHeader(
@@ -415,7 +423,34 @@ fun OptionsDialog(
                         onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, confirmedSourcePack)
                     },
                     scrollBehavior = headerScrollBehavior,
-                    labelExpand = labelExpand
+                    labelExpand = labelExpand,
+                    // Mihon-style bar on the icon-pack browser: back arrow + inline search +
+                    // sort menu, with a thin activity line while the search still resolves.
+                    titleContent = if (packBrowsing) {
+                        {
+                            AppBarSearchField(
+                                query = createSearchQuery,
+                                onQueryChange = { createSearchQuery = it },
+                                placeholder = stringResource(R.string.searchIcons)
+                            )
+                        }
+                    } else null,
+                    extraActions = if (packBrowsing) {
+                        {
+                            IconSortMenuButton(
+                                sortOrder = iconSortOrder,
+                                onSortOrderChange = { iconSortOrder = it },
+                                packSortOrder = packSortOrder,
+                                onPackSortOrderChange = { packSortOrder = it }
+                            )
+                        }
+                    } else null,
+                    // Unified chrome: every tab uses the back arrow. Inside a pack it returns
+                    // to the pack list; everywhere else it closes the dialog.
+                    onNavigateBack = {
+                        if (packBrowsing && expandedPack != null) expandedPack = null else startClose()
+                    },
+                    showProgress = packBrowsing && createBusy
                 )
 
                 // The Create tab draws its own divider under the search bar;
@@ -462,13 +497,16 @@ fun OptionsDialog(
                                 gridState = iconGridState,
                                 expandedPack = expandedPack,
                                 onExpandedPackChange = { expandedPack = it },
-                                // Same enter-always scroll behaviour as the app bar collapses the
-                                // pinned search bar pixel-by-pixel (read in the layout phase, so the
-                                // pack list isn't recomposed each frame).
-                                searchBarExpand = { 1f - headerScrollBehavior.state.collapsedFraction },
+                                sortOrder = iconSortOrder,
+                                packSort = packSortOrder,
+                                onBusyChange = { createBusy = it },
                                 packUsage = packUsage,
                                 searchQuery = createSearchQuery,
-                                onSearchQueryChange = { createSearchQuery = it },
+                                // Component matching only while the query is the untouched default
+                                // (the app's name); a custom query = pure text search.
+                                componentMatch = if (createSearchQuery == app.originalName) {
+                                    app.toInstalledApplication()
+                                } else null,
                                 onIconSelect = { res, pack, drawableName ->
                                     customIconList = listOf(res)
                                     iconPack = pack.packageName

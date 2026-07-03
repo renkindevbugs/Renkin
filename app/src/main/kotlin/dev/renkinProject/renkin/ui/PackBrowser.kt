@@ -56,6 +56,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.extension.calendarPrefixOrNull
@@ -116,7 +117,14 @@ fun PackIconsRow(
     // Prefix of the calendar icon picked from this pack, so its day-siblings are framed too.
     selectedCalendarPrefix: String? = null,
     onMore: (() -> Unit)? = null,
+    // Component of the app being edited: while set, the pack's appfilter-designated icon for it
+    // is always shown first (packs identify apps by component, not by drawable name).
+    component: InstalledApplication? = null,
     onResult: (hasMatches: Boolean) -> Unit = {},
+    // Mirrors this row's load state outward, so the dialog's top bar can show one shared
+    // activity line while any row is still resolving. try/finally keeps the count balanced
+    // even when the effect restarts mid-load.
+    onLoadingChange: (Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
@@ -131,13 +139,18 @@ fun PackIconsRow(
 
     LaunchedEffect(iconPack.packageName, sortOrder, query, previewOptions) {
         isLoading = true
-        // The view model serves a cached result instantly (no suspension) when it has one, so
-        // a row scrolled back into view shows immediately without a loading flash.
-        val result = viewModel.packRowPreviews(iconPack.packageName, sortOrder, query, previewOptions)
-        iconPairs = result.previews
-        moreCount = result.moreCount
-        isLoading = false
-        onResult(result.previews.isNotEmpty())
+        onLoadingChange(true)
+        try {
+            // The view model serves a cached result instantly (no suspension) when it has one, so
+            // a row scrolled back into view shows immediately without a loading flash.
+            val result = viewModel.packRowPreviews(iconPack.packageName, sortOrder, query, previewOptions, component)
+            iconPairs = result.previews
+            moreCount = result.moreCount
+            isLoading = false
+            onResult(result.previews.isNotEmpty())
+        } finally {
+            onLoadingChange(false)
+        }
     }
 
     val calendarPrefixes = rememberCalendarPrefixes(iconPack, iconPairs)
@@ -216,6 +229,10 @@ fun PackDetailGrid(
     onBack: () -> Unit,
     // Hoisted by the dialog so it can fade the comparison labels by the grid's distance from top.
     gridState: LazyGridState,
+    // Same component-first matching as PackIconsRow.
+    component: InstalledApplication? = null,
+    // Same shared activity-line reporting as PackIconsRow.
+    onLoadingChange: (Boolean) -> Unit = {},
     onSelect: (ResourceDrawable, IconPackDrawable, String) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
@@ -224,12 +241,17 @@ fun PackDetailGrid(
 
     LaunchedEffect(iconPack.packageName, sortOrder, query) {
         isLoading = true
-        iconPairs = emptyList()
-        // The grid fills progressively as the view model streams chunks back on the main thread.
-        viewModel.packDetailPreviews(iconPack.packageName, sortOrder, query, options) { chunk ->
-            iconPairs = (iconPairs + chunk).distinctBy { it.resource.resourceId }
+        onLoadingChange(true)
+        try {
+            iconPairs = emptyList()
+            // The grid fills progressively as the view model streams chunks back on the main thread.
+            viewModel.packDetailPreviews(iconPack.packageName, sortOrder, query, options, component) { chunk ->
+                iconPairs = (iconPairs + chunk).distinctBy { it.resource.resourceId }
+            }
+            isLoading = false
+        } finally {
+            onLoadingChange(false)
         }
-        isLoading = false
     }
 
     val calendarPrefixes = rememberCalendarPrefixes(iconPack, iconPairs)

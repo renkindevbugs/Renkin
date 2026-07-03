@@ -15,6 +15,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -29,6 +30,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -245,6 +248,39 @@ fun Modifier.collapsibleHeight(fraction: () -> Float): Modifier =
             val height = (placeable.height * fraction()).roundToInt()
             layout(placeable.width, height) { placeable.place(0, 0) }
         }
+
+/**
+ * Borderless search field for a TopAppBar's title slot (Mihon-style): transparent container, no
+ * underline, and a clear (×) button while there's a query. The IME search action drops focus.
+ */
+@Composable
+fun AppBarSearchField(query: String, onQueryChange: (String) -> Unit, placeholder: String) {
+    val focusManager = LocalFocusManager.current
+    TextField(
+        value = query,
+        onValueChange = onQueryChange,
+        placeholder = { Text(placeholder) },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { focusManager.clearFocus() }),
+        trailingIcon = if (query.isNotEmpty()) {
+            {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.clear))
+                }
+            }
+        } else null,
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+            unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+            disabledContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+            focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+            unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+            disabledIndicatorColor = androidx.compose.ui.graphics.Color.Transparent
+        ),
+        modifier = Modifier.fillMaxWidth()
+    )
+}
 
 /**
  * Explains a disabled control on tap: while [enabled] is false, a transparent overlay catches the
