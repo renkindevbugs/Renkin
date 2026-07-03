@@ -45,17 +45,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import android.view.WindowManager
-import androidx.compose.runtime.SideEffect
+import android.app.Activity
+import android.content.Intent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.window.DialogWindowProvider
+import androidx.datastore.preferences.core.Preferences
+import dev.renkinProject.renkin.WallpaperPreviewActivity
+import dev.renkinProject.renkin.apk.ApplicationProvider
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
@@ -73,9 +75,16 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     val context = getCurrentContext()
     val toaster = LocalToaster.current
 
-    var showPreview by remember { mutableStateOf(false) }
-
     val buildStep = viewModel.buildStep
+
+    // The preview lives in its own activity (WallpaperPreviewActivity) so the real wallpaper can
+    // show behind it; RESULT_OK = the user pressed Build there.
+    val previewLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            view.performConfirmHaptic()
+            viewModel.build(preferences)
+        }
+    }
 
     ExtendedFloatingActionButton(
         onClick = {
@@ -86,7 +95,11 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
 
             // Review the whole pack before committing to a build
             view.performTapHaptic()
-            showPreview = true
+            previewLauncher.launch(
+                Intent(context, WallpaperPreviewActivity::class.java)
+                    .putStringArrayListExtra(WallpaperPreviewActivity.EXTRA_BUILT_KEYS, ArrayList(viewModel.builtKeys))
+                    .putStringArrayListExtra(WallpaperPreviewActivity.EXTRA_UPDATED_KEYS, ArrayList(viewModel.updatedKeys))
+            )
         },
         icon = {
             Icon(
@@ -99,17 +112,6 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
         containerColor = MaterialTheme.colorScheme.primaryContainer,
         contentColor = MaterialTheme.colorScheme.onPrimaryContainer
     )
-
-    if (showPreview) {
-        BuildPackPreview(
-            onDismiss = { showPreview = false },
-            onBuild = {
-                showPreview = false
-                view.performConfirmHaptic()
-                viewModel.build(preferences)
-            }
-        )
-    }
 
     if (buildStep != null) {
         RenkinAlertDialog(
@@ -159,15 +161,21 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
 /**
  * Full-screen review of every icon that will go into the pack (apps that have a
  * created icon), shown before the actual build so the user can judge the set as a
- * whole. The Build button kicks off the real build.
+ * whole. Hosted by [dev.renkinProject.renkin.WallpaperPreviewActivity], whose
+ * windowShowWallpaper theme puts the real wallpaper behind the translucent scrim here.
+ * The Build button reports back (RESULT_OK) and the launching side runs the build.
  */
 @Composable
-fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
-    val viewModel: MainViewModel = hiltViewModel()
-    val builtKeys = viewModel.builtKeys
-    val updatedKeys = viewModel.updatedKeys
+fun BuildPackPreviewContent(
+    applications: List<PackageInfoStruct>,
+    builtKeys: Set<String>,
+    updatedKeys: Set<String>,
+    loadCalendarWarnings: suspend (Preferences) -> List<ApplicationProvider.CalendarWarning>,
+    onDismiss: () -> Unit,
+    onBuild: () -> Unit
+) {
     // Sort: new (never built) first → changed (edited this session) second → rest alphabetical.
-    val themedApps = viewModel.applicationList
+    val themedApps = applications
         .filter { it.createdIcon != null }
         .sortedWith(
             compareByDescending<PackageInfoStruct> { it.key !in builtKeys }
@@ -179,26 +187,12 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
     // Warn (before building) about calendar apps whose source pack lacks some 1..31 day
     // drawables — those days fall back to a repeated icon instead of rotating.
     val preferences = getPreferences().getPreferencesValue()
-    var calendarWarnings by remember { mutableStateOf<List<dev.renkinProject.renkin.apk.ApplicationProvider.CalendarWarning>>(emptyList()) }
+    var calendarWarnings by remember { mutableStateOf<List<ApplicationProvider.CalendarWarning>>(emptyList()) }
     LaunchedEffect(themedApps.size) {
-        calendarWarnings = viewModel.calendarWarnings(preferences)
+        calendarWarnings = loadCalendarWarnings(preferences)
     }
 
-    Dialog(
-        onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
-    ) {
-        // Launcher trick: the system composites the real (even live) wallpaper behind a window
-        // flagged FLAG_SHOW_WALLPAPER — the app never reads the wallpaper bitmap, so this needs
-        // no permission (WallpaperManager.getDrawable is locked behind MANAGE_EXTERNAL_STORAGE
-        // since Android 13). Dim must be off or the wallpaper renders darkened.
-        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
-        SideEffect {
-            dialogWindow?.let { window ->
-                window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
-                window.setDimAmount(0f)
-            }
-        }
+    Box(Modifier.fillMaxSize()) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             // Translucent scrim instead of an opaque surface: the wallpaper shows through, and
