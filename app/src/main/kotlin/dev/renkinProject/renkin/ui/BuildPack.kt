@@ -45,8 +45,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import android.view.WindowManager
+import androidx.compose.runtime.SideEffect
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.window.DialogWindowProvider
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -185,9 +188,22 @@ fun BuildPackPreview(onDismiss: () -> Unit, onBuild: () -> Unit) {
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
+        // Launcher trick: the system composites the real (even live) wallpaper behind a window
+        // flagged FLAG_SHOW_WALLPAPER — the app never reads the wallpaper bitmap, so this needs
+        // no permission (WallpaperManager.getDrawable is locked behind MANAGE_EXTERNAL_STORAGE
+        // since Android 13). Dim must be off or the wallpaper renders darkened.
+        val dialogWindow = (LocalView.current.parent as? DialogWindowProvider)?.window
+        SideEffect {
+            dialogWindow?.let { window ->
+                window.addFlags(WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER)
+                window.setDimAmount(0f)
+            }
+        }
         Surface(
             modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.surfaceContainerLow
+            // Translucent scrim instead of an opaque surface: the wallpaper shows through, and
+            // the tint keeps the icon labels and chrome readable on any wallpaper.
+            color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.62f)
         ) {
             Column(
                 Modifier
