@@ -7,11 +7,13 @@ plugins {
 }
 
 android {
-    namespace = "dev.alembiconsProject.alembicons"
+    namespace = "dev.renkinProject.renkin"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.kaanelloed.iconeration"
+        // Renamed from the fork's com.kaanelloed.iconeration (2026-07): a brand-new app
+        // identity — existing installs of the old id do not update into this one.
+        applicationId = "dev.renkinProject.renkin"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 44
