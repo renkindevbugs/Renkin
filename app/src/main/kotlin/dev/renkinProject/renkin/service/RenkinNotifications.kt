@@ -24,7 +24,9 @@ import dev.renkinProject.renkin.packages.PackageVersion
  * new app installs.
  */
 class RenkinNotifications {
-    private val iconAvailableChannelId = "alembicons_icon_available"
+    // The app id is brand-new (dev.renkinProject.renkin), so the channel id could be renamed
+    // without stranding an old channel on user devices.
+    private val iconAvailableChannelId = "renkin_icon_available"
 
     // Watch notifications get a stable id per suggestion so they update/cancel cleanly
     private val iconAvailableBaseId = 1000

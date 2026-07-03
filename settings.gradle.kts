@@ -20,5 +20,5 @@ dependencyResolutionManagement {
         }
     }
 }
-rootProject.name = "Alembicons"
+rootProject.name = "Renkin"
 include(":app")

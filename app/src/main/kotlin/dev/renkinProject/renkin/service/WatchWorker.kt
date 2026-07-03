@@ -40,12 +40,12 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
     override suspend fun doWork(): Result {
         return try {
             if (inputData.getBoolean(KEY_PERIODIC, false) && !enoughTimeElapsed()) {
-                Log.debug("Alembicons", "WatchChecker periodic run skipped — too soon since last check")
+                Log.debug("Renkin", "WatchChecker periodic run skipped — too soon since last check")
                 return Result.success()
             }
 
             val fired = WatchChecker(applicationContext).runCheck()
-            Log.debug("Alembicons", "WatchChecker fired ${fired.size} suggestion(s)")
+            Log.debug("Renkin", "WatchChecker fired ${fired.size} suggestion(s)")
             val notifier = RenkinNotifications()
             val profileRepo = RenkinPackRepository(applicationContext)
             for (suggestion in fired) {
@@ -63,7 +63,7 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
             applicationContext.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())
             Result.success()
         } catch (e: Exception) {
-            Log.debug("Alembicons", "WatchChecker failed: ${e.message}")
+            Log.debug("Renkin", "WatchChecker failed: ${e.message}")
             Result.retry()
         }
     }
