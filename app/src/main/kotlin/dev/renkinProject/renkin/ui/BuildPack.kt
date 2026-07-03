@@ -49,6 +49,8 @@ import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.datastore.preferences.core.Preferences
@@ -195,16 +197,17 @@ fun BuildPackPreviewContent(
     Box(Modifier.fillMaxSize()) {
         Surface(
             modifier = Modifier.fillMaxSize(),
-            // Translucent scrim instead of an opaque surface: the wallpaper shows through, and
-            // the tint keeps the icon labels and chrome readable on any wallpaper.
-            color = MaterialTheme.colorScheme.surfaceContainerLow.copy(alpha = 0.62f)
+            // Fully transparent (Icon Pack Studio style): the wallpaper shows untouched behind
+            // the icon grid; only the top chrome and the bottom build bar get an opaque surface.
+            color = Color.Transparent
         ) {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-            ) {
+            Column(Modifier.fillMaxSize()) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .statusBarsPadding()
+                ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -260,13 +263,16 @@ fun BuildPackPreviewContent(
                     }
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
                 }
+                }
 
                 if (themedApps.isEmpty()) {
                     Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                         Text(
                             text = stringResource(R.string.buildPreviewEmpty),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                shadow = Shadow(color = Color.Black.copy(alpha = 0.85f), blurRadius = 6f)
+                            ),
+                            color = Color.White,
                             modifier = Modifier.padding(32.dp)
                         )
                     }
@@ -289,22 +295,29 @@ fun BuildPackPreviewContent(
                     }
                 }
 
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                DisabledExplanation(
-                    enabled = themedApps.isNotEmpty(),
-                    message = stringResource(R.string.buildDisabledHint),
-                    modifier = Modifier
+                Column(
+                    Modifier
                         .fillMaxWidth()
-                        .padding(16.dp)
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .navigationBarsPadding()
                 ) {
-                    Button(
-                        onClick = onBuild,
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    DisabledExplanation(
                         enabled = themedApps.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth()
+                        message = stringResource(R.string.buildDisabledHint),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp)
                     ) {
-                        Icon(Icons.Filled.Build, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.buildIconPack))
+                        Button(
+                            onClick = onBuild,
+                            enabled = themedApps.isNotEmpty(),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Filled.Build, contentDescription = null)
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.buildIconPack))
+                        }
                     }
                 }
             }
@@ -349,10 +362,14 @@ private fun BuildPreviewItem(
             }
         }
         Spacer(Modifier.height(4.dp))
+        // Launcher-style label: white with a soft shadow, readable on any wallpaper (the grid
+        // sits directly on the transparent, wallpaper-showing area).
         Text(
             text = app.appName,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.labelSmall.copy(
+                shadow = Shadow(color = Color.Black.copy(alpha = 0.85f), blurRadius = 6f)
+            ),
+            color = Color.White,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
