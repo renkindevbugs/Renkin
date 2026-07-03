@@ -41,6 +41,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -76,58 +77,42 @@ private fun SortMenuHeader(text: String) {
 }
 
 /**
- * The icon search field plus the sort menu: icon order (A→Z / Z→A) and pack order
- * (most used / name / recently installed). Pinned above the pack list (see CreateTab).
+ * The sort menu button for the edit-mode top bar (Mihon-style): icon order (A→Z / Z→A)
+ * and pack order (most used / name / recently installed) in one dropdown.
  */
 @Composable
-private fun IconSearchBar(
-    query: String,
-    onQueryChange: (String) -> Unit,
+internal fun IconSortMenuButton(
     sortOrder: IconSortOrder,
     onSortOrderChange: (IconSortOrder) -> Unit,
     packSortOrder: PackSortOrder,
     onPackSortOrderChange: (PackSortOrder) -> Unit
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        SearchField(
-            value = query,
-            onValueChange = onQueryChange,
-            placeholder = stringResource(R.string.searchIcons),
-            modifier = Modifier.weight(1f)
-        )
-        Box {
-            IconButton(onClick = { showSortMenu = true }) {
-                Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.sort), tint = MaterialTheme.colorScheme.primary)
+    Box {
+        IconButton(onClick = { showSortMenu = true }) {
+            Icon(Icons.AutoMirrored.Filled.Sort, stringResource(R.string.sort), tint = MaterialTheme.colorScheme.primary)
+        }
+        DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
+            SortMenuHeader(stringResource(R.string.sortIconsHeader))
+            CheckableDropdownItem(stringResource(R.string.sortAToZ), sortOrder == IconSortOrder.NAME_ASC) {
+                onSortOrderChange(IconSortOrder.NAME_ASC); showSortMenu = false
             }
-            DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
-                SortMenuHeader(stringResource(R.string.sortIconsHeader))
-                CheckableDropdownItem(stringResource(R.string.sortAToZ), sortOrder == IconSortOrder.NAME_ASC) {
-                    onSortOrderChange(IconSortOrder.NAME_ASC); showSortMenu = false
-                }
-                CheckableDropdownItem(stringResource(R.string.sortZToA), sortOrder == IconSortOrder.NAME_DESC) {
-                    onSortOrderChange(IconSortOrder.NAME_DESC); showSortMenu = false
-                }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                SortMenuHeader(stringResource(R.string.sortPacksHeader))
-                CheckableDropdownItem(stringResource(R.string.sortByUsage), packSortOrder == PackSortOrder.USAGE) {
-                    onPackSortOrderChange(PackSortOrder.USAGE); showSortMenu = false
-                }
-                CheckableDropdownItem(stringResource(R.string.sortByName), packSortOrder == PackSortOrder.NAME) {
-                    onPackSortOrderChange(PackSortOrder.NAME); showSortMenu = false
-                }
-                CheckableDropdownItem(stringResource(R.string.sortByInstallDate), packSortOrder == PackSortOrder.INSTALL_DATE) {
-                    onPackSortOrderChange(PackSortOrder.INSTALL_DATE); showSortMenu = false
-                }
+            CheckableDropdownItem(stringResource(R.string.sortZToA), sortOrder == IconSortOrder.NAME_DESC) {
+                onSortOrderChange(IconSortOrder.NAME_DESC); showSortMenu = false
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            SortMenuHeader(stringResource(R.string.sortPacksHeader))
+            CheckableDropdownItem(stringResource(R.string.sortByUsage), packSortOrder == PackSortOrder.USAGE) {
+                onPackSortOrderChange(PackSortOrder.USAGE); showSortMenu = false
+            }
+            CheckableDropdownItem(stringResource(R.string.sortByName), packSortOrder == PackSortOrder.NAME) {
+                onPackSortOrderChange(PackSortOrder.NAME); showSortMenu = false
+            }
+            CheckableDropdownItem(stringResource(R.string.sortByInstallDate), packSortOrder == PackSortOrder.INSTALL_DATE) {
+                onPackSortOrderChange(PackSortOrder.INSTALL_DATE); showSortMenu = false
             }
         }
     }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 }
 
 @Composable
@@ -142,16 +127,18 @@ fun CreateTab(
     gridState: LazyGridState,
     expandedPack: IconPack?,
     onExpandedPackChange: (IconPack?) -> Unit,
-    // How much of the pinned search bar to show: 1 = full, 0 = collapsed. A lambda (read in the
-    // layout/draw phase) so the enter-always collapse re-lays-out only the bar, not the whole list.
-    searchBarExpand: () -> Float = { 1f },
+    // Sort orders live in the dialog's top bar (Mihon-style), so they're hoisted with the query.
+    sortOrder: IconSortOrder,
+    packSort: PackSortOrder,
+    // Reports whether icons are still loading / the search is still resolving, so the dialog's
+    // top bar can show its activity line and hide it when the search has finished.
+    onBusyChange: (Boolean) -> Unit = {},
     // How many stored icons came from each pack, keyed by package name. Packs the user takes
     // from most often sort higher (after packs that actually have an icon for the query).
     packUsage: Map<String, Int> = emptyMap(),
-    // Hoisted by the dialog so the typed (or cleared) query survives leaving and returning to
-    // this tab; it's seeded with the app name and reset per edit at the dialog level.
+    // Hoisted by the dialog: the top-bar search field edits it there; it's seeded with the app
+    // name and reset per edit at the dialog level.
     searchQuery: String,
-    onSearchQueryChange: (String) -> Unit,
     // drawableName is the raw resource name (e.g. "bee_calendar_6") — used to derive the
     // calendar prefix when the user opts into day rotation.
     onIconSelect: (ResourceDrawable, IconPack, String) -> Unit,
@@ -183,8 +170,11 @@ fun CreateTab(
     // Seeded from the hoisted query so returning to the tab doesn't trigger a spurious
     // re-search (debouncedQuery already matches the preserved searchQuery).
     var debouncedQuery by remember { mutableStateOf(searchQuery) }
-    var sortOrder by rememberSaveable { mutableStateOf(IconSortOrder.NAME_ASC) }
-    var packSort by rememberSaveable { mutableStateOf(PackSortOrder.USAGE) }
+    // In-flight pack-row loads; > 0 (or a pending debounce) means the search is still resolving.
+    var activeLoads by remember { mutableIntStateOf(0) }
+    val trackLoad: (Boolean) -> Unit = remember { { loading -> activeLoads += if (loading) 1 else -1 } }
+    val busy = activeLoads > 0 || searchQuery != debouncedQuery
+    LaunchedEffect(busy) { onBusyChange(busy) }
     // Pack first-install times, fetched only once the recently-installed sort is chosen.
     val viewModel: MainViewModel = hiltViewModel()
     val packInstallTimes by produceState(emptyMap<String, Long>(), packSort, iconPacks) {
@@ -255,6 +245,7 @@ fun CreateTab(
                         options = options,
                         sortOrder = sortOrder,
                         query = debouncedQuery,
+                        onLoadingChange = trackLoad,
                         selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.primaryIconPack },
                         selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { detailPack.packageName == options.primaryIconPack },
                         gridState = gridState,
@@ -275,21 +266,6 @@ fun CreateTab(
                     }
                 } else {
                     Column(Modifier.fillMaxSize()) {
-                        // Pinned above the list (not a list item): reordering or scrolling the pack
-                        // list must not touch the focused search field. As a list item it shared the
-                        // LazyColumn's relayout, and a reshuffle/scrollToItem mid-typing desynced the
-                        // IME — dropped key presses and a cursor that jumped to the start. It still
-                        // collapses pixel-by-pixel with the scroll (enter-always) via collapsibleHeight.
-                        Box(Modifier.collapsibleHeight(searchBarExpand)) {
-                            IconSearchBar(
-                                query = searchQuery,
-                                onQueryChange = onSearchQueryChange,
-                                sortOrder = sortOrder,
-                                onSortOrderChange = { sortOrder = it },
-                                packSortOrder = packSort,
-                                onPackSortOrderChange = { packSort = it }
-                            )
-                        }
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize(),
@@ -308,6 +284,7 @@ fun CreateTab(
                                             options = options,
                                             sortOrder = sortOrder,
                                             query = debouncedQuery,
+                                            onLoadingChange = trackLoad,
                                             selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
                                             selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.primaryIconPack },
                                             onMore = { onExpandedPackChange(pack) },

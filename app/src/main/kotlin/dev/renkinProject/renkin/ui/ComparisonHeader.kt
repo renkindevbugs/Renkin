@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -87,7 +89,15 @@ internal fun ComparisonHeader(
     scrollBehavior: TopAppBarScrollBehavior? = null,
     // How much of the Current/New labels to show: 1 = full (list at the very top), 0 = gone. Pixel-
     // tied to the list's distance from the top, so the labels only return when scrolled fully up.
-    labelExpand: Float = 1f
+    labelExpand: Float = 1f,
+    // Create-tab chrome (Mihon-style): [titleContent] replaces the app-name title (the inline
+    // search field), [extraActions] adds buttons before the overflow (the sort menu),
+    // [onNavigateBack] swaps the close button for a back arrow (collapses the pack grid first),
+    // and [showProgress] draws a thin indeterminate line under the bar while icons still load.
+    titleContent: (@Composable () -> Unit)? = null,
+    extraActions: (@Composable () -> Unit)? = null,
+    onNavigateBack: (() -> Unit)? = null,
+    showProgress: Boolean = false
 ) {
     // Both icons fly up into their slots when the dialog opens
     val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
@@ -126,17 +136,21 @@ internal fun ComparisonHeader(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    CloseButton(onDismiss)
-                    Text(
-                        text = appName,
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier
-                            .weight(1f, fill = false)
-                            .padding(horizontal = 4.dp)
-                    )
+                    NavigationButton(onNavigateBack, onDismiss)
+                    if (titleContent != null) {
+                        Box(Modifier.weight(1f)) { titleContent() }
+                    } else {
+                        Text(
+                            text = appName,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier
+                                .weight(1f, fill = false)
+                                .padding(horizontal = 4.dp)
+                        )
+                    }
                 }
 
                 Row(verticalAlignment = Alignment.Top) {
@@ -151,6 +165,7 @@ internal fun ComparisonHeader(
                     horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)
                 ) {
                     ApplyButton(onConfirm)
+                    extraActions?.invoke()
                     OverflowMenu(onClear)
                 }
             }
@@ -167,14 +182,18 @@ internal fun ComparisonHeader(
             // inset of its own (the dialog already applies statusBarsPadding).
             TopAppBar(
                 title = {
-                    Text(
+                    if (titleContent != null) titleContent()
+                    else Text(
                         text = appName,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 },
-                navigationIcon = { CloseButton(onDismiss) },
-                actions = { OverflowMenu(onClear) },
+                navigationIcon = { NavigationButton(onNavigateBack, onDismiss) },
+                actions = {
+                    extraActions?.invoke()
+                    OverflowMenu(onClear)
+                },
                 scrollBehavior = scrollBehavior,
                 windowInsets = WindowInsets(0),
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -182,6 +201,15 @@ internal fun ComparisonHeader(
                     scrolledContainerColor = Color.Transparent
                 )
             )
+            // Mihon-style activity line right under the bar: visible while pack rows are still
+            // resolving the query, so "search finished" is unambiguous.
+            if (showProgress) {
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                )
+            }
 
             ElevatedCard(
                 modifier = Modifier
@@ -215,6 +243,22 @@ internal fun ComparisonHeader(
                 }
             }
         }
+    }
+}
+
+/** Back arrow (Create tab, [onNavigateBack] set) or the tonal close button. */
+@Composable
+private fun NavigationButton(onNavigateBack: (() -> Unit)?, onDismiss: () -> Unit) {
+    if (onNavigateBack != null) {
+        IconButton(onClick = onNavigateBack, modifier = Modifier.size(40.dp)) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = stringResource(R.string.dismiss),
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    } else {
+        CloseButton(onDismiss)
     }
 }
 
