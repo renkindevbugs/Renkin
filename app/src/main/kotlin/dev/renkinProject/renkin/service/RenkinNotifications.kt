@@ -34,7 +34,14 @@ class RenkinNotifications {
     private val iconAvailableSummaryId = 999
 
     /** Posts (or updates) a notification that a watched pack has a new icon for an app. */
-    fun postIconAvailable(context: Context, suggestionId: Long, appPackage: String, packPackages: List<String>) {
+    fun postIconAvailable(
+        context: Context,
+        suggestionId: Long,
+        appPackage: String,
+        packPackages: List<String>,
+        profileId: Long,
+        profileName: String
+    ) {
         createIconAvailableChannel(context)
         val pm = context.packageManager
 
@@ -57,6 +64,7 @@ class RenkinNotifications {
             action = MainActivity.ACTION_OPEN_SUGGESTION
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(MainActivity.EXTRA_SUGGESTION_ID, suggestionId)
+            putExtra(MainActivity.EXTRA_SUGGESTION_PROFILE_ID, profileId)
         }
         val pendingIntent = PendingIntent.getActivity(
             context, suggestionId.toInt(), intent,
@@ -73,6 +81,8 @@ class RenkinNotifications {
             .setSmallIcon(R.mipmap.ic_launcher_monochrome)
             .setContentTitle(context.getString(R.string.iconAvailableTitle, appName))
             .setContentText(text)
+            // Which profile found it — shown in the notification header.
+            .setSubText(profileName)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_DEFAULT)
             .setAutoCancel(true)

@@ -43,7 +43,9 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import kotlin.coroutines.coroutineContext
@@ -133,6 +135,27 @@ class MainViewModel @Inject constructor(
         private set
 
     fun setPendingWatchSuggestion(id: Long) { pendingWatchSuggestionId = id }
+
+    /**
+     * Opens a watch suggestion from its notification: switches to the profile that owns it
+     * first (auto-saving the active profile's unsaved work — the user opted into that), then
+     * shows the apply modal. Waits out a cold start so the switch doesn't race initialization.
+     */
+    fun openSuggestionInProfile(suggestionId: Long, profileId: Long) {
+        viewModelScope.launch {
+            // Cold start from a notification: the app list / saved icons may still be loading.
+            withTimeoutOrNull(10_000) {
+                while (!appProvider.startupComplete) delay(50)
+            }
+            if (profileId > 0 && profileId != appProvider.activeProfileId && appProvider.startupComplete) {
+                if (hasUnsavedChanges()) appProvider.saveActiveProfileIcons()
+                appProvider.switchProfile(profileId)
+                builtKeys = appProvider.getSavedPackKeys()
+                updatedKeys = emptySet()
+            }
+            pendingWatchSuggestionId = suggestionId
+        }
+    }
 
     fun clearPendingWatchSuggestion() { pendingWatchSuggestionId = null }
 

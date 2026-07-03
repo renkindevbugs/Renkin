@@ -16,20 +16,21 @@ class WatchRepository(private val db: WatchDatabase) {
 
     private val dao = db.watchDao()
 
-    val rules: Flow<List<RuleWithDetails>> = dao.observeRules()
-    val completedCount: Flow<Int> = dao.observeCompletedCount()
+    fun rules(profileId: Long): Flow<List<RuleWithDetails>> = dao.observeRules(profileId)
+    fun completedCount(profileId: Long): Flow<Int> = dao.observeCompletedCount(profileId)
 
     suspend fun getRule(ruleId: Long): RuleWithDetails? = dao.getRuleWithDetails(ruleId)
 
     suspend fun getActiveRules(): List<RuleWithDetails> = dao.getActiveRules()
 
-    /** Creates a new active rule. [packPackages] is ignored when [watchAllPacks]. */
+    /** Creates a new active rule owned by [profileId]. [packPackages] is ignored when [watchAllPacks]. */
     suspend fun createRule(
         apps: List<AppComponent>,
         watchAllPacks: Boolean,
-        packPackages: List<String>
+        packPackages: List<String>,
+        profileId: Long
     ): Long = db.withTransaction {
-        val ruleId = dao.insertRule(WatchRule(watchAllPacks = watchAllPacks))
+        val ruleId = dao.insertRule(WatchRule(watchAllPacks = watchAllPacks, profileId = profileId))
         writeRuleChildren(ruleId, apps, watchAllPacks, packPackages)
         ruleId
     }
@@ -123,7 +124,8 @@ class WatchRepository(private val db: WatchDatabase) {
             dao.insertPacks(matchedPacks.map { WatchRulePack(originalRuleId, it) })
             completedRuleId = originalRuleId
         } else {
-            completedRuleId = dao.insertRule(WatchRule(watchAllPacks = false, completed = true, completedAt = now))
+            // The split-off completed rule stays in the same profile as the original.
+            completedRuleId = dao.insertRule(WatchRule(watchAllPacks = false, completed = true, completedAt = now, profileId = original.rule.profileId))
             dao.insertApps(listOf(WatchRuleApp(completedRuleId, app.packageName, app.activityName)))
             dao.insertPacks(matchedPacks.map { WatchRulePack(completedRuleId, it) })
             dao.deleteApp(originalRuleId, app.packageName, app.activityName)

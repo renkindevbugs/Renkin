@@ -52,6 +52,9 @@ class ApplicationProvider(private val context: Context) {
     val iconPackLoaded: Boolean get() = iconPackRepo.iconPackLoaded
     var applicationsLoaded: Boolean by mutableStateOf(false)
         private set
+    /** True once apps, packs and the saved icons have all loaded (profile switches are safe). */
+    var startupComplete: Boolean by mutableStateOf(false)
+        private set
 
     var defaultColor: Color = Color.Unspecified
 
@@ -70,6 +73,7 @@ class ApplicationProvider(private val context: Context) {
         initializeApplications()
         initializeIconPacks()
         initializeRenkinPack()
+        startupComplete = true
     }
 
     suspend fun initializeApplications() = withContext(Dispatchers.Default) {

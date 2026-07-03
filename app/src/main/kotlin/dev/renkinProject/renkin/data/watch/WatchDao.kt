@@ -26,8 +26,8 @@ interface WatchDao {
     suspend fun getRule(ruleId: Long): WatchRule?
 
     @Transaction
-    @Query("SELECT * FROM watch_rule ORDER BY completed ASC, createdAt DESC")
-    fun observeRules(): Flow<List<RuleWithDetails>>
+    @Query("SELECT * FROM watch_rule WHERE profileId = :profileId ORDER BY completed ASC, createdAt DESC")
+    fun observeRules(profileId: Long): Flow<List<RuleWithDetails>>
 
     @Transaction
     @Query("SELECT * FROM watch_rule WHERE completed = 0")
@@ -37,9 +37,9 @@ interface WatchDao {
     @Query("SELECT * FROM watch_rule WHERE id = :ruleId")
     suspend fun getRuleWithDetails(ruleId: Long): RuleWithDetails?
 
-    /** Drives the home-screen bell badge. */
-    @Query("SELECT COUNT(*) FROM watch_rule WHERE completed = 1")
-    fun observeCompletedCount(): Flow<Int>
+    /** Drives the home-screen bell badge (per profile). */
+    @Query("SELECT COUNT(*) FROM watch_rule WHERE completed = 1 AND profileId = :profileId")
+    fun observeCompletedCount(profileId: Long): Flow<Int>
 
     // --- Rule apps / packs ---------------------------------------------------
 

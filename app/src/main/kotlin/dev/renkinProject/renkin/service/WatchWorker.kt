@@ -12,6 +12,7 @@ import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
+import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.renkinProject.renkin.data.getLongValue
 import dev.renkinProject.renkin.data.setLongValue
@@ -46,12 +47,17 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
             val fired = WatchChecker(applicationContext).runCheck()
             Log.debug("Alembicons", "WatchChecker fired ${fired.size} suggestion(s)")
             val notifier = RenkinNotifications()
+            val profileRepo = RenkinPackRepository(applicationContext)
             for (suggestion in fired) {
+                // Name the owning profile in the notification; the tap deep-links into it.
+                val profileName = profileRepo.profile(suggestion.profileId)?.name ?: "Renkin"
                 notifier.postIconAvailable(
                     applicationContext,
                     suggestion.suggestionId,
                     suggestion.packageName,
-                    suggestion.packPackages
+                    suggestion.packPackages,
+                    suggestion.profileId,
+                    profileName
                 )
             }
             applicationContext.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())

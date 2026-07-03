@@ -19,10 +19,12 @@ import dev.renkinProject.renkin.data.watch.IconSuggestion
 import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.service.WatchChecker
 import dev.renkinProject.renkin.service.WatchWorker
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -37,16 +39,26 @@ import javax.inject.Inject
 @HiltViewModel
 class WatchViewModel @Inject constructor(
     application: Application,
-    private val repo: WatchRepository
+    private val repo: WatchRepository,
+    private val appProvider: ApplicationProvider
 ) : AndroidViewModel(application) {
 
-    /** All watch rules (active + completed); the UI splits them by `completed`. */
-    val rules: StateFlow<List<RuleWithDetails>> =
-        repo.rules.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    // Rules and the badge follow the ACTIVE profile: snapshotFlow tracks the Compose state
+    // in the provider and re-subscribes the Room flow whenever the profile switches.
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private fun <T> perProfile(source: (Long) -> kotlinx.coroutines.flow.Flow<T>) =
+        androidx.compose.runtime.snapshotFlow { appProvider.activeProfileId }
+            .flatMapLatest(source)
 
-    /** Number of completed rules — drives the bell badge on the home screen. */
+    /** The active profile's watch rules (active + completed); the UI splits them by `completed`. */
+    val rules: StateFlow<List<RuleWithDetails>> =
+        perProfile { repo.rules(it) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** Completed rules of the active profile — drives the bell badge on the home screen. */
     val completedCount: StateFlow<Int> =
-        repo.completedCount.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+        perProfile { repo.completedCount(it) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     /** Epoch-millis of the next scheduled periodic check; null when none is pending. */
     val nextCheckAt: StateFlow<Long?> =
@@ -81,7 +93,7 @@ class WatchViewModel @Inject constructor(
     ) {
         viewModelScope.launch {
             val ruleId = if (existing == null) {
-                repo.createRule(apps, watchAll, packs)
+                repo.createRule(apps, watchAll, packs, appProvider.activeProfileId)
             } else {
                 repo.updateRule(existing.rule.id, apps, watchAll, packs)
                 existing.rule.id

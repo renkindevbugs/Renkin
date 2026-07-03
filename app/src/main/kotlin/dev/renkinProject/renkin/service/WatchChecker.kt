@@ -36,7 +36,9 @@ class WatchChecker(context: Context) {
         val suggestionId: Long,
         val packageName: String,
         val activityName: String,
-        val packPackages: List<String>
+        val packPackages: List<String>,
+        // Profile owning the rule, so the notification can name it and deep-link into it.
+        val profileId: Long
     )
 
     suspend fun runCheck(): List<FiredSuggestion> = withContext(Dispatchers.Default) {
@@ -95,7 +97,8 @@ class WatchChecker(context: Context) {
                                 suggestionId,
                                 ruleApp.packageName,
                                 ruleApp.activityName,
-                                candidates.map { it.iconPackPackage }
+                                candidates.map { it.iconPackPackage },
+                                rule.rule.profileId
                             )
                         )
                     }

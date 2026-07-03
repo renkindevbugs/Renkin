@@ -46,7 +46,8 @@ class WatchRepositoryTest {
         val id = repo.createRule(
             apps = listOf(AppComponent("com.a", "A")),
             watchAllPacks = false,
-            packPackages = listOf("pack1")
+            packPackages = listOf("pack1"),
+            profileId = 1L
         )
 
         val rules = repo.getActiveRules()
@@ -63,7 +64,8 @@ class WatchRepositoryTest {
         repo.createRule(
             apps = listOf(AppComponent("com.a", "A")),
             watchAllPacks = true,
-            packPackages = listOf("pack1", "pack2")
+            packPackages = listOf("pack1", "pack2"),
+            profileId = 1L
         )
 
         val rule = repo.getActiveRules().first()
@@ -73,7 +75,7 @@ class WatchRepositoryTest {
 
     @Test
     fun deleteRule_removesIt() = runBlocking {
-        val id = repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"))
+        val id = repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
 
         repo.deleteRule(id)
 
@@ -82,7 +84,7 @@ class WatchRepositoryTest {
 
     @Test
     fun updateRule_replacesAppsAndPacks() = runBlocking {
-        val id = repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"))
+        val id = repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
 
         repo.updateRule(
             ruleId = id,

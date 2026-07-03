@@ -175,7 +175,9 @@ class MainActivity : ComponentActivity() {
     private fun handleWatchIntent(intent: Intent?) {
         if (intent?.action == ACTION_OPEN_SUGGESTION) {
             val id = intent.getLongExtra(EXTRA_SUGGESTION_ID, -1L)
-            if (id >= 0) viewModel.setPendingWatchSuggestion(id)
+            val profileId = intent.getLongExtra(EXTRA_SUGGESTION_PROFILE_ID, -1L)
+            // Switches to the owning profile first (auto-saving the current one), then opens.
+            if (id >= 0) viewModel.openSuggestionInProfile(id, profileId)
         }
     }
 
@@ -207,5 +209,6 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_OPEN_SUGGESTION = "dev.renkinProject.renkin.OPEN_SUGGESTION"
         const val EXTRA_SUGGESTION_ID = "watch_suggestion_id"
+        const val EXTRA_SUGGESTION_PROFILE_ID = "watch_suggestion_profile_id"
     }
 }
