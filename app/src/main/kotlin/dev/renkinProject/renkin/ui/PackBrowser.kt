@@ -219,6 +219,9 @@ fun PackIconsRow(
 
 @Composable
 fun PackDetailGrid(
+    // Top inset of the overlaid header chrome; applied above the pack-title row so the whole
+    // detail view sits below the header (the row itself isn't lazy, so it can't scroll under).
+    contentPadding: PaddingValues = PaddingValues(0.dp),
     iconPack: IconPack,
     options: GenerationOptions,
     sortOrder: IconSortOrder,
@@ -256,7 +259,7 @@ fun PackDetailGrid(
 
     val calendarPrefixes = rememberCalendarPrefixes(iconPack, iconPairs)
 
-    Column(Modifier.fillMaxSize()) {
+    Column(Modifier.fillMaxSize().padding(top = contentPadding.calculateTopPadding())) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -305,7 +308,9 @@ fun PackDetailGrid(
             LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Fixed(4),
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawVerticalScrollbar(gridState, spanCount = 4),
                 contentPadding = PaddingValues(start = 8.dp, end = 8.dp, top = 4.dp, bottom = 16.dp)
             ) {
                 items(iconPairs, key = { it.resource.resourceId }) { item ->
