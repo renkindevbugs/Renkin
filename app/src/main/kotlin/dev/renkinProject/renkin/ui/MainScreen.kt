@@ -717,7 +717,7 @@ fun TitleBar(
     )
 
     if (openSettings) {
-        SettingsDialog(prefs) {
+        SettingsScreen(prefs) {
             openSettings = false
         }
     }

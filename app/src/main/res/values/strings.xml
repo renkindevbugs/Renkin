@@ -26,6 +26,10 @@
     <string name="confirmClearText">Are you sure to clear the icon ?</string>
     <string name="none">None</string>
     <string name="settings">Settings</string>
+    <string name="settingsAppearance">Appearance</string>
+    <string name="settingsIconPacks">Icon packs</string>
+    <string name="settingsData">Data</string>
+    <string name="settingsDiagnostics">Diagnostics</string>
     <string name="theme">Theme</string>
     <string name="version">Version %s</string>
     <string name="aboutTitle">About</string>
@@ -113,6 +117,7 @@
     <string name="clearIcons">Clear icons</string>
     <string name="clearIconsTitle">Clear icons?</string>
     <string name="clearIconsText">This removes the generated icons inside the app. The icons in your already-built icon pack stay there until you build a new one.</string>
+    <string name="iconsCleared">Icons cleared</string>
     <string name="searchIcons">Search icons…</string>
     <string name="noIconsFound">No icons found</string>
     <string name="sourceAppIcon">App Icon</string>
