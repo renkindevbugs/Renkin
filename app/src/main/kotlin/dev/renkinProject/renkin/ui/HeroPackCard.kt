@@ -27,6 +27,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -251,7 +252,12 @@ private fun PackPickerSheet(
     val viewModel: MainViewModel = hiltViewModel()
     val usage = remember { viewModel.packUsageCounts() }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    // Two anchors only (open / dismissed), like Mihon's AdaptiveSheet: with the default
+    // partially-expanded middle state, the list's nested scroll hands off to a sheet drag at
+    // both edges and stutters between anchors. Skipping it, the sheet opens full-height and
+    // an edge over-drag goes straight into the single dismiss transition.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         // LazyColumn (not Column+verticalScroll): with many packs the list is taller than the
         // sheet, and the lazy list's nested-scroll handoff to the sheet is smooth at the edges.
         LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
