@@ -27,6 +27,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -40,11 +41,16 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -251,10 +257,29 @@ private fun PackPickerSheet(
     val viewModel: MainViewModel = hiltViewModel()
     val usage = remember { viewModel.packUsageCounts() }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    // Two anchors only (open / dismissed), like Mihon's AdaptiveSheet: with the default
+    // partially-expanded middle state, the list's nested scroll hands off to a sheet drag at
+    // both edges and stutters between anchors. Skipping it, the sheet opens full-height and
+    // an edge over-drag goes straight into the single dismiss transition.
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    // A fling that ends at the list edge leaves residual velocity, which the sheet would
+    // consume as a drag — a visible twitch toward dismiss and back. Swallow fling leftovers
+    // here; finger drags (UserInput) still pass through so drag-to-dismiss keeps working.
+    val swallowFlingLeftovers = remember {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
+                if (source == NestedScrollSource.SideEffect) available else Offset.Zero
+
+            override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available
+        }
+    }
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
         // LazyColumn (not Column+verticalScroll): with many packs the list is taller than the
         // sheet, and the lazy list's nested-scroll handoff to the sheet is smooth at the edges.
-        LazyColumn(contentPadding = PaddingValues(bottom = 16.dp)) {
+        LazyColumn(
+            modifier = Modifier.nestedScroll(swallowFlingLeftovers),
+            contentPadding = PaddingValues(bottom = 16.dp)
+        ) {
             item {
                 Text(
                     text = stringResource(R.string.choosePackTitle),
