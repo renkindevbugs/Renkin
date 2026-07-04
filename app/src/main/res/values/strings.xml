@@ -150,6 +150,8 @@
     <string name="profileName">Name</string>
     <string name="profileDescription">Description (optional)</string>
     <string name="profilePackLabel">Icon pack name</string>
+    <string name="editProfile">Edit profile</string>
+    <string name="requiredField">Required</string>
     <string name="createProfileAction">Create</string>
     <string name="deleteProfile">Delete profile</string>
     <string name="deleteProfileText">Delete “%1$s” and all of its icons? Its installed icon pack stays on the device until you uninstall it.</string>

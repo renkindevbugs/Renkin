@@ -329,6 +329,15 @@ class ApplicationProvider(private val context: Context) {
     suspend fun createProfile(name: String, description: String, packLabel: String): Long =
         packRepo.createProfile(Profile(name = name, description = description, packLabel = packLabel))
 
+    /**
+     * Updates [id]'s user-facing details. The pack label only takes effect on the next build
+     * (it's the launcher-visible label baked into the pack APK's manifest).
+     */
+    suspend fun updateProfileDetails(id: Long, name: String, description: String, packLabel: String) {
+        val profile = packRepo.profile(id) ?: return
+        packRepo.updateProfile(profile.copy(name = name, description = description, packLabel = packLabel))
+    }
+
     /** Deletes [id] (never the default) and its icons; switches to the default first if active. */
     suspend fun deleteProfile(id: Long) {
         if (id == DEFAULT_PROFILE_ID) return
