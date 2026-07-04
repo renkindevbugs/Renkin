@@ -107,6 +107,14 @@ Switcher = the top-bar title dropdown.
 - **Loading**: the shared `WavyLoadingBar` (ControlWidgets.kt), not hand-rolled indicators.
 - **Dialogs**: `RenkinAlertDialog` is the app-wide dialog chrome; `ConfirmDialog` (destructive
   confirmations) delegates to it.
+- **Tooltips**: `RenkinTooltipBox` (UIHelper.kt) — a custom position provider clamps the popup
+  into the window (the stock M3 plain-tooltip provider doesn't, so edge tooltips ran off
+  screen) and text wraps in a width-capped rounded bubble. Pack icons show their
+  `prettyDrawableName()` on long press.
+- **Pack picker sheet**: two anchors only (`skipPartiallyExpanded`) plus a nested-scroll
+  connection that swallows fling leftovers at the list edges — workaround for the M3
+  ModalBottomSheet jitter bug (issuetracker.google.com/issues/486562294); the connection can
+  go once material3 ships the fix.
 - No pull-to-refresh on the home list **on purpose**: its nested-scroll handler fought the
   collapsing large top bar (glitches, ghost taps). The app list reloads from Settings.
 
