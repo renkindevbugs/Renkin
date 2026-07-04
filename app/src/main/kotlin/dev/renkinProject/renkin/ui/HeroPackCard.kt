@@ -265,6 +265,8 @@ private fun PackPickerSheet(
     // A fling that ends at the list edge leaves residual velocity, which the sheet would
     // consume as a drag — a visible twitch toward dismiss and back. Swallow fling leftovers
     // here; finger drags (UserInput) still pass through so drag-to-dismiss keeps working.
+    // Workaround for https://issuetracker.google.com/issues/486562294 — delete once material3
+    // ships the fix.
     val swallowFlingLeftovers = remember {
         object : NestedScrollConnection {
             override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset =
