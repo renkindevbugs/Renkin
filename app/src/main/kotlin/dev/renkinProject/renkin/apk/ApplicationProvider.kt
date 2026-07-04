@@ -260,14 +260,6 @@ class ApplicationProvider(private val context: Context) {
         }
     }
 
-    /** Sets the calendar-day-icons flag, prefix, and source pack for [app]. */
-    fun setCalendar(app: PackageInfoStruct, enabled: Boolean, calendarPrefix: String?, calendarPackName: String?) {
-        val index = _applicationList.indexOfFirst {
-            it.packageName == app.packageName && it.activityName == app.activityName
-        }
-        if (index >= 0) editApplication(index, _applicationList[index].changeCalendar(enabled, calendarPrefix, calendarPackName))
-    }
-
     private suspend fun saveRenkinPack() = renkinPackStore.save(activeProfileId, applicationList)
 
     suspend fun forceSync() {
