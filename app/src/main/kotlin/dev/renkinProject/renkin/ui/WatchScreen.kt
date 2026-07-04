@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalLayoutApi::class)
+@file:OptIn(ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package dev.renkinProject.renkin.ui
 
@@ -37,6 +37,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -59,6 +60,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -69,6 +72,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.zIndex
@@ -260,33 +264,33 @@ private fun WatchRuleList(
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                IconButton(onClick = onClose) {
-                    Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
-                }
-                Text(
-                    text = stringResource(R.string.watchedIcons),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                if (BuildConfig.DEBUG) {
-                    IconButton(onClick = onSimulate) {
-                        Icon(
-                            Icons.Filled.BugReport,
-                            stringResource(R.string.watchSimulate),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
+            // Same top-bar chrome as Settings and Crash logs, so every fullscreen screen opens
+            // with the identical back-arrow app bar. The dialog already applies the status-bar
+            // inset, hence WindowInsets(0).
+            TopAppBar(
+                title = { Text(stringResource(R.string.watchedIcons)) },
+                navigationIcon = {
+                    IconButton(onClick = onClose) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.dismiss))
                     }
-                }
-            }
+                },
+                actions = {
+                    if (BuildConfig.DEBUG) {
+                        IconButton(onClick = onSimulate) {
+                            Icon(
+                                Icons.Filled.BugReport,
+                                stringResource(R.string.watchSimulate),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                },
+                windowInsets = WindowInsets(0),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = Color.Transparent,
+                    titleContentColor = MaterialTheme.colorScheme.primary
+                )
+            )
             HorizontalDivider()
 
             // Only meaningful while something is actively watched — hide it otherwise.

@@ -84,6 +84,8 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     val viewModel: MainViewModel = hiltViewModel()
     val view = LocalView.current
     val context = getCurrentContext()
+    val toaster = LocalToaster.current
+    val iconsClearedMessage = stringResource(R.string.iconsCleared)
 
     var showStats by rememberSaveable { mutableStateOf(false) }
     var showCrashLogs by rememberSaveable { mutableStateOf(false) }
@@ -210,6 +212,8 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
             onConfirm = {
                 confirmClearIcons = false
                 viewModel.clearIcons()
+                // Visible acknowledgement — the list change alone is easy to miss from Settings.
+                toaster.show(iconsClearedMessage)
             },
             onDismiss = { confirmClearIcons = false }
         )
