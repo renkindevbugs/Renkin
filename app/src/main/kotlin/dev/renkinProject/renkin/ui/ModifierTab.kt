@@ -68,6 +68,9 @@ internal class AdjustmentState {
     var edgeThreshold by mutableFloatStateOf(2.5f)
     var edgeSmoothing by mutableFloatStateOf(2f)
     var edgeContrast by mutableStateOf(false)
+    // Colorize as a flat fill (SRC_IN) instead of the default multiply blend, so the picked
+    // colour lands exactly — a green icon tinted blue no longer muddies to a green/blue mix.
+    var colorizeFlat by mutableStateOf(false)
     var iconScale by mutableFloatStateOf(1f)
     var bgRemovalTolerance by mutableFloatStateOf(0.1f)
     // Auto-center is UI state only: switching it on computes the offsets below (the pipeline's
@@ -80,7 +83,8 @@ internal class AdjustmentState {
         val Saver = listSaver<AdjustmentState, Any>(
             save = {
                 listOf(it.edgeThreshold, it.edgeSmoothing, it.edgeContrast, it.iconScale,
-                    it.bgRemovalTolerance, it.autoCenter, it.iconOffsetX, it.iconOffsetY)
+                    it.bgRemovalTolerance, it.autoCenter, it.iconOffsetX, it.iconOffsetY,
+                    it.colorizeFlat)
             },
             restore = { saved ->
                 AdjustmentState().apply {
@@ -92,6 +96,7 @@ internal class AdjustmentState {
                     autoCenter = saved[5] as Boolean
                     iconOffsetX = saved[6] as Float
                     iconOffsetY = saved[7] as Float
+                    colorizeFlat = saved[8] as Boolean
                 }
             }
         )
@@ -108,6 +113,8 @@ internal fun ModifierTab(
     adjustments: AdjustmentState,
     // The current preview icon, shown in the position tool to visualise its margins.
     centerPreview: Bitmap?,
+    // The app's original icon, offered as an eyedropper source in the colour picker.
+    sampleBitmap: Bitmap? = null,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
@@ -216,7 +223,33 @@ internal fun ModifierTab(
                                     IconColorCard(iconColor) { colorPickerOpen = true }
                                 }
 
-                                ImageEdit.COLORIZE -> IconColorCard(iconColor) { colorPickerOpen = true }
+                                ImageEdit.COLORIZE -> {
+                                    IconColorCard(iconColor) { colorPickerOpen = true }
+                                    // Flat fill vs. multiply blend: on a coloured icon the multiply
+                                    // default mixes the picked colour with the original, so blue over
+                                    // green reads muddy. This makes the picked colour land exactly.
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = stringResource(R.string.colorizeSolid),
+                                                style = MaterialTheme.typography.bodyLarge,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                            Text(
+                                                text = stringResource(R.string.colorizeSolidHint),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Switch(
+                                            checked = adjustments.colorizeFlat,
+                                            onCheckedChange = { adjustments.colorizeFlat = it }
+                                        )
+                                    }
+                                }
 
                                 ImageEdit.REMOVE_BACKGROUND -> OptionGroup {
                                     // Remove background keeps the original pixels, so no colour control.
@@ -340,7 +373,8 @@ internal fun ModifierTab(
         ColorDialog(
             onDismiss = { colorPickerOpen = false },
             currentlySelected = iconColor,
-            onColorSelected = { onColorChange(it) }
+            onColorSelected = { onColorChange(it) },
+            sampleBitmap = sampleBitmap
         )
     }
 

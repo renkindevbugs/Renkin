@@ -1,9 +1,12 @@
 package dev.renkinProject.renkin.ui
 
+import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +33,7 @@ import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -37,11 +41,23 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.FilterQuality
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import dev.renkinProject.renkin.R
+import kotlin.math.min
+import kotlin.math.roundToInt
 import com.github.skydoves.colorpicker.compose.AlphaSlider
 import com.github.skydoves.colorpicker.compose.AlphaTile
 import com.github.skydoves.colorpicker.compose.BrightnessSlider
@@ -114,7 +130,9 @@ fun ColorButton(caption: String, initialColor: Color, onColorSelected: (Color) -
 fun ColorDialog(
     onDismiss: (() -> Unit),
     currentlySelected: Color,
-    onColorSelected: ((Color) -> Unit) // when a colour is picked
+    onColorSelected: ((Color) -> Unit), // when a colour is picked
+    // Optional image to sample colours from (eyedropper). Null hides the picker section.
+    sampleBitmap: Bitmap? = null
 ) {
     val controller = rememberColorPickerController()
 
@@ -167,10 +185,93 @@ fun ColorDialog(
                     modifier = Modifier.padding(10.dp)
                     , controller = controller
                 )
+
+                // Eyedropper: sample a colour straight from the app's icon instead of
+                // guessing its RGB. Only shown when the caller hands us a bitmap.
+                sampleBitmap?.takeIf { !it.isRecycled }?.let { bitmap ->
+                    Text(
+                        text = stringResource(R.string.eyedropperHint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(10.dp, 4.dp, 10.dp, 6.dp)
+                    )
+                    IconEyedropper(
+                        bitmap = bitmap,
+                        onPick = { picked ->
+                            controller.selectByColor(picked, true)
+                            onColorSelected(picked)
+                        }
+                    )
+                }
             }
         },
         confirmButton = {}
     )
+}
+
+/**
+ * Draws [bitmap] fitted into a square and lets the user tap or drag to sample the colour
+ * under their finger, feeding it back through [onPick]. Fully transparent pixels are ignored
+ * so an accidental tap on empty space doesn't wipe the colour to transparent.
+ */
+@Composable
+private fun IconEyedropper(bitmap: Bitmap, onPick: (Color) -> Unit) {
+    val image = remember(bitmap) { bitmap.asImageBitmap() }
+    // The rect the image actually occupies inside the canvas (letterboxed for non-square icons),
+    // shared from the draw pass to the gesture handlers so taps map to the right pixel.
+    var drawnRect by remember(bitmap) { mutableStateOf(Rect.Zero) }
+    var touch by remember(bitmap) { mutableStateOf<Offset?>(null) }
+
+    val sample: (Offset) -> Unit = { pos ->
+        val r = drawnRect
+        if (r.width > 0f && r.height > 0f && r.contains(pos)) {
+            val fx = ((pos.x - r.left) / r.width).coerceIn(0f, 1f)
+            val fy = ((pos.y - r.top) / r.height).coerceIn(0f, 1f)
+            val px = (fx * (bitmap.width - 1)).roundToInt()
+            val py = (fy * (bitmap.height - 1)).roundToInt()
+            val argb = bitmap.getPixel(px, py)
+            if (argb ushr 24 != 0) {
+                touch = pos
+                onPick(Color(argb))
+            }
+        }
+    }
+
+    Box(modifier = Modifier.fillMaxWidth().padding(10.dp), contentAlignment = Alignment.Center) {
+        Canvas(
+            modifier = Modifier
+                .size(120.dp)
+                .clip(RoundedCornerShape(20))
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20))
+                .pointerInput(bitmap) { detectTapGestures { sample(it) } }
+                .pointerInput(bitmap) {
+                    detectDragGestures { change, _ ->
+                        change.consume()
+                        sample(change.position)
+                    }
+                }
+        ) {
+            val scale = min(size.width / image.width, size.height / image.height)
+            val w = image.width * scale
+            val h = image.height * scale
+            val left = (size.width - w) / 2f
+            val top = (size.height - h) / 2f
+            drawnRect = Rect(left, top, left + w, top + h)
+
+            drawImage(
+                image = image,
+                dstOffset = IntOffset(left.roundToInt(), top.roundToInt()),
+                dstSize = IntSize(w.roundToInt(), h.roundToInt()),
+                filterQuality = FilterQuality.None
+            )
+
+            // Loupe ring at the last sampled point: white core with a dark halo for contrast on any icon.
+            touch?.let { p ->
+                drawCircle(Color.Black, radius = 8.dp.toPx(), center = p, style = Stroke(width = 3.dp.toPx()))
+                drawCircle(Color.White, radius = 8.dp.toPx(), center = p, style = Stroke(width = 1.5.dp.toPx()))
+            }
+        }
+    }
 }
 
 @Composable
