@@ -14,8 +14,6 @@ import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.IconPack
-import dev.renkinProject.renkin.data.RawItem
-import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimarySourceKey
@@ -27,14 +25,9 @@ import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
-import dev.renkinProject.renkin.extension.normalizeIconSearchQuery
-import android.graphics.Bitmap
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
-import dev.renkinProject.renkin.icon.creator.PACK_DETAIL_LIMIT
-import dev.renkinProject.renkin.icon.creator.PACK_ROW_LIMIT
+import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews
 import dev.renkinProject.renkin.icon.creator.PackIconPreview
 import dev.renkinProject.renkin.icon.creator.PackRowPreviews
 import dev.renkinProject.renkin.packages.ApplicationManager
@@ -43,14 +36,12 @@ import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
-import kotlin.coroutines.coroutineContext
 
 /**
  * Owns the [ApplicationProvider] for the app's lifetime. The provider is injected (a Hilt
@@ -70,26 +61,6 @@ interface IconPreviewBuilder {
     ): IconPackDrawable?
 
     suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable
-}
-
-// Roughly 30 preview bitmaps per row at ~96px ≈ 1 MB; 24 rows caps the browser cache near 25 MB.
-private const val PACK_ROW_PREVIEW_CACHE_MAX = 24
-
-// Previews only ever render at ~56-64dp; a 96px bitmap covers that on the highest densities while
-// keeping the full-pack grid (up to PACK_DETAIL_LIMIT items) within a sane memory budget — a full
-// 256px raster each would be ~100 MB for 400 icons.
-private const val PREVIEW_PX = 96
-
-private fun Bitmap.scaledPreview(max: Int = PREVIEW_PX): Bitmap {
-    val biggest = maxOf(width, height)
-    if (biggest <= max) return this
-    val scale = max.toFloat() / biggest
-    return Bitmap.createScaledBitmap(
-        this,
-        (width * scale).toInt().coerceAtLeast(1),
-        (height * scale).toInt().coerceAtLeast(1),
-        true
-    )
 }
 
 @HiltViewModel
@@ -450,166 +421,32 @@ class MainViewModel @Inject constructor(
     suspend fun iconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
         appProvider.getIconPackDropdownIcons(application)
 
-    /** Builds a pack's icons for the given [drawables] — used by the icon-pack browser previews. */
-    suspend fun iconPackIcons(
-        iconPackName: String,
-        options: GenerationOptions,
-        drawables: List<ResourceDrawable>
-    ): Map<ResourceDrawable, IconPackDrawable?> =
-        appProvider.getIconPackIcons(iconPackName, options, drawables)
-
     // ---- Icon-pack browser previews ---------------------------------------------------
-    // Enumerating a pack's drawables and rasterising their previews is the icon-pack browser's
-    // heavy work. It lives here (not in the composables) so the UI only talks to the view model,
-    // and so the row cache below can sit next to it.
+    // The pack browser's heavy work (enumerating, filtering and rasterising a pack's drawables,
+    // plus the row-preview cache) lives in PackBrowserPreviews; the view model just forwards to it
+    // so the UI still only talks to the view model. buildPackIcons is wired to the provider.
+    private val packBrowserPreviews by lazy {
+        PackBrowserPreviews(appMan, appProvider::getIconPackIcons)
+    }
 
-    // Generating a pack row's preview bitmaps is expensive. Without a cache each row regenerated
-    // them every time it scrolled back into view (a LazyColumn discards off-screen items, taking
-    // their remembered state with them) — that's the loading flicker seen while scrolling the
-    // multi-pack browser. The cache lives on the view model so it also survives reopening the
-    // dialog and rotation. Keyed by pack + sort + query + options so a different filter/option set
-    // gets a fresh entry; an LRU bound keeps memory sane. Touched only from the main thread.
-    private val packRowPreviewCache =
-        object : LinkedHashMap<String, PackRowPreviews>(16, 0.75f, true) {
-            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, PackRowPreviews>?) =
-                size > PACK_ROW_PREVIEW_CACHE_MAX
-        }
-
-    private fun packRowCacheKey(
-        packageName: String,
-        sortOrder: IconSortOrder,
-        query: String,
-        options: GenerationOptions,
-        component: InstalledApplication?
-    ) = "$packageName|$sortOrder|$query|${options.hashCode()}|${component?.packageName ?: ""}"
-
-    /**
-     * The collapsed row previews for [packageName] (first [PACK_ROW_LIMIT] matches plus the
-     * "+N more" count). Returns the cached result instantly when present, otherwise generates
-     * and caches it. A malformed pack yields an empty row instead of crashing the browser.
-     */
+    /** Collapsed row previews for the icon-pack browser (see [PackBrowserPreviews.rowPreviews]). */
     suspend fun packRowPreviews(
         packageName: String,
         sortOrder: IconSortOrder,
         query: String,
         options: GenerationOptions,
-        // When set, the icons the pack's appfilter maps to this app component are prepended to
-        // the results regardless of the name query — packs identify apps by component, so the
-        // designated icon is found even when its drawable name has nothing to do with the app name.
         component: InstalledApplication? = null
-    ): PackRowPreviews {
-        val key = packRowCacheKey(packageName, sortOrder, query, options, component)
-        packRowPreviewCache[key]?.let { return it }
+    ): PackRowPreviews = packBrowserPreviews.rowPreviews(packageName, sortOrder, query, options, component)
 
-        val result = withContext(Dispatchers.Default) {
-            try {
-                val sortedNames = filteredSortedPackNames(appMan, packageName, query, sortOrder, component)
-                val more = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
-                val pairs = loadPackIconPairs(appMan, packageName, options, sortedNames.take(PACK_ROW_LIMIT))
-                PackRowPreviews(pairs, more)
-            } catch (_: Exception) {
-                PackRowPreviews(emptyList(), 0)
-            }
-        }
-        packRowPreviewCache[key] = result
-        return result
-    }
-
-    /**
-     * Generates the full-pack grid previews (up to [PACK_DETAIL_LIMIT]) for [packageName],
-     * streaming them to [onChunk] a chunk at a time so the grid fills progressively instead of
-     * blocking. [onChunk] is invoked on the calling (main) thread. Not cached — the detail grid
-     * stays in composition while open, so it only loads once anyway.
-     */
+    /** Streaming full-pack grid previews for the browser (see [PackBrowserPreviews.detailPreviews]). */
     suspend fun packDetailPreviews(
         packageName: String,
         sortOrder: IconSortOrder,
         query: String,
         options: GenerationOptions,
-        // Same component-mapped prepending as packRowPreviews.
         component: InstalledApplication? = null,
         onChunk: (List<PackIconPreview>) -> Unit
-    ) {
-        val sortedNames = withContext(Dispatchers.Default) {
-            try {
-                filteredSortedPackNames(appMan, packageName, query, sortOrder, component)
-            } catch (_: Exception) {
-                emptyList()
-            }
-        }
-        for (chunk in sortedNames.take(PACK_DETAIL_LIMIT).chunked(40)) {
-            coroutineContext.ensureActive()
-            val pairs = withContext(Dispatchers.Default) {
-                try {
-                    loadPackIconPairs(appMan, packageName, options, chunk)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (_: Exception) {
-                    // A malformed icon pack must not crash the browser
-                    emptyList()
-                }
-            }
-            onChunk(pairs)
-        }
-    }
-
-    /**
-     * Drawable names of [packageName] matching [query], sorted by [sortOrder]. Icons the pack's
-     * appfilter maps to [component] come first, independent of the query (see packRowPreviews).
-     */
-    private fun filteredSortedPackNames(
-        appMan: ApplicationManager,
-        packageName: String,
-        query: String,
-        sortOrder: IconSortOrder,
-        component: InstalledApplication? = null
-    ): List<String> {
-        val allNames = appMan.getIconPackDrawableNames(packageName)
-        val formattedQuery = query.normalizeIconSearchQuery()
-        val matching = if (formattedQuery.isEmpty()) {
-            allNames
-        } else {
-            allNames.filter { it.contains(formattedQuery) }
-        }
-        val sorted = when (sortOrder) {
-            IconSortOrder.NAME_ASC -> matching.sortedBy { it }
-            IconSortOrder.NAME_DESC -> matching.sortedByDescending { it }
-        }
-        val componentNames = component?.let { componentDrawableNames(appMan, packageName, it) }.orEmpty()
-        return componentNames + (sorted - componentNames.toSet())
-    }
-
-    /** The drawable names [packageName]'s appfilter assigns to [component] (usually 0 or 1). */
-    private fun componentDrawableNames(
-        appMan: ApplicationManager,
-        packageName: String,
-        component: InstalledApplication
-    ): List<String> {
-        val componentInfo = component.toComponentInfo()
-        return appMan.getAppFilterRawElements(packageName, listOf(component))
-            .filterIsInstance<RawItem>()
-            .filter { it.component == componentInfo }
-            .mapNotNull { it.drawableLink }
-            .distinct()
-    }
-
-    /** Builds + rasterises the preview icons for the given drawable [names] of a pack. */
-    private suspend fun loadPackIconPairs(
-        appMan: ApplicationManager,
-        packageName: String,
-        options: GenerationOptions,
-        names: List<String>
-    ): List<PackIconPreview> {
-        val ids = appMan.getIconPackDrawableIds(packageName, names)
-        // names and ids are parallel lists (same order) — build id→name reverse lookup.
-        val idToName = names.zip(ids).associate { (name, id) -> id to name }
-        val drawables = appMan.getIconPackDrawables(packageName, ids)
-        val exportDrawables = iconPackIcons(packageName, options, drawables)
-        return exportDrawables.entries
-            .filter { it.value != null }
-            .distinctBy { it.key.resourceId }
-            .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap(), idToName[it.key.resourceId] ?: "") }
-    }
+    ) = packBrowserPreviews.detailPreviews(packageName, sortOrder, query, options, component, onChunk)
 
     /** Clears only the unsaved bulk-refresh icons — see ApplicationProvider.clearRefreshedIcons. */
     fun clearRefreshedIcons() = appProvider.clearRefreshedIcons()
