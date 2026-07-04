@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.datastore.preferences.core.Preferences
+import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.WallpaperPreviewActivity
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import androidx.compose.ui.text.font.FontWeight
@@ -345,7 +346,7 @@ private fun BuildPreviewItem(
                     contentDescription = app.appName,
                     modifier = Modifier
                         .size(56.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(IconShape)
                 )
             }
             // Green = new (not in last build); orange = edited this session (was already built)

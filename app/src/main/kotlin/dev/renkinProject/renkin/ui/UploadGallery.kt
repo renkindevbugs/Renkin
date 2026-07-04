@@ -412,7 +412,7 @@ fun UploadColumn(app: PackageInfoStruct,
                 }
                 FloatingActionButton(
                     onClick = { deleteMarked() },
-                    shape = RoundedCornerShape(18.dp),
+                    shape = CardShape,
                     containerColor = MaterialTheme.colorScheme.errorContainer,
                     contentColor = MaterialTheme.colorScheme.onErrorContainer
                 ) {

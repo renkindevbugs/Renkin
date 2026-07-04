@@ -37,6 +37,7 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
@@ -77,6 +78,7 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.R
@@ -291,13 +293,22 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 },
                 onSearch = { packageFilter = it }
             )
-            ApplicationList(
-                iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, listState,
-                onShowAllApps = {
-                    filterFallback = false
-                    scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
-                }
-            )
+            // Pull down to reload the app list (same as Settings > Refresh application list).
+            PullToRefreshBox(
+                isRefreshing = viewModel.appsRefreshing,
+                onRefresh = { viewModel.refreshApps() },
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+            ) {
+                ApplicationList(
+                    iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, listState,
+                    onShowAllApps = {
+                        filterFallback = false
+                        scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
+                    }
+                )
+            }
         }
     }
 
@@ -517,7 +528,7 @@ fun ApplicationItem(
                     contentDescription = null,
                     modifier = Modifier
                         .size(56.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(IconShape)
                 )
             }
 
@@ -550,7 +561,7 @@ fun ApplicationItem(
                             contentDescription = null,
                             modifier = Modifier
                                 .size(56.dp)
-                                .clip(RoundedCornerShape(14.dp))
+                                .clip(IconShape)
                                 .background(bgColor)
                         )
                     } else {

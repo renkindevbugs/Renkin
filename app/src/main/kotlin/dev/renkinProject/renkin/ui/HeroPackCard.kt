@@ -48,6 +48,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.IconPack
@@ -132,7 +133,7 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
                             modifier = Modifier
                                 .padding(end = 12.dp)
                                 .size(40.dp)
-                                .clip(RoundedCornerShape(10.dp))
+                                .clip(InnerShape)
                         )
                     }
                 }

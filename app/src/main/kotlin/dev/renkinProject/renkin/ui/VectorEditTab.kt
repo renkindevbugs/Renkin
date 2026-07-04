@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -315,7 +316,7 @@ fun VectorPathItem(
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Surface(
-                shape = RoundedCornerShape(14.dp),
+                shape = IconShape,
                 color = MaterialTheme.colorScheme.surfaceContainerHigh
             ) {
                 val painter = rememberVectorPainter(previewVector)

@@ -1,0 +1,17 @@
+# Normalize line endings: everything text is stored with LF in the repo; Windows checkouts
+# no longer produce "LF will be replaced by CRLF" warnings on every commit.
+* text=auto eol=lf
+
+# Windows scripts need CRLF to run.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binary assets — never touch.
+*.png binary
+*.jpg binary
+*.webp binary
+*.ico binary
+*.jar binary
+*.keystore binary
+*.ttf binary
+*.otf binary
