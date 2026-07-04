@@ -1,4 +1,4 @@
-.class public Ldev/alembiconsProject/renkinpack/MainActivity;
+.class public Ldev/renkinProject/renkinpack/MainActivity;
 .super Landroid/app/Activity;
 .source "MainActivity.java"
 
@@ -25,7 +25,7 @@
     .line 10
     const/high16 v0, 0x7f010000    # @layout/main_activity 'res/layout/main_activity.xml'
 
-    invoke-virtual {p0, v0}, Ldev/alembiconsProject/renkinpack/MainActivity;->setContentView(I)V
+    invoke-virtual {p0, v0}, Ldev/renkinProject/renkinpack/MainActivity;->setContentView(I)V
 
     .line 11
     return-void

@@ -1,10 +1,10 @@
-.class public final Ldev/alembiconsProject/renkinpack/BuildConfig;
+.class public final Ldev/renkinProject/renkinpack/BuildConfig;
 .super Ljava/lang/Object;
 .source "BuildConfig.java"
 
 
 # static fields
-.field public static final APPLICATION_ID:Ljava/lang/String; = "dev.alembiconsProject.renkinpack"
+.field public static final APPLICATION_ID:Ljava/lang/String; = "dev.renkinProject.renkinpack"
 
 .field public static final BUILD_TYPE:Ljava/lang/String; = "debug"
 
@@ -26,7 +26,7 @@
 
     move-result v0
 
-    sput-boolean v0, Ldev/alembiconsProject/renkinpack/BuildConfig;->DEBUG:Z
+    sput-boolean v0, Ldev/renkinProject/renkinpack/BuildConfig;->DEBUG:Z
 
     return-void
 .end method

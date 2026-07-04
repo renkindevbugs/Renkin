@@ -30,9 +30,6 @@
 -dontnote org.xmlpull.v1.**
 -keep class org.xmlpull.** { *; }
 
-# Shrink and obfuscate only Android libraries
--keep class com.kaanelloed.iconeration** { * ; }
-
 # Fix resource errors
 -keep class android.content.res** { * ; }
 

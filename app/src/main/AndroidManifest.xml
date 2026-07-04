@@ -34,6 +34,7 @@
     <application
         android:name=".RenkinApplication"
         android:allowBackup="true"
+        android:enableOnBackInvokedCallback="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
@@ -42,6 +43,11 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Material3.DayNight.NoActionBar"
         tools:targetApi="35">
+        <!-- Fullscreen pack preview drawn over the real wallpaper (windowShowWallpaper theme). -->
+        <activity
+            android:name=".WallpaperPreviewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Renkin.WallpaperPreview" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -52,6 +58,13 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Receive an image shared back from an external editor (e.g. ImageToolbox); it's saved
+                 into the upload gallery so it can be picked as an icon. -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
             </intent-filter>
             <meta-data
                 android:name="android.app.lib_name"

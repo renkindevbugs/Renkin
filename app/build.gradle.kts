@@ -7,15 +7,19 @@ plugins {
 }
 
 android {
-    namespace = "dev.alembiconsProject.alembicons"
+    namespace = "dev.renkinProject.renkin"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.kaanelloed.iconeration"
+        // Renamed from the fork's com.kaanelloed.iconeration (2026-07): a brand-new app
+        // identity — existing installs of the old id do not update into this one.
+        applicationId = "dev.renkinProject.renkin"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 44
-        versionName = "2025.02.00"
+        // Renkin's own year.month.patch scheme, started for the first release under the new
+        // app id (the 2025.02.00 / 44 values were inherited from the Alembicons fork).
+        versionCode = 45
+        versionName = "2026.07.00"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

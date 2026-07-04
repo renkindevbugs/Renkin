@@ -5,17 +5,17 @@ installable Android icon packs on-device.
 
 ## Naming — read this first
 
-Three different names refer to the same app; this trips up newcomers:
+Several names float around; this trips up newcomers:
 
 | Thing | Value |
 | --- | --- |
 | App display name | **Renkin** |
-| Application id | `com.kaanelloed.iconeration` (kept for F-Droid update continuity) |
-| Kotlin package | `dev.alembiconsProject.alembicons` |
-| Generated icon pack package | `dev.alembiconsProject.renkinpack` (`IconPackBuilder.PACKAGE_NAME`) |
+| Application id / namespace | `dev.renkinProject.renkin` (renamed 2026-07; a brand-new app identity) |
+| Generated icon pack package | `dev.renkinProject.renkinpack` (`IconPackBuilder.PACKAGE_NAME`); non-default profiles append `.p<profileId>` so several packs install side by side |
+| External libraries | `dev.alembiconsProject.imagetracer`, `dev.alembiconsProject.tgCannyEdgeCompose` and the `com.github.Alembicons` gradle coordinates are **upstream libraries — never rename** |
 
-It is a fork of **Alembicons** (formerly *Iconeration*). The package and app id are
-inherited from upstream and are intentionally not renamed.
+It is a fork of **Alembicons** (formerly *Iconeration*). The upstream attribution
+(InfoDialog F-Droid link, `aboutFork` strings) stays.
 
 ## Build & run
 
@@ -24,6 +24,7 @@ inherited from upstream and are intentionally not renamed.
 - Unit tests: `./gradlew testDebugUnitTest`
 - Dependencies live in `gradle/libs.versions.toml` (version catalog) + `app/build.gradle.kts`.
   KSP is used for annotation processing (Room + Hilt) — prefer KSP over kapt.
+- `.gitattributes` normalizes the repo to LF.
 
 ## Layers
 
@@ -34,8 +35,8 @@ Composables (ui/)                         ← stateless-ish views, read VM state
 MainViewModel / WatchViewModel            ← @HiltViewModel; own session/UI state, orchestrate
         │                                    operations on viewModelScope
         ▼
-ApplicationProvider (apk/)                ← orchestrator: owns the app list, build/install,
-        │                                    calendar trigger, writes generated icons back
+ApplicationProvider (apk/)                ← orchestrator: owns the app list, profiles, refresh,
+        │                                    build/install, writes generated icons back
         ├── IconPackRepository             ← installed packs, app-filter elements, per-app
         │                                    drawables, calendar icons (Compose-state backed)
         ├── IconGenerationService          ← runs IconGenerator to produce icons
@@ -49,16 +50,27 @@ The UI layer never constructs repositories by hand; view models receive them thr
 Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only for genuine
 Activity operations (`finish()`, starting services, permission requests).
 
-## Dependency injection (Hilt)
+## Activities
 
-- `RenkinApplication` is `@HiltAndroidApp`; `MainActivity` is `@AndroidEntryPoint`.
-- `di/AppModule` provides app singletons (`WatchRepository`, `ApplicationProvider`).
-- `MainViewModel` / `WatchViewModel` are `@HiltViewModel` and inject their dependencies.
-- **Services are intentionally NOT on Hilt** — they construct what they need by hand
-  (`ApplicationProvider`, `WatchRepository`). This is deliberate: services use their own
-  `ApplicationProvider` instance instead of sharing the UI's singleton.
-- Repositories take their database in the primary constructor with a `(context)` secondary
-  constructor for production. This is what makes them unit-testable with an in-memory DB.
+- **MainActivity** — the whole app UI; provides `LocalMainActivity` and `LocalToaster`.
+- **WallpaperPreviewActivity** — the pack preview before a build. Its theme sets
+  `windowShowWallpaper` + a transparent background so the system draws the real wallpaper
+  behind it (the launcher trick — no permission; `WallpaperManager.getDrawable` is locked
+  behind MANAGE_EXTERNAL_STORAGE since Android 13). It must be an activity: dialog windows
+  never become the wallpaper target. It reads shared state from the `ApplicationProvider`
+  singleton directly — deliberately **not** through a new `MainViewModel`, whose init would
+  re-run provider initialization and drop unsaved icons. RESULT_OK = "user pressed Build";
+  the launching side (BuildPackFab) runs the build.
+
+## Profiles
+
+Multiple named icon sets. Each profile owns its icons (`DbApplication.profileId`), its
+generation preferences (JSON snapshot in the Profile row, swapped through the shared
+DataStore on switch — see `ProfilePrefKeys` in `DataPreferences.kt`), its watch rules, and
+builds its own pack APK under its own package (see Naming). The default profile (id = 1) is
+undeletable; deleting a profile also deletes its watch rules, and a watch notification whose
+profile has since been deleted shows an explanation instead of applying to the wrong profile.
+Switcher = the top-bar title dropdown.
 
 ## Threading & state
 
@@ -73,9 +85,38 @@ Activity operations (`finish()`, starting services, permission requests).
 - **DataStore Preferences** (`data/DataPreferences.kt`) — all settings. Typed accessors:
   Composable `DataStore.getXValue()` for reading in composition; `Preferences.getXValue()`
   for reading a captured snapshot off the main thread.
-- **Room — `RenkinPackDatabase`** (file `"alchemiconPack"`, kept for data continuity) — the
-  generated icons of the last built pack. Loaded into the app list at startup.
-- **Room — `WatchDatabase`** — icon-watch rules, suggestions and baselines.
+- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v9) — profiles + the generated icons
+  of the last built/saved pack per profile. Loaded into the app list at startup.
+  **Never lower the version once any build was installed** — schema-identical bump +
+  migration instead (see the v5/v6/v7 history in `DbApplication.kt`).
+- **Room — `WatchDatabase`** (v2) — icon-watch rules, suggestions and baselines, owned per
+  profile via `WatchRule.profileId`.
+
+## UI conventions
+
+- **Fullscreen screens** (Settings, Crash logs, Watched icons) are fullscreen dialogs with
+  the same M3 `TopAppBar`: back arrow, primary-tinted title, actions on the right.
+- **Feedback**: plain notices go through the shared `Toaster` (`LocalToaster` + `ToastHost`);
+  a `SnackbarHost` exists only where an action is attached (upload gallery's Undo).
+- **Shapes**: use the tokens in `ui/theme/Shapes.kt` (`DialogShape`/`CardShape`/`FieldShape`/
+  `InnerShape`/`IconShape`) — no raw `RoundedCornerShape(n.dp)` at call sites.
+- **Scroll chrome** (`ui/ScrollChrome.kt`): `OverlayHeaderLayout` lays a collapsing header
+  *over* scroll-under content (Mihon-style — the content keeps its size, so flings stay
+  smooth while the bar animates; used by the edit dialog), and `Modifier.drawVerticalScrollbar`
+  adds the transient scrollbar used on every long list/grid.
+- **Loading**: the shared `WavyLoadingBar` (ControlWidgets.kt), not hand-rolled indicators.
+- **Dialogs**: `RenkinAlertDialog` is the app-wide dialog chrome; `ConfirmDialog` (destructive
+  confirmations) delegates to it.
+- **Tooltips**: `RenkinTooltipBox` (UIHelper.kt) — a custom position provider clamps the popup
+  into the window (the stock M3 plain-tooltip provider doesn't, so edge tooltips ran off
+  screen) and text wraps in a width-capped rounded bubble. Pack icons show their
+  `prettyDrawableName()` on long press.
+- **Pack picker sheet**: two anchors only (`skipPartiallyExpanded`) plus a nested-scroll
+  connection that swallows fling leftovers at the list edges — workaround for the M3
+  ModalBottomSheet jitter bug (issuetracker.google.com/issues/486562294); the connection can
+  go once material3 ships the fix.
+- No pull-to-refresh on the home list **on purpose**: its nested-scroll handler fought the
+  collapsing large top bar (glitches, ghost taps). The app list reloads from Settings.
 
 ## The build "change bar"
 
@@ -83,7 +124,17 @@ The Options card shows a segmented bar (blue = already built, green = added sinc
 build, red = removed since). It is a **diff** of the current app list against
 `MainViewModel.builtKeys` (the keys saved in the last built pack), not event tracking — so
 it stays correct even when icons are added via the Refresh button. `builtKeys` reloads after
-each successful build and after "Clear icons".
+each successful build and after "Clear icons". `updatedKeys` tracks this session's hand edits.
+
+## Icon pack build
+
+`IconPackBuilder` assembles the APK with reandroid (no external build tools). The generated
+pack's dex classes come from prebuilt smali assets (`app/src/main/assets/{R,RLayout,
+MainActivity,BuildConfig}`); the pack's applicationId is parameterized per profile, but the
+smali class package must match IconPackBuilder's activity FQN string. Signing uses
+`renkinpack.keystore` in filesDir. Each launcher activity of a package gets its own drawable
+file name (a package with several activities must not overwrite one icon with the other).
+Packs identify apps by `ComponentInfo` in appfilter.xml — never by name.
 
 ## Testing
 
@@ -101,3 +152,7 @@ each successful build and after "Clear icons".
 - Downscale list icons to their on-screen size (`toSafeBitmapOrNull(px, px)`, never upscale)
   to avoid scroll jank.
 - `LazyColumn`/grid keys must be unique — duplicate keys crash.
+- `ic_launcher_monochrome` PNGs are alpha glyphs (Material You tints alpha only) — don't
+  replace them with opaque images.
+- Composition locals (`LocalToaster`, `LocalMainActivity`) are provided per-activity — a new
+  activity hosting shared composables must provide its own (see WallpaperPreviewActivity).
