@@ -1,136 +1,304 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.runtime.remember
-import androidx.compose.ui.Alignment
-import dev.renkinProject.renkin.data.IconPack
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.Badge
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.BuildConfig
+import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.data.DARK_MODE_DEFAULT
 import dev.renkinProject.renkin.data.DarkModeKey
+import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.getDarkModeLabels
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.setEnumValue
-import androidx.hilt.navigation.compose.hiltViewModel
-import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.util.CrashReporter
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
+/**
+ * Fullscreen settings screen (Mihon-style): a plain top bar with a back arrow and the options
+ * as icon rows grouped under section headers — Appearance / Icon packs / Data / Diagnostics —
+ * with the destructive actions tinted and separated. Replaces the old cramped AlertDialog.
+ */
 @Composable
-fun SettingsDialog(prefs: DataStore<Preferences>, onDismiss: (() -> Unit)) {
-    RenkinAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.settings)) },
-        text = {
-            Column {
-                DarkModeDropdown(prefs)
-                SyncButton()
-                RefreshApplicationListButton()
-                StatsButton()
-                RemoveIconsButton()
-                DeleteIconPackButton()
-                CrashLogsButton()
-                if (BuildConfig.DEBUG) {
-                    ForceCrashButton()
-                }
-                AppVersion()
-            }
-        },
-        confirmButton = {}
-    )
-}
-
-@Composable
-fun DarkModeDropdown(prefs: DataStore<Preferences>) {
-    val scope = rememberCoroutineScope()
-    val selected = prefs.getEnumValue(DarkModeKey, DARK_MODE_DEFAULT)
-    EnumDropdown(
-        labelId = R.string.theme,
-        selected = selected,
-        labels = getDarkModeLabels(),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 4.dp)
-    ) { mode ->
-        scope.launch { prefs.setEnumValue(DarkModeKey, mode) }
-    }
-}
-
-// All settings actions share one full-width shape so the column lines up
-private val settingsButtonModifier: Modifier
-    @Composable get() = Modifier
-        .fillMaxWidth()
-        .padding(horizontal = 8.dp, vertical = 4.dp)
-
-@Composable
-fun SyncButton() {
+fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     val viewModel: MainViewModel = hiltViewModel()
+    val view = LocalView.current
+    val context = getCurrentContext()
 
-    Button(
-        onClick = { viewModel.sync() },
-        shape = FieldShape,
-        modifier = settingsButtonModifier
-    ) {
-        Text(stringResource(R.string.syncPacks))
-    }
-}
-
-@Composable
-fun RefreshApplicationListButton() {
-    val viewModel: MainViewModel = hiltViewModel()
-
-    Button(
-        onClick = { viewModel.refreshApps() },
-        shape = FieldShape,
-        modifier = settingsButtonModifier
-    ) {
-        Text(stringResource(R.string.refreshApplicationList))
-    }
-}
-
-/** Opens the icon-pack usage stats modal. */
-@Composable
-fun StatsButton() {
     var showStats by rememberSaveable { mutableStateOf(false) }
+    var showCrashLogs by rememberSaveable { mutableStateOf(false) }
+    var showAbout by rememberSaveable { mutableStateOf(false) }
+    var confirmClearIcons by rememberSaveable { mutableStateOf(false) }
 
-    Button(
-        onClick = { showStats = true },
-        shape = FieldShape,
-        modifier = settingsButtonModifier
+    // Badge on the Crash logs row; reloaded when returning from the crash list (deletes there).
+    val crashCount by produceState(0, showCrashLogs) {
+        if (!showCrashLogs) value = withContext(Dispatchers.Default) { CrashReporter.list(context).size }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
-        Text(stringResource(R.string.statsButton))
+        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
+                topBar = {
+                    TopAppBar(
+                        title = { Text(stringResource(R.string.settings)) },
+                        navigationIcon = {
+                            IconButton(onClick = onDismiss) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.close))
+                            }
+                        },
+                        colors = TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background,
+                            titleContentColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                }
+            ) { innerPadding ->
+                Column(
+                    Modifier
+                        .padding(innerPadding)
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp)
+                ) {
+                    SettingsSectionHeader(stringResource(R.string.settingsAppearance))
+                    ThemeRow(prefs)
+
+                    SettingsSectionHeader(stringResource(R.string.settingsIconPacks))
+                    SettingsRow(Icons.Filled.Sync, stringResource(R.string.syncPacks)) {
+                        viewModel.sync()
+                    }
+                    SettingsRow(Icons.Filled.Apps, stringResource(R.string.refreshApplicationList)) {
+                        viewModel.refreshApps()
+                    }
+                    SettingsRow(Icons.Filled.BarChart, stringResource(R.string.statsButton)) {
+                        showStats = true
+                    }
+
+                    SettingsSectionHeader(stringResource(R.string.settingsData), color = MaterialTheme.colorScheme.error)
+                    SettingsRow(Icons.Filled.DeleteSweep, stringResource(R.string.clearIcons)) {
+                        confirmClearIcons = true
+                    }
+                    SettingsRow(
+                        Icons.Filled.Delete,
+                        stringResource(R.string.deleteIconPack),
+                        tint = MaterialTheme.colorScheme.error
+                    ) {
+                        view.performConfirmHaptic()
+                        viewModel.deleteIconPack()
+                    }
+
+                    SettingsSectionHeader(stringResource(R.string.settingsDiagnostics))
+                    SettingsRow(
+                        Icons.Filled.BugReport,
+                        stringResource(R.string.crashLogs),
+                        trailing = {
+                            if (crashCount > 0) {
+                                Badge { Text(crashCount.toString()) }
+                            }
+                        }
+                    ) {
+                        showCrashLogs = true
+                    }
+                    if (BuildConfig.DEBUG) {
+                        SettingsRow(
+                            Icons.Filled.Warning,
+                            stringResource(R.string.forceCrash),
+                            tint = MaterialTheme.colorScheme.error
+                        ) {
+                            throw RuntimeException("Forced crash for testing")
+                        }
+                    }
+
+                    // Footer: version on the left, About opening the info dialog on the right.
+                    HorizontalDivider(Modifier.padding(top = 16.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.version, BuildConfig.VERSION_NAME),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { showAbout = true }) {
+                            Text(stringResource(R.string.aboutTitle))
+                        }
+                    }
+                }
+            }
+        }
     }
 
     if (showStats) {
         PackUsageDialog(onDismiss = { showStats = false })
+    }
+    if (showCrashLogs) {
+        CrashLogsScreen { showCrashLogs = false }
+    }
+    if (showAbout) {
+        InfoDialog { showAbout = false }
+    }
+    if (confirmClearIcons) {
+        ConfirmDialog(
+            title = stringResource(R.string.clearIconsTitle),
+            text = stringResource(R.string.clearIconsText),
+            onConfirm = {
+                confirmClearIcons = false
+                viewModel.clearIcons()
+            },
+            onDismiss = { confirmClearIcons = false }
+        )
+    }
+}
+
+/** Muted section label above a group of settings rows. */
+@Composable
+private fun SettingsSectionHeader(text: String, color: Color = MaterialTheme.colorScheme.primary) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelMedium,
+        fontWeight = FontWeight.SemiBold,
+        color = color,
+        modifier = Modifier.padding(top = 16.dp, bottom = 4.dp)
+    )
+}
+
+/** One tappable settings row: leading icon, label, optional trailing content (e.g. a badge). */
+@Composable
+private fun SettingsRow(
+    icon: ImageVector,
+    label: String,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    trailing: (@Composable () -> Unit)? = null,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.width(16.dp))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = if (tint == MaterialTheme.colorScheme.error) tint else MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        trailing?.invoke()
+    }
+}
+
+/** The theme picker row: current value on the right, options in a dropdown. */
+@Composable
+private fun ThemeRow(prefs: DataStore<Preferences>) {
+    val scope = rememberCoroutineScope()
+    val selected = prefs.getEnumValue(DarkModeKey, DARK_MODE_DEFAULT)
+    val labels = getDarkModeLabels()
+    var open by remember { mutableStateOf(false) }
+
+    Box {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { open = true }
+                .padding(vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                Icons.Filled.DarkMode,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(Modifier.width(16.dp))
+            Text(
+                text = stringResource(R.string.theme),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = labels[selected] ?: "",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            labels.forEach { (mode, label) ->
+                CheckableDropdownItem(label, checked = mode == selected) {
+                    open = false
+                    scope.launch { prefs.setEnumValue(DarkModeKey, mode) }
+                }
+            }
+        }
     }
 }
 
@@ -196,108 +364,4 @@ private fun PackUsageDialog(onDismiss: () -> Unit) {
             }
         }
     )
-}
-
-@Composable
-fun DeleteIconPackButton() {
-    val viewModel: MainViewModel = hiltViewModel()
-    val view = LocalView.current
-
-    // Destructive action — tonal/error styling sets it apart from the blue actions
-    FilledTonalButton(
-        onClick = {
-            view.performConfirmHaptic()
-            viewModel.deleteIconPack()
-        },
-        shape = FieldShape,
-        colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-            contentColor = MaterialTheme.colorScheme.onErrorContainer
-        ),
-        modifier = settingsButtonModifier
-    ) {
-        Text(stringResource(R.string.deleteIconPack))
-    }
-}
-
-@Composable
-fun RemoveIconsButton() {
-    val viewModel: MainViewModel = hiltViewModel()
-    val view = LocalView.current
-    var confirm by rememberSaveable { mutableStateOf(false) }
-
-    // Destructive action — tonal/error styling sets it apart from the blue actions
-    FilledTonalButton(
-        onClick = { confirm = true },
-        shape = FieldShape,
-        colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-            contentColor = MaterialTheme.colorScheme.onErrorContainer
-        ),
-        modifier = settingsButtonModifier
-    ) {
-        Text(stringResource(R.string.clearIcons))
-    }
-
-    if (confirm) {
-        ConfirmDialog(
-            title = stringResource(R.string.clearIconsTitle),
-            text = stringResource(R.string.clearIconsText),
-            onConfirm = {
-                confirm = false
-                viewModel.clearIcons()
-            },
-            onDismiss = { confirm = false }
-        )
-    }
-}
-
-
-@Composable
-fun CrashLogsButton() {
-    var open by rememberSaveable { mutableStateOf(false) }
-
-    Button(
-        onClick = { open = true },
-        shape = FieldShape,
-        modifier = settingsButtonModifier
-    ) {
-        Text(stringResource(R.string.crashLogs))
-    }
-
-    if (open) {
-        CrashLogsScreen { open = false }
-    }
-}
-
-/** Debug-only: throws to verify the crash-capture + report-on-next-launch flow. */
-@Composable
-private fun ForceCrashButton() {
-    FilledTonalButton(
-        onClick = { throw RuntimeException("Forced crash for testing") },
-        shape = FieldShape,
-        colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = MaterialTheme.colorScheme.errorContainer,
-            contentColor = MaterialTheme.colorScheme.onErrorContainer
-        ),
-        modifier = settingsButtonModifier
-    ) {
-        Text(stringResource(R.string.forceCrash))
-    }
-}
-
-@Composable
-fun AppVersion() {
-    HorizontalDivider(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 4.dp), thickness = Dp.Hairline, color = MaterialTheme.colorScheme.outline
-    )
-    Row(modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End) {
-        Text(
-            text = stringResource(R.string.version, BuildConfig.VERSION_NAME),
-            fontSize = 12.sp
-        )
-    }
 }
