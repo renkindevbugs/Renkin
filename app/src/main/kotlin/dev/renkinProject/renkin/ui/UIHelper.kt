@@ -25,6 +25,19 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.rememberTooltipState
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.PopupPositionProvider
+import dev.renkinProject.renkin.ui.theme.InnerShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -374,5 +387,60 @@ fun ToastHost(toaster: Toaster) {
         toaster.events.collect { message ->
             Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
+    }
+}
+/**
+ * Position provider for tooltips that CLAMPS the popup into the window horizontally — the
+ * stock M3 plain-tooltip provider centres over the anchor without clamping, so a tooltip on a
+ * badge near the screen edge runs off screen. Vertically it prefers above the anchor and
+ * flips below when there is no room.
+ */
+@Composable
+private fun rememberClampedTooltipPositionProvider(): PopupPositionProvider {
+    val spacingPx = with(LocalDensity.current) { 6.dp.roundToPx() }
+    return remember(spacingPx) {
+        object : PopupPositionProvider {
+            override fun calculatePosition(
+                anchorBounds: IntRect,
+                windowSize: IntSize,
+                layoutDirection: LayoutDirection,
+                popupContentSize: IntSize
+            ): IntOffset {
+                val x = (anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2)
+                    .coerceIn(0, (windowSize.width - popupContentSize.width).coerceAtLeast(0))
+                var y = anchorBounds.top - popupContentSize.height - spacingPx
+                if (y < 0) y = anchorBounds.bottom + spacingPx
+                return IntOffset(x, y)
+            }
+        }
+    }
+}
+
+/**
+ * The app-wide tooltip: long-press (or hover) the [content] anchor to show [text]. Stays inside
+ * the window (see [rememberClampedTooltipPositionProvider]) and wraps long text into a rounded,
+ * width-capped bubble instead of one clipped line.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun RenkinTooltipBox(text: String, modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    TooltipBox(
+        positionProvider = rememberClampedTooltipPositionProvider(),
+        tooltip = {
+            PlainTooltip(shape = InnerShape) {
+                Text(
+                    text = text,
+                    style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .widthIn(max = 220.dp)
+                        .padding(horizontal = 4.dp, vertical = 4.dp)
+                )
+            }
+        },
+        state = rememberTooltipState(),
+        modifier = modifier
+    ) {
+        content()
     }
 }

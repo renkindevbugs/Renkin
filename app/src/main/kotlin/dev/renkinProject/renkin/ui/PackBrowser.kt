@@ -372,6 +372,8 @@ private fun PackIconItem(
             .size(size)
             .padding(4.dp)
     ) {
+        // Long-pressing the icon shows the drawable name the pack's author gave it.
+        RenkinTooltipBox(item.drawableName) {
         Image(
             bitmap = item.preview,
             contentDescription = null,
@@ -387,6 +389,7 @@ private fun PackIconItem(
                 }
                 .tappableIcon(onSelect)
         )
+        }
         if (isCalendarGroup) {
             BadgeTooltip(stringResource(R.string.calendarGroupTooltip), Modifier.align(Alignment.TopEnd)) {
                 Box(
