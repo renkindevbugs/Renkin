@@ -175,7 +175,9 @@ class IconPackBuilder(
         var doneIcons = 0
         for (app in apps) {
             if (app.createdIcon != null) {
-                progressMethod(doneIcons++, totalIcons)
+                // Pre-increment so the bar reaches total/total on the last icon (post-increment
+                // topped out one short and never showed completion).
+                progressMethod(++doneIcons, totalIcons)
                 val appFileName = appFileNames.getValue(app.key)
 
                 val exportAsAdaptive = themed || app.createdIcon.isAdaptiveIcon()
