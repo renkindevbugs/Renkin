@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -286,7 +287,7 @@ private fun WatchRuleList(
                     }
                 }
             }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider()
 
             // Only meaningful while something is actively watched — hide it otherwise.
             if (active.isNotEmpty()) {
@@ -305,8 +306,12 @@ private fun WatchRuleList(
                 // dialog draws edge-to-edge with decorFitsSystemWindows = false) + room for
                 // the FAB, so the last rule's Edit/Delete aren't hidden behind it.
                 val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                val rulesListState = rememberLazyListState()
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    state = rulesListState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .drawVerticalScrollbar(rulesListState),
                     contentPadding = PaddingValues(
                         start = 16.dp, end = 16.dp, top = 8.dp, bottom = 88.dp + navBarInset
                     ),

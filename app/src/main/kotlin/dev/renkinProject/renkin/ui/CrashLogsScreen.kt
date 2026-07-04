@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -129,8 +130,12 @@ fun CrashLogsScreen(onDismiss: () -> Unit) {
                 if (entries.isEmpty()) {
                     EmptyState(Modifier.padding(innerPadding))
                 } else {
+                    val logsListState = rememberLazyListState()
                     LazyColumn(
-                        modifier = Modifier.padding(innerPadding),
+                        state = logsListState,
+                        modifier = Modifier
+                            .padding(innerPadding)
+                            .drawVerticalScrollbar(logsListState),
                         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {

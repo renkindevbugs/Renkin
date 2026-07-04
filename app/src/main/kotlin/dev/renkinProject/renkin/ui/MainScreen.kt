@@ -130,7 +130,7 @@ fun AppSortFilterMenu(
                 text = stringResource(R.string.sortByInstallDate),
                 checked = sortOrder == AppSortOrder.INSTALL_DATE
             ) { onSortChange(AppSortOrder.INSTALL_DATE); showSortMenu = false }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            HorizontalDivider()
             CheckableDropdownItem(
                 text = stringResource(R.string.filterAllApps),
                 checked = !filterNoIcon && !filterFallback
@@ -340,11 +340,13 @@ fun ApplicationList(
     val bgColorValue = prefs.getBackgroundColor()
     val themed = prefs.getBooleanValue(ExportThemedKey)
 
-    // Install times do not change while the app runs; refresh only when the list grows/shrinks.
-    // Looked up off the main thread via the view model — until they arrive, INSTALL_DATE sort
-    // just shows the default order.
-    val installTimes by produceState(emptyMap<String, Long>(), applications.size) {
-        value = viewModel.installTimes(applications.map { it.packageName })
+    // Install times refresh whenever the set of packages changes — keying on size alone missed
+    // a reinstall or list refresh that swapped apps without changing the count. Looked up off
+    // the main thread via the view model — until they arrive, INSTALL_DATE sort just shows the
+    // default order.
+    val packageNames = applications.map { it.packageName }
+    val installTimes by produceState(emptyMap<String, Long>(), packageNames) {
+        value = viewModel.installTimes(packageNames)
     }
 
     // Keep the original index — ApplicationItem edits the app list by position (via the VM).
@@ -377,6 +379,7 @@ fun ApplicationList(
 
     LazyColumn(
         state = listState,
+        modifier = Modifier.drawVerticalScrollbar(listState),
         contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {

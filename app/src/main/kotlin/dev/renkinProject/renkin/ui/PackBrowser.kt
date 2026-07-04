@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -162,12 +161,10 @@ fun PackIconsRow(
                 .height(80.dp),
             contentAlignment = Alignment.Center
         ) {
-            LinearWavyProgressIndicator(
-                modifier = Modifier
+            WavyLoadingBar(
+                Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    .padding(horizontal = 16.dp)
             )
         }
     } else if (iconPairs.isEmpty()) {
@@ -289,12 +286,10 @@ fun PackDetailGrid(
             }
         }
         if (isLoading) {
-            LinearWavyProgressIndicator(
-                modifier = Modifier
+            WavyLoadingBar(
+                Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                color = MaterialTheme.colorScheme.primary,
-                trackColor = MaterialTheme.colorScheme.surfaceVariant
+                    .padding(horizontal = 16.dp)
             )
         }
         if (!isLoading && iconPairs.isEmpty()) {

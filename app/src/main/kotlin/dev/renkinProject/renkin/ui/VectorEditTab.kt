@@ -446,7 +446,9 @@ fun EditPathDialog(path: String, onDismiss: () -> Unit, onChange: (newPath: Stri
                     }
                 } catch (e: IllegalArgumentException) {
                     badFormatting = true
-                    formatError = e.localizedMessage!!
+                    // localizedMessage is nullable — a message-less exception must not crash
+                    // the error reporting itself.
+                    formatError = e.localizedMessage ?: e.toString()
                 }
 
                 if (!badFormatting) {

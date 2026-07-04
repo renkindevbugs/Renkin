@@ -473,7 +473,7 @@ fun OptionsDialog(
                 // The Create tab draws its own divider under the search bar;
                 // the other tabs get one right below the header
                 if (selectedTab != 0) {
-                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                    HorizontalDivider()
                 }
 
                 // Calendar card: visible only on Create tab with Icon Pack source when
@@ -601,7 +601,7 @@ fun OptionsDialog(
                         draft.origin = IconOrigin.CREATE
                     }
                 }
-                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                HorizontalDivider()
 
                 OptionsBottomBar(
                     selectedTab = selectedTab,

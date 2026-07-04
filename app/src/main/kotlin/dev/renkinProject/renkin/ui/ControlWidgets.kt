@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
@@ -165,4 +166,17 @@ fun LabeledSlider(
     } else {
         Slider(value = value, onValueChange = onValueChange, valueRange = valueRange)
     }
+}
+
+/**
+ * The shared indeterminate wavy loading bar (primary over the surfaceVariant track) used while
+ * browsers and grids resolve their content — callers only position it.
+ */
+@Composable
+fun WavyLoadingBar(modifier: Modifier = Modifier) {
+    LinearWavyProgressIndicator(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.primary,
+        trackColor = MaterialTheme.colorScheme.surfaceVariant
+    )
 }
