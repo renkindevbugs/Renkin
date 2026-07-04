@@ -37,7 +37,9 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.pullToRefresh
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
@@ -276,7 +278,23 @@ fun MainColumn(iconPacks: List<IconPack>) {
         topBar = { TitleBar(scrollBehavior) },
         floatingActionButton = { BuildPackFab(isInRefresh, expanded = listState.isScrollingUp()) }
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding)) {
+        // Pull down to reload the app list (same as Settings > Refresh application list).
+        // Armed only once the large top bar is fully expanded — otherwise the pull gesture
+        // must first re-expand the bar, and only the next pull starts the refresh (the box
+        // would otherwise steal the overscroll from the bar and trigger mid-way down).
+        val pullState = rememberPullToRefreshState()
+        val topBarSettled by remember { derivedStateOf { scrollBehavior.state.collapsedFraction < 0.01f } }
+        Box(
+            modifier = Modifier
+                .padding(innerPadding)
+                .pullToRefresh(
+                    isRefreshing = viewModel.appsRefreshing,
+                    state = pullState,
+                    enabled = topBarSettled,
+                    onRefresh = { viewModel.refreshApps() }
+                )
+        ) {
+        Column {
             SearchBar(
                 containerColor = headerColor,
                 sortOrder = sortOrder,
@@ -293,22 +311,20 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 },
                 onSearch = { packageFilter = it }
             )
-            // Pull down to reload the app list (same as Settings > Refresh application list).
-            PullToRefreshBox(
-                isRefreshing = viewModel.appsRefreshing,
-                onRefresh = { viewModel.refreshApps() },
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-            ) {
-                ApplicationList(
-                    iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, listState,
-                    onShowAllApps = {
-                        filterFallback = false
-                        scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
-                    }
-                )
-            }
+            ApplicationList(
+                iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, listState,
+                onShowAllApps = {
+                    filterFallback = false
+                    scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
+                }
+            )
+        }
+        // Drawn over the search bar so the spinner appears at the very top of the content.
+        PullToRefreshDefaults.Indicator(
+            state = pullState,
+            isRefreshing = viewModel.appsRefreshing,
+            modifier = Modifier.align(Alignment.TopCenter)
+        )
         }
     }
 
