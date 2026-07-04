@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.items
@@ -273,28 +274,25 @@ fun MainColumn(iconPacks: List<IconPack>) {
         label = "searchBarBackground"
     )
 
+    // Pull down to reload the app list (same as Settings > Refresh application list). The pull
+    // handler sits OUTSIDE the scaffold, above the top bar's scroll behavior in the nested-scroll
+    // chain: leftover downward scroll re-expands the collapsed bar first and only then feeds the
+    // pull indicator, while reverse dragging shrinks the indicator immediately (an enabled-flag
+    // gate froze it mid-gesture). The spinner drops in from the very top of the screen.
+    val pullState = rememberPullToRefreshState()
+    Box(
+        Modifier.pullToRefresh(
+            isRefreshing = viewModel.appsRefreshing,
+            state = pullState,
+            onRefresh = { viewModel.refreshApps() }
+        )
+    ) {
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = { TitleBar(scrollBehavior) },
         floatingActionButton = { BuildPackFab(isInRefresh, expanded = listState.isScrollingUp()) }
     ) { innerPadding ->
-        // Pull down to reload the app list (same as Settings > Refresh application list).
-        // Armed only once the large top bar is fully expanded — otherwise the pull gesture
-        // must first re-expand the bar, and only the next pull starts the refresh (the box
-        // would otherwise steal the overscroll from the bar and trigger mid-way down).
-        val pullState = rememberPullToRefreshState()
-        val topBarSettled by remember { derivedStateOf { scrollBehavior.state.collapsedFraction < 0.01f } }
-        Box(
-            modifier = Modifier
-                .padding(innerPadding)
-                .pullToRefresh(
-                    isRefreshing = viewModel.appsRefreshing,
-                    state = pullState,
-                    enabled = topBarSettled,
-                    onRefresh = { viewModel.refreshApps() }
-                )
-        ) {
-        Column {
+        Column(Modifier.padding(innerPadding)) {
             SearchBar(
                 containerColor = headerColor,
                 sortOrder = sortOrder,
@@ -319,13 +317,14 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 }
             )
         }
-        // Drawn over the search bar so the spinner appears at the very top of the content.
-        PullToRefreshDefaults.Indicator(
-            state = pullState,
-            isRefreshing = viewModel.appsRefreshing,
-            modifier = Modifier.align(Alignment.TopCenter)
-        )
-        }
+    }
+    PullToRefreshDefaults.Indicator(
+        state = pullState,
+        isRefreshing = viewModel.appsRefreshing,
+        modifier = Modifier
+            .align(Alignment.TopCenter)
+            .statusBarsPadding()
+    )
     }
 
     // Opened from an icon-watch notification → show the apply modal for that suggestion
