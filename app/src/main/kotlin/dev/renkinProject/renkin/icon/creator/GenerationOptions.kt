@@ -62,6 +62,9 @@ data class GenerationOptions(
     // Colour-distance tolerance (0..1) for the Remove background modifier — how far a pixel's colour
     // can be from the border background colour and still be erased.
     val bgRemovalTolerance: Float = 0.1f,
+    // Colorize as a flat fill (SRC_IN) rather than the default multiply blend, so the picked colour
+    // replaces the icon's own colours instead of mixing with them. Per-icon Modifier-tab option.
+    val colorizeFlat: Boolean = false,
     // Which pack's fallback styling to give apps neither pack themes (NONE = leave them raw).
     val fallbackSource: FallbackSource = FallbackSource.NONE
 ) {

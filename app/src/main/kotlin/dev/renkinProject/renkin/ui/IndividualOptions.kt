@@ -340,7 +340,8 @@ fun OptionsDialog(
         iconScale = adjustments.iconScale,
         bgRemovalTolerance = adjustments.bgRemovalTolerance,
         iconOffsetX = adjustments.iconOffsetX,
-        iconOffsetY = adjustments.iconOffsetY
+        iconOffsetY = adjustments.iconOffsetY,
+        colorizeFlat = adjustments.colorizeFlat
     )
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
@@ -571,6 +572,7 @@ fun OptionsDialog(
                                 useMonochrome = useMonochrome,
                                 adjustments = adjustments,
                                 centerPreview = remember(draft.iconToConfirm) { draft.iconToConfirm?.toBitmap() },
+                                sampleBitmap = heroBitmap,
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },

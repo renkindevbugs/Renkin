@@ -194,6 +194,9 @@
     <string name="done">Done</string>
     <string name="removeBackgroundTolerance">Tolerance</string>
     <string name="removeBackgroundHint">Erases the flat background colour around the icon, working inward from the edges. Raise the tolerance for backgrounds with a slight gradient.</string>
+    <string name="colorizeSolid">Solid fill</string>
+    <string name="colorizeSolidHint">Replace the icon\'s own colours with the picked one instead of blending, so the colour lands exactly.</string>
+    <string name="eyedropperHint">Or pick a colour straight from the app\'s icon — tap or drag on it.</string>
     <string name="optionsHint">These options apply to all apps at once. After changing them, tap the refresh button in the top bar to regenerate the icons.</string>
     <string name="completionProgress">%1$d / %2$d apps have a custom icon</string>
     <string name="selectIconFirst">Select an icon before opening the modifier</string>

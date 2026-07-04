@@ -77,6 +77,11 @@ class IconGenerator(
     private val adaptiveIconScale = 1.5f // 108dp / 72dp
     private val appMan by lazy { ApplicationManager(ctx) }
 
+    // Colorize blend for bitmap icons: SRC_IN replaces the icon's colours with the picked one (flat
+    // fill), MULTIPLY tints them (mixes with the original). Vectors always recolour flat regardless.
+    private val colorizeMode
+        get() = if (options.colorizeFlat) PorterDuff.Mode.SRC_IN else PorterDuff.Mode.MULTIPLY
+
     fun generateIcon(application: PackageInfoStruct,
                      onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String) -> Unit) {
         generateIcons(listOf(application)) { app, icon, _, source -> onUpdate(app, icon, source) }
@@ -246,7 +251,7 @@ class IconGenerator(
 
         // Non-vector icons rasterise, then run through the shared modifier dispatch
         // (NONE is already handled by the early return at the top of this method).
-        return generateImage(icon.toBitmap(), null, imageEdit, PorterDuff.Mode.MULTIPLY)
+        return generateImage(icon.toBitmap(), null, imageEdit, colorizeMode)
     }
 
     fun colorizeFromIconPack(iconPackName: String, icon: ResourceDrawable): IconPackDrawable? {
@@ -254,7 +259,7 @@ class IconGenerator(
         val parsedIcon = exportIconPackXML(iconPackName, icon)
 
         return if (options.primaryImageEdit == ImageEdit.COLORIZE)
-            colorizeImage(bitmapIcon, parsedIcon, PorterDuff.Mode.MULTIPLY)
+            colorizeImage(bitmapIcon, parsedIcon, colorizeMode)
         else
             getDefaultIcon(bitmapIcon, parsedIcon)
     }
@@ -286,7 +291,7 @@ class IconGenerator(
         val bitmapIcon = getIconBitmap(resIcon.drawable) ?: return null
         val parsedIcon = exportIconPackXML(iconPack.iconPackName, resIcon)
 
-        return generateImage(bitmapIcon, parsedIcon, imageEdit, PorterDuff.Mode.MULTIPLY)
+        return generateImage(bitmapIcon, parsedIcon, imageEdit, colorizeMode)
     }
 
     private fun generateImageFromApplication(
@@ -303,7 +308,7 @@ class IconGenerator(
         val bitmapIcon = getAppIconBitmap(application) ?: return null
         val parsedIcon = parseApplicationIcon(application)
 
-        return generateImage(bitmapIcon, parsedIcon, imageEdit, PorterDuff.Mode.MULTIPLY)
+        return generateImage(bitmapIcon, parsedIcon, imageEdit, colorizeMode)
     }
 
     /** True when [application]'s launcher icon ships a Material You `<monochrome>` layer (API 33+). */
