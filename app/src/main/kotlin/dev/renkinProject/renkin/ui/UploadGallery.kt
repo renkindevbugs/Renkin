@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.CircularProgressIndicator
@@ -375,11 +376,18 @@ fun UploadColumn(app: PackageInfoStruct,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.weight(1f)
                         )
+                        val allSelected = savedImages.isNotEmpty() && markedForDelete.size == savedImages.size
                         IconButton(onClick = {
-                            val all = savedImages.map { it.absolutePath }.toSet()
-                            markedForDelete = if (markedForDelete.size == all.size) emptySet() else all
+                            markedForDelete = if (allSelected) emptySet()
+                                else savedImages.map { it.absolutePath }.toSet()
                         }) {
-                            Icon(Icons.Filled.SelectAll, stringResource(R.string.selectAll))
+                            // The icon mirrors what the tap will do: select all vs deselect all
+                            // (the crossed-out variant), like other gallery apps.
+                            if (allSelected) {
+                                Icon(Icons.Filled.Deselect, stringResource(R.string.deselectAll))
+                            } else {
+                                Icon(Icons.Filled.SelectAll, stringResource(R.string.selectAll))
+                            }
                         }
                     }
                 }
