@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.items
@@ -38,9 +37,6 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.PlainTooltip
-import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
-import androidx.compose.material3.pulltorefresh.pullToRefresh
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
@@ -274,19 +270,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
         label = "searchBarBackground"
     )
 
-    // Pull down to reload the app list (same as Settings > Refresh application list). The pull
-    // handler sits OUTSIDE the scaffold, above the top bar's scroll behavior in the nested-scroll
-    // chain: leftover downward scroll re-expands the collapsed bar first and only then feeds the
-    // pull indicator, while reverse dragging shrinks the indicator immediately (an enabled-flag
-    // gate froze it mid-gesture). The spinner drops in from the very top of the screen.
-    val pullState = rememberPullToRefreshState()
-    Box(
-        Modifier.pullToRefresh(
-            isRefreshing = viewModel.appsRefreshing,
-            state = pullState,
-            onRefresh = { viewModel.refreshApps() }
-        )
-    ) {
+    // No pull-to-refresh here on purpose: its nested-scroll handler interfered with the
+    // collapsing top bar (scroll glitches, freezes) — the app list reloads from Settings.
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = { TitleBar(scrollBehavior) },
@@ -317,14 +302,6 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 }
             )
         }
-    }
-    PullToRefreshDefaults.Indicator(
-        state = pullState,
-        isRefreshing = viewModel.appsRefreshing,
-        modifier = Modifier
-            .align(Alignment.TopCenter)
-            .statusBarsPadding()
-    )
     }
 
     // Opened from an icon-watch notification → show the apply modal for that suggestion
