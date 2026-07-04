@@ -25,6 +25,9 @@ interface WatchDao {
     @Query("SELECT * FROM watch_rule WHERE id = :ruleId")
     suspend fun getRule(ruleId: Long): WatchRule?
 
+    @Query("SELECT id FROM watch_rule WHERE profileId = :profileId")
+    suspend fun ruleIdsForProfile(profileId: Long): List<Long>
+
     @Transaction
     @Query("SELECT * FROM watch_rule WHERE profileId = :profileId ORDER BY completed ASC, createdAt DESC")
     fun observeRules(profileId: Long): Flow<List<RuleWithDetails>>

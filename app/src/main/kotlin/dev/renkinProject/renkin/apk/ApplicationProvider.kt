@@ -10,6 +10,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
+import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.CalendarIconsKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.ExportThemedKey
@@ -341,7 +342,13 @@ class ApplicationProvider(private val context: Context) {
         if (id == DEFAULT_PROFILE_ID) return
         if (id == activeProfileId) switchProfile(DEFAULT_PROFILE_ID)
         packRepo.deleteProfile(id)
+        // Drop the profile's watch rules too, or the periodic worker keeps checking them and
+        // fires notifications that deep-link into a profile that no longer exists.
+        WatchRepository(context).deleteRulesForProfile(id)
     }
+
+    /** True while [id] still names an existing profile — deleted-profile deep links check this. */
+    suspend fun profileExists(id: Long): Boolean = packRepo.profile(id) != null
 
     /**
      * Switches the active profile: snapshots the leaving profile's generation preferences,

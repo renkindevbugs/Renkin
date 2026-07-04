@@ -300,6 +300,21 @@ fun MainColumn(iconPacks: List<IconPack>) {
     if (pendingSuggestion != null) {
         WatchApplyModal(pendingSuggestion) { viewModel.clearPendingWatchSuggestion() }
     }
+
+    // The notification pointed at a profile that no longer exists — explain instead of
+    // silently doing nothing (or worse, applying the icon to the wrong profile).
+    if (viewModel.watchProfileMissing) {
+        RenkinAlertDialog(
+            onDismissRequest = { viewModel.clearWatchProfileMissing() },
+            title = { Text(stringResource(R.string.watchProfileGoneTitle)) },
+            text = { Text(stringResource(R.string.watchProfileGoneText)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.clearWatchProfileMissing() }) {
+                    Text(stringResource(R.string.ok))
+                }
+            }
+        )
+    }
 }
 
 /**

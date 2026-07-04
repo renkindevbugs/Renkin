@@ -138,6 +138,13 @@ class MainViewModel @Inject constructor(
 
     fun setPendingWatchSuggestion(id: Long) { pendingWatchSuggestionId = id }
 
+    // True when a watch notification pointed at a profile that has since been deleted — the
+    // home screen explains why the suggestion can't be applied instead of silently ignoring it.
+    var watchProfileMissing by mutableStateOf(false)
+        private set
+
+    fun clearWatchProfileMissing() { watchProfileMissing = false }
+
     /**
      * Opens a watch suggestion from its notification: switches to the profile that owns it
      * first (auto-saving the active profile's unsaved work — the user opted into that), then
@@ -150,6 +157,13 @@ class MainViewModel @Inject constructor(
                 while (!appProvider.startupComplete) delay(50)
             }
             if (profileId > 0 && profileId != appProvider.activeProfileId && appProvider.startupComplete) {
+                // The profile may have been deleted since the notification fired. Dropping the
+                // suggestion (instead of showing it) stops it from being applied to whatever
+                // profile happens to be active; the dialog explains why nothing opened.
+                if (!appProvider.profileExists(profileId)) {
+                    watchProfileMissing = true
+                    return@launch
+                }
                 performSwitch(profileId, saveFirst = hasUnsavedChanges())
             }
             pendingWatchSuggestionId = suggestionId
