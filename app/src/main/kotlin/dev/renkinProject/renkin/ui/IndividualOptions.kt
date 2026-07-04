@@ -485,10 +485,10 @@ fun OptionsDialog(
                         packName = calendarPackLabel,
                         calendarPrefix = calendarPrefix ?: "",
                         calendarEnabled = calendarEnabled,
-                        onToggle = { enabled ->
-                            calendarEnabled = enabled
-                            viewModel.setCalendarEnabled(app, enabled, calendarPrefix, calendarPackName)
-                        }
+                        // Local state only: the calendar choice commits together with the icon
+                        // on Apply (the applyIcon overload). Persisting it here leaked the
+                        // prefix of a browsed-but-never-confirmed icon into the stored app.
+                        onToggle = { enabled -> calendarEnabled = enabled }
                     )
                 }
                 }
@@ -534,10 +534,10 @@ fun OptionsDialog(
                                     val newPrefix = drawableName.calendarPrefixOrNull()
                                     calendarPrefix = newPrefix
                                     calendarPackName = if (newPrefix != null) pack.packageName else null
-                                    // If calendar was enabled but the new icon can't rotate, disable it.
+                                    // If calendar was enabled but the new icon can't rotate, disable it
+                                    // (locally — like the toggle, this commits on Apply).
                                     if (newPrefix == null && calendarEnabled) {
                                         calendarEnabled = false
-                                        viewModel.setCalendarEnabled(app, false, null, null)
                                     }
                                 },
                                 onTextTypeChange = { textType = it; draft.origin = IconOrigin.CREATE },

@@ -381,15 +381,6 @@ class MainViewModel @Inject constructor(
     fun packUsageCounts(): Map<String, Int> = appProvider.packUsageCounts()
 
     /**
-     * Toggles the calendar-day-icons flag for [app]. [calendarPrefix] is the drawable-name
-     * prefix derived from the icon the user selected (e.g. `"google_cal_"`). Committed
-     * immediately (independent of the edit dialog's Confirm).
-     */
-    fun setCalendarEnabled(app: PackageInfoStruct, enabled: Boolean, calendarPrefix: String?, calendarPackName: String?) {
-        appProvider.setCalendar(app, enabled, calendarPrefix, calendarPackName)
-    }
-
-    /**
      * Uninstalls the app's own generated icon pack. Emits a toast event for the outcome
      * (uninstalled / not installed); the system shows its own uninstall confirmation.
      */

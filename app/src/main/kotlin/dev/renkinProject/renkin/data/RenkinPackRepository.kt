@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.data
 
 import android.content.Context
+import androidx.room.withTransaction
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -21,8 +22,11 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         dao.getAll(profileId)
     }
 
-    /** Replaces the stored set of [profileId] in one shot. */
-    suspend fun replaceAll(profileId: Long, apps: List<DbApplication>) = withContext(Dispatchers.Default) {
+    /**
+     * Replaces the stored set of [profileId] in one shot — atomically: a crash or error
+     * between the delete and the insert must not leave the profile empty.
+     */
+    suspend fun replaceAll(profileId: Long, apps: List<DbApplication>) = db.withTransaction {
         dao.deleteAllApplications(profileId)
         dao.insertAll(apps)
     }

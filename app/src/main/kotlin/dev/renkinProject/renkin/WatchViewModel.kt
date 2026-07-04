@@ -119,8 +119,12 @@ class WatchViewModel @Inject constructor(
         if (isChecking) return
         viewModelScope.launch {
             isChecking = true
-            val fired = WatchChecker(getApplication()).runCheck()
-            isChecking = false
+            // finally keeps the spinner from sticking when the checker throws.
+            val fired = try {
+                WatchChecker(getApplication()).runCheck()
+            } finally {
+                isChecking = false
+            }
             // A manual check counts as a check: record it and re-enqueue the periodic
             // safety-net so its next run (and the "Next check" label) move out by a full
             // interval from now.

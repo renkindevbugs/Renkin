@@ -113,7 +113,9 @@ fun Preferences.snapshotProfilePrefs(): String {
  * ones removed — a fresh profile starts from the defaults.
  */
 suspend fun DataStore<Preferences>.restoreProfilePrefs(snapshot: String) {
-    val json = if (snapshot.isEmpty()) org.json.JSONObject() else org.json.JSONObject(snapshot)
+    // A corrupt/unparsable snapshot must not crash the profile switch — the profile then
+    // just starts from the defaults, same as an empty snapshot.
+    val json = runCatching { org.json.JSONObject(snapshot) }.getOrDefault(org.json.JSONObject())
     edit { prefs ->
         for (key in ProfilePrefKeys) {
             if (json.has(key.name)) {
