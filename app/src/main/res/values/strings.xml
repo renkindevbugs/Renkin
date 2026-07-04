@@ -228,6 +228,8 @@
     <string name="crashLogsCleared">All crash logs cleared</string>
     <string name="forceCrash">Force crash (debug)</string>
     <string name="watchDone">Done</string>
+    <string name="watchProfileGoneTitle">Profile no longer exists</string>
+    <string name="watchProfileGoneText">This icon suggestion belonged to a profile that has been deleted, so it can\'t be applied.</string>
     <string name="newIconIn">New icon in</string>
     <string name="watching">Watching</string>
     <string name="allIconPacks">all icon packs</string>
