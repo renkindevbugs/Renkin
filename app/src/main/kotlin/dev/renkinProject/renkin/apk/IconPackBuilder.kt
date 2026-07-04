@@ -8,6 +8,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.annotation.DrawableRes
 import androidx.annotation.RequiresApi
+import androidx.annotation.VisibleForTesting
 import androidx.core.net.toUri
 import app.revanced.library.ApkUtils
 import dev.renkinProject.renkin.R
@@ -76,31 +77,34 @@ class IconPackBuilder(
     companion object {
         /** Base package id of the generated Renkin icon pack (profiles append ".p<id>"). */
         const val PACKAGE_NAME = "dev.renkinProject.renkinpack"
+
+        /**
+         * One drawable file name per app. Normally just the package name, but a package with
+         * several launcher activities (each themable separately) must not reuse it — both entries
+         * would write the same resource name and one icon would silently replace the other in the
+         * built pack. Duplicates get a suffix from their activity class name.
+         *
+         * Pure (depends only on each app's package/activity), so it's unit-tested directly.
+         */
+        @VisibleForTesting
+        internal fun uniqueDrawableFileNames(apps: List<PackageInfoStruct>): Map<String, String> {
+            val names = mutableMapOf<String, String>()
+            val used = mutableSetOf<String>()
+            for (app in apps) {
+                var name = app.getFileName()
+                if (!used.add(name)) {
+                    name += "_" + app.activityName.substringAfterLast('.')
+                        .replace(Regex("[^A-Za-z0-9]"), "").lowercase().ifEmpty { "alt" }
+                    while (!used.add(name)) name += "_alt"
+                }
+                names[app.key] = name
+            }
+            return names
+        }
     }
     private val newInternalVersionCode = 0
     private val frameworkVersion = 34
     private val minSdkVersion = 21
-
-    /**
-     * One drawable file name per app. Normally just the package name, but a package with
-     * several launcher activities (each themable separately) must not reuse it — both entries
-     * would write the same resource name and one icon would silently replace the other in the
-     * built pack. Duplicates get a suffix from their activity class name.
-     */
-    private fun uniqueDrawableFileNames(apps: List<PackageInfoStruct>): Map<String, String> {
-        val names = mutableMapOf<String, String>()
-        val used = mutableSetOf<String>()
-        for (app in apps) {
-            var name = app.getFileName()
-            if (!used.add(name)) {
-                name += "_" + app.activityName.substringAfterLast('.')
-                    .replace(Regex("[^A-Za-z0-9]"), "").lowercase().ifEmpty { "alt" }
-                while (!used.add(name)) name += "_alt"
-            }
-            names[app.key] = name
-        }
-        return names
-    }
 
     fun canBeInstalled(): Boolean {
         val installedVersion = getInstalledVersion()
