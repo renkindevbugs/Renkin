@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.graphics.Paint
+import android.graphics.RectF
 import android.net.Uri
 import dev.renkinProject.renkin.extension.newArgbBitmap
 import androidx.compose.runtime.Composable
@@ -32,8 +33,9 @@ internal fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
     contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, boundsOptions) }
     val decodeOptions = BitmapFactory.Options().apply {
         inSampleSize = 1
-        while (boundsOptions.outWidth / (inSampleSize * 2) >= MAX_IMPORT_SIZE
-            && boundsOptions.outHeight / (inSampleSize * 2) >= MAX_IMPORT_SIZE) {
+        // Cap the LARGEST side: with the textbook both-sides condition a 20000x500 panorama
+        // never downsamples (the short side bails the loop out) and allocates tens of MB.
+        while (max(boundsOptions.outWidth, boundsOptions.outHeight) / (inSampleSize * 2) >= MAX_IMPORT_SIZE) {
             inSampleSize *= 2
         }
     }
@@ -43,9 +45,14 @@ internal fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
     if (bitmap == null) {
         val svg = contentResolver.openInputStream(uri).use { decodeSVGSteam(it) }
 
-        if (svg != null) {
-            if (svg.documentWidth > 0 && svg.documentHeight > 0) {
-                bitmap = newArgbBitmap(svg.documentWidth.toInt(), svg.documentHeight.toInt()) { svg.renderToCanvas(it) }
+        if (svg != null && svg.documentWidth > 0 && svg.documentHeight > 0) {
+            // Cap the raster size too — an SVG can declare arbitrarily huge document
+            // dimensions, and rendering them 1:1 would allocate an equally huge bitmap.
+            val scale = (MAX_IMPORT_SIZE / max(svg.documentWidth, svg.documentHeight)).coerceAtMost(1f)
+            val width = (svg.documentWidth * scale).toInt().coerceAtLeast(1)
+            val height = (svg.documentHeight * scale).toInt().coerceAtLeast(1)
+            bitmap = newArgbBitmap(width, height) {
+                svg.renderToCanvas(it, RectF(0f, 0f, width.toFloat(), height.toFloat()))
             }
         }
     }

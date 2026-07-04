@@ -271,7 +271,9 @@ inline fun <reified T: Enum<T>> DataStore<Preferences>.getEnumValue(
     , default: T
 ): T {
     val ordinal = getPreferenceValue(key, default.ordinal)
-    return enumEntries<T>()[ordinal]
+    // Stored ordinals can outlive the enum (corrupt store, profile snapshot from a build with
+    // more values) — fall back to the default instead of crashing on an out-of-range index.
+    return enumEntries<T>().getOrNull(ordinal) ?: default
 }
 
 suspend inline fun <reified T: Enum<T>> DataStore<Preferences>.setEnumValue(
@@ -286,7 +288,8 @@ inline fun <reified T: Enum<T>> Preferences.getEnumValue(
     , default: T
 ): T {
     val ordinal = this[key] ?: default.ordinal
-    return enumEntries<T>()[ordinal]
+    // Same out-of-range guard as the DataStore variant above.
+    return enumEntries<T>().getOrNull(ordinal) ?: default
 }
 
 //Common
