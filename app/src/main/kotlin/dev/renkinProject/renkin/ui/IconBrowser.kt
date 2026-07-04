@@ -194,7 +194,7 @@ fun CreateTab(
     // Base order per the chosen pack sort; most-used is the default (usage stays the tiebreaker
     // once query matches settle below).
     val distinctPacks = remember(iconPacks, packUsage, packSort, packInstallTimes) {
-        val base = iconPacks.distinctBy { it.packageName }
+        val base = iconPacks
         when (packSort) {
             PackSortOrder.USAGE -> base.sortedByDescending { packUsage[it.packageName] ?: 0 }
             PackSortOrder.NAME -> base.sortedBy { it.applicationName.lowercase() }

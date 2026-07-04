@@ -142,7 +142,7 @@ fun StatsButton() {
 @Composable
 private fun PackUsageDialog(onDismiss: () -> Unit) {
     val viewModel: MainViewModel = hiltViewModel()
-    val packs = viewModel.iconPacks.distinctBy { it.packageName }
+    val packs = viewModel.iconPacks
     val usage = remember { viewModel.packUsageCounts() }
     val max = (usage.values.maxOrNull() ?: 0).coerceAtLeast(1)
 

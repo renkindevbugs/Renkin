@@ -311,7 +311,9 @@ class ApplicationManager(private val ctx: Context) {
             }
         }
 
-        return iconPacks
+        // A pack with several THEMES activities resolves several times — dedupe here at the
+        // source instead of at every UI call site.
+        return iconPacks.distinctBy { it.packageName }
     }
 
     private fun getAppFilterRawElements(xmlParser: XmlPullParser, components: List<String>): List<RawElement> {
