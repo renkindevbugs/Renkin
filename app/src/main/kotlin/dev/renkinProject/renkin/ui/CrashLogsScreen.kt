@@ -61,6 +61,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.DialogShape
@@ -194,7 +195,7 @@ private fun GithubReportLink() {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(FieldShape)
             .clickable(role = Role.Button) { uriHandler.openUri(url) }
             .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.Center,

@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.extension.alphaInt
 import dev.renkinProject.renkin.extension.blueInt
 import dev.renkinProject.renkin.extension.greenInt
@@ -58,11 +59,11 @@ fun ColorButton(caption: String, initialColor: Color, onColorSelected: (Color) -
         modifier = Modifier
             .padding(horizontal = 16.dp, vertical = 6.dp)
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
+            .clip(FieldShape)
             .border(
                 1.dp,
                 MaterialTheme.colorScheme.outline,
-                RoundedCornerShape(16.dp)
+                FieldShape
             )
             .clickable {
                 colorPickerOpen = true

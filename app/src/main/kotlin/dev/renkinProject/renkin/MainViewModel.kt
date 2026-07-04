@@ -414,11 +414,21 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    // True while the app list reload runs — drives the home list's pull-to-refresh spinner.
+    var appsRefreshing by mutableStateOf(false)
+        private set
+
     /** Reloads apps, icon packs and the saved Renkin pack from scratch. */
     fun refreshApps() {
+        if (appsRefreshing) return
         viewModelScope.launch {
-            appProvider.initialize()
-            _toastEvents.trySend(R.string.appListRefreshed)
+            appsRefreshing = true
+            try {
+                appProvider.initialize()
+                _toastEvents.trySend(R.string.appListRefreshed)
+            } finally {
+                appsRefreshing = false
+            }
         }
     }
 

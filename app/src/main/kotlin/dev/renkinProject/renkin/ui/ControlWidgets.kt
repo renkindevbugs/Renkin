@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.ui.theme.CardShape
 
 // Small controls shared across the Modifier tab and the Options screens, so each doesn't carry
@@ -37,8 +38,8 @@ fun SegmentedRow(modifier: Modifier = Modifier, content: @Composable RowScope.()
     Row(
         modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(12.dp)),
+            .clip(InnerShape)
+            .border(0.5.dp, MaterialTheme.colorScheme.outlineVariant, InnerShape),
         content = content
     )
 }

@@ -52,6 +52,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.IconPack
@@ -103,7 +104,7 @@ private val selectedIconBorderColor = AddedGreen
 private fun Modifier.selectedIconBorder(selected: Boolean): Modifier {
     // Animate the width so the frame eases in/out instead of snapping.
     val width by animateDpAsState(if (selected) 2.dp else 0.dp, label = "selectedIconBorder")
-    return if (width > 0.dp) border(width, selectedIconBorderColor, RoundedCornerShape(16.dp)) else this
+    return if (width > 0.dp) border(width, selectedIconBorderColor, FieldShape) else this
 }
 
 @Composable
@@ -381,7 +382,7 @@ private fun PackIconItem(
                     if (isCalendarGroup && !selected && !inSelectedCalendarGroup) m.border(
                         1.5.dp,
                         MaterialTheme.colorScheme.tertiary.copy(alpha = 0.55f),
-                        RoundedCornerShape(16.dp)
+                        FieldShape
                     ) else m
                 }
                 .tappableIcon(onSelect)

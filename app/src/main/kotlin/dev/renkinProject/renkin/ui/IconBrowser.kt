@@ -48,6 +48,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -465,7 +466,7 @@ private fun ApplicationIconVariant(
 private fun ColorRow(label: String, color: Color, onClick: () -> Unit) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(12.dp),
+        shape = InnerShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -505,9 +506,9 @@ private fun SchemeSwatch(
     Box(
         modifier = Modifier
             .size(44.dp)
-            .clip(RoundedCornerShape(12.dp))
+            .clip(InnerShape)
             .background(background)
-            .border(if (selected) 2.dp else 0.5.dp, ring, RoundedCornerShape(12.dp))
+            .border(if (selected) 2.dp else 0.5.dp, ring, InnerShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {

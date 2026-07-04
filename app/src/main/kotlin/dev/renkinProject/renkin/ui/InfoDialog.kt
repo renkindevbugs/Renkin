@@ -35,6 +35,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
+import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.DialogShape
 
@@ -66,7 +67,7 @@ fun InfoDialog(onDismiss: () -> Unit) {
                             contentDescription = null,
                             modifier = Modifier
                                 .size(56.dp)
-                                .clip(RoundedCornerShape(16.dp))
+                                .clip(FieldShape)
                         )
                         Spacer(Modifier.width(16.dp))
                     }

@@ -44,6 +44,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.WatchViewModel
@@ -229,7 +230,7 @@ private fun ComparePreview(
     }
     Surface(
         modifier = Modifier.size(72.dp),
-        shape = RoundedCornerShape(18.dp),
+        shape = CardShape,
         color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Crossfade(targetState = state, label = "comparePreview") { s ->

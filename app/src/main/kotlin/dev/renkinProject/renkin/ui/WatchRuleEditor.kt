@@ -61,6 +61,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.ui.theme.InnerShape
+import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.FieldShape
@@ -146,7 +148,7 @@ internal fun WatchRuleEditor(
                         onSave(selectedApps.toList(), watchAll, selectedPacks.toList())
                     },
                     enabled = canSave,
-                    shape = RoundedCornerShape(14.dp)
+                    shape = FieldShape
                 ) {
                     Text(stringResource(R.string.save))
                 }
@@ -357,12 +359,12 @@ private fun IconTile(
                         contentDescription = null,
                         modifier = Modifier
                             .fillMaxSize()
-                            .clip(RoundedCornerShape(14.dp))
+                            .clip(IconShape)
                     )
                 } else {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
-                        shape = RoundedCornerShape(14.dp),
+                        shape = IconShape,
                         color = MaterialTheme.colorScheme.surfaceVariant
                     ) {}
                 }
@@ -426,7 +428,7 @@ private fun RemovableChip(
     onRemove: () -> Unit
 ) {
     Surface(
-        shape = RoundedCornerShape(10.dp),
+        shape = InnerShape,
         color = MaterialTheme.colorScheme.secondaryContainer
     ) {
         Row(

@@ -81,6 +81,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.BuildConfig
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
@@ -668,7 +669,7 @@ private fun DoneBadge() {
 @Composable
 private fun Pill(text: String, icon: @Composable () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(10.dp),
+        shape = InnerShape,
         color = MaterialTheme.colorScheme.surfaceContainerHighest
     ) {
         Row(

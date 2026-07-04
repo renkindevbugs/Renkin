@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.R
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -70,12 +71,12 @@ internal fun UploadedImageThumbnail(
         else -> MaterialTheme.colorScheme.outlineVariant
     }
     Surface(
-        shape = RoundedCornerShape(16.dp),
+        shape = FieldShape,
         color = MaterialTheme.colorScheme.surfaceContainerHigh,
         border = BorderStroke(if (marked || selected) 2.dp else 1.dp, borderColor),
         modifier = Modifier
             .aspectRatio(1f)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(FieldShape)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
     ) {
         Box(Modifier.fillMaxSize()) {

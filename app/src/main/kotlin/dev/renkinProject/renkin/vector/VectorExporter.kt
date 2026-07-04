@@ -76,8 +76,10 @@ class VectorExporter(val vector: ImageVector) {
         file.endGroup()
     }
 
+    // Known limitation: colours are exported resolved — a path that referenced @color/icon_color
+    // loses the reference here, so a re-imported vector can't be re-tinted through the resource.
+    // Nothing depends on round-tripping today; revisit only if vector re-import ever needs it.
     private fun setXmlPath(file : BaseVectorXml, path: VectorPath) {
-        //TODO: save reference default color in custom attribute
         file.path(
             path.pathData.toStringPath(),
             setXmlJoin(path.strokeLineJoin).toString(),

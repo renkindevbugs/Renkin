@@ -77,6 +77,7 @@ import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.R
@@ -269,12 +270,14 @@ fun MainColumn(iconPacks: List<IconPack>) {
         label = "searchBarBackground"
     )
 
+    // No pull-to-refresh here on purpose: its nested-scroll handler interfered with the
+    // collapsing top bar (scroll glitches, freezes) — the app list reloads from Settings.
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = { TitleBar(scrollBehavior) },
         floatingActionButton = { BuildPackFab(isInRefresh, expanded = listState.isScrollingUp()) }
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding)) {
+        Column(Modifier.padding(innerPadding)) {
             SearchBar(
                 containerColor = headerColor,
                 sortOrder = sortOrder,
@@ -517,7 +520,7 @@ fun ApplicationItem(
                     contentDescription = null,
                     modifier = Modifier
                         .size(56.dp)
-                        .clip(RoundedCornerShape(14.dp))
+                        .clip(IconShape)
                 )
             }
 
@@ -550,7 +553,7 @@ fun ApplicationItem(
                             contentDescription = null,
                             modifier = Modifier
                                 .size(56.dp)
-                                .clip(RoundedCornerShape(14.dp))
+                                .clip(IconShape)
                                 .background(bgColor)
                         )
                     } else {
