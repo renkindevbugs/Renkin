@@ -27,7 +27,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,7 +64,6 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
@@ -356,8 +354,10 @@ fun OptionsDialog(
         draft.regenerateUpload(viewModel, generatingOptions)
     }
 
+    // The snackbar surface exists only for the upload gallery's Undo action; plain hints go
+    // through the shared Toaster like everywhere else in the app.
     val snackbarHostState = remember { SnackbarHostState() }
-    val snackbarScope = rememberCoroutineScope()
+    val toaster = LocalToaster.current
     val selectIconMessage = stringResource(R.string.selectIconFirst)
     val context = LocalContext.current
     val view = LocalView.current
@@ -577,7 +577,7 @@ fun OptionsDialog(
                                 onEditExternally = { toolbox ->
                                     val bitmap = draft.iconToConfirm?.toBitmap()
                                     when {
-                                        bitmap == null -> snackbarScope.launch { snackbarHostState.showSnackbar(selectIconMessage) }
+                                        bitmap == null -> toaster.show(selectIconMessage)
                                         toolbox -> openInImageToolbox(context, bitmap)
                                         else -> editInAnotherApp(context, bitmap)
                                     }
@@ -608,7 +608,7 @@ fun OptionsDialog(
                     modifierEnabled = draft.hasIcon,
                     onSelectTab = { selectedTab = it },
                     onModifierBlocked = {
-                        snackbarScope.launch { snackbarHostState.showSnackbar(selectIconMessage) }
+                        toaster.show(selectIconMessage)
                     }
                 )
             }

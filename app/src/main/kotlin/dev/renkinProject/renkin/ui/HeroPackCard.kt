@@ -263,7 +263,7 @@ private fun PackPickerSheet(
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
                 )
             }
-            items(iconPacks.distinctBy { it.packageName }, key = { it.packageName }) { pack ->
+            items(iconPacks, key = { it.packageName }) { pack ->
                 val selected = selectedSource == Source.ICON_PACK && pack.packageName == selectedPackage
                 PickerRow(
                     title = pack.applicationName,

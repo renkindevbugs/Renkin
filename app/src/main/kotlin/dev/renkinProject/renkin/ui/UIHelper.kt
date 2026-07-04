@@ -26,6 +26,7 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -314,10 +315,17 @@ fun DisabledExplanation(
  * Centered message shown when a list/grid has no items (e.g. an empty filter result). Pass an
  * [icon] for large empty areas (full screen / grid); omit it for thin inline slots (a single
  * pack's preview row) where a 48dp glyph wouldn't fit. Shared by the app list, watch editor and
- * icon-pack browser so every empty state reads the same.
+ * icon-pack browser so every empty state reads the same. An optional [actionLabel]/[onAction]
+ * pair adds a button offering the obvious way out (e.g. clearing an active filter).
  */
 @Composable
-fun EmptyState(text: String, modifier: Modifier = Modifier, icon: ImageVector? = null) {
+fun EmptyState(
+    text: String,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null
+) {
     Box(modifier, contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             if (icon != null) {
@@ -335,6 +343,10 @@ fun EmptyState(text: String, modifier: Modifier = Modifier, icon: ImageVector? =
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
+            if (actionLabel != null && onAction != null) {
+                Spacer(Modifier.height(12.dp))
+                FilledTonalButton(onClick = onAction) { Text(actionLabel) }
+            }
         }
     }
 }

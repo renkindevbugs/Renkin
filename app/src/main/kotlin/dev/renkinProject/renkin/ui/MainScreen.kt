@@ -291,7 +291,13 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 },
                 onSearch = { packageFilter = it }
             )
-            ApplicationList(iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, listState)
+            ApplicationList(
+                iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, listState,
+                onShowAllApps = {
+                    filterFallback = false
+                    scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
+                }
+            )
         }
     }
 
@@ -344,7 +350,10 @@ fun ApplicationList(
     sortOrder: AppSortOrder,
     filterNoIcon: Boolean,
     filterFallback: Boolean = false,
-    listState: LazyListState = rememberLazyListState()
+    listState: LazyListState = rememberLazyListState(),
+    // Clears the active icon filters; offered on the empty state so a filtered-out list has an
+    // obvious way back. Null hides the button (e.g. when no filter could be the cause).
+    onShowAllApps: (() -> Unit)? = null
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val applications = viewModel.applicationList
@@ -408,12 +417,16 @@ fun ApplicationList(
         if (displayList.isEmpty()) {
             // A filter/search matched nothing — say so instead of leaving a blank gap.
             item(key = "empty") {
+                // Offer the way out when an icon filter is what emptied the list.
+                val filtered = filterNoIcon || filterFallback
                 EmptyState(
                     icon = Icons.Filled.SearchOff,
                     text = stringResource(R.string.noAppsFound),
                     modifier = Modifier
                         .fillParentMaxHeight(0.6f)
-                        .fillMaxWidth()
+                        .fillMaxWidth(),
+                    actionLabel = stringResource(R.string.filterAllApps).takeIf { filtered && onShowAllApps != null },
+                    onAction = onShowAllApps.takeIf { filtered }
                 )
             }
         } else {
