@@ -40,6 +40,7 @@ import dev.renkinProject.renkin.IconPreviewBuilder
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.calendarPrefixOrNull
+import dev.renkinProject.renkin.extension.prettyDrawableName
 import dev.renkinProject.renkin.extension.toInt
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.data.IconPack
@@ -762,7 +763,7 @@ private fun CalendarCard(
                     color = MaterialTheme.colorScheme.onSecondaryContainer
                 )
                 Text(
-                    text = stringResource(R.string.calendarDayIconsDesc, calendarPrefix, packName),
+                    text = stringResource(R.string.calendarDayIconsDesc, calendarPrefix.prettyDrawableName(), packName),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.75f)
                 )

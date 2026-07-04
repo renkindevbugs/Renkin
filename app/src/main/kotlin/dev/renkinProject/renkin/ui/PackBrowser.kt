@@ -60,6 +60,7 @@ import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.extension.calendarPrefixOrNull
+import dev.renkinProject.renkin.extension.prettyDrawableName
 import dev.renkinProject.renkin.extension.isCalendarDayName
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
@@ -372,6 +373,8 @@ private fun PackIconItem(
             .size(size)
             .padding(4.dp)
     ) {
+        // Long-pressing the icon shows the icon's name the way the pack's own app displays it.
+        RenkinTooltipBox(item.drawableName.prettyDrawableName()) {
         Image(
             bitmap = item.preview,
             contentDescription = null,
@@ -387,6 +390,7 @@ private fun PackIconItem(
                 }
                 .tappableIcon(onSelect)
         )
+        }
         if (isCalendarGroup) {
             BadgeTooltip(stringResource(R.string.calendarGroupTooltip), Modifier.align(Alignment.TopEnd)) {
                 Box(
