@@ -81,6 +81,27 @@ class IconPackBuilder(
     private val frameworkVersion = 34
     private val minSdkVersion = 21
 
+    /**
+     * One drawable file name per app. Normally just the package name, but a package with
+     * several launcher activities (each themable separately) must not reuse it — both entries
+     * would write the same resource name and one icon would silently replace the other in the
+     * built pack. Duplicates get a suffix from their activity class name.
+     */
+    private fun uniqueDrawableFileNames(apps: List<PackageInfoStruct>): Map<String, String> {
+        val names = mutableMapOf<String, String>()
+        val used = mutableSetOf<String>()
+        for (app in apps) {
+            var name = app.getFileName()
+            if (!used.add(name)) {
+                name += "_" + app.activityName.substringAfterLast('.')
+                    .replace(Regex("[^A-Za-z0-9]"), "").lowercase().ifEmpty { "alt" }
+                while (!used.add(name)) name += "_alt"
+            }
+            names[app.key] = name
+        }
+        return names
+    }
+
     fun canBeInstalled(): Boolean {
         val installedVersion = getInstalledVersion()
         if (installedVersion != null) {
@@ -150,11 +171,12 @@ class IconPackBuilder(
         val vectorBrush = ReferenceBrush("@color/icon_color")
 
         val totalIcons = apps.count { it.createdIcon != null }
+        val appFileNames = uniqueDrawableFileNames(apps)
         var doneIcons = 0
         for (app in apps) {
             if (app.createdIcon != null) {
                 progressMethod(doneIcons++, totalIcons)
-                val appFileName = app.getFileName()
+                val appFileName = appFileNames.getValue(app.key)
 
                 val exportAsAdaptive = themed || app.createdIcon.isAdaptiveIcon()
                 if (exportAsAdaptive && PackageVersion.is26OrMore()) {
