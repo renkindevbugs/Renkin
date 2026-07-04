@@ -5,6 +5,14 @@ import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -29,6 +37,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Deselect
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material3.CircularProgressIndicator
@@ -375,11 +384,29 @@ fun UploadColumn(app: PackageInfoStruct,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.weight(1f)
                         )
+                        val allSelected = savedImages.isNotEmpty() && markedForDelete.size == savedImages.size
                         IconButton(onClick = {
-                            val all = savedImages.map { it.absolutePath }.toSet()
-                            markedForDelete = if (markedForDelete.size == all.size) emptySet() else all
+                            markedForDelete = if (allSelected) emptySet()
+                                else savedImages.map { it.absolutePath }.toSet()
                         }) {
-                            Icon(Icons.Filled.SelectAll, stringResource(R.string.selectAll))
+                            // The icon mirrors what the tap will do: select all vs deselect all
+                            // (the crossed-out variant), like other gallery apps. The swap pops
+                            // through a small scale+fade so the state change is noticeable.
+                            AnimatedContent(
+                                targetState = allSelected,
+                                transitionSpec = {
+                                    (fadeIn(spring(stiffness = Spring.StiffnessMedium)) +
+                                        scaleIn(initialScale = 0.6f, animationSpec = spring(Spring.DampingRatioMediumBouncy))) togetherWith
+                                        (fadeOut(spring(stiffness = Spring.StiffnessHigh)) + scaleOut(targetScale = 0.6f))
+                                },
+                                label = "selectAllToggle"
+                            ) { deselect ->
+                                if (deselect) {
+                                    Icon(Icons.Filled.Deselect, stringResource(R.string.deselectAll))
+                                } else {
+                                    Icon(Icons.Filled.SelectAll, stringResource(R.string.selectAll))
+                                }
+                            }
                         }
                     }
                 }
