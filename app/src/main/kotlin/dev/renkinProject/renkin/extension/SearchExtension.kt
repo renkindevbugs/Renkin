@@ -16,3 +16,13 @@ fun String.normalizeIconSearchQuery(): String =
         .joinToString("")
         .replace(Regex("_+"), "_")
         .trim('_')
+
+/**
+ * Human-readable form of a drawable name, the way icon-pack companion apps display their
+ * icons: underscores become spaces and each word is capitalised ("google_action_blocks" →
+ * "Google Action Blocks"). Trailing separators (calendar prefixes like "bee_calendar_") drop.
+ */
+fun String.prettyDrawableName(): String = trim('_')
+    .split('_')
+    .filter { it.isNotEmpty() }
+    .joinToString(" ") { word -> word.replaceFirstChar { it.uppercaseChar() } }
