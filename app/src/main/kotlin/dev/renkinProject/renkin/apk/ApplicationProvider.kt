@@ -376,6 +376,24 @@ class ApplicationProvider(private val context: Context) {
     }
 
     /**
+     * Re-reads the active profile id and its saved icons after a backup import replaced the
+     * stores under the running app. Same in-memory reset as a profile switch, minus the
+     * snapshot of the leaving state — that state was just overwritten on purpose.
+     */
+    suspend fun reloadActiveProfile() = withContext(Dispatchers.Default) {
+        val storedId = context.dataStore.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
+        // The stored id always exists in a well-formed backup; fall back defensively anyway.
+        activeProfileId = if (packRepo.profile(storedId) != null) storedId else DEFAULT_PROFILE_ID
+        if (activeProfileId != storedId) {
+            context.dataStore.edit { it[ActiveProfileIdKey] = activeProfileId }
+        }
+        for (app in applicationList.toList()) {
+            editApplication(app, app.changeExport(null).changeCalendar(false, null, null))
+        }
+        loadRenkinPack()
+    }
+
+    /**
      * Live count of icons taken from each pack, from the in-memory app list — so the per-app
      * picker reflects icons the moment they're assigned (generated or hand-picked), not only
      * after a build persists them. The list is seeded from the DB on startup, so saved counts

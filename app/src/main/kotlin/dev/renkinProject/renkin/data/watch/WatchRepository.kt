@@ -90,6 +90,39 @@ class WatchRepository(private val db: WatchDatabase) {
         dao.pruneOrphanStates()
     }
 
+    // --- Backup ---------------------------------------------------------------
+
+    /** Every profile's rules (active and completed) with their children — backup export. */
+    suspend fun getAllRules(): List<RuleWithDetails> = dao.getAllRulesWithDetails()
+
+    /**
+     * Backup import: wipes the whole watch store and inserts [rules] under fresh ids.
+     * Suggestions and baselines are deliberately not restored — suggestions are transient
+     * (their notification is gone anyway) and baselines are facts about the packs installed
+     * on THIS device, so the next check rebuilds them.
+     */
+    suspend fun replaceAllRules(rules: List<WatchRuleImport>) = db.withTransaction {
+        dao.deleteAllCandidates()
+        dao.deleteAllSuggestions()
+        dao.deleteAllRuleApps()
+        dao.deleteAllRulePacks()
+        dao.deleteAllRules()
+        dao.deleteAllStates()
+        for (r in rules) {
+            val ruleId = dao.insertRule(
+                WatchRule(
+                    watchAllPacks = r.watchAllPacks,
+                    completed = r.completed,
+                    createdAt = r.createdAt,
+                    completedAt = r.completedAt,
+                    profileId = r.profileId
+                )
+            )
+            dao.insertApps(r.apps.map { WatchRuleApp(ruleId, it.packageName, it.activityName) })
+            dao.insertPacks(r.packs.map { WatchRulePack(ruleId, it) })
+        }
+    }
+
     // --- Detection (phase 3) -------------------------------------------------
 
     suspend fun getState(packageName: String, activityName: String, iconPackPackage: String): WatchState? =
@@ -152,4 +185,15 @@ data class CandidateInput(
     val iconPackPackage: String,
     val drawableName: String,
     val iconHash: String
+)
+
+/** One rule (plus children) to insert during a backup import — rule ids are regenerated. */
+data class WatchRuleImport(
+    val profileId: Long,
+    val watchAllPacks: Boolean,
+    val completed: Boolean,
+    val createdAt: Long,
+    val completedAt: Long?,
+    val apps: List<AppComponent>,
+    val packs: List<String>
 )

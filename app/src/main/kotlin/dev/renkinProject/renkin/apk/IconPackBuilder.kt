@@ -70,13 +70,19 @@ class IconPackBuilder(
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
-    private val keyStoreFile = ctx.filesDir.resolve("renkinpack.keystore")
+    private val keyStoreFile = ctx.filesDir.resolve(KEYSTORE_FILE_NAME)
 
     private val iconPackName = packPackageName
 
     companion object {
         /** Base package id of the generated Renkin icon pack (profiles append ".p<id>"). */
         const val PACKAGE_NAME = "dev.renkinProject.renkinpack"
+
+        /**
+         * The pack-signing keystore in filesDir. Backups carry it so packs rebuilt after a
+         * device migration keep the signature of the already-installed ones.
+         */
+        const val KEYSTORE_FILE_NAME = "renkinpack.keystore"
 
         // Packs built before the 2026-07 app-id rename; they may still be installed on devices.
         private const val LEGACY_PACKAGE_NAME = "dev.alembiconsProject.renkinpack"

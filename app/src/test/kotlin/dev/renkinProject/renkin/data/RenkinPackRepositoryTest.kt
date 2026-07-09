@@ -80,6 +80,47 @@ class RenkinPackRepositoryTest {
     }
 
     @Test
+    fun replaceEverything_replacesAllProfilesAndIcons() = runBlocking {
+        repo.createProfile(Profile(name = "old", packLabel = "old pack"))
+        repo.replaceAll(DEFAULT_PROFILE_ID, listOf(app("com.old")))
+
+        val importedProfiles = listOf(
+            Profile(id = DEFAULT_PROFILE_ID, name = "Renkin", packLabel = "Renkin Pack"),
+            Profile(id = 7L, name = "imported", packLabel = "Imported Pack")
+        )
+        val importedApps = listOf(app("com.a"), app("com.b").copy(profileId = 7L))
+        repo.replaceEverything(importedProfiles, importedApps)
+
+        assertEquals(listOf(DEFAULT_PROFILE_ID, 7L), repo.profiles().map { it.id })
+        assertEquals(listOf("com.a"), repo.getAll(DEFAULT_PROFILE_ID).map { it.packageName })
+        assertEquals(listOf("com.b"), repo.getAll(7L).map { it.packageName })
+    }
+
+    @Test
+    fun replaceEverything_profileIdsKeepGrowingAfterImport() = runBlocking {
+        // Imported profiles carry explicit ids; a profile created afterwards must not collide.
+        repo.replaceEverything(
+            listOf(
+                Profile(id = DEFAULT_PROFILE_ID, name = "Renkin"),
+                Profile(id = 9L, name = "imported")
+            ),
+            emptyList()
+        )
+
+        val newId = repo.createProfile(Profile(name = "fresh"))
+        assertTrue("new profile id $newId must be above the imported ids", newId > 9L)
+    }
+
+    @Test
+    fun getAllProfilesApplications_returnsEveryProfilesRows() = runBlocking {
+        repo.replaceAll(DEFAULT_PROFILE_ID, listOf(app("com.a")))
+        repo.replaceAll(2L, listOf(app("com.b").copy(profileId = 2L)))
+
+        val all = repo.getAllProfilesApplications()
+        assertEquals(setOf("com.a" to DEFAULT_PROFILE_ID, "com.b" to 2L), all.map { it.packageName to it.profileId }.toSet())
+    }
+
+    @Test
     fun getAll_preservesRowFields() = runBlocking {
         repo.replaceAll(DEFAULT_PROFILE_ID, listOf(DbApplication("com.x", "com.x.Main", isAdaptiveIcon = true, isXml = true, drawable = "blob")))
 

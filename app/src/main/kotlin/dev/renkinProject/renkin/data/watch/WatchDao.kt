@@ -112,4 +112,29 @@ interface WatchDao {
     /** Debug only: makes every baseline look outdated so the next check reports "new". */
     @Query("UPDATE watch_state SET lastPackVersionCode = -1, lastIconHash = 'debug-force'")
     suspend fun debugStaleAllStates()
+
+    // --- Backup --------------------------------------------------------------
+
+    /** Every profile's rules (active and completed) — backup export. */
+    @Transaction
+    @Query("SELECT * FROM watch_rule")
+    suspend fun getAllRulesWithDetails(): List<RuleWithDetails>
+
+    @Query("DELETE FROM watch_rule")
+    suspend fun deleteAllRules()
+
+    @Query("DELETE FROM watch_rule_app")
+    suspend fun deleteAllRuleApps()
+
+    @Query("DELETE FROM watch_rule_pack")
+    suspend fun deleteAllRulePacks()
+
+    @Query("DELETE FROM icon_suggestion")
+    suspend fun deleteAllSuggestions()
+
+    @Query("DELETE FROM icon_suggestion_candidate")
+    suspend fun deleteAllCandidates()
+
+    @Query("DELETE FROM watch_state")
+    suspend fun deleteAllStates()
 }

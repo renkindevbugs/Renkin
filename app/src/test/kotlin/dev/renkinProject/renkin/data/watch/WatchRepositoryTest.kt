@@ -97,4 +97,57 @@ class WatchRepositoryTest {
         assertEquals(listOf("com.b"), rule.apps.map { it.packageName })
         assertEquals(listOf("pack2"), rule.packs.map { it.iconPackPackage })
     }
+
+    @Test
+    fun getAllRules_includesCompletedAndAllProfiles() = runBlocking {
+        repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
+        val completedId = repo.createRule(listOf(AppComponent("com.b", "B")), true, emptyList(), profileId = 2L)
+        repo.completeWithSuggestion(
+            completedId,
+            AppComponent("com.b", "B"),
+            listOf(CandidateInput("pack2", "drawable_b", "hash"))
+        )
+
+        val all = repo.getAllRules()
+        assertEquals(2, all.size)
+        assertEquals(setOf(1L, 2L), all.map { it.rule.profileId }.toSet())
+        assertTrue(all.any { it.rule.completed })
+    }
+
+    @Test
+    fun replaceAllRules_wipesAndInsertsUnderOwningProfiles() = runBlocking {
+        repo.createRule(listOf(AppComponent("com.old", "Old")), false, listOf("pack.old"), profileId = 1L)
+
+        repo.replaceAllRules(
+            listOf(
+                WatchRuleImport(
+                    profileId = 1L, watchAllPacks = false, completed = false,
+                    createdAt = 10L, completedAt = null,
+                    apps = listOf(AppComponent("com.a", "A")), packs = listOf("pack1")
+                ),
+                WatchRuleImport(
+                    profileId = 3L, watchAllPacks = false, completed = true,
+                    createdAt = 20L, completedAt = 30L,
+                    apps = listOf(AppComponent("com.b", "B")), packs = listOf("pack2")
+                )
+            )
+        )
+
+        val all = repo.getAllRules()
+        assertEquals(2, all.size)
+        assertTrue(all.none { rule -> rule.apps.any { it.packageName == "com.old" } })
+        val completed = all.single { it.rule.completed }
+        assertEquals(3L, completed.rule.profileId)
+        assertEquals(30L, completed.rule.completedAt)
+        assertEquals(listOf("pack2"), completed.packs.map { it.iconPackPackage })
+    }
+
+    @Test
+    fun replaceAllRules_empty_clearsStore() = runBlocking {
+        repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
+
+        repo.replaceAllRules(emptyList())
+
+        assertTrue(repo.getAllRules().isEmpty())
+    }
 }

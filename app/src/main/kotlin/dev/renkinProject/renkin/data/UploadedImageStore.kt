@@ -12,7 +12,8 @@ import java.io.File
 object UploadedImageStore {
     private const val DIRECTORY_NAME = "uploaded_images"
 
-    private fun directory(context: Context): File {
+    /** The gallery directory — also read/written directly by the backup export/import. */
+    fun directory(context: Context): File {
         return File(context.filesDir, DIRECTORY_NAME).apply { mkdirs() }
     }
 
