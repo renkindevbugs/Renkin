@@ -61,11 +61,18 @@ interface RenkinPackDao {
     @Query("SELECT * FROM DbApplication WHERE profileId = :profileId")
     fun getAll(profileId: Long): List<DbApplication>
 
+    /** Every profile's rows in one query — backup export. */
+    @Query("SELECT * FROM DbApplication")
+    fun getAllProfiles(): List<DbApplication>
+
     @Insert
     fun insertAll(apps: List<DbApplication>)
 
     @Query("DELETE FROM DbApplication WHERE profileId = :profileId")
     fun deleteAllApplications(profileId: Long)
+
+    @Query("DELETE FROM DbApplication")
+    fun deleteEverything()
 }
 
 @Dao
@@ -87,6 +94,9 @@ interface ProfileDao {
 
     @Query("DELETE FROM Profile WHERE id = :id")
     fun delete(id: Long)
+
+    @Query("DELETE FROM Profile")
+    fun deleteEverything()
 }
 
 // Version 7 has the same schema as version 5: 6 briefly added an isCustomIcon column during

@@ -288,4 +288,13 @@
     <string name="sortZToA">Z → A</string>
     <string name="iconPackBuildFailed">Couldn\'t build the icon pack</string>
     <string name="iconPackInstallFailed">The icon pack wasn\'t installed</string>
+    <string name="settingsBackup">Backup</string>
+    <string name="exportBackup">Export backup</string>
+    <string name="importBackup">Import backup</string>
+    <string name="importBackupTitle">Import backup?</string>
+    <string name="importBackupText">Everything on this device — profiles, icons, watch rules and settings — will be replaced with the backup\'s contents.</string>
+    <string name="backupExported">Backup exported</string>
+    <string name="backupExportFailed">Couldn\'t export the backup</string>
+    <string name="backupImported">Backup imported</string>
+    <string name="backupImportFailed">Couldn\'t import this file — is it a Renkin backup?</string>
 </resources>

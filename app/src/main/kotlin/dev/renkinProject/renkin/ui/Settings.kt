@@ -2,6 +2,9 @@
 
 package dev.renkinProject.renkin.ui
 
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +26,8 @@ import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Restore
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Badge
@@ -69,6 +74,7 @@ import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.getDarkModeLabels
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.setEnumValue
+import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.util.CrashReporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -91,6 +97,15 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     var showCrashLogs by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var confirmClearIcons by rememberSaveable { mutableStateOf(false) }
+
+    // A picked backup file waiting for the "replace everything?" confirmation.
+    var pendingImportUri by rememberSaveable { mutableStateOf<Uri?>(null) }
+    val exportBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri -> if (uri != null) viewModel.exportBackup(uri) }
+    val importBackupLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) pendingImportUri = uri }
 
     // Badge on the Crash logs row; reloaded when returning from the crash list (deletes there).
     val crashCount by produceState(0, showCrashLogs) {
@@ -138,6 +153,18 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     }
                     SettingsRow(Icons.Filled.BarChart, stringResource(R.string.statsButton)) {
                         showStats = true
+                    }
+
+                    SettingsSectionHeader(stringResource(R.string.settingsBackup))
+                    SettingsRow(Icons.Filled.Save, stringResource(R.string.exportBackup)) {
+                        if (!viewModel.backupInProgress) {
+                            exportBackupLauncher.launch(BackupManager.defaultFileName())
+                        }
+                    }
+                    SettingsRow(Icons.Filled.Restore, stringResource(R.string.importBackup)) {
+                        if (!viewModel.backupInProgress) {
+                            importBackupLauncher.launch(arrayOf("*/*"))
+                        }
                     }
 
                     SettingsSectionHeader(stringResource(R.string.settingsData), color = MaterialTheme.colorScheme.error)
@@ -204,6 +231,17 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     }
     if (showAbout) {
         InfoDialog { showAbout = false }
+    }
+    pendingImportUri?.let { uri ->
+        ConfirmDialog(
+            title = stringResource(R.string.importBackupTitle),
+            text = stringResource(R.string.importBackupText),
+            onConfirm = {
+                pendingImportUri = null
+                viewModel.importBackup(uri)
+            },
+            onDismiss = { pendingImportUri = null }
+        )
     }
     if (confirmClearIcons) {
         ConfirmDialog(

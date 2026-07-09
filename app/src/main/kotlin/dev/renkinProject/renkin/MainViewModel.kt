@@ -23,6 +23,7 @@ import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.isSystemInDarkTheme
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
+import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
@@ -518,6 +519,64 @@ class MainViewModel @Inject constructor(
             appProvider.clearIcons()
             // Saved pack is now empty → reset both change baselines.
             resetChangeBaselines()
+        }
+    }
+
+    // ---- Backup -------------------------------------------------------------------
+
+    /** True while a backup export/import runs — Settings ignores further taps meanwhile. */
+    var backupInProgress by mutableStateOf(false)
+        private set
+
+    /**
+     * Writes the full backup (all profiles, settings, watch rules, uploads, keystore) to
+     * [uri]. Unsaved work is saved first, the same way the save-before-switch prompt would —
+     * exporting a backup that silently lacks what's on screen would be worse.
+     */
+    fun exportBackup(uri: android.net.Uri) {
+        if (backupInProgress) return
+        viewModelScope.launch {
+            backupInProgress = true
+            try {
+                if (hasUnsavedChanges()) {
+                    appProvider.saveActiveProfileIcons()
+                    resetChangeBaselines()
+                }
+                BackupManager(getApplication()).exportBackup(uri)
+                _toastEvents.trySend(R.string.backupExported)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.error("MainViewModel", "Backup export failed", e)
+                _toastEvents.trySend(R.string.backupExportFailed)
+            } finally {
+                backupInProgress = false
+            }
+        }
+    }
+
+    /**
+     * Replaces everything on this device with [uri]'s backup, then reloads the in-memory
+     * state so the restored profiles/icons appear without an app restart. The import itself
+     * parses the whole file before wiping anything, so a bad file leaves the device untouched.
+     */
+    fun importBackup(uri: android.net.Uri) {
+        if (backupInProgress) return
+        viewModelScope.launch {
+            backupInProgress = true
+            try {
+                BackupManager(getApplication()).importBackup(uri)
+                appProvider.reloadActiveProfile()
+                resetChangeBaselines()
+                _toastEvents.trySend(R.string.backupImported)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.error("MainViewModel", "Backup import failed", e)
+                _toastEvents.trySend(R.string.backupImportFailed)
+            } finally {
+                backupInProgress = false
+            }
         }
     }
 
