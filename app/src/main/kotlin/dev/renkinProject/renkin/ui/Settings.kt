@@ -67,9 +67,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.DARK_MODE_DEFAULT
 import dev.renkinProject.renkin.data.DarkModeKey
-import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.getDarkModeLabels
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.setEnumValue
@@ -341,16 +341,18 @@ private fun ThemeRow(prefs: DataStore<Preferences>) {
 }
 
 /**
- * Per-pack usage stats: how many stored icons were taken from each installed pack, so
- * heavy-lifter packs and never-used packs are both visible at a glance. Counts are read when
- * the modal opens, so they reflect the icons at the moment of looking.
+ * Per-pack usage stats by TRUE origin: icons taken through one of Renkin's own built packs
+ * count for the pack they originally came from (the built pack carries provenance), and
+ * packs that aren't installed here still appear — marked so. Counts include icons currently
+ * locked behind a missing pack. Read when the modal opens.
  */
 @Composable
 private fun PackUsageDialog(onDismiss: () -> Unit) {
     val viewModel: MainViewModel = hiltViewModel()
-    val packs = viewModel.iconPacks
-    val usage = remember { viewModel.packUsageCounts() }
-    val max = (usage.values.maxOrNull() ?: 0).coerceAtLeast(1)
+    val entries by produceState(emptyList<ApplicationProvider.PackUsage>()) {
+        value = viewModel.packUsageEntries()
+    }
+    val max = (entries.maxOfOrNull { it.count } ?: 0).coerceAtLeast(1)
 
     RenkinAlertDialog(
         onDismissRequest = onDismiss,
@@ -358,47 +360,52 @@ private fun PackUsageDialog(onDismiss: () -> Unit) {
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                if (packs.isEmpty()) {
+                if (entries.isEmpty()) {
                     Text(
                         text = stringResource(R.string.packUsageEmpty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                packs
-                    .map { it to (usage[it.packageName] ?: 0) }
-                    .sortedWith(compareByDescending<Pair<IconPack, Int>> { it.second }
-                        .thenBy { it.first.applicationName.lowercase() })
-                    .forEach { (pack, count) ->
-                        Row(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(Modifier.weight(1f)) {
+                entries.forEach { entry ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text(
-                                    text = pack.applicationName,
+                                    text = entry.label,
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = if (count == 0) MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = if (entry.count == 0) MaterialTheme.colorScheme.onSurfaceVariant
                                         else MaterialTheme.colorScheme.onSurface
                                 )
-                                LinearProgressIndicator(
-                                    progress = { count / max.toFloat() },
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 3.dp)
-                                )
+                                if (!entry.installed) {
+                                    Text(
+                                        text = " · " + stringResource(R.string.packUsageNotInstalled),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.tertiary
+                                    )
+                                }
                             }
-                            Text(
-                                text = "$count",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = if (count == 0) MaterialTheme.colorScheme.onSurfaceVariant
-                                    else MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.padding(start = 12.dp)
+                            LinearProgressIndicator(
+                                progress = { entry.count / max.toFloat() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 3.dp)
                             )
                         }
+                        Text(
+                            text = "${entry.count}",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (entry.count == 0) MaterialTheme.colorScheme.onSurfaceVariant
+                                else MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 12.dp)
+                        )
                     }
+                }
             }
         }
     )
