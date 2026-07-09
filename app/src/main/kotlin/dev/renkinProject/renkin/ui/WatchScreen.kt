@@ -104,7 +104,9 @@ fun WatchScreen(onDismiss: () -> Unit) {
 
     val rules by watchViewModel.rules.collectAsState()
     val apps = viewModel.applicationList
-    val packs = viewModel.iconPacks
+    // Renkin's own generated packs can't be watched (the checker ignores them), so don't
+    // offer them in the rule editor's pack picker either.
+    val packs = viewModel.iconPacks.filterNot { IconPackBuilder.isOwnPack(it.packageName) }
 
     // Icon-watch is the only feature that posts notifications now, so ask for the permission
     // here (it used to be requested by the removed package-added setting).

@@ -21,9 +21,11 @@ import kotlinx.coroutines.withContext
  *
  * Work is gated on each pack's versionCode: if the pack hasn't been updated since the
  * last check for an (app, pack) pair, it's skipped entirely — so a periodic run does
- * almost nothing unless a pack actually changed. The first time an (app, pack) is seen
- * it only records a baseline (no notification); a later change in the icon's content
- * hash is what fires a suggestion.
+ * almost nothing unless a pack actually changed. Packs installed when a rule is created
+ * are baselined by [baselineRule] (no notification for icons that already existed); an
+ * (app, pack) pair the checker has never seen — i.e. a pack installed AFTER the rule —
+ * fires immediately when the pack carries an icon for the watched app, and a changed
+ * icon content hash fires for known pairs.
  *
  * Pure of any UI/notification side effects — it returns the suggestions it created so a
  * trigger (phase 4) / notifier (phase 5) can act on them.
@@ -65,8 +67,11 @@ class WatchChecker(context: Context) {
 
                     val (drawableName, hash) = resolveIcon(packPackage, installedApp)
 
-                    // First sighting is only a baseline; a changed hash afterwards is "new"
-                    val isNew = previous != null && hash != null && hash != previous.lastIconHash
+                    // New for the user either way: a pack installed after the rule that already
+                    // carries an icon for the app (previous == null — packs present at rule
+                    // creation were baselined by baselineRule), or a known pack whose icon
+                    // content changed with an update.
+                    val isNew = hash != null && (previous == null || hash != previous.lastIconHash)
 
                     repo.upsertState(
                         WatchState(
@@ -144,12 +149,13 @@ class WatchChecker(context: Context) {
     }
 
     /**
-     * Installed icon packs eligible as watch sources, keyed by package name. Our own generated
-     * pack is excluded — it only ever holds icons we just built, so it would suggest the very
-     * icon the user already applied.
+     * Installed icon packs eligible as watch sources, keyed by package name. Renkin's own
+     * generated packs are excluded — every profile's pack and the pre-rename legacy one (see
+     * [IconPackBuilder.isOwnPack]): they only ever hold icons we just built, so they would
+     * suggest the very icon the user already applied.
      */
     private fun watchablePacks() = appMan.getIconPacks()
-        .filter { !it.packageName.startsWith(IconPackBuilder.PACKAGE_NAME) }
+        .filter { !IconPackBuilder.isOwnPack(it.packageName) }
         .associateBy { it.packageName }
 
     /** Resolves the (drawable name, content hash) a pack currently provides for an app, or nulls. */
