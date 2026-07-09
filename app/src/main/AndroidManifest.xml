@@ -8,6 +8,9 @@
         </intent>
     </queries>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Only used to ask the Play Store whether an icon pack referenced by an imported
+         profile/backup is paid or free (PlayStoreLookup). Nothing else touches the network. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
 
     <uses-permission
         android:name="${applicationId}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"

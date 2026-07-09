@@ -108,6 +108,15 @@ class WatchRepository(private val db: WatchDatabase) {
         dao.deleteAllRulePacks()
         dao.deleteAllRules()
         dao.deleteAllStates()
+        insertImportedRules(rules)
+    }
+
+    /** Adds [rules] without touching existing ones — a shared-profile import is additive. */
+    suspend fun insertRules(rules: List<WatchRuleImport>) = db.withTransaction {
+        insertImportedRules(rules)
+    }
+
+    private suspend fun insertImportedRules(rules: List<WatchRuleImport>) {
         for (r in rules) {
             val ruleId = dao.insertRule(
                 WatchRule(

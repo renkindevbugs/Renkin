@@ -14,7 +14,10 @@ import org.json.JSONObject
  */
 data class BackupData(
     val profiles: List<BackupProfile>,
-    val prefs: Map<String, BackupPref>
+    val prefs: Map<String, BackupPref>,
+    // Human-readable names of the packs referenced by any icon, captured on the exporting
+    // device — the importer can name a missing pack it has never seen.
+    val packLabels: Map<String, String> = emptyMap()
 )
 
 data class BackupProfile(
@@ -90,6 +93,7 @@ object BackupCodec {
                 .put("packLabel", bp.profile.packLabel)
                 .put("prefsSnapshot", bp.profile.prefsSnapshot)
                 .put("hasUnbuiltChanges", bp.profile.hasUnbuiltChanges)
+                .put("hideMissingPackWarning", bp.profile.hideMissingPackWarning)
 
             val icons = JSONArray()
             for (icon in bp.icons) {
@@ -104,6 +108,7 @@ object BackupCodec {
                         .put("calendarPrefix", icon.calendarPrefix)
                         .put("calendarPackName", icon.calendarPackName)
                         .put("sourcePackName", icon.sourcePackName)
+                        .put("sourceDrawableName", icon.sourceDrawableName)
                 )
             }
             p.put("icons", icons)
@@ -128,6 +133,10 @@ object BackupCodec {
             profiles.put(p)
         }
         root.put("profiles", profiles)
+
+        val packs = JSONObject()
+        for ((pack, label) in data.packLabels) packs.put(pack, label)
+        root.put("packs", packs)
 
         return root.toString()
     }
@@ -168,7 +177,8 @@ object BackupCodec {
                 description = p.optString("description"),
                 packLabel = p.optString("packLabel"),
                 prefsSnapshot = p.optString("prefsSnapshot"),
-                hasUnbuiltChanges = p.optBoolean("hasUnbuiltChanges")
+                hasUnbuiltChanges = p.optBoolean("hasUnbuiltChanges"),
+                hideMissingPackWarning = p.optBoolean("hideMissingPackWarning")
             )
 
             val icons = mutableListOf<DbApplication>()
@@ -186,7 +196,8 @@ object BackupCodec {
                         calendarPrefix = icon.optString("calendarPrefix"),
                         calendarPackName = icon.optString("calendarPackName"),
                         sourcePackName = icon.optString("sourcePackName"),
-                        profileId = profileId
+                        profileId = profileId,
+                        sourceDrawableName = icon.optString("sourceDrawableName")
                     )
                 )
             }
@@ -218,6 +229,11 @@ object BackupCodec {
             profiles.add(BackupProfile(profile, icons, rules))
         }
 
-        return BackupData(profiles, prefs)
+        val packLabels = mutableMapOf<String, String>()
+        root.optJSONObject("packs")?.let { packs ->
+            for (name in packs.keys()) packLabels[name] = packs.getString(name)
+        }
+
+        return BackupData(profiles, prefs, packLabels)
     }
 }

@@ -21,7 +21,16 @@ import kotlinx.coroutines.withContext
 class RenkinPackStore(private val context: Context) {
     private val repo = RenkinPackRepository(context)
 
-    data class SavedEntry(val icon: IconPackDrawable?, val calendarEnabled: Boolean, val calendarPrefix: String?, val calendarPackName: String?, val sourcePackName: String?)
+    data class SavedEntry(
+        val icon: IconPackDrawable?,
+        val calendarEnabled: Boolean,
+        val calendarPrefix: String?,
+        val calendarPackName: String?,
+        val sourcePackName: String?,
+        // The raw row, so held-back entries (locked packs, reference icons, absent apps)
+        // can be written back verbatim on the next save instead of being dropped.
+        val row: DbApplication
+    )
 
     /** Loads [profileId]'s saved icons + calendar flags, keyed by "package/activity". */
     suspend fun load(profileId: Long, defaultColor: Color): Map<String, SavedEntry> = withContext(Dispatchers.Default) {
@@ -43,13 +52,23 @@ class RenkinPackStore(private val context: Context) {
                 dbApp.calendarEnabled,
                 dbApp.calendarPrefix.ifEmpty { null },
                 dbApp.calendarPackName.ifEmpty { null },
-                dbApp.sourcePackName.ifEmpty { null }
+                dbApp.sourcePackName.ifEmpty { null },
+                dbApp
             )
         }
     }
 
-    /** Replaces [profileId]'s stored set with the created icons and calendar flags of [apps]. */
-    suspend fun save(profileId: Long, apps: List<PackageInfoStruct>) = withContext(Dispatchers.Default) {
+    /**
+     * Replaces [profileId]'s stored set with the created icons and calendar flags of [apps],
+     * plus [preservedRows] — rows held back from the in-memory list (locked behind a missing
+     * paid pack, or belonging to apps not installed here) that must survive the save. A live
+     * app entry always wins over a preserved row with the same key.
+     */
+    suspend fun save(
+        profileId: Long,
+        apps: List<PackageInfoStruct>,
+        preservedRows: Collection<DbApplication> = emptyList()
+    ) = withContext(Dispatchers.Default) {
         val dbApps = apps.mapNotNull { app ->
             val icon = app.createdIcon
             if (icon == null && !app.calendarEnabled) return@mapNotNull null
@@ -66,7 +85,9 @@ class RenkinPackStore(private val context: Context) {
                 profileId
             )
         }
-        repo.replaceAll(profileId, dbApps)
+        val liveKeys = dbApps.map { "${it.packageName}/${it.activityName}" }.toSet()
+        val kept = preservedRows.filter { "${it.packageName}/${it.activityName}" !in liveKeys }
+        repo.replaceAll(profileId, dbApps + kept)
     }
 
     /** Keys ("package/activity") of the apps in [profileId]'s last built/saved pack. */

@@ -34,7 +34,9 @@ data class Profile(
     @ColumnInfo(defaultValue = "") val prefsSnapshot: String = "",
     // True when the profile's icons were saved (e.g. before switching away) but not built
     // into the pack APK since — the UI marks these so the save isn't mistaken for a build.
-    @ColumnInfo(defaultValue = "0") val hasUnbuiltChanges: Boolean = false
+    @ColumnInfo(defaultValue = "0") val hasUnbuiltChanges: Boolean = false,
+    // "Don't show again" for the missing-icon-packs dialog, chosen per profile.
+    @ColumnInfo(defaultValue = "0") val hideMissingPackWarning: Boolean = false
 )
 
 @Entity(primaryKeys = ["packageName", "activityName", "profileId"])
@@ -51,10 +53,51 @@ data class DbApplication(
     // come from a pack — app-icon, app-name, upload, hand-edited vector or fallback styling).
     // Used to order packs by how often they're used in the per-app icon picker.
     @ColumnInfo(defaultValue = "") val sourcePackName: String = "",
-    // Which profile this icon belongs to. Kept last so the positional constructor calls
-    // predating profiles stay valid.
-    @ColumnInfo(defaultValue = "1") val profileId: Long = DEFAULT_PROFILE_ID
+    // Which profile this icon belongs to. Kept after the earlier columns so the positional
+    // constructor calls predating profiles stay valid.
+    @ColumnInfo(defaultValue = "1") val profileId: Long = DEFAULT_PROFILE_ID,
+    // Drawable name inside sourcePackName, written only by profile/backup import for icons
+    // shared as references (no image data). A row with an empty [drawable] and a non-empty
+    // [sourcePackName] is such a reference: the icon is rebuilt from the installed pack.
+    @ColumnInfo(defaultValue = "") val sourceDrawableName: String = ""
 )
+
+/**
+ * What this device knows about an icon pack referenced by stored icons — drives the
+ * paid-pack lock on imported profiles/backups. [seenInstalled] is the ownership record:
+ * a pack ever seen installed on THIS device stays usable forever, even after uninstall.
+ * It is deliberately device-local — backups/shares never carry it, otherwise forwarding
+ * a file would forward the ownership too.
+ */
+@Entity
+data class PackVerdict(
+    @PrimaryKey val packageName: String,
+    // One of the VERDICT_* constants; UNKNOWN until a Play Store lookup succeeds.
+    @ColumnInfo(defaultValue = VERDICT_UNKNOWN) val verdict: String = VERDICT_UNKNOWN,
+    // Human-readable pack name, recorded while installed — shown when the pack is missing.
+    @ColumnInfo(defaultValue = "") val label: String = "",
+    @ColumnInfo(defaultValue = "0") val seenInstalled: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val checkedAt: Long = 0
+)
+
+const val VERDICT_UNKNOWN = "unknown"
+const val VERDICT_FREE = "free"
+const val VERDICT_PAID = "paid"
+// Not (or no longer) on the Play Store — treated like free per the app's policy: packs
+// that can't be bought anywhere (Icon Pack Studio exports, delisted packs) stay usable.
+const val VERDICT_UNLISTED = "unlisted"
+
+@Dao
+interface PackVerdictDao {
+    @Query("SELECT * FROM PackVerdict WHERE packageName IN (:packages)")
+    fun get(packages: List<String>): List<PackVerdict>
+
+    @Query("SELECT * FROM PackVerdict")
+    fun getAll(): List<PackVerdict>
+
+    @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
+    fun upsert(verdicts: List<PackVerdict>)
+}
 
 @Dao
 interface RenkinPackDao {
@@ -73,6 +116,10 @@ interface RenkinPackDao {
 
     @Query("DELETE FROM DbApplication")
     fun deleteEverything()
+
+    /** Every pack any stored icon (any profile) came from — the packs needing a verdict. */
+    @Query("SELECT DISTINCT sourcePackName FROM DbApplication WHERE sourcePackName != ''")
+    fun distinctSourcePacks(): List<String>
 }
 
 @Dao
@@ -103,13 +150,16 @@ interface ProfileDao {
 // development (never released), so 7 exists only to give both 5 and 6 a forward path.
 // Version 8 adds profiles: the Profile table plus DbApplication.profileId (part of the PK).
 // Version 9 adds Profile.hasUnbuiltChanges (saved-but-not-built marker).
+// Version 10 adds the PackVerdict table (paid-pack locks), DbApplication.sourceDrawableName
+// (imported icon references) and Profile.hideMissingPackWarning.
 @Database(
-    entities = [DbApplication::class, Profile::class],
-    version = 9
+    entities = [DbApplication::class, Profile::class, PackVerdict::class],
+    version = 10
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
     abstract fun profileDao(): ProfileDao
+    abstract fun packVerdictDao(): PackVerdictDao
 
     companion object {
         @Volatile
@@ -205,6 +255,19 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        private val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN sourceDrawableName TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE Profile ADD COLUMN hideMissingPackWarning INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `PackVerdict` (`packageName` TEXT NOT NULL, " +
+                        "`verdict` TEXT NOT NULL DEFAULT 'unknown', `label` TEXT NOT NULL DEFAULT '', " +
+                        "`seenInstalled` INTEGER NOT NULL DEFAULT 0, `checkedAt` INTEGER NOT NULL DEFAULT 0, " +
+                        "PRIMARY KEY(`packageName`))"
+                )
+            }
+        }
+
         // The default profile row must exist even on a fresh database (migrations don't run there).
         private val seedDefaultProfile = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
@@ -220,7 +283,7 @@ abstract class RenkinPackDatabase : RoomDatabase() {
                     context.applicationContext,
                     RenkinPackDatabase::class.java,
                     "renkinPack"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_7, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9)
+                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_7, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
                     .addCallback(seedDefaultProfile)
                     .build().also { instance = it }
             }

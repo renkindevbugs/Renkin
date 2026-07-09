@@ -48,6 +48,27 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         dao.insertAll(apps)
     }
 
+    // ---- Pack verdicts -------------------------------------------------------------
+
+    private val verdictDao = db.packVerdictDao()
+
+    suspend fun verdicts(packages: List<String>): Map<String, PackVerdict> = withContext(Dispatchers.Default) {
+        verdictDao.get(packages).associateBy { it.packageName }
+    }
+
+    suspend fun allVerdicts(): List<PackVerdict> = withContext(Dispatchers.Default) {
+        verdictDao.getAll()
+    }
+
+    suspend fun upsertVerdicts(verdicts: List<PackVerdict>) = withContext(Dispatchers.Default) {
+        if (verdicts.isNotEmpty()) verdictDao.upsert(verdicts)
+    }
+
+    /** Every pack any stored icon (any profile) came from. */
+    suspend fun distinctSourcePacks(): List<String> = withContext(Dispatchers.Default) {
+        dao.distinctSourcePacks()
+    }
+
     // ---- Profiles -----------------------------------------------------------------
 
     /** All profiles, default first (ordered by id), as a reactive stream for the switcher UI. */
