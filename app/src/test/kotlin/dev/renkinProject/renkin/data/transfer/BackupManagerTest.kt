@@ -5,6 +5,7 @@ import android.content.Context
 import androidx.room.Room
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.RenkinPackRepository
@@ -130,6 +131,8 @@ class BackupManagerTest {
                 WatchRuleImport(3L, false, false, 5L, null, listOf(AppComponent("com.paid", "com.paid.Main")), listOf("pack.paid"))
             )
         )
+        // The source device knows the pack's display name (recorded while it was installed).
+        srcPackRepo.upsertVerdicts(listOf(PackVerdict("pack.paid", label = "Paid Icons", seenInstalled = true)))
         val fakeVerdicts = PackVerdictManager(context, srcPackRepo) { pack ->
             if (pack == "pack.paid") StoreVerdict.PAID else StoreVerdict.FREE
         }
@@ -162,6 +165,12 @@ class BackupManagerTest {
         val rule = tgtWatchRepo.getAllRules().single()
         assertEquals(newId, rule.rule.profileId)
         assertEquals(listOf("com.paid"), rule.apps.map { it.packageName })
+
+        // The pack's display name travelled for the missing-packs dialog — label only,
+        // never the ownership flag (the file is untrusted).
+        val verdict = tgtPackRepo.verdicts(listOf("pack.paid")).getValue("pack.paid")
+        assertEquals("Paid Icons", verdict.label)
+        assertEquals(false, verdict.seenInstalled)
     }
 
     @Test

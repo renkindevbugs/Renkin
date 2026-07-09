@@ -17,6 +17,7 @@ import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
+import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
@@ -251,6 +252,7 @@ class BackupManager(
             bp.watchRules.map { it.toImport(bp.profile.id) }
         })
         restorePrefs(data.prefs)
+        storePackLabels(data.packLabels)
 
         // Pass 2: the bundled files. The gallery is replaced wholesale to match the backup.
         val uploadsDir = UploadedImageStore.directory(context)
@@ -282,7 +284,22 @@ class BackupManager(
         )
         packRepo.replaceAll(newId, bp.icons.map { it.copy(profileId = newId) })
         watchRepo.insertRules(bp.watchRules.map { it.toImport(newId) })
+        storePackLabels(data.packLabels)
         return ImportResult(ImportKind.PROFILE, 1, bp.icons.size, importedProfileId = newId)
+    }
+
+    /**
+     * Remembers the exporting device's pack names so the missing-packs dialog can name a
+     * pack this device has never seen. Only fills empty labels — never touches verdicts or
+     * the ownership flag (the file is untrusted).
+     */
+    private suspend fun storePackLabels(labels: Map<String, String>) {
+        if (labels.isEmpty()) return
+        val existing = packRepo.verdicts(labels.keys.toList())
+        packRepo.upsertVerdicts(labels.mapNotNull { (pack, label) ->
+            val row = existing[pack] ?: PackVerdict(pack)
+            if (row.label.isEmpty() && label.isNotEmpty()) row.copy(label = label) else null
+        })
     }
 
     // ---- Helpers ---------------------------------------------------------------------

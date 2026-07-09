@@ -179,9 +179,15 @@ class MainViewModel @Inject constructor(
             appProvider.initializeApplications()
             appProvider.initializeRenkinPack()
             builtKeys = appProvider.getSavedPackKeys()
+            refreshMissingPacks()
             // Classify any source packs that still lack a paid/free verdict (quiet best
-            // effort; imported-offline icons stay locked until a lookup succeeds).
-            runCatching { appProvider.verifyPendingVerdicts() }
+            // effort; imported-offline icons stay locked until a lookup succeeds). A verdict
+            // becoming decisive can unlock icons — reload so that shows without a restart.
+            if (runCatching { appProvider.verifyPendingVerdicts() }.getOrDefault(false)) {
+                appProvider.reloadActiveProfile()
+                resetChangeBaselines()
+                refreshMissingPacks(prompt = false)
+            }
         }
         viewModelScope.launch { appProvider.initializeIconPacks() }
     }
@@ -489,6 +495,7 @@ class MainViewModel @Inject constructor(
         if (saveFirst) appProvider.saveActiveProfileIcons()
         appProvider.switchProfile(id)
         resetChangeBaselines()
+        refreshMissingPacks()
     }
 
     /** Switches the active profile (prefs snapshot + icon set swap), optionally saving first. */
@@ -523,6 +530,42 @@ class MainViewModel @Inject constructor(
             // Saved pack is now empty → reset both change baselines.
             resetChangeBaselines()
         }
+    }
+
+    // ---- Missing icon packs ---------------------------------------------------------
+
+    /** Keys of the active profile's icons locked behind a missing pack (marks the rows). */
+    val lockedIconKeys: Set<String> get() = appProvider.lockedIconKeys
+
+    /** The active profile's locked icons grouped by missing pack — badge, banner, dialog. */
+    var missingPackSummary by mutableStateOf<List<ApplicationProvider.MissingPack>>(emptyList())
+        private set
+
+    var showMissingPacksDialog by mutableStateOf(false)
+        private set
+
+    // Profiles already prompted this session, so switching back and forth doesn't nag.
+    private val missingPacksPrompted = mutableSetOf<Long>()
+
+    /**
+     * Recomputes the summary and (when [prompt]) opens the dialog once per profile per
+     * session, unless the profile opted out ("don't show again").
+     */
+    private suspend fun refreshMissingPacks(prompt: Boolean = true) {
+        missingPackSummary = appProvider.missingPackSummary()
+        if (!prompt || missingPackSummary.isEmpty()) return
+        val profileId = appProvider.activeProfileId
+        if (!missingPacksPrompted.add(profileId)) return
+        if (appProvider.activeProfile()?.hideMissingPackWarning == true) return
+        showMissingPacksDialog = true
+    }
+
+    /** User-invoked (badge/banner tap): always opens, regardless of "don't show again". */
+    fun openMissingPacksDialog() { showMissingPacksDialog = true }
+
+    fun dismissMissingPacksDialog(dontShowAgain: Boolean) {
+        showMissingPacksDialog = false
+        if (dontShowAgain) viewModelScope.launch { appProvider.setHideMissingPackWarning(true) }
     }
 
     // ---- Backup -------------------------------------------------------------------
@@ -645,16 +688,25 @@ class MainViewModel @Inject constructor(
                 // Everything was replaced — reload the in-memory state in place.
                 appProvider.reloadActiveProfile()
                 resetChangeBaselines()
+                // A restored profile counts as freshly entered for the prompt.
+                missingPacksPrompted.remove(appProvider.activeProfileId)
+                refreshMissingPacks()
                 _toastEvents.trySend(R.string.backupImported)
             }
             BackupManager.ImportKind.PROFILE -> {
-                // Additive: the active profile is untouched; the new one is in the switcher.
+                // Additive: the active profile is untouched; the new one is in the switcher
+                // (its missing-pack prompt fires when the user switches to it).
                 _toastEvents.trySend(R.string.profileImported)
             }
         }
-        // Classify any packs the import referenced (quiet best effort — retried later
-        // at app start and by the periodic watch worker when offline now).
-        runCatching { appProvider.verifyPendingVerdicts() }
+        // Classify any packs the import referenced (quiet best effort — retried later at
+        // app start and by the periodic watch worker when offline now). Free verdicts
+        // unlock icons, so reload when something got decided.
+        if (runCatching { appProvider.verifyPendingVerdicts() }.getOrDefault(false)) {
+            appProvider.reloadActiveProfile()
+            resetChangeBaselines()
+            refreshMissingPacks(prompt = false)
+        }
     }
 
     /** Calendar-enabled apps whose source pack is missing day drawables (shown before a build). */
