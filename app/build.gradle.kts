@@ -1,9 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.ksp)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.hilt.android)
+}
+
+// Release signing credentials live in local.properties (gitignored), so a signed release
+// builds with plain `gradlew assembleRelease`; without them (CI, F-Droid) the release APK
+// is simply unsigned, exactly as before.
+val localProps = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
 android {
@@ -34,6 +43,17 @@ android {
             }
     }
 
+    signingConfigs {
+        localProps.getProperty("renkin.keystore")?.let { keystorePath ->
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = localProps.getProperty("renkin.keystore.password")
+                keyAlias = localProps.getProperty("renkin.key.alias")
+                keyPassword = localProps.getProperty("renkin.key.password")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".dev"
@@ -42,6 +62,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
