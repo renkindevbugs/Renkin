@@ -24,10 +24,17 @@ import dev.renkinProject.renkin.extension.redInt
 import dev.renkinProject.renkin.extension.toColor
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.extension.toNullableColor
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -138,8 +145,9 @@ fun ColorDialog(
 
     RenkinAlertDialog(
         onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.pickColorTitle)) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 HsvColorPicker(modifier = Modifier.height(200.dp)
                     , controller = controller
                     , onColorChanged = {
@@ -154,7 +162,7 @@ fun ColorDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(10.dp)
-                        .height(35.dp),
+                        .height(26.dp),
                     controller = controller,
                     initialColor = currentlySelected
                 )
@@ -163,18 +171,59 @@ fun ColorDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(10.dp, 0.dp, 10.dp, 10.dp)
-                        .height(35.dp),
+                        .height(26.dp),
                     controller = controller,
                     initialColor = currentlySelected
                 )
 
-                AlphaTile(
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .align(CenterHorizontally),
-                    controller = controller
-                )
+                // Before → after: the colour that was set when the dialog opened next to the
+                // live pick. Tapping the old swatch is an undo — it re-selects the original.
+                Row(
+                    modifier = Modifier.align(CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(horizontalAlignment = CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(currentlySelected)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                .clickable {
+                                    controller.selectByColor(currentlySelected, true)
+                                    onColorSelected(currentlySelected)
+                                }
+                        )
+                        Text(
+                            text = stringResource(R.string.iconCurrent),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Column(horizontalAlignment = CenterHorizontally) {
+                        AlphaTile(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
+                            controller = controller
+                        )
+                        Text(
+                            text = stringResource(R.string.iconNew),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                }
 
                 RGBFields(
                     modifier = Modifier.padding(10.dp, 10.dp, 10.dp, 0.dp)
@@ -205,7 +254,21 @@ fun ColorDialog(
                 }
             }
         },
-        confirmButton = {}
+        // The pick applies live — OK just closes, but without it "how do I leave?" was a
+        // back-gesture guessing game.
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Icon(
+                    imageVector = Icons.Filled.Done,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = stringResource(R.string.ok),
+                    modifier = Modifier.padding(start = 6.dp)
+                )
+            }
+        }
     )
 }
 

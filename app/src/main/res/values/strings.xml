@@ -316,4 +316,5 @@
     <string name="importProfile">Import profile</string>
     <string name="importSvg">SVG</string>
     <string name="svgImportFailed">Couldn\'t read this SVG — only path-based icons are supported</string>
+    <string name="pickColorTitle">Pick a colour</string>
 </resources>
