@@ -7,6 +7,7 @@
 <p align="center">Make your own Android icon pack, on your phone.</p>
 
 <p align="center">
+  <a href="https://github.com/renkindevbugs/Renkin/actions/workflows/ci.yml"><img src="https://github.com/renkindevbugs/Renkin/actions/workflows/ci.yml/badge.svg?branch=dev" alt="CI"></a>
   <a href="https://github.com/renkindevbugs/Renkin/releases/latest"><img src="https://img.shields.io/github/v/release/renkindevbugs/Renkin?label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/renkindevbugs/Renkin" alt="License"></a>
 </p>
