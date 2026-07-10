@@ -297,4 +297,8 @@
     <string name="backupExportFailed">Couldn\'t export the backup</string>
     <string name="backupImported">Backup imported</string>
     <string name="backupImportFailed">Couldn\'t import this file — is it a Renkin backup?</string>
+    <string name="shareProfile">Share profile</string>
+    <string name="profileExported">Profile exported</string>
+    <string name="profileExportFailed">Couldn\'t export the profile</string>
+    <string name="profileImported">Profile imported — open it from the title menu</string>
 </resources>

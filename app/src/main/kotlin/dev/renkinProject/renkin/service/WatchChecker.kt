@@ -33,6 +33,7 @@ import kotlinx.coroutines.withContext
 class WatchChecker(context: Context) {
     private val appMan = ApplicationManager(context)
     private val repo = WatchRepository(context)
+    private val packageManager = context.packageManager
 
     data class FiredSuggestion(
         val suggestionId: Long,
@@ -55,6 +56,10 @@ class WatchChecker(context: Context) {
             }
 
             for (ruleApp in rule.apps) {
+                // Imported rules can watch apps this device doesn't have — leave those
+                // dormant (no phantom suggestions for apps the user can't theme); the rule
+                // comes alive by itself once the app is installed.
+                if (!isAppInstalled(ruleApp.packageName)) continue
                 val installedApp = InstalledApplication(ruleApp.packageName, ruleApp.activityName, 0)
                 val candidates = mutableListOf<CandidateInput>()
 
@@ -157,6 +162,9 @@ class WatchChecker(context: Context) {
     private fun watchablePacks() = appMan.getIconPacks()
         .filter { !IconPackBuilder.isOwnPack(it.packageName) }
         .associateBy { it.packageName }
+
+    private fun isAppInstalled(packageName: String): Boolean =
+        runCatching { packageManager.getPackageInfo(packageName, 0) }.isSuccess
 
     /** Resolves the (drawable name, content hash) a pack currently provides for an app, or nulls. */
     private fun resolveIcon(packPackage: String, installedApp: InstalledApplication): Pair<String?, String?> {

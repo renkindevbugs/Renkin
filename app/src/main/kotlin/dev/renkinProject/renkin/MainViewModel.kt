@@ -179,6 +179,9 @@ class MainViewModel @Inject constructor(
             appProvider.initializeApplications()
             appProvider.initializeRenkinPack()
             builtKeys = appProvider.getSavedPackKeys()
+            // Classify any source packs that still lack a paid/free verdict (quiet best
+            // effort; imported-offline icons stay locked until a lookup succeeds).
+            runCatching { appProvider.verifyPendingVerdicts() }
         }
         viewModelScope.launch { appProvider.initializeIconPacks() }
     }
@@ -556,28 +559,102 @@ class MainViewModel @Inject constructor(
     }
 
     /**
-     * Replaces everything on this device with [uri]'s backup, then reloads the in-memory
-     * state so the restored profiles/icons appear without an app restart. The import itself
-     * parses the whole file before wiping anything, so a bad file leaves the device untouched.
+     * Exports one profile as a shareable file. Paid-pack icons travel as references only —
+     * the export may go online to classify the source packs (see BackupManager).
      */
-    fun importBackup(uri: android.net.Uri) {
+    fun exportProfile(profileId: Long, uri: android.net.Uri) {
         if (backupInProgress) return
         viewModelScope.launch {
             backupInProgress = true
             try {
-                BackupManager(getApplication()).importBackup(uri)
-                appProvider.reloadActiveProfile()
-                resetChangeBaselines()
-                _toastEvents.trySend(R.string.backupImported)
+                if (profileId == activeProfileId && hasUnsavedChanges()) {
+                    appProvider.saveActiveProfileIcons()
+                    resetChangeBaselines()
+                }
+                BackupManager(getApplication()).exportProfile(profileId, uri)
+                _toastEvents.trySend(R.string.profileExported)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                Log.error("MainViewModel", "Backup import failed", e)
+                Log.error("MainViewModel", "Profile export failed", e)
+                _toastEvents.trySend(R.string.profileExportFailed)
+            } finally {
+                backupInProgress = false
+            }
+        }
+    }
+
+    // A picked full-backup file waiting for the "replace everything?" confirmation.
+    // (Profile files import right away — they only add a new profile.)
+    var pendingBackupImport by mutableStateOf<android.net.Uri?>(null)
+        private set
+
+    fun confirmBackupImport() {
+        val uri = pendingBackupImport ?: return
+        pendingBackupImport = null
+        runImport(uri)
+    }
+
+    fun cancelBackupImport() { pendingBackupImport = null }
+
+    /**
+     * Entry point for a picked `.renkin` file: full backups are destructive, so they stop at
+     * a confirmation ([pendingBackupImport]); shared profiles are additive and import now.
+     */
+    fun importFile(uri: android.net.Uri) {
+        if (backupInProgress) return
+        viewModelScope.launch {
+            backupInProgress = true
+            try {
+                when (BackupManager(getApplication()).peekKind(uri)) {
+                    BackupManager.ImportKind.BACKUP -> pendingBackupImport = uri
+                    BackupManager.ImportKind.PROFILE -> performImport(uri)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.error("MainViewModel", "Import failed", e)
                 _toastEvents.trySend(R.string.backupImportFailed)
             } finally {
                 backupInProgress = false
             }
         }
+    }
+
+    private fun runImport(uri: android.net.Uri) {
+        if (backupInProgress) return
+        viewModelScope.launch {
+            backupInProgress = true
+            try {
+                performImport(uri)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.error("MainViewModel", "Import failed", e)
+                _toastEvents.trySend(R.string.backupImportFailed)
+            } finally {
+                backupInProgress = false
+            }
+        }
+    }
+
+    private suspend fun performImport(uri: android.net.Uri) {
+        val result = BackupManager(getApplication()).importFile(uri)
+        when (result.kind) {
+            BackupManager.ImportKind.BACKUP -> {
+                // Everything was replaced — reload the in-memory state in place.
+                appProvider.reloadActiveProfile()
+                resetChangeBaselines()
+                _toastEvents.trySend(R.string.backupImported)
+            }
+            BackupManager.ImportKind.PROFILE -> {
+                // Additive: the active profile is untouched; the new one is in the switcher.
+                _toastEvents.trySend(R.string.profileImported)
+            }
+        }
+        // Classify any packs the import referenced (quiet best effort — retried later
+        // at app start and by the periodic watch worker when offline now).
+        runCatching { appProvider.verifyPendingVerdicts() }
     }
 
     /** Calendar-enabled apps whose source pack is missing day drawables (shown before a build). */

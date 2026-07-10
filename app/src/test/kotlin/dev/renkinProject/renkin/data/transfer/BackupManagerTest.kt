@@ -111,6 +111,60 @@ class BackupManagerTest {
     }
 
     @Test
+    fun profileShare_stripsPaidPackPixels_importsAsNewProfile() = runBlocking {
+        val srcPackRepo = RenkinPackRepository(srcPackDb)
+        val srcWatchRepo = WatchRepository(srcWatchDb)
+        srcPackRepo.replaceEverything(
+            listOf(
+                Profile(id = DEFAULT_PROFILE_ID, name = "Renkin"),
+                Profile(id = 3L, name = "Shared set", packLabel = "Shared Pack")
+            ),
+            listOf(
+                DbApplication("com.paid", "com.paid.Main", isAdaptiveIcon = false, isXml = false, drawable = "cGFpZA==", sourcePackName = "pack.paid", profileId = 3L),
+                DbApplication("com.free", "com.free.Main", isAdaptiveIcon = false, isXml = false, drawable = "ZnJlZQ==", sourcePackName = "pack.free", profileId = 3L),
+                DbApplication("com.upload", "com.upload.Main", isAdaptiveIcon = false, isXml = false, drawable = "dXBsb2Fk", profileId = 3L)
+            )
+        )
+        srcWatchRepo.insertRules(
+            listOf(
+                WatchRuleImport(3L, false, false, 5L, null, listOf(AppComponent("com.paid", "com.paid.Main")), listOf("pack.paid"))
+            )
+        )
+        val fakeVerdicts = PackVerdictManager(context, srcPackRepo) { pack ->
+            if (pack == "pack.paid") StoreVerdict.PAID else StoreVerdict.FREE
+        }
+
+        val out = ByteArrayOutputStream()
+        BackupManager(context, srcPackRepo, srcWatchRepo, fakeVerdicts).exportProfile(3L) { out }
+        val bytes = out.toByteArray()
+
+        val tgtPackRepo = RenkinPackRepository(tgtPackDb)
+        val tgtWatchRepo = WatchRepository(tgtWatchDb)
+        tgtPackRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Keep me")), emptyList())
+        val result = BackupManager(context, tgtPackRepo, tgtWatchRepo)
+            .importFile { ByteArrayInputStream(bytes) }
+
+        // The import is additive: a fresh profile next to the untouched existing ones.
+        assertEquals(BackupManager.ImportKind.PROFILE, result.kind)
+        val newId = result.importedProfileId!!
+        assertTrue(newId > DEFAULT_PROFILE_ID)
+        assertEquals(listOf("Keep me", "Shared set"), tgtPackRepo.profiles().map { it.name })
+        assertTrue(tgtPackRepo.profiles().single { it.id == newId }.hasUnbuiltChanges)
+
+        val rows = tgtPackRepo.getAll(newId).associateBy { it.packageName }
+        // Paid-pack icon travelled as a pixel-less reference; the others kept their data.
+        assertEquals("", rows.getValue("com.paid").drawable)
+        assertEquals("pack.paid", rows.getValue("com.paid").sourcePackName)
+        assertEquals("ZnJlZQ==", rows.getValue("com.free").drawable)
+        assertEquals("dXBsb2Fk", rows.getValue("com.upload").drawable)
+
+        // The watch rule came along, re-owned by the new profile.
+        val rule = tgtWatchRepo.getAllRules().single()
+        assertEquals(newId, rule.rule.profileId)
+        assertEquals(listOf("com.paid"), rule.apps.map { it.packageName })
+    }
+
+    @Test
     fun import_rejectsGarbageWithoutTouchingStores() = runBlocking {
         val tgtPackRepo = RenkinPackRepository(tgtPackDb)
         val tgtWatchRepo = WatchRepository(tgtWatchDb)
@@ -121,7 +175,7 @@ class BackupManagerTest {
 
         val result = runCatching {
             BackupManager(context, tgtPackRepo, tgtWatchRepo)
-                .importBackup { ByteArrayInputStream("definitely not a zip".toByteArray()) }
+                .importFile { ByteArrayInputStream("definitely not a zip".toByteArray()) }
         }
 
         assertTrue(result.isFailure)

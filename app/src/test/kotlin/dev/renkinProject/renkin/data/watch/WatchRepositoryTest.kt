@@ -143,6 +143,25 @@ class WatchRepositoryTest {
     }
 
     @Test
+    fun insertRules_isAdditive() = runBlocking {
+        repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
+
+        repo.insertRules(
+            listOf(
+                WatchRuleImport(
+                    profileId = 5L, watchAllPacks = false, completed = false,
+                    createdAt = 10L, completedAt = null,
+                    apps = listOf(AppComponent("com.b", "B")), packs = listOf("pack2")
+                )
+            )
+        )
+
+        val all = repo.getAllRules()
+        assertEquals(2, all.size)
+        assertEquals(setOf(1L, 5L), all.map { it.rule.profileId }.toSet())
+    }
+
+    @Test
     fun replaceAllRules_empty_clearsStore() = runBlocking {
         repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
 

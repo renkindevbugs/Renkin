@@ -14,14 +14,20 @@ import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
+import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
+import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.snapshotProfilePrefs
+import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.data.watch.AppComponent
+import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchRuleImport
 import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.packages.ApplicationManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
@@ -35,28 +41,50 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 /**
- * Full-device backup: writes and restores the `.renkin` file (a ZIP of `manifest.json`,
- * `data.json`, the upload gallery and the pack-signing keystore). Import is all-or-nothing:
- * the file is fully parsed BEFORE any store is touched, so a corrupt file never leaves the
- * device half-wiped. After a successful import the caller must reload the in-memory app
- * state (ApplicationProvider.reloadActiveProfile).
+ * Writes and restores `.renkin` files (a ZIP of `manifest.json`, `data.json` and, for full
+ * backups, the upload gallery and the pack-signing keystore). Two kinds share the format:
+ *
+ *  - **backup** — the whole device: every profile, all settings, uploads, keystore. Import
+ *    replaces everything in place.
+ *  - **profile** — one profile to share. Icons from packs verified paid (or unverifiable —
+ *    fail-closed) carry no image data, only a `{pack, drawable}` reference the importer
+ *    resolves from their own installed copy; free/unlisted/non-pack icons embed fully.
+ *    Import always creates a NEW profile.
+ *
+ * Import is all-or-nothing: the file is fully parsed BEFORE any store is touched. Whether
+ * imported icons are usable is decided on the importing device every time they load
+ * (PackVerdictManager) — verdicts inside the file are never trusted. After an import the
+ * caller reloads the in-memory state and kicks off verdict verification.
  */
 class BackupManager(
     private val context: Context,
     private val packRepo: RenkinPackRepository,
-    private val watchRepo: WatchRepository
+    private val watchRepo: WatchRepository,
+    private val verdictManager: PackVerdictManager = PackVerdictManager(context, packRepo)
 ) {
     /** Production entry point: uses the shared singleton databases. Tests inject in-memory ones. */
     constructor(context: Context) : this(context, RenkinPackRepository(context), WatchRepository(context))
 
-    data class ImportSummary(val profileCount: Int, val iconCount: Int)
+    private val appManager by lazy { ApplicationManager(context) }
+
+    enum class ImportKind { BACKUP, PROFILE }
+
+    data class ImportResult(
+        val kind: ImportKind,
+        val profileCount: Int,
+        val iconCount: Int,
+        /** Id of the newly created profile for [ImportKind.PROFILE] imports. */
+        val importedProfileId: Long? = null
+    )
+
+    // ---- Export --------------------------------------------------------------------
 
     suspend fun exportBackup(uri: Uri) = exportBackup {
         context.contentResolver.openOutputStream(uri) ?: throw IOException("Cannot open $uri for writing")
     }
 
-    suspend fun importBackup(uri: Uri): ImportSummary = importBackup {
-        context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri for reading")
+    suspend fun exportProfile(profileId: Long, uri: Uri) = exportProfile(profileId) {
+        context.contentResolver.openOutputStream(uri) ?: throw IOException("Cannot open $uri for writing")
     }
 
     suspend fun exportBackup(open: () -> OutputStream) = withContext(Dispatchers.IO) {
@@ -68,34 +96,27 @@ class BackupManager(
             packRepo.updateProfile(it.copy(prefsSnapshot = prefs.snapshotProfilePrefs()))
         }
 
-        val iconsByProfile = packRepo.getAllProfilesApplications().groupBy { it.profileId }
+        val allIcons = packRepo.getAllProfilesApplications()
+        val iconsByProfile = allIcons.groupBy { it.profileId }
         val rulesByProfile = watchRepo.getAllRules().groupBy { it.rule.profileId }
         val data = BackupData(
             profiles = packRepo.profiles().map { profile ->
                 BackupProfile(
                     profile = profile,
                     icons = iconsByProfile[profile.id].orEmpty(),
-                    watchRules = rulesByProfile[profile.id].orEmpty().map { details ->
-                        BackupWatchRule(
-                            watchAllPacks = details.rule.watchAllPacks,
-                            completed = details.rule.completed,
-                            createdAt = details.rule.createdAt,
-                            completedAt = details.rule.completedAt,
-                            apps = details.apps.map { AppComponent(it.packageName, it.activityName) },
-                            packs = details.packs.map { it.iconPackPackage }
-                        )
-                    }
+                    watchRules = rulesByProfile[profile.id].orEmpty().map { it.toBackupRule() }
                 )
             },
             prefs = prefs.asMap().mapNotNull { (key, value) ->
                 // The last-watch-check timestamp is about THIS device's worker, not the data.
                 if (key.name == LastWatchCheckAtKey.name) return@mapNotNull null
                 BackupPref.of(value)?.let { key.name to it }
-            }.toMap()
+            }.toMap(),
+            packLabels = packLabelsFor(allIcons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet())
         )
 
         ZipOutputStream(open().buffered()).use { zip ->
-            zip.putTextEntry(MANIFEST_ENTRY, manifestJson())
+            zip.putTextEntry(MANIFEST_ENTRY, manifestJson(KIND_BACKUP))
             zip.putTextEntry(DATA_ENTRY, BackupCodec.encode(data))
             context.filesDir.resolve(IconPackBuilder.KEYSTORE_FILE_NAME)
                 .takeIf { it.exists() }
@@ -106,8 +127,91 @@ class BackupManager(
         }
     }
 
-    suspend fun importBackup(open: () -> InputStream): ImportSummary = withContext(Dispatchers.IO) {
-        // Pass 1: read + fully validate the metadata before touching anything on the device.
+    /**
+     * Exports one profile for sharing. Icons from packs that are paid — or whose price
+     * can't be verified right now (no network): fail-closed, a share must never leak paid
+     * artwork — are stripped to references. No uploads or keystore travel with a share.
+     */
+    suspend fun exportProfile(profileId: Long, open: () -> OutputStream) = withContext(Dispatchers.IO) {
+        val prefs = context.dataStore.data.first()
+        val activeId = prefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
+        if (profileId == activeId) {
+            packRepo.profile(profileId)?.let {
+                packRepo.updateProfile(it.copy(prefsSnapshot = prefs.snapshotProfilePrefs()))
+            }
+        }
+        val profile = packRepo.profile(profileId) ?: throw IOException("Profile $profileId does not exist")
+        val icons = packRepo.getAll(profileId)
+        val rules = watchRepo.getAllRules()
+            .filter { it.rule.profileId == profileId }
+            .map { it.toBackupRule() }
+
+        val sourcePacks = icons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet()
+        val stripPacks = verdictManager.ensureVerdicts(sourcePacks)
+        val exportIcons = icons.map { icon ->
+            if (icon.sourcePackName.isNotEmpty() && icon.sourcePackName in stripPacks && icon.drawable.isNotEmpty()) {
+                icon.copy(
+                    drawable = "",
+                    isXml = false,
+                    // Bulk-refresh icons are exactly the appfilter-mapped ones, so this
+                    // resolution is faithful; a hand-picked alternate degrades to the
+                    // pack's default icon for the app.
+                    sourceDrawableName = icon.sourceDrawableName.ifEmpty {
+                        appFilterDrawableName(icon.sourcePackName, icon.packageName, icon.activityName) ?: ""
+                    }
+                )
+            } else icon
+        }
+        val data = BackupData(
+            profiles = listOf(BackupProfile(profile, exportIcons, rules)),
+            prefs = emptyMap(),
+            packLabels = packLabelsFor(sourcePacks)
+        )
+
+        ZipOutputStream(open().buffered()).use { zip ->
+            zip.putTextEntry(MANIFEST_ENTRY, manifestJson(KIND_PROFILE))
+            zip.putTextEntry(DATA_ENTRY, BackupCodec.encode(data))
+        }
+    }
+
+    // ---- Import --------------------------------------------------------------------
+
+    /** Reads just enough of the file to tell a full backup from a shared profile. */
+    suspend fun peekKind(uri: Uri): ImportKind = withContext(Dispatchers.IO) {
+        val manifest = openZip(uri).use { zip ->
+            var entry = zip.nextEntry
+            while (entry != null && entry.name != MANIFEST_ENTRY) entry = zip.nextEntry
+            if (entry == null) throw IOException("Not a Renkin file (no manifest)")
+            JSONObject(zip.readEntryText())
+        }
+        kindOf(manifest)
+    }
+
+    suspend fun importFile(uri: Uri): ImportResult = importFile {
+        context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri for reading")
+    }
+
+    /** Dispatches on the file's kind: full backups replace, shared profiles add. */
+    suspend fun importFile(open: () -> InputStream): ImportResult = withContext(Dispatchers.IO) {
+        val (manifest, data) = readArchive(open)
+        when (kindOf(manifest)) {
+            ImportKind.BACKUP -> restoreBackup(data, open)
+            ImportKind.PROFILE -> importProfile(data)
+        }
+    }
+
+    suspend fun importBackup(uri: Uri): ImportResult = importBackup {
+        context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri for reading")
+    }
+
+    suspend fun importBackup(open: () -> InputStream): ImportResult = withContext(Dispatchers.IO) {
+        val (manifest, data) = readArchive(open)
+        if (kindOf(manifest) != ImportKind.BACKUP) throw IOException("Not a full-backup file")
+        restoreBackup(data, open)
+    }
+
+    /** Pass 1 of an import: read and fully validate before touching anything on the device. */
+    private fun readArchive(open: () -> InputStream): Pair<JSONObject, BackupData> {
         var manifest: JSONObject? = null
         var dataJson: String? = null
         ZipInputStream(open().buffered()).use { zip ->
@@ -120,33 +224,31 @@ class BackupManager(
                 entry = zip.nextEntry
             }
         }
-        val meta = manifest ?: throw IOException("Not a Renkin backup (no manifest)")
-        if (meta.optString("kind") != KIND_BACKUP) throw IOException("Not a full-backup file")
+        val meta = manifest ?: throw IOException("Not a Renkin file (no manifest)")
         if (meta.optInt("format", Int.MAX_VALUE) > BackupCodec.FORMAT_VERSION) {
-            throw IOException("Backup was made by a newer app version")
+            throw IOException("File was made by a newer app version")
         }
-        val data = BackupCodec.decode(dataJson ?: throw IOException("Backup has no data entry"))
+        val data = BackupCodec.decode(dataJson ?: throw IOException("File has no data entry"))
+        return meta to data
+    }
+
+    private fun kindOf(manifest: JSONObject): ImportKind = when (manifest.optString("kind")) {
+        KIND_BACKUP -> ImportKind.BACKUP
+        KIND_PROFILE -> ImportKind.PROFILE
+        else -> throw IOException("Unknown file kind")
+    }
+
+    private suspend fun restoreBackup(data: BackupData, open: () -> InputStream): ImportResult {
         if (data.profiles.none { it.profile.id == DEFAULT_PROFILE_ID }) {
             throw IOException("Backup has no default profile")
         }
 
-        // Everything parsed — replace the stores.
         packRepo.replaceEverything(
             data.profiles.map { it.profile },
             data.profiles.flatMap { it.icons }
         )
         watchRepo.replaceAllRules(data.profiles.flatMap { bp ->
-            bp.watchRules.map { rule ->
-                WatchRuleImport(
-                    profileId = bp.profile.id,
-                    watchAllPacks = rule.watchAllPacks,
-                    completed = rule.completed,
-                    createdAt = rule.createdAt,
-                    completedAt = rule.completedAt,
-                    apps = rule.apps,
-                    packs = rule.packs
-                )
-            }
+            bp.watchRules.map { it.toImport(bp.profile.id) }
         })
         restorePrefs(data.prefs)
 
@@ -167,8 +269,69 @@ class BackupManager(
             }
         }
 
-        ImportSummary(data.profiles.size, data.profiles.sumOf { it.icons.size })
+        return ImportResult(ImportKind.BACKUP, data.profiles.size, data.profiles.sumOf { it.icons.size })
     }
+
+    /** A shared profile always lands as a NEW profile — imports never overwrite anything. */
+    private suspend fun importProfile(data: BackupData): ImportResult {
+        val bp = data.profiles.firstOrNull() ?: throw IOException("File contains no profile")
+        val newId = packRepo.createProfile(
+            // Fresh identity (the id also names the built pack's package) and fresh flags:
+            // the icons are saved-but-not-built, and the missing-pack dialog choice is local.
+            bp.profile.copy(id = 0, hasUnbuiltChanges = true, hideMissingPackWarning = false)
+        )
+        packRepo.replaceAll(newId, bp.icons.map { it.copy(profileId = newId) })
+        watchRepo.insertRules(bp.watchRules.map { it.toImport(newId) })
+        return ImportResult(ImportKind.PROFILE, 1, bp.icons.size, importedProfileId = newId)
+    }
+
+    // ---- Helpers ---------------------------------------------------------------------
+
+    private fun RuleWithDetails.toBackupRule() = BackupWatchRule(
+        watchAllPacks = rule.watchAllPacks,
+        completed = rule.completed,
+        createdAt = rule.createdAt,
+        completedAt = rule.completedAt,
+        apps = apps.map { AppComponent(it.packageName, it.activityName) },
+        packs = packs.map { it.iconPackPackage }
+    )
+
+    private fun BackupWatchRule.toImport(profileId: Long) = WatchRuleImport(
+        profileId = profileId,
+        watchAllPacks = watchAllPacks,
+        completed = completed,
+        createdAt = createdAt,
+        completedAt = completedAt,
+        apps = apps,
+        packs = packs
+    )
+
+    /** Display names for [packs]: from the installed copy, else the verdict cache. */
+    private suspend fun packLabelsFor(packs: Set<String>): Map<String, String> {
+        if (packs.isEmpty()) return emptyMap()
+        val installed = runCatching { appManager.getIconPacks() }.getOrDefault(emptyList())
+            .associate { it.packageName to it.applicationName }
+        val cached = packRepo.verdicts(packs.toList())
+        return packs.mapNotNull { pack ->
+            val label = installed[pack] ?: cached[pack]?.label?.ifEmpty { null }
+            label?.let { pack to it }
+        }.toMap()
+    }
+
+    /** The drawable name [packPackage]'s appfilter maps to the app's component, if any. */
+    private fun appFilterDrawableName(packPackage: String, packageName: String, activityName: String): String? {
+        val installedApp = InstalledApplication(packageName, activityName, 0)
+        return runCatching {
+            appManager.getAppFilterRawElements(packPackage, listOf(installedApp))
+                .filterIsInstance<RawItem>()
+                .firstOrNull { it.component == installedApp.toComponentInfo() }
+                ?.drawableLink
+        }.getOrNull()
+    }
+
+    private fun openZip(uri: Uri): ZipInputStream = ZipInputStream(
+        (context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri for reading")).buffered()
+    )
 
     private suspend fun restorePrefs(prefs: Map<String, BackupPref>) {
         context.dataStore.edit { store ->
@@ -188,9 +351,9 @@ class BackupManager(
         }
     }
 
-    private fun manifestJson(): String = JSONObject()
+    private fun manifestJson(kind: String): String = JSONObject()
         .put("format", BackupCodec.FORMAT_VERSION)
-        .put("kind", KIND_BACKUP)
+        .put("kind", kind)
         .put("appVersion", BuildConfig.VERSION_NAME)
         .put("exportedAt", System.currentTimeMillis())
         .toString()
@@ -201,12 +364,20 @@ class BackupManager(
         private const val KEYSTORE_ENTRY = "keystore/" + IconPackBuilder.KEYSTORE_FILE_NAME
         private const val UPLOADS_DIR = "uploads"
         private const val KIND_BACKUP = "backup"
+        private const val KIND_PROFILE = "profile"
 
-        /** Suggested file name for the SAF save dialog. */
-        fun defaultFileName(): String {
-            val date = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
-            return "renkin-backup-$date.renkin"
+        /** Suggested file name for the SAF save dialog (full backup). */
+        fun defaultFileName(): String = "renkin-backup-${today()}.renkin"
+
+        /** Suggested file name for a shared profile. */
+        fun profileFileName(profileName: String): String {
+            val safe = profileName.lowercase()
+                .replace(Regex("[^a-z0-9]+"), "-").trim('-').ifEmpty { "profile" }
+            return "renkin-profile-$safe-${today()}.renkin"
         }
+
+        private fun today(): String =
+            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date())
     }
 }
 

@@ -2,7 +2,6 @@
 
 package dev.renkinProject.renkin.ui
 
-import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -98,14 +97,14 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var confirmClearIcons by rememberSaveable { mutableStateOf(false) }
 
-    // A picked backup file waiting for the "replace everything?" confirmation.
-    var pendingImportUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     val exportBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri -> if (uri != null) viewModel.exportBackup(uri) }
+    // Full backups stop at a confirmation (viewModel.pendingBackupImport); shared profiles
+    // are additive and import right away.
     val importBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument()
-    ) { uri -> if (uri != null) pendingImportUri = uri }
+    ) { uri -> if (uri != null) viewModel.importFile(uri) }
 
     // Badge on the Crash logs row; reloaded when returning from the crash list (deletes there).
     val crashCount by produceState(0, showCrashLogs) {
@@ -232,15 +231,12 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     if (showAbout) {
         InfoDialog { showAbout = false }
     }
-    pendingImportUri?.let { uri ->
+    if (viewModel.pendingBackupImport != null) {
         ConfirmDialog(
             title = stringResource(R.string.importBackupTitle),
             text = stringResource(R.string.importBackupText),
-            onConfirm = {
-                pendingImportUri = null
-                viewModel.importBackup(uri)
-            },
-            onDismiss = { pendingImportUri = null }
+            onConfirm = { viewModel.confirmBackupImport() },
+            onDismiss = { viewModel.cancelBackupImport() }
         )
     }
     if (confirmClearIcons) {
