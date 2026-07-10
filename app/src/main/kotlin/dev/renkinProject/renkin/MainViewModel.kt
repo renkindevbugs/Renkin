@@ -1,6 +1,8 @@
 package dev.renkinProject.renkin
 
 import android.app.Application
+import android.net.Uri
+import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -333,23 +335,16 @@ class MainViewModel @Inject constructor(
     }
 
     /**
-     * Assigns (or clears, when [icon] is null) the created icon for the app at [index].
+     * Assigns (or clears, when [icon] is null) the created icon for [app].
      * [sourcePackName] is the pack the icon was taken from (null/empty when not from a pack).
      * An icon picked from one of our own packs is attributed to its recorded origin — and
      * withheld (with a toast) when that origin is a pack this device doesn't own.
      */
-    fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String? = null) {
-        viewModelScope.launch {
-            val (origin, locked) = appProvider.resolvePickedSource(app, if (icon == null) null else sourcePackName)
-            if (icon != null && locked) {
-                _toastEvents.trySend(R.string.iconOriginLocked)
-                return@launch
-            }
+    fun applyIcon(app: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String? = null) =
+        applyPickedIcon(app, icon, sourcePackName) { live, origin ->
             // Hand-picked icons are locked immediately: a refresh never replaces them.
-            appProvider.editApplication(index, app.changeExport(icon, sourcePackName = origin, isRefreshMade = false))
-            markUpdated(app, icon)
+            live.changeExport(icon, sourcePackName = origin, isRefreshMade = false)
         }
-    }
 
     /**
      * Applies the icon and the calendar selection together. The edit dialog tracks the
@@ -359,13 +354,29 @@ class MainViewModel @Inject constructor(
      * old icon. Setting both in one edit keeps the static `<item>` and `<calendar>` in sync.
      */
     fun applyIcon(
-        index: Int,
         app: PackageInfoStruct,
         icon: IconPackDrawable?,
         calendarEnabled: Boolean,
         calendarPrefix: String?,
         calendarPackName: String?,
         sourcePackName: String?
+    ) = applyPickedIcon(app, icon, sourcePackName) { live, origin ->
+        live.changeExport(icon, sourcePackName = origin, isRefreshMade = false)
+            .changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
+    }
+
+    /**
+     * The shared hand-pick gate: resolves the picked pack to its true origin, blocks the
+     * pick (with a toast) when that origin is locked on this device, and applies [edit] to
+     * the app's LIVE row. The row is looked up by key after the suspension — the list can
+     * mutate (refresh, sync) while resolvePickedSource runs, so an index captured by the
+     * dialog could go stale.
+     */
+    private fun applyPickedIcon(
+        app: PackageInfoStruct,
+        icon: IconPackDrawable?,
+        sourcePackName: String?,
+        edit: (live: PackageInfoStruct, origin: String?) -> PackageInfoStruct
     ) {
         viewModelScope.launch {
             val (origin, locked) = appProvider.resolvePickedSource(app, if (icon == null) null else sourcePackName)
@@ -373,10 +384,9 @@ class MainViewModel @Inject constructor(
                 _toastEvents.trySend(R.string.iconOriginLocked)
                 return@launch
             }
-            appProvider.editApplication(
-                index,
-                app.changeExport(icon, sourcePackName = origin, isRefreshMade = false).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
-            )
+            val index = appProvider.applicationList.indexOfFirst { it.key == app.key }
+            if (index < 0) return@launch
+            appProvider.editApplication(index, edit(appProvider.applicationList[index], origin))
             markUpdated(app, icon)
         }
     }
@@ -602,70 +612,67 @@ class MainViewModel @Inject constructor(
     var backupInProgress by mutableStateOf(false)
         private set
 
+    private val backupManager by lazy { BackupManager(getApplication()) }
+
+    /**
+     * Runs one backup/import operation at a time: the shared busy flag gates re-entry, a
+     * failure logs and toasts [failureToast], cancellation propagates.
+     */
+    private fun runBackupOp(@StringRes failureToast: Int, op: suspend () -> Unit) {
+        if (backupInProgress) return
+        viewModelScope.launch {
+            backupInProgress = true
+            try {
+                op()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.error("MainViewModel", "Backup operation failed", e)
+                _toastEvents.trySend(failureToast)
+            } finally {
+                backupInProgress = false
+            }
+        }
+    }
+
     /**
      * Writes the full backup (all profiles, settings, watch rules, uploads, keystore) to
      * [uri]. Unsaved work is saved first, the same way the save-before-switch prompt would —
      * exporting a backup that silently lacks what's on screen would be worse.
      */
-    fun exportBackup(uri: android.net.Uri) {
-        if (backupInProgress) return
-        viewModelScope.launch {
-            backupInProgress = true
-            try {
-                if (hasUnsavedChanges()) {
-                    appProvider.saveActiveProfileIcons()
-                    resetChangeBaselines()
-                    refreshMissingPacks(prompt = false)
-                }
-                BackupManager(getApplication()).exportBackup(uri)
-                _toastEvents.trySend(R.string.backupExported)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.error("MainViewModel", "Backup export failed", e)
-                _toastEvents.trySend(R.string.backupExportFailed)
-            } finally {
-                backupInProgress = false
-            }
+    fun exportBackup(uri: Uri) = runBackupOp(R.string.backupExportFailed) {
+        if (hasUnsavedChanges()) {
+            appProvider.saveActiveProfileIcons()
+            resetChangeBaselines()
+            refreshMissingPacks(prompt = false)
         }
+        backupManager.exportBackup(uri)
+        _toastEvents.trySend(R.string.backupExported)
     }
 
     /**
      * Exports one profile as a shareable file. Paid-pack icons travel as references only —
      * the export may go online to classify the source packs (see BackupManager).
      */
-    fun exportProfile(profileId: Long, uri: android.net.Uri) {
-        if (backupInProgress) return
-        viewModelScope.launch {
-            backupInProgress = true
-            try {
-                if (profileId == activeProfileId && hasUnsavedChanges()) {
-                    appProvider.saveActiveProfileIcons()
-                    resetChangeBaselines()
-                    refreshMissingPacks(prompt = false)
-                }
-                BackupManager(getApplication()).exportProfile(profileId, uri)
-                _toastEvents.trySend(R.string.profileExported)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.error("MainViewModel", "Profile export failed", e)
-                _toastEvents.trySend(R.string.profileExportFailed)
-            } finally {
-                backupInProgress = false
-            }
+    fun exportProfile(profileId: Long, uri: Uri) = runBackupOp(R.string.profileExportFailed) {
+        if (profileId == activeProfileId && hasUnsavedChanges()) {
+            appProvider.saveActiveProfileIcons()
+            resetChangeBaselines()
+            refreshMissingPacks(prompt = false)
         }
+        backupManager.exportProfile(profileId, uri)
+        _toastEvents.trySend(R.string.profileExported)
     }
 
     // A picked full-backup file waiting for the "replace everything?" confirmation.
     // (Profile files import right away — they only add a new profile.)
-    var pendingBackupImport by mutableStateOf<android.net.Uri?>(null)
+    var pendingBackupImport by mutableStateOf<Uri?>(null)
         private set
 
     fun confirmBackupImport() {
         val uri = pendingBackupImport ?: return
         pendingBackupImport = null
-        runImport(uri)
+        runBackupOp(R.string.backupImportFailed) { performImport(uri) }
     }
 
     fun cancelBackupImport() { pendingBackupImport = null }
@@ -674,45 +681,15 @@ class MainViewModel @Inject constructor(
      * Entry point for a picked `.renkin` file: full backups are destructive, so they stop at
      * a confirmation ([pendingBackupImport]); shared profiles are additive and import now.
      */
-    fun importFile(uri: android.net.Uri) {
-        if (backupInProgress) return
-        viewModelScope.launch {
-            backupInProgress = true
-            try {
-                when (BackupManager(getApplication()).peekKind(uri)) {
-                    BackupManager.ImportKind.BACKUP -> pendingBackupImport = uri
-                    BackupManager.ImportKind.PROFILE -> performImport(uri)
-                }
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.error("MainViewModel", "Import failed", e)
-                _toastEvents.trySend(R.string.backupImportFailed)
-            } finally {
-                backupInProgress = false
-            }
+    fun importFile(uri: Uri) = runBackupOp(R.string.backupImportFailed) {
+        when (backupManager.peekKind(uri)) {
+            BackupManager.ImportKind.BACKUP -> pendingBackupImport = uri
+            BackupManager.ImportKind.PROFILE -> performImport(uri)
         }
     }
 
-    private fun runImport(uri: android.net.Uri) {
-        if (backupInProgress) return
-        viewModelScope.launch {
-            backupInProgress = true
-            try {
-                performImport(uri)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.error("MainViewModel", "Import failed", e)
-                _toastEvents.trySend(R.string.backupImportFailed)
-            } finally {
-                backupInProgress = false
-            }
-        }
-    }
-
-    private suspend fun performImport(uri: android.net.Uri) {
-        val result = BackupManager(getApplication()).importFile(uri)
+    private suspend fun performImport(uri: Uri) {
+        val result = backupManager.importFile(uri)
         when (result.kind) {
             BackupManager.ImportKind.BACKUP -> {
                 // Everything was replaced — reload the in-memory state in place.

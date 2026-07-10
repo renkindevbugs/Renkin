@@ -75,8 +75,9 @@ class PackVerdictManager(
         val packs = repo.distinctSourcePacks().toSet()
             .filter { it.isNotEmpty() && !IconPackBuilder.isOwnPack(it) }
         if (packs.isEmpty()) return@withContext false
+        val before = repo.verdicts(packs)
         val undecidedBefore = packs.filter {
-            (repo.verdicts(packs)[it]?.verdict ?: VERDICT_UNKNOWN) == VERDICT_UNKNOWN
+            (before[it]?.verdict ?: VERDICT_UNKNOWN) == VERDICT_UNKNOWN
         }.toSet()
         ensureVerdicts(packs.toSet())
         val after = repo.verdicts(undecidedBefore.toList())

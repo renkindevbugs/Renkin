@@ -714,7 +714,7 @@ fun ApplicationItem(
     }
 
     if (openAppOptions) {
-        OpenAppOptions(iconPacks, app, themed, index) {
+        OpenAppOptions(iconPacks, app, themed) {
             openAppOptions = false
         }
     }
@@ -725,19 +725,18 @@ fun OpenAppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    index: Int,
     onDismiss: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
 
     AppOptions(iconPacks, app, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName ->
-        viewModel.applyIcon(index, app, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName)
+        viewModel.applyIcon(app, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName)
         onDismiss()
     }, {
         onDismiss()
     }) {
         onDismiss()
-        viewModel.applyIcon(index, app, null)
+        viewModel.applyIcon(app, null)
     }
 }
 
