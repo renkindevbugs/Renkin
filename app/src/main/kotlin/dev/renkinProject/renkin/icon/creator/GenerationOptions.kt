@@ -67,9 +67,11 @@ data class GenerationOptions(
     // replaces the icon's own colours instead of mixing with them. Per-icon Modifier-tab option.
     val colorizeFlat: Boolean = false,
     // Icon shape applied as the LAST step: NONE leaves the icon untouched; otherwise the icon
-    // is laid on a [bgColor]-filled shape plate, or cropped into the shape when [iconShapeCrop].
+    // is cropped into the shape (the default — most icons are full-bleed) or laid on a
+    // [bgColor]-filled shape plate. [iconShapeScale] sizes the icon relative to the shape.
     val iconShape: IconShape = IconShape.NONE,
-    val iconShapeCrop: Boolean = false,
+    val iconShapeCrop: Boolean = true,
+    val iconShapeScale: Float = 1f,
     // Text-icon options: the string rendered for TextType.CUSTOM (empty falls back to the app
     // name), the letter-case transform (all text types), and the TTF/OTF the glyphs come from
     // (empty = the bundled Arcticons Sans).

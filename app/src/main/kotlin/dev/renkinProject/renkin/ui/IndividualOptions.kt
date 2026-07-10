@@ -357,6 +357,7 @@ fun OptionsDialog(
         colorizeFlat = adjustments.colorizeFlat,
         iconShape = adjustments.iconShape,
         iconShapeCrop = adjustments.shapeCrop,
+        iconShapeScale = adjustments.shapeScale,
         textCustom = customText,
         textCase = textCase,
         textFontPath = textFontPath

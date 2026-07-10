@@ -88,10 +88,12 @@ internal class AdjustmentState {
     var autoCenter by mutableStateOf(false)
     var iconOffsetX by mutableFloatStateOf(0f)
     var iconOffsetY by mutableFloatStateOf(0f)
-    // Icon shape (applied as the last generation step): the shape, plate-vs-crop mode
-    // and the plate's fill colour.
+    // Icon shape (applied as the last generation step): the shape, crop-vs-plate mode
+    // (crop is the default — most icons are full-bleed), the icon's size relative to
+    // the shape, and the plate's fill colour.
     var iconShape by mutableStateOf(IconShape.NONE)
-    var shapeCrop by mutableStateOf(false)
+    var shapeCrop by mutableStateOf(true)
+    var shapeScale by mutableFloatStateOf(1f)
     var shapeColor by mutableStateOf(Color.White)
 
     companion object {
@@ -99,7 +101,8 @@ internal class AdjustmentState {
             save = {
                 listOf(it.edgeThreshold, it.edgeSmoothing, it.edgeContrast, it.iconScale,
                     it.bgRemovalTolerance, it.autoCenter, it.iconOffsetX, it.iconOffsetY,
-                    it.colorizeFlat, it.iconShape.ordinal, it.shapeCrop, it.shapeColor.toArgb())
+                    it.colorizeFlat, it.iconShape.ordinal, it.shapeCrop, it.shapeColor.toArgb(),
+                    it.shapeScale)
             },
             restore = { saved ->
                 AdjustmentState().apply {
@@ -115,6 +118,7 @@ internal class AdjustmentState {
                     iconShape = IconShape.entries.getOrElse(saved[9] as Int) { IconShape.NONE }
                     shapeCrop = saved[10] as Boolean
                     shapeColor = Color(saved[11] as Int)
+                    shapeScale = saved[12] as Float
                 }
             }
         )
@@ -336,18 +340,28 @@ internal fun ModifierTab(
             }
             androidx.compose.animation.AnimatedVisibility(visible = adjustments.iconShape != IconShape.NONE) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Crop first — most icons are full-bleed, so cropping is the common case.
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = !adjustments.shapeCrop,
-                            onClick = { adjustments.shapeCrop = false },
-                            label = { Text(stringResource(R.string.shapePlate)) }
-                        )
                         FilterChip(
                             selected = adjustments.shapeCrop,
                             onClick = { adjustments.shapeCrop = true },
                             label = { Text(stringResource(R.string.shapeCrop)) }
                         )
+                        FilterChip(
+                            selected = !adjustments.shapeCrop,
+                            onClick = { adjustments.shapeCrop = false },
+                            label = { Text(stringResource(R.string.shapePlate)) }
+                        )
                     }
+                    // How big the icon sits inside the shape, in both modes.
+                    LabeledSlider(
+                        label = stringResource(R.string.shapeIconScale),
+                        value = adjustments.shapeScale,
+                        onValueChange = { adjustments.shapeScale = it },
+                        valueRange = 0.5f..1.5f,
+                        valueLabel = "${(adjustments.shapeScale * 100).roundToInt()}%",
+                        centered = true
+                    )
                     if (!adjustments.shapeCrop) {
                         OptionCard(
                             label = stringResource(R.string.shapeColor),

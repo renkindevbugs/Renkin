@@ -786,29 +786,39 @@ class IconGenerator(
     }
 
     /**
-     * The Modifier tab's shape step: either lays the icon on a [GenerationOptions.bgColor]-filled
-     * shape plate (glyphs, shapeless pack icons), or crops the icon into the shape (photos,
-     * uploads, full-bleed icons). The mask is drawn with an anti-aliased SRC_IN composite —
+     * The Modifier tab's shape step: crops the icon into the shape (the default), or lays it
+     * on a [GenerationOptions.bgColor]-filled shape plate (glyphs, shapeless pack icons) —
+     * [GenerationOptions.iconShapeScale] sizes the icon relative to the shape either way.
+     * The whole composite is masked by the shape at the end, so a full-bleed icon's corners
+     * can't poke out of curvy shapes (pebble, sunny). Anti-aliased SRC_IN masking —
      * Canvas.clipPath would leave jagged edges.
      */
     private fun applyShape(src: Bitmap): Bitmap {
         val size = maxOf(src.width, src.height, 256)
-        val path = IconShapes.path(options.iconShape, size.toFloat()) ?: return src
-        return newArgbBitmap(size, size) { canvas ->
-            val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        val sizeF = size.toFloat()
+        val path = IconShapes.path(options.iconShape, sizeF) ?: return src
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+
+        val content = newArgbBitmap(size, size) { canvas ->
+            val half = sizeF / 2f
             if (options.iconShapeCrop) {
-                canvas.drawPath(path, paint)
-                paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
-                canvas.drawBitmap(src, null, RectF(0f, 0f, size.toFloat(), size.toFloat()), paint)
+                val extent = half * options.iconShapeScale
+                canvas.drawBitmap(src, null, RectF(half - extent, half - extent, half + extent, half + extent), paint)
             } else {
                 paint.color = options.bgColor
                 canvas.drawPath(path, paint)
-                // Glyph inside the plate, scaled to the launcher-ish safe zone.
-                val inset = size * 0.19f
-                paint.xfermode = null
+                // Glyph inside the plate: 62% of the shape at scale 1 (launcher-ish safe zone).
+                val extent = half * 0.62f * options.iconShapeScale
                 paint.color = -0x1
-                canvas.drawBitmap(src, null, RectF(inset, inset, size - inset, size - inset), paint)
+                canvas.drawBitmap(src, null, RectF(half - extent, half - extent, half + extent, half + extent), paint)
             }
+        }
+
+        return newArgbBitmap(size, size) { canvas ->
+            val mask = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            canvas.drawPath(path, mask)
+            mask.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+            canvas.drawBitmap(content, 0f, 0f, mask)
         }
     }
 
