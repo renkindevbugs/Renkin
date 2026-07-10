@@ -733,7 +733,8 @@ class IconGenerator(
      */
     private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {
         val offset = options.iconOffsetX != 0f || options.iconOffsetY != 0f
-        if (!offset && options.iconScale == 1f) return icon
+        val shaped = options.iconShape != IconShape.NONE
+        if (!offset && options.iconScale == 1f && !shaped) return icon
 
         var bitmap = icon.toBitmap()
         if (bitmap.width <= 0 || bitmap.height <= 0) return icon
@@ -748,14 +749,46 @@ class IconGenerator(
                 canvas.drawBitmap(src, 0f, 0f, null)
             }
         }
+        if (shaped) {
+            bitmap = applyShape(bitmap)
+        }
 
         val source = icon as? BitmapIconDrawable
         return BitmapIconDrawable(
             ctx.resources,
             bitmap,
-            exportAsAdaptiveIcon = source?.isAdaptiveIcon() ?: false,
-            previewScale = source?.previewScale ?: 1f
+            // A shaped icon IS its shape — exporting it adaptive would let the launcher mask
+            // it again (a squircle inside the launcher's circle). Ship it as a legacy bitmap.
+            exportAsAdaptiveIcon = if (shaped) false else source?.isAdaptiveIcon() ?: false,
+            previewScale = if (shaped) 1f else source?.previewScale ?: 1f
         )
+    }
+
+    /**
+     * The Modifier tab's shape step: either lays the icon on a [GenerationOptions.bgColor]-filled
+     * shape plate (glyphs, shapeless pack icons), or crops the icon into the shape (photos,
+     * uploads, full-bleed icons). The mask is drawn with an anti-aliased SRC_IN composite —
+     * Canvas.clipPath would leave jagged edges.
+     */
+    private fun applyShape(src: Bitmap): Bitmap {
+        val size = maxOf(src.width, src.height, 256)
+        val path = IconShapes.path(options.iconShape, size.toFloat()) ?: return src
+        return newArgbBitmap(size, size) { canvas ->
+            val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            if (options.iconShapeCrop) {
+                canvas.drawPath(path, paint)
+                paint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+                canvas.drawBitmap(src, null, RectF(0f, 0f, size.toFloat(), size.toFloat()), paint)
+            } else {
+                paint.color = options.bgColor
+                canvas.drawPath(path, paint)
+                // Glyph inside the plate, scaled to the launcher-ish safe zone.
+                val inset = size * 0.19f
+                paint.xfermode = null
+                paint.color = -0x1
+                canvas.drawBitmap(src, null, RectF(inset, inset, size - inset, size - inset), paint)
+            }
+        }
     }
 
     /**

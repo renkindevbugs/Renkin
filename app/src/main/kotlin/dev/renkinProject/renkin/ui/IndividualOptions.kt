@@ -56,6 +56,7 @@ import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -191,9 +192,10 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         val base = vectorIcon
         modifiedVector = when {
             base == null -> null
-            // Only skip when there's truly nothing to apply — scale (iconScale) is applied by
-            // applyModifier too, so a scale change with no image-edit must still run it.
-            options.primaryImageEdit == ImageEdit.NONE && options.iconScale == 1f -> base
+            // Only skip when there's truly nothing to apply — scale and shape are applied by
+            // applyModifier too, so those changes with no image-edit must still run it.
+            options.primaryImageEdit == ImageEdit.NONE && options.iconScale == 1f
+                && options.iconShape == IconShape.NONE -> base
             else -> {
                 generating = true
                 val result = builder.applyModifier(base, options)
@@ -323,10 +325,12 @@ fun OptionsDialog(
     val isCustomScheme = monochromeScheme >= monochromeSchemes.size
     val scheme = monochromeSchemes.getOrNull(monochromeScheme)
     val effectiveColor = if (isMonochromeVariant && !isCustomScheme) scheme!!.first else iconColor
-    // Background only applies to the monochrome variant; other sources keep the transparent default.
+    // Background only applies to the monochrome variant and the shape plate; other sources
+    // keep the transparent default.
     val effectiveBgColor = when {
         isMonochromeVariant && !isCustomScheme -> scheme!!.second
         isMonochromeVariant -> customBgColor
+        adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop -> adjustments.shapeColor
         else -> Color.Transparent
     }
 
@@ -341,7 +345,9 @@ fun OptionsDialog(
         bgRemovalTolerance = adjustments.bgRemovalTolerance,
         iconOffsetX = adjustments.iconOffsetX,
         iconOffsetY = adjustments.iconOffsetY,
-        colorizeFlat = adjustments.colorizeFlat
+        colorizeFlat = adjustments.colorizeFlat,
+        iconShape = adjustments.iconShape,
+        iconShapeCrop = adjustments.shapeCrop
     )
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work

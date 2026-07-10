@@ -65,6 +65,10 @@ data class GenerationOptions(
     // Colorize as a flat fill (SRC_IN) rather than the default multiply blend, so the picked colour
     // replaces the icon's own colours instead of mixing with them. Per-icon Modifier-tab option.
     val colorizeFlat: Boolean = false,
+    // Icon shape applied as the LAST step: NONE leaves the icon untouched; otherwise the icon
+    // is laid on a [bgColor]-filled shape plate, or cropped into the shape when [iconShapeCrop].
+    val iconShape: IconShape = IconShape.NONE,
+    val iconShapeCrop: Boolean = false,
     // Which pack's fallback styling to give apps neither pack themes (NONE = leave them raw).
     val fallbackSource: FallbackSource = FallbackSource.NONE
 ) {
