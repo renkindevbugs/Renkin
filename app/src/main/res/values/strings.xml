@@ -317,4 +317,20 @@
     <string name="importSvg">SVG</string>
     <string name="svgImportFailed">Couldn\'t read this SVG — only path-based icons are supported</string>
     <string name="pickColorTitle">Pick a colour</string>
+    <string name="iconShapeTitle">Icon shape</string>
+    <string name="shapeNone">No shape</string>
+    <string name="shapeCircle">Circle</string>
+    <string name="shapeSquircle">Squircle</string>
+    <string name="shapePebble">Pebble</string>
+    <string name="shapeCookie">Cookie</string>
+    <string name="shapeSunny">Sunny</string>
+    <string name="shapePlate">Background</string>
+    <string name="shapeCrop">Crop icon</string>
+    <string name="shapeColor">Shape colour</string>
+    <string name="shapeIconScale">Shape size</string>
+    <string name="textTypeCustom">Custom text</string>
+    <string name="textCustomLabel">Custom text</string>
+    <string name="textCustomHint">YT</string>
+    <string name="textFont">Font</string>
+    <string name="textCaseLabel">Letter case</string>
 </resources>

@@ -23,6 +23,7 @@ import dev.renkinProject.renkin.data.SecondarySourceKey
 import dev.renkinProject.renkin.data.SecondaryTextTypeKey
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
+import dev.renkinProject.renkin.data.TextFontKey
 import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getBackgroundColor
@@ -65,6 +66,19 @@ data class GenerationOptions(
     // Colorize as a flat fill (SRC_IN) rather than the default multiply blend, so the picked colour
     // replaces the icon's own colours instead of mixing with them. Per-icon Modifier-tab option.
     val colorizeFlat: Boolean = false,
+    // Icon shape applied as the LAST step: NONE leaves the icon untouched; otherwise the icon
+    // is cropped into the shape (the default — most icons are full-bleed) or laid on a
+    // [bgColor]-filled shape plate. [iconShapeScale] sizes the SHAPE itself (the icon stays
+    // as-is — that's [iconScale]): smaller crops deeper, larger clips just the corners.
+    val iconShape: IconShape = IconShape.NONE,
+    val iconShapeCrop: Boolean = true,
+    val iconShapeScale: Float = 1f,
+    // Text-icon options: the string rendered for TextType.CUSTOM (empty falls back to the app
+    // name), the letter-case transform (all text types), and the TTF/OTF the glyphs come from
+    // (empty = the bundled Arcticons Sans).
+    val textCustom: String = "",
+    val textCase: TextCase = TextCase.AS_IS,
+    val textFontPath: String = "",
     // Which pack's fallback styling to give apps neither pack themes (NONE = leave them raw).
     val fallbackSource: FallbackSource = FallbackSource.NONE
 ) {
@@ -100,8 +114,12 @@ data class GenerationOptions(
                 monochrome = preferences.getBooleanValue(MonochromeKey),
                 themed = preferences.getBooleanValue(ExportThemedKey),
                 override = override,
-                fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT)
+                fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
+                textFontPath = preferences.getStringValue(TextFontKey)
             )
         }
     }
 }
+
+/** Letter-case transform for text icons (per-app option; not persisted globally). */
+enum class TextCase { AS_IS, UPPER, LOWER }

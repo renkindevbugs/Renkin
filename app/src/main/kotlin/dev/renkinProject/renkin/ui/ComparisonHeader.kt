@@ -434,12 +434,12 @@ private fun EnlargedIconDialog(icon: IconPackDrawable, onDismiss: () -> Unit) {
             modifier = Modifier.clickable(onClick = onDismiss)
         ) {
             Box(Modifier.padding(32.dp), contentAlignment = Alignment.Center) {
+                // No clip on purpose: rounding here would misrepresent shaped/full-bleed
+                // icons — the preview must show exactly the pixels the pack will carry.
                 Image(
                     painter = icon.getPainter(),
                     contentDescription = stringResource(R.string.iconNew),
-                    modifier = Modifier
-                        .size(240.dp)
-                        .clip(RoundedCornerShape(60.dp))
+                    modifier = Modifier.size(240.dp)
                 )
             }
         }

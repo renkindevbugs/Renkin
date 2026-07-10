@@ -5,8 +5,11 @@ package dev.renkinProject.renkin.ui
 import android.graphics.Bitmap
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,9 +24,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -45,8 +50,11 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -56,6 +64,8 @@ import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getImageEditLabels
+import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.icon.creator.IconShapes
 import kotlin.math.roundToInt
 
 /**
@@ -78,13 +88,21 @@ internal class AdjustmentState {
     var autoCenter by mutableStateOf(false)
     var iconOffsetX by mutableFloatStateOf(0f)
     var iconOffsetY by mutableFloatStateOf(0f)
+    // Icon shape (applied as the last generation step): the shape, crop-vs-plate mode
+    // (crop is the default — most icons are full-bleed), the icon's size relative to
+    // the shape, and the plate's fill colour.
+    var iconShape by mutableStateOf(IconShape.NONE)
+    var shapeCrop by mutableStateOf(true)
+    var shapeScale by mutableFloatStateOf(1f)
+    var shapeColor by mutableStateOf(Color.White)
 
     companion object {
         val Saver = listSaver<AdjustmentState, Any>(
             save = {
                 listOf(it.edgeThreshold, it.edgeSmoothing, it.edgeContrast, it.iconScale,
                     it.bgRemovalTolerance, it.autoCenter, it.iconOffsetX, it.iconOffsetY,
-                    it.colorizeFlat)
+                    it.colorizeFlat, it.iconShape.ordinal, it.shapeCrop, it.shapeColor.toArgb(),
+                    it.shapeScale)
             },
             restore = { saved ->
                 AdjustmentState().apply {
@@ -97,6 +115,10 @@ internal class AdjustmentState {
                     iconOffsetX = saved[6] as Float
                     iconOffsetY = saved[7] as Float
                     colorizeFlat = saved[8] as Boolean
+                    iconShape = IconShape.entries.getOrElse(saved[9] as Int) { IconShape.NONE }
+                    shapeCrop = saved[10] as Boolean
+                    shapeColor = Color(saved[11] as Int)
+                    shapeScale = saved[12] as Float
                 }
             }
         )
@@ -124,6 +146,7 @@ internal fun ModifierTab(
 ) {
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
+    var shapeColorPickerOpen by remember { mutableStateOf(false) }
     var centerDialogOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val toolboxInstalled = remember { imageToolboxInstalled(context) }
@@ -294,6 +317,70 @@ internal fun ModifierTab(
             )
         }
 
+        // Icon shape: laid on a coloured plate or cropping the icon itself, drawn with the
+        // same Material You shape presets launchers use.
+        Text(
+            text = stringResource(R.string.iconShapeTitle),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        OptionGroup {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                IconShape.entries.forEach { shape ->
+                    ShapeSwatch(
+                        shape = shape,
+                        selected = adjustments.iconShape == shape,
+                        onClick = { adjustments.iconShape = shape }
+                    )
+                }
+            }
+            androidx.compose.animation.AnimatedVisibility(visible = adjustments.iconShape != IconShape.NONE) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Crop first — most icons are full-bleed, so cropping is the common case.
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = adjustments.shapeCrop,
+                            onClick = { adjustments.shapeCrop = true },
+                            label = { Text(stringResource(R.string.shapeCrop)) }
+                        )
+                        FilterChip(
+                            selected = !adjustments.shapeCrop,
+                            onClick = { adjustments.shapeCrop = false },
+                            label = { Text(stringResource(R.string.shapePlate)) }
+                        )
+                    }
+                    // Scales the shape itself (the icon stays as-is — that's Icon scale above):
+                    // smaller crops deeper into the icon, larger clips just the corners.
+                    LabeledSlider(
+                        label = stringResource(R.string.shapeIconScale),
+                        value = adjustments.shapeScale,
+                        onValueChange = { adjustments.shapeScale = it },
+                        valueRange = 0.5f..1.5f,
+                        valueLabel = "${(adjustments.shapeScale * 100).roundToInt()}%",
+                        centered = true
+                    )
+                    if (!adjustments.shapeCrop) {
+                        OptionCard(
+                            label = stringResource(R.string.shapeColor),
+                            onClick = { shapeColorPickerOpen = true },
+                            trailing = {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = adjustments.shapeColor,
+                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                    modifier = Modifier.size(28.dp)
+                                ) {}
+                            }
+                        )
+                    }
+                }
+            }
+        }
+
         // Position: opens a visual tool (like the colour picker) showing the icon's margins.
         OptionCard(
             label = stringResource(R.string.position),
@@ -378,6 +465,15 @@ internal fun ModifierTab(
         )
     }
 
+    if (shapeColorPickerOpen) {
+        ColorDialog(
+            onDismiss = { shapeColorPickerOpen = false },
+            currentlySelected = adjustments.shapeColor,
+            onColorSelected = { adjustments.shapeColor = it },
+            sampleBitmap = sampleBitmap
+        )
+    }
+
     if (centerDialogOpen) {
         CenterDialog(
             iconBitmap = centerPreview,
@@ -386,6 +482,56 @@ internal fun ModifierTab(
         )
     }
 }
+
+/**
+ * One selectable shape preview. The path comes from the same [IconShapes] geometry the
+ * generator uses, so what's drawn here is exactly what the icon gets.
+ */
+@Composable
+private fun ShapeSwatch(shape: IconShape, selected: Boolean, onClick: () -> Unit) {
+    val label = shapeLabel(shape)
+    val fill = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+    RenkinTooltipBox(label) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .clip(CircleShape)
+                .then(
+                    if (selected) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape)
+                    else Modifier
+                )
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center
+        ) {
+            if (shape == IconShape.NONE) {
+                Icon(
+                    imageVector = Icons.Filled.Block,
+                    contentDescription = label,
+                    tint = fill,
+                    modifier = Modifier.size(26.dp)
+                )
+            } else {
+                Canvas(Modifier.size(30.dp)) {
+                    IconShapes.path(shape, size.minDimension)?.let {
+                        drawPath(it.asComposePath(), color = fill)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun shapeLabel(shape: IconShape): String = stringResource(
+    when (shape) {
+        IconShape.NONE -> R.string.shapeNone
+        IconShape.CIRCLE -> R.string.shapeCircle
+        IconShape.SQUIRCLE -> R.string.shapeSquircle
+        IconShape.PEBBLE -> R.string.shapePebble
+        IconShape.COOKIE -> R.string.shapeCookie
+        IconShape.SUNNY -> R.string.shapeSunny
+    }
+)
 
 /** The recolouring edits' colour row: opens the picker, shows the current colour as a swatch. */
 @Composable

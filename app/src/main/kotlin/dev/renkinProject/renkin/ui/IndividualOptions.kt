@@ -46,7 +46,10 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.TextFontKey
 import dev.renkinProject.renkin.data.TextType
+import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.icon.creator.TextCase
 import android.graphics.drawable.AdaptiveIconDrawable
 import androidx.compose.ui.platform.LocalContext
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -56,6 +59,7 @@ import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -191,9 +195,10 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         val base = vectorIcon
         modifiedVector = when {
             base == null -> null
-            // Only skip when there's truly nothing to apply — scale (iconScale) is applied by
-            // applyModifier too, so a scale change with no image-edit must still run it.
-            options.primaryImageEdit == ImageEdit.NONE && options.iconScale == 1f -> base
+            // Only skip when there's truly nothing to apply — scale and shape are applied by
+            // applyModifier too, so those changes with no image-edit must still run it.
+            options.primaryImageEdit == ImageEdit.NONE && options.iconScale == 1f
+                && options.iconShape == IconShape.NONE -> base
             else -> {
                 generating = true
                 val result = builder.applyModifier(base, options)
@@ -225,6 +230,12 @@ fun OptionsDialog(
     var source by rememberSaveable { mutableStateOf(Source.ICON_PACK) }
     var imageEdit by rememberSaveable { mutableStateOf(ImageEdit.NONE) }
     var textType by rememberSaveable { mutableStateOf(TextType.FULL_NAME) }
+    // Text-source extras: the CUSTOM type's string (seeded with the app name), the letter-case
+    // transform, and the font — per-app; the font starts from the global preference.
+    var customText by rememberSaveable { mutableStateOf(app.appName) }
+    var textCase by rememberSaveable { mutableStateOf(TextCase.AS_IS) }
+    val globalFontPath = getPreferences().getStringValue(TextFontKey)
+    var textFontPath by rememberSaveable(globalFontPath) { mutableStateOf(globalFontPath) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
     // Monochrome variant: which colour scheme tints the icon. 0..schemes-1 pick a wallpaper-derived
@@ -323,10 +334,12 @@ fun OptionsDialog(
     val isCustomScheme = monochromeScheme >= monochromeSchemes.size
     val scheme = monochromeSchemes.getOrNull(monochromeScheme)
     val effectiveColor = if (isMonochromeVariant && !isCustomScheme) scheme!!.first else iconColor
-    // Background only applies to the monochrome variant; other sources keep the transparent default.
+    // Background only applies to the monochrome variant and the shape plate; other sources
+    // keep the transparent default.
     val effectiveBgColor = when {
         isMonochromeVariant && !isCustomScheme -> scheme!!.second
         isMonochromeVariant -> customBgColor
+        adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop -> adjustments.shapeColor
         else -> Color.Transparent
     }
 
@@ -341,7 +354,13 @@ fun OptionsDialog(
         bgRemovalTolerance = adjustments.bgRemovalTolerance,
         iconOffsetX = adjustments.iconOffsetX,
         iconOffsetY = adjustments.iconOffsetY,
-        colorizeFlat = adjustments.colorizeFlat
+        colorizeFlat = adjustments.colorizeFlat,
+        iconShape = adjustments.iconShape,
+        iconShapeCrop = adjustments.shapeCrop,
+        iconShapeScale = adjustments.shapeScale,
+        textCustom = customText,
+        textCase = textCase,
+        textFontPath = textFontPath
     )
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
@@ -543,6 +562,12 @@ fun OptionsDialog(
                                     }
                                 },
                                 onTextTypeChange = { textType = it; draft.origin = IconOrigin.CREATE },
+                                customText = customText,
+                                onCustomTextChange = { customText = it; draft.origin = IconOrigin.CREATE },
+                                textCase = textCase,
+                                onTextCaseChange = { textCase = it; draft.origin = IconOrigin.CREATE },
+                                fontPath = textFontPath,
+                                onFontPathChange = { textFontPath = it; draft.origin = IconOrigin.CREATE },
                                 contentReady = createTabReady,
                                 selectedResourceId = customIconList.firstOrNull()?.resourceId,
                                 // Frame the rotation siblings only once the user has opted in.
