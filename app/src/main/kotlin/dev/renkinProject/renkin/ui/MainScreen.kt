@@ -23,8 +23,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Lock
@@ -241,13 +244,20 @@ fun MainColumn(iconPacks: List<IconPack>) {
         val isUpdate = buildOutcome.outcome == MainViewModel.BuildOutcome.UPDATE
         RenkinAlertDialog(
             onDismissRequest = { viewModel.dismissBuildOutcome() },
+            icon = {
+                Icon(
+                    imageVector = if (isUpdate) Icons.Filled.Refresh else Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
             title = {
                 Text(stringResource(
                     if (isUpdate) R.string.buildUpdatedTitle else R.string.buildInstalledTitle
                 ))
             },
             text = {
-                Text(stringResource(
+                Text(boldStringResource(
                     if (isUpdate) R.string.buildUpdatedText else R.string.buildInstalledText,
                     buildOutcome.packLabel
                 ))
@@ -344,6 +354,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
         ConfirmDialog(
             title = stringResource(R.string.importBackupTitle),
             text = stringResource(R.string.importBackupText),
+            icon = Icons.Filled.Restore,
             onConfirm = { viewModel.confirmBackupImport() },
             onDismiss = { viewModel.cancelBackupImport() }
         )
@@ -362,8 +373,9 @@ fun MainColumn(iconPacks: List<IconPack>) {
     if (viewModel.watchProfileMissing) {
         RenkinAlertDialog(
             onDismissRequest = { viewModel.clearWatchProfileMissing() },
+            icon = { Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             title = { Text(stringResource(R.string.watchProfileGoneTitle)) },
-            text = { Text(stringResource(R.string.watchProfileGoneText)) },
+            text = { Text(boldStringResource(R.string.watchProfileGoneText)) },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearWatchProfileMissing() }) {
                     Text(stringResource(R.string.ok))
@@ -381,8 +393,9 @@ fun MainColumn(iconPacks: List<IconPack>) {
 fun NewIconPackDialog(packLabel: String, onReload: () -> Unit, onDismiss: () -> Unit) {
     RenkinAlertDialog(
         onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Filled.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         title = { Text(stringResource(R.string.newIconPackTitle)) },
-        text = { Text(stringResource(R.string.newIconPackText, packLabel)) },
+        text = { Text(boldStringResource(R.string.newIconPackText, packLabel)) },
         confirmButton = {
             TextButton(onClick = onReload) { Text(stringResource(R.string.reload)) }
         },

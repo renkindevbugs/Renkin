@@ -5,6 +5,7 @@ package dev.renkinProject.renkin.ui
 import android.graphics.Bitmap
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -46,8 +47,10 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
+import androidx.compose.ui.window.Dialog
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.ui.theme.CardShape
+import dev.renkinProject.renkin.ui.theme.DialogShape
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
@@ -363,10 +366,14 @@ private fun NewSlot(
     labelExpand: Float
 ) {
     val borderColor = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+    // Tapping the preview blows it up, so the result is judgeable before applying.
+    var enlarged by remember { mutableStateOf(false) }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
             Surface(
-                modifier = Modifier.size(size),
+                modifier = Modifier
+                    .size(size)
+                    .clickable(enabled = previewIcon != null) { enlarged = true },
                 shape = RoundedCornerShape(size / 4),
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(2.dp, borderColor)
@@ -409,6 +416,33 @@ private fun NewSlot(
             color = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.collapsibleHeight { labelExpand }.padding(top = 4.dp)
         )
+    }
+
+    if (enlarged && previewIcon != null) {
+        EnlargedIconDialog(previewIcon) { enlarged = false }
+    }
+}
+
+/** Blown-up look at the new icon — the 56dp slot hides detail the launcher will show. */
+@Composable
+private fun EnlargedIconDialog(icon: IconPackDrawable, onDismiss: () -> Unit) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            shape = DialogShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+            // Tapping the blown-up icon closes it again — no chrome needed.
+            modifier = Modifier.clickable(onClick = onDismiss)
+        ) {
+            Box(Modifier.padding(32.dp), contentAlignment = Alignment.Center) {
+                Image(
+                    painter = icon.getPainter(),
+                    contentDescription = stringResource(R.string.iconNew),
+                    modifier = Modifier
+                        .size(240.dp)
+                        .clip(RoundedCornerShape(60.dp))
+                )
+            }
+        }
     }
 }
 

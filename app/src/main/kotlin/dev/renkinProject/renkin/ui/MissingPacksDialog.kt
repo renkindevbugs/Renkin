@@ -48,11 +48,12 @@ fun MissingPacksDialog(packs: List<MissingPack>, onDismiss: (dontShowAgain: Bool
 
     RenkinAlertDialog(
         onDismissRequest = { onDismiss(dontShowAgain) },
+        icon = { Icon(Icons.Filled.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
         title = { Text(stringResource(R.string.missingPacksTitle)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    text = stringResource(R.string.missingPacksText),
+                    text = boldStringResource(R.string.missingPacksText),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(bottom = 8.dp)

@@ -15,7 +15,6 @@ import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.toArgb
 import com.caverock.androidsvg.SVG
 import com.caverock.androidsvg.SVGParseException
-import java.io.InputStream
 import kotlin.math.max
 
 // Bitmap/SVG helpers shared by UploadColumn (UploadGallery.kt). internal so the upload
@@ -43,32 +42,62 @@ internal fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
     var bitmap = contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, decodeOptions) }
 
     if (bitmap == null) {
-        val svg = contentResolver.openInputStream(uri).use { decodeSVGSteam(it) }
-
-        if (svg != null && svg.documentWidth > 0 && svg.documentHeight > 0) {
-            // Cap the raster size too — an SVG can declare arbitrarily huge document
-            // dimensions, and rendering them 1:1 would allocate an equally huge bitmap.
-            val scale = (MAX_IMPORT_SIZE / max(svg.documentWidth, svg.documentHeight)).coerceAtMost(1f)
-            val width = (svg.documentWidth * scale).toInt().coerceAtLeast(1)
-            val height = (svg.documentHeight * scale).toInt().coerceAtLeast(1)
-            bitmap = newArgbBitmap(width, height) {
-                svg.renderToCanvas(it, RectF(0f, 0f, width.toFloat(), height.toFloat()))
-            }
+        // Not a raster image — try SVG. Reading as text is cheap here: this branch is only
+        // reached when the raster decode already failed, and real SVGs are small.
+        val markup = runCatching {
+            contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+        }.getOrNull()
+        if (markup != null && markup.contains("<svg", ignoreCase = true)) {
+            bitmap = decodeSvgToBitmap(markup)
         }
     }
 
     return bitmap ?: null
 }
 
-internal fun decodeSVGSteam(stream: InputStream?): SVG? {
-    if (stream == null)
-        return null
-
-    return try {
-        SVG.getFromInputStream(stream)
-    } catch (_: SVGParseException) {
-        null
+/**
+ * Renders SVG markup to a bitmap at the full import size. An SVG's document size is a hint,
+ * not pixels — so the scale goes BOTH ways: a 24x24 icon document (heroicons etc.) rendered
+ * 1:1 and enlarged later is exactly the blur vectors exist to avoid. A render that painted
+ * nothing at all reports failure (error toast) instead of leaving a blank tile in the gallery.
+ */
+internal fun decodeSvgToBitmap(markup: String): Bitmap? {
+    val svg = decodeSvg(markup) ?: return null
+    val (width, height) = svgRenderSize(svg) ?: return null
+    val bitmap = newArgbBitmap(width, height) {
+        svg.renderToCanvas(it, RectF(0f, 0f, width.toFloat(), height.toFloat()))
     }
+    return if (bitmap.hasAnyVisiblePixel()) bitmap else null
+}
+
+/** Parses SVG markup, resolving `currentColor` to black up front — icon sets use it
+ * throughout, and unresolved it draws nothing (a blank import). */
+internal fun decodeSvg(markup: String): SVG? = try {
+    SVG.getFromString(markup.replace("currentColor", "#000000"))
+} catch (_: SVGParseException) {
+    null
+}
+
+/** Raster size for [svg]: the longest side always lands on MAX_IMPORT_SIZE (up or down);
+ * documents without width/height fall back to their viewBox. */
+internal fun svgRenderSize(svg: SVG): Pair<Int, Int>? {
+    val docWidth = if (svg.documentWidth > 0) svg.documentWidth else svg.documentViewBox?.width() ?: 0f
+    val docHeight = if (svg.documentHeight > 0) svg.documentHeight else svg.documentViewBox?.height() ?: 0f
+    if (docWidth <= 0 || docHeight <= 0) return null
+    val scale = MAX_IMPORT_SIZE / max(docWidth, docHeight)
+    val width = (docWidth * scale).toInt().coerceAtLeast(1)
+    val height = (docHeight * scale).toInt().coerceAtLeast(1)
+    return width to height
+}
+
+private fun Bitmap.hasAnyVisiblePixel(): Boolean {
+    val step = (max(width, height) / 64).coerceAtLeast(1)
+    for (x in 0 until width step step) {
+        for (y in 0 until height step step) {
+            if ((getPixel(x, y) ushr 24) != 0) return true
+        }
+    }
+    return false
 }
 
 @Composable

@@ -66,11 +66,11 @@
     <string name="applicationName">Application Name</string>
     <string name="ok">OK</string>
     <string name="buildInstalledTitle">Icon pack installed</string>
-    <string name="buildInstalledText">The icon pack was installed as “%1$s”. Select it as the icon pack in your launcher’s settings to see your icons.</string>
+    <string name="buildInstalledText">The icon pack was installed as **“%1$s”**. Select it as the icon pack in your **launcher’s settings** to see your icons.</string>
     <string name="buildUpdatedTitle">Icon pack updated</string>
-    <string name="buildUpdatedText">Launchers cache icons, so the changes may not show right away. In your launcher’s settings, switch to another icon pack and then back to “%1$s” to refresh them.</string>
+    <string name="buildUpdatedText">Launchers cache icons, so the changes may not show right away. In your launcher’s settings, **switch to another icon pack and back to “%1$s”** to refresh them.</string>
     <string name="saveBeforeSwitchTitle">Save changes?</string>
-    <string name="saveBeforeSwitchText">This profile has changes that aren’t saved. Save them before switching? Saved icons are kept without building; tap outside to cancel.</string>
+    <string name="saveBeforeSwitchText">This profile has changes that aren’t saved. **Save them before switching?** Saved icons are kept without building; tap outside to cancel.</string>
     <string name="saveAction">Save</string>
     <string name="discardAction">Don\'t save</string>
     <string name="unbuiltChanges">Saved changes not built yet</string>
@@ -87,7 +87,7 @@
     <string name="calendarDayIconsDesc">%1$s from %2$s · rotates with the date</string>
     <string name="iconsStillGenerated">Icons are still being generated</string>
     <string name="newIconPackTitle">New icon pack installed</string>
-    <string name="newIconPackText">Reload Renkin to use \"%1$s\" for your icons.</string>
+    <string name="newIconPackText">Reload Renkin to use **\"%1$s\"** for your icons.</string>
     <string name="reload">Reload</string>
     <string name="overrideIcon">Refresh replaces existing icons</string>
     <string name="deleteIconPack">Uninstall icon pack</string>
@@ -106,7 +106,7 @@
     <string name="colorize">Colorize</string>
     <string name="clearIcons">Clear icons</string>
     <string name="clearIconsTitle">Clear icons?</string>
-    <string name="clearIconsText">This removes the generated icons inside the app. The icons in your already-built icon pack stay there until you build a new one.</string>
+    <string name="clearIconsText">This removes the generated icons **inside the app**. The icons in your already-built icon pack **stay there** until you build a new one.</string>
     <string name="iconsCleared">Icons cleared</string>
     <string name="searchIcons">Search icons…</string>
     <string name="noIconsFound">No icons found</string>
@@ -154,7 +154,7 @@
     <string name="requiredField">Required</string>
     <string name="createProfileAction">Create</string>
     <string name="deleteProfile">Delete profile</string>
-    <string name="deleteProfileText">Delete “%1$s” and all of its icons? Its installed icon pack stays on the device until you uninstall it.</string>
+    <string name="deleteProfileText">Delete **“%1$s”** and all of its icons? Its installed icon pack **stays on the device** until you uninstall it.</string>
     <string name="packUsageEmpty">No icon packs installed</string>
     <string name="sortIconsHeader">Icons</string>
     <string name="sortPacksHeader">Icon packs</string>
@@ -229,7 +229,7 @@
     <string name="forceCrash">Force crash (debug)</string>
     <string name="watchDone">Done</string>
     <string name="watchProfileGoneTitle">Profile no longer exists</string>
-    <string name="watchProfileGoneText">This icon suggestion belonged to a profile that has been deleted, so it can\'t be applied.</string>
+    <string name="watchProfileGoneText">This icon suggestion belonged to a profile that has been **deleted**, so it can\'t be applied.</string>
     <string name="newIconIn">New icon in</string>
     <string name="watching">Watching</string>
     <string name="allIconPacks">all icon packs</string>
@@ -292,7 +292,7 @@
     <string name="exportBackup">Export backup</string>
     <string name="importBackup">Import backup</string>
     <string name="importBackupTitle">Import backup?</string>
-    <string name="importBackupText">Everything on this device — profiles, icons, watch rules and settings — will be replaced with the backup\'s contents.</string>
+    <string name="importBackupText">Everything on this device — profiles, icons, watch rules and settings — will be **replaced** with the backup\'s contents.</string>
     <string name="backupExported">Backup exported</string>
     <string name="backupExportFailed">Couldn\'t export the backup</string>
     <string name="backupImported">Backup imported</string>
@@ -302,7 +302,7 @@
     <string name="profileExportFailed">Couldn\'t export the profile</string>
     <string name="profileImported">Profile imported — open it from the title menu</string>
     <string name="missingPacksTitle">Missing icon packs</string>
-    <string name="missingPacksText">This profile uses icon packs that aren\'t installed on this device. Their icons stay locked until the pack is installed.</string>
+    <string name="missingPacksText">This profile uses icon packs that aren\'t installed on this device. Their icons stay **locked until the pack is installed**.</string>
     <string name="missingPackPaid">Paid · %d icon(s) locked</string>
     <string name="missingPackPending">Not verified yet · %d icon(s) waiting</string>
     <string name="missingPackOpenStore">Play Store</string>
@@ -314,4 +314,6 @@
     <string name="iconOriginLocked">This icon\'s source pack isn\'t on this device — install it to use the icon</string>
     <string name="packUsageNotInstalled">not installed</string>
     <string name="importProfile">Import profile</string>
+    <string name="importSvg">SVG</string>
+    <string name="svgImportFailed">Couldn\'t read this SVG — only path-based icons are supported</string>
 </resources>

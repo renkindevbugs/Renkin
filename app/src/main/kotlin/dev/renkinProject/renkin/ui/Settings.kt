@@ -237,6 +237,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
         ConfirmDialog(
             title = stringResource(R.string.clearIconsTitle),
             text = stringResource(R.string.clearIconsText),
+            icon = Icons.Filled.DeleteSweep,
             onConfirm = {
                 confirmClearIcons = false
                 viewModel.clearIcons()
