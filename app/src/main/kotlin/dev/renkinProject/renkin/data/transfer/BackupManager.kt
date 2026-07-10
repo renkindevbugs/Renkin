@@ -277,15 +277,24 @@ class BackupManager(
     /** A shared profile always lands as a NEW profile — imports never overwrite anything. */
     private suspend fun importProfile(data: BackupData): ImportResult {
         val bp = data.profiles.firstOrNull() ?: throw IOException("File contains no profile")
+        // A numbered suffix keeps repeated imports of the same share tellable apart.
+        val name = uniqueProfileName(bp.profile.name, packRepo.profiles().map { it.name }.toSet())
         val newId = packRepo.createProfile(
             // Fresh identity (the id also names the built pack's package) and fresh flags:
             // the icons are saved-but-not-built, and the missing-pack dialog choice is local.
-            bp.profile.copy(id = 0, hasUnbuiltChanges = true, hideMissingPackWarning = false)
+            bp.profile.copy(id = 0, name = name, hasUnbuiltChanges = true, hideMissingPackWarning = false)
         )
         packRepo.replaceAll(newId, bp.icons.map { it.copy(profileId = newId) })
         watchRepo.insertRules(bp.watchRules.map { it.toImport(newId) })
         storePackLabels(data.packLabels)
         return ImportResult(ImportKind.PROFILE, 1, bp.icons.size, importedProfileId = newId)
+    }
+
+    private fun uniqueProfileName(base: String, existing: Set<String>): String {
+        if (base !in existing) return base
+        var n = 2
+        while ("$base ($n)" in existing) n++
+        return "$base ($n)"
     }
 
     /**

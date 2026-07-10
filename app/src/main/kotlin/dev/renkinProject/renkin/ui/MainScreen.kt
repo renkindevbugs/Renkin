@@ -338,6 +338,17 @@ fun MainColumn(iconPacks: List<IconPack>) {
         WatchApplyModal(pendingSuggestion) { viewModel.clearPendingWatchSuggestion() }
     }
 
+    // The replace-everything confirmation for a picked full-backup file. Hosted here (not in
+    // Settings) so imports started from the profile switcher confirm too.
+    if (viewModel.pendingBackupImport != null) {
+        ConfirmDialog(
+            title = stringResource(R.string.importBackupTitle),
+            text = stringResource(R.string.importBackupText),
+            onConfirm = { viewModel.confirmBackupImport() },
+            onDismiss = { viewModel.cancelBackupImport() }
+        )
+    }
+
     // Locked icons from a missing pack: prompted automatically once per profile per session
     // (unless the profile opted out); the top-bar badge and banner reopen it any time.
     if (viewModel.showMissingPacksDialog) {
@@ -763,12 +774,13 @@ fun TitleBar(
         },
         actions = {
             // Lit while any of the active profile's icons are locked behind a missing pack.
+            // Error tint on purpose: it must stand out from the primary-tinted actions.
             if (mainViewModel.missingPackSummary.isNotEmpty()) {
                 IconButton(onClick = { mainViewModel.openMissingPacksDialog() }) {
                     Icon(
                         imageVector = Icons.Filled.Warning,
                         contentDescription = stringResource(R.string.missingPacksTitle),
-                        tint = MaterialTheme.colorScheme.tertiary
+                        tint = MaterialTheme.colorScheme.error
                     )
                 }
             }

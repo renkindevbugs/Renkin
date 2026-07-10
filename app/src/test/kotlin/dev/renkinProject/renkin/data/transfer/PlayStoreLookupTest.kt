@@ -34,4 +34,15 @@ class PlayStoreLookupTest {
     fun pageWithoutPrice_isUnknown() {
         assertEquals(StoreVerdict.UNKNOWN, PlayStoreLookup.parsePrice("<html>captcha wall</html>"))
     }
+
+    @Test
+    fun parseTitle_readsOgTitleAndStripsSuffix() {
+        val html = """<meta property="og:title" content="Whicons &amp; Friends - Apps on Google Play">"""
+        assertEquals("Whicons & Friends", PlayStoreLookup.parseTitle(html))
+    }
+
+    @Test
+    fun parseTitle_missingMeta_isNull() {
+        assertEquals(null, PlayStoreLookup.parseTitle("<html></html>"))
+    }
 }

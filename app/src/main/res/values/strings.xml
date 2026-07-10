@@ -310,4 +310,8 @@
     <string name="missingPacksBanner">%1$d icon pack(s) missing · %2$d icon(s) locked</string>
     <string name="filterMissingPack">Missing icon pack</string>
     <string name="lockedIconTooltip">Locked — install its source icon pack to use this icon</string>
+    <string name="refreshLockedSkipped">Some icons were skipped — their source icon packs aren\'t on this device</string>
+    <string name="iconOriginLocked">This icon\'s source pack isn\'t on this device — install it to use the icon</string>
+    <string name="packUsageNotInstalled">not installed</string>
+    <string name="importProfile">Import profile</string>
 </resources>

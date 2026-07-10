@@ -134,7 +134,7 @@ class BackupManagerTest {
         // The source device knows the pack's display name (recorded while it was installed).
         srcPackRepo.upsertVerdicts(listOf(PackVerdict("pack.paid", label = "Paid Icons", seenInstalled = true)))
         val fakeVerdicts = PackVerdictManager(context, srcPackRepo) { pack ->
-            if (pack == "pack.paid") StoreVerdict.PAID else StoreVerdict.FREE
+            StoreLookupResult(if (pack == "pack.paid") StoreVerdict.PAID else StoreVerdict.FREE)
         }
 
         val out = ByteArrayOutputStream()
@@ -171,6 +171,35 @@ class BackupManagerTest {
         val verdict = tgtPackRepo.verdicts(listOf("pack.paid")).getValue("pack.paid")
         assertEquals("Paid Icons", verdict.label)
         assertEquals(false, verdict.seenInstalled)
+    }
+
+    @Test
+    fun profileImport_dedupesNamesWithNumberSuffix() = runBlocking {
+        val srcPackRepo = RenkinPackRepository(srcPackDb)
+        val srcWatchRepo = WatchRepository(srcWatchDb)
+        srcPackRepo.replaceEverything(
+            listOf(
+                Profile(id = DEFAULT_PROFILE_ID, name = "Renkin"),
+                Profile(id = 2L, name = "Gaming")
+            ),
+            emptyList()
+        )
+        val out = ByteArrayOutputStream()
+        BackupManager(context, srcPackRepo, srcWatchRepo).exportProfile(2L) { out }
+        val bytes = out.toByteArray()
+
+        val tgtPackRepo = RenkinPackRepository(tgtPackDb)
+        val tgtWatchRepo = WatchRepository(tgtWatchDb)
+        tgtPackRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
+        val manager = BackupManager(context, tgtPackRepo, tgtWatchRepo)
+        manager.importFile { ByteArrayInputStream(bytes) }
+        manager.importFile { ByteArrayInputStream(bytes) }
+        manager.importFile { ByteArrayInputStream(bytes) }
+
+        assertEquals(
+            listOf("Renkin", "Gaming", "Gaming (2)", "Gaming (3)"),
+            tgtPackRepo.profiles().map { it.name }
+        )
     }
 
     @Test

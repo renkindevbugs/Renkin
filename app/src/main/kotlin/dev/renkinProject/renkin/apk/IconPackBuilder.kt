@@ -289,6 +289,14 @@ class IconPackBuilder(
 
         apkModule.add(ByteInputSource(drawableXml.getBytes(), "assets/drawable.xml"))
         apkModule.add(ByteInputSource(appfilterXml.getBytes(), "assets/appfilter.xml"))
+        // Provenance: which real pack each icon came from, so this pack used as a source
+        // elsewhere attributes icons to their origin (and the paid-pack checks still apply).
+        apkModule.add(
+            ByteInputSource(
+                PackProvenance.encode(apps).toByteArray(Charsets.UTF_8),
+                "assets/" + PackProvenance.ASSET_NAME
+            )
+        )
 
         createXmlResource(apkModule, packageBlock, drawableXml, "drawable")
         createXmlResource(apkModule, packageBlock, appfilterXml, "appfilter")

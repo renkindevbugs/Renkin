@@ -214,7 +214,11 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             isRefreshing = true
             try {
-                appProvider.refreshIcons(preferences)
+                // Icons whose real origin (via an own pack used as source) isn't owned on
+                // this device are withheld — say so instead of leaving silent empty slots.
+                if (appProvider.refreshIcons(preferences) > 0) {
+                    _toastEvents.trySend(R.string.refreshLockedSkipped)
+                }
             } finally {
                 // Without this a failed refresh would leave the spinner on forever and block builds.
                 isRefreshing = false
@@ -296,6 +300,9 @@ class MainViewModel @Inject constructor(
                     // The saved pack now matches the current icons → reset both change baselines.
                     builtKeys = appProvider.getSavedPackKeys()
                     updatedKeys = emptySet()
+                    // The save dropped locked originals the user replaced by hand — the
+                    // missing-pack warning must not keep counting them after a build.
+                    refreshMissingPacks(prompt = false)
                     // The hero pick only sticks once built: record what was built so startup
                     // can restore it over any later, unbuilt pick.
                     val store = getApplication<Application>().dataStore
@@ -328,11 +335,20 @@ class MainViewModel @Inject constructor(
     /**
      * Assigns (or clears, when [icon] is null) the created icon for the app at [index].
      * [sourcePackName] is the pack the icon was taken from (null/empty when not from a pack).
+     * An icon picked from one of our own packs is attributed to its recorded origin — and
+     * withheld (with a toast) when that origin is a pack this device doesn't own.
      */
     fun applyIcon(index: Int, app: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String? = null) {
-        // Hand-picked icons are locked immediately: a refresh never replaces them.
-        appProvider.editApplication(index, app.changeExport(icon, sourcePackName = sourcePackName, isRefreshMade = false))
-        markUpdated(app, icon)
+        viewModelScope.launch {
+            val (origin, locked) = appProvider.resolvePickedSource(app, if (icon == null) null else sourcePackName)
+            if (icon != null && locked) {
+                _toastEvents.trySend(R.string.iconOriginLocked)
+                return@launch
+            }
+            // Hand-picked icons are locked immediately: a refresh never replaces them.
+            appProvider.editApplication(index, app.changeExport(icon, sourcePackName = origin, isRefreshMade = false))
+            markUpdated(app, icon)
+        }
     }
 
     /**
@@ -351,15 +367,25 @@ class MainViewModel @Inject constructor(
         calendarPackName: String?,
         sourcePackName: String?
     ) {
-        appProvider.editApplication(
-            index,
-            app.changeExport(icon, sourcePackName = sourcePackName, isRefreshMade = false).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
-        )
-        markUpdated(app, icon)
+        viewModelScope.launch {
+            val (origin, locked) = appProvider.resolvePickedSource(app, if (icon == null) null else sourcePackName)
+            if (icon != null && locked) {
+                _toastEvents.trySend(R.string.iconOriginLocked)
+                return@launch
+            }
+            appProvider.editApplication(
+                index,
+                app.changeExport(icon, sourcePackName = origin, isRefreshMade = false).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
+            )
+            markUpdated(app, icon)
+        }
     }
 
     /** Live count of icons taken from each pack — orders the per-app icon picker. */
     fun packUsageCounts(): Map<String, Int> = appProvider.packUsageCounts()
+
+    /** Per-pack usage by TRUE origin (locked icons included) for the stats dialog. */
+    suspend fun packUsageEntries(): List<ApplicationProvider.PackUsage> = appProvider.packUsageEntries()
 
     /**
      * Uninstalls the app's own generated icon pack. Emits a toast event for the outcome
@@ -378,10 +404,12 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Re-reads the installed icon packs. */
+    /** Re-reads the installed icon packs (and unlocks icons whose pack just arrived). */
     fun sync() {
         viewModelScope.launch {
             appProvider.forceSync()
+            // The sync may have unlocked held-back icons — the badge/banner must follow.
+            refreshMissingPacks(prompt = false)
             _toastEvents.trySend(R.string.packsSynced)
         }
     }
@@ -587,6 +615,7 @@ class MainViewModel @Inject constructor(
                 if (hasUnsavedChanges()) {
                     appProvider.saveActiveProfileIcons()
                     resetChangeBaselines()
+                    refreshMissingPacks(prompt = false)
                 }
                 BackupManager(getApplication()).exportBackup(uri)
                 _toastEvents.trySend(R.string.backupExported)
@@ -613,6 +642,7 @@ class MainViewModel @Inject constructor(
                 if (profileId == activeProfileId && hasUnsavedChanges()) {
                     appProvider.saveActiveProfileIcons()
                     resetChangeBaselines()
+                    refreshMissingPacks(prompt = false)
                 }
                 BackupManager(getApplication()).exportProfile(profileId, uri)
                 _toastEvents.trySend(R.string.profileExported)

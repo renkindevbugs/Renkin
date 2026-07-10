@@ -12,6 +12,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Share
@@ -79,6 +80,10 @@ fun ProfileSwitcherTitle() {
         pendingShareId = null
         if (uri != null && id != null) viewModel.exportProfile(id, uri)
     }
+    // Shared-profile (or backup) file import, right where profiles are managed.
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) viewModel.importFile(uri) }
 
     Box {
         Row(
@@ -181,6 +186,14 @@ fun ProfileSwitcherTitle() {
                 onClick = {
                     menuOpen = false
                     createOpen = true
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.importProfile)) },
+                leadingIcon = { Icon(Icons.Filled.FileDownload, null, tint = MaterialTheme.colorScheme.primary) },
+                onClick = {
+                    menuOpen = false
+                    importLauncher.launch(arrayOf("*/*"))
                 }
             )
         }

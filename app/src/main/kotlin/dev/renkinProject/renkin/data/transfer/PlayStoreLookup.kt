@@ -9,6 +9,9 @@ import java.net.URL
 /** What a Play Store lookup concluded about a pack. */
 enum class StoreVerdict { FREE, PAID, UNLISTED, UNKNOWN }
 
+/** A lookup's outcome: the price verdict plus the store-listed app name when readable. */
+data class StoreLookupResult(val verdict: StoreVerdict, val label: String? = null)
+
 /**
  * Checks whether an app is paid or free by fetching its public Play Store details page —
  * there is no official price API and no offline source at all, so this is the pragmatic
@@ -19,7 +22,7 @@ enum class StoreVerdict { FREE, PAID, UNLISTED, UNKNOWN }
  */
 object PlayStoreLookup {
 
-    suspend fun lookup(packageName: String): StoreVerdict = withContext(Dispatchers.IO) {
+    suspend fun lookup(packageName: String): StoreLookupResult = withContext(Dispatchers.IO) {
         val url = URL("https://play.google.com/store/apps/details?id=$packageName&hl=en&gl=US")
         var connection: HttpURLConnection? = null
         try {
@@ -31,13 +34,16 @@ object PlayStoreLookup {
                 setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
             }
             when (connection.responseCode) {
-                HttpURLConnection.HTTP_OK ->
-                    parsePrice(connection.inputStream.bufferedReader().use { it.readText() })
-                HttpURLConnection.HTTP_NOT_FOUND, HttpURLConnection.HTTP_GONE -> StoreVerdict.UNLISTED
-                else -> StoreVerdict.UNKNOWN
+                HttpURLConnection.HTTP_OK -> {
+                    val html = connection.inputStream.bufferedReader().use { it.readText() }
+                    StoreLookupResult(parsePrice(html), parseTitle(html))
+                }
+                HttpURLConnection.HTTP_NOT_FOUND, HttpURLConnection.HTTP_GONE ->
+                    StoreLookupResult(StoreVerdict.UNLISTED)
+                else -> StoreLookupResult(StoreVerdict.UNKNOWN)
             }
         } catch (e: IOException) {
-            StoreVerdict.UNKNOWN
+            StoreLookupResult(StoreVerdict.UNKNOWN)
         } finally {
             connection?.disconnect()
         }
@@ -63,4 +69,18 @@ object PlayStoreLookup {
             else -> StoreVerdict.PAID
         }
     }
+
+    /**
+     * The app's store-listed name from the page's og:title — the missing-packs dialog would
+     * otherwise have to show a bare package name for a pack this device never saw installed.
+     */
+    fun parseTitle(html: String): String? =
+        Regex("<meta property=\"og:title\" content=\"([^\"]+)\"")
+            .find(html)?.groupValues?.get(1)
+            ?.removeSuffix(" - Apps on Google Play")
+            ?.replace("&amp;", "&")
+            ?.replace("&#39;", "'")
+            ?.replace("&quot;", "\"")
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
 }
