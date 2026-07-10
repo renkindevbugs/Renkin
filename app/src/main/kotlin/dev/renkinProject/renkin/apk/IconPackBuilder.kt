@@ -30,6 +30,8 @@ import dev.renkinProject.renkin.xml.XmlEncoder
 import dev.renkinProject.renkin.xml.XmlParser.Companion.toXmlNode
 import dev.renkinProject.renkin.xml.file.AdaptiveIconXml
 import dev.renkinProject.renkin.xml.file.AppFilterXml
+import dev.renkinProject.renkin.xml.file.AppMapXml
+import dev.renkinProject.renkin.xml.file.ThemeResourcesXml
 import dev.renkinProject.renkin.xml.file.DrawableXml
 import dev.renkinProject.renkin.xml.file.LayoutXml
 import dev.renkinProject.renkin.xml.file.XmlMemoryFile
@@ -104,6 +106,22 @@ class IconPackBuilder(
          *
          * Pure (depends only on each app's package/activity), so it's unit-tested directly.
          */
+        /**
+         * A compiled `<string-array>` resource. Bag children are named by 1-based array index
+         * (the 0x02000001… scheme aapt uses); each value is a string-pool reference.
+         */
+        @VisibleForTesting
+        internal fun createStringArrayResource(packageBlock: PackageBlock, name: String, values: List<String>) {
+            val entry = packageBlock.getOrCreate("", "array", name)
+            entry.ensureComplex(true)
+            val mapArray = entry.resValueMapArray
+            values.forEachIndexed { index, value ->
+                val item = mapArray.createNext()
+                item.setArrayIndex(index + 1)
+                item.setValueAsString(value)
+            }
+        }
+
         @VisibleForTesting
         internal fun uniqueDrawableFileNames(apps: List<PackageInfoStruct>): Map<String, String> {
             val names = mutableMapOf<String, String>()
@@ -189,6 +207,11 @@ class IconPackBuilder(
         textMethod(ctx.resources.getString(R.string.writingElement))
         val drawableXml = DrawableXml()
         val appfilterXml = AppFilterXml()
+        // The same mappings again in the legacy schemas: GO-family/Solo launchers read
+        // appmap.xml / theme_resources.xml instead of appfilter.xml — the manifest already
+        // advertises them, so the pack must speak their format too.
+        val appMapXml = AppMapXml()
+        val themeResourcesXml = ThemeResourcesXml(packLabel)
 
         val vectorBrush = ReferenceBrush("@color/icon_color")
 
@@ -273,6 +296,8 @@ class IconPackBuilder(
                 // <calendar> entry below; only launchers that prefer <item> over <calendar> (e.g.
                 // Smart Launcher) fall back to the static icon without rotating.
                 appfilterXml.item(app.packageName, app.activityName, appFileName)
+                appMapXml.item(app.activityName, appFileName)
+                themeResourcesXml.item(app.packageName, app.activityName, appFileName)
             }
         }
 
@@ -290,6 +315,8 @@ class IconPackBuilder(
 
         apkModule.add(ByteInputSource(drawableXml.getBytes(), "assets/drawable.xml"))
         apkModule.add(ByteInputSource(appfilterXml.getBytes(), "assets/appfilter.xml"))
+        apkModule.add(ByteInputSource(appMapXml.getBytes(), "assets/appmap.xml"))
+        apkModule.add(ByteInputSource(themeResourcesXml.getBytes(), "assets/theme_resources.xml"))
         // Provenance: which real pack each icon came from, so this pack used as a source
         // elsewhere attributes icons to their origin (and the paid-pack checks still apply).
         apkModule.add(
@@ -301,6 +328,15 @@ class IconPackBuilder(
 
         createXmlResource(apkModule, packageBlock, drawableXml, "drawable")
         createXmlResource(apkModule, packageBlock, appfilterXml, "appfilter")
+        createXmlResource(apkModule, packageBlock, appMapXml, "appmap")
+        createXmlResource(apkModule, packageBlock, themeResourcesXml, "theme_resources")
+
+        // Flat icon list as a compiled string-array — the format icon pickers and the old
+        // theme engines look up via resources.getIdentifier("icon_pack", "array", pkg).
+        val allDrawables = apps.filter { it.createdIcon != null }.map { appFileNames.getValue(it.key) } +
+            calendarIconsDrawable.keys
+        createStringArrayResource(packageBlock, "icon_pack", allDrawables)
+        createStringArrayResource(packageBlock, "all", allDrawables)
 
         val layout = createXmlLayoutResource(apkModule, packageBlock, createLayout(), "main_activity")
 
