@@ -68,10 +68,19 @@ class PackVerdictManager(
     /**
      * Looks up every referenced pack that still lacks a decisive verdict. Quiet best effort:
      * offline or blocked lookups leave the verdict UNKNOWN and a later call retries (after
-     * [RETRY_INTERVAL_MS], so a burst of triggers doesn't hammer the store).
+     * [RETRY_INTERVAL_MS], so a burst of triggers doesn't hammer the store). Returns true
+     * when any verdict became decisive — the caller can reload to unlock verified-free icons.
      */
-    suspend fun verifyPendingVerdicts() = withContext(Dispatchers.Default) {
-        ensureVerdicts(repo.distinctSourcePacks().toSet())
+    suspend fun verifyPendingVerdicts(): Boolean = withContext(Dispatchers.Default) {
+        val packs = repo.distinctSourcePacks().toSet()
+            .filter { it.isNotEmpty() && !IconPackBuilder.isOwnPack(it) }
+        if (packs.isEmpty()) return@withContext false
+        val undecidedBefore = packs.filter {
+            (repo.verdicts(packs)[it]?.verdict ?: VERDICT_UNKNOWN) == VERDICT_UNKNOWN
+        }.toSet()
+        ensureVerdicts(packs.toSet())
+        val after = repo.verdicts(undecidedBefore.toList())
+        undecidedBefore.any { (after[it]?.verdict ?: VERDICT_UNKNOWN) != VERDICT_UNKNOWN }
     }
 
     /**

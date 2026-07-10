@@ -9,8 +9,9 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
  * bare [PackageInfoStruct] — only the wrapper differs, the filtering rules are identical.
  *
  * Order of operations: text match (app name or original English name), then the mutually
- * exclusive Fallback / No-icon filter, then the sort. [installTimes] backs the install-date
- * sort and may be empty until it has been looked up off the main thread.
+ * exclusive Fallback / No-icon / Missing-pack filter, then the sort. [installTimes] backs the
+ * install-date sort and may be empty until it has been looked up off the main thread.
+ * [lockedKeys] are the apps whose saved icon is locked behind a missing icon pack.
  */
 fun <T> List<T>.sortedFilteredApps(
     query: String,
@@ -18,6 +19,8 @@ fun <T> List<T>.sortedFilteredApps(
     filterFallback: Boolean,
     sortOrder: AppSortOrder,
     installTimes: Map<String, Long>,
+    filterLocked: Boolean = false,
+    lockedKeys: Set<String> = emptySet(),
     selector: (T) -> PackageInfoStruct
 ): List<T> {
     val trimmed = query.trim()
@@ -28,6 +31,7 @@ fun <T> List<T>.sortedFilteredApps(
             app.originalName.contains(trimmed, ignoreCase = true)
     }
     seq = when {
+        filterLocked -> seq.filter { selector(it).key in lockedKeys }
         filterFallback -> seq.filter { selector(it).isFallback }
         filterNoIcon -> seq.filter { selector(it).createdIcon == null }
         else -> seq

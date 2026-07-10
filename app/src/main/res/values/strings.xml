@@ -301,4 +301,13 @@
     <string name="profileExported">Profile exported</string>
     <string name="profileExportFailed">Couldn\'t export the profile</string>
     <string name="profileImported">Profile imported — open it from the title menu</string>
+    <string name="missingPacksTitle">Missing icon packs</string>
+    <string name="missingPacksText">This profile uses icon packs that aren\'t installed on this device. Their icons stay locked until the pack is installed.</string>
+    <string name="missingPackPaid">Paid · %d icon(s) locked</string>
+    <string name="missingPackPending">Not verified yet · %d icon(s) waiting</string>
+    <string name="missingPackOpenStore">Play Store</string>
+    <string name="missingPackDontShowAgain">Don\'t show again for this profile</string>
+    <string name="missingPacksBanner">%1$d icon pack(s) missing · %2$d icon(s) locked</string>
+    <string name="filterMissingPack">Missing icon pack</string>
+    <string name="lockedIconTooltip">Locked — install its source icon pack to use this icon</string>
 </resources>

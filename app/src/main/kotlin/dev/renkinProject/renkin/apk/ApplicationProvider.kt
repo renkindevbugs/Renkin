@@ -26,6 +26,7 @@ import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.restoreProfilePrefs
 import dev.renkinProject.renkin.data.snapshotProfilePrefs
+import dev.renkinProject.renkin.data.VERDICT_UNKNOWN
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.data.transfer.PackVerdictManager
 import dev.renkinProject.renkin.data.FallbackSource
@@ -79,8 +80,14 @@ class ApplicationProvider(private val context: Context) {
     // they come back through a normal load once the app is installed.
     private val orphanRows = mutableMapOf<String, DbApplication>()
 
-    /** Keys of the active profile's icons currently locked behind a missing pack. */
-    val lockedIconKeys: Set<String> get() = lockedRows.keys
+    /** Keys of the active profile's icons currently locked behind a missing pack. Compose
+     * state (snapshot of the internal map) so the list rows/badges react to lock changes. */
+    var lockedIconKeys: Set<String> by mutableStateOf(emptySet())
+        private set
+
+    private fun publishLockedKeys() {
+        lockedIconKeys = lockedRows.keys.toSet()
+    }
 
     /** The profile whose icons/preferences are active. Set before the saved pack loads. */
     var activeProfileId: Long by mutableStateOf(DEFAULT_PROFILE_ID)
@@ -276,6 +283,7 @@ class ApplicationProvider(private val context: Context) {
     private suspend fun loadRenkinPack() {
         lockedRows.clear()
         orphanRows.clear()
+        publishLockedKeys()
         val saved = renkinPackStore.load(activeProfileId, defaultColor)
         if (saved.isEmpty()) return
 
@@ -320,6 +328,7 @@ class ApplicationProvider(private val context: Context) {
             }
             editApplication(app, updated)
         }
+        publishLockedKeys()
     }
 
     /**
@@ -358,6 +367,7 @@ class ApplicationProvider(private val context: Context) {
         // A hand-picked or regenerated icon over a locked slot replaces the held-back original.
         val replacedKeys = applicationList.filter { it.createdIcon != null }.map { it.key }.toSet()
         lockedRows.keys.removeAll(replacedKeys)
+        publishLockedKeys()
         renkinPackStore.save(activeProfileId, applicationList, lockedRows.values + orphanRows.values)
     }
 
@@ -399,6 +409,7 @@ class ApplicationProvider(private val context: Context) {
         // "Remove icons" is explicit user intent — held-back rows (locked/absent apps) go too.
         lockedRows.clear()
         orphanRows.clear()
+        publishLockedKeys()
         // Snapshot copy: editApplication mutates the live list in place.
         // Also reset calendar opt-ins: otherwise a calendar-enabled app is still persisted
         // (RenkinPackStore keeps calendar rows even without an icon), so it lingers in the
@@ -453,8 +464,38 @@ class ApplicationProvider(private val context: Context) {
     /** True while [id] still names an existing profile — deleted-profile deep links check this. */
     suspend fun profileExists(id: Long): Boolean = packRepo.profile(id) != null
 
-    /** Looks up any referenced pack still lacking a paid/free verdict (quiet best effort). */
-    suspend fun verifyPendingVerdicts() = verdictManager.verifyPendingVerdicts()
+    /**
+     * Looks up any referenced pack still lacking a paid/free verdict (quiet best effort).
+     * Returns true when a verdict became decisive — callers reload so freshly-verified-free
+     * icons unlock without a restart.
+     */
+    suspend fun verifyPendingVerdicts(): Boolean = verdictManager.verifyPendingVerdicts()
+
+    /** One missing source pack and how many of the active profile's icons it locks. */
+    data class MissingPack(val packageName: String, val label: String, val verdict: String, val iconCount: Int)
+
+    /** The active profile's locked icons grouped by their missing source pack. */
+    suspend fun missingPackSummary(): List<MissingPack> = withContext(Dispatchers.Default) {
+        val byPack = lockedRows.values.groupBy { it.sourcePackName }.filterKeys { it.isNotEmpty() }
+        if (byPack.isEmpty()) return@withContext emptyList()
+        val verdicts = packRepo.verdicts(byPack.keys.toList())
+        byPack.map { (pack, rows) ->
+            val verdict = verdicts[pack]
+            MissingPack(
+                packageName = pack,
+                label = verdict?.label?.ifEmpty { null } ?: pack,
+                verdict = verdict?.verdict ?: VERDICT_UNKNOWN,
+                iconCount = rows.size
+            )
+        }.sortedByDescending { it.iconCount }
+    }
+
+    /** Persists the active profile's "don't show the missing-packs dialog again" choice. */
+    suspend fun setHideMissingPackWarning(hide: Boolean) {
+        packRepo.profile(activeProfileId)?.let {
+            packRepo.updateProfile(it.copy(hideMissingPackWarning = hide))
+        }
+    }
 
     /**
      * Switches the active profile: snapshots the leaving profile's generation preferences,
