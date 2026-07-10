@@ -70,7 +70,7 @@ class IconPackBuilder(
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
-    private val keyStoreFile = ctx.filesDir.resolve(KEYSTORE_FILE_NAME)
+    private val keyStoreFile = PackKeystore.keystoreFile(ctx.filesDir)
 
     private val iconPackName = packPackageName
 
@@ -79,10 +79,11 @@ class IconPackBuilder(
         const val PACKAGE_NAME = "dev.renkinProject.renkinpack"
 
         /**
-         * The pack-signing keystore in filesDir. Backups carry it so packs rebuilt after a
-         * device migration keep the signature of the already-installed ones.
+         * The pack-signing keystore in filesDir. Backups carry it (with its password file,
+         * see [PackKeystore]) so packs rebuilt after a device migration keep the signature
+         * of the already-installed ones.
          */
-        const val KEYSTORE_FILE_NAME = "renkinpack.keystore"
+        const val KEYSTORE_FILE_NAME = PackKeystore.FILE_NAME
 
         // Packs built before the 2026-07 app-id rename; they may still be installed on devices.
         private const val LEGACY_PACKAGE_NAME = "dev.alembiconsProject.renkinpack"
@@ -632,15 +633,17 @@ class IconPackBuilder(
             ?: return null
 
         val versionCode = appMan.getVersionCode(iconPack)
-        val versionName = iconPack.versionName!!
+        // A package squatting our name (or a corrupt install) may carry no versionName —
+        // treat it like version 1 instead of crashing the build.
+        val versionName = iconPack.versionName ?: "1"
 
         return Version(versionCode, versionName)
     }
 
     private fun signApk(file: File, outFile: File) {
-        val pwd = "s3cur3p@ssw0rd"
+        val pwd = PackKeystore.password(ctx.filesDir)
 
-        val dtl = ApkUtils.KeyStoreDetails(keyStoreFile, pwd, "alias", pwd)
+        val dtl = ApkUtils.KeyStoreDetails(keyStoreFile, pwd, PackKeystore.KEY_ALIAS, pwd)
         ApkUtils.signApk(file, outFile, packLabel, dtl)
     }
 }

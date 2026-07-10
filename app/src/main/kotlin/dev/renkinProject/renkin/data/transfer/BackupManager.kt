@@ -12,6 +12,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.apk.IconPackBuilder
+import dev.renkinProject.renkin.apk.PackKeystore
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
@@ -120,6 +121,11 @@ class BackupManager(
             context.filesDir.resolve(IconPackBuilder.KEYSTORE_FILE_NAME)
                 .takeIf { it.exists() }
                 ?.let { zip.putFileEntry(KEYSTORE_ENTRY, it) }
+            // The keystore's random password (absent for legacy keystores, which open with
+            // the built-in constant) — without it a restored keystore couldn't sign.
+            PackKeystore.passwordFile(context.filesDir)
+                .takeIf { it.exists() }
+                ?.let { zip.putFileEntry(KEYSTORE_PASSWORD_ENTRY, it) }
             for (file in UploadedImageStore.list(context)) {
                 zip.putFileEntry("$UPLOADS_DIR/${file.name}", file)
             }
@@ -252,18 +258,32 @@ class BackupManager(
         // Pass 2: the bundled files. The gallery is replaced wholesale to match the backup.
         val uploadsDir = UploadedImageStore.directory(context)
         uploadsDir.listFiles()?.forEach { it.delete() }
+        var keystoreRestored = false
+        var passwordRestored = false
         ZipInputStream(open().buffered()).use { zip ->
             var entry = zip.nextEntry
             while (entry != null) {
                 when {
-                    entry.name == KEYSTORE_ENTRY ->
+                    entry.name == KEYSTORE_ENTRY -> {
                         writeEntryTo(zip, context.filesDir.resolve(IconPackBuilder.KEYSTORE_FILE_NAME))
+                        keystoreRestored = true
+                    }
+                    entry.name == KEYSTORE_PASSWORD_ENTRY -> {
+                        writeEntryTo(zip, PackKeystore.passwordFile(context.filesDir))
+                        passwordRestored = true
+                    }
                     entry.name.startsWith("$UPLOADS_DIR/") && entry.name.endsWith(".png") ->
                         // Only the file name is trusted, never the entry's path (zip-slip).
                         writeEntryTo(zip, File(uploadsDir, File(entry.name).name))
                 }
                 entry = zip.nextEntry
             }
+        }
+        // A restored keystore without a password in the backup is a legacy one (opens with
+        // the built-in constant) — a stale random password left behind would lock it out.
+        // When the backup carried no keystore at all, both local files stay as they are.
+        if (keystoreRestored && !passwordRestored) {
+            PackKeystore.passwordFile(context.filesDir).delete()
         }
 
         return ImportResult(ImportKind.BACKUP, data.profiles.size, data.profiles.sumOf { it.icons.size })
@@ -378,6 +398,7 @@ class BackupManager(
         private const val MANIFEST_ENTRY = "manifest.json"
         private const val DATA_ENTRY = "data.json"
         private const val KEYSTORE_ENTRY = "keystore/" + IconPackBuilder.KEYSTORE_FILE_NAME
+        private const val KEYSTORE_PASSWORD_ENTRY = "keystore/" + PackKeystore.PASSWORD_FILE_NAME
         private const val UPLOADS_DIR = "uploads"
         private const val KIND_BACKUP = "backup"
         private const val KIND_PROFILE = "profile"
