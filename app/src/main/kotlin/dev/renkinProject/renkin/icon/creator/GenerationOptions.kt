@@ -23,6 +23,7 @@ import dev.renkinProject.renkin.data.SecondarySourceKey
 import dev.renkinProject.renkin.data.SecondaryTextTypeKey
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
+import dev.renkinProject.renkin.data.TextFontKey
 import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getBackgroundColor
@@ -69,6 +70,12 @@ data class GenerationOptions(
     // is laid on a [bgColor]-filled shape plate, or cropped into the shape when [iconShapeCrop].
     val iconShape: IconShape = IconShape.NONE,
     val iconShapeCrop: Boolean = false,
+    // Text-icon options: the string rendered for TextType.CUSTOM (empty falls back to the app
+    // name), the letter-case transform (all text types), and the TTF/OTF the glyphs come from
+    // (empty = the bundled Arcticons Sans).
+    val textCustom: String = "",
+    val textCase: TextCase = TextCase.AS_IS,
+    val textFontPath: String = "",
     // Which pack's fallback styling to give apps neither pack themes (NONE = leave them raw).
     val fallbackSource: FallbackSource = FallbackSource.NONE
 ) {
@@ -104,8 +111,12 @@ data class GenerationOptions(
                 monochrome = preferences.getBooleanValue(MonochromeKey),
                 themed = preferences.getBooleanValue(ExportThemedKey),
                 override = override,
-                fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT)
+                fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
+                textFontPath = preferences.getStringValue(TextFontKey)
             )
         }
     }
 }
+
+/** Letter-case transform for text icons (per-app option; not persisted globally). */
+enum class TextCase { AS_IS, UPPER, LOWER }

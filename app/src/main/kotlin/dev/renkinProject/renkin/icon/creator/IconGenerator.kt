@@ -386,20 +386,41 @@ class IconGenerator(
     private fun generateText(applicationName: String, textType: TextType): IconPackDrawable {
         val size = 256
         val strokeWidth = size / 48F
-        val textGenerator = LetterGenerator(ctx)
+        val textGenerator = LetterGenerator(ctx, options.textFontPath)
+
+        // Custom text only applies to the CUSTOM type; the case transform applies everywhere.
+        val text = when (options.textCase) {
+            TextCase.UPPER -> applicationName.uppercase()
+            TextCase.LOWER -> applicationName.lowercase()
+            TextCase.AS_IS -> applicationName
+        }
 
         val newIcon = when(textType) {
             TextType.FULL_NAME -> {
-                val draw = textGenerator.generateAppName(applicationName, options.color, size)
+                val draw = textGenerator.generateAppName(text, options.color, size)
                 createVectorForMultiLineText(draw as BaseTextDrawable, options.color, size)
             }
             TextType.ONE_LETTER -> {
-                val draw = textGenerator.generateFirstLetter(applicationName, options.color, strokeWidth, size)
+                val draw = textGenerator.generateFirstLetter(text, options.color, strokeWidth, size)
                 createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
             }
             TextType.TWO_LETTERS -> {
-                val draw = textGenerator.generateTwoLetters(applicationName, options.color, strokeWidth, size)
+                val draw = textGenerator.generateTwoLetters(text, options.color, strokeWidth, size)
                 createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
+            }
+            TextType.CUSTOM -> {
+                val custom = when (options.textCase) {
+                    TextCase.UPPER -> options.textCustom.uppercase()
+                    TextCase.LOWER -> options.textCustom.lowercase()
+                    TextCase.AS_IS -> options.textCustom
+                }.trim().ifEmpty { text }
+                if (custom.length <= 3) {
+                    val draw = textGenerator.generateExact(custom, options.color, strokeWidth, size)
+                    createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
+                } else {
+                    val draw = textGenerator.generateAppName(custom, options.color, size)
+                    createVectorForMultiLineText(draw as BaseTextDrawable, options.color, size)
+                }
             }
         }
 

@@ -46,7 +46,10 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.TextFontKey
 import dev.renkinProject.renkin.data.TextType
+import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.icon.creator.TextCase
 import android.graphics.drawable.AdaptiveIconDrawable
 import androidx.compose.ui.platform.LocalContext
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -227,6 +230,12 @@ fun OptionsDialog(
     var source by rememberSaveable { mutableStateOf(Source.ICON_PACK) }
     var imageEdit by rememberSaveable { mutableStateOf(ImageEdit.NONE) }
     var textType by rememberSaveable { mutableStateOf(TextType.FULL_NAME) }
+    // Text-source extras: the CUSTOM type's string (seeded with the app name), the letter-case
+    // transform, and the font — per-app; the font starts from the global preference.
+    var customText by rememberSaveable { mutableStateOf(app.appName) }
+    var textCase by rememberSaveable { mutableStateOf(TextCase.AS_IS) }
+    val globalFontPath = getPreferences().getStringValue(TextFontKey)
+    var textFontPath by rememberSaveable(globalFontPath) { mutableStateOf(globalFontPath) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var useMonochrome by rememberSaveable { mutableStateOf(false) }
     // Monochrome variant: which colour scheme tints the icon. 0..schemes-1 pick a wallpaper-derived
@@ -347,7 +356,10 @@ fun OptionsDialog(
         iconOffsetY = adjustments.iconOffsetY,
         colorizeFlat = adjustments.colorizeFlat,
         iconShape = adjustments.iconShape,
-        iconShapeCrop = adjustments.shapeCrop
+        iconShapeCrop = adjustments.shapeCrop,
+        textCustom = customText,
+        textCase = textCase,
+        textFontPath = textFontPath
     )
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
@@ -549,6 +561,12 @@ fun OptionsDialog(
                                     }
                                 },
                                 onTextTypeChange = { textType = it; draft.origin = IconOrigin.CREATE },
+                                customText = customText,
+                                onCustomTextChange = { customText = it; draft.origin = IconOrigin.CREATE },
+                                textCase = textCase,
+                                onTextCaseChange = { textCase = it; draft.origin = IconOrigin.CREATE },
+                                fontPath = textFontPath,
+                                onFontPathChange = { textFontPath = it; draft.origin = IconOrigin.CREATE },
                                 contentReady = createTabReady,
                                 selectedResourceId = customIconList.firstOrNull()?.resourceId,
                                 // Frame the rotation siblings only once the user has opted in.

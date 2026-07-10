@@ -327,4 +327,9 @@
     <string name="shapePlate">Background</string>
     <string name="shapeCrop">Crop icon</string>
     <string name="shapeColor">Shape colour</string>
+    <string name="textTypeCustom">Custom text</string>
+    <string name="textCustomLabel">Custom text</string>
+    <string name="textCustomHint">YT</string>
+    <string name="textFont">Font</string>
+    <string name="textCaseLabel">Letter case</string>
 </resources>
