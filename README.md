@@ -24,6 +24,15 @@ Fork of [Alembicons](https://codeberg.org/kaanelloed/Alembicons) by kaanelloed (
 
 Grab the latest APK from [GitHub Releases](https://github.com/renkindevbugs/Renkin/releases/latest).
 
+## Screenshots
+
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="24%" alt="Home — pick a source and refresh">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" width="24%" alt="Pack preview before building">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/3.png" width="24%" alt="Per-app icon picker">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.png" width="24%" alt="Modifiers — scale, colorize, icon shapes">
+</p>
+
 ## Features
 
 - Source an icon from any installed icon pack, the app's own icon, or its name as text
