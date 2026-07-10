@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.IconLockManager
 import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.IconPack
@@ -576,7 +577,7 @@ class MainViewModel @Inject constructor(
     val lockedIconKeys: Set<String> get() = appProvider.lockedIconKeys
 
     /** The active profile's locked icons grouped by missing pack — badge, banner, dialog. */
-    var missingPackSummary by mutableStateOf<List<ApplicationProvider.MissingPack>>(emptyList())
+    var missingPackSummary by mutableStateOf<List<IconLockManager.MissingPack>>(emptyList())
         private set
 
     var showMissingPacksDialog by mutableStateOf(false)

@@ -31,7 +31,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.apk.ApplicationProvider.MissingPack
+import dev.renkinProject.renkin.apk.IconLockManager.MissingPack
 import dev.renkinProject.renkin.data.VERDICT_PAID
 import dev.renkinProject.renkin.ui.theme.CardShape
 
