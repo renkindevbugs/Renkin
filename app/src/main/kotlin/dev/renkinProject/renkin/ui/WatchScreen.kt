@@ -34,7 +34,6 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -89,6 +88,7 @@ import dev.renkinProject.renkin.WatchViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.ui.theme.CardShape
+import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dev.renkinProject.renkin.packages.PackageInfoStruct
@@ -104,7 +104,9 @@ fun WatchScreen(onDismiss: () -> Unit) {
 
     val rules by watchViewModel.rules.collectAsState()
     val apps = viewModel.applicationList
-    val packs = viewModel.iconPacks
+    // Renkin's own generated packs can't be watched (the checker ignores them), so don't
+    // offer them in the rule editor's pack picker either.
+    val packs = viewModel.iconPacks.filterNot { IconPackBuilder.isOwnPack(it.packageName) }
 
     // Icon-watch is the only feature that posts notifications now, so ask for the permission
     // here (it used to be requested by the removed package-added setting).
@@ -641,7 +643,7 @@ private fun CompletedRuleCard(
 @Composable
 private fun DoneBadge() {
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = SwatchShape,
         color = MaterialTheme.colorScheme.tertiaryContainer
     ) {
         Row(

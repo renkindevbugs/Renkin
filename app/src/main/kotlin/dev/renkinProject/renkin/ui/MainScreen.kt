@@ -23,12 +23,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -63,7 +68,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -107,7 +116,11 @@ fun AppSortFilterMenu(
     filterFallback: Boolean = false,
     onSortChange: (AppSortOrder) -> Unit,
     onFilterChange: (Boolean) -> Unit,
-    onFallbackFilterChange: (Boolean) -> Unit = {}
+    onFallbackFilterChange: (Boolean) -> Unit = {},
+    // Missing-pack filter: only offered where locked icons exist (home list).
+    filterLocked: Boolean = false,
+    showLockedFilter: Boolean = false,
+    onLockedFilterChange: (Boolean) -> Unit = {}
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
     Box {
@@ -130,16 +143,22 @@ fun AppSortFilterMenu(
             HorizontalDivider()
             CheckableDropdownItem(
                 text = stringResource(R.string.filterAllApps),
-                checked = !filterNoIcon && !filterFallback
-            ) { onFilterChange(false); onFallbackFilterChange(false); showSortMenu = false }
+                checked = !filterNoIcon && !filterFallback && !filterLocked
+            ) { onFilterChange(false); onFallbackFilterChange(false); onLockedFilterChange(false); showSortMenu = false }
             CheckableDropdownItem(
                 text = stringResource(R.string.filterWithoutIcon),
                 checked = filterNoIcon
-            ) { onFilterChange(true); showSortMenu = false }
+            ) { onFilterChange(true); onLockedFilterChange(false); showSortMenu = false }
             CheckableDropdownItem(
                 text = stringResource(R.string.filterFallback),
                 checked = filterFallback
-            ) { onFallbackFilterChange(true); showSortMenu = false }
+            ) { onFallbackFilterChange(true); onLockedFilterChange(false); showSortMenu = false }
+            if (showLockedFilter) {
+                CheckableDropdownItem(
+                    text = stringResource(R.string.filterMissingPack),
+                    checked = filterLocked
+                ) { onLockedFilterChange(true); showSortMenu = false }
+            }
         }
     }
 }
@@ -186,6 +205,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val filterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
     // Transient (not a pref): fallback flags only exist after a refresh, so the filter resets too.
     var filterFallback by remember { mutableStateOf(false) }
+    // Transient too: locked icons are a temporary condition (install the pack and it's gone).
+    var filterLocked by remember { mutableStateOf(false) }
 
     // Require a second back press to leave. Registered here (before the search bar),
     // so the search bar's clear-on-back handler takes priority while it has text.
@@ -223,13 +244,20 @@ fun MainColumn(iconPacks: List<IconPack>) {
         val isUpdate = buildOutcome.outcome == MainViewModel.BuildOutcome.UPDATE
         RenkinAlertDialog(
             onDismissRequest = { viewModel.dismissBuildOutcome() },
+            icon = {
+                Icon(
+                    imageVector = if (isUpdate) Icons.Filled.Refresh else Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
             title = {
                 Text(stringResource(
                     if (isUpdate) R.string.buildUpdatedTitle else R.string.buildInstalledTitle
                 ))
             },
             text = {
-                Text(stringResource(
+                Text(boldStringResource(
                     if (isUpdate) R.string.buildUpdatedText else R.string.buildInstalledText,
                     buildOutcome.packLabel
                 ))
@@ -279,21 +307,35 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 sortOrder = sortOrder,
                 filterNoIcon = filterNoIcon,
                 filterFallback = filterFallback,
+                filterLocked = filterLocked,
+                showLockedFilter = viewModel.lockedIconKeys.isNotEmpty() || filterLocked,
                 onSortChange = { scope.launch { prefs.setEnumValue(AppSortOrderKey, it) } },
                 onFilterChange = {
                     filterFallback = false
+                    filterLocked = false
                     scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, it) }
                 },
                 onFallbackFilterChange = {
                     filterFallback = it
-                    if (it) scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
+                    if (it) {
+                        filterLocked = false
+                        scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
+                    }
+                },
+                onLockedFilterChange = {
+                    filterLocked = it
+                    if (it) {
+                        filterFallback = false
+                        scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
+                    }
                 },
                 onSearch = { packageFilter = it }
             )
             ApplicationList(
-                iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, listState,
+                iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, filterLocked, listState,
                 onShowAllApps = {
                     filterFallback = false
+                    filterLocked = false
                     scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
                 }
             )
@@ -306,13 +348,34 @@ fun MainColumn(iconPacks: List<IconPack>) {
         WatchApplyModal(pendingSuggestion) { viewModel.clearPendingWatchSuggestion() }
     }
 
+    // The replace-everything confirmation for a picked full-backup file. Hosted here (not in
+    // Settings) so imports started from the profile switcher confirm too.
+    if (viewModel.pendingBackupImport != null) {
+        ConfirmDialog(
+            title = stringResource(R.string.importBackupTitle),
+            text = stringResource(R.string.importBackupText),
+            icon = Icons.Filled.Restore,
+            onConfirm = { viewModel.confirmBackupImport() },
+            onDismiss = { viewModel.cancelBackupImport() }
+        )
+    }
+
+    // Locked icons from a missing pack: prompted automatically once per profile per session
+    // (unless the profile opted out); the top-bar badge and banner reopen it any time.
+    if (viewModel.showMissingPacksDialog) {
+        MissingPacksDialog(viewModel.missingPackSummary) { dontShowAgain ->
+            viewModel.dismissMissingPacksDialog(dontShowAgain)
+        }
+    }
+
     // The notification pointed at a profile that no longer exists — explain instead of
     // silently doing nothing (or worse, applying the icon to the wrong profile).
     if (viewModel.watchProfileMissing) {
         RenkinAlertDialog(
             onDismissRequest = { viewModel.clearWatchProfileMissing() },
+            icon = { Icon(Icons.Filled.Info, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             title = { Text(stringResource(R.string.watchProfileGoneTitle)) },
-            text = { Text(stringResource(R.string.watchProfileGoneText)) },
+            text = { Text(boldStringResource(R.string.watchProfileGoneText)) },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearWatchProfileMissing() }) {
                     Text(stringResource(R.string.ok))
@@ -330,8 +393,9 @@ fun MainColumn(iconPacks: List<IconPack>) {
 fun NewIconPackDialog(packLabel: String, onReload: () -> Unit, onDismiss: () -> Unit) {
     RenkinAlertDialog(
         onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Filled.Extension, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
         title = { Text(stringResource(R.string.newIconPackTitle)) },
-        text = { Text(stringResource(R.string.newIconPackText, packLabel)) },
+        text = { Text(boldStringResource(R.string.newIconPackText, packLabel)) },
         confirmButton = {
             TextButton(onClick = onReload) { Text(stringResource(R.string.reload)) }
         },
@@ -349,6 +413,7 @@ fun ApplicationList(
     sortOrder: AppSortOrder,
     filterNoIcon: Boolean,
     filterFallback: Boolean = false,
+    filterLocked: Boolean = false,
     listState: LazyListState = rememberLazyListState(),
     // Clears the active icon filters; offered on the empty state so a filtered-out list has an
     // obvious way back. Null hides the button (e.g. when no filter could be the cause).
@@ -376,18 +441,21 @@ fun ApplicationList(
     // derivedStateOf so it recomputes when the list's contents change (applicationList is a
     // SnapshotStateList edited in place, so its instance identity never changes) while still
     // caching across unrelated recompositions. Recreated when the sort/filter inputs change.
-    val displayList by remember(sortOrder, filterNoIcon, filterFallback, filter, installTimes) {
+    val displayList by remember(sortOrder, filterNoIcon, filterFallback, filterLocked, filter, installTimes) {
         derivedStateOf {
             // withIndex() first so each app keeps its original position; the shared pipeline then
             // filters and sorts the wrappers (selector pulls the app out of each IndexedValue).
             applications.withIndex().toList()
-                .sortedFilteredApps(filter, filterNoIcon, filterFallback, sortOrder, installTimes) { it.value }
+                .sortedFilteredApps(
+                    filter, filterNoIcon, filterFallback, sortOrder, installTimes,
+                    filterLocked, viewModel.lockedIconKeys
+                ) { it.value }
         }
     }
 
     // Keyed items make LazyColumn follow the previously visible app to its new
     // position when the order changes — jump back to the top instead
-    LaunchedEffect(sortOrder, filterNoIcon, filterFallback) {
+    LaunchedEffect(sortOrder, filterNoIcon, filterFallback, filterLocked) {
         listState.scrollToItem(0)
     }
 
@@ -406,6 +474,16 @@ fun ApplicationList(
         contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
+        // Missing-pack banner rides above the hero card while anything stays locked.
+        if (viewModel.missingPackSummary.isNotEmpty()) {
+            item(key = "missingPacks") {
+                MissingPacksBanner(
+                    packCount = viewModel.missingPackSummary.size,
+                    iconCount = viewModel.missingPackSummary.sumOf { it.iconCount },
+                    onClick = { viewModel.openMissingPacksDialog() }
+                )
+            }
+        }
         // Scrolls away with the list — only the search bar stays pinned
         item(key = "hero") {
             HeroPackCard(iconPacks)
@@ -417,7 +495,7 @@ fun ApplicationList(
             // A filter/search matched nothing — say so instead of leaving a blank gap.
             item(key = "empty") {
                 // Offer the way out when an icon filter is what emptied the list.
-                val filtered = filterNoIcon || filterFallback
+                val filtered = filterNoIcon || filterFallback || filterLocked
                 EmptyState(
                     icon = Icons.Filled.SearchOff,
                     text = stringResource(R.string.noAppsFound),
@@ -536,6 +614,7 @@ fun ApplicationItem(
             // Crossfade the trailing slot so assigning or clearing an icon fades
             // between the preview and the edit bubble instead of popping
             Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+                val isLocked = app.createdIcon == null && app.key in viewModel.lockedIconKeys
                 Crossfade(targetState = app.createdIcon, label = "iconPreview") { createdIcon ->
                     if (createdIcon != null) {
                         Image(
@@ -546,6 +625,34 @@ fun ApplicationItem(
                                 .clip(IconShape)
                                 .background(bgColor)
                         )
+                    } else if (isLocked) {
+                        // The saved icon exists but its source pack is missing/paid — show a
+                        // dashed placeholder; tapping the row still lets the user pick another.
+                        val outline = MaterialTheme.colorScheme.outline
+                        RenkinTooltipBox(stringResource(R.string.lockedIconTooltip)) {
+                            Box(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .drawBehind {
+                                        drawRoundRect(
+                                            color = outline,
+                                            style = Stroke(
+                                                width = 1.5.dp.toPx(),
+                                                pathEffect = PathEffect.dashPathEffect(floatArrayOf(10f, 8f))
+                                            ),
+                                            cornerRadius = CornerRadius(16.dp.toPx())
+                                        )
+                                    },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.Lock,
+                                    contentDescription = stringResource(R.string.lockedIconTooltip),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(22.dp)
+                                )
+                            }
+                        }
                     } else {
                         Surface(
                             shape = CircleShape,
@@ -607,7 +714,7 @@ fun ApplicationItem(
     }
 
     if (openAppOptions) {
-        OpenAppOptions(iconPacks, app, themed, index) {
+        OpenAppOptions(iconPacks, app, themed) {
             openAppOptions = false
         }
     }
@@ -618,19 +725,18 @@ fun OpenAppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    index: Int,
     onDismiss: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
 
     AppOptions(iconPacks, app, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName ->
-        viewModel.applyIcon(index, app, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName)
+        viewModel.applyIcon(app, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName)
         onDismiss()
     }, {
         onDismiss()
     }) {
         onDismiss()
-        viewModel.applyIcon(index, app, null)
+        viewModel.applyIcon(app, null)
     }
 }
 
@@ -666,6 +772,7 @@ fun TitleBar(
 
     val watchViewModel: WatchViewModel = hiltViewModel()
     val completedCount by watchViewModel.completedCount.collectAsState()
+    val mainViewModel: MainViewModel = hiltViewModel()
 
     LargeFlexibleTopAppBar(
         scrollBehavior = scrollBehavior,
@@ -678,6 +785,17 @@ fun TitleBar(
             ProfileSwitcherTitle()
         },
         actions = {
+            // Lit while any of the active profile's icons are locked behind a missing pack.
+            // Error tint on purpose: it must stand out from the primary-tinted actions.
+            if (mainViewModel.missingPackSummary.isNotEmpty()) {
+                IconButton(onClick = { mainViewModel.openMissingPacksDialog() }) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = stringResource(R.string.missingPacksTitle),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
             RefreshButton()
             IconButton(onClick = { openWatch = true }) {
                 BadgedBox(badge = {
@@ -733,10 +851,13 @@ fun SearchBar(
     sortOrder: AppSortOrder,
     filterNoIcon: Boolean,
     filterFallback: Boolean = false,
+    filterLocked: Boolean = false,
+    showLockedFilter: Boolean = false,
     containerColor: Color = MaterialTheme.colorScheme.background,
     onSortChange: (AppSortOrder) -> Unit,
     onFilterChange: (Boolean) -> Unit,
     onFallbackFilterChange: (Boolean) -> Unit = {},
+    onLockedFilterChange: (Boolean) -> Unit = {},
     onSearch: (String) -> Unit
 ) {
     var text by remember { mutableStateOf("") }
@@ -763,7 +884,12 @@ fun SearchBar(
             },
             modifier = Modifier.weight(1f)
         )
-        AppSortFilterMenu(sortOrder, filterNoIcon, filterFallback, onSortChange, onFilterChange, onFallbackFilterChange)
+        AppSortFilterMenu(
+            sortOrder, filterNoIcon, filterFallback, onSortChange, onFilterChange, onFallbackFilterChange,
+            filterLocked = filterLocked,
+            showLockedFilter = showLockedFilter,
+            onLockedFilterChange = onLockedFilterChange
+        )
     }
     }
 }

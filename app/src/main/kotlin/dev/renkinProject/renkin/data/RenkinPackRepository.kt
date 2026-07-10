@@ -31,6 +31,44 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         dao.insertAll(apps)
     }
 
+    /** Every profile's stored icons in one read — backup export. */
+    suspend fun getAllProfilesApplications(): List<DbApplication> = withContext(Dispatchers.Default) {
+        dao.getAllProfiles()
+    }
+
+    /**
+     * Backup import: replaces every profile and every stored icon in one transaction, keeping
+     * the backup's profile ids (icons and watch rules reference them). Callers must have fully
+     * parsed the incoming data first — a decode error must not run after the wipe.
+     */
+    suspend fun replaceEverything(profiles: List<Profile>, apps: List<DbApplication>) = db.withTransaction {
+        dao.deleteEverything()
+        profileDao.deleteEverything()
+        profiles.forEach { profileDao.insert(it) }
+        dao.insertAll(apps)
+    }
+
+    // ---- Pack verdicts -------------------------------------------------------------
+
+    private val verdictDao = db.packVerdictDao()
+
+    suspend fun verdicts(packages: List<String>): Map<String, PackVerdict> = withContext(Dispatchers.Default) {
+        verdictDao.get(packages).associateBy { it.packageName }
+    }
+
+    suspend fun allVerdicts(): List<PackVerdict> = withContext(Dispatchers.Default) {
+        verdictDao.getAll()
+    }
+
+    suspend fun upsertVerdicts(verdicts: List<PackVerdict>) = withContext(Dispatchers.Default) {
+        if (verdicts.isNotEmpty()) verdictDao.upsert(verdicts)
+    }
+
+    /** Every pack any stored icon (any profile) came from. */
+    suspend fun distinctSourcePacks(): List<String> = withContext(Dispatchers.Default) {
+        dao.distinctSourcePacks()
+    }
+
     // ---- Profiles -----------------------------------------------------------------
 
     /** All profiles, default first (ordered by id), as a reactive stream for the switcher UI. */

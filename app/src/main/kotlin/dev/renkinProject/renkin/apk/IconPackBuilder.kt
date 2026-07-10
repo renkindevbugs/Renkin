@@ -70,13 +70,30 @@ class IconPackBuilder(
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
-    private val keyStoreFile = ctx.filesDir.resolve("renkinpack.keystore")
+    private val keyStoreFile = ctx.filesDir.resolve(KEYSTORE_FILE_NAME)
 
     private val iconPackName = packPackageName
 
     companion object {
         /** Base package id of the generated Renkin icon pack (profiles append ".p<id>"). */
         const val PACKAGE_NAME = "dev.renkinProject.renkinpack"
+
+        /**
+         * The pack-signing keystore in filesDir. Backups carry it so packs rebuilt after a
+         * device migration keep the signature of the already-installed ones.
+         */
+        const val KEYSTORE_FILE_NAME = "renkinpack.keystore"
+
+        // Packs built before the 2026-07 app-id rename; they may still be installed on devices.
+        private const val LEGACY_PACKAGE_NAME = "dev.alembiconsProject.renkinpack"
+
+        /**
+         * True for icon packs Renkin itself built — the current package (any profile suffix)
+         * or the pre-rename one. Used to keep our own output out of places where it would only
+         * feed back on itself (icon watch, new-pack prompts).
+         */
+        fun isOwnPack(packageName: String): Boolean =
+            packageName.startsWith(PACKAGE_NAME) || packageName.startsWith(LEGACY_PACKAGE_NAME)
 
         /**
          * One drawable file name per app. Normally just the package name, but a package with
@@ -272,6 +289,14 @@ class IconPackBuilder(
 
         apkModule.add(ByteInputSource(drawableXml.getBytes(), "assets/drawable.xml"))
         apkModule.add(ByteInputSource(appfilterXml.getBytes(), "assets/appfilter.xml"))
+        // Provenance: which real pack each icon came from, so this pack used as a source
+        // elsewhere attributes icons to their origin (and the paid-pack checks still apply).
+        apkModule.add(
+            ByteInputSource(
+                PackProvenance.encode(apps).toByteArray(Charsets.UTF_8),
+                "assets/" + PackProvenance.ASSET_NAME
+            )
+        )
 
         createXmlResource(apkModule, packageBlock, drawableXml, "drawable")
         createXmlResource(apkModule, packageBlock, appfilterXml, "appfilter")

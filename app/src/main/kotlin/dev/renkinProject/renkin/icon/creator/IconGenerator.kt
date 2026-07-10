@@ -386,20 +386,41 @@ class IconGenerator(
     private fun generateText(applicationName: String, textType: TextType): IconPackDrawable {
         val size = 256
         val strokeWidth = size / 48F
-        val textGenerator = LetterGenerator(ctx)
+        val textGenerator = LetterGenerator(ctx, options.textFontPath)
+
+        // Custom text only applies to the CUSTOM type; the case transform applies everywhere.
+        val text = when (options.textCase) {
+            TextCase.UPPER -> applicationName.uppercase()
+            TextCase.LOWER -> applicationName.lowercase()
+            TextCase.AS_IS -> applicationName
+        }
 
         val newIcon = when(textType) {
             TextType.FULL_NAME -> {
-                val draw = textGenerator.generateAppName(applicationName, options.color, size)
+                val draw = textGenerator.generateAppName(text, options.color, size)
                 createVectorForMultiLineText(draw as BaseTextDrawable, options.color, size)
             }
             TextType.ONE_LETTER -> {
-                val draw = textGenerator.generateFirstLetter(applicationName, options.color, strokeWidth, size)
+                val draw = textGenerator.generateFirstLetter(text, options.color, strokeWidth, size)
                 createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
             }
             TextType.TWO_LETTERS -> {
-                val draw = textGenerator.generateTwoLetters(applicationName, options.color, strokeWidth, size)
+                val draw = textGenerator.generateTwoLetters(text, options.color, strokeWidth, size)
                 createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
+            }
+            TextType.CUSTOM -> {
+                val custom = when (options.textCase) {
+                    TextCase.UPPER -> options.textCustom.uppercase()
+                    TextCase.LOWER -> options.textCustom.lowercase()
+                    TextCase.AS_IS -> options.textCustom
+                }.trim().ifEmpty { text }
+                if (custom.length <= 3) {
+                    val draw = textGenerator.generateExact(custom, options.color, strokeWidth, size)
+                    createVectorForText(draw as BaseTextDrawable, options.color, strokeWidth, size)
+                } else {
+                    val draw = textGenerator.generateAppName(custom, options.color, size)
+                    createVectorForMultiLineText(draw as BaseTextDrawable, options.color, size)
+                }
             }
         }
 
@@ -733,7 +754,8 @@ class IconGenerator(
      */
     private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {
         val offset = options.iconOffsetX != 0f || options.iconOffsetY != 0f
-        if (!offset && options.iconScale == 1f) return icon
+        val shaped = options.iconShape != IconShape.NONE
+        if (!offset && options.iconScale == 1f && !shaped) return icon
 
         var bitmap = icon.toBitmap()
         if (bitmap.width <= 0 || bitmap.height <= 0) return icon
@@ -748,14 +770,53 @@ class IconGenerator(
                 canvas.drawBitmap(src, 0f, 0f, null)
             }
         }
+        if (shaped) {
+            bitmap = applyShape(bitmap)
+        }
 
         val source = icon as? BitmapIconDrawable
         return BitmapIconDrawable(
             ctx.resources,
             bitmap,
-            exportAsAdaptiveIcon = source?.isAdaptiveIcon() ?: false,
-            previewScale = source?.previewScale ?: 1f
+            // A shaped icon IS its shape — exporting it adaptive would let the launcher mask
+            // it again (a squircle inside the launcher's circle). Ship it as a legacy bitmap.
+            exportAsAdaptiveIcon = if (shaped) false else source?.isAdaptiveIcon() ?: false,
+            previewScale = if (shaped) 1f else source?.previewScale ?: 1f
         )
+    }
+
+    /**
+     * The Modifier tab's shape step. The icon itself stays untouched (its size is the
+     * separate Icon scale adjustment) — what [GenerationOptions.iconShapeScale] scales is
+     * THE SHAPE, around the centre: a smaller shape crops deeper into the icon, a larger one
+     * clips just the corners. Crop mode masks the icon with the shape; plate mode fills the
+     * shape with [GenerationOptions.bgColor] behind the icon first. Either way the composite
+     * is masked by the shape at the end, so nothing pokes out of curvy shapes (pebble,
+     * sunny). Anti-aliased SRC_IN masking — Canvas.clipPath would leave jagged edges.
+     */
+    private fun applyShape(src: Bitmap): Bitmap {
+        val size = maxOf(src.width, src.height, 256)
+        val sizeF = size.toFloat()
+        val path = IconShapes.path(options.iconShape, sizeF * options.iconShapeScale) ?: return src
+        // Keep the scaled shape centred on the canvas.
+        path.offset(sizeF * (1f - options.iconShapeScale) / 2f, sizeF * (1f - options.iconShapeScale) / 2f)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+
+        val content = newArgbBitmap(size, size) { canvas ->
+            if (!options.iconShapeCrop) {
+                paint.color = options.bgColor
+                canvas.drawPath(path, paint)
+                paint.color = -0x1
+            }
+            canvas.drawBitmap(src, null, RectF(0f, 0f, sizeF, sizeF), paint)
+        }
+
+        return newArgbBitmap(size, size) { canvas ->
+            val mask = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            canvas.drawPath(path, mask)
+            mask.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+            canvas.drawBitmap(content, 0f, 0f, mask)
+        }
     }
 
     /**

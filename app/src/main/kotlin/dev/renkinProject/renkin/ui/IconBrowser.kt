@@ -33,7 +33,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -62,6 +64,7 @@ import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
+import dev.renkinProject.renkin.icon.creator.TextCase
 import kotlinx.coroutines.delay
 
 /** How the pack list itself is ordered (the icons inside sort by [IconSortOrder]). */
@@ -153,6 +156,13 @@ fun CreateTab(
     // calendar prefix when the user opts into day rotation.
     onIconSelect: (ResourceDrawable, IconPack, String) -> Unit,
     onTextTypeChange: (TextType) -> Unit,
+    // Text-source extras: the CUSTOM type's string, the letter-case transform and the font.
+    customText: String = "",
+    onCustomTextChange: (String) -> Unit = {},
+    textCase: TextCase = TextCase.AS_IS,
+    onTextCaseChange: (TextCase) -> Unit = {},
+    fontPath: String = "",
+    onFontPathChange: (String) -> Unit = {},
     contentReady: Boolean = true,
     // Resource id of the icon currently picked (from options.primaryIconPack), so the grid
     // can frame it. null = nothing picked yet.
@@ -337,9 +347,47 @@ fun CreateTab(
                     .fillMaxSize()
                     .padding(contentPadding)
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                TextTypeDropdown(R.string.textType, textType) { onTextTypeChange(it) }
+                TextTypeDropdown(R.string.textType, textType, includeCustom = true) { onTextTypeChange(it) }
+                androidx.compose.animation.AnimatedVisibility(visible = textType == TextType.CUSTOM) {
+                    OutlinedTextField(
+                        value = customText,
+                        onValueChange = onCustomTextChange,
+                        label = { Text(stringResource(R.string.textCustomLabel)) },
+                        placeholder = { Text(stringResource(R.string.textCustomHint)) },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                FontPickerRow(selectedPath = fontPath, onChange = onFontPathChange)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.textCaseLabel),
+                        style = MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.weight(1f)
+                    )
+                    // Literal glyphs on purpose — "Aa/AA/aa" IS the meaning, in any language.
+                    FilterChip(
+                        selected = textCase == TextCase.AS_IS,
+                        onClick = { onTextCaseChange(TextCase.AS_IS) },
+                        label = { Text("Aa") }
+                    )
+                    FilterChip(
+                        selected = textCase == TextCase.UPPER,
+                        onClick = { onTextCaseChange(TextCase.UPPER) },
+                        label = { Text("AA") }
+                    )
+                    FilterChip(
+                        selected = textCase == TextCase.LOWER,
+                        onClick = { onTextCaseChange(TextCase.LOWER) },
+                        label = { Text("aa") }
+                    )
+                }
             }
             else -> {}
         }

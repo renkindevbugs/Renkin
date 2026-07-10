@@ -12,9 +12,11 @@ import androidx.compose.ui.unit.dp
  *  - [FieldShape]  — buttons, text fields, dropdowns
  *  - [InnerShape]  — nested blocks inside a card or dialog (code blocks, previews)
  *  - [IconShape]   — rounded-square app-icon tiles and icon previews
+ *  - [SwatchShape] — small inline tiles: colour swatches, badges, tiny overlays
  */
 val DialogShape = RoundedCornerShape(28.dp)
 val CardShape = RoundedCornerShape(20.dp)
 val FieldShape = RoundedCornerShape(16.dp)
 val InnerShape = RoundedCornerShape(12.dp)
 val IconShape = RoundedCornerShape(14.dp)
+val SwatchShape = RoundedCornerShape(8.dp)

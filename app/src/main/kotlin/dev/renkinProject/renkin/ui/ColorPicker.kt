@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import dev.renkinProject.renkin.ui.theme.FieldShape
+import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.extension.alphaInt
 import dev.renkinProject.renkin.extension.blueInt
 import dev.renkinProject.renkin.extension.greenInt
@@ -24,7 +25,17 @@ import dev.renkinProject.renkin.extension.redInt
 import dev.renkinProject.renkin.extension.toColor
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.extension.toNullableColor
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Done
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -135,11 +146,19 @@ fun ColorDialog(
     sampleBitmap: Bitmap? = null
 ) {
     val controller = rememberColorPickerController()
+    // What was set when the dialog opened. Picks apply live (the icon previews behind the
+    // dialog), so cancelling means actively putting this colour back.
+    val originalColor = remember { currentlySelected }
+    val cancel = {
+        onColorSelected(originalColor)
+        onDismiss()
+    }
 
     RenkinAlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = cancel,
+        title = { Text(stringResource(R.string.pickColorTitle)) },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 HsvColorPicker(modifier = Modifier.height(200.dp)
                     , controller = controller
                     , onColorChanged = {
@@ -154,7 +173,7 @@ fun ColorDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(10.dp)
-                        .height(35.dp),
+                        .height(26.dp),
                     controller = controller,
                     initialColor = currentlySelected
                 )
@@ -163,18 +182,59 @@ fun ColorDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(10.dp, 0.dp, 10.dp, 10.dp)
-                        .height(35.dp),
+                        .height(26.dp),
                     controller = controller,
                     initialColor = currentlySelected
                 )
 
-                AlphaTile(
-                    modifier = Modifier
-                        .size(50.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .align(CenterHorizontally),
-                    controller = controller
-                )
+                // Before → after: the colour that was set when the dialog opened next to the
+                // live pick. Tapping the old swatch is an undo — it re-selects the original.
+                Row(
+                    modifier = Modifier.align(CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Column(horizontalAlignment = CenterHorizontally) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(SwatchShape)
+                                .background(originalColor)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, SwatchShape)
+                                .clickable {
+                                    controller.selectByColor(originalColor, true)
+                                    onColorSelected(originalColor)
+                                }
+                        )
+                        Text(
+                            text = stringResource(R.string.iconCurrent),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(18.dp)
+                    )
+                    Column(horizontalAlignment = CenterHorizontally) {
+                        AlphaTile(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(SwatchShape)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, SwatchShape),
+                            controller = controller
+                        )
+                        Text(
+                            text = stringResource(R.string.iconNew),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 2.dp)
+                        )
+                    }
+                }
 
                 RGBFields(
                     modifier = Modifier.padding(10.dp, 10.dp, 10.dp, 0.dp)
@@ -205,7 +265,24 @@ fun ColorDialog(
                 }
             }
         },
-        confirmButton = {}
+        // Same chrome as the watch-apply modal: ✕ throws the pick away (the original colour
+        // comes back), ✓ keeps it. Back gesture / tapping outside cancel too.
+        confirmButton = {
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                FilledTonalIconButton(
+                    onClick = cancel,
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
+                }
+                FilledIconButton(onClick = onDismiss) {
+                    Icon(Icons.Filled.Done, stringResource(R.string.confirm))
+                }
+            }
+        }
     )
 }
 

@@ -1,5 +1,8 @@
 package dev.renkinProject.renkin.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -8,10 +11,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -31,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -38,6 +44,7 @@ import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.Profile
+import dev.renkinProject.renkin.data.transfer.BackupManager
 
 // Input caps: the profile name doubles as the top-bar title and the pack label ends up as the
 // launcher-visible app name of the built pack — unbounded text breaks both layouts.
@@ -66,6 +73,20 @@ fun ProfileSwitcherTitle() {
     var pendingSwitch by remember { mutableStateOf<Long?>(null) }
     var pendingCreate by remember { mutableStateOf<Triple<String, String, String>?>(null) }
 
+    // Profile whose share was requested, held while the system file picker is up.
+    var pendingShareId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val shareLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        val id = pendingShareId
+        pendingShareId = null
+        if (uri != null && id != null) viewModel.exportProfile(id, uri)
+    }
+    // Shared-profile (or backup) file import, right where profiles are managed.
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri -> if (uri != null) viewModel.importFile(uri) }
+
     Box {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -88,10 +109,19 @@ fun ProfileSwitcherTitle() {
 
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             profiles.forEach { profile ->
+                val isActive = profile.id == activeId
                 DropdownMenuItem(
+                    // The active profile reads from the row itself (tinted background + bold
+                    // name) instead of a leading check icon, which squeezed long names.
+                    modifier = if (isActive) Modifier.background(MaterialTheme.colorScheme.secondaryContainer) else Modifier,
                     text = {
                         Column(Modifier.widthIn(max = 220.dp)) {
-                            Text(profile.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(
+                                text = profile.name,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = if (isActive) FontWeight.Bold else null
+                            )
                             if (profile.description.isNotEmpty()) {
                                 Text(
                                     text = profile.description,
@@ -110,12 +140,20 @@ fun ProfileSwitcherTitle() {
                             }
                         }
                     },
-                    leadingIcon = if (profile.id == activeId) {
-                        { Icon(Icons.Filled.Check, null, tint = MaterialTheme.colorScheme.primary) }
-                    } else null,
-                    trailingIcon = if (profile.id != DEFAULT_PROFILE_ID) {
-                        {
-                            Row {
+                    trailingIcon = {
+                        Row {
+                            IconButton(onClick = {
+                                menuOpen = false
+                                pendingShareId = profile.id
+                                shareLauncher.launch(BackupManager.profileFileName(profile.name))
+                            }) {
+                                Icon(
+                                    imageVector = Icons.Filled.Share,
+                                    contentDescription = stringResource(R.string.shareProfile),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            if (profile.id != DEFAULT_PROFILE_ID) {
                                 IconButton(onClick = {
                                     menuOpen = false
                                     editing = profile
@@ -138,7 +176,7 @@ fun ProfileSwitcherTitle() {
                                 }
                             }
                         }
-                    } else null,
+                    },
                     onClick = {
                         menuOpen = false
                         if (profile.id != activeId) {
@@ -156,6 +194,14 @@ fun ProfileSwitcherTitle() {
                 onClick = {
                     menuOpen = false
                     createOpen = true
+                }
+            )
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.importProfile)) },
+                leadingIcon = { Icon(Icons.Filled.FileDownload, null, tint = MaterialTheme.colorScheme.primary) },
+                onClick = {
+                    menuOpen = false
+                    importLauncher.launch(arrayOf("*/*"))
                 }
             )
         }
@@ -194,8 +240,9 @@ fun ProfileSwitcherTitle() {
     if (pendingSwitch != null || pendingCreate != null) {
         RenkinAlertDialog(
             onDismissRequest = { pendingSwitch = null; pendingCreate = null },
+            icon = { Icon(Icons.Filled.Save, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             title = { Text(stringResource(R.string.saveBeforeSwitchTitle)) },
-            text = { Text(stringResource(R.string.saveBeforeSwitchText)) },
+            text = { Text(boldStringResource(R.string.saveBeforeSwitchText)) },
             confirmButton = {
                 TextButton(onClick = {
                     pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = true) }
@@ -217,6 +264,7 @@ fun ProfileSwitcherTitle() {
         ConfirmDialog(
             title = stringResource(R.string.deleteProfile),
             text = stringResource(R.string.deleteProfileText, profile.name),
+            icon = Icons.Filled.Delete,
             onConfirm = {
                 pendingDelete = null
                 viewModel.deleteProfile(profile.id)

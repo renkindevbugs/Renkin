@@ -73,8 +73,13 @@ fun ImageEditDropdown(@StringRes labelId: Int, type: ImageEdit, onChange: (newVa
     EnumDropdown(labelId, type, getImageEditLabels(), onChange = onChange)
 
 @Composable
-fun TextTypeDropdown(@StringRes labelId: Int, type: TextType, onChange: (newValue: TextType) -> Unit) =
-    EnumDropdown(labelId, type, getTextTypeLabels(), onChange = onChange)
+fun TextTypeDropdown(
+    @StringRes labelId: Int,
+    type: TextType,
+    // Custom text only makes sense per app, so just the edit dialog opts in.
+    includeCustom: Boolean = false,
+    onChange: (newValue: TextType) -> Unit
+) = EnumDropdown(labelId, type, getTextTypeLabels(includeCustom), onChange = onChange)
 
 /**
  * The shared read-only anchor field for the exposed dropdowns: a labelled [OutlinedTextField]

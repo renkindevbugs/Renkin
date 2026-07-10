@@ -164,8 +164,13 @@ class MainActivity : ComponentActivity() {
             val installed = ApplicationManager(this@MainActivity).getIconPacks()
             val loaded = viewModel.iconPacks.map { it.packageName }.toSet()
             val newPack = installed.firstOrNull {
-                !it.packageName.startsWith(IconPackBuilder.PACKAGE_NAME) && it.packageName !in loaded
+                !IconPackBuilder.isOwnPack(it.packageName) && it.packageName !in loaded
             } ?: return@launch
+            // A brand-new pack may already carry icons for watched apps — run the watch check
+            // now instead of waiting for the periodic worker. Cheap: version-gating makes the
+            // run a no-op for every pack that didn't change, and duplicate runs upsert the
+            // same state without firing twice.
+            WatchWorker.runNow(applicationContext)
             withContext(Dispatchers.Main) {
                 viewModel.onIconPackInstalled(newPack.packageName, newPack.applicationName)
             }

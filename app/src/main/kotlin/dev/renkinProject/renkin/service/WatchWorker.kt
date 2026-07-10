@@ -14,6 +14,7 @@ import androidx.work.workDataOf
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
+import dev.renkinProject.renkin.data.transfer.PackVerdictManager
 import dev.renkinProject.renkin.data.getLongValue
 import dev.renkinProject.renkin.data.setLongValue
 import dev.renkinProject.renkin.dataStore
@@ -61,6 +62,9 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
                 )
             }
             applicationContext.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())
+            // Piggyback the paid-pack verdict retries on the periodic run: an import done
+            // offline gets verified as soon as a later check runs with connectivity.
+            runCatching { PackVerdictManager(applicationContext).verifyPendingVerdicts() }
             Result.success()
         } catch (e: Exception) {
             Log.debug("Renkin", "WatchChecker failed: ${e.message}")

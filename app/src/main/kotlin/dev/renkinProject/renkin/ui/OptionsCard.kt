@@ -69,6 +69,7 @@ import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimaryImageEditKey
 import dev.renkinProject.renkin.data.PrimarySourceKey
 import dev.renkinProject.renkin.data.PrimaryTextTypeKey
+import dev.renkinProject.renkin.data.TextFontKey
 import dev.renkinProject.renkin.data.SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.SecondaryIconPackKey
 import dev.renkinProject.renkin.data.SecondaryImageEditKey
@@ -223,6 +224,15 @@ fun OptionsCard(
                 if (needTextType(primarySource)) {
                     TextTypeDropdown(R.string.primaryTextType, primaryTextType) { scope.launch { prefs.setEnumValue(
                         PrimaryTextTypeKey, it) } }
+                }
+
+                // One shared font for every text icon the refresh generates (per-app override
+                // lives in the edit dialog). Shown when any source produces text icons.
+                if (needTextType(primarySource) || needTextType(secondarySource)) {
+                    val textFont = prefs.getStringValue(TextFontKey)
+                    Box(Modifier.padding(horizontal = 12.dp)) {
+                        FontPickerRow(selectedPath = textFont) { scope.launch { prefs.setStringValue(TextFontKey, it) } }
+                    }
                 }
 
                 if (needSecondarySource(primarySource)) {

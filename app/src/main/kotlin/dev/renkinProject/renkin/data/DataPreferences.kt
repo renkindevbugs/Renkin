@@ -78,6 +78,8 @@ val SecondaryImageEditKey = intPreferencesKey(SECONDARY_IMAGE_EDIT_NAME)
 val SecondaryTextTypeKey = intPreferencesKey(SECONDARY_TEXT_TYPE_NAME)
 val SecondaryIconPackKey = stringPreferencesKey(SECONDARY_ICON_PACK_NAME)
 val FallbackSourceKey = intPreferencesKey(FALLBACK_SOURCE_NAME)
+// Absolute path of the TTF/OTF used for text icons; empty = the bundled Arcticons Sans.
+val TextFontKey = stringPreferencesKey("TEXT_FONT")
 val AppSortOrderKey = intPreferencesKey(APP_SORT_ORDER_NAME)
 val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
 val WatchCheckIntervalKey = intPreferencesKey(WATCH_CHECK_INTERVAL_NAME)
@@ -95,7 +97,7 @@ val ProfilePrefKeys: List<Preferences.Key<*>> = listOf(
     PrimarySourceKey, PrimaryImageEditKey, PrimaryTextTypeKey, PrimaryIconPackKey,
     SecondarySourceKey, SecondaryImageEditKey, SecondaryTextTypeKey, SecondaryIconPackKey,
     IncludeVectorKey, MonochromeKey, ExportThemedKey, IconColorKey, BackgroundColorKey,
-    CalendarIconsKey, OverrideIconKey, FallbackSourceKey,
+    CalendarIconsKey, OverrideIconKey, FallbackSourceKey, TextFontKey,
     BuiltPrimarySourceKey, BuiltPrimaryIconPackKey
 )
 
@@ -338,10 +340,11 @@ fun getImageEditLabels(): Map<ImageEdit, String> {
 }
 
 @Composable
-fun getTextTypeLabels(): Map<TextType, String> {
-    return mapOf(TextType.FULL_NAME to stringResource(id = R.string.fullName)
+fun getTextTypeLabels(includeCustom: Boolean = false): Map<TextType, String> {
+    val base = mapOf(TextType.FULL_NAME to stringResource(id = R.string.fullName)
         , TextType.ONE_LETTER to stringResource(id = R.string.firstLetter)
         , TextType.TWO_LETTERS to stringResource(id = R.string.twoLetters))
+    return if (includeCustom) base + (TextType.CUSTOM to stringResource(id = R.string.textTypeCustom)) else base
 }
 
 @Composable
@@ -385,5 +388,7 @@ enum class ImageEdit {
 }
 
 enum class TextType {
-    FULL_NAME, ONE_LETTER, TWO_LETTERS
+    // CUSTOM stays last so existing stored ordinals (persisted by index) keep their value.
+    // It only makes sense per app (the edit dialog); the global dropdowns don't offer it.
+    FULL_NAME, ONE_LETTER, TWO_LETTERS, CUSTOM
 }

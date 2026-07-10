@@ -22,7 +22,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -66,6 +65,7 @@ import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.FieldShape
+import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
@@ -373,7 +373,7 @@ private fun IconTile(
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
                             .size(26.dp),
-                        shape = RoundedCornerShape(8.dp),
+                        shape = SwatchShape,
                         color = MaterialTheme.colorScheme.surface,
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
                     ) {

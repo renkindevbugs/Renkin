@@ -18,9 +18,15 @@ import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.Profile
+import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.ImageEdit
+import dev.renkinProject.renkin.data.OverrideIconKey
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.restoreProfilePrefs
 import dev.renkinProject.renkin.data.snapshotProfilePrefs
+import dev.renkinProject.renkin.data.VERDICT_UNKNOWN
+import dev.renkinProject.renkin.data.transfer.PackVerdictManager
 import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.data.SecondaryIconPackKey
 import dev.renkinProject.renkin.data.getBooleanValue
@@ -62,6 +68,53 @@ class ApplicationProvider(private val context: Context) {
     private val renkinPackStore = RenkinPackStore(context)
     private val packRepo = RenkinPackRepository(context)
     private val iconPackRepo = IconPackRepository(context)
+    private val verdictManager = PackVerdictManager(context, packRepo)
+
+    // Rows held back from the in-memory list but preserved across saves:
+    // icons locked behind a missing paid/unverified pack (or references that couldn't be
+    // rebuilt yet), keyed like the app list...
+    private val lockedRows = mutableMapOf<String, DbApplication>()
+    // ...and icons of apps not installed on this device (from imported profiles/backups) —
+    // they come back through a normal load once the app is installed.
+    private val orphanRows = mutableMapOf<String, DbApplication>()
+
+    /** Keys of the active profile's icons currently locked behind a missing pack. Compose
+     * state (snapshot of the internal map) so the list rows/badges react to lock changes. */
+    var lockedIconKeys: Set<String> by mutableStateOf(emptySet())
+        private set
+
+    // Session cache of the provenance maps carried by installed Renkin-built packs
+    // (component key → original source pack). Cleared when packs re-sync or rebuild.
+    private val provenanceCache = mutableMapOf<String, Map<String, String>>()
+
+    private fun provenanceFor(packPackage: String): Map<String, String> =
+        provenanceCache.getOrPut(packPackage) { PackProvenance.read(context, packPackage) }
+
+    /**
+     * The REAL origin of an icon sourced from [sourcePack]: our own built packs carry a
+     * provenance map, so an icon that was originally taken from pack X stays attributed to
+     * X even when it arrives through a Renkin pack. Foreign packs pass through unchanged.
+     */
+    private fun resolveOrigin(appKey: String, sourcePack: String?): String? {
+        val source = sourcePack?.takeIf { it.isNotEmpty() } ?: return sourcePack
+        if (!IconPackBuilder.isOwnPack(source)) return source
+        return provenanceFor(source)[appKey] ?: source
+    }
+
+    /**
+     * Origins recorded by the own packs among [options]' sources that are locked on this
+     * device — precomputed so the (non-suspend) generation callbacks can gate on it.
+     */
+    private suspend fun lockedOriginsFor(options: GenerationOptions): Set<String> {
+        val ownPacks = listOf(options.primaryIconPack, options.secondaryIconPack)
+            .filter { it.isNotEmpty() && IconPackBuilder.isOwnPack(it) }
+        if (ownPacks.isEmpty()) return emptySet()
+        return verdictManager.lockedPacksAmong(ownPacks.flatMap { provenanceFor(it).values }.toSet())
+    }
+
+    private fun publishLockedKeys() {
+        lockedIconKeys = lockedRows.keys.toSet()
+    }
 
     /** The profile whose icons/preferences are active. Set before the saved pack loads. */
     var activeProfileId: Long by mutableStateOf(DEFAULT_PROFILE_ID)
@@ -85,7 +138,12 @@ class ApplicationProvider(private val context: Context) {
         applicationsLoaded = true
     }
 
-    suspend fun initializeIconPacks() = iconPackRepo.load()
+    suspend fun initializeIconPacks() {
+        iconPackRepo.load()
+        // Every pack seen installed is owned on this device forever — the paid-pack lock
+        // never applies to it again, even after an uninstall.
+        verdictManager.recordInstalledPacks(iconPacks)
+    }
 
     suspend fun initializeRenkinPack() {
         activeProfileId = context.dataStore.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
@@ -108,12 +166,19 @@ class ApplicationProvider(private val context: Context) {
     suspend fun refreshIcon(application: PackageInfoStruct, preferences: Preferences) = withContext(Dispatchers.Default) {
         // A newly installed app always gets its icon (re)generated
         val genOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
+        val lockedOrigins = lockedOriginsFor(genOptions)
         iconGenService.refreshIcon(application, genOptions) { app, icon, sourcePack ->
-            editApplication(app, app.changeExport(icon, sourcePackName = sourcePack, isRefreshMade = true))
+            val origin = resolveOrigin(app.key, sourcePack)
+            // An own pack handing out an icon whose real origin isn't owned here → withhold.
+            if (icon == null || origin == null || origin !in lockedOrigins) {
+                editApplication(app, app.changeExport(icon, sourcePackName = origin, isRefreshMade = true))
+            }
         }
     }
 
-    suspend fun refreshIcons(preferences: Preferences) = withContext(Dispatchers.Default) {
+    /** Regenerates all icons. Returns how many were withheld because their real origin
+     * (recorded by an own pack used as source) is a pack this device doesn't own. */
+    suspend fun refreshIcons(preferences: Preferences): Int = withContext(Dispatchers.Default) {
         var opt = GenerationOptions.fromPreferences(preferences, context)
         val retrieveCalendarIcon = preferences.getBooleanValue(CalendarIconsKey)
 
@@ -131,9 +196,24 @@ class ApplicationProvider(private val context: Context) {
 
         // Iterate a snapshot copy: the callback edits the live list in place, and iterating
         // the SnapshotStateList itself while mutating it would throw.
-        iconGenService.refreshIcons(applicationList.toList(), opt) { application, icon, isFallback, sourcePack ->
-            editApplication(application, application.changeExport(icon, isFallback, sourcePack, isRefreshMade = true))
+        // Apps whose icon is locked behind a missing pack look empty but must not be
+        // silently refilled — the original would be lost on save. The explicit "Refresh
+        // replaces existing icons" switch bypasses this like every other lock.
+        val targets = if (preferences.getBooleanValue(OverrideIconKey)) applicationList.toList()
+            else applicationList.toList().filter { it.key !in lockedRows.keys }
+        val lockedOrigins = lockedOriginsFor(opt)
+        var withheld = 0
+        iconGenService.refreshIcons(targets, opt) { application, icon, isFallback, sourcePack ->
+            val origin = resolveOrigin(application.key, sourcePack) ?: sourcePack
+            if (icon != null && origin in lockedOrigins) {
+                // An own pack used as source handed out an icon whose real origin isn't
+                // owned on this device — withhold it (the slot stays empty).
+                withheld++
+            } else {
+                editApplication(application, application.changeExport(icon, isFallback, origin, isRefreshMade = true))
+            }
         }
+        withheld
     }
 
     suspend fun getIcon(application: PackageInfoStruct, options: GenerationOptions, customIcon: ResourceDrawable? = null): IconPackDrawable? =
@@ -188,12 +268,23 @@ class ApplicationProvider(private val context: Context) {
             val allCalendarIcons = iconPackRepo.calendarIcon.filter { it.key.packageName !in perAppPackages } + perAppIcons
             val allCalendarDrawables = iconPackRepo.calendarIconsDrawable + perAppDrawables
 
+            // Final gate: icons whose (already translated) source pack is locked on this
+            // device must not ship in the APK — belt-and-braces for anything that slipped
+            // into the session between load-time lock evaluations.
+            val lockedSources = verdictManager.lockedPacksAmong(
+                applicationList.mapNotNull { it.sourcePackName?.takeIf { s -> s.isNotEmpty() } }.toSet()
+            )
+            val buildApps = if (lockedSources.isEmpty()) applicationList.toList()
+                else applicationList.map { app ->
+                    if (app.sourcePackName in lockedSources) app.changeExport(null) else app
+                }
+
             // Each profile builds its own pack: a per-profile package name (side-by-side
             // installs) and the user's chosen launcher label.
             val profile = packRepo.profile(activeProfileId)
             val iconPackGenerator = IconPackBuilder(
                 context,
-                applicationList,
+                buildApps,
                 allCalendarIcons,
                 allCalendarDrawables,
                 packPackageName = packPackageNameFor(activeProfileId),
@@ -220,6 +311,9 @@ class ApplicationProvider(private val context: Context) {
         // leaves the save marked as not yet built.
         persistActiveProfileIcons(unbuiltAfter = !success)
 
+        // The just-(re)installed pack carries a fresh provenance map.
+        if (success) provenanceCache.clear()
+
         success
     }
 
@@ -245,27 +339,126 @@ class ApplicationProvider(private val context: Context) {
     }
 
     private suspend fun loadRenkinPack() {
+        lockedRows.clear()
+        orphanRows.clear()
+        publishLockedKeys()
         val saved = renkinPackStore.load(activeProfileId, defaultColor)
         if (saved.isEmpty()) return
 
+        // Which source packs' icons must stay locked on this device (paid or unverified,
+        // not installed, never seen installed) — see PackVerdictManager.
+        val lockedPacks = verdictManager.lockedPacksAmong(
+            saved.values.mapNotNull { it.sourcePackName }.toSet()
+        )
+
+        // Rows for apps not installed here (imported sets) survive saves untouched and
+        // load normally once the app appears.
+        val appKeys = applicationList.map { it.key }.toSet()
+        for ((key, entry) in saved) {
+            if (key !in appKeys) orphanRows[key] = entry.row
+        }
+
+        val prefs = context.dataStore.data.first()
         for (app in applicationList.toList()) {
             val entry = saved[app.key] ?: continue
+            if (entry.sourcePackName != null && entry.sourcePackName in lockedPacks) {
+                // Held back: invisible to the list and the build, preserved by saves,
+                // loaded normally once the pack is installed (or verified free).
+                lockedRows[app.key] = entry.row
+                continue
+            }
+            // A reference row (image data stripped at share time) whose pack is usable:
+            // rebuild the icon from the pack. Failure keeps the row held back for retry.
+            val isReference = entry.icon == null && entry.row.drawable.isEmpty() && entry.sourcePackName != null
+            val icon = if (isReference) {
+                val rebuilt = materializeReference(app, entry, prefs)
+                if (rebuilt == null) {
+                    lockedRows[app.key] = entry.row
+                    continue
+                }
+                rebuilt
+            } else entry.icon
             val updated = when {
                 // Loaded from the DB = built/saved before, so it arrives locked (isRefreshMade
                 // defaults to false): a refresh won't replace it.
-                entry.icon != null -> app.changeExport(entry.icon, sourcePackName = entry.sourcePackName).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
+                icon != null -> app.changeExport(icon, sourcePackName = entry.sourcePackName).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
                 else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
             }
             editApplication(app, updated)
         }
+        publishLockedKeys()
     }
 
-    private suspend fun saveRenkinPack() = renkinPackStore.save(activeProfileId, applicationList)
+    /**
+     * Rebuilds a reference icon from its (present) source pack: by the drawable name the
+     * share carried, otherwise through the pack's appfilter mapping for the component.
+     */
+    private suspend fun materializeReference(
+        app: PackageInfoStruct,
+        entry: RenkinPackStore.SavedEntry,
+        preferences: Preferences
+    ): IconPackDrawable? {
+        val sourcePack = entry.sourcePackName ?: return null
+        val drawableName = entry.row.sourceDrawableName.ifEmpty {
+            appFilterDrawableName(sourcePack, app) ?: return null
+        }
+        val options = GenerationOptions.fromPreferences(preferences, context).copy(
+            primarySource = Source.ICON_PACK,
+            primaryImageEdit = ImageEdit.NONE,
+            primaryIconPack = sourcePack
+        )
+        return runCatching {
+            iconGenService.getIconFromPackDrawable(app, sourcePack, drawableName, options)
+        }.getOrNull()
+    }
+
+    /** The drawable name [packPackage]'s appfilter maps to [app]'s component, if any. */
+    private fun appFilterDrawableName(packPackage: String, app: PackageInfoStruct): String? =
+        appManager.appFilterDrawableName(packPackage, app.toInstalledApplication())
+
+    private suspend fun saveRenkinPack() {
+        // A hand-picked or regenerated icon over a locked slot replaces the held-back original.
+        val replacedKeys = applicationList.filter { it.createdIcon != null }.map { it.key }.toSet()
+        lockedRows.keys.removeAll(replacedKeys)
+        publishLockedKeys()
+        renkinPackStore.save(activeProfileId, applicationList, lockedRows.values + orphanRows.values)
+    }
 
     suspend fun forceSync() {
         if (iconPackRepo.iconPackLoaded) {
             iconPackRepo.load()
+            verdictManager.recordInstalledPacks(iconPacks)
+            // Packs may have been updated/rebuilt — their provenance maps can be stale.
+            provenanceCache.clear()
+            // A freshly installed pack may be exactly the one some icons were waiting for.
+            refreshLockedIcons()
         }
+    }
+
+    /**
+     * Re-evaluates the held-back rows after the installed packs changed: rows whose pack
+     * just became usable load into the list right away — no restart or profile switch.
+     * Unsaved session edits stay untouched; rows that still can't be rebuilt stay held back.
+     */
+    private suspend fun refreshLockedIcons() = withContext(Dispatchers.Default) {
+        if (lockedRows.isEmpty()) return@withContext
+        val stillLocked = verdictManager.lockedPacksAmong(
+            lockedRows.values.map { it.sourcePackName }.filter { it.isNotEmpty() }.toSet()
+        )
+        val prefs = context.dataStore.data.first()
+        for ((key, row) in lockedRows.toList()) {
+            if (row.sourcePackName in stillLocked) continue
+            val app = applicationList.firstOrNull { it.key == key } ?: continue
+            val entry = renkinPackStore.decodeRow(row, defaultColor)
+            val icon = entry.icon ?: materializeReference(app, entry, prefs) ?: continue
+            editApplication(
+                app,
+                app.changeExport(icon, sourcePackName = entry.sourcePackName)
+                    .changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
+            )
+            lockedRows.remove(key)
+        }
+        publishLockedKeys()
     }
 
     private fun editApplication(oldApp: PackageInfoStruct, newApp: PackageInfoStruct) {
@@ -297,6 +490,10 @@ class ApplicationProvider(private val context: Context) {
     }
 
     suspend fun clearIcons() = withContext(Dispatchers.Default) {
+        // "Remove icons" is explicit user intent — held-back rows (locked/absent apps) go too.
+        lockedRows.clear()
+        orphanRows.clear()
+        publishLockedKeys()
         // Snapshot copy: editApplication mutates the live list in place.
         // Also reset calendar opt-ins: otherwise a calendar-enabled app is still persisted
         // (RenkinPackStore keeps calendar rows even without an icon), so it lingers in the
@@ -352,6 +549,78 @@ class ApplicationProvider(private val context: Context) {
     suspend fun profileExists(id: Long): Boolean = packRepo.profile(id) != null
 
     /**
+     * Looks up any referenced pack still lacking a paid/free verdict (quiet best effort).
+     * Returns true when a verdict became decisive — callers reload so freshly-verified-free
+     * icons unlock without a restart.
+     */
+    suspend fun verifyPendingVerdicts(): Boolean = verdictManager.verifyPendingVerdicts()
+
+    /** One missing source pack and how many of the active profile's icons it locks. */
+    data class MissingPack(val packageName: String, val label: String, val verdict: String, val iconCount: Int)
+
+    /** The active profile's locked icons grouped by their missing source pack. */
+    suspend fun missingPackSummary(): List<MissingPack> = withContext(Dispatchers.Default) {
+        val byPack = lockedRows.values.groupBy { it.sourcePackName }.filterKeys { it.isNotEmpty() }
+        if (byPack.isEmpty()) return@withContext emptyList()
+        val verdicts = packRepo.verdicts(byPack.keys.toList())
+        byPack.map { (pack, rows) ->
+            val verdict = verdicts[pack]
+            MissingPack(
+                packageName = pack,
+                label = verdict?.label?.ifEmpty { null } ?: pack,
+                verdict = verdict?.verdict ?: VERDICT_UNKNOWN,
+                iconCount = rows.size
+            )
+        }.sortedByDescending { it.iconCount }
+    }
+
+    /**
+     * The hand-pick path's provenance gate: translates an own-pack source to the origin its
+     * provenance records and says whether that origin is locked here. Foreign packs pass
+     * through unlocked — an installed pack is usable by definition.
+     */
+    suspend fun resolvePickedSource(app: PackageInfoStruct, sourcePackName: String?): Pair<String?, Boolean> =
+        withContext(Dispatchers.Default) {
+            val origin = resolveOrigin(app.key, sourcePackName)
+            if (origin == null || origin == sourcePackName) origin to false
+            else origin to verdictManager.lockedPacksAmong(setOf(origin)).isNotEmpty()
+        }
+
+    /** One row of the "pack usage" stats: how many stored icons really came from [packageName]. */
+    data class PackUsage(val packageName: String, val label: String, val count: Int, val installed: Boolean)
+
+    /**
+     * Per-pack usage by TRUE origin for the stats dialog: counts include the locked
+     * (held-back) icons, and packs that aren't installed still show up — named from the
+     * verdict cache when we've never seen them installed.
+     */
+    suspend fun packUsageEntries(): List<PackUsage> = withContext(Dispatchers.Default) {
+        val counts = (
+            applicationList.mapNotNull { it.sourcePackName?.takeIf { s -> s.isNotEmpty() } } +
+                lockedRows.values.map { it.sourcePackName }.filter { it.isNotEmpty() }
+            ).groupingBy { it }.eachCount()
+        val installed = iconPacks.associateBy { it.packageName }
+        val cachedLabels = packRepo.verdicts(counts.keys.filter { it !in installed })
+        (installed.keys + counts.keys).distinct().map { pack ->
+            PackUsage(
+                packageName = pack,
+                label = installed[pack]?.applicationName
+                    ?: cachedLabels[pack]?.label?.ifEmpty { null }
+                    ?: pack,
+                count = counts[pack] ?: 0,
+                installed = pack in installed
+            )
+        }.sortedWith(compareByDescending<PackUsage> { it.count }.thenBy { it.label.lowercase() })
+    }
+
+    /** Persists the active profile's "don't show the missing-packs dialog again" choice. */
+    suspend fun setHideMissingPackWarning(hide: Boolean) {
+        packRepo.profile(activeProfileId)?.let {
+            packRepo.updateProfile(it.copy(hideMissingPackWarning = hide))
+        }
+    }
+
+    /**
      * Switches the active profile: snapshots the leaving profile's generation preferences,
      * restores the target's, and swaps the in-memory icons for the target's saved set. For the
      * leaving profile this behaves like an app restart — unbuilt edits are not persisted.
@@ -369,6 +638,24 @@ class ApplicationProvider(private val context: Context) {
         activeProfileId = newProfileId
 
         // Reset the in-memory icons and load the target profile's saved set.
+        for (app in applicationList.toList()) {
+            editApplication(app, app.changeExport(null).changeCalendar(false, null, null))
+        }
+        loadRenkinPack()
+    }
+
+    /**
+     * Re-reads the active profile id and its saved icons after a backup import replaced the
+     * stores under the running app. Same in-memory reset as a profile switch, minus the
+     * snapshot of the leaving state — that state was just overwritten on purpose.
+     */
+    suspend fun reloadActiveProfile() = withContext(Dispatchers.Default) {
+        val storedId = context.dataStore.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
+        // The stored id always exists in a well-formed backup; fall back defensively anyway.
+        activeProfileId = if (packRepo.profile(storedId) != null) storedId else DEFAULT_PROFILE_ID
+        if (activeProfileId != storedId) {
+            context.dataStore.edit { it[ActiveProfileIdKey] = activeProfileId }
+        }
         for (app in applicationList.toList()) {
             editApplication(app, app.changeExport(null).changeCalendar(false, null, null))
         }
