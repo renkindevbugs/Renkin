@@ -6,6 +6,11 @@
 
 <p align="center">Make your own Android icon pack, on your phone.</p>
 
+<p align="center">
+  <a href="https://github.com/renkindevbugs/Renkin/releases/latest"><img src="https://img.shields.io/github/v/release/renkindevbugs/Renkin?label=release" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/github/license/renkindevbugs/Renkin" alt="License"></a>
+</p>
+
 ---
 
 Renkin builds a real, installable icon pack from your own choices — no PC, no account, offline.
@@ -14,6 +19,10 @@ on-device and select it in your launcher.
 
 Fork of [Alembicons](https://codeberg.org/kaanelloed/Alembicons) by kaanelloed (formerly
 *Iconeration*), with its own direction on top.
+
+## Download
+
+Grab the latest APK from [GitHub Releases](https://github.com/renkindevbugs/Renkin/releases/latest).
 
 ## Features
 
