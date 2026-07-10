@@ -21,13 +21,11 @@ import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.OverrideIconKey
-import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.restoreProfilePrefs
 import dev.renkinProject.renkin.data.snapshotProfilePrefs
 import dev.renkinProject.renkin.data.VERDICT_UNKNOWN
-import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.data.transfer.PackVerdictManager
 import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.data.SecondaryIconPackKey
@@ -415,13 +413,8 @@ class ApplicationProvider(private val context: Context) {
     }
 
     /** The drawable name [packPackage]'s appfilter maps to [app]'s component, if any. */
-    private fun appFilterDrawableName(packPackage: String, app: PackageInfoStruct): String? {
-        val installedApp = app.toInstalledApplication()
-        return appManager.getAppFilterRawElements(packPackage, listOf(installedApp))
-            .filterIsInstance<RawItem>()
-            .firstOrNull { it.component == installedApp.toComponentInfo() }
-            ?.drawableLink
-    }
+    private fun appFilterDrawableName(packPackage: String, app: PackageInfoStruct): String? =
+        appManager.appFilterDrawableName(packPackage, app.toInstalledApplication())
 
     private suspend fun saveRenkinPack() {
         // A hand-picked or regenerated icon over a locked slot replaces the held-back original.

@@ -18,11 +18,9 @@ import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.PackVerdict
-import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.snapshotProfilePrefs
-import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dev.renkinProject.renkin.data.watch.WatchRepository
@@ -345,15 +343,10 @@ class BackupManager(
     }
 
     /** The drawable name [packPackage]'s appfilter maps to the app's component, if any. */
-    private fun appFilterDrawableName(packPackage: String, packageName: String, activityName: String): String? {
-        val installedApp = InstalledApplication(packageName, activityName, 0)
-        return runCatching {
-            appManager.getAppFilterRawElements(packPackage, listOf(installedApp))
-                .filterIsInstance<RawItem>()
-                .firstOrNull { it.component == installedApp.toComponentInfo() }
-                ?.drawableLink
+    private fun appFilterDrawableName(packPackage: String, packageName: String, activityName: String): String? =
+        runCatching {
+            appManager.appFilterDrawableName(packPackage, InstalledApplication(packageName, activityName, 0))
         }.getOrNull()
-    }
 
     private fun openZip(uri: Uri): ZipInputStream = ZipInputStream(
         (context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri for reading")).buffered()

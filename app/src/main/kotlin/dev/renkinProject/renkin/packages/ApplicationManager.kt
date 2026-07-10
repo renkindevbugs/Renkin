@@ -128,6 +128,13 @@ class ApplicationManager(private val ctx: Context) {
         return emptyList()
     }
 
+    /** The drawable name [iconPackName]'s appfilter maps to [application]'s component, if any. */
+    fun appFilterDrawableName(iconPackName: String, application: InstalledApplication): String? =
+        getAppFilterRawElements(iconPackName, listOf(application))
+            .filterIsInstance<RawItem>()
+            .firstOrNull { it.component == application.toComponentInfo() }
+            ?.drawableLink
+
     /**
      * Parses the pack's classic fallback styling (`<iconback>`, `<iconmask>`, `<iconupon>`,
      * `<scale>`) used to give a uniform look to apps the pack doesn't theme. Returns an empty

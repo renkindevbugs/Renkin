@@ -191,12 +191,9 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                             val icon = newIcon
                             val targetApp = app
                             if (icon != null && targetApp != null) {
-                                val index = apps.indexOfFirst {
-                                    it.packageName == targetApp.packageName && it.activityName == targetApp.activityName
-                                }
-                                if (index >= 0) {
-                                    viewModel.applyIcon(index, targetApp, icon, sourcePackName = selectedPack)
-                                }
+                                // applyIcon finds the live row by key; a target no longer
+                                // in the list is a silent no-op, same as before.
+                                viewModel.applyIcon(targetApp, icon, sourcePackName = selectedPack)
                                 // Applying handles the rule, so remove it (cascades the suggestion)
                                 suggestion?.ruleId?.let { ruleId -> watchViewModel.deleteRule(ruleId) }
                                 toaster.show(applyToast)

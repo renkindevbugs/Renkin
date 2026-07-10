@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import dev.renkinProject.renkin.ui.theme.FieldShape
+import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.extension.alphaInt
 import dev.renkinProject.renkin.extension.blueInt
 import dev.renkinProject.renkin.extension.greenInt
@@ -197,9 +198,9 @@ fun ColorDialog(
                         Box(
                             modifier = Modifier
                                 .size(44.dp)
-                                .clip(RoundedCornerShape(8.dp))
+                                .clip(SwatchShape)
                                 .background(originalColor)
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, SwatchShape)
                                 .clickable {
                                     controller.selectByColor(originalColor, true)
                                     onColorSelected(originalColor)
@@ -222,8 +223,8 @@ fun ColorDialog(
                         AlphaTile(
                             modifier = Modifier
                                 .size(44.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
+                                .clip(SwatchShape)
+                                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, SwatchShape),
                             controller = controller
                         )
                         Text(
