@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -239,8 +240,9 @@ fun ProfileSwitcherTitle() {
     if (pendingSwitch != null || pendingCreate != null) {
         RenkinAlertDialog(
             onDismissRequest = { pendingSwitch = null; pendingCreate = null },
+            icon = { Icon(Icons.Filled.Save, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             title = { Text(stringResource(R.string.saveBeforeSwitchTitle)) },
-            text = { Text(stringResource(R.string.saveBeforeSwitchText)) },
+            text = { Text(boldStringResource(R.string.saveBeforeSwitchText)) },
             confirmButton = {
                 TextButton(onClick = {
                     pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = true) }
@@ -262,6 +264,7 @@ fun ProfileSwitcherTitle() {
         ConfirmDialog(
             title = stringResource(R.string.deleteProfile),
             text = stringResource(R.string.deleteProfileText, profile.name),
+            icon = Icons.Filled.Delete,
             onConfirm = {
                 pendingDelete = null
                 viewModel.deleteProfile(profile.id)

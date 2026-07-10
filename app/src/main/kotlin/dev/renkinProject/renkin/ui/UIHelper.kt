@@ -2,6 +2,12 @@ package dev.renkinProject.renkin.ui
 
 import android.content.Context
 import android.os.Build
+import androidx.annotation.StringRes
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.withStyle
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.widget.Toast
@@ -232,6 +238,25 @@ fun RenkinAlertDialog(
         titleContentColor = MaterialTheme.colorScheme.onSurface
     )
 }
+
+/**
+ * Turns `**double-asterisk**` segments semi-bold — dialog bodies use it so the load-bearing
+ * part of a long text (what gets replaced, which pack, what to tap) stands out at a glance.
+ */
+fun String.withBoldMarkers(): AnnotatedString = buildAnnotatedString {
+    split("**").forEachIndexed { index, part ->
+        if (index % 2 == 1) {
+            withStyle(SpanStyle(fontWeight = FontWeight.SemiBold)) { append(part) }
+        } else {
+            append(part)
+        }
+    }
+}
+
+/** [stringResource] whose result renders `**marked**` segments bold (see [withBoldMarkers]). */
+@Composable
+fun boldStringResource(@StringRes id: Int, vararg formatArgs: Any): AnnotatedString =
+    stringResource(id, *formatArgs).withBoldMarkers()
 
 /**
  * A primary-coloured clickable text link that opens [url]. Carries a [Role.Button] semantic so
