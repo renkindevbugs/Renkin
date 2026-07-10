@@ -29,12 +29,15 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
@@ -142,9 +145,16 @@ fun ColorDialog(
     sampleBitmap: Bitmap? = null
 ) {
     val controller = rememberColorPickerController()
+    // What was set when the dialog opened. Picks apply live (the icon previews behind the
+    // dialog), so cancelling means actively putting this colour back.
+    val originalColor = remember { currentlySelected }
+    val cancel = {
+        onColorSelected(originalColor)
+        onDismiss()
+    }
 
     RenkinAlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = cancel,
         title = { Text(stringResource(R.string.pickColorTitle)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -188,11 +198,11 @@ fun ColorDialog(
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(RoundedCornerShape(8.dp))
-                                .background(currentlySelected)
+                                .background(originalColor)
                                 .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp))
                                 .clickable {
-                                    controller.selectByColor(currentlySelected, true)
-                                    onColorSelected(currentlySelected)
+                                    controller.selectByColor(originalColor, true)
+                                    onColorSelected(originalColor)
                                 }
                         )
                         Text(
@@ -254,19 +264,22 @@ fun ColorDialog(
                 }
             }
         },
-        // The pick applies live — OK just closes, but without it "how do I leave?" was a
-        // back-gesture guessing game.
+        // Same chrome as the watch-apply modal: ✕ throws the pick away (the original colour
+        // comes back), ✓ keeps it. Back gesture / tapping outside cancel too.
         confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Icon(
-                    imageVector = Icons.Filled.Done,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp)
-                )
-                Text(
-                    text = stringResource(R.string.ok),
-                    modifier = Modifier.padding(start = 6.dp)
-                )
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                FilledTonalIconButton(
+                    onClick = cancel,
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                ) {
+                    Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
+                }
+                FilledIconButton(onClick = onDismiss) {
+                    Icon(Icons.Filled.Done, stringResource(R.string.confirm))
+                }
             }
         }
     )
