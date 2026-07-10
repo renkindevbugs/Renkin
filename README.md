@@ -46,9 +46,9 @@ Grab the latest APK from [GitHub Releases](https://github.com/renkindevbugs/Renk
 - Themed (Material You) icon export
 - **Profiles** — several named icon sets, each with its own built pack, side by side
 - **Profile sharing** — export a profile as a file anyone can import as a new profile.
-  Icons from paid packs travel as references, not pixels: they unlock on the other device
-  only with the pack installed (built packs carry icon provenance, so this can't be
-  laundered through Renkin's own output)
+  Icons from paid packs stay locked on the other device until that pack is installed
+  there — and unlock automatically if the pack leaves the store (built packs carry icon
+  provenance, so this can't be laundered through Renkin's own output)
 - **Backup & restore** — one file with every profile, setting, watch rule and upload,
   for moving to a new phone
 - **Icon watch** — get notified when a followed pack adds an icon for one of your apps

@@ -45,10 +45,11 @@ import java.util.zip.ZipOutputStream
  *
  *  - **backup** — the whole device: every profile, all settings, uploads, keystore. Import
  *    replaces everything in place.
- *  - **profile** — one profile to share. Icons from packs verified paid (or unverifiable —
- *    fail-closed) carry no image data, only a `{pack, drawable}` reference the importer
- *    resolves from their own installed copy; free/unlisted/non-pack icons embed fully.
- *    Import always creates a NEW profile.
+ *  - **profile** — one profile to share. Every icon embeds its image data, and pack-sourced
+ *    icons also carry a `{pack, drawable}` reference. Import always creates a NEW profile;
+ *    icons from a paid (or not-yet-verified) pack stay LOCKED on the importing device until
+ *    that pack is installed there — but because the pixels ride along, a pack that later
+ *    disappears from the store keeps working (its verdict flips to unlisted and unlocks).
  *
  * Import is all-or-nothing: the file is fully parsed BEFORE any store is touched. Whether
  * imported icons are usable is decided on the importing device every time they load
@@ -58,8 +59,7 @@ import java.util.zip.ZipOutputStream
 class BackupManager(
     private val context: Context,
     private val packRepo: RenkinPackRepository,
-    private val watchRepo: WatchRepository,
-    private val verdictManager: PackVerdictManager = PackVerdictManager(context, packRepo)
+    private val watchRepo: WatchRepository
 ) {
     /** Production entry point: uses the shared singleton databases. Tests inject in-memory ones. */
     constructor(context: Context) : this(context, RenkinPackRepository(context), WatchRepository(context))
@@ -127,9 +127,11 @@ class BackupManager(
     }
 
     /**
-     * Exports one profile for sharing. Icons from packs that are paid — or whose price
-     * can't be verified right now (no network): fail-closed, a share must never leak paid
-     * artwork — are stripped to references. No uploads or keystore travel with a share.
+     * Exports one profile for sharing. Every icon travels with its image data; pack-sourced
+     * icons additionally get a `{pack, drawable}` reference so the importer can re-materialize
+     * them from an installed copy. Whether paid-pack icons may be USED is enforced on the
+     * importing device at load time, not here — so the export works fully offline.
+     * No uploads or keystore travel with a share.
      */
     suspend fun exportProfile(profileId: Long, open: () -> OutputStream) = withContext(Dispatchers.IO) {
         val prefs = context.dataStore.data.first()
@@ -146,18 +148,13 @@ class BackupManager(
             .map { it.toBackupRule() }
 
         val sourcePacks = icons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet()
-        val stripPacks = verdictManager.ensureVerdicts(sourcePacks)
         val exportIcons = icons.map { icon ->
-            if (icon.sourcePackName.isNotEmpty() && icon.sourcePackName in stripPacks && icon.drawable.isNotEmpty()) {
+            if (icon.sourcePackName.isNotEmpty() && icon.sourceDrawableName.isEmpty()) {
                 icon.copy(
-                    drawable = "",
-                    isXml = false,
                     // Bulk-refresh icons are exactly the appfilter-mapped ones, so this
                     // resolution is faithful; a hand-picked alternate degrades to the
                     // pack's default icon for the app.
-                    sourceDrawableName = icon.sourceDrawableName.ifEmpty {
-                        appFilterDrawableName(icon.sourcePackName, icon.packageName, icon.activityName) ?: ""
-                    }
+                    sourceDrawableName = appFilterDrawableName(icon.sourcePackName, icon.packageName, icon.activityName) ?: ""
                 )
             } else icon
         }
