@@ -651,8 +651,8 @@ class MainViewModel @Inject constructor(
     }
 
     /**
-     * Exports one profile as a shareable file. Paid-pack icons travel as references only —
-     * the export may go online to classify the source packs (see BackupManager).
+     * Exports one profile as a shareable file. Icons embed their image data; whether
+     * paid-pack icons are usable is enforced on the importing device (see BackupManager).
      */
     fun exportProfile(profileId: Long, uri: Uri) = runBackupOp(R.string.profileExportFailed) {
         if (profileId == activeProfileId && hasUnsavedChanges()) {

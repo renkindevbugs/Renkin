@@ -112,7 +112,7 @@ class BackupManagerTest {
     }
 
     @Test
-    fun profileShare_stripsPaidPackPixels_importsAsNewProfile() = runBlocking {
+    fun profileShare_embedsAllPixels_importsAsNewProfile() = runBlocking {
         val srcPackRepo = RenkinPackRepository(srcPackDb)
         val srcWatchRepo = WatchRepository(srcWatchDb)
         srcPackRepo.replaceEverything(
@@ -133,12 +133,9 @@ class BackupManagerTest {
         )
         // The source device knows the pack's display name (recorded while it was installed).
         srcPackRepo.upsertVerdicts(listOf(PackVerdict("pack.paid", label = "Paid Icons", seenInstalled = true)))
-        val fakeVerdicts = PackVerdictManager(context, srcPackRepo) { pack ->
-            StoreLookupResult(if (pack == "pack.paid") StoreVerdict.PAID else StoreVerdict.FREE)
-        }
 
         val out = ByteArrayOutputStream()
-        BackupManager(context, srcPackRepo, srcWatchRepo, fakeVerdicts).exportProfile(3L) { out }
+        BackupManager(context, srcPackRepo, srcWatchRepo).exportProfile(3L) { out }
         val bytes = out.toByteArray()
 
         val tgtPackRepo = RenkinPackRepository(tgtPackDb)
@@ -155,8 +152,9 @@ class BackupManagerTest {
         assertTrue(tgtPackRepo.profiles().single { it.id == newId }.hasUnbuiltChanges)
 
         val rows = tgtPackRepo.getAll(newId).associateBy { it.packageName }
-        // Paid-pack icon travelled as a pixel-less reference; the others kept their data.
-        assertEquals("", rows.getValue("com.paid").drawable)
+        // Every icon keeps its pixels — a paid pack vanishing from the store must not kill
+        // the shared icons. Locking paid-pack rows is the importing device's job at load.
+        assertEquals("cGFpZA==", rows.getValue("com.paid").drawable)
         assertEquals("pack.paid", rows.getValue("com.paid").sourcePackName)
         assertEquals("ZnJlZQ==", rows.getValue("com.free").drawable)
         assertEquals("dXBsb2Fk", rows.getValue("com.upload").drawable)
