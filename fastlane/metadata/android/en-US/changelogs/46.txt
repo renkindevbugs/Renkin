@@ -1,0 +1,7 @@
+• Profile sharing as .renkin files — imports always add a new profile; paid-pack icons travel as references and unlock once the pack is installed
+• Full backup & restore in one file
+• Material You icon shapes with crop or colour plate
+• Text icons: custom text, letter case, system fonts
+• SVG import — sharp uploads and editable vector paths
+• Missing-pack warnings with Play Store links
+• Pack stats show true icon origins

@@ -1,17 +1,17 @@
-<i>Formerly Iconeration</i>. Icon pack creator for Android and Arcticons companion application. Create your own icon pack or extend Arcticons or another icon pack.
+Renkin builds a real, installable icon pack from your own choices — no PC, no account, offline. Pick icons from packs you already have, redraw or recolour them, then compile and sign the pack on-device and select it in your launcher.
 
-<b>Basic features</b>
+Fork of <a href="https://codeberg.org/kaanelloed/Alembicons">Alembicons</a> by kaanelloed (formerly Iconeration), with its own direction on top.
 
-<ul><li>Get icon from icon pack</li>
-<li>Use path tracing on the application icon using Color Quantization</li>
-<li>Use canny edge detection on the application icon</li>
-<li>Create text from application name using Arcticons OTF font</li>
-<li>Choose icon color</li></ul>
+<b>Features</b>
 
-<b>Advanced features</b>
-
-<ul><li>Use the vector version of the application icon if available</li>
-<li>Use the monochrome version of the application icon if available</li>
-<li>Export icons as themed icons</li>
-<li>Import an image for a specific application</li>
-<li>Create or edit the vector of the application icon</li></ul>
+<ul><li>Source an icon from any installed icon pack, the app's own icon, or its name as text</li>
+<li>Modify icons: path tracing, edge detection, colorize, background removal, vector editing</li>
+<li>Icon shapes — crop any icon into Material You shapes (circle, squircle, pebble, …) or put it on a coloured shape plate</li>
+<li>Text icons with custom text, letter case and any system font (or the bundled Arcticons Sans)</li>
+<li>Import your own image per app — SVG included, rendered sharp or imported as editable vector paths</li>
+<li>Themed (Material You) icon export</li>
+<li>Profiles — several named icon sets, each with its own built pack, side by side</li>
+<li>Profile sharing — export a profile as a file anyone can import as a new profile; icons from paid packs travel as references, not pixels</li>
+<li>Backup and restore — one file with every profile, setting, watch rule and upload</li>
+<li>Icon watch — get notified when a followed pack adds an icon for one of your apps</li>
+<li>Calendar day icons that rotate with the date</li></ul>
