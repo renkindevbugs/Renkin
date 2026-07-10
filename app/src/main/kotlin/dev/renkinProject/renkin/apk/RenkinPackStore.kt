@@ -35,27 +35,32 @@ class RenkinPackStore(private val context: Context) {
     /** Loads [profileId]'s saved icons + calendar flags, keyed by "package/activity". */
     suspend fun load(profileId: Long, defaultColor: Color): Map<String, SavedEntry> = withContext(Dispatchers.Default) {
         repo.getAll(profileId).associate { dbApp ->
-            // Per-row guard: one corrupt base64/XML record loses that single icon (the row's
-            // calendar flags survive) instead of crashing the whole profile load.
-            val icon: IconPackDrawable? = runCatching {
-                when {
-                    dbApp.drawable.isEmpty() -> null
-                    dbApp.isXml -> {
-                        val nodes = XmlDecoder.fromBase64(dbApp.drawable)
-                        XmlNodeParser.parse(context.resources, nodes, defaultColor)
-                    }
-                    else -> BitmapIconDrawable(bitmapFromBase64(dbApp.drawable), dbApp.isAdaptiveIcon)
-                }
-            }.getOrNull()
-            "${dbApp.packageName}/${dbApp.activityName}" to SavedEntry(
-                icon,
-                dbApp.calendarEnabled,
-                dbApp.calendarPrefix.ifEmpty { null },
-                dbApp.calendarPackName.ifEmpty { null },
-                dbApp.sourcePackName.ifEmpty { null },
-                dbApp
-            )
+            "${dbApp.packageName}/${dbApp.activityName}" to decodeRow(dbApp, defaultColor)
         }
+    }
+
+    /** Decodes one stored row — used by [load] and by late unlocks (a missing pack arriving). */
+    fun decodeRow(dbApp: DbApplication, defaultColor: Color): SavedEntry {
+        // Per-row guard: one corrupt base64/XML record loses that single icon (the row's
+        // calendar flags survive) instead of crashing the whole profile load.
+        val icon: IconPackDrawable? = runCatching {
+            when {
+                dbApp.drawable.isEmpty() -> null
+                dbApp.isXml -> {
+                    val nodes = XmlDecoder.fromBase64(dbApp.drawable)
+                    XmlNodeParser.parse(context.resources, nodes, defaultColor)
+                }
+                else -> BitmapIconDrawable(bitmapFromBase64(dbApp.drawable), dbApp.isAdaptiveIcon)
+            }
+        }.getOrNull()
+        return SavedEntry(
+            icon,
+            dbApp.calendarEnabled,
+            dbApp.calendarPrefix.ifEmpty { null },
+            dbApp.calendarPackName.ifEmpty { null },
+            dbApp.sourcePackName.ifEmpty { null },
+            dbApp
+        )
     }
 
     /**

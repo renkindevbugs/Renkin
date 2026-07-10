@@ -231,14 +231,8 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     if (showAbout) {
         InfoDialog { showAbout = false }
     }
-    if (viewModel.pendingBackupImport != null) {
-        ConfirmDialog(
-            title = stringResource(R.string.importBackupTitle),
-            text = stringResource(R.string.importBackupText),
-            onConfirm = { viewModel.confirmBackupImport() },
-            onDismiss = { viewModel.cancelBackupImport() }
-        )
-    }
+    // Note: the full-backup import confirmation dialog is hosted by MainColumn, so it also
+    // covers imports started from the profile switcher.
     if (confirmClearIcons) {
         ConfirmDialog(
             title = stringResource(R.string.clearIconsTitle),

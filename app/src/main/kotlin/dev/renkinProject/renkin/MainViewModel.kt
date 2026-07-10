@@ -300,6 +300,9 @@ class MainViewModel @Inject constructor(
                     // The saved pack now matches the current icons → reset both change baselines.
                     builtKeys = appProvider.getSavedPackKeys()
                     updatedKeys = emptySet()
+                    // The save dropped locked originals the user replaced by hand — the
+                    // missing-pack warning must not keep counting them after a build.
+                    refreshMissingPacks(prompt = false)
                     // The hero pick only sticks once built: record what was built so startup
                     // can restore it over any later, unbuilt pick.
                     val store = getApplication<Application>().dataStore
@@ -401,10 +404,12 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Re-reads the installed icon packs. */
+    /** Re-reads the installed icon packs (and unlocks icons whose pack just arrived). */
     fun sync() {
         viewModelScope.launch {
             appProvider.forceSync()
+            // The sync may have unlocked held-back icons — the badge/banner must follow.
+            refreshMissingPacks(prompt = false)
             _toastEvents.trySend(R.string.packsSynced)
         }
     }
@@ -610,6 +615,7 @@ class MainViewModel @Inject constructor(
                 if (hasUnsavedChanges()) {
                     appProvider.saveActiveProfileIcons()
                     resetChangeBaselines()
+                    refreshMissingPacks(prompt = false)
                 }
                 BackupManager(getApplication()).exportBackup(uri)
                 _toastEvents.trySend(R.string.backupExported)
@@ -636,6 +642,7 @@ class MainViewModel @Inject constructor(
                 if (profileId == activeProfileId && hasUnsavedChanges()) {
                     appProvider.saveActiveProfileIcons()
                     resetChangeBaselines()
+                    refreshMissingPacks(prompt = false)
                 }
                 BackupManager(getApplication()).exportProfile(profileId, uri)
                 _toastEvents.trySend(R.string.profileExported)

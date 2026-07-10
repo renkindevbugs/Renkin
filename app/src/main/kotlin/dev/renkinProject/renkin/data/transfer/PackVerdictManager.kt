@@ -27,7 +27,7 @@ import kotlinx.coroutines.withContext
 class PackVerdictManager(
     private val context: Context,
     private val repo: RenkinPackRepository,
-    private val lookup: suspend (String) -> StoreVerdict = PlayStoreLookup::lookup
+    private val lookup: suspend (String) -> StoreLookupResult = PlayStoreLookup::lookup
 ) {
     /** Production entry point: uses the shared singleton database. */
     constructor(context: Context) : this(context, RenkinPackRepository(context))
@@ -104,13 +104,19 @@ class PackVerdictManager(
             val undecided = (verdicts[pack] ?: row).verdict == VERDICT_UNKNOWN
             val retryDue = now - ((verdicts[pack] ?: row).checkedAt) >= RETRY_INTERVAL_MS
             if (undecided && retryDue) {
-                val result = when (lookup(pack)) {
+                val result = lookup(pack)
+                val verdictValue = when (result.verdict) {
                     StoreVerdict.FREE -> VERDICT_FREE
                     StoreVerdict.PAID -> VERDICT_PAID
                     StoreVerdict.UNLISTED -> VERDICT_UNLISTED
                     StoreVerdict.UNKNOWN -> VERDICT_UNKNOWN
                 }
-                val updated = (verdicts[pack] ?: row).copy(verdict = result, checkedAt = now)
+                var updated = (verdicts[pack] ?: row).copy(verdict = verdictValue, checkedAt = now)
+                // The store page also names the pack — fills the gap for packs this device
+                // never saw installed (otherwise the dialog shows a bare package name).
+                if (updated.label.isEmpty() && !result.label.isNullOrEmpty()) {
+                    updated = updated.copy(label = result.label)
+                }
                 verdicts[pack] = updated
                 updates.add(updated)
             }

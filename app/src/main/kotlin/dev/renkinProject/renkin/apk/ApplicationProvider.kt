@@ -437,7 +437,35 @@ class ApplicationProvider(private val context: Context) {
             verdictManager.recordInstalledPacks(iconPacks)
             // Packs may have been updated/rebuilt — their provenance maps can be stale.
             provenanceCache.clear()
+            // A freshly installed pack may be exactly the one some icons were waiting for.
+            refreshLockedIcons()
         }
+    }
+
+    /**
+     * Re-evaluates the held-back rows after the installed packs changed: rows whose pack
+     * just became usable load into the list right away — no restart or profile switch.
+     * Unsaved session edits stay untouched; rows that still can't be rebuilt stay held back.
+     */
+    private suspend fun refreshLockedIcons() = withContext(Dispatchers.Default) {
+        if (lockedRows.isEmpty()) return@withContext
+        val stillLocked = verdictManager.lockedPacksAmong(
+            lockedRows.values.map { it.sourcePackName }.filter { it.isNotEmpty() }.toSet()
+        )
+        val prefs = context.dataStore.data.first()
+        for ((key, row) in lockedRows.toList()) {
+            if (row.sourcePackName in stillLocked) continue
+            val app = applicationList.firstOrNull { it.key == key } ?: continue
+            val entry = renkinPackStore.decodeRow(row, defaultColor)
+            val icon = entry.icon ?: materializeReference(app, entry, prefs) ?: continue
+            editApplication(
+                app,
+                app.changeExport(icon, sourcePackName = entry.sourcePackName)
+                    .changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
+            )
+            lockedRows.remove(key)
+        }
+        publishLockedKeys()
     }
 
     private fun editApplication(oldApp: PackageInfoStruct, newApp: PackageInfoStruct) {

@@ -57,7 +57,7 @@ class PackVerdictManagerTest {
                 PackVerdict("pack.owned", VERDICT_PAID, seenInstalled = true)
             )
         )
-        val manager = PackVerdictManager(context, repo) { StoreVerdict.UNKNOWN }
+        val manager = PackVerdictManager(context, repo) { StoreLookupResult(StoreVerdict.UNKNOWN) }
 
         val locked = manager.lockedPacksAmong(
             setOf("pack.free", "pack.unlisted", "pack.paid", "pack.owned", "pack.never.seen")
@@ -68,7 +68,7 @@ class PackVerdictManagerTest {
 
     @Test
     fun lockedPacksAmong_neverLocksRenkinsOwnPacks() = runBlocking {
-        val manager = PackVerdictManager(context, repo) { StoreVerdict.UNKNOWN }
+        val manager = PackVerdictManager(context, repo) { StoreLookupResult(StoreVerdict.UNKNOWN) }
 
         val locked = manager.lockedPacksAmong(setOf("dev.renkinProject.renkinpack.p3", ""))
 
@@ -79,10 +79,10 @@ class PackVerdictManagerTest {
     fun ensureVerdicts_looksUpUndecided_returnsPacksToStrip() = runBlocking {
         val manager = PackVerdictManager(context, repo) { pack ->
             when (pack) {
-                "pack.free" -> StoreVerdict.FREE
-                "pack.paid" -> StoreVerdict.PAID
-                "pack.gone" -> StoreVerdict.UNLISTED
-                else -> StoreVerdict.UNKNOWN
+                "pack.free" -> StoreLookupResult(StoreVerdict.FREE, "Free Icons")
+                "pack.paid" -> StoreLookupResult(StoreVerdict.PAID, "Paid Icons")
+                "pack.gone" -> StoreLookupResult(StoreVerdict.UNLISTED)
+                else -> StoreLookupResult(StoreVerdict.UNKNOWN)
             }
         }
 
@@ -94,11 +94,13 @@ class PackVerdictManagerTest {
         assertEquals(VERDICT_FREE, stored.getValue("pack.free").verdict)
         assertEquals(VERDICT_PAID, stored.getValue("pack.paid").verdict)
         assertEquals(VERDICT_UNLISTED, stored.getValue("pack.gone").verdict)
+        // The store-listed name fills the label so the missing-packs dialog can show it.
+        assertEquals("Paid Icons", stored.getValue("pack.paid").label)
     }
 
     @Test
     fun recordInstalledPacks_marksOwnershipForever() = runBlocking {
-        val manager = PackVerdictManager(context, repo) { StoreVerdict.UNKNOWN }
+        val manager = PackVerdictManager(context, repo) { StoreLookupResult(StoreVerdict.UNKNOWN) }
         manager.recordInstalledPacks(listOf(IconPack("pack.x", "X Icons", 1L, "1.0", 0)))
 
         val verdict = repo.verdicts(listOf("pack.x")).getValue("pack.x")

@@ -313,4 +313,5 @@
     <string name="refreshLockedSkipped">Some icons were skipped — their source icon packs aren\'t on this device</string>
     <string name="iconOriginLocked">This icon\'s source pack isn\'t on this device — install it to use the icon</string>
     <string name="packUsageNotInstalled">not installed</string>
+    <string name="importProfile">Import profile</string>
 </resources>
