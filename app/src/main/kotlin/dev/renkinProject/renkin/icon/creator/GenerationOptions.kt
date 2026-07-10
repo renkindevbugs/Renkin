@@ -68,7 +68,8 @@ data class GenerationOptions(
     val colorizeFlat: Boolean = false,
     // Icon shape applied as the LAST step: NONE leaves the icon untouched; otherwise the icon
     // is cropped into the shape (the default — most icons are full-bleed) or laid on a
-    // [bgColor]-filled shape plate. [iconShapeScale] sizes the icon relative to the shape.
+    // [bgColor]-filled shape plate. [iconShapeScale] sizes the SHAPE itself (the icon stays
+    // as-is — that's [iconScale]): smaller crops deeper, larger clips just the corners.
     val iconShape: IconShape = IconShape.NONE,
     val iconShapeCrop: Boolean = true,
     val iconShapeScale: Float = 1f,

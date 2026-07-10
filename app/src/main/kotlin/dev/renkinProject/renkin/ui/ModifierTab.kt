@@ -353,7 +353,8 @@ internal fun ModifierTab(
                             label = { Text(stringResource(R.string.shapePlate)) }
                         )
                     }
-                    // How big the icon sits inside the shape, in both modes.
+                    // Scales the shape itself (the icon stays as-is — that's Icon scale above):
+                    // smaller crops deeper into the icon, larger clips just the corners.
                     LabeledSlider(
                         label = stringResource(R.string.shapeIconScale),
                         value = adjustments.shapeScale,

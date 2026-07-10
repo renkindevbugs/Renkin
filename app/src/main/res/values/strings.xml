@@ -327,7 +327,7 @@
     <string name="shapePlate">Background</string>
     <string name="shapeCrop">Crop icon</string>
     <string name="shapeColor">Shape colour</string>
-    <string name="shapeIconScale">Icon size in shape</string>
+    <string name="shapeIconScale">Shape size</string>
     <string name="textTypeCustom">Custom text</string>
     <string name="textCustomLabel">Custom text</string>
     <string name="textCustomHint">YT</string>
