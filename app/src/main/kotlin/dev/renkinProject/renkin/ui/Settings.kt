@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Badge
@@ -70,6 +71,8 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.DARK_MODE_DEFAULT
 import dev.renkinProject.renkin.data.DarkModeKey
+import dev.renkinProject.renkin.data.OnboardingSeenKey
+import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.getDarkModeLabels
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.setEnumValue
@@ -90,6 +93,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     val view = LocalView.current
     val context = getCurrentContext()
     val toaster = LocalToaster.current
+    val scope = rememberCoroutineScope()
     val iconsClearedMessage = stringResource(R.string.iconsCleared)
 
     var showStats by rememberSaveable { mutableStateOf(false) }
@@ -180,6 +184,12 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     }
 
                     SettingsSectionHeader(stringResource(R.string.settingsDiagnostics))
+                    SettingsRow(Icons.Filled.School, stringResource(R.string.showIntro)) {
+                        // Clearing the flag makes the home screen show the intro again; close
+                        // Settings so it isn't sitting underneath the overlay.
+                        scope.launch { prefs.setBooleanValue(OnboardingSeenKey, false) }
+                        onDismiss()
+                    }
                     SettingsRow(
                         Icons.Filled.BugReport,
                         stringResource(R.string.crashLogs),
