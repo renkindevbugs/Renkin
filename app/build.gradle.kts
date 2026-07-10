@@ -139,6 +139,13 @@ dependencies {
     //Test
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
+    // Compose UI tests run locally on Robolectric (no device): the BOM pins the versions,
+    // ui-test-manifest provides the host activity createComposeRule needs.
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    // debugImplementation (not test): the host ComponentActivity must be merged into the
+    // debug manifest for Robolectric to resolve it.
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }
