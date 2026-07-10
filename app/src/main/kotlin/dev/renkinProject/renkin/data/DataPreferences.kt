@@ -88,6 +88,10 @@ val LastWatchCheckAtKey = longPreferencesKey(LAST_WATCH_CHECK_AT_NAME)
 // Which profile's icons/preferences are active. Profiles snapshot/restore the keys below.
 val ActiveProfileIdKey = longPreferencesKey("ACTIVE_PROFILE_ID")
 
+// First-run intro dismissed. App-level (not in ProfilePrefKeys): the intro explains the app,
+// not a profile, so switching or importing profiles must never bring it back by itself.
+val OnboardingSeenKey = booleanPreferencesKey("ONBOARDING_SEEN")
+
 /**
  * The generation preferences that belong to a profile — captured into [Profile.prefsSnapshot]
  * when switching away and restored when switching back, so profiles don't influence each other.
