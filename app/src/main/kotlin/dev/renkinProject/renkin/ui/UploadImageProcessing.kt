@@ -45,14 +45,20 @@ internal fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
     if (bitmap == null) {
         val svg = contentResolver.openInputStream(uri).use { decodeSVGSteam(it) }
 
-        if (svg != null && svg.documentWidth > 0 && svg.documentHeight > 0) {
-            // Cap the raster size too — an SVG can declare arbitrarily huge document
-            // dimensions, and rendering them 1:1 would allocate an equally huge bitmap.
-            val scale = (MAX_IMPORT_SIZE / max(svg.documentWidth, svg.documentHeight)).coerceAtMost(1f)
-            val width = (svg.documentWidth * scale).toInt().coerceAtLeast(1)
-            val height = (svg.documentHeight * scale).toInt().coerceAtLeast(1)
-            bitmap = newArgbBitmap(width, height) {
-                svg.renderToCanvas(it, RectF(0f, 0f, width.toFloat(), height.toFloat()))
+        if (svg != null) {
+            // An SVG's document size is a hint, not pixels. Render at the full import size in
+            // BOTH directions: scaling up matters just as much — a 24x24 icon document (e.g.
+            // heroicons) rendered 1:1 and enlarged later is exactly the blur vectors avoid.
+            // Documents that declare no width/height at all fall back to their viewBox.
+            val docWidth = if (svg.documentWidth > 0) svg.documentWidth else svg.documentViewBox?.width() ?: 0f
+            val docHeight = if (svg.documentHeight > 0) svg.documentHeight else svg.documentViewBox?.height() ?: 0f
+            if (docWidth > 0 && docHeight > 0) {
+                val scale = MAX_IMPORT_SIZE / max(docWidth, docHeight)
+                val width = (docWidth * scale).toInt().coerceAtLeast(1)
+                val height = (docHeight * scale).toInt().coerceAtLeast(1)
+                bitmap = newArgbBitmap(width, height) {
+                    svg.renderToCanvas(it, RectF(0f, 0f, width.toFloat(), height.toFloat()))
+                }
             }
         }
     }
