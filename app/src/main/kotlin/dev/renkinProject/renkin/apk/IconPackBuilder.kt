@@ -33,6 +33,7 @@ import dev.renkinProject.renkin.xml.file.AppFilterXml
 import dev.renkinProject.renkin.xml.file.AppMapXml
 import dev.renkinProject.renkin.xml.file.ThemeResourcesXml
 import dev.renkinProject.renkin.xml.file.DrawableXml
+import dev.renkinProject.renkin.xml.file.LayerListXml
 import dev.renkinProject.renkin.xml.file.LayoutXml
 import dev.renkinProject.renkin.xml.file.XmlMemoryFile
 import com.reandroid.apk.ApkModule
@@ -99,14 +100,6 @@ class IconPackBuilder(
             packageName.startsWith(PACKAGE_NAME) || packageName.startsWith(LEGACY_PACKAGE_NAME)
 
         /**
-         * One drawable file name per app. Normally just the package name, but a package with
-         * several launcher activities (each themable separately) must not reuse it — both entries
-         * would write the same resource name and one icon would silently replace the other in the
-         * built pack. Duplicates get a suffix from their activity class name.
-         *
-         * Pure (depends only on each app's package/activity), so it's unit-tested directly.
-         */
-        /**
          * A compiled `<string-array>` resource. Bag children are named by 1-based array index
          * (the 0x02000001… scheme aapt uses); each value is a string-pool reference.
          */
@@ -122,6 +115,14 @@ class IconPackBuilder(
             }
         }
 
+        /**
+         * One drawable file name per app. Normally just the package name, but a package with
+         * several launcher activities (each themable separately) must not reuse it — both entries
+         * would write the same resource name and one icon would silently replace the other in the
+         * built pack. Duplicates get a suffix from their activity class name.
+         *
+         * Pure (depends only on each app's package/activity), so it's unit-tested directly.
+         */
         @VisibleForTesting
         internal fun uniqueDrawableFileNames(apps: List<PackageInfoStruct>): Map<String, String> {
             val names = mutableMapOf<String, String>()
@@ -217,6 +218,7 @@ class IconPackBuilder(
 
         val totalIcons = apps.count { it.createdIcon != null }
         val appFileNames = uniqueDrawableFileNames(apps)
+        val clockExporter = DynamicClockExporter(ctx, apps.map { it.toInstalledApplication() })
         var doneIcons = 0
         for (app in apps) {
             if (app.createdIcon != null) {
@@ -225,8 +227,31 @@ class IconPackBuilder(
                 progressMethod(++doneIcons, totalIcons)
                 val appFileName = appFileNames.getValue(app.key)
 
+                // Live clock: copied from the source pack when this app's icon is that pack's
+                // untouched dynamic-clock drawable. Skipped in themed mode — the copied hand
+                // layers wouldn't follow the tinting.
+                val clock = if (themed) null else app.sourcePackName
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { clockExporter.clockIconFor(app, it, app.createdIcon) }
+
                 val exportAsAdaptive = themed || app.createdIcon.isAdaptiveIcon()
-                if (exportAsAdaptive && PackageVersion.is26OrMore()) {
+                if (clock != null) {
+                    val layerList = LayerListXml()
+                    clock.layers.forEachIndexed { index, layer ->
+                        val layerName = "${appFileName}_layer$index"
+                        createBitmapResource(apkModule, packageBlock, layer, layerName)
+                        layerList.item(layerName)
+                    }
+                    createXmlDrawableResource(apkModule, packageBlock, layerList, appFileName)
+                    appfilterXml.dynamicClock(
+                        appFileName,
+                        clock.meta.defaultHour,
+                        clock.meta.defaultMinute,
+                        clock.meta.hourLayerIndex,
+                        clock.meta.minuteLayerIndex
+                    )
+                }
+                else if (exportAsAdaptive && PackageVersion.is26OrMore()) {
                     val adaptive = AdaptiveIconXml()
                     adaptive.background("@color/icon_background_color")
 

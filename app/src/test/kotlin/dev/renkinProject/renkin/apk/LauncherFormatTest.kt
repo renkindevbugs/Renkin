@@ -49,6 +49,20 @@ class LauncherFormatTest {
     }
 
     @Test
+    fun layerListXml_stacksLayersInOrderWithAndroidNamespace() {
+        val xml = dev.renkinProject.renkin.xml.file.LayerListXml()
+        xml.item("clock_layer0")
+        xml.item("clock_layer1")
+        val text = xml.getBytes().toString(Charsets.UTF_8)
+
+        assertTrue(text.contains("xmlns:android=\"http://schemas.android.com/apk/res/android\""))
+        val first = text.indexOf("<item android:drawable=\"@drawable/clock_layer0\" />")
+        val second = text.indexOf("<item android:drawable=\"@drawable/clock_layer1\" />")
+        assertTrue(first in 1 until second)
+        assertTrue(text.contains("</layer-list>"))
+    }
+
+    @Test
     fun stringArrayResource_roundTripsThroughTheResourceTable() {
         val tableBlock = TableBlock()
         val packageBlock = tableBlock.newPackage(0x7f, "test.pack")
