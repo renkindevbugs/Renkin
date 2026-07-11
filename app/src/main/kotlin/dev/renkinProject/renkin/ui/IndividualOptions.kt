@@ -46,9 +46,17 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
+import dev.renkinProject.renkin.data.OutlineAddKey
+import dev.renkinProject.renkin.data.OutlineColorKey
+import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.TextFontKey
 import dev.renkinProject.renkin.data.TextType
+import dev.renkinProject.renkin.data.getBooleanValue
+import dev.renkinProject.renkin.data.getColorValue
+import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getStringValue
+import kotlinx.coroutines.flow.first
 import dev.renkinProject.renkin.icon.creator.TextCase
 import android.graphics.drawable.AdaptiveIconDrawable
 import androidx.compose.ui.platform.LocalContext
@@ -293,6 +301,23 @@ fun OptionsDialog(
     // The Modifier tab's adjustment values (edge tuning, scale, tolerance, position), bundled in
     // one saveable holder instead of eight loose rememberSaveables + callback pairs.
     val adjustments = rememberSaveable(saver = AdjustmentState.Saver) { AdjustmentState() }
+    // The global "Add outline" preference flows in as the Modifier tab's starting point (like
+    // the text font above), so the per-app preview matches what a refresh would produce; the
+    // user can still switch to Recolor or None. Seeded once from the loaded store — the
+    // composable preference value starts at the defaults before the DataStore flow emits,
+    // and re-seeding would clobber restored dialog state.
+    var outlineSeeded by rememberSaveable { mutableStateOf(false) }
+    val prefsStore = getPreferences()
+    LaunchedEffect(Unit) {
+        if (outlineSeeded) return@LaunchedEffect
+        val p = prefsStore.data.first()
+        if (p.getBooleanValue(OutlineAddKey)) {
+            adjustments.outlineMode = OutlineMode.ADD
+            adjustments.outlineWidth = p.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT).toFloat()
+            adjustments.outlineColor = p.getColorValue(OutlineColorKey, Color.Black)
+        }
+        outlineSeeded = true
+    }
 
     // Calendar day icons — committed immediately when toggled (independent of icon confirm).
     var calendarEnabled by rememberSaveable { mutableStateOf(app.calendarEnabled) }

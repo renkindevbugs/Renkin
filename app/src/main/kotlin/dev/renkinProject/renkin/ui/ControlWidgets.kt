@@ -140,7 +140,10 @@ fun LabeledSlider(
     onValueChange: (Float) -> Unit,
     valueRange: ClosedFloatingPointRange<Float>,
     valueLabel: String? = null,
-    centered: Boolean = false
+    centered: Boolean = false,
+    // For callers persisting the value somewhere expensive (DataStore): fires once on release
+    // instead of on every drag tick.
+    onValueChangeFinished: (() -> Unit)? = null
 ) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -162,10 +165,16 @@ fun LabeledSlider(
             value = value,
             onValueChange = onValueChange,
             valueRange = valueRange,
+            onValueChangeFinished = onValueChangeFinished,
             track = { SliderDefaults.CenteredTrack(sliderState = it) }
         )
     } else {
-        Slider(value = value, onValueChange = onValueChange, valueRange = valueRange)
+        Slider(
+            value = value,
+            onValueChange = onValueChange,
+            valueRange = valueRange,
+            onValueChangeFinished = onValueChangeFinished
+        )
     }
 }
 
