@@ -6,6 +6,7 @@ import android.graphics.Paint
 import android.graphics.Path
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -63,7 +64,9 @@ class VectorRenderer(private val imageVector: ImageVector) {
     }
 
     private fun renderPath(canvas: Canvas, path: VectorPath) {
-        canvas.drawPath(path.pathData.toPath().asAndroidPath(), getPaint(path))
+        val androidPath = path.pathData.toPath().asAndroidPath()
+        androidPath.fillType = convertFillType(path.pathFillType)
+        drawPath(canvas, androidPath, path)
     }
 
     private fun renderNonScalingStroke(canvas: Canvas) {
@@ -105,22 +108,32 @@ class VectorRenderer(private val imageVector: ImageVector) {
         val newPath = Path()
 
         androidPath.transform(currentMatrix, newPath)
+        newPath.fillType = convertFillType(path.pathFillType)
 
-        canvas.drawPath(newPath, getPaint(path))
+        drawPath(canvas, newPath, path)
     }
 
-    private fun getPaint(path: VectorPath): Paint {
-        return if (path.strokeLineWidth == 0f) {
-            getFillPaint(path)
-        } else {
-            getStrokePaint(path)
-        }
+    /**
+     * Fill and stroke are drawn independently, like VectorDrawable itself does — a path may
+     * carry both. SVG-to-vector converters (Lawnicons among others) also emit a TRANSPARENT
+     * strokeColor with strokeWidth="1" on plain filled paths; the old either/or paint choice
+     * saw the non-zero width, drew only the invisible stroke and dropped the fill entirely,
+     * blanking every icon of such packs.
+     */
+    private fun drawPath(canvas: Canvas, androidPath: Path, path: VectorPath) {
+        getFillPaint(path)?.let { canvas.drawPath(androidPath, it) }
+        getStrokePaint(path)?.let { canvas.drawPath(androidPath, it) }
     }
 
-    private fun getStrokePaint(path: VectorPath): Paint {
+    private fun getStrokePaint(path: VectorPath): Paint? {
+        if (path.strokeLineWidth <= 0f) return null
+        val color = convertColor(path.stroke)
+        val alpha = (Color(color).alpha * path.strokeAlpha * 255).toInt()
+        if (alpha <= 0) return null
+
         val paint = Paint()
-        paint.color = convertColor(path.stroke)
-        paint.alpha = (path.strokeAlpha * 255).toInt()
+        paint.color = color
+        paint.alpha = alpha
         paint.strokeCap = convertCap(path.strokeLineCap)
         paint.strokeJoin = convertJoin(path.strokeLineJoin)
         paint.strokeWidth = path.strokeLineWidth
@@ -131,19 +144,22 @@ class VectorRenderer(private val imageVector: ImageVector) {
         return paint
     }
 
-    private fun getFillPaint(path: VectorPath): Paint {
+    private fun getFillPaint(path: VectorPath): Paint? {
+        val color = convertColor(path.fill)
+        val alpha = (Color(color).alpha * path.fillAlpha * 255).toInt()
+        if (alpha <= 0) return null
+
         val paint = Paint()
-        paint.color = convertColor(path.fill)
-        paint.alpha = (path.fillAlpha * 255).toInt()
-        paint.strokeCap = convertCap(path.strokeLineCap)
-        paint.strokeJoin = convertJoin(path.strokeLineJoin)
-        paint.strokeWidth = path.strokeLineWidth
-        paint.strokeMiter = path.strokeLineMiter
-        paint.style = Paint.Style.FILL_AND_STROKE
+        paint.color = color
+        paint.alpha = alpha
+        paint.style = Paint.Style.FILL
         paint.flags = Paint.ANTI_ALIAS_FLAG or Paint.LINEAR_TEXT_FLAG or Paint.SUBPIXEL_TEXT_FLAG
 
         return paint
     }
+
+    private fun convertFillType(fillType: PathFillType): Path.FillType =
+        if (fillType == PathFillType.EvenOdd) Path.FillType.EVEN_ODD else Path.FillType.WINDING
 
     private fun convertColor(brush: Brush?): Int {
         if (brush == null)
