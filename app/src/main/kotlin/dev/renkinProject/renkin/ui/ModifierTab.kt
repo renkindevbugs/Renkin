@@ -437,13 +437,16 @@ internal fun ModifierTab(
             }
             androidx.compose.animation.AnimatedVisibility(visible = adjustments.outlineMode != OutlineMode.NONE) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LabeledSlider(
-                        label = stringResource(R.string.outlineThickness),
-                        value = adjustments.outlineWidth,
-                        onValueChange = { adjustments.outlineWidth = it },
-                        valueRange = 1f..16f,
-                        valueLabel = "${adjustments.outlineWidth.roundToInt()} px"
-                    )
+                    // Recolor finds the outline's extent by colour, so thickness only applies to Add.
+                    if (adjustments.outlineMode == OutlineMode.ADD) {
+                        LabeledSlider(
+                            label = stringResource(R.string.outlineThickness),
+                            value = adjustments.outlineWidth,
+                            onValueChange = { adjustments.outlineWidth = it },
+                            valueRange = 1f..16f,
+                            valueLabel = "${adjustments.outlineWidth.roundToInt()} px"
+                        )
+                    }
                     OptionCard(
                         label = stringResource(R.string.outlineColor),
                         onClick = { outlineColorPickerOpen = true },
