@@ -23,18 +23,6 @@ import org.robolectric.annotation.GraphicsMode
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class IconOutlineTest {
 
-    // The debug selection tint (temporary, device-side) would repaint everything magenta;
-    // these tests check the real recolour path.
-    @org.junit.Before
-    fun disableDebugTint() {
-        IconOutline.debugTintSelection = false
-    }
-
-    @org.junit.After
-    fun restoreDebugTint() {
-        IconOutline.debugTintSelection = true
-    }
-
     private fun disc(size: Int = 64, radius: Float = 20f, color: Int = Color.BLUE): Bitmap {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)

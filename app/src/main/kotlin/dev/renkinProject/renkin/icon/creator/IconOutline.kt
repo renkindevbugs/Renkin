@@ -64,11 +64,6 @@ object IconOutline {
     // for the reference palette.
     private const val PALETTE_MIN_ALPHA = 200
 
-    // DEBUG (remove before merge): when true, RECOLOR paints the flood SELECTION opaque
-    // magenta instead of running the HSV transfer, so a single device screenshot shows
-    // whether the wrong pixels are selected or the right pixels are painted wrong.
-    internal var debugTintSelection = true
-
     /**
      * Repaints the icon's EXISTING outline instead of adding one. The outline is found by an
      * edge-stopping flood: a colour palette is sampled where the icon meets transparency (the
@@ -126,16 +121,6 @@ object IconOutline {
                 depth[n] = depth[i] + 1
                 queue.add(n)
             }
-        }
-
-        if (debugTintSelection) {
-            for (i in pixels.indices) {
-                if (depth[i] < 0) continue
-                pixels[i] = (pixels[i] and 0xFF000000.toInt()) or 0x00FF00FF
-            }
-            val debugBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-            debugBitmap.setPixels(pixels, 0, w, 0, 0, w, h)
-            return debugBitmap
         }
 
         // Brightness reference: the brightest value among the outline's CORE pixels (past the
