@@ -124,6 +124,7 @@
     <string name="fallbackBadgeTooltip">Fallback icon — neither pack had this app, so it uses the pack\'s default styling</string>
     <string name="calendarBadgeTooltip">Calendar icon — changes to match the day of the month</string>
     <string name="calendarGroupTooltip">Calendar icon — rotates through the days of the month</string>
+    <string name="dynamicClockTooltip">Live clock icon — shows the real time on supported launchers</string>
     <string name="fallbackCount">%d use a fallback icon</string>
     <string name="fallbackStyling">Fallback styling</string>
     <string name="fallbackPreviewLabel">Preview</string>

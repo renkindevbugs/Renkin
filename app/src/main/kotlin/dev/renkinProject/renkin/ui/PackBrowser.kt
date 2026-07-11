@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalIconButton
@@ -155,6 +156,7 @@ fun PackIconsRow(
     }
 
     val calendarPrefixes = rememberCalendarPrefixes(iconPack, iconPairs)
+    val clockDrawables = rememberDynamicClockDrawables(iconPack)
 
     if (isLoading) {
         Box(
@@ -188,6 +190,7 @@ fun PackIconsRow(
                     selected = item.resource.resourceId == selectedResourceId,
                     isCalendarGroup = item.drawableName.calendarPrefixOrNull() in calendarPrefixes,
                     inSelectedCalendarGroup = item.drawableName.inCalendarGroup(selectedCalendarPrefix),
+                    isDynamicClock = item.drawableName in clockDrawables,
                     onSelect = { onSelect(item.resource, item.drawable, item.drawableName) }
                 )
             }
@@ -257,6 +260,7 @@ fun PackDetailGrid(
     }
 
     val calendarPrefixes = rememberCalendarPrefixes(iconPack, iconPairs)
+    val clockDrawables = rememberDynamicClockDrawables(iconPack)
 
     Column(Modifier.fillMaxSize().padding(top = contentPadding.calculateTopPadding())) {
         Row(
@@ -316,6 +320,7 @@ fun PackDetailGrid(
                         selected = item.resource.resourceId == selectedResourceId,
                         isCalendarGroup = item.drawableName.calendarPrefixOrNull() in calendarPrefixes,
                         inSelectedCalendarGroup = item.drawableName.inCalendarGroup(selectedCalendarPrefix),
+                        isDynamicClock = item.drawableName in clockDrawables,
                         modifier = Modifier.animateItem(),
                         size = 56.dp,
                         onSelect = { onSelect(item.resource, item.drawable, item.drawableName) }
@@ -352,9 +357,24 @@ private fun rememberCalendarPrefixes(iconPack: IconPack, iconPairs: List<PackIco
 }
 
 /**
+ * Drawable names [iconPack] declares as `<dynamic-clock>` icons, loaded once per pack —
+ * badging is then a cheap membership test, same shape as [rememberCalendarPrefixes].
+ */
+@Composable
+private fun rememberDynamicClockDrawables(iconPack: IconPack): Set<String> {
+    val viewModel: MainViewModel = hiltViewModel()
+    var drawables by remember(iconPack.packageName) { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(iconPack.packageName) {
+        drawables = viewModel.dynamicClockDrawables(iconPack.packageName)
+    }
+    return drawables
+}
+
+/**
  * A single icon slot used in both the row preview and the detail grid.
- * Shows a subtle calendar badge (DateRange icon) when [isCalendarGroup] is true,
- * so the user can recognise which icons belong to the calendar day-rotation set.
+ * Shows a subtle badge when the icon is special: DateRange for members of a calendar
+ * day-rotation set, Schedule for a `<dynamic-clock>` live-clock icon — so the user can
+ * recognise both before picking.
  */
 @Composable
 private fun PackIconItem(
@@ -365,6 +385,7 @@ private fun PackIconItem(
     // True when this icon is a day-sibling (same prefix) of the calendar icon the user picked,
     // so the whole rotation set is framed in the selection colour, not just the picked day.
     inSelectedCalendarGroup: Boolean = false,
+    isDynamicClock: Boolean = false,
     size: androidx.compose.ui.unit.Dp = 64.dp,
     onSelect: () -> Unit
 ) {
@@ -373,6 +394,7 @@ private fun PackIconItem(
             .size(size)
             .padding(4.dp)
     ) {
+        val badged = isCalendarGroup || isDynamicClock
         // Long-pressing the icon shows the icon's name the way the pack's own app displays it.
         RenkinTooltipBox(item.drawableName.prettyDrawableName()) {
         Image(
@@ -382,7 +404,7 @@ private fun PackIconItem(
                 .fillMaxSize()
                 .selectedIconBorder(selected || inSelectedCalendarGroup)
                 .let { m ->
-                    if (isCalendarGroup && !selected && !inSelectedCalendarGroup) m.border(
+                    if (badged && !selected && !inSelectedCalendarGroup) m.border(
                         1.5.dp,
                         MaterialTheme.colorScheme.tertiary.copy(alpha = 0.55f),
                         FieldShape
@@ -391,8 +413,11 @@ private fun PackIconItem(
                 .tappableIcon(onSelect)
         )
         }
-        if (isCalendarGroup) {
-            BadgeTooltip(stringResource(R.string.calendarGroupTooltip), Modifier.align(Alignment.TopEnd)) {
+        if (badged) {
+            BadgeTooltip(
+                stringResource(if (isCalendarGroup) R.string.calendarGroupTooltip else R.string.dynamicClockTooltip),
+                Modifier.align(Alignment.TopEnd)
+            ) {
                 Box(
                     modifier = Modifier
                         .size(16.dp)
@@ -401,7 +426,7 @@ private fun PackIconItem(
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Filled.DateRange,
+                        imageVector = if (isCalendarGroup) Icons.Filled.DateRange else Icons.Filled.Schedule,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onTertiaryContainer,
                         modifier = Modifier.size(10.dp)

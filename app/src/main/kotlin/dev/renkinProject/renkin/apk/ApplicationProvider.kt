@@ -587,6 +587,19 @@ class ApplicationProvider(private val context: Context) {
             prefixes.filter { iconPackRepo.isCalendarPrefix(packPackageName, it) }.toSet()
         }
 
+    /**
+     * Drawable names [packPackageName]'s appfilter declares as `<dynamic-clock>` icons —
+     * the pack browser badges them so a live-clock pick is recognisable before building.
+     */
+    suspend fun dynamicClockDrawables(packPackageName: String): Set<String> =
+        withContext(Dispatchers.Default) {
+            runCatching { appManager.getAppFilterRawElements(packPackageName, emptyList()) }
+                .getOrDefault(emptyList())
+                .filterIsInstance<dev.renkinProject.renkin.data.RawDynamicClock>()
+                .map { it.drawableLink }
+                .toSet()
+        }
+
     /** A calendar-enabled app whose source pack is missing some of the 1..31 day drawables. */
     data class CalendarWarning(val appName: String, val missingDays: Int)
 
