@@ -138,8 +138,11 @@ class IconGenerator(
                     primaryIconPackApplications
                 )
 
+                // The bulk path applies the adjustments too: with preference-driven options only
+                // the pack-wide outline can differ from the no-op defaults, but every icon the
+                // refresh produces (fallback-styled ones included) must carry it.
                 if (primary != null) {
-                    onUpdate(app, primary, false, sourcePackNameFor(options.primarySource, primaryIconPackApplications))
+                    onUpdate(app, applyAdjustments(primary), false, sourcePackNameFor(options.primarySource, primaryIconPackApplications))
                 } else {
                     val secondary = generateIcon(
                         app,
@@ -150,11 +153,11 @@ class IconGenerator(
                     )
 
                     if (secondary != null) {
-                        onUpdate(app, secondary, false, sourcePackNameFor(options.secondarySource, secondaryIconPackApplications))
+                        onUpdate(app, applyAdjustments(secondary), false, sourcePackNameFor(options.secondarySource, secondaryIconPackApplications))
                     } else {
                         // Neither pack themes this app — give it the primary pack's fallback styling.
                         // The result isn't a real pack icon, so it carries no source pack.
-                        val fallback = generateFallback(app)
+                        val fallback = generateFallback(app)?.let { applyAdjustments(it) }
                         onUpdate(app, fallback, fallback != null, "")
                     }
                 }
