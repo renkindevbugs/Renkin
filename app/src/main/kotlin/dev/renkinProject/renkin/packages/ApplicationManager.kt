@@ -34,6 +34,17 @@ import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
 class ApplicationManager(private val ctx: Context) {
+
+    companion object {
+        /**
+         * The night mode Renkin's UI currently displays — set by MainActivity when the
+         * Compose theme resolves (the in-app dark-mode choice never touches the process
+         * configuration). Null until the first composition; pack resources then resolve
+         * with the system configuration, same as before.
+         */
+        @Volatile
+        var displayedNightMode: Boolean? = null
+    }
     private val pm = ctx.packageManager
 
     fun getAllInstalledApplications(): List<InstalledApplication> {
@@ -514,10 +525,30 @@ class ApplicationManager(private val ctx: Context) {
 
     fun getResources(packageName: String): Resources? {
         return try {
-            return pm.getResourcesForApplication(packageName)
+            val res = pm.getResourcesForApplication(packageName)
+            withDisplayedNightMode(res)
         } catch (e: PackageManager.NameNotFoundException) {
             null
         }
+    }
+
+    /**
+     * Re-resolves [res] with the night mode Renkin's UI actually displays. The in-app theme
+     * is a Compose override, not a configuration change — so a pack's mode-dependent colours
+     * (Lawnicons' values-night foreground, for one) would otherwise resolve by the SYSTEM
+     * mode and come out as the exact background colour of the mismatched in-app theme,
+     * rendering its icons invisible.
+     */
+    private fun withDisplayedNightMode(res: Resources): Resources {
+        val displayedNight = displayedNightMode ?: return res
+        val config = Configuration(res.configuration)
+        val resolvedNight =
+            config.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+        if (resolvedNight == displayedNight) return res
+        config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or
+            (if (displayedNight) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO)
+        @Suppress("DEPRECATION")
+        return Resources(res.assets, res.displayMetrics, config)
     }
     
     fun getApp(packageName: String): ApplicationInfo? {
