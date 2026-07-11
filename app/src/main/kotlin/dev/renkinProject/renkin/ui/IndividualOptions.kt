@@ -607,6 +607,7 @@ fun OptionsDialog(
                                 useMonochrome = useMonochrome,
                                 adjustments = adjustments,
                                 centerPreview = remember(draft.iconToConfirm) { draft.iconToConfirm?.toBitmap() },
+                                previewGenerating = draft.generating,
                                 sampleBitmap = heroBitmap,
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },

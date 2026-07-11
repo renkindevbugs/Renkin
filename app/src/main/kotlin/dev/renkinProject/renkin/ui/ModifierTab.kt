@@ -146,6 +146,8 @@ internal fun ModifierTab(
     adjustments: AdjustmentState,
     // The current preview icon, shown in the position tool to visualise its margins.
     centerPreview: Bitmap?,
+    // True while the preview regenerates — the eraser shows a spinner during its live update.
+    previewGenerating: Boolean = false,
     // The app's original icon, offered as an eyedropper source in the colour picker.
     sampleBitmap: Bitmap? = null,
     onImageEditChange: (ImageEdit) -> Unit,
@@ -572,6 +574,7 @@ internal fun ModifierTab(
             iconBitmap = centerPreview,
             strokes = adjustments.eraseStrokes,
             onStrokesChange = { adjustments.eraseStrokes = it },
+            generating = previewGenerating,
             onDismiss = { eraseDialogOpen = false }
         )
     }

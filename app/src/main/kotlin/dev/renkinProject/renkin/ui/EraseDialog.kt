@@ -13,10 +13,13 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -26,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,10 +93,16 @@ internal fun EraseDialog(
     iconBitmap: Bitmap?,
     strokes: List<EraseStroke>,
     onStrokesChange: (List<EraseStroke>) -> Unit,
+    // True while the preview pipeline regenerates — a stroke was just committed.
+    generating: Boolean = false,
     onDismiss: () -> Unit
 ) {
     // For Dismiss (cancel): the strokes as they were when the dialog opened.
     val openingStrokes = remember { strokes }
+    // The gesture handlers below live inside pointerInput and would otherwise capture the
+    // strokes list from THEIR composition — every commit would build on that stale list,
+    // silently dropping the strokes added since (the "second stroke undoes the first" bug).
+    val liveStrokes by rememberUpdatedState(strokes)
     var brush by remember { mutableFloatStateOf(0.10f) }
     // The in-progress stroke, drawn as a translucent marker only until the finger lifts —
     // then it commits into the adjustments and the real erased preview takes over.
@@ -140,6 +150,15 @@ internal fun EraseDialog(
                             modifier = Modifier.fillMaxWidth().aspectRatio(1f)
                         )
                     }
+                    if (generating) {
+                        CircularProgressIndicator(
+                            strokeWidth = 2.5.dp,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(10.dp)
+                                .size(20.dp)
+                        )
+                    }
                     Canvas(
                         Modifier
                             .fillMaxWidth()
@@ -161,7 +180,7 @@ internal fun EraseDialog(
                                         currentStroke = stroke.copy(points = stroke.points + point)
                                     },
                                     onDragEnd = {
-                                        currentStroke?.let { onStrokesChange(strokes + it) }
+                                        currentStroke?.let { onStrokesChange(liveStrokes + it) }
                                         currentStroke = null
                                     },
                                     onDragCancel = { currentStroke = null }
@@ -170,7 +189,7 @@ internal fun EraseDialog(
                             .pointerInput(brush) {
                                 detectTapGestures { position ->
                                     onStrokesChange(
-                                        strokes + EraseStroke(
+                                        liveStrokes + EraseStroke(
                                             brush,
                                             listOf(Offset(position.x / size.width, position.y / size.height))
                                         )
