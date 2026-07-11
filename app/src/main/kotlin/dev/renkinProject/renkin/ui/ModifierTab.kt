@@ -100,6 +100,9 @@ internal class AdjustmentState {
     var outlineMode by mutableStateOf(OutlineMode.NONE)
     var outlineWidth by mutableFloatStateOf(6f)
     var outlineColor by mutableStateOf(Color.Black)
+    // Eraser strokes masking where the outline must not apply. Deliberately NOT in [Saver]:
+    // they're transient per-app geometry, and holding them out keeps the saver list flat.
+    var eraseStrokes by mutableStateOf<List<EraseStroke>>(emptyList())
 
     companion object {
         val Saver = listSaver<AdjustmentState, Any>(
@@ -156,6 +159,7 @@ internal fun ModifierTab(
     var colorPickerOpen by remember { mutableStateOf(false) }
     var shapeColorPickerOpen by remember { mutableStateOf(false) }
     var outlineColorPickerOpen by remember { mutableStateOf(false) }
+    var eraseDialogOpen by remember { mutableStateOf(false) }
     var centerDialogOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val toolboxInstalled = remember { imageToolboxInstalled(context) }
@@ -324,20 +328,20 @@ internal fun ModifierTab(
                 valueLabel = "${(adjustments.iconScale * 100).roundToInt()}%",
                 centered = true
             )
-            // Position sits with scale — both move/size the icon inside its frame.
-            OptionCard(
-                label = stringResource(R.string.position),
-                onClick = { centerDialogOpen = true },
-                trailing = {
-                    val adjusted = adjustments.iconOffsetX != 0f || adjustments.iconOffsetY != 0f
-                    Text(
-                        text = if (adjusted) stringResource(R.string.positionCustom) else stringResource(R.string.positionDefault),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            )
         }
+        // Position under scale as its own card — related tools, separate controls.
+        OptionCard(
+            label = stringResource(R.string.position),
+            onClick = { centerDialogOpen = true },
+            trailing = {
+                val adjusted = adjustments.iconOffsetX != 0f || adjustments.iconOffsetY != 0f
+                Text(
+                    text = if (adjusted) stringResource(R.string.positionCustom) else stringResource(R.string.positionDefault),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        )
 
         // Icon shape: laid on a coloured plate or cropping the icon itself, drawn with the
         // same Material You shape presets launchers use.
@@ -450,6 +454,19 @@ internal fun ModifierTab(
                             ) {}
                         }
                     )
+                    // Eraser: paint the areas the outline must skip (per app, session-only).
+                    OptionCard(
+                        label = stringResource(R.string.eraseTitle),
+                        onClick = { eraseDialogOpen = true },
+                        trailing = {
+                            Text(
+                                text = if (adjustments.eraseStrokes.isEmpty()) stringResource(R.string.positionDefault)
+                                    else stringResource(R.string.eraseCount, adjustments.eraseStrokes.size),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    )
                 }
             }
         }
@@ -547,6 +564,15 @@ internal fun ModifierTab(
             iconBitmap = centerPreview,
             adjustments = adjustments,
             onDismiss = { centerDialogOpen = false }
+        )
+    }
+
+    if (eraseDialogOpen) {
+        EraseDialog(
+            iconBitmap = centerPreview,
+            initialStrokes = adjustments.eraseStrokes,
+            onApply = { adjustments.eraseStrokes = it },
+            onDismiss = { eraseDialogOpen = false }
         )
     }
 }

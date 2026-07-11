@@ -776,12 +776,17 @@ class IconGenerator(
             // still trims anything the outline pushed past the shape's edge.
             // The width option is calibrated to the 256px working size; scale it with the
             // actual bitmap so the outline looks the same at any source resolution.
+            val preOutline = bitmap
             bitmap = IconOutline.apply(
-                bitmap,
+                preOutline,
                 options.outlineMode,
-                options.outlineWidth * maxOf(bitmap.width, bitmap.height) / 256f,
+                options.outlineWidth * maxOf(preOutline.width, preOutline.height) / 256f,
                 options.outlineColor
             )
+            // The eraser: inside the painted areas the outline step is undone, the icon stays.
+            options.outlineEraseMask?.let { mask ->
+                bitmap = IconOutline.eraseOutline(bitmap, preOutline, mask)
+            }
         }
         if (shaped) {
             bitmap = applyShape(bitmap)

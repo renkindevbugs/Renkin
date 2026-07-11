@@ -77,6 +77,25 @@ class IconOutlineTest {
     }
 
     @Test
+    fun eraseOutline_undoesTheOutlineOnlyInsideTheMask() {
+        val original = disc()
+        val outlined = IconOutline.apply(original, OutlineMode.ADD, widthPx = 6f, color = Color.RED)
+        // Mask covering the right half of the canvas.
+        val mask = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+        val paint = Paint()
+        paint.color = Color.BLACK
+        Canvas(mask).drawRect(32f, 0f, 64f, 64f, paint)
+
+        val out = IconOutline.eraseOutline(outlined, original, mask)
+
+        // Left half keeps its outline; the right half's outline is gone…
+        assertTrue(Color.red(out.getPixel(32 - 23, 32)) > 200)
+        assertEquals(0, out.getPixel(32 + 23, 32))
+        // …but the icon itself survives inside the masked area.
+        assertEquals(Color.BLUE, out.getPixel(32 + 15, 32))
+    }
+
+    @Test
     fun none_returnsTheSourceUntouched() {
         val src = disc()
         assertTrue(IconOutline.apply(src, OutlineMode.NONE, 6f, Color.RED) === src)

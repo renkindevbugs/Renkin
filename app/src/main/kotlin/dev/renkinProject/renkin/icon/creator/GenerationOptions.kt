@@ -79,6 +79,9 @@ data class GenerationOptions(
     val outlineMode: OutlineMode = OutlineMode.NONE,
     val outlineWidth: Float = 6f,
     val outlineColor: Int = android.graphics.Color.BLACK,
+    // Painted areas where the outline step must not apply (the eraser tool). Alpha mask in
+    // normalised icon space; null = outline everywhere. Session-only — never persisted.
+    val outlineEraseMask: android.graphics.Bitmap? = null,
     // Text-icon options: the string rendered for TextType.CUSTOM (empty falls back to the app
     // name), the letter-case transform (all text types), and the TTF/OTF the glyphs come from
     // (empty = the bundled Arcticons Sans).

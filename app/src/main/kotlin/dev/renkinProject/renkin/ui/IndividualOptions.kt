@@ -363,6 +363,11 @@ fun OptionsDialog(
         outlineMode = adjustments.outlineMode,
         outlineWidth = adjustments.outlineWidth,
         outlineColor = adjustments.outlineColor.toInt(),
+        // Memoised per stroke list: the options object must only change when the strokes do,
+        // or every recomposition would look like a new mask and re-trigger generation.
+        outlineEraseMask = remember(adjustments.eraseStrokes) {
+            if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
+        },
         textCustom = customText,
         textCase = textCase,
         textFontPath = textFontPath
