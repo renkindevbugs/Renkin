@@ -4,6 +4,38 @@ Renkin builds installable Android icon packs on-device (Jetpack Compose, Kotlin,
 Expressive; fork of Alembicons). Read `docs/ARCHITECTURE.md` before touching code — it has the
 layer map, naming table, persistence rules and UI conventions.
 
+## Current focus (2026-07: fix the Recolor outline mode)
+
+The Outline modifier (GitHub issue #1) shipped with three modes in the Modifier tab —
+Add / Recolor / None plus a live eraser (`icon/creator/IconOutline.kt`, `ui/EraseDialog.kt`).
+**Add and the eraser work on-device; Recolor does NOT yet** — on the Komikku test icon
+(a blue ring around a pale disc) the recolour still comes out wrong; exact failure mode
+unverified (developer parked it; ask for a screenshot with the current build first).
+
+Current Recolor implementation: BFS flood from the transparency boundary inward, stopping
+when a 4-neighbour differs by >40 per RGB channel or `outlineWidth` depth is reached, then
+an HSV transfer (target hue+sat, per-pixel V scaled against the flood core's max V).
+
+Debug FIRST, then fix — likely tools/techniques, in rough order of value:
+1. **Separate selection from recolouring**: add a temporary debug path that tints the flood
+   SELECTION magenta in the preview. One screenshot then shows whether the flood picks the
+   wrong pixels or the HSV transfer paints them wrong.
+2. **Ground truth**: pull the actual drawable the pipeline sees (it may be the pack's
+   adaptive foreground, resized, or our vector rasteriser's output — not the on-store PNG)
+   by dumping `applyAdjustments`' input bitmap to filesDir and inspecting it.
+3. Selection candidates if the flood is wrong: seed-relative tolerance in **CIELAB (ΔE)**
+   instead of neighbour-chained RGB; or select by **dominant boundary hue histogram**
+   across the whole icon (also catches disconnected outline segments); or compute the
+   boundary band with a **two-pass chamfer distance transform** instead of BFS depth.
+4. Recolour candidates if the paint is wrong: **hue ROTATION** by (targetHue − dominantHue)
+   instead of hue replacement (preserves multi-hue gradients); alpha-weighted handling of
+   antialiased fringe pixels (ignore alpha < ~40 as flood seeds, recolour them by blend).
+5. Watch out: low-alpha unpremultiplied pixels carry noisy RGB — never let them drive the
+   reference colour.
+
+Everything else from the outline feature is merged and device-verified; keep new work on a
+`fix/recolor-outline` branch. Remove this section once Recolor is confirmed on-device.
+
 ## Build & verify
 
 - Compile: `JAVA_HOME="D:/Android/jbr" ./gradlew compileDebugKotlin` (Git Bash / POSIX syntax)
