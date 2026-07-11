@@ -2,12 +2,15 @@ package dev.renkinProject.renkin.icon.creator
 
 import android.graphics.Bitmap
 import androidx.annotation.VisibleForTesting
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
+import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
+import dev.renkinProject.renkin.extension.contentBounds
 import dev.renkinProject.renkin.extension.normalizeIconSearchQuery
 import dev.renkinProject.renkin.packages.ApplicationManager
 import kotlinx.coroutines.CancellationException
@@ -172,7 +175,23 @@ class PackBrowserPreviews(
         return exportDrawables.entries
             .filter { it.value != null }
             .distinctBy { it.key.resourceId }
-            .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap(), idToName[it.key.resourceId] ?: "") }
+            .map {
+                PackIconPreview(it.key, it.value!!, previewBitmap(it.key, it.value!!), idToName[it.key.resourceId] ?: "")
+            }
+    }
+
+    /**
+     * The tile bitmap for one preview. When the generation pipeline rasterises to nothing —
+     * some packs' drawable structures (Lawnicons' tinted inset-adaptive chain, for one)
+     * defeat the custom vector renderer — fall back to the PLATFORM's own rendering of the
+     * raw drawable, so the browser at least shows what the launcher would. The pick still
+     * hands over the generated icon, which the comparison preview renders correctly.
+     */
+    private fun previewBitmap(resource: ResourceDrawable, generated: IconPackDrawable): ImageBitmap {
+        val rendered = generated.toBitmap()
+        val bitmap = if (rendered.contentBounds() != null) rendered
+            else resource.drawable.toSafeBitmapOrNull() ?: rendered
+        return bitmap.scaledPreview().asImageBitmap()
     }
 
     companion object {
