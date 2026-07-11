@@ -1,6 +1,9 @@
 package dev.renkinProject.renkin.icon.creator
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.Drawable
 import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -9,10 +12,10 @@ import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
-import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.contentBounds
 import dev.renkinProject.renkin.extension.normalizeIconSearchQuery
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.PackageVersion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -190,8 +193,33 @@ class PackBrowserPreviews(
     private fun previewBitmap(resource: ResourceDrawable, generated: IconPackDrawable): ImageBitmap {
         val rendered = generated.toBitmap()
         val bitmap = if (rendered.contentBounds() != null) rendered
-            else resource.drawable.toSafeBitmapOrNull() ?: rendered
+            else platformPreview(resource.drawable) ?: rendered
         return bitmap.scaledPreview().asImageBitmap()
+    }
+
+    /**
+     * Platform rendering at full preview quality. An adaptive icon draws only its scaled
+     * FOREGROUND: the glyph then fills the tile like every other preview (the full adaptive
+     * square looked shrunken — the safe zone is 72/108 of it — and its opaque background
+     * poked out of the tile frame). Falls back to the whole drawable when the foreground
+     * alone has nothing visible.
+     */
+    private fun platformPreview(drawable: Drawable, size: Int = 256): Bitmap? {
+        if (PackageVersion.is26OrMore() && drawable is AdaptiveIconDrawable) {
+            val foreground = drawable.foreground
+            if (foreground != null) {
+                val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                // Upscale by the adaptive safe-zone ratio (108/72) around the centre.
+                val overdraw = (size * (108f / 72f - 1f) / 2f).toInt()
+                foreground.setBounds(-overdraw, -overdraw, size + overdraw, size + overdraw)
+                foreground.draw(Canvas(bitmap))
+                if (bitmap.contentBounds() != null) return bitmap
+            }
+        }
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        drawable.setBounds(0, 0, size, size)
+        drawable.draw(Canvas(bitmap))
+        return bitmap.takeIf { it.contentBounds() != null }
     }
 
     companion object {

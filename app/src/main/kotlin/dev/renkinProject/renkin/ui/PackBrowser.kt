@@ -402,6 +402,9 @@ private fun PackIconItem(
             contentDescription = null,
             modifier = Modifier
                 .fillMaxSize()
+                // Full-bleed previews (adaptive backgrounds) must not poke out of the
+                // rounded selection/badge frames drawn around the same shape.
+                .clip(FieldShape)
                 .selectedIconBorder(selected || inSelectedCalendarGroup)
                 .let { m ->
                     if (badged && !selected && !inSelectedCalendarGroup) m.border(
