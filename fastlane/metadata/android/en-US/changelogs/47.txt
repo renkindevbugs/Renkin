@@ -1,0 +1,8 @@
+• Outline modifier (per app): Add draws a contour around the icon, Recolor repaints an icon's existing outline in a new colour, with thickness, colour and a live eraser to mask where it should not apply
+• Pack-wide Add outline in Advanced options — one contour across every refreshed icon
+• First-run intro pager, with "Show intro" in Settings
+• Wider launcher support: built packs also work with GO-family launchers and legacy icon pickers
+• Signed release builds
+• Profile sharing embeds every icon's pixels; paid-pack icons stay locked until the pack is installed
+• Sharper pack browser previews, with a fallback when an icon can't be generated
+• Fixes: Lawnicons icons no longer render invisible (transparent-stroke and night-theme handling), stronger per-install pack signing key
