@@ -91,6 +91,7 @@ import dev.renkinProject.renkin.data.AppFilterNoIconKey
 import dev.renkinProject.renkin.data.AppSortOrderKey
 import dev.renkinProject.renkin.data.getBackgroundColor
 import dev.renkinProject.renkin.data.ExportThemedKey
+import dev.renkinProject.renkin.data.OnboardingSeenKey
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getEnumValue
@@ -100,6 +101,7 @@ import dev.renkinProject.renkin.data.setEnumValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.WatchViewModel
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 enum class AppSortOrder { NAME, INSTALL_DATE }
@@ -339,6 +341,17 @@ fun MainColumn(iconPacks: List<IconPack>) {
                     scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
                 }
             )
+        }
+    }
+
+    // First-run intro: shows until dismissed once; Settings → "Show intro" clears the flag
+    // to bring it back. Initial=true so nothing flashes while the DataStore loads.
+    val onboardingSeen by remember {
+        prefs.data.map { it.getBooleanValue(OnboardingSeenKey) }
+    }.collectAsState(initial = true)
+    if (!onboardingSeen) {
+        OnboardingOverlay {
+            scope.launch { prefs.setBooleanValue(OnboardingSeenKey, true) }
         }
     }
 

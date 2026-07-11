@@ -65,6 +65,7 @@ import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getImageEditLabels
 import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconShapes
 import kotlin.math.roundToInt
 
@@ -95,6 +96,13 @@ internal class AdjustmentState {
     var shapeCrop by mutableStateOf(true)
     var shapeScale by mutableFloatStateOf(1f)
     var shapeColor by mutableStateOf(Color.White)
+    // Outline: add a contour around the silhouette, or recolor the icon's existing one.
+    var outlineMode by mutableStateOf(OutlineMode.NONE)
+    var outlineWidth by mutableFloatStateOf(6f)
+    var outlineColor by mutableStateOf(Color.Black)
+    // Eraser strokes masking where the outline must not apply. Deliberately NOT in [Saver]:
+    // they're transient per-app geometry, and holding them out keeps the saver list flat.
+    var eraseStrokes by mutableStateOf<List<EraseStroke>>(emptyList())
 
     companion object {
         val Saver = listSaver<AdjustmentState, Any>(
@@ -102,7 +110,7 @@ internal class AdjustmentState {
                 listOf(it.edgeThreshold, it.edgeSmoothing, it.edgeContrast, it.iconScale,
                     it.bgRemovalTolerance, it.autoCenter, it.iconOffsetX, it.iconOffsetY,
                     it.colorizeFlat, it.iconShape.ordinal, it.shapeCrop, it.shapeColor.toArgb(),
-                    it.shapeScale)
+                    it.shapeScale, it.outlineMode.ordinal, it.outlineWidth, it.outlineColor.toArgb())
             },
             restore = { saved ->
                 AdjustmentState().apply {
@@ -119,6 +127,9 @@ internal class AdjustmentState {
                     shapeCrop = saved[10] as Boolean
                     shapeColor = Color(saved[11] as Int)
                     shapeScale = saved[12] as Float
+                    outlineMode = OutlineMode.entries.getOrElse(saved[13] as Int) { OutlineMode.NONE }
+                    outlineWidth = saved[14] as Float
+                    outlineColor = Color(saved[15] as Int)
                 }
             }
         )
@@ -135,6 +146,8 @@ internal fun ModifierTab(
     adjustments: AdjustmentState,
     // The current preview icon, shown in the position tool to visualise its margins.
     centerPreview: Bitmap?,
+    // True while the preview regenerates — the eraser shows a spinner during its live update.
+    previewGenerating: Boolean = false,
     // The app's original icon, offered as an eyedropper source in the colour picker.
     sampleBitmap: Bitmap? = null,
     onImageEditChange: (ImageEdit) -> Unit,
@@ -147,6 +160,8 @@ internal fun ModifierTab(
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
     var shapeColorPickerOpen by remember { mutableStateOf(false) }
+    var outlineColorPickerOpen by remember { mutableStateOf(false) }
+    var eraseDialogOpen by remember { mutableStateOf(false) }
     var centerDialogOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val toolboxInstalled = remember { imageToolboxInstalled(context) }
@@ -316,6 +331,19 @@ internal fun ModifierTab(
                 centered = true
             )
         }
+        // Position under scale as its own card — related tools, separate controls.
+        OptionCard(
+            label = stringResource(R.string.position),
+            onClick = { centerDialogOpen = true },
+            trailing = {
+                val adjusted = adjustments.iconOffsetX != 0f || adjustments.iconOffsetY != 0f
+                Text(
+                    text = if (adjusted) stringResource(R.string.positionCustom) else stringResource(R.string.positionDefault),
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+        )
 
         // Icon shape: laid on a coloured plate or cropping the icon itself, drawn with the
         // same Material You shape presets launchers use.
@@ -381,19 +409,72 @@ internal fun ModifierTab(
             }
         }
 
-        // Position: opens a visual tool (like the colour picker) showing the icon's margins.
-        OptionCard(
-            label = stringResource(R.string.position),
-            onClick = { centerDialogOpen = true },
-            trailing = {
-                val adjusted = adjustments.iconOffsetX != 0f || adjustments.iconOffsetY != 0f
-                Text(
-                    text = if (adjusted) stringResource(R.string.positionCustom) else stringResource(R.string.positionDefault),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
+        // Outline: a contour around the icon's silhouette (Add), or a repaint of the ring the
+        // icon already carries (Recolor) — the shape crop above still applies afterwards.
+        Text(
+            text = stringResource(R.string.outlineTitle),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        OptionGroup {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = adjustments.outlineMode == OutlineMode.NONE,
+                    onClick = { adjustments.outlineMode = OutlineMode.NONE },
+                    label = { Text(stringResource(R.string.outlineNone)) }
+                )
+                FilterChip(
+                    selected = adjustments.outlineMode == OutlineMode.ADD,
+                    onClick = { adjustments.outlineMode = OutlineMode.ADD },
+                    label = { Text(stringResource(R.string.outlineAdd)) }
+                )
+                FilterChip(
+                    selected = adjustments.outlineMode == OutlineMode.RECOLOR,
+                    onClick = { adjustments.outlineMode = OutlineMode.RECOLOR },
+                    label = { Text(stringResource(R.string.outlineRecolor)) }
                 )
             }
-        )
+            androidx.compose.animation.AnimatedVisibility(visible = adjustments.outlineMode != OutlineMode.NONE) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    // Recolor finds the outline's extent by colour, so thickness only applies to Add.
+                    if (adjustments.outlineMode == OutlineMode.ADD) {
+                        LabeledSlider(
+                            label = stringResource(R.string.outlineThickness),
+                            value = adjustments.outlineWidth,
+                            onValueChange = { adjustments.outlineWidth = it },
+                            valueRange = 1f..16f,
+                            valueLabel = "${adjustments.outlineWidth.roundToInt()} px"
+                        )
+                    }
+                    OptionCard(
+                        label = stringResource(R.string.outlineColor),
+                        onClick = { outlineColorPickerOpen = true },
+                        trailing = {
+                            Surface(
+                                shape = CircleShape,
+                                color = adjustments.outlineColor,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier.size(28.dp)
+                            ) {}
+                        }
+                    )
+                    // Eraser: paint the areas the outline must skip (per app, session-only).
+                    OptionCard(
+                        label = stringResource(R.string.eraseTitle),
+                        onClick = { eraseDialogOpen = true },
+                        trailing = {
+                            Text(
+                                text = if (adjustments.eraseStrokes.isEmpty()) stringResource(R.string.positionDefault)
+                                    else stringResource(R.string.eraseCount, adjustments.eraseStrokes.size),
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    )
+                }
+            }
+        }
 
         // External editor hand-off, at the end: the in-app tools above come first. A split button:
         // the main action opens ImageToolbox (or its Play Store page when not installed), the arrow
@@ -474,11 +555,30 @@ internal fun ModifierTab(
         )
     }
 
+    if (outlineColorPickerOpen) {
+        ColorDialog(
+            onDismiss = { outlineColorPickerOpen = false },
+            currentlySelected = adjustments.outlineColor,
+            onColorSelected = { adjustments.outlineColor = it },
+            sampleBitmap = sampleBitmap
+        )
+    }
+
     if (centerDialogOpen) {
         CenterDialog(
             iconBitmap = centerPreview,
             adjustments = adjustments,
             onDismiss = { centerDialogOpen = false }
+        )
+    }
+
+    if (eraseDialogOpen) {
+        EraseDialog(
+            iconBitmap = centerPreview,
+            strokes = adjustments.eraseStrokes,
+            onStrokesChange = { adjustments.eraseStrokes = it },
+            generating = previewGenerating,
+            onDismiss = { eraseDialogOpen = false }
         )
     }
 }

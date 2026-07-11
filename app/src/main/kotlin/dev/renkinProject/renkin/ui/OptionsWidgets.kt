@@ -65,6 +65,11 @@ fun ThemedIconsSwitch(useThemed: Boolean, onChange: (newValue: Boolean) -> Unit)
 }
 
 @Composable
+fun OutlineAddSwitch(outlineAdd: Boolean, onChange: (newValue: Boolean) -> Unit) {
+    DefaultSwitchLayoutWithInfo(outlineAdd, R.string.outlineGlobal, R.string.outlineGlobalOptionDescription) { onChange(it) }
+}
+
+@Composable
 fun SourceDropdown(@StringRes labelId: Int, source: Source, onChange: (newValue: Source) -> Unit) =
     EnumDropdown(labelId, source, getSourceLabels(), onChange = onChange)
 

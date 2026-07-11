@@ -1,9 +1,18 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.ksp)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.hilt.android)
+}
+
+// Release signing credentials live in local.properties (gitignored), so a signed release
+// builds with plain `gradlew assembleRelease`; without them (CI, F-Droid) the release APK
+// is simply unsigned, exactly as before.
+val localProps = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 
 android {
@@ -18,8 +27,8 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         // Renkin's own year.month.patch scheme, started for the first release under the new
         // app id (the 2025.02.00 / 44 values were inherited from the Alembicons fork).
-        versionCode = 46
-        versionName = "2026.07.01"
+        versionCode = 47
+        versionName = "2026.07.02"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -34,6 +43,17 @@ android {
             }
     }
 
+    signingConfigs {
+        localProps.getProperty("renkin.keystore")?.let { keystorePath ->
+            create("release") {
+                storeFile = file(keystorePath)
+                storePassword = localProps.getProperty("renkin.keystore.password")
+                keyAlias = localProps.getProperty("renkin.key.alias")
+                keyPassword = localProps.getProperty("renkin.key.password")
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".dev"
@@ -42,6 +62,7 @@ android {
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 
@@ -118,6 +139,13 @@ dependencies {
     //Test
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
+    // Compose UI tests run locally on Robolectric (no device): the BOM pins the versions,
+    // ui-test-manifest provides the host activity createComposeRule needs.
+    testImplementation(composeBom)
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    // debugImplementation (not test): the host ComponentActivity must be merged into the
+    // debug manifest for Robolectric to resolve it.
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 }

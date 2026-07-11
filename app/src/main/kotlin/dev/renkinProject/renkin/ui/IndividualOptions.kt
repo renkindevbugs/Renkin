@@ -60,6 +60,7 @@ import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -195,10 +196,11 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         val base = vectorIcon
         modifiedVector = when {
             base == null -> null
-            // Only skip when there's truly nothing to apply — scale and shape are applied by
-            // applyModifier too, so those changes with no image-edit must still run it.
+            // Only skip when there's truly nothing to apply — scale, shape and outline are
+            // applied by applyModifier too, so those changes with no image-edit must run it.
             options.primaryImageEdit == ImageEdit.NONE && options.iconScale == 1f
-                && options.iconShape == IconShape.NONE -> base
+                && options.iconShape == IconShape.NONE
+                && options.outlineMode == OutlineMode.NONE -> base
             else -> {
                 generating = true
                 val result = builder.applyModifier(base, options)
@@ -290,6 +292,9 @@ fun OptionsDialog(
     }
     // The Modifier tab's adjustment values (edge tuning, scale, tolerance, position), bundled in
     // one saveable holder instead of eight loose rememberSaveables + callback pairs.
+    // The global "Add outline" preference is deliberately NOT seeded here: it applies to the
+    // bulk refresh's own (hero-source) icons only, never to hand-picked ones. Per-app outline
+    // stays an explicit choice in the Modifier tab.
     val adjustments = rememberSaveable(saver = AdjustmentState.Saver) { AdjustmentState() }
 
     // Calendar day icons — committed immediately when toggled (independent of icon confirm).
@@ -358,6 +363,14 @@ fun OptionsDialog(
         iconShape = adjustments.iconShape,
         iconShapeCrop = adjustments.shapeCrop,
         iconShapeScale = adjustments.shapeScale,
+        outlineMode = adjustments.outlineMode,
+        outlineWidth = adjustments.outlineWidth,
+        outlineColor = adjustments.outlineColor.toInt(),
+        // Memoised per stroke list: the options object must only change when the strokes do,
+        // or every recomposition would look like a new mask and re-trigger generation.
+        outlineEraseMask = remember(adjustments.eraseStrokes) {
+            if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
+        },
         textCustom = customText,
         textCase = textCase,
         textFontPath = textFontPath
@@ -597,6 +610,7 @@ fun OptionsDialog(
                                 useMonochrome = useMonochrome,
                                 adjustments = adjustments,
                                 centerPreview = remember(draft.iconToConfirm) { draft.iconToConfirm?.toBitmap() },
+                                previewGenerating = draft.generating,
                                 sampleBitmap = heroBitmap,
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },

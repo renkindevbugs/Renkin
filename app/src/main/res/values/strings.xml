@@ -124,6 +124,7 @@
     <string name="fallbackBadgeTooltip">Fallback icon — neither pack had this app, so it uses the pack\'s default styling</string>
     <string name="calendarBadgeTooltip">Calendar icon — changes to match the day of the month</string>
     <string name="calendarGroupTooltip">Calendar icon — rotates through the days of the month</string>
+    <string name="dynamicClockTooltip">Live clock icon — shows the real time on supported launchers</string>
     <string name="fallbackCount">%d use a fallback icon</string>
     <string name="fallbackStyling">Fallback styling</string>
     <string name="fallbackPreviewLabel">Preview</string>
@@ -333,4 +334,31 @@
     <string name="textCustomHint">YT</string>
     <string name="textFont">Font</string>
     <string name="textCaseLabel">Letter case</string>
+    <string name="outlineGlobal">Add outline</string>
+    <string name="outlineGlobalOptionDescription">Draws a coloured contour around every icon the refresh generates. Recoloring an icon\'s existing outline stays per app, in the icon editor\'s Modifier tab.</string>
+    <string name="outlineTitle">Outline</string>
+    <string name="outlineNone">None</string>
+    <string name="outlineAdd">Add</string>
+    <string name="outlineRecolor">Recolor</string>
+    <string name="outlineThickness">Thickness</string>
+    <string name="outlineColor">Outline colour</string>
+    <string name="eraseTitle">Erase areas</string>
+    <string name="eraseBrush">Brush size</string>
+    <string name="eraseUndo">Undo stroke</string>
+    <string name="eraseClear">Clear all strokes</string>
+    <string name="eraseCount">%1$d stroke(s)</string>
+
+    <!-- First-run intro -->
+    <string name="onboardingSourceTitle">Pick your icon source</string>
+    <string name="onboardingSourceText">The card at the top decides where icons come from: an installed icon pack, the apps\' own icons, or their names as text.</string>
+    <string name="onboardingRefreshTitle">Refresh generates icons</string>
+    <string name="onboardingRefreshText">One tap creates an icon for every app. Empty slots fill in; icons you picked yourself are never replaced.</string>
+    <string name="onboardingEditTitle">Make any icon yours</string>
+    <string name="onboardingEditText">Tap an app to browse packs, upload an image or SVG, edit the vector, or crop it into a Material You shape.</string>
+    <string name="onboardingBuildTitle">Build your pack</string>
+    <string name="onboardingBuildText">Build icon pack compiles and installs a real icon pack APK — select it in your launcher and you\'re done.</string>
+    <string name="onboardingSkip">Skip</string>
+    <string name="onboardingNext">Next</string>
+    <string name="onboardingStart">Start</string>
+    <string name="showIntro">Show intro</string>
 </resources>

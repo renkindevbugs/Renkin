@@ -112,6 +112,9 @@ class MainActivity : ComponentActivity() {
         setContent {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
             edgeToEdge(darkMode)
+            // Pack resources must resolve values-night the way the UI displays, not the way
+            // the system is set — mode-dependent pack colours are invisible otherwise.
+            ApplicationManager.displayedNightMode = darkMode
 
             // Detected once per launch: if the previous session crashed, offer the log for
             // manual reporting (copy / email / GitHub) — nothing is sent automatically.

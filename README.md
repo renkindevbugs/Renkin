@@ -7,6 +7,7 @@
 <p align="center">Make your own Android icon pack, on your phone.</p>
 
 <p align="center">
+  <a href="https://github.com/renkindevbugs/Renkin/actions/workflows/ci.yml"><img src="https://github.com/renkindevbugs/Renkin/actions/workflows/ci.yml/badge.svg?branch=dev" alt="CI"></a>
   <a href="https://github.com/renkindevbugs/Renkin/releases/latest"><img src="https://img.shields.io/github/v/release/renkindevbugs/Renkin?label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/renkindevbugs/Renkin" alt="License"></a>
 </p>
@@ -37,6 +38,8 @@ Grab the latest APK from [GitHub Releases](https://github.com/renkindevbugs/Renk
 
 - Source an icon from any installed icon pack, the app's own icon, or its name as text
 - Modify icons: path tracing, edge detection, colorize, background removal, vector editing
+- **Outline icons** — draw a coloured contour around any icon (or recolor the outline it
+  already has), with a finger-painted eraser for the areas the outline should skip
 - **Icon shapes** — crop any icon into Material You shapes (circle, squircle, pebble, …) or
   put it on a coloured shape plate
 - Text icons with custom text, letter case and any system font (or the bundled Arcticons Sans)
@@ -45,13 +48,18 @@ Grab the latest APK from [GitHub Releases](https://github.com/renkindevbugs/Renk
 - Themed (Material You) icon export
 - **Profiles** — several named icon sets, each with its own built pack, side by side
 - **Profile sharing** — export a profile as a file anyone can import as a new profile.
-  Icons from paid packs travel as references, not pixels: they unlock on the other device
-  only with the pack installed (built packs carry icon provenance, so this can't be
-  laundered through Renkin's own output)
+  Icons from paid packs stay locked on the other device until that pack is installed
+  there — and unlock automatically if the pack leaves the store (built packs carry icon
+  provenance, so this can't be laundered through Renkin's own output)
 - **Backup & restore** — one file with every profile, setting, watch rule and upload,
   for moving to a new phone
 - **Icon watch** — get notified when a followed pack adds an icon for one of your apps
 - Calendar day icons that rotate with the date
+- **Live clock icons** — a clock icon taken from a pack with dynamic-clock support keeps
+  ticking on launchers that support it (Nova, Lawnchair); everywhere else it falls back
+  to a static icon automatically
+- Built packs speak every launcher dialect: appfilter.xml plus the GO-family
+  appmap.xml / theme_resources.xml and the classic icon_pack resource array
 
 ## Build
 

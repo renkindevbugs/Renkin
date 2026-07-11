@@ -30,7 +30,10 @@ import dev.renkinProject.renkin.xml.XmlEncoder
 import dev.renkinProject.renkin.xml.XmlParser.Companion.toXmlNode
 import dev.renkinProject.renkin.xml.file.AdaptiveIconXml
 import dev.renkinProject.renkin.xml.file.AppFilterXml
+import dev.renkinProject.renkin.xml.file.AppMapXml
+import dev.renkinProject.renkin.xml.file.ThemeResourcesXml
 import dev.renkinProject.renkin.xml.file.DrawableXml
+import dev.renkinProject.renkin.xml.file.LayerListXml
 import dev.renkinProject.renkin.xml.file.LayoutXml
 import dev.renkinProject.renkin.xml.file.XmlMemoryFile
 import com.reandroid.apk.ApkModule
@@ -70,7 +73,7 @@ class IconPackBuilder(
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
-    private val keyStoreFile = ctx.filesDir.resolve(KEYSTORE_FILE_NAME)
+    private val keyStoreFile = PackKeystore.keystoreFile(ctx.filesDir)
 
     private val iconPackName = packPackageName
 
@@ -79,10 +82,11 @@ class IconPackBuilder(
         const val PACKAGE_NAME = "dev.renkinProject.renkinpack"
 
         /**
-         * The pack-signing keystore in filesDir. Backups carry it so packs rebuilt after a
-         * device migration keep the signature of the already-installed ones.
+         * The pack-signing keystore in filesDir. Backups carry it (with its password file,
+         * see [PackKeystore]) so packs rebuilt after a device migration keep the signature
+         * of the already-installed ones.
          */
-        const val KEYSTORE_FILE_NAME = "renkinpack.keystore"
+        const val KEYSTORE_FILE_NAME = PackKeystore.FILE_NAME
 
         // Packs built before the 2026-07 app-id rename; they may still be installed on devices.
         private const val LEGACY_PACKAGE_NAME = "dev.alembiconsProject.renkinpack"
@@ -94,6 +98,22 @@ class IconPackBuilder(
          */
         fun isOwnPack(packageName: String): Boolean =
             packageName.startsWith(PACKAGE_NAME) || packageName.startsWith(LEGACY_PACKAGE_NAME)
+
+        /**
+         * A compiled `<string-array>` resource. Bag children are named by 1-based array index
+         * (the 0x02000001… scheme aapt uses); each value is a string-pool reference.
+         */
+        @VisibleForTesting
+        internal fun createStringArrayResource(packageBlock: PackageBlock, name: String, values: List<String>) {
+            val entry = packageBlock.getOrCreate("", "array", name)
+            entry.ensureComplex(true)
+            val mapArray = entry.resValueMapArray
+            values.forEachIndexed { index, value ->
+                val item = mapArray.createNext()
+                item.setArrayIndex(index + 1)
+                item.setValueAsString(value)
+            }
+        }
 
         /**
          * One drawable file name per app. Normally just the package name, but a package with
@@ -188,11 +208,17 @@ class IconPackBuilder(
         textMethod(ctx.resources.getString(R.string.writingElement))
         val drawableXml = DrawableXml()
         val appfilterXml = AppFilterXml()
+        // The same mappings again in the legacy schemas: GO-family/Solo launchers read
+        // appmap.xml / theme_resources.xml instead of appfilter.xml — the manifest already
+        // advertises them, so the pack must speak their format too.
+        val appMapXml = AppMapXml()
+        val themeResourcesXml = ThemeResourcesXml(packLabel)
 
         val vectorBrush = ReferenceBrush("@color/icon_color")
 
         val totalIcons = apps.count { it.createdIcon != null }
         val appFileNames = uniqueDrawableFileNames(apps)
+        val clockExporter = DynamicClockExporter(ctx, apps.map { it.toInstalledApplication() })
         var doneIcons = 0
         for (app in apps) {
             if (app.createdIcon != null) {
@@ -201,8 +227,31 @@ class IconPackBuilder(
                 progressMethod(++doneIcons, totalIcons)
                 val appFileName = appFileNames.getValue(app.key)
 
+                // Live clock: copied from the source pack when this app's icon is that pack's
+                // untouched dynamic-clock drawable. Skipped in themed mode — the copied hand
+                // layers wouldn't follow the tinting.
+                val clock = if (themed) null else app.sourcePackName
+                    ?.takeIf { it.isNotEmpty() }
+                    ?.let { clockExporter.clockIconFor(app, it, app.createdIcon) }
+
                 val exportAsAdaptive = themed || app.createdIcon.isAdaptiveIcon()
-                if (exportAsAdaptive && PackageVersion.is26OrMore()) {
+                if (clock != null) {
+                    val layerList = LayerListXml()
+                    clock.layers.forEachIndexed { index, layer ->
+                        val layerName = "${appFileName}_layer$index"
+                        createBitmapResource(apkModule, packageBlock, layer, layerName)
+                        layerList.item(layerName)
+                    }
+                    createXmlDrawableResource(apkModule, packageBlock, layerList, appFileName)
+                    appfilterXml.dynamicClock(
+                        appFileName,
+                        clock.meta.defaultHour,
+                        clock.meta.defaultMinute,
+                        clock.meta.hourLayerIndex,
+                        clock.meta.minuteLayerIndex
+                    )
+                }
+                else if (exportAsAdaptive && PackageVersion.is26OrMore()) {
                     val adaptive = AdaptiveIconXml()
                     adaptive.background("@color/icon_background_color")
 
@@ -272,6 +321,8 @@ class IconPackBuilder(
                 // <calendar> entry below; only launchers that prefer <item> over <calendar> (e.g.
                 // Smart Launcher) fall back to the static icon without rotating.
                 appfilterXml.item(app.packageName, app.activityName, appFileName)
+                appMapXml.item(app.activityName, appFileName)
+                themeResourcesXml.item(app.packageName, app.activityName, appFileName)
             }
         }
 
@@ -289,6 +340,8 @@ class IconPackBuilder(
 
         apkModule.add(ByteInputSource(drawableXml.getBytes(), "assets/drawable.xml"))
         apkModule.add(ByteInputSource(appfilterXml.getBytes(), "assets/appfilter.xml"))
+        apkModule.add(ByteInputSource(appMapXml.getBytes(), "assets/appmap.xml"))
+        apkModule.add(ByteInputSource(themeResourcesXml.getBytes(), "assets/theme_resources.xml"))
         // Provenance: which real pack each icon came from, so this pack used as a source
         // elsewhere attributes icons to their origin (and the paid-pack checks still apply).
         apkModule.add(
@@ -300,6 +353,15 @@ class IconPackBuilder(
 
         createXmlResource(apkModule, packageBlock, drawableXml, "drawable")
         createXmlResource(apkModule, packageBlock, appfilterXml, "appfilter")
+        createXmlResource(apkModule, packageBlock, appMapXml, "appmap")
+        createXmlResource(apkModule, packageBlock, themeResourcesXml, "theme_resources")
+
+        // Flat icon list as a compiled string-array — the format icon pickers and the old
+        // theme engines look up via resources.getIdentifier("icon_pack", "array", pkg).
+        val allDrawables = apps.filter { it.createdIcon != null }.map { appFileNames.getValue(it.key) } +
+            calendarIconsDrawable.keys
+        createStringArrayResource(packageBlock, "icon_pack", allDrawables)
+        createStringArrayResource(packageBlock, "all", allDrawables)
 
         val layout = createXmlLayoutResource(apkModule, packageBlock, createLayout(), "main_activity")
 
@@ -632,15 +694,17 @@ class IconPackBuilder(
             ?: return null
 
         val versionCode = appMan.getVersionCode(iconPack)
-        val versionName = iconPack.versionName!!
+        // A package squatting our name (or a corrupt install) may carry no versionName —
+        // treat it like version 1 instead of crashing the build.
+        val versionName = iconPack.versionName ?: "1"
 
         return Version(versionCode, versionName)
     }
 
     private fun signApk(file: File, outFile: File) {
-        val pwd = "s3cur3p@ssw0rd"
+        val pwd = PackKeystore.password(ctx.filesDir)
 
-        val dtl = ApkUtils.KeyStoreDetails(keyStoreFile, pwd, "alias", pwd)
+        val dtl = ApkUtils.KeyStoreDetails(keyStoreFile, pwd, PackKeystore.KEY_ALIAS, pwd)
         ApkUtils.signApk(file, outFile, packLabel, dtl)
     }
 }

@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.IconLockManager
 import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.IconPack
@@ -576,7 +577,7 @@ class MainViewModel @Inject constructor(
     val lockedIconKeys: Set<String> get() = appProvider.lockedIconKeys
 
     /** The active profile's locked icons grouped by missing pack — badge, banner, dialog. */
-    var missingPackSummary by mutableStateOf<List<ApplicationProvider.MissingPack>>(emptyList())
+    var missingPackSummary by mutableStateOf<List<IconLockManager.MissingPack>>(emptyList())
         private set
 
     var showMissingPacksDialog by mutableStateOf(false)
@@ -651,8 +652,8 @@ class MainViewModel @Inject constructor(
     }
 
     /**
-     * Exports one profile as a shareable file. Paid-pack icons travel as references only —
-     * the export may go online to classify the source packs (see BackupManager).
+     * Exports one profile as a shareable file. Icons embed their image data; whether
+     * paid-pack icons are usable is enforced on the importing device (see BackupManager).
      */
     fun exportProfile(profileId: Long, uri: Uri) = runBackupOp(R.string.profileExportFailed) {
         if (profileId == activeProfileId && hasUnsavedChanges()) {
@@ -723,6 +724,10 @@ class MainViewModel @Inject constructor(
     /** Of [prefixes], those that are genuine calendar day-rotation sets in [packPackageName]. */
     suspend fun calendarPrefixesAmong(packPackageName: String, prefixes: List<String>): Set<String> =
         appProvider.calendarPrefixesAmong(packPackageName, prefixes)
+
+    /** Drawable names [packPackageName] declares as live-clock icons (see ApplicationProvider). */
+    suspend fun dynamicClockDrawables(packPackageName: String): Set<String> =
+        appProvider.dynamicClockDrawables(packPackageName)
 
     /** Sample icons showing the fallback styling for [fallbackSource], for the Options preview. */
     suspend fun fallbackPreview(preferences: Preferences, fallbackSource: dev.renkinProject.renkin.data.FallbackSource) =

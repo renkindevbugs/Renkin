@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.data.transfer
 import android.app.Application
 import android.content.Context
 import androidx.room.Room
+import dev.renkinProject.renkin.apk.PackKeystore
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.PackVerdict
@@ -15,7 +16,9 @@ import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchRuleImport
 import kotlinx.coroutines.runBlocking
 import org.junit.After
+import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -112,7 +115,7 @@ class BackupManagerTest {
     }
 
     @Test
-    fun profileShare_stripsPaidPackPixels_importsAsNewProfile() = runBlocking {
+    fun profileShare_embedsAllPixels_importsAsNewProfile() = runBlocking {
         val srcPackRepo = RenkinPackRepository(srcPackDb)
         val srcWatchRepo = WatchRepository(srcWatchDb)
         srcPackRepo.replaceEverything(
@@ -133,12 +136,9 @@ class BackupManagerTest {
         )
         // The source device knows the pack's display name (recorded while it was installed).
         srcPackRepo.upsertVerdicts(listOf(PackVerdict("pack.paid", label = "Paid Icons", seenInstalled = true)))
-        val fakeVerdicts = PackVerdictManager(context, srcPackRepo) { pack ->
-            StoreLookupResult(if (pack == "pack.paid") StoreVerdict.PAID else StoreVerdict.FREE)
-        }
 
         val out = ByteArrayOutputStream()
-        BackupManager(context, srcPackRepo, srcWatchRepo, fakeVerdicts).exportProfile(3L) { out }
+        BackupManager(context, srcPackRepo, srcWatchRepo).exportProfile(3L) { out }
         val bytes = out.toByteArray()
 
         val tgtPackRepo = RenkinPackRepository(tgtPackDb)
@@ -155,8 +155,9 @@ class BackupManagerTest {
         assertTrue(tgtPackRepo.profiles().single { it.id == newId }.hasUnbuiltChanges)
 
         val rows = tgtPackRepo.getAll(newId).associateBy { it.packageName }
-        // Paid-pack icon travelled as a pixel-less reference; the others kept their data.
-        assertEquals("", rows.getValue("com.paid").drawable)
+        // Every icon keeps its pixels — a paid pack vanishing from the store must not kill
+        // the shared icons. Locking paid-pack rows is the importing device's job at load.
+        assertEquals("cGFpZA==", rows.getValue("com.paid").drawable)
         assertEquals("pack.paid", rows.getValue("com.paid").sourcePackName)
         assertEquals("ZnJlZQ==", rows.getValue("com.free").drawable)
         assertEquals("dXBsb2Fk", rows.getValue("com.upload").drawable)
@@ -171,6 +172,57 @@ class BackupManagerTest {
         val verdict = tgtPackRepo.verdicts(listOf("pack.paid")).getValue("pack.paid")
         assertEquals("Paid Icons", verdict.label)
         assertEquals(false, verdict.seenInstalled)
+    }
+
+    @Test
+    fun backup_roundTripsKeystoreWithItsPassword() = runBlocking {
+        val filesDir = context.filesDir
+        PackKeystore.keystoreFile(filesDir).writeBytes(byteArrayOf(1, 2, 3))
+        PackKeystore.passwordFile(filesDir).writeText("hunter2")
+        try {
+            val srcPackRepo = RenkinPackRepository(srcPackDb)
+            srcPackRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
+            val out = ByteArrayOutputStream()
+            BackupManager(context, srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
+
+            PackKeystore.keystoreFile(filesDir).delete()
+            PackKeystore.passwordFile(filesDir).delete()
+
+            BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb))
+                .importBackup { ByteArrayInputStream(out.toByteArray()) }
+
+            assertArrayEquals(byteArrayOf(1, 2, 3), PackKeystore.keystoreFile(filesDir).readBytes())
+            assertEquals("hunter2", PackKeystore.passwordFile(filesDir).readText())
+        } finally {
+            PackKeystore.keystoreFile(filesDir).delete()
+            PackKeystore.passwordFile(filesDir).delete()
+        }
+    }
+
+    @Test
+    fun restoringPasswordlessBackup_dropsTheStaleRandomPassword() = runBlocking {
+        val filesDir = context.filesDir
+        try {
+            // The backup carries a legacy keystore (no password file existed when it was made).
+            PackKeystore.keystoreFile(filesDir).writeBytes(byteArrayOf(9))
+            val srcPackRepo = RenkinPackRepository(srcPackDb)
+            srcPackRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
+            val out = ByteArrayOutputStream()
+            BackupManager(context, srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
+
+            // The device meanwhile has a random-password keystore — restoring the legacy
+            // backup must not leave that password behind (it would lock the keystore out).
+            PackKeystore.passwordFile(filesDir).writeText("stale-random")
+
+            BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb))
+                .importBackup { ByteArrayInputStream(out.toByteArray()) }
+
+            assertArrayEquals(byteArrayOf(9), PackKeystore.keystoreFile(filesDir).readBytes())
+            assertFalse(PackKeystore.passwordFile(filesDir).exists())
+        } finally {
+            PackKeystore.keystoreFile(filesDir).delete()
+            PackKeystore.passwordFile(filesDir).delete()
+        }
     }
 
     @Test

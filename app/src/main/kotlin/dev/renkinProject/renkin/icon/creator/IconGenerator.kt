@@ -138,8 +138,11 @@ class IconGenerator(
                     primaryIconPackApplications
                 )
 
+                // The bulk path applies the adjustments too: with preference-driven options only
+                // the pack-wide outline can differ from the no-op defaults, but every icon the
+                // refresh produces (fallback-styled ones included) must carry it.
                 if (primary != null) {
-                    onUpdate(app, primary, false, sourcePackNameFor(options.primarySource, primaryIconPackApplications))
+                    onUpdate(app, applyAdjustments(primary), false, sourcePackNameFor(options.primarySource, primaryIconPackApplications))
                 } else {
                     val secondary = generateIcon(
                         app,
@@ -150,11 +153,11 @@ class IconGenerator(
                     )
 
                     if (secondary != null) {
-                        onUpdate(app, secondary, false, sourcePackNameFor(options.secondarySource, secondaryIconPackApplications))
+                        onUpdate(app, applyAdjustments(secondary), false, sourcePackNameFor(options.secondarySource, secondaryIconPackApplications))
                     } else {
                         // Neither pack themes this app — give it the primary pack's fallback styling.
                         // The result isn't a real pack icon, so it carries no source pack.
-                        val fallback = generateFallback(app)
+                        val fallback = generateFallback(app)?.let { applyAdjustments(it) }
                         onUpdate(app, fallback, fallback != null, "")
                     }
                 }
@@ -755,7 +758,8 @@ class IconGenerator(
     private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {
         val offset = options.iconOffsetX != 0f || options.iconOffsetY != 0f
         val shaped = options.iconShape != IconShape.NONE
-        if (!offset && options.iconScale == 1f && !shaped) return icon
+        val outlined = options.outlineMode != OutlineMode.NONE
+        if (!offset && options.iconScale == 1f && !shaped && !outlined) return icon
 
         var bitmap = icon.toBitmap()
         if (bitmap.width <= 0 || bitmap.height <= 0) return icon
@@ -768,6 +772,23 @@ class IconGenerator(
             bitmap = newArgbBitmap(src.width, src.height) { canvas ->
                 canvas.scale(options.iconScale, options.iconScale, src.width / 2f, src.height / 2f)
                 canvas.drawBitmap(src, 0f, 0f, null)
+            }
+        }
+        if (outlined) {
+            // Before the shape: the contour hugs the icon itself; a shape crop afterwards
+            // still trims anything the outline pushed past the shape's edge.
+            // The width option is calibrated to the 256px working size; scale it with the
+            // actual bitmap so the outline looks the same at any source resolution.
+            val preOutline = bitmap
+            bitmap = IconOutline.apply(
+                preOutline,
+                options.outlineMode,
+                options.outlineWidth * maxOf(preOutline.width, preOutline.height) / 256f,
+                options.outlineColor
+            )
+            // The eraser: inside the painted areas the outline step is undone, the icon stays.
+            options.outlineEraseMask?.let { mask ->
+                bitmap = IconOutline.eraseOutline(bitmap, preOutline, mask)
             }
         }
         if (shaped) {

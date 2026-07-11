@@ -64,6 +64,10 @@ import dev.renkinProject.renkin.data.getBackgroundColor
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.IncludeVectorKey
 import dev.renkinProject.renkin.data.MonochromeKey
+import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
+import dev.renkinProject.renkin.data.OutlineAddKey
+import dev.renkinProject.renkin.data.OutlineColorKey
+import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.OverrideIconKey
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimaryImageEditKey
@@ -77,7 +81,11 @@ import dev.renkinProject.renkin.data.SecondarySourceKey
 import dev.renkinProject.renkin.data.SecondaryTextTypeKey
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
 import dev.renkinProject.renkin.data.getBooleanValue
+import dev.renkinProject.renkin.data.getColorValue
 import dev.renkinProject.renkin.data.getEnumValue
+import dev.renkinProject.renkin.data.getIntValue
+import dev.renkinProject.renkin.data.setIntValue
+import kotlin.math.roundToInt
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.setBooleanValue
@@ -122,9 +130,12 @@ fun OptionsCard(
     var retrieveCalendarIcons by rememberSaveable { mutableStateOf(false) }
     var overrideIcon by rememberSaveable { mutableStateOf(false) }
     var fallbackSource by rememberSaveable { mutableStateOf(FALLBACK_SOURCE_DEFAULT) }
+    var outlineAdd by rememberSaveable { mutableStateOf(false) }
+    var outlineWidth by rememberSaveable { mutableStateOf(OUTLINE_WIDTH_DEFAULT) }
 
     val currentColor = prefs.getIconColor()
     val currentBgColor = prefs.getBackgroundColor()
+    val currentOutlineColor = prefs.getColorValue(OutlineColorKey, androidx.compose.ui.graphics.Color.Black)
 
     primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
@@ -140,6 +151,8 @@ fun OptionsCard(
     retrieveCalendarIcons = prefs.getBooleanValue(CalendarIconsKey)
     overrideIcon = prefs.getBooleanValue(OverrideIconKey)
     fallbackSource = prefs.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT)
+    outlineAdd = prefs.getBooleanValue(OutlineAddKey)
+    outlineWidth = prefs.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
 
     val pathTracing = isPathTracingEnabled(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit)
     val showIconColor = showIconColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
@@ -304,6 +317,33 @@ fun OptionsCard(
                 }
 
                 ThemedIconsSwitch(useThemed) { scope.launch { prefs.setBooleanValue(ExportThemedKey, it) } }
+
+                // Pack-wide outline (Add only): a contour around every generated icon.
+                // Recolor needs the individual icon's artwork, so it stays per app.
+                OutlineAddSwitch(outlineAdd) { scope.launch { prefs.setBooleanValue(OutlineAddKey, it) } }
+                AnimatedVisibility(visible = outlineAdd) {
+                    Column {
+                        Column(Modifier.padding(horizontal = 16.dp)) {
+                            // Local echo while dragging; DataStore only sees the released value.
+                            var dragWidth by remember { mutableStateOf<Float?>(null) }
+                            val shownWidth = dragWidth ?: outlineWidth.toFloat()
+                            LabeledSlider(
+                                label = stringResource(R.string.outlineThickness),
+                                value = shownWidth,
+                                onValueChange = { dragWidth = it },
+                                valueRange = 1f..16f,
+                                valueLabel = "${shownWidth.roundToInt()} px",
+                                onValueChangeFinished = {
+                                    val released = dragWidth?.roundToInt()
+                                    dragWidth = null
+                                    if (released != null) scope.launch { prefs.setIntValue(OutlineWidthKey, released) }
+                                }
+                            )
+                        }
+                        ColorButton(stringResource(R.string.outlineColor), currentOutlineColor) { scope.launch { prefs.setColorValue(
+                            OutlineColorKey, it) } }
+                    }
+                }
                 }
             }
         }

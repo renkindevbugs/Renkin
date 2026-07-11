@@ -80,6 +80,14 @@ val SecondaryIconPackKey = stringPreferencesKey(SECONDARY_ICON_PACK_NAME)
 val FallbackSourceKey = intPreferencesKey(FALLBACK_SOURCE_NAME)
 // Absolute path of the TTF/OTF used for text icons; empty = the bundled Arcticons Sans.
 val TextFontKey = stringPreferencesKey("TEXT_FONT")
+// Pack-wide outline: draw an [OutlineColorKey] contour of [OutlineWidthKey] px around every
+// generated icon. Only the Add mode exists globally — Recolor depends on the individual
+// icon's artwork, so it stays a per-app Modifier-tab option. Width is an Int px (1..16 at
+// the 256px working size): the profile snapshot restore only carries Bool/Int/Long/String.
+val OutlineAddKey = booleanPreferencesKey("OUTLINE_ADD")
+val OutlineWidthKey = intPreferencesKey("OUTLINE_WIDTH")
+val OutlineColorKey = stringPreferencesKey("OUTLINE_COLOR")
+const val OUTLINE_WIDTH_DEFAULT = 6
 val AppSortOrderKey = intPreferencesKey(APP_SORT_ORDER_NAME)
 val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
 val WatchCheckIntervalKey = intPreferencesKey(WATCH_CHECK_INTERVAL_NAME)
@@ -87,6 +95,10 @@ val LastWatchCheckAtKey = longPreferencesKey(LAST_WATCH_CHECK_AT_NAME)
 
 // Which profile's icons/preferences are active. Profiles snapshot/restore the keys below.
 val ActiveProfileIdKey = longPreferencesKey("ACTIVE_PROFILE_ID")
+
+// First-run intro dismissed. App-level (not in ProfilePrefKeys): the intro explains the app,
+// not a profile, so switching or importing profiles must never bring it back by itself.
+val OnboardingSeenKey = booleanPreferencesKey("ONBOARDING_SEEN")
 
 /**
  * The generation preferences that belong to a profile — captured into [Profile.prefsSnapshot]
@@ -98,6 +110,7 @@ val ProfilePrefKeys: List<Preferences.Key<*>> = listOf(
     SecondarySourceKey, SecondaryImageEditKey, SecondaryTextTypeKey, SecondaryIconPackKey,
     IncludeVectorKey, MonochromeKey, ExportThemedKey, IconColorKey, BackgroundColorKey,
     CalendarIconsKey, OverrideIconKey, FallbackSourceKey, TextFontKey,
+    OutlineAddKey, OutlineWidthKey, OutlineColorKey,
     BuiltPrimarySourceKey, BuiltPrimaryIconPackKey
 )
 

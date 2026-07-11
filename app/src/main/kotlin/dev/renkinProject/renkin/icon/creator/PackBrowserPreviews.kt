@@ -1,15 +1,21 @@
 package dev.renkinProject.renkin.icon.creator
 
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.Drawable
 import androidx.annotation.VisibleForTesting
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
+import dev.renkinProject.renkin.extension.contentBounds
 import dev.renkinProject.renkin.extension.normalizeIconSearchQuery
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.PackageVersion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
@@ -172,7 +178,48 @@ class PackBrowserPreviews(
         return exportDrawables.entries
             .filter { it.value != null }
             .distinctBy { it.key.resourceId }
-            .map { PackIconPreview(it.key, it.value!!, it.value!!.toBitmap().scaledPreview().asImageBitmap(), idToName[it.key.resourceId] ?: "") }
+            .map {
+                PackIconPreview(it.key, it.value!!, previewBitmap(it.key, it.value!!), idToName[it.key.resourceId] ?: "")
+            }
+    }
+
+    /**
+     * The tile bitmap for one preview. When the generation pipeline rasterises to nothing —
+     * some packs' drawable structures (Lawnicons' tinted inset-adaptive chain, for one)
+     * defeat the custom vector renderer — fall back to the PLATFORM's own rendering of the
+     * raw drawable, so the browser at least shows what the launcher would. The pick still
+     * hands over the generated icon, which the comparison preview renders correctly.
+     */
+    private fun previewBitmap(resource: ResourceDrawable, generated: IconPackDrawable): ImageBitmap {
+        val rendered = generated.toBitmap()
+        val bitmap = if (rendered.contentBounds() != null) rendered
+            else platformPreview(resource.drawable) ?: rendered
+        return bitmap.scaledPreview().asImageBitmap()
+    }
+
+    /**
+     * Platform rendering at full preview quality. An adaptive icon draws only its scaled
+     * FOREGROUND: the glyph then fills the tile like every other preview (the full adaptive
+     * square looked shrunken — the safe zone is 72/108 of it — and its opaque background
+     * poked out of the tile frame). Falls back to the whole drawable when the foreground
+     * alone has nothing visible.
+     */
+    private fun platformPreview(drawable: Drawable, size: Int = 256): Bitmap? {
+        if (PackageVersion.is26OrMore() && drawable is AdaptiveIconDrawable) {
+            val foreground = drawable.foreground
+            if (foreground != null) {
+                val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+                // Upscale by the adaptive safe-zone ratio (108/72) around the centre.
+                val overdraw = (size * (108f / 72f - 1f) / 2f).toInt()
+                foreground.setBounds(-overdraw, -overdraw, size + overdraw, size + overdraw)
+                foreground.draw(Canvas(bitmap))
+                if (bitmap.contentBounds() != null) return bitmap
+            }
+        }
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        drawable.setBounds(0, 0, size, size)
+        drawable.draw(Canvas(bitmap))
+        return bitmap.takeIf { it.contentBounds() != null }
     }
 
     companion object {
