@@ -292,6 +292,9 @@ fun OptionsDialog(
     }
     // The Modifier tab's adjustment values (edge tuning, scale, tolerance, position), bundled in
     // one saveable holder instead of eight loose rememberSaveables + callback pairs.
+    // The global "Add outline" preference is deliberately NOT seeded here: it applies to the
+    // bulk refresh's own (hero-source) icons only, never to hand-picked ones. Per-app outline
+    // stays an explicit choice in the Modifier tab.
     val adjustments = rememberSaveable(saver = AdjustmentState.Saver) { AdjustmentState() }
 
     // Calendar day icons — committed immediately when toggled (independent of icon confirm).

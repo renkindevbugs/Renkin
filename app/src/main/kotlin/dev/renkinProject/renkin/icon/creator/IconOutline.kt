@@ -6,7 +6,6 @@ import android.graphics.Color
 import android.graphics.Paint
 import kotlin.math.cos
 import kotlin.math.max
-import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /** The Modifier tab's outline step: none, add a contour, or repaint the existing one. */
@@ -55,24 +54,31 @@ object IconOutline {
         return out
     }
 
-    // How different two neighbouring pixels may be (max per-channel delta) and still count as
-    // the same outline. Antialiased fringes and gradients step gently and pass; the outline
-    // meeting the icon's fill is a hard jump and stops the flood.
-    private const val LOCAL_TOLERANCE = 40
+    // How far (CIE76 ΔE in Lab) a pixel may sit from the outline's boundary palette and still
+    // count as outline. Generous enough for shading within the outline colour, small enough
+    // that the halfway blend of an antialiased outline/fill edge already falls outside.
+    private const val DELTA_E_TOLERANCE = 30f
+
+    // Boundary pixels below this alpha are too noisy to describe the outline's colour
+    // (unpremultiplied low-alpha RGB is garbage) — they get selected, but never vote
+    // for the reference palette.
+    private const val PALETTE_MIN_ALPHA = 200
 
     /**
      * Repaints the icon's EXISTING outline instead of adding one. The outline is found by an
-     * edge-stopping flood: it grows inward from the transparency boundary while neighbouring
-     * pixels stay colour-similar (so antialiased fringes AND gradient outlines are covered in
-     * full), and stops at the sharp colour jump where the outline meets the icon's fill —
-     * [widthPx] only caps the depth as a safety net. The repaint transfers [color]'s hue and
-     * saturation but scales each pixel's own brightness relative to the outline's core, so
-     * soft edges and gradients keep their shading in the new colour instead of flattening.
+     * edge-stopping flood: a colour palette is sampled where the icon meets transparency (the
+     * outline's own colours, by construction), then the flood grows inward from that boundary
+     * as long as pixels stay within [DELTA_E_TOLERANCE] of the palette in CIELAB — it stops at
+     * the perceptual colour jump where the outline meets the icon's fill, whatever the
+     * outline's thickness ([widthPx] is deliberately ignored; a depth cap used to cut thick
+     * outlines in half). The repaint transfers [color]'s hue and saturation but scales each
+     * pixel's own brightness relative to the outline's core, so soft edges and gradients keep
+     * their shading in the new colour instead of flattening.
      */
+    @Suppress("UNUSED_PARAMETER")
     private fun recolorOutline(src: Bitmap, widthPx: Float, color: Int): Bitmap {
         val w = src.width
         val h = src.height
-        val maxDepth = max(1, widthPx.roundToInt())
         val pixels = IntArray(w * h)
         src.getPixels(pixels, 0, w, 0, 0, w, h)
 
@@ -94,10 +100,13 @@ object IconOutline {
             }
         }
 
-        // Edge-stopping flood: grow to visible 4-neighbours of similar colour, up to maxDepth.
+        val palette = boundaryPalette(pixels, depth)
+        val labScratch = FloatArray(3)
+
+        // Edge-stopping flood: grow to visible 4-neighbours that are still perceptually close
+        // to the boundary palette. No depth cap — the colour jump at the fill is the stop.
         while (queue.isNotEmpty()) {
             val i = queue.removeFirst()
-            if (depth[i] >= maxDepth) continue
             val x = i % w
             val y = i / w
             for (n in intArrayOf(
@@ -108,21 +117,25 @@ object IconOutline {
             )) {
                 if (n < 0 || depth[n] >= 0) continue
                 if ((pixels[n] ushr 24) == 0) continue
-                if (!similar(pixels[i], pixels[n])) continue
+                if (!nearPalette(pixels[n], palette, labScratch)) continue
                 depth[n] = depth[i] + 1
                 queue.add(n)
             }
         }
 
         // Brightness reference: the brightest value among the outline's CORE pixels (past the
-        // antialiased first layers), so the fringe scales below it instead of clipping.
+        // antialiased first layers), so the fringe scales below it instead of clipping. A
+        // selection too thin to have a core falls back to every selected pixel.
         val hsv = FloatArray(3)
         var refValue = 0f
-        for (i in pixels.indices) {
-            if (depth[i] >= 2 || (depth[i] >= 0 && maxDepth < 2)) {
-                Color.colorToHSV(pixels[i], hsv)
-                if (hsv[2] > refValue) refValue = hsv[2]
+        for (coreOnly in booleanArrayOf(true, false)) {
+            for (i in pixels.indices) {
+                if (if (coreOnly) depth[i] >= 2 else depth[i] >= 0) {
+                    Color.colorToHSV(pixels[i], hsv)
+                    if (hsv[2] > refValue) refValue = hsv[2]
+                }
             }
+            if (refValue > 0f) break
         }
         if (refValue <= 0f) refValue = 1f
 
@@ -188,8 +201,84 @@ object IconOutline {
         return out
     }
 
-    private fun similar(a: Int, b: Int): Boolean =
-        kotlin.math.abs(Color.red(a) - Color.red(b)) <= LOCAL_TOLERANCE &&
-            kotlin.math.abs(Color.green(a) - Color.green(b)) <= LOCAL_TOLERANCE &&
-            kotlin.math.abs(Color.blue(a) - Color.blue(b)) <= LOCAL_TOLERANCE
+    /**
+     * The outline's own colours, sampled where the icon meets transparency (depth-0 seeds).
+     * Seeds are bucketed at 4 bits per channel and each bucket that holds a meaningful share
+     * of the boundary contributes its average colour — so a gradient outline yields several
+     * palette entries while lone noise pixels yield none. Only solid seeds vote: low-alpha
+     * unpremultiplied RGB is noise. Returns packed L,a,b triples.
+     */
+    private fun boundaryPalette(pixels: IntArray, depth: IntArray): FloatArray {
+        // bucket key -> [count, sumR, sumG, sumB]
+        val buckets = HashMap<Int, LongArray>()
+        var votes = 0
+        for (minAlpha in intArrayOf(PALETTE_MIN_ALPHA, 40, 1)) {
+            for (i in pixels.indices) {
+                if (depth[i] != 0 || (pixels[i] ushr 24) < minAlpha) continue
+                val r = pixels[i] shr 16 and 0xFF
+                val g = pixels[i] shr 8 and 0xFF
+                val b = pixels[i] and 0xFF
+                val key = (r shr 4 shl 8) or (g shr 4 shl 4) or (b shr 4)
+                val acc = buckets.getOrPut(key) { LongArray(4) }
+                acc[0]++
+                acc[1] += r
+                acc[2] += g
+                acc[3] += b
+                votes++
+            }
+            if (votes > 0) break // only fall back to fringier seeds when no solid ones exist
+        }
+        val minCount = max(1, votes / 100)
+        val scratch = FloatArray(3)
+        val lab = ArrayList<Float>(buckets.size * 3)
+        for (acc in buckets.values) {
+            if (acc[0] < minCount) continue
+            rgbToLab(
+                (acc[1] / acc[0]).toInt(),
+                (acc[2] / acc[0]).toInt(),
+                (acc[3] / acc[0]).toInt(),
+                scratch
+            )
+            lab.add(scratch[0]); lab.add(scratch[1]); lab.add(scratch[2])
+        }
+        return lab.toFloatArray()
+    }
+
+    private fun nearPalette(pixel: Int, palette: FloatArray, scratch: FloatArray): Boolean {
+        if (palette.isEmpty()) return false
+        rgbToLab(pixel shr 16 and 0xFF, pixel shr 8 and 0xFF, pixel and 0xFF, scratch)
+        var p = 0
+        while (p < palette.size) {
+            val dl = scratch[0] - palette[p]
+            val da = scratch[1] - palette[p + 1]
+            val db = scratch[2] - palette[p + 2]
+            if (dl * dl + da * da + db * db <= DELTA_E_TOLERANCE * DELTA_E_TOLERANCE) return true
+            p += 3
+        }
+        return false
+    }
+
+    // sRGB -> linear lookup, built once; the flood converts every visited pixel.
+    private val srgbToLinear = DoubleArray(256) { i ->
+        val c = i / 255.0
+        if (c <= 0.04045) c / 12.92 else Math.pow((c + 0.055) / 1.055, 2.4)
+    }
+
+    /** sRGB (D65) to CIELAB, for perceptual colour distances. */
+    private fun rgbToLab(r: Int, g: Int, b: Int, out: FloatArray) {
+        val rl = srgbToLinear[r]
+        val gl = srgbToLinear[g]
+        val bl = srgbToLinear[b]
+        // XYZ, normalized to the D65 white point.
+        val x = (0.4124564 * rl + 0.3575761 * gl + 0.1804375 * bl) / 0.95047
+        val y = 0.2126729 * rl + 0.7151522 * gl + 0.0721750 * bl
+        val z = (0.0193339 * rl + 0.1191920 * gl + 0.9503041 * bl) / 1.08883
+        fun f(t: Double): Double = if (t > 0.008856) Math.cbrt(t) else (7.787 * t + 16.0 / 116.0)
+        val fx = f(x)
+        val fy = f(y)
+        val fz = f(z)
+        out[0] = (116.0 * fy - 16.0).toFloat()
+        out[1] = (500.0 * (fx - fy)).toFloat()
+        out[2] = (200.0 * (fy - fz)).toFloat()
+    }
 }

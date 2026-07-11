@@ -46,14 +46,15 @@ class IconOutlineTest {
     }
 
     @Test
-    fun recolor_repaintsTheRimOnly() {
+    fun recolor_uniformShapeRecoloursWholeAndStaysInside() {
+        // A solid one-colour disc has no outline/fill jump: the whole disc counts as the
+        // outline and is repainted, but nothing may grow outside the silhouette.
         val out = IconOutline.apply(disc(), OutlineMode.RECOLOR, widthPx = 4f, color = Color.RED)
 
-        // Rim (just inside radius 20): recoloured, still opaque.
         val rim = out.getPixel(32 + 18, 32)
         assertTrue(Color.red(rim) > 200 && Color.blue(rim) < 60)
-        // Centre keeps the original colour; nothing grew outside.
-        assertEquals(Color.BLUE, out.getPixel(32, 32))
+        val centre = out.getPixel(32, 32)
+        assertTrue(Color.red(centre) > 200 && Color.blue(centre) < 60)
         assertEquals(0, out.getPixel(32 + 25, 32))
     }
 

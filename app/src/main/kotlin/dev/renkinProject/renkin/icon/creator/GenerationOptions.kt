@@ -11,6 +11,10 @@ import dev.renkinProject.renkin.data.IMAGE_EDIT_DEFAULT
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.IncludeVectorKey
 import dev.renkinProject.renkin.data.MonochromeKey
+import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
+import dev.renkinProject.renkin.data.OutlineAddKey
+import dev.renkinProject.renkin.data.OutlineColorKey
+import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.OverrideIconKey
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimaryImageEditKey
@@ -27,8 +31,10 @@ import dev.renkinProject.renkin.data.TextFontKey
 import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getBackgroundColor
+import dev.renkinProject.renkin.data.getColorValue
 import dev.renkinProject.renkin.data.getIconColor
 import dev.renkinProject.renkin.data.getEnumValue
+import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getStringValue
 
 // The secondary* fields default to "no secondary source", so a single-source
@@ -124,7 +130,12 @@ data class GenerationOptions(
                 themed = preferences.getBooleanValue(ExportThemedKey),
                 override = override,
                 fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
-                textFontPath = preferences.getStringValue(TextFontKey)
+                textFontPath = preferences.getStringValue(TextFontKey),
+                // Only ADD exists pack-wide; RECOLOR stays a per-app Modifier-tab option.
+                outlineMode = if (preferences.getBooleanValue(OutlineAddKey)) OutlineMode.ADD else OutlineMode.NONE,
+                outlineWidth = preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT).toFloat(),
+                outlineColor = preferences.getColorValue(
+                    OutlineColorKey, androidx.compose.ui.graphics.Color.Black).toArgb()
             )
         }
     }

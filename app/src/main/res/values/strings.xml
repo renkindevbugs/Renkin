@@ -334,6 +334,8 @@
     <string name="textCustomHint">YT</string>
     <string name="textFont">Font</string>
     <string name="textCaseLabel">Letter case</string>
+    <string name="outlineGlobal">Add outline</string>
+    <string name="outlineGlobalOptionDescription">Draws a coloured contour around every icon the refresh generates. Recoloring an icon\'s existing outline stays per app, in the icon editor\'s Modifier tab.</string>
     <string name="outlineTitle">Outline</string>
     <string name="outlineNone">None</string>
     <string name="outlineAdd">Add</string>
