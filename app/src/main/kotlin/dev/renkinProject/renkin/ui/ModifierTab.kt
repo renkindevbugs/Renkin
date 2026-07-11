@@ -65,6 +65,7 @@ import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getImageEditLabels
 import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconShapes
 import kotlin.math.roundToInt
 
@@ -95,6 +96,10 @@ internal class AdjustmentState {
     var shapeCrop by mutableStateOf(true)
     var shapeScale by mutableFloatStateOf(1f)
     var shapeColor by mutableStateOf(Color.White)
+    // Outline: add a contour around the silhouette, or recolor the icon's existing one.
+    var outlineMode by mutableStateOf(OutlineMode.NONE)
+    var outlineWidth by mutableFloatStateOf(6f)
+    var outlineColor by mutableStateOf(Color.Black)
 
     companion object {
         val Saver = listSaver<AdjustmentState, Any>(
@@ -102,7 +107,7 @@ internal class AdjustmentState {
                 listOf(it.edgeThreshold, it.edgeSmoothing, it.edgeContrast, it.iconScale,
                     it.bgRemovalTolerance, it.autoCenter, it.iconOffsetX, it.iconOffsetY,
                     it.colorizeFlat, it.iconShape.ordinal, it.shapeCrop, it.shapeColor.toArgb(),
-                    it.shapeScale)
+                    it.shapeScale, it.outlineMode.ordinal, it.outlineWidth, it.outlineColor.toArgb())
             },
             restore = { saved ->
                 AdjustmentState().apply {
@@ -119,6 +124,9 @@ internal class AdjustmentState {
                     shapeCrop = saved[10] as Boolean
                     shapeColor = Color(saved[11] as Int)
                     shapeScale = saved[12] as Float
+                    outlineMode = OutlineMode.entries.getOrElse(saved[13] as Int) { OutlineMode.NONE }
+                    outlineWidth = saved[14] as Float
+                    outlineColor = Color(saved[15] as Int)
                 }
             }
         )
@@ -147,6 +155,7 @@ internal fun ModifierTab(
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
     var shapeColorPickerOpen by remember { mutableStateOf(false) }
+    var outlineColorPickerOpen by remember { mutableStateOf(false) }
     var centerDialogOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val toolboxInstalled = remember { imageToolboxInstalled(context) }
@@ -381,6 +390,57 @@ internal fun ModifierTab(
             }
         }
 
+        // Outline: a contour around the icon's silhouette (Add), or a repaint of the ring the
+        // icon already carries (Recolor) — the shape crop above still applies afterwards.
+        Text(
+            text = stringResource(R.string.outlineTitle),
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        OptionGroup {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = adjustments.outlineMode == OutlineMode.NONE,
+                    onClick = { adjustments.outlineMode = OutlineMode.NONE },
+                    label = { Text(stringResource(R.string.outlineNone)) }
+                )
+                FilterChip(
+                    selected = adjustments.outlineMode == OutlineMode.ADD,
+                    onClick = { adjustments.outlineMode = OutlineMode.ADD },
+                    label = { Text(stringResource(R.string.outlineAdd)) }
+                )
+                FilterChip(
+                    selected = adjustments.outlineMode == OutlineMode.RECOLOR,
+                    onClick = { adjustments.outlineMode = OutlineMode.RECOLOR },
+                    label = { Text(stringResource(R.string.outlineRecolor)) }
+                )
+            }
+            androidx.compose.animation.AnimatedVisibility(visible = adjustments.outlineMode != OutlineMode.NONE) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LabeledSlider(
+                        label = stringResource(R.string.outlineThickness),
+                        value = adjustments.outlineWidth,
+                        onValueChange = { adjustments.outlineWidth = it },
+                        valueRange = 1f..16f,
+                        valueLabel = "${adjustments.outlineWidth.roundToInt()} px"
+                    )
+                    OptionCard(
+                        label = stringResource(R.string.outlineColor),
+                        onClick = { outlineColorPickerOpen = true },
+                        trailing = {
+                            Surface(
+                                shape = CircleShape,
+                                color = adjustments.outlineColor,
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                                modifier = Modifier.size(28.dp)
+                            ) {}
+                        }
+                    )
+                }
+            }
+        }
+
         // Position: opens a visual tool (like the colour picker) showing the icon's margins.
         OptionCard(
             label = stringResource(R.string.position),
@@ -470,6 +530,15 @@ internal fun ModifierTab(
             onDismiss = { shapeColorPickerOpen = false },
             currentlySelected = adjustments.shapeColor,
             onColorSelected = { adjustments.shapeColor = it },
+            sampleBitmap = sampleBitmap
+        )
+    }
+
+    if (outlineColorPickerOpen) {
+        ColorDialog(
+            onDismiss = { outlineColorPickerOpen = false },
+            currentlySelected = adjustments.outlineColor,
+            onColorSelected = { adjustments.outlineColor = it },
             sampleBitmap = sampleBitmap
         )
     }

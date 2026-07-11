@@ -60,6 +60,7 @@ import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -195,10 +196,11 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         val base = vectorIcon
         modifiedVector = when {
             base == null -> null
-            // Only skip when there's truly nothing to apply — scale and shape are applied by
-            // applyModifier too, so those changes with no image-edit must still run it.
+            // Only skip when there's truly nothing to apply — scale, shape and outline are
+            // applied by applyModifier too, so those changes with no image-edit must run it.
             options.primaryImageEdit == ImageEdit.NONE && options.iconScale == 1f
-                && options.iconShape == IconShape.NONE -> base
+                && options.iconShape == IconShape.NONE
+                && options.outlineMode == OutlineMode.NONE -> base
             else -> {
                 generating = true
                 val result = builder.applyModifier(base, options)
@@ -358,6 +360,9 @@ fun OptionsDialog(
         iconShape = adjustments.iconShape,
         iconShapeCrop = adjustments.shapeCrop,
         iconShapeScale = adjustments.shapeScale,
+        outlineMode = adjustments.outlineMode,
+        outlineWidth = adjustments.outlineWidth,
+        outlineColor = adjustments.outlineColor.toInt(),
         textCustom = customText,
         textCase = textCase,
         textFontPath = textFontPath

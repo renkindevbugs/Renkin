@@ -755,7 +755,8 @@ class IconGenerator(
     private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {
         val offset = options.iconOffsetX != 0f || options.iconOffsetY != 0f
         val shaped = options.iconShape != IconShape.NONE
-        if (!offset && options.iconScale == 1f && !shaped) return icon
+        val outlined = options.outlineMode != OutlineMode.NONE
+        if (!offset && options.iconScale == 1f && !shaped && !outlined) return icon
 
         var bitmap = icon.toBitmap()
         if (bitmap.width <= 0 || bitmap.height <= 0) return icon
@@ -769,6 +770,18 @@ class IconGenerator(
                 canvas.scale(options.iconScale, options.iconScale, src.width / 2f, src.height / 2f)
                 canvas.drawBitmap(src, 0f, 0f, null)
             }
+        }
+        if (outlined) {
+            // Before the shape: the contour hugs the icon itself; a shape crop afterwards
+            // still trims anything the outline pushed past the shape's edge.
+            // The width option is calibrated to the 256px working size; scale it with the
+            // actual bitmap so the outline looks the same at any source resolution.
+            bitmap = IconOutline.apply(
+                bitmap,
+                options.outlineMode,
+                options.outlineWidth * maxOf(bitmap.width, bitmap.height) / 256f,
+                options.outlineColor
+            )
         }
         if (shaped) {
             bitmap = applyShape(bitmap)

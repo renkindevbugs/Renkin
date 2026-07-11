@@ -73,6 +73,12 @@ data class GenerationOptions(
     val iconShape: IconShape = IconShape.NONE,
     val iconShapeCrop: Boolean = true,
     val iconShapeScale: Float = 1f,
+    // Outline (Modifier tab, applied after scale/offset and before the shape): ADD draws a
+    // [outlineColor] contour of [outlineWidth] px (at the 256px working size) around the
+    // icon's silhouette; RECOLOR repaints the icon's existing boundary ring instead.
+    val outlineMode: OutlineMode = OutlineMode.NONE,
+    val outlineWidth: Float = 6f,
+    val outlineColor: Int = android.graphics.Color.BLACK,
     // Text-icon options: the string rendered for TextType.CUSTOM (empty falls back to the app
     // name), the letter-case transform (all text types), and the TTF/OTF the glyphs come from
     // (empty = the bundled Arcticons Sans).

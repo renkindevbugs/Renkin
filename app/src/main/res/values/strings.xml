@@ -334,6 +334,12 @@
     <string name="textCustomHint">YT</string>
     <string name="textFont">Font</string>
     <string name="textCaseLabel">Letter case</string>
+    <string name="outlineTitle">Outline</string>
+    <string name="outlineNone">None</string>
+    <string name="outlineAdd">Add</string>
+    <string name="outlineRecolor">Recolor</string>
+    <string name="outlineThickness">Thickness</string>
+    <string name="outlineColor">Outline colour</string>
 
     <!-- First-run intro -->
     <string name="onboardingSourceTitle">Pick your icon source</string>
