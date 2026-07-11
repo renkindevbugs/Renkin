@@ -5,15 +5,14 @@ import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -32,7 +31,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
@@ -79,28 +77,53 @@ internal fun buildEraseMask(strokes: List<EraseStroke>, size: Int = 256): Bitmap
 }
 
 /**
- * The outline eraser (opened from the Modifier tab's Outline section): the current preview
- * is shown on the Position tool's blueprint-style canvas and the user paints the areas the
- * outline must skip. Strokes are per-app session state on [AdjustmentState]; Apply hands
- * them back, Cancel discards the edits.
+ * The outline eraser (opened from the Modifier tab's Outline section), on the Position
+ * tool's blueprint-style canvas. LIVE: each finished stroke commits straight into the
+ * adjustments (via [onStrokesChange]), the preview pipeline regenerates and [iconBitmap]
+ * recomposes with the outline actually erased — the translucent stroke marker only exists
+ * while the finger is down. Done keeps the result; Dismiss restores the strokes the dialog
+ * opened with.
  */
 @Composable
 internal fun EraseDialog(
     iconBitmap: Bitmap?,
-    initialStrokes: List<EraseStroke>,
-    onApply: (List<EraseStroke>) -> Unit,
+    strokes: List<EraseStroke>,
+    onStrokesChange: (List<EraseStroke>) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var strokes by remember { mutableStateOf(initialStrokes) }
+    // For Dismiss (cancel): the strokes as they were when the dialog opened.
+    val openingStrokes = remember { strokes }
     var brush by remember { mutableFloatStateOf(0.10f) }
+    // The in-progress stroke, drawn as a translucent marker only until the finger lifts —
+    // then it commits into the adjustments and the real erased preview takes over.
+    var currentStroke by remember { mutableStateOf<EraseStroke?>(null) }
 
     val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
     val frameColor = MaterialTheme.colorScheme.outline
-    val maskColor = MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
+    val markerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
 
     RenkinAlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.eraseTitle)) },
+        onDismissRequest = {
+            onStrokesChange(openingStrokes)
+            onDismiss()
+        },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(stringResource(R.string.eraseTitle), modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = { onStrokesChange(strokes.dropLast(1)) },
+                    enabled = strokes.isNotEmpty()
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.Undo, stringResource(R.string.eraseUndo))
+                }
+                IconButton(
+                    onClick = { onStrokesChange(emptyList()) },
+                    enabled = strokes.isNotEmpty()
+                ) {
+                    Icon(Icons.Filled.DeleteSweep, stringResource(R.string.eraseClear))
+                }
+            }
+        },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Box(
@@ -124,26 +147,33 @@ internal fun EraseDialog(
                             .pointerInput(brush) {
                                 detectDragGestures(
                                     onDragStart = { position ->
-                                        strokes = strokes + EraseStroke(
+                                        currentStroke = EraseStroke(
                                             brush,
                                             listOf(Offset(position.x / size.width, position.y / size.height))
                                         )
                                     },
                                     onDrag = { change, _ ->
-                                        val last = strokes.lastOrNull() ?: return@detectDragGestures
+                                        val stroke = currentStroke ?: return@detectDragGestures
                                         val point = Offset(
                                             (change.position.x / size.width).coerceIn(0f, 1f),
                                             (change.position.y / size.height).coerceIn(0f, 1f)
                                         )
-                                        strokes = strokes.dropLast(1) + last.copy(points = last.points + point)
-                                    }
+                                        currentStroke = stroke.copy(points = stroke.points + point)
+                                    },
+                                    onDragEnd = {
+                                        currentStroke?.let { onStrokesChange(strokes + it) }
+                                        currentStroke = null
+                                    },
+                                    onDragCancel = { currentStroke = null }
                                 )
                             }
                             .pointerInput(brush) {
                                 detectTapGestures { position ->
-                                    strokes = strokes + EraseStroke(
-                                        brush,
-                                        listOf(Offset(position.x / size.width, position.y / size.height))
+                                    onStrokesChange(
+                                        strokes + EraseStroke(
+                                            brush,
+                                            listOf(Offset(position.x / size.width, position.y / size.height))
+                                        )
                                     )
                                 }
                             }
@@ -157,11 +187,11 @@ internal fun EraseDialog(
                         }
                         drawRect(frameColor, style = Stroke(1.5.dp.toPx()))
 
-                        for (stroke in strokes) {
+                        currentStroke?.let { stroke ->
                             val width = stroke.brush * size.width
                             if (stroke.points.size < 2) {
-                                val p = stroke.points.firstOrNull() ?: continue
-                                drawCircle(maskColor, width / 2f, Offset(p.x * size.width, p.y * size.height))
+                                val p = stroke.points.firstOrNull() ?: return@let
+                                drawCircle(markerColor, width / 2f, Offset(p.x * size.width, p.y * size.height))
                             } else {
                                 val path = Path()
                                 stroke.points.forEachIndexed { index, point ->
@@ -171,7 +201,7 @@ internal fun EraseDialog(
                                 }
                                 drawPath(
                                     path,
-                                    maskColor,
+                                    markerColor,
                                     style = Stroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round)
                                 )
                             }
@@ -179,29 +209,22 @@ internal fun EraseDialog(
                     }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(Modifier.weight(1f)) {
-                        LabeledSlider(
-                            label = stringResource(R.string.eraseBrush),
-                            value = brush,
-                            onValueChange = { brush = it },
-                            valueRange = 0.03f..0.25f
-                        )
-                    }
-                    IconButton(onClick = { strokes = strokes.dropLast(1) }, enabled = strokes.isNotEmpty()) {
-                        Icon(Icons.AutoMirrored.Filled.Undo, stringResource(R.string.eraseUndo))
-                    }
-                    IconButton(onClick = { strokes = emptyList() }, enabled = strokes.isNotEmpty()) {
-                        Icon(Icons.Filled.DeleteSweep, stringResource(R.string.eraseClear))
-                    }
-                }
+                LabeledSlider(
+                    label = stringResource(R.string.eraseBrush),
+                    value = brush,
+                    onValueChange = { brush = it },
+                    valueRange = 0.03f..0.25f
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onApply(strokes); onDismiss() }) { Text(stringResource(R.string.done)) }
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.done)) }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
+            TextButton(onClick = {
+                onStrokesChange(openingStrokes)
+                onDismiss()
+            }) { Text(stringResource(R.string.dismiss)) }
         }
     )
 }

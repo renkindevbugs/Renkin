@@ -141,30 +141,50 @@ object IconOutline {
     }
 
     /**
-     * Undoes the outline step inside [mask]'s painted areas: wherever the mask is opaque, the
-     * outlined result is replaced by the [original] pixels — the user's eraser says "no
-     * outline here", it never punches holes into the icon itself.
+     * Undoes the outline step inside [mask]'s painted areas: per pixel, the result blends
+     * from the outlined image towards [original] by the mask's alpha. Done in software on
+     * unpremultiplied pixels — a clear-then-patch canvas composite left visible seams along
+     * the mask's antialiased edges wherever it crossed the icon's fill (where outlined and
+     * original are the SAME colour, the blend must be an exact no-op).
      */
     fun eraseOutline(outlined: Bitmap, original: Bitmap, mask: Bitmap): Bitmap {
         val w = outlined.width
         val h = outlined.height
+        val scaledMask = if (mask.width == w && mask.height == h) mask
+            else Bitmap.createScaledBitmap(mask, w, h, true)
+
+        val outPx = IntArray(w * h)
+        val origPx = IntArray(w * h)
+        val maskPx = IntArray(w * h)
+        outlined.getPixels(outPx, 0, w, 0, 0, w, h)
+        original.getPixels(origPx, 0, w, 0, 0, w, h)
+        scaledMask.getPixels(maskPx, 0, w, 0, 0, w, h)
+
+        for (i in outPx.indices) {
+            val m = maskPx[i] ushr 24
+            if (m == 0) continue
+            if (m == 255) {
+                outPx[i] = origPx[i]
+                continue
+            }
+            // Alpha-weighted blend of unpremultiplied colours, so a transparent side doesn't
+            // drag the channels towards black along the mask's soft edge.
+            val aOut = outPx[i] ushr 24
+            val aOrig = origPx[i] ushr 24
+            val wOut = aOut * (255 - m)
+            val wOrig = aOrig * m
+            val aSum = wOut + wOrig
+            val alpha = (aOut * (255 - m) + aOrig * m) / 255
+            outPx[i] = if (aSum == 0) 0 else {
+                val r = ((outPx[i] shr 16 and 0xFF) * wOut + (origPx[i] shr 16 and 0xFF) * wOrig) / aSum
+                val g = ((outPx[i] shr 8 and 0xFF) * wOut + (origPx[i] shr 8 and 0xFF) * wOrig) / aSum
+                val b = ((outPx[i] and 0xFF) * wOut + (origPx[i] and 0xFF) * wOrig) / aSum
+                (alpha shl 24) or (r shl 16) or (g shl 8) or b
+            }
+        }
+
         val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(out)
-        canvas.drawBitmap(outlined, 0f, 0f, null)
-
-        // Clear the masked region, then patch the original back into it.
-        val clear = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-        clear.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_OUT)
-        canvas.drawBitmap(mask, null, android.graphics.RectF(0f, 0f, w.toFloat(), h.toFloat()), clear)
-
-        val patch = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        val patchCanvas = Canvas(patch)
-        patchCanvas.drawBitmap(mask, null, android.graphics.RectF(0f, 0f, w.toFloat(), h.toFloat()), null)
-        val srcIn = Paint(Paint.FILTER_BITMAP_FLAG)
-        srcIn.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SRC_IN)
-        patchCanvas.drawBitmap(original, 0f, 0f, srcIn)
-        canvas.drawBitmap(patch, 0f, 0f, null)
-
+        out.setPixels(outPx, 0, w, 0, 0, w, h)
         return out
     }
 

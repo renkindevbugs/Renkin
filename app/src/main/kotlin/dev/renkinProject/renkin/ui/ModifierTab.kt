@@ -570,8 +570,8 @@ internal fun ModifierTab(
     if (eraseDialogOpen) {
         EraseDialog(
             iconBitmap = centerPreview,
-            initialStrokes = adjustments.eraseStrokes,
-            onApply = { adjustments.eraseStrokes = it },
+            strokes = adjustments.eraseStrokes,
+            onStrokesChange = { adjustments.eraseStrokes = it },
             onDismiss = { eraseDialogOpen = false }
         )
     }
