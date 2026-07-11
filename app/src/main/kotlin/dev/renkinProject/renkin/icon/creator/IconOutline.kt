@@ -60,6 +60,11 @@ object IconOutline {
     // meeting the icon's fill is a hard jump and stops the flood.
     private const val LOCAL_TOLERANCE = 40
 
+    // DEBUG (remove before merge): when true, RECOLOR paints the flood SELECTION opaque
+    // magenta instead of running the HSV transfer, so a single device screenshot shows
+    // whether the wrong pixels are selected or the right pixels are painted wrong.
+    private const val DEBUG_TINT_SELECTION = true
+
     /**
      * Repaints the icon's EXISTING outline instead of adding one. The outline is found by an
      * edge-stopping flood: it grows inward from the transparency boundary while neighbouring
@@ -112,6 +117,16 @@ object IconOutline {
                 depth[n] = depth[i] + 1
                 queue.add(n)
             }
+        }
+
+        if (DEBUG_TINT_SELECTION) {
+            for (i in pixels.indices) {
+                if (depth[i] < 0) continue
+                pixels[i] = (pixels[i] and 0xFF000000.toInt()) or 0x00FF00FF
+            }
+            val debugBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+            debugBitmap.setPixels(pixels, 0, w, 0, 0, w, h)
+            return debugBitmap
         }
 
         // Brightness reference: the brightest value among the outline's CORE pixels (past the
