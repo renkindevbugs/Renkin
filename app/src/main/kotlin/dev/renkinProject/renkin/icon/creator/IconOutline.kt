@@ -55,49 +55,93 @@ object IconOutline {
         return out
     }
 
+    // How different two neighbouring pixels may be (max per-channel delta) and still count as
+    // the same outline. Antialiased fringes and gradients step gently and pass; the outline
+    // meeting the icon's fill is a hard jump and stops the flood.
+    private const val LOCAL_TOLERANCE = 40
+
     /**
-     * Repaints the icon's EXISTING outline instead of adding one: every visible pixel within
-     * [widthPx] of transparency (found by eroding the alpha mask that many times) keeps its
-     * alpha but takes [color]'s hue. An icon that already carries a ring around its edge —
-     * the reason this mode exists — is recoloured without growing thicker; interior strokes
-     * away from the silhouette boundary are deliberately left alone.
+     * Repaints the icon's EXISTING outline instead of adding one. The outline is found by an
+     * edge-stopping flood: it grows inward from the transparency boundary while neighbouring
+     * pixels stay colour-similar (so antialiased fringes AND gradient outlines are covered in
+     * full), and stops at the sharp colour jump where the outline meets the icon's fill —
+     * [widthPx] only caps the depth as a safety net. The repaint transfers [color]'s hue and
+     * saturation but scales each pixel's own brightness relative to the outline's core, so
+     * soft edges and gradients keep their shading in the new colour instead of flattening.
      */
     private fun recolorOutline(src: Bitmap, widthPx: Float, color: Int): Bitmap {
         val w = src.width
         val h = src.height
-        val iterations = max(1, widthPx.roundToInt())
+        val maxDepth = max(1, widthPx.roundToInt())
         val pixels = IntArray(w * h)
         src.getPixels(pixels, 0, w, 0, 0, w, h)
 
-        // opaque[i] shrinks by one 4-neighbour ring per iteration; whatever it loses is the
-        // boundary band to recolour.
-        var opaque = BooleanArray(w * h) { (pixels[it] ushr 24) > 0 }
-        val band = BooleanArray(w * h)
-        repeat(iterations) {
-            val eroded = BooleanArray(w * h)
-            for (y in 0 until h) {
-                for (x in 0 until w) {
-                    val i = y * w + x
-                    if (!opaque[i]) continue
-                    val edge = x == 0 || y == 0 || x == w - 1 || y == h - 1 ||
-                        !opaque[i - 1] || !opaque[i + 1] || !opaque[i - w] || !opaque[i + w]
-                    if (edge) band[i] = true else eroded[i] = true
+        // Seed: visible pixels touching transparency (or the bitmap edge).
+        val depth = IntArray(w * h) { -1 }
+        val queue = ArrayDeque<Int>()
+        fun transparentAt(x: Int, y: Int): Boolean =
+            x < 0 || y < 0 || x >= w || y >= h || (pixels[y * w + x] ushr 24) == 0
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val i = y * w + x
+                if ((pixels[i] ushr 24) == 0) continue
+                if (transparentAt(x - 1, y) || transparentAt(x + 1, y) ||
+                    transparentAt(x, y - 1) || transparentAt(x, y + 1)
+                ) {
+                    depth[i] = 0
+                    queue.add(i)
                 }
             }
-            opaque = eroded
         }
 
-        val r = Color.red(color)
-        val g = Color.green(color)
-        val b = Color.blue(color)
-        for (i in pixels.indices) {
-            if (band[i]) {
-                pixels[i] = (pixels[i] and 0xFF000000.toInt()) or (r shl 16) or (g shl 8) or b
+        // Edge-stopping flood: grow to visible 4-neighbours of similar colour, up to maxDepth.
+        while (queue.isNotEmpty()) {
+            val i = queue.removeFirst()
+            if (depth[i] >= maxDepth) continue
+            val x = i % w
+            val y = i / w
+            for (n in intArrayOf(
+                if (x > 0) i - 1 else -1,
+                if (x < w - 1) i + 1 else -1,
+                if (y > 0) i - w else -1,
+                if (y < h - 1) i + w else -1
+            )) {
+                if (n < 0 || depth[n] >= 0) continue
+                if ((pixels[n] ushr 24) == 0) continue
+                if (!similar(pixels[i], pixels[n])) continue
+                depth[n] = depth[i] + 1
+                queue.add(n)
             }
         }
 
-        val out = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-        out.setPixels(pixels, 0, w, 0, 0, w, h)
-        return out
+        // Brightness reference: the brightest value among the outline's CORE pixels (past the
+        // antialiased first layers), so the fringe scales below it instead of clipping.
+        val hsv = FloatArray(3)
+        var refValue = 0f
+        for (i in pixels.indices) {
+            if (depth[i] >= 2 || (depth[i] >= 0 && maxDepth < 2)) {
+                Color.colorToHSV(pixels[i], hsv)
+                if (hsv[2] > refValue) refValue = hsv[2]
+            }
+        }
+        if (refValue <= 0f) refValue = 1f
+
+        val target = FloatArray(3)
+        Color.colorToHSV(color, target)
+        for (i in pixels.indices) {
+            if (depth[i] < 0) continue
+            Color.colorToHSV(pixels[i], hsv)
+            val out = floatArrayOf(target[0], target[1], (target[2] * hsv[2] / refValue).coerceIn(0f, 1f))
+            pixels[i] = (pixels[i] and 0xFF000000.toInt()) or (Color.HSVToColor(out) and 0x00FFFFFF)
+        }
+
+        val outBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        outBitmap.setPixels(pixels, 0, w, 0, 0, w, h)
+        return outBitmap
     }
+
+    private fun similar(a: Int, b: Int): Boolean =
+        kotlin.math.abs(Color.red(a) - Color.red(b)) <= LOCAL_TOLERANCE &&
+            kotlin.math.abs(Color.green(a) - Color.green(b)) <= LOCAL_TOLERANCE &&
+            kotlin.math.abs(Color.blue(a) - Color.blue(b)) <= LOCAL_TOLERANCE
 }

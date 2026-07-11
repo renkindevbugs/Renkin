@@ -324,6 +324,19 @@ internal fun ModifierTab(
                 valueLabel = "${(adjustments.iconScale * 100).roundToInt()}%",
                 centered = true
             )
+            // Position sits with scale — both move/size the icon inside its frame.
+            OptionCard(
+                label = stringResource(R.string.position),
+                onClick = { centerDialogOpen = true },
+                trailing = {
+                    val adjusted = adjustments.iconOffsetX != 0f || adjustments.iconOffsetY != 0f
+                    Text(
+                        text = if (adjusted) stringResource(R.string.positionCustom) else stringResource(R.string.positionDefault),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+            )
         }
 
         // Icon shape: laid on a coloured plate or cropping the icon itself, drawn with the
@@ -440,20 +453,6 @@ internal fun ModifierTab(
                 }
             }
         }
-
-        // Position: opens a visual tool (like the colour picker) showing the icon's margins.
-        OptionCard(
-            label = stringResource(R.string.position),
-            onClick = { centerDialogOpen = true },
-            trailing = {
-                val adjusted = adjustments.iconOffsetX != 0f || adjustments.iconOffsetY != 0f
-                Text(
-                    text = if (adjusted) stringResource(R.string.positionCustom) else stringResource(R.string.positionDefault),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-        )
 
         // External editor hand-off, at the end: the in-app tools above come first. A split button:
         // the main action opens ImageToolbox (or its Play Store page when not installed), the arrow

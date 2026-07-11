@@ -58,6 +58,25 @@ class IconOutlineTest {
     }
 
     @Test
+    fun recolor_stopsAtTheFillEvenWithAGenerousThickness() {
+        // A blue ring around a pale fill — the Komikku case. The flood must stop at the
+        // ring/fill colour jump, so cranking the thickness up cannot eat into the fill.
+        val bitmap = disc(radius = 24f, color = Color.BLUE)
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG)
+        paint.color = Color.rgb(225, 240, 255)
+        Canvas(bitmap).drawCircle(32f, 32f, 16f, paint)
+
+        val out = IconOutline.apply(bitmap, OutlineMode.RECOLOR, widthPx = 16f, color = Color.RED)
+
+        // Ring fully recoloured, from its outer to its inner edge.
+        assertTrue(Color.red(out.getPixel(32 + 22, 32)) > 180)
+        assertTrue(Color.red(out.getPixel(32 + 18, 32)) > 180)
+        // The pale fill keeps its colour — the flood stopped at the jump.
+        val fill = out.getPixel(32, 32)
+        assertTrue(Color.blue(fill) > 200 && Color.green(fill) > 200)
+    }
+
+    @Test
     fun none_returnsTheSourceUntouched() {
         val src = disc()
         assertTrue(IconOutline.apply(src, OutlineMode.NONE, 6f, Color.RED) === src)
