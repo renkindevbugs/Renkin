@@ -11,6 +11,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.Checkbox
@@ -32,7 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.IconLockManager.MissingPack
-import dev.renkinProject.renkin.data.VERDICT_PAID
+import dev.renkinProject.renkin.data.VERDICT_UNKNOWN
 import dev.renkinProject.renkin.ui.theme.CardShape
 
 /**
@@ -66,9 +67,11 @@ fun MissingPacksDialog(packs: List<MissingPack>, onDismiss: (dontShowAgain: Bool
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        val paid = pack.verdict == VERDICT_PAID
+                        // Decisive verdict = the pack is installable somewhere, so the fix is to
+                        // install it; UNKNOWN = still checking availability.
+                        val pending = pack.verdict == VERDICT_UNKNOWN
                         Icon(
-                            imageVector = if (paid) Icons.Filled.Lock else Icons.Filled.CloudOff,
+                            imageVector = if (pending) Icons.Filled.CloudOff else Icons.Filled.Lock,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(22.dp)
@@ -82,7 +85,7 @@ fun MissingPacksDialog(packs: List<MissingPack>, onDismiss: (dontShowAgain: Bool
                             )
                             Text(
                                 text = stringResource(
-                                    if (paid) R.string.missingPackPaid else R.string.missingPackPending,
+                                    if (pending) R.string.missingPackPending else R.string.missingPackInstall,
                                     pack.iconCount
                                 ),
                                 style = MaterialTheme.typography.bodySmall,
@@ -112,6 +115,48 @@ fun MissingPacksDialog(packs: List<MissingPack>, onDismiss: (dontShowAgain: Bool
         },
         confirmButton = {
             TextButton(onClick = { onDismiss(dontShowAgain) }) { Text(stringResource(R.string.ok)) }
+        }
+    )
+}
+
+/**
+ * Shown before exporting a profile to share: its pack icons only work for recipients who have
+ * the same packs installed. [onShare] carries the "don't show again" choice so the caller can
+ * persist it. Informational (not destructive), so it uses the neutral confirm styling.
+ */
+@Composable
+fun ProfileShareWarningDialog(onShare: (dontShowAgain: Boolean) -> Unit, onDismiss: () -> Unit) {
+    var dontShowAgain by rememberSaveable { mutableStateOf(false) }
+    RenkinAlertDialog(
+        onDismissRequest = onDismiss,
+        icon = { Icon(Icons.Filled.Share, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
+        title = { Text(stringResource(R.string.shareWarningTitle)) },
+        text = {
+            Column {
+                Text(
+                    text = boldStringResource(R.string.shareWarningText),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp)
+                ) {
+                    Checkbox(checked = dontShowAgain, onCheckedChange = { dontShowAgain = it })
+                    Text(
+                        text = stringResource(R.string.shareWarningDontShowAgain),
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onShare(dontShowAgain) }) { Text(stringResource(R.string.shareWarningShare)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
         }
     )
 }
