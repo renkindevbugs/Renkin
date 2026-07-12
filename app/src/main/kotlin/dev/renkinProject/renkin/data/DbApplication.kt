@@ -101,6 +101,9 @@ interface PackVerdictDao {
 
     @Insert(onConflict = androidx.room.OnConflictStrategy.REPLACE)
     fun upsert(verdicts: List<PackVerdict>)
+
+    @Query("DELETE FROM PackVerdict")
+    fun deleteEverything()
 }
 
 @Dao

@@ -115,6 +115,30 @@ class BackupManagerTest {
     }
 
     @Test
+    fun backupRestore_resetsStalePerDeviceVerdicts() = runBlocking {
+        // A minimal backup referencing a pack.
+        val srcPackRepo = RenkinPackRepository(srcPackDb)
+        srcPackRepo.replaceEverything(
+            listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")),
+            listOf(DbApplication("com.app", "A", isAdaptiveIcon = false, isXml = false, drawable = "data", sourcePackName = "pack.free", profileId = DEFAULT_PROFILE_ID))
+        )
+        val out = ByteArrayOutputStream()
+        BackupManager(context, srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
+
+        // Target device wrongly still "owns" pack.free from an earlier install (seenInstalled),
+        // though nothing is installed now (Robolectric). A restore must not inherit that.
+        val tgtPackRepo = RenkinPackRepository(tgtPackDb)
+        tgtPackRepo.upsertVerdicts(listOf(PackVerdict("pack.free", "free", seenInstalled = true)))
+
+        BackupManager(context, tgtPackRepo, WatchRepository(tgtWatchDb))
+            .importBackup { ByteArrayInputStream(out.toByteArray()) }
+
+        // The stale ownership is gone — the pack would lock again on load.
+        val after = tgtPackRepo.verdicts(listOf("pack.free"))["pack.free"]
+        assertTrue(after == null || !after.seenInstalled)
+    }
+
+    @Test
     fun profileShare_embedsAllPixels_importsAsNewProfile() = runBlocking {
         val srcPackRepo = RenkinPackRepository(srcPackDb)
         val srcWatchRepo = WatchRepository(srcWatchDb)

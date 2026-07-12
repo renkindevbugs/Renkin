@@ -64,6 +64,21 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         if (verdicts.isNotEmpty()) verdictDao.upsert(verdicts)
     }
 
+    /**
+     * Rebuilds the per-device verdict cache from scratch, keeping only what is actually
+     * installed now (marked owned). Used after a full-backup restore: the cache is device-local
+     * truth about which packs are owned/priced HERE and must not survive a restore that replaced
+     * everything else — otherwise a pack the device no longer has installed would stay unlocked.
+     */
+    suspend fun resetVerdictsToInstalled(installed: List<IconPack>) = withContext(Dispatchers.Default) {
+        verdictDao.deleteEverything()
+        if (installed.isNotEmpty()) {
+            verdictDao.upsert(installed.map {
+                PackVerdict(it.packageName, seenInstalled = true, label = it.applicationName)
+            })
+        }
+    }
+
     /** Every pack any stored icon (any profile) came from. */
     suspend fun distinctSourcePacks(): List<String> = withContext(Dispatchers.Default) {
         dao.distinctSourcePacks()
