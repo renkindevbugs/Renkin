@@ -83,8 +83,12 @@ data class PackVerdict(
 const val VERDICT_UNKNOWN = "unknown"
 const val VERDICT_FREE = "free"
 const val VERDICT_PAID = "paid"
-// Not (or no longer) on the Play Store — treated like free per the app's policy: packs
-// that can't be bought anywhere (Icon Pack Studio exports, delisted packs) stay usable.
+// Found on a store the price of which we don't parse (F-Droid) — installable, so shared
+// icons stay locked until the recipient installs the pack (respects the pack's developer).
+const val VERDICT_LISTED = "listed"
+// Found on NO known store (Play, F-Droid). The pack can't be installed anywhere, so its
+// shared icons stay usable — losing them would help nobody. NOTE: Icon Pack Studio exports
+// also resolve here, but are locked by package pattern regardless (see PackVerdictManager).
 const val VERDICT_UNLISTED = "unlisted"
 
 @Dao

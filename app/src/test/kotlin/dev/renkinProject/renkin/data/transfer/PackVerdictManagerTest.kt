@@ -8,6 +8,7 @@ import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.VERDICT_FREE
+import dev.renkinProject.renkin.data.VERDICT_LISTED
 import dev.renkinProject.renkin.data.VERDICT_PAID
 import dev.renkinProject.renkin.data.VERDICT_UNLISTED
 import kotlinx.coroutines.runBlocking
@@ -48,22 +49,38 @@ class PackVerdictManagerTest {
     }
 
     @Test
-    fun lockedPacksAmong_locksPaidAndUnverified_notFreeUnlistedOrOwned() = runBlocking {
+    fun lockedPacksAmong_locksAnythingInstallableOrUnverified_notUnlistedOrOwned() = runBlocking {
         repo.upsertVerdicts(
             listOf(
+                // Installable somewhere (free/paid on Play, or on F-Droid) -> must install.
                 PackVerdict("pack.free", VERDICT_FREE),
-                PackVerdict("pack.unlisted", VERDICT_UNLISTED),
                 PackVerdict("pack.paid", VERDICT_PAID),
+                PackVerdict("pack.fdroid", VERDICT_LISTED),
+                // On no known store -> can't be installed, so its icons stay usable.
+                PackVerdict("pack.unlisted", VERDICT_UNLISTED),
+                // Owned here beats any verdict.
                 PackVerdict("pack.owned", VERDICT_PAID, seenInstalled = true)
             )
         )
         val manager = PackVerdictManager(context, repo) { StoreLookupResult(StoreVerdict.UNKNOWN) }
 
         val locked = manager.lockedPacksAmong(
-            setOf("pack.free", "pack.unlisted", "pack.paid", "pack.owned", "pack.never.seen")
+            setOf("pack.free", "pack.paid", "pack.fdroid", "pack.unlisted", "pack.owned", "pack.never.seen")
         )
 
-        assertEquals(setOf("pack.paid", "pack.never.seen"), locked)
+        // Free now locks too (must install); only unlisted + owned stay unlocked.
+        assertEquals(setOf("pack.free", "pack.paid", "pack.fdroid", "pack.never.seen"), locked)
+    }
+
+    @Test
+    fun lockedPacksAmong_alwaysLocksIconPackStudioExports_evenWhenUnlisted() = runBlocking {
+        // Icon Pack Studio stamps every export with this same package; it's never on a store.
+        repo.upsertVerdicts(listOf(PackVerdict("ginlemon.iconpackstudio.exported", VERDICT_UNLISTED)))
+        val manager = PackVerdictManager(context, repo) { StoreLookupResult(StoreVerdict.UNKNOWN) }
+
+        val locked = manager.lockedPacksAmong(setOf("ginlemon.iconpackstudio.exported"))
+
+        assertEquals(setOf("ginlemon.iconpackstudio.exported"), locked)
     }
 
     @Test
@@ -76,26 +93,42 @@ class PackVerdictManagerTest {
     }
 
     @Test
-    fun ensureVerdicts_looksUpUndecided_returnsPacksToStrip() = runBlocking {
+    fun ensureVerdicts_looksUpUndecided_storesVerdicts_returnsInstallableOnes() = runBlocking {
         val manager = PackVerdictManager(context, repo) { pack ->
             when (pack) {
                 "pack.free" -> StoreLookupResult(StoreVerdict.FREE, "Free Icons")
                 "pack.paid" -> StoreLookupResult(StoreVerdict.PAID, "Paid Icons")
+                "pack.fdroid" -> StoreLookupResult(StoreVerdict.LISTED, "FOSS Icons")
                 "pack.gone" -> StoreLookupResult(StoreVerdict.UNLISTED)
                 else -> StoreLookupResult(StoreVerdict.UNKNOWN)
             }
         }
 
-        val strip = manager.ensureVerdicts(setOf("pack.free", "pack.paid", "pack.gone", "pack.mystery"))
+        val installable = manager.ensureVerdicts(
+            setOf("pack.free", "pack.paid", "pack.fdroid", "pack.gone", "pack.mystery")
+        )
 
-        // Paid AND unverifiable are stripped (fail-closed); free and unlisted embed.
-        assertEquals(setOf("pack.paid", "pack.mystery"), strip)
-        val stored = repo.verdicts(listOf("pack.free", "pack.paid", "pack.gone"))
+        // Everything still installable or unverified; only the found-nowhere pack drops out.
+        assertEquals(setOf("pack.free", "pack.paid", "pack.fdroid", "pack.mystery"), installable)
+        val stored = repo.verdicts(listOf("pack.free", "pack.paid", "pack.fdroid", "pack.gone"))
         assertEquals(VERDICT_FREE, stored.getValue("pack.free").verdict)
         assertEquals(VERDICT_PAID, stored.getValue("pack.paid").verdict)
+        assertEquals(VERDICT_LISTED, stored.getValue("pack.fdroid").verdict)
         assertEquals(VERDICT_UNLISTED, stored.getValue("pack.gone").verdict)
         // The store-listed name fills the label so the missing-packs dialog can show it.
         assertEquals("Paid Icons", stored.getValue("pack.paid").label)
+    }
+
+    @Test
+    fun ensureVerdicts_marksIconPackStudioUnlisted_withoutALookup() = runBlocking {
+        var lookups = 0
+        val manager = PackVerdictManager(context, repo) { lookups++; StoreLookupResult(StoreVerdict.FREE) }
+
+        manager.ensureVerdicts(setOf("ginlemon.iconpackstudio.exported"))
+
+        assertEquals(0, lookups) // never hits the network for a per-user export
+        val stored = repo.verdicts(listOf("ginlemon.iconpackstudio.exported"))
+        assertEquals(VERDICT_UNLISTED, stored.getValue("ginlemon.iconpackstudio.exported").verdict)
     }
 
     @Test
