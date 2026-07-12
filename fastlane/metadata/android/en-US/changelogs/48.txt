@@ -1,0 +1,3 @@
+• Shared profiles and backups now unlock a pack's icons only once that pack is installed — free or paid, from Google Play or F-Droid — so the pack's developer still gets the install.
+• Icon packs exported from Icon Pack Studio stay locked when shared (they're personal-use).
+• A reminder before you share a profile: the other person needs the same icon packs installed to see its pack icons.
