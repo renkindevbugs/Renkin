@@ -31,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -43,8 +44,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
+import dev.renkinProject.renkin.data.HideProfileShareWarningKey
 import dev.renkinProject.renkin.data.Profile
+import dev.renkinProject.renkin.data.getBooleanValue
+import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
+import kotlinx.coroutines.launch
 
 // Input caps: the profile name doubles as the top-bar title and the pack label ends up as the
 // launcher-visible app name of the built pack — unbounded text breaks both layouts.
@@ -75,12 +80,22 @@ fun ProfileSwitcherTitle() {
 
     // Profile whose share was requested, held while the system file picker is up.
     var pendingShareId by rememberSaveable { mutableStateOf<Long?>(null) }
+    // Profile awaiting the pre-share warning's confirmation (null once past it).
+    var shareWarningFor by remember { mutableStateOf<Profile?>(null) }
+    val prefs = getPreferences()
+    val hideShareWarning = prefs.getBooleanValue(HideProfileShareWarningKey)
+    val scope = rememberCoroutineScope()
     val shareLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
         val id = pendingShareId
         pendingShareId = null
         if (uri != null && id != null) viewModel.exportProfile(id, uri)
+    }
+    // Launches the file picker for [profile]'s share (warning already handled by the caller).
+    val startShare: (Profile) -> Unit = { profile ->
+        pendingShareId = profile.id
+        shareLauncher.launch(BackupManager.profileFileName(profile.name))
     }
     // Shared-profile (or backup) file import, right where profiles are managed.
     val importLauncher = rememberLauncherForActivityResult(
@@ -144,8 +159,10 @@ fun ProfileSwitcherTitle() {
                         Row {
                             IconButton(onClick = {
                                 menuOpen = false
-                                pendingShareId = profile.id
-                                shareLauncher.launch(BackupManager.profileFileName(profile.name))
+                                // Warn (once) that the recipient needs the source packs, unless
+                                // the user has opted out — then go straight to the file picker.
+                                if (hideShareWarning) startShare(profile)
+                                else shareWarningFor = profile
                             }) {
                                 Icon(
                                     imageVector = Icons.Filled.Share,
@@ -270,6 +287,17 @@ fun ProfileSwitcherTitle() {
                 viewModel.deleteProfile(profile.id)
             },
             onDismiss = { pendingDelete = null }
+        )
+    }
+
+    shareWarningFor?.let { profile ->
+        ProfileShareWarningDialog(
+            onShare = { dontShowAgain ->
+                shareWarningFor = null
+                if (dontShowAgain) scope.launch { prefs.setBooleanValue(HideProfileShareWarningKey, true) }
+                startShare(profile)
+            },
+            onDismiss = { shareWarningFor = null }
         )
     }
 }

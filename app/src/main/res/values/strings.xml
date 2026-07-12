@@ -304,9 +304,13 @@
     <string name="profileImported">Profile imported — open it from the title menu</string>
     <string name="missingPacksTitle">Missing icon packs</string>
     <string name="missingPacksText">This profile uses icon packs that aren\'t installed on this device. Their icons stay **locked until the pack is installed**.</string>
-    <string name="missingPackPaid">Paid · %d icon(s) locked</string>
-    <string name="missingPackPending">Not verified yet · %d icon(s) waiting</string>
-    <string name="missingPackOpenStore">Play Store</string>
+    <string name="missingPackInstall">Install to unlock · %d icon(s)</string>
+    <string name="missingPackPending">Checking availability · %d icon(s) waiting</string>
+    <string name="missingPackOpenStore">Find pack</string>
+    <string name="shareWarningTitle">Before you share</string>
+    <string name="shareWarningText">This profile\'s pack icons only work for people who have the **same icon packs installed**. Anyone missing a pack sees those icons locked until they install it — so let them know which packs this profile uses.</string>
+    <string name="shareWarningDontShowAgain">Don\'t show again</string>
+    <string name="shareWarningShare">Share</string>
     <string name="missingPackDontShowAgain">Don\'t show again for this profile</string>
     <string name="missingPacksBanner">%1$d icon pack(s) missing · %2$d icon(s) locked</string>
     <string name="filterMissingPack">Missing icon pack</string>

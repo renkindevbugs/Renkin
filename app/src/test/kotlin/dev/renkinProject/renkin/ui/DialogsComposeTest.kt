@@ -90,7 +90,7 @@ class DialogsComposeTest {
         }
 
         compose.onNodeWithText("Paid Icons").assertIsDisplayed()
-        compose.onNodeWithText(string(R.string.missingPackPaid, 12)).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.missingPackInstall, 12)).assertIsDisplayed()
         compose.onNodeWithText("Fresh Icons").assertIsDisplayed()
         compose.onNodeWithText(string(R.string.missingPackPending, 3)).assertIsDisplayed()
     }
@@ -116,6 +116,33 @@ class DialogsComposeTest {
         compose.onNode(isToggleable()).performClick()
         compose.onNodeWithText(string(R.string.ok)).performClick()
         assertEquals(true, dontShowAgain)
+    }
+
+    // ---- ProfileShareWarningDialog ---------------------------------------------------
+
+    @Test
+    fun shareWarningDialog_shareReportsTickedDontShowAgain() {
+        var shared: Boolean? = null
+        compose.setContent {
+            ProfileShareWarningDialog(onShare = { shared = it }, onDismiss = {})
+        }
+
+        compose.onNode(isToggleable()).performClick()
+        compose.onNodeWithText(string(R.string.shareWarningShare)).performClick()
+        assertEquals(true, shared)
+    }
+
+    @Test
+    fun shareWarningDialog_dismissDoesNotShare() {
+        var shareCalls = 0
+        var dismissed = false
+        compose.setContent {
+            ProfileShareWarningDialog(onShare = { shareCalls++ }, onDismiss = { dismissed = true })
+        }
+
+        compose.onNodeWithText(string(R.string.dismiss)).performClick()
+        assertEquals(0, shareCalls)
+        assertTrue(dismissed)
     }
 
     // ---- MissingPacksBanner ----------------------------------------------------------
