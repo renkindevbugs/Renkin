@@ -6,6 +6,7 @@ import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.VERDICT_FREE
+import dev.renkinProject.renkin.data.VERDICT_LISTED
 import dev.renkinProject.renkin.data.VERDICT_PAID
 import dev.renkinProject.renkin.data.VERDICT_UNKNOWN
 import dev.renkinProject.renkin.data.VERDICT_UNLISTED
@@ -20,15 +21,24 @@ import kotlinx.coroutines.withContext
  *  - a pack verified paid — or not verified yet — keeps its imported icons locked
  *    (loaded rows are held back and excluded from builds) until the pack is installed.
  *
- * Verdicts come from [PlayStoreLookup] (injectable for tests) and are re-tried by
+ * Verdicts come from [StoreLookup] (Play + F-Droid; injectable for tests) and are re-tried by
  * [verifyPendingVerdicts] whenever it's called with connectivity — import, app start and
  * the periodic watch worker all call it, so an offline import self-heals later.
+ *
+ * The policy deliberately requires INSTALLING any pack that is still available anywhere: a
+ * pack found on a store (free or paid, Play or F-Droid) keeps its shared icons LOCKED until
+ * installed, so we never redistribute a developer's pack in place of an install. Only a pack
+ * on no known store unlocks (its icons would otherwise be lost). Icon Pack Studio exports —
+ * per-user packages that were never on any store — are locked by package pattern regardless.
  */
 class PackVerdictManager(
     private val context: Context,
     private val repo: RenkinPackRepository,
-    private val lookup: suspend (String) -> StoreLookupResult = PlayStoreLookup::lookup
+    private val lookup: suspend (String) -> StoreLookupResult = StoreLookup::lookup
 ) {
+    /** Icon Pack Studio stamps every export with this same package — never store-installable. */
+    private fun isIconPackStudioExport(pack: String): Boolean =
+        pack.contains("iconpackstudio.exported", ignoreCase = true)
     /** Production entry point: uses the shared singleton database. */
     constructor(context: Context) : this(context, RenkinPackRepository(context))
 
@@ -57,10 +67,16 @@ class PackVerdictManager(
         candidates.filter { pack ->
             val verdict = verdicts[pack]
             when {
+                // Installed here (now or ever) — owned, always usable.
                 verdict?.seenInstalled == true -> false
                 isInstalled(pack) -> false
-                verdict?.verdict == VERDICT_FREE || verdict?.verdict == VERDICT_UNLISTED -> false
-                else -> true // paid, or not verified yet
+                // Icon Pack Studio exports are never on a store to install from, and are
+                // personal-use — locked unless the recipient actually installed one.
+                isIconPackStudioExport(pack) -> true
+                // On no known store: can't be installed anywhere, so keep its icons usable.
+                verdict?.verdict == VERDICT_UNLISTED -> false
+                // Available somewhere (free/paid/F-Droid) or not verified yet -> install to use.
+                else -> true
             }
         }.toSet()
     }
@@ -86,8 +102,9 @@ class PackVerdictManager(
 
     /**
      * Makes sure each of [packs] has a verdict, looking up the undecided ones now. Returns
-     * the packs that must NOT have their image data embedded in a shared file: verified paid,
-     * or unverifiable (fail-closed — an offline export must not leak paid icons).
+     * (advisory) the packs still installable somewhere or not yet verified — i.e. everything
+     * except those found on no known store. Locking is enforced by [lockedPacksAmong]; this
+     * set is a hint for callers that want to warn about install-required packs.
      */
     suspend fun ensureVerdicts(packs: Set<String>): Set<String> = withContext(Dispatchers.Default) {
         val candidates = packs.filter { it.isNotEmpty() && !IconPackBuilder.isOwnPack(it) }
@@ -98,9 +115,16 @@ class PackVerdictManager(
         val updates = mutableListOf<PackVerdict>()
         for (pack in candidates) {
             val row = verdicts[pack] ?: PackVerdict(pack)
-            // Installed packs are owned; still resolve their price for export stripping.
+            // Installed packs are owned; record that so they never lock.
             if (isInstalled(pack) && !row.seenInstalled) {
                 verdicts[pack] = row.copy(seenInstalled = true).also { updates.add(it) }
+            }
+            // Icon Pack Studio exports are never on a store — don't waste a lookup; record a
+            // decisive verdict so it isn't retried hourly (the package-pattern lock covers it).
+            if (isIconPackStudioExport(pack) && (verdicts[pack] ?: row).verdict == VERDICT_UNKNOWN) {
+                verdicts[pack] = (verdicts[pack] ?: row).copy(verdict = VERDICT_UNLISTED, checkedAt = now)
+                    .also { updates.add(it) }
+                continue
             }
             val undecided = (verdicts[pack] ?: row).verdict == VERDICT_UNKNOWN
             val retryDue = now - ((verdicts[pack] ?: row).checkedAt) >= RETRY_INTERVAL_MS
@@ -109,6 +133,7 @@ class PackVerdictManager(
                 val verdictValue = when (result.verdict) {
                     StoreVerdict.FREE -> VERDICT_FREE
                     StoreVerdict.PAID -> VERDICT_PAID
+                    StoreVerdict.LISTED -> VERDICT_LISTED
                     StoreVerdict.UNLISTED -> VERDICT_UNLISTED
                     StoreVerdict.UNKNOWN -> VERDICT_UNKNOWN
                 }
@@ -125,8 +150,7 @@ class PackVerdictManager(
         repo.upsertVerdicts(updates.distinctBy { it.packageName }.map { verdicts[it.packageName] ?: it })
 
         candidates.filter { pack ->
-            val verdict = verdicts[pack]?.verdict ?: VERDICT_UNKNOWN
-            verdict == VERDICT_PAID || verdict == VERDICT_UNKNOWN
+            (verdicts[pack]?.verdict ?: VERDICT_UNKNOWN) != VERDICT_UNLISTED
         }.toSet()
     }
 

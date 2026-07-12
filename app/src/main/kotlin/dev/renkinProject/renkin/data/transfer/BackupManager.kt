@@ -253,6 +253,12 @@ class BackupManager(
             bp.watchRules.map { it.toImport(bp.profile.id) }
         })
         restorePrefs(data.prefs)
+        // The verdict cache is per-device truth (which packs are owned/priced HERE), not part of
+        // the backup — re-derive it from what's actually installed so a restored profile locks
+        // exactly like a fresh import: packs not installed here stay locked until installed.
+        packRepo.resetVerdictsToInstalled(
+            runCatching { appManager.getIconPacks() }.getOrDefault(emptyList())
+        )
         storePackLabels(data.packLabels)
 
         // Pass 2: the bundled files. The gallery is replaced wholesale to match the backup.
