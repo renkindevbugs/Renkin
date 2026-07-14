@@ -16,6 +16,9 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -53,7 +56,9 @@ class IconDraftStateTest {
     /** Records what was asked of it and returns the configured icons. */
     private class FakeBuilder(
         private val previewResult: IconPackDrawable? = null,
-        private val modifierResult: IconPackDrawable? = null
+        private val modifierResult: IconPackDrawable? = null,
+        private val modifierStarted: CompletableDeferred<Unit>? = null,
+        private val modifierRelease: CompletableDeferred<Unit>? = null
     ) : IconPreviewBuilder {
         var previewCalls = 0
         var applyCalls = 0
@@ -76,6 +81,8 @@ class IconDraftStateTest {
         ): IconPackDrawable {
             applyCalls++
             lastModifierInput = icon
+            modifierStarted?.complete(Unit)
+            modifierRelease?.await()
             return modifierResult ?: icon
         }
     }
@@ -243,6 +250,41 @@ class IconDraftStateTest {
         val draft = IconDraftState(create).apply { origin = IconOrigin.UPLOAD }
         // No upload generated yet → confirm keeps the create-tab icon rather than null.
         assertSame(create, draft.iconToConfirm)
+    }
+
+    @Test
+    fun cancelledUploadGeneration_clearsLoadingState() = runBlocking {
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val draft = IconDraftState(null).apply {
+            uploadBase = FakeIcon()
+            origin = IconOrigin.UPLOAD
+        }
+        val builder = FakeBuilder(modifierStarted = started, modifierRelease = release)
+
+        val job = launch { draft.regenerateUpload(builder, options()) }
+        started.await()
+        assertTrue(draft.generating)
+
+        job.cancelAndJoin()
+
+        assertFalse(draft.generating)
+    }
+
+    @Test
+    fun confirmedSourcePack_keepsOnlyThePackThatProducedTheDraft() {
+        assertEquals(
+            "pack.new",
+            confirmedSourcePack(IconOrigin.CREATE, Source.ICON_PACK, "pack.new", "pack.old")
+        )
+        assertEquals(
+            "pack.old",
+            confirmedSourcePack(IconOrigin.CREATE, Source.ICON_PACK, null, "pack.old")
+        )
+        assertNull(confirmedSourcePack(IconOrigin.UPLOAD, Source.ICON_PACK, null, "pack.old"))
+        assertNull(confirmedSourcePack(IconOrigin.VECTOR, Source.ICON_PACK, null, "pack.old"))
+        assertNull(confirmedSourcePack(IconOrigin.CREATE, Source.APPLICATION_ICON, null, "pack.old"))
+        assertNull(confirmedSourcePack(IconOrigin.CREATE, Source.APPLICATION_NAME, null, "pack.old"))
     }
 
     /** Runs the once-only initial gate so the next regenerateCreate actually builds. */

@@ -84,6 +84,7 @@ internal fun ComparisonHeader(
     appName: String,
     previewIcon: IconPackDrawable?,
     previewLoading: Boolean,
+    confirmEnabled: Boolean,
     onDismiss: () -> Unit,
     onClear: () -> Unit,
     onConfirm: () -> Unit,
@@ -167,7 +168,7 @@ internal fun ComparisonHeader(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp, Alignment.End)
                 ) {
-                    ApplyButton(onConfirm)
+                    ApplyButton(onConfirm, enabled = confirmEnabled)
                     extraActions?.invoke()
                     OverflowMenu(onClear)
                 }
@@ -241,7 +242,8 @@ internal fun ComparisonHeader(
                         onConfirm,
                         Modifier
                             .fillMaxWidth()
-                            .padding(top = 12.dp)
+                            .padding(top = 12.dp),
+                        enabled = confirmEnabled
                     )
                 }
             }
@@ -470,9 +472,17 @@ private fun ComparisonArrow(iconSize: Dp) {
 
 /** Primary "apply" action; fires a confirmation haptic before [onConfirm]. */
 @Composable
-private fun ApplyButton(onConfirm: () -> Unit, modifier: Modifier = Modifier) {
+private fun ApplyButton(
+    onConfirm: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
     val view = LocalView.current
-    Button(onClick = { view.performConfirmHaptic(); onConfirm() }, modifier = modifier) {
+    Button(
+        onClick = { view.performConfirmHaptic(); onConfirm() },
+        modifier = modifier,
+        enabled = enabled
+    ) {
         Icon(
             imageVector = Icons.Filled.Done,
             contentDescription = null,
