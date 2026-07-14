@@ -125,7 +125,7 @@ fun OptionsCard(
     var secondaryTextType by rememberSaveable { mutableStateOf(TEXT_TYPE_DEFAULT) }
     var secondaryIconPack by rememberSaveable { mutableStateOf("") }
     var useVector by rememberSaveable { mutableStateOf(false) }
-    var useMonochrome by rememberSaveable { mutableStateOf(false) }
+    var useMaterialYou by rememberSaveable { mutableStateOf(false) }
     var useThemed by rememberSaveable { mutableStateOf(false) }
     var retrieveCalendarIcons by rememberSaveable { mutableStateOf(false) }
     var overrideIcon by rememberSaveable { mutableStateOf(false) }
@@ -146,7 +146,7 @@ fun OptionsCard(
     secondaryTextType = prefs.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT)
     secondaryIconPack = prefs.getStringValue(SecondaryIconPackKey)
     useVector = prefs.getBooleanValue(IncludeVectorKey)
-    useMonochrome = prefs.getBooleanValue(MonochromeKey)
+    useMaterialYou = prefs.getBooleanValue(MonochromeKey)
     useThemed = prefs.getBooleanValue(ExportThemedKey)
     retrieveCalendarIcons = prefs.getBooleanValue(CalendarIconsKey)
     overrideIcon = prefs.getBooleanValue(OverrideIconKey)
@@ -312,7 +312,7 @@ fun OptionsCard(
 
                 if (pathTracing) {
                     VectorSwitch(useVector) { scope.launch { prefs.setBooleanValue(IncludeVectorKey, it) } }
-                    MonochromeSwitch(useMonochrome) { scope.launch { prefs.setBooleanValue(
+                    MaterialYouSwitch(useMaterialYou) { scope.launch { prefs.setBooleanValue(
                         MonochromeKey, it) } }
                 }
 

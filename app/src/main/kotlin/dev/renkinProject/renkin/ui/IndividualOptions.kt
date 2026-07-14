@@ -59,6 +59,7 @@ import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
@@ -239,12 +240,12 @@ fun OptionsDialog(
     val globalFontPath = getPreferences().getStringValue(TextFontKey)
     var textFontPath by rememberSaveable(globalFontPath) { mutableStateOf(globalFontPath) }
     var useVector by rememberSaveable { mutableStateOf(false) }
-    var useMonochrome by rememberSaveable { mutableStateOf(false) }
-    // Monochrome variant: which colour scheme tints the icon. 0..schemes-1 pick a wallpaper-derived
+    var applicationIconVariant by rememberSaveable { mutableStateOf(ApplicationIconVariant.DEFAULT) }
+    // Material You variant: which colour scheme tints the icon. 0..schemes-1 pick a wallpaper-derived
     // Material You scheme (foreground+background); the last index is Custom (manual colour below).
-    var monochromeScheme by rememberSaveable { mutableIntStateOf(0) }
+    var materialYouScheme by rememberSaveable { mutableIntStateOf(0) }
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
-    // Background for the monochrome variant's Custom scheme (the system schemes carry their own).
+    // Background for the Material You variant's Custom scheme (the system schemes carry their own).
     var customBgColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.Black) }
     var iconPack by rememberSaveable { mutableStateOf(iconPacks.firstOrNull()?.packageName ?: "") }
     // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
@@ -327,30 +328,34 @@ fun OptionsDialog(
         runCatching { app.icon.toSafeBitmapOrNull() }.getOrNull()
     }
 
-    // Whether the app ships a Material You <monochrome> layer, enabling the Monochrome variant.
-    val appHasMonochrome = remember(app.icon) {
+    // Whether the app ships a Material You <monochrome> layer, enabling that variant.
+    val appHasMaterialYouIcon = remember(app.icon) {
         val icon = app.icon
         icon.isAdaptiveIconDrawable() && (icon as AdaptiveIconDrawable).haveMonochrome()
     }
 
-    // Monochrome variant colours: a wallpaper-derived scheme (foreground+background) or Custom.
-    val isMonochromeVariant = source == Source.APPLICATION_ICON && useMonochrome
-    val monochromeSchemes = rememberMonochromeSchemes()
-    val isCustomScheme = monochromeScheme >= monochromeSchemes.size
-    val scheme = monochromeSchemes.getOrNull(monochromeScheme)
-    val effectiveColor = if (isMonochromeVariant && !isCustomScheme) scheme!!.first else iconColor
-    // Background only applies to the monochrome variant and the shape plate; other sources
+    // Material You colours: a wallpaper-derived scheme (foreground+background) or Custom.
+    val isMaterialYouVariant = source == Source.APPLICATION_ICON &&
+        applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU
+    val materialYouSchemes = rememberMaterialYouSchemes()
+    val isCustomScheme = materialYouScheme >= materialYouSchemes.size
+    val scheme = materialYouSchemes.getOrNull(materialYouScheme)
+    val effectiveColor = if (isMaterialYouVariant && !isCustomScheme) scheme!!.first else iconColor
+    // Background only applies to the Material You variant and the shape plate; other sources
     // keep the transparent default.
     val effectiveBgColor = when {
-        isMonochromeVariant && !isCustomScheme -> scheme!!.second
-        isMonochromeVariant -> customBgColor
+        isMaterialYouVariant && !isCustomScheme -> scheme!!.second
+        isMaterialYouVariant -> customBgColor
         adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop -> adjustments.shapeColor
         else -> Color.Transparent
     }
 
     val generatingOptions = GenerationOptions(
         source, imageEdit, textType, iconPack,
-        effectiveColor.toInt(), effectiveBgColor.toInt(), useVector, useMonochrome, themed, override = true,
+        effectiveColor.toInt(), effectiveBgColor.toInt(), useVector,
+        materialYou = applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
+        themed = themed,
+        override = true,
         edgeLowThreshold = adjustments.edgeThreshold,
         edgeHighThreshold = adjustments.edgeThreshold * 3f,
         edgeGaussianRadius = adjustments.edgeSmoothing,
@@ -373,7 +378,8 @@ fun OptionsDialog(
         },
         textCustom = customText,
         textCase = textCase,
-        textFontPath = textFontPath
+        textFontPath = textFontPath,
+        applicationIconVariant = applicationIconVariant
     )
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
@@ -585,11 +591,12 @@ fun OptionsDialog(
                                 selectedResourceId = customIconList.firstOrNull()?.resourceId,
                                 // Frame the rotation siblings only once the user has opted in.
                                 selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },
-                                appHasMonochrome = appHasMonochrome,
-                                onMonochromeChange = { useMonochrome = it },
-                                monochromeSchemes = monochromeSchemes,
-                                selectedScheme = monochromeScheme,
-                                onSchemeChange = { monochromeScheme = it },
+                                appHasMaterialYouIcon = appHasMaterialYouIcon,
+                                applicationIconVariant = applicationIconVariant,
+                                onApplicationIconVariantChange = { applicationIconVariant = it },
+                                materialYouSchemes = materialYouSchemes,
+                                selectedScheme = materialYouScheme,
+                                onSchemeChange = { materialYouScheme = it },
                                 customForeground = iconColor,
                                 customBackground = customBgColor,
                                 onCustomForegroundChange = { iconColor = it },
@@ -607,7 +614,7 @@ fun OptionsDialog(
                                 imageEdit = imageEdit,
                                 iconColor = iconColor,
                                 useVector = useVector,
-                                useMonochrome = useMonochrome,
+                                useMaterialYou = applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
                                 adjustments = adjustments,
                                 centerPreview = remember(draft.iconToConfirm) { draft.iconToConfirm?.toBitmap() },
                                 previewGenerating = draft.generating,
@@ -615,7 +622,10 @@ fun OptionsDialog(
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },
-                                onMonochromeChange = { useMonochrome = it },
+                                onMaterialYouChange = {
+                                    applicationIconVariant = if (it) ApplicationIconVariant.MATERIAL_YOU
+                                    else ApplicationIconVariant.DEFAULT
+                                },
                                 onEditExternally = { toolbox ->
                                     val bitmap = draft.iconToConfirm?.toBitmap()
                                     when {
@@ -734,13 +744,13 @@ private fun OptionsBottomBar(
 }
 
 /**
- * Wallpaper-derived colour schemes (foreground over background) for tinting the monochrome icon,
+ * Wallpaper-derived colour schemes (foreground over background) for tinting the Material You layer,
  * pulled from the live Material You palette — the three accent hues plus a neutral, and an inverted
  * accent. These harmonise with the user's wallpaper, like Android's own themed-icon colours. On
  * Android < 12 (no dynamic colours) it falls back to plain light-on-dark / dark-on-light.
  */
 @Composable
-private fun rememberMonochromeSchemes(): List<Pair<Color, Color>> {
+private fun rememberMaterialYouSchemes(): List<Pair<Color, Color>> {
     if (!supportDynamicColors()) {
         return listOf(Color.White to Color.Black, Color.Black to Color.White)
     }
@@ -844,5 +854,3 @@ private fun SourcePills(
         ) { Text(stringResource(R.string.sourceText)) }
     }
 }
-
-

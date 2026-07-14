@@ -101,7 +101,7 @@ class IconDraftStateTest {
         color = 0,
         bgColor = 0,
         vector = false,
-        monochrome = false,
+        materialYou = false,
         themed = false,
         override = true,
         iconScale = iconScale

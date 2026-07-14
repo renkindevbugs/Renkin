@@ -48,7 +48,7 @@ data class GenerationOptions(
     val color: Int,
     val bgColor: Int,
     val vector: Boolean,
-    val monochrome: Boolean,
+    val materialYou: Boolean,
     val themed: Boolean,
     val override: Boolean,
     val edgeLowThreshold: Float = 2.5F,
@@ -95,7 +95,14 @@ data class GenerationOptions(
     val textCase: TextCase = TextCase.AS_IS,
     val textFontPath: String = "",
     // Which pack's fallback styling to give apps neither pack themes (NONE = leave them raw).
-    val fallbackSource: FallbackSource = FallbackSource.NONE
+    val fallbackSource: FallbackSource = FallbackSource.NONE,
+    // Per-app Application Icon choice. Existing bulk preferences keep their old behaviour by
+    // mapping the persisted monochrome flag to the Material You layer.
+    val applicationIconVariant: ApplicationIconVariant = if (materialYou) {
+        ApplicationIconVariant.MATERIAL_YOU
+    } else {
+        ApplicationIconVariant.DEFAULT
+    }
 ) {
     companion object {
         /**
@@ -126,7 +133,7 @@ data class GenerationOptions(
                 color = iconColor.toArgb(),
                 bgColor = bgColor.toArgb(),
                 vector = preferences.getBooleanValue(IncludeVectorKey),
-                monochrome = preferences.getBooleanValue(MonochromeKey),
+                materialYou = preferences.getBooleanValue(MonochromeKey),
                 themed = preferences.getBooleanValue(ExportThemedKey),
                 override = override,
                 fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
@@ -143,3 +150,6 @@ data class GenerationOptions(
 
 /** Letter-case transform for text icons (per-app option; not persisted globally). */
 enum class TextCase { AS_IS, UPPER, LOWER }
+
+/** How an app's own launcher icon is represented in the per-app editor. */
+enum class ApplicationIconVariant { DEFAULT, MATERIAL_YOU, MONOCHROME }

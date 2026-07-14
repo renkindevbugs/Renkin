@@ -3,7 +3,7 @@
 
     <string name="iconColor">Icon color</string>
     <string name="vector">Vector (BETA)</string>
-    <string name="monochrome">Monochrome (BETA)</string>
+    <string name="materialYou">Material You (BETA)</string>
     <string name="themedIcons">Themed icons (BETA)</string>
     <string name="backgroundColor">Background color</string>
     <string name="iconPack">Icon pack</string>
@@ -17,7 +17,7 @@
     <string name="create">Create</string>
     <string name="upload">Upload</string>
     <string name="vectorOptionDescription">If the application use a vector as an icon, edit the vector.\n\nThis will not work if Renkin is installed on the main profile and the application is installed on the work profile.</string>
-    <string name="monochromeOptionDescription">If the application have a monochrome icon, use it.</string>
+    <string name="materialYouOptionDescription">Uses each app\'s Material You icon when one is available.</string>
     <string name="themedIconsOptionDescription">Export icons as themed icons.</string>
     <string name="confirmClear">Confirm</string>
     <string name="confirmClearText">Are you sure to clear the icon ?</string>
@@ -273,12 +273,14 @@
     <string name="calendarMissingDaysApp">%1$s: missing %2$d of 31 days</string>
     <string name="iconVariant">Icon variant</string>
     <string name="variantDefault">Default</string>
+    <string name="variantMaterialYou">Material You</string>
     <string name="variantMonochrome">Monochrome</string>
     <string name="variantDefaultHint">Uses the app\'s normal icon, unchanged.</string>
-    <string name="monochromeRecolorHint">Uses the app\'s monochrome icon, recolored to your choice.</string>
-    <string name="monochromeUnavailable">This app has no monochrome icon, so it can\'t be recolored.</string>
-    <string name="monochromeColors">Color</string>
-    <string name="monochromeColorsHint">Wallpaper colors that match Android\'s themed icons. Pick Custom to choose your own in the Modifier tab.</string>
+    <string name="materialYouRecolorHint">Uses the app\'s Material You icon, recolored to your choice.</string>
+    <string name="materialYouUnavailable">This app has no Material You icon.</string>
+    <string name="monochromeHint">Removes color while keeping the app\'s original icon.</string>
+    <string name="materialYouColors">Color</string>
+    <string name="materialYouColorsHint">Wallpaper colors that match Android\'s themed icons. Pick Custom to choose your own in the Modifier tab.</string>
     <string name="custom">Custom</string>
     <string name="refreshIcons">Refresh icons</string>
     <string name="info">Info</string>
