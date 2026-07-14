@@ -95,4 +95,18 @@ class PackBrowserPreviewsTest {
             cacheKey("com.pack", IconSortOrder.NAME_ASC, "q", options(), InstalledApplication("com.app", "com.app.Main", 0))
         )
     }
+
+    @Test
+    fun cacheKey_distinguishesActivitiesInTheSamePackage() {
+        val first = cacheKey(
+            "com.pack", IconSortOrder.NAME_ASC, "q", options(),
+            InstalledApplication("com.app", "com.app.First", 0)
+        )
+        val second = cacheKey(
+            "com.pack", IconSortOrder.NAME_ASC, "q", options(),
+            InstalledApplication("com.app", "com.app.Second", 0)
+        )
+
+        assertNotEquals(first, second)
+    }
 }

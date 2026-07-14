@@ -256,6 +256,6 @@ class PackBrowserPreviews(
             query: String,
             options: GenerationOptions,
             component: InstalledApplication?
-        ) = "$packageName|$sortOrder|$query|${options.hashCode()}|${component?.packageName ?: ""}"
+        ) = "$packageName|$sortOrder|$query|${options.hashCode()}|${component?.toComponentInfo() ?: ""}"
     }
 }

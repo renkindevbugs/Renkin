@@ -14,6 +14,7 @@ import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
+import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.ImageEdit
@@ -36,6 +37,15 @@ import dev.renkinProject.renkin.dataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+
+/** Per-app calendar choices replace only the same launcher component's global mapping. */
+internal fun mergeCalendarIconMappings(
+    global: Map<InstalledApplication, String>,
+    perApp: Map<InstalledApplication, String>
+): Map<InstalledApplication, String> {
+    val overriddenComponents = perApp.keys.map { it.toComponentInfo() }.toSet()
+    return global.filterKeys { it.toComponentInfo() !in overriddenComponents } + perApp
+}
 
 /**
  * The domain hub between the UI layer (MainViewModel) and everything icon-related: the live
@@ -230,8 +240,7 @@ class ApplicationProvider(private val context: Context) {
                 }
 
             // Global calendar for apps that did NOT opt in per-app
-            val perAppPackages = perAppIcons.keys.map { it.packageName }.toSet()
-            val allCalendarIcons = iconPackRepo.calendarIcon.filter { it.key.packageName !in perAppPackages } + perAppIcons
+            val allCalendarIcons = mergeCalendarIconMappings(iconPackRepo.calendarIcon, perAppIcons)
             val allCalendarDrawables = iconPackRepo.calendarIconsDrawable + perAppDrawables
 
             // Final gate: icons whose (already translated) source pack is locked on this

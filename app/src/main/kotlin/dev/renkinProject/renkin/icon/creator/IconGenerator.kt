@@ -289,7 +289,7 @@ class IconGenerator(
         iconPack: IconPackContainer,
         customIcon: ResourceDrawable? = null
     ): IconPackDrawable? {
-        val resIcon = customIcon ?: iconPack.getApplicationIcon(application.packageName) ?: return null
+        val resIcon = customIcon ?: iconPack.getApplicationIcon(application.toInstalledApplication()) ?: return null
 
         val bitmapIcon = getIconBitmap(resIcon.drawable) ?: return null
         val parsedIcon = exportIconPackXML(iconPack.iconPackName, resIcon)
