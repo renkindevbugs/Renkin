@@ -33,6 +33,12 @@ import dev.renkinProject.renkin.extension.toDrawable
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
+internal fun launcherIconOrFallback(activityIcon: Drawable?, applicationIcon: () -> Drawable): Drawable =
+    activityIcon ?: applicationIcon()
+
+internal fun launcherIconIdOrFallback(activityIconId: Int?, applicationIconId: Int): Int =
+    activityIconId?.takeIf { it != 0 } ?: applicationIconId
+
 class ApplicationManager(private val ctx: Context) {
 
     companion object {
@@ -74,8 +80,17 @@ class ApplicationManager(private val ctx: Context) {
                     val originalName = loadEnglishLabel(app.applicationInfo, appName)
                     val packageName = app.componentName.packageName
                     val activityName = app.componentName.className
-                    val icon = app.applicationInfo.loadIcon(pm)
-                    val iconID = app.applicationInfo.icon
+                    // Launcher activities may override the application-level icon. Use the
+                    // activity-specific artwork and resource id so Current/Application Icon
+                    // previews match the exact component being edited.
+                    val icon = launcherIconOrFallback(
+                        runCatching { app.getIcon(ctx.resources.displayMetrics.densityDpi) }.getOrNull()
+                    ) { app.applicationInfo.loadIcon(pm) }
+                    @Suppress("DEPRECATION")
+                    val iconID = launcherIconIdOrFallback(
+                        runCatching { pm.getActivityInfo(app.componentName, 0).iconResource }.getOrNull(),
+                        app.applicationInfo.icon
+                    )
 
                     val icon2 = if (!icon.hasValidDimensions()) {
                         Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).toDrawable(ctx.resources)
