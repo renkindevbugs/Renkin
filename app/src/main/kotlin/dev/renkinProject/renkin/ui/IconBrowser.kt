@@ -450,7 +450,7 @@ private fun ApplicationIconVariantSelector(
                         Box(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
-                                .padding(top = 6.dp, end = 7.dp)
+                                .padding(top = 1.dp, end = 6.dp)
                                 .size(6.dp)
                                 .background(ChangedOrange, CircleShape)
                         )
