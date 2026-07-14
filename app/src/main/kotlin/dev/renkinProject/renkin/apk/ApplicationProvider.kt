@@ -14,7 +14,6 @@ import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
-import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.ImageEdit
@@ -37,15 +36,6 @@ import dev.renkinProject.renkin.dataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-
-/** Per-app calendar choices replace only the same launcher component's global mapping. */
-internal fun mergeCalendarIconMappings(
-    global: Map<InstalledApplication, String>,
-    perApp: Map<InstalledApplication, String>
-): Map<InstalledApplication, String> {
-    val overriddenComponents = perApp.keys.map { it.toComponentInfo() }.toSet()
-    return global.filterKeys { it.toComponentInfo() !in overriddenComponents } + perApp
-}
 
 /**
  * The domain hub between the UI layer (MainViewModel) and everything icon-related: the live
@@ -119,15 +109,6 @@ class ApplicationProvider(private val context: Context) {
         startupComplete = true
     }
 
-    suspend fun retrieveOtherIcons(preferences: Preferences) = withContext(Dispatchers.Default) {
-        val iconPackageName = preferences.getStringValue(PrimaryIconPackKey)
-        val retrieveCalendarIcon = preferences.getBooleanValue(CalendarIconsKey)
-
-        if (iconPackageName != "" && retrieveCalendarIcon) {
-            iconPackRepo.retrieveCalendarIcons(iconPackageName)
-        }
-    }
-
     suspend fun refreshIcon(application: PackageInfoStruct, preferences: Preferences) = withContext(Dispatchers.Default) {
         // A newly installed app always gets its icon (re)generated
         val genOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
@@ -145,12 +126,6 @@ class ApplicationProvider(private val context: Context) {
      * (recorded by an own pack used as source) is a pack this device doesn't own. */
     suspend fun refreshIcons(preferences: Preferences): Int = withContext(Dispatchers.Default) {
         var opt = GenerationOptions.fromPreferences(preferences, context)
-        val retrieveCalendarIcon = preferences.getBooleanValue(CalendarIconsKey)
-
-        if (opt.primaryIconPack != "" && retrieveCalendarIcon) {
-            iconPackRepo.retrieveCalendarIcons(opt.primaryIconPack)
-        }
-
         // Themed icons on Android 12+ are recoloured with the system dynamic palette
         if (opt.themed && supportDynamicColors()) {
             opt = opt.copy(
@@ -222,26 +197,23 @@ class ApplicationProvider(private val context: Context) {
             val bgColor = preferences.getDefaultBackgroundColor(context)
             val primaryPackName = preferences.getStringValue(PrimaryIconPackKey)
 
-            // Per-app calendar: group opted-in apps by which pack they chose their icon from,
-            // then load the day-1..31 drawables from THAT pack (not the global primary).
-            // Per-app entries override global calendar for the same app.
-            var perAppIcons = emptyMap<InstalledApplication, String>()
-            var perAppDrawables = emptyMap<String, android.graphics.drawable.Drawable>()
-
-            applicationList
+            // Resolve calendar data at build time from the current preferences and installed
+            // packs. There is deliberately no mutable cache: building immediately after startup,
+            // changing the primary pack, or disabling global calendars must all use current data.
+            val globalSelections = if (
+                preferences.getBooleanValue(CalendarIconsKey) && primaryPackName.isNotEmpty()
+            ) iconPackRepo.declaredCalendarSelections(primaryPackName) else emptyList()
+            val perAppSelections = applicationList
                 .filter { it.hasCalendarIcon }
-                .groupBy { it.calendarSourcePack(primaryPackName) }
-                .filter { (packName, _) -> packName.isNotEmpty() }
-                .forEach { (packName, apps) ->
-                    val appsWithPrefixes = apps.map { it.toInstalledApplication() to it.calendarPrefix!! }
-                    val (icons, drawables) = iconPackRepo.calendarDataForPrefixes(packName, appsWithPrefixes)
-                    perAppIcons = perAppIcons + icons
-                    perAppDrawables = perAppDrawables + drawables
+                .mapNotNull { app ->
+                    val packName = app.calendarSourcePack(primaryPackName)
+                    packName.takeIf { it.isNotEmpty() }?.let {
+                        CalendarSelection(app.toInstalledApplication(), it, app.calendarPrefix!!)
+                    }
                 }
-
-            // Global calendar for apps that did NOT opt in per-app
-            val allCalendarIcons = mergeCalendarIconMappings(iconPackRepo.calendarIcon, perAppIcons)
-            val allCalendarDrawables = iconPackRepo.calendarIconsDrawable + perAppDrawables
+            // buildCalendarData applies later selections last, so an explicit per-app choice
+            // replaces only the same launcher component's global declaration.
+            val calendarData = iconPackRepo.calendarBuildData(globalSelections + perAppSelections)
 
             // Final gate: icons whose (already translated) source pack is locked on this
             // device must not ship in the APK — belt-and-braces for anything that slipped
@@ -260,8 +232,8 @@ class ApplicationProvider(private val context: Context) {
             val iconPackGenerator = IconPackBuilder(
                 context,
                 buildApps,
-                allCalendarIcons,
-                allCalendarDrawables,
+                calendarData.mappings,
+                calendarData.drawables,
                 packPackageName = profileManager.packPackageNameFor(activeProfileId),
                 packLabel = profile?.packLabel?.ifEmpty { profile.name } ?: "Renkin Pack"
             )

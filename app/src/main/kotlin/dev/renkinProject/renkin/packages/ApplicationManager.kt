@@ -306,24 +306,6 @@ class ApplicationManager(private val ctx: Context) {
         return map
     }
 
-    fun getCalendarFromAppFilterElements(iconPackName: String, elements: List<RawElement>): Map<String, Drawable> {
-        val map = mutableMapOf<String, Drawable>()
-        val res = getResources(iconPackName) ?: return map
-
-        val calendarIcons = elements.filterIsInstance<RawCalendar>()
-        for (calendar in calendarIcons) {
-            for (i in 1 .. 31) {
-                val resource = getResIcon(res, calendar.prefix + i, iconPackName)
-
-                if (resource != null) {
-                    map[calendar.prefix + i] = resource
-                }
-            }
-        }
-
-        return map
-    }
-
     private fun getIconPacks(intent: Intent): List<IconPack> {
         val resolves = getResolves(intent)
         val iconPacks = mutableListOf<IconPack>()
