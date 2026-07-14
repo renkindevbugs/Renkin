@@ -186,6 +186,17 @@ class ApplicationProvider(private val context: Context) {
     ): IconPackDrawable? =
         iconGenService.getIconFromPackDrawable(application, packPackage, drawableName, options)
 
+    suspend fun getValidatedIconFromPackDrawable(
+        application: PackageInfoStruct,
+        packPackage: String,
+        drawableName: String,
+        expectedHash: String,
+        options: GenerationOptions
+    ): IconGenerationService.ValidatedPackIcon =
+        iconGenService.getValidatedIconFromPackDrawable(
+            application, packPackage, drawableName, expectedHash, options
+        )
+
     /** Applies the modifier from [options] to an already-built icon (e.g. a hand-edited vector). */
     suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =
         iconGenService.applyModifier(icon, options)

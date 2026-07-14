@@ -234,4 +234,26 @@ class WatchRepositoryTest {
         assertEquals(-1L, result)
         assertEquals(false, repo.getRule(ruleId)?.rule?.completed)
     }
+
+    @Test
+    fun migrateRuleAppMovesTheComponentAndItsBaseline() = runBlocking {
+        val old = AppComponent("com.a", "OldActivity")
+        val replacement = AppComponent("com.a", "NewActivity")
+        val ruleId = createRule(
+            listOf(old), false, listOf("pack1"), 1L,
+            listOf(BaselineInput("com.a", "OldActivity", "pack1", 1L, "old", "old-hash", 10L))
+        )
+
+        val migrated = repo.migrateRuleApp(
+            ruleId,
+            old,
+            replacement,
+            listOf(BaselineInput("com.a", "NewActivity", "pack1", 2L, "new", "new-hash", 20L))
+        )
+
+        assertTrue(migrated)
+        assertEquals(listOf("NewActivity"), repo.getRule(ruleId)?.apps?.map { it.activityName })
+        assertEquals(null, repo.getState(ruleId, "com.a", "OldActivity", "pack1"))
+        assertEquals("new-hash", repo.getState(ruleId, "com.a", "NewActivity", "pack1")?.lastIconHash)
+    }
 }

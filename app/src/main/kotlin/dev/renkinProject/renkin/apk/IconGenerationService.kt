@@ -11,6 +11,8 @@ import dev.renkinProject.renkin.icon.creator.IconGenerator
 import dev.renkinProject.renkin.icon.creator.IconPackContainer
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
+import dev.renkinProject.renkin.extension.contentHash
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -24,6 +26,8 @@ class IconGenerationService(
     private val context: Context,
     private val iconPackRepo: IconPackRepository
 ) {
+    data class ValidatedPackIcon(val icon: IconPackDrawable?, val sourceChanged: Boolean)
+
     private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
 
     /** Generates one icon from the primary pack only (preview / single-pack lookups). */
@@ -53,15 +57,33 @@ class IconGenerationService(
         packPackage: String,
         drawableName: String,
         options: GenerationOptions
-    ): IconPackDrawable? {
+    ): IconPackDrawable? = getValidatedIconFromPackDrawable(
+        application, packPackage, drawableName, expectedHash = null, options = options
+    ).icon
+
+    /** Resolves once, verifies the raw pack artwork when requested, then builds its preview. */
+    suspend fun getValidatedIconFromPackDrawable(
+        application: PackageInfoStruct,
+        packPackage: String,
+        drawableName: String,
+        expectedHash: String?,
+        options: GenerationOptions
+    ): ValidatedPackIcon {
         val ids = appManager.getIconPackDrawableIds(packPackage, listOf(drawableName))
-        val resource = appManager.getIconPackDrawables(packPackage, ids).firstOrNull() ?: return null
+        val resource = appManager.getIconPackDrawables(packPackage, ids).firstOrNull()
+            ?: return ValidatedPackIcon(null, sourceChanged = expectedHash != null)
+        if (expectedHash != null) {
+            val currentHash = resource.drawable.toSafeBitmapOrNull()?.contentHash()
+            if (currentHash == null || currentHash != expectedHash) {
+                return ValidatedPackIcon(null, sourceChanged = true)
+            }
+        }
         val packOptions = options.copy(
             primarySource = Source.ICON_PACK,
             primaryImageEdit = ImageEdit.NONE,
             primaryIconPack = packPackage
         )
-        return getIcon(application, packOptions, resource)
+        return ValidatedPackIcon(getIcon(application, packOptions, resource), sourceChanged = false)
     }
 
     /** Applies the modifier from [options] to an already-built icon. */

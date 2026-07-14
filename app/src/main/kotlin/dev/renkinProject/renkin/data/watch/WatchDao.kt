@@ -107,6 +107,9 @@ interface WatchDao {
     @Query("DELETE FROM watch_state WHERE ruleId = :ruleId")
     suspend fun deleteStatesForRule(ruleId: Long)
 
+    @Query("DELETE FROM watch_state WHERE ruleId = :ruleId AND packageName = :packageName AND activityName = :activityName")
+    suspend fun deleteStatesForRuleApp(ruleId: Long, packageName: String, activityName: String)
+
     @Query("SELECT * FROM watch_state WHERE ruleId = :ruleId AND packageName = :packageName AND activityName = :activityName AND iconPackPackage = :iconPackPackage")
     suspend fun getState(ruleId: Long, packageName: String, activityName: String, iconPackPackage: String): WatchState?
 

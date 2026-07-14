@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.IconGenerationService
 import dev.renkinProject.renkin.apk.IconLockManager
 import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
@@ -484,8 +485,10 @@ class MainViewModel @Inject constructor(
         app: PackageInfoStruct,
         packPackage: String,
         drawableName: String,
+        expectedHash: String,
         options: GenerationOptions
-    ): IconPackDrawable? = appProvider.getIconFromPackDrawable(app, packPackage, drawableName, options)
+    ): IconGenerationService.ValidatedPackIcon =
+        appProvider.getValidatedIconFromPackDrawable(app, packPackage, drawableName, expectedHash, options)
 
     /** The selectable drawables for the icon-pack dropdown, keyed by display name. */
     suspend fun iconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =

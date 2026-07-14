@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -89,6 +90,7 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
+import dev.renkinProject.renkin.ui.theme.ChangedOrange
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dev.renkinProject.renkin.packages.PackageInfoStruct
@@ -513,6 +515,10 @@ private fun ActiveRuleCard(
     selected: Boolean,
     onClick: () -> Unit
 ) {
+    val launcherActivityChanged = rule.apps.any { watched ->
+        apps.none { it.packageName == watched.packageName && it.activityName == watched.activityName } &&
+            apps.any { it.packageName == watched.packageName }
+    }
     Surface(
         onClick = onClick,
         shape = CardShape,
@@ -533,6 +539,25 @@ private fun ActiveRuleCard(
                 rule.apps.forEach { ra ->
                     val app = apps.find { it.packageName == ra.packageName && it.activityName == ra.activityName }
                     AppPill(app, ra.packageName)
+                }
+            }
+            if (launcherActivityChanged) {
+                Row(
+                    modifier = Modifier.padding(top = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Filled.Warning,
+                        contentDescription = null,
+                        tint = ChangedOrange,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.watchActivityChanged),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 6.dp)
+                    )
                 }
             }
             HorizontalDivider(

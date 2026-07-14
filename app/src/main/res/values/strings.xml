@@ -192,6 +192,8 @@
     <string name="watchSaveDisabledHint">Pick at least one app and an icon pack (or enable all packs) first</string>
     <string name="watchSaving">Saving…</string>
     <string name="watchApplyDisabledHint">The new icon hasn\'t loaded yet</string>
+    <string name="watchCandidateChanged">This icon pack changed after the suggestion was created. Run a new check to get its latest icon.</string>
+    <string name="watchActivityChanged">Launcher activity changed. Run a check, or edit this rule if the app has multiple launcher activities.</string>
     <string name="positionCustom">Custom</string>
     <string name="done">Done</string>
     <string name="removeBackgroundTolerance">Tolerance</string>

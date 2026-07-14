@@ -48,18 +48,7 @@ class WatchRepository(private val db: WatchDatabase) {
             ruleId
         }
         writeRuleChildren(savedRuleId, apps, watchAllPacks, packPackages)
-        dao.upsertStates(baseline.map { state ->
-            WatchState(
-                ruleId = savedRuleId,
-                packageName = state.packageName,
-                activityName = state.activityName,
-                iconPackPackage = state.iconPackPackage,
-                lastPackVersionCode = state.lastPackVersionCode,
-                lastIconName = state.lastIconName,
-                lastIconHash = state.lastIconHash,
-                lastCheckedAt = state.lastCheckedAt
-            )
-        })
+        dao.upsertStates(baseline.map { it.toWatchState(savedRuleId) })
         dao.pruneOrphanStates()
         savedRuleId
     }
@@ -149,6 +138,31 @@ class WatchRepository(private val db: WatchDatabase) {
 
     suspend fun upsertState(state: WatchState) = dao.upsertState(state)
 
+    /** Moves a watched app to its sole replacement launcher activity and installs its baseline. */
+    suspend fun migrateRuleApp(
+        ruleId: Long,
+        oldApp: AppComponent,
+        newApp: AppComponent,
+        baseline: List<BaselineInput>
+    ): Boolean = db.withTransaction {
+        val rule = dao.getRuleWithDetails(ruleId) ?: return@withTransaction false
+        if (rule.rule.completed || rule.apps.none {
+                it.packageName == oldApp.packageName && it.activityName == oldApp.activityName
+            }) return@withTransaction false
+
+        val replacementAlreadyWatched = rule.apps.any {
+            it.packageName == newApp.packageName && it.activityName == newApp.activityName
+        }
+        dao.deleteApp(ruleId, oldApp.packageName, oldApp.activityName)
+        dao.deleteStatesForRuleApp(ruleId, oldApp.packageName, oldApp.activityName)
+        if (!replacementAlreadyWatched) {
+            dao.insertApps(listOf(WatchRuleApp(ruleId, newApp.packageName, newApp.activityName)))
+            dao.upsertStates(baseline.map { it.toWatchState(ruleId) })
+        }
+        dao.pruneOrphanStates()
+        true
+    }
+
     /** Debug only: stale all baselines so the next check fires for any app with an icon. */
     suspend fun debugStaleAllStates() = dao.debugStaleAllStates()
 
@@ -221,6 +235,17 @@ data class BaselineInput(
     val lastIconName: String?,
     val lastIconHash: String?,
     val lastCheckedAt: Long
+)
+
+private fun BaselineInput.toWatchState(ruleId: Long) = WatchState(
+    ruleId = ruleId,
+    packageName = packageName,
+    activityName = activityName,
+    iconPackPackage = iconPackPackage,
+    lastPackVersionCode = lastPackVersionCode,
+    lastIconName = lastIconName,
+    lastIconHash = lastIconHash,
+    lastCheckedAt = lastCheckedAt
 )
 
 /** One rule (plus children) to insert during a backup import — rule ids are regenerated. */
