@@ -93,20 +93,7 @@ import dev.renkinProject.renkin.data.setColorValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
-import dev.renkinProject.renkin.packages.PackageInfoStruct
 import kotlinx.coroutines.launch
-
-@Composable
-fun AppOptions(
-    iconPacks: List<IconPack>,
-    app: PackageInfoStruct,
-    themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?) -> Unit,
-    onDismiss: () -> Unit,
-    onIconClear: () -> Unit
-) {
-    OptionsDialog(iconPacks, app, themed, onConfirm, onDismiss, onIconClear)
-}
 
 @Composable
 fun OptionsCard(

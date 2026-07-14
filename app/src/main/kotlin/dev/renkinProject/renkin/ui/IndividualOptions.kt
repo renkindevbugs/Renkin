@@ -32,7 +32,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -108,6 +107,18 @@ import androidx.compose.ui.text.font.FontWeight
 /** The source that produced the icon currently being previewed and confirmed. */
 internal enum class IconOrigin { CREATE, UPLOAD, VECTOR }
 
+/** Source-pack attribution for the draft that Apply will persist. */
+internal fun confirmedSourcePack(
+    origin: IconOrigin,
+    source: Source,
+    pickedPack: String?,
+    existingPack: String?
+): String? = when {
+    origin != IconOrigin.CREATE || source != Source.ICON_PACK -> null
+    !pickedPack.isNullOrEmpty() -> pickedPack
+    else -> existingPack?.takeIf { it.isNotEmpty() }
+}
+
 /**
  * How fully the comparison labels should show given a list's top position: 1 at the very top,
  * fading to 0 over the first 120px of scroll (and 0 once past the first item).
@@ -145,6 +156,7 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
     /** True while an icon is being (re)generated; drives the spinner over the preview slot. */
     var generating by mutableStateOf(false)
         private set
+    private var activeGenerations = 0
 
     // Keep the existing icon on the first pass — only regenerate once the user actually
     // changes a source, modifier or selects an icon.
@@ -163,6 +175,18 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         IconOrigin.CREATE -> createIcon
     }
 
+    /** Keeps the shared loading state correct across overlapping and cancelled effects. */
+    private suspend fun <T> trackGeneration(block: suspend () -> T): T {
+        activeGenerations++
+        generating = true
+        return try {
+            block()
+        } finally {
+            activeGenerations--
+            generating = activeGenerations > 0
+        }
+    }
+
     /** Rebuilds the Create-tab icon for [options] (and an optional explicit pack pick). */
     suspend fun regenerateCreate(
         builder: IconPreviewBuilder,
@@ -177,19 +201,19 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         val custom = customIconList.firstOrNull()
         // previewIcon / applyModifier hop to Dispatchers.Default internally, so this no
         // longer blocks the main thread; show the spinner for the duration.
-        generating = true
-        createIcon = when {
-            // Explicit pick from a pack
-            custom != null -> builder.previewIcon(app, options, custom)
-            // Icon-pack source with no new pick: apply the modifier to the already saved icon
-            // rather than pulling a fresh one from the first pack (which would swap the icon
-            // out from under the user). Null until a tap if none.
-            options.primarySource == Source.ICON_PACK ->
-                app.createdIcon?.let { builder.applyModifier(it, options) }
-            // Text / app-icon sources generate from the source itself
-            else -> builder.previewIcon(app, options, null)
+        createIcon = trackGeneration {
+            when {
+                // Explicit pick from a pack
+                custom != null -> builder.previewIcon(app, options, custom)
+                // Icon-pack source with no new pick: apply the modifier to the already saved icon
+                // rather than pulling a fresh one from the first pack (which would swap the icon
+                // out from under the user). Null until a tap if none.
+                options.primarySource == Source.ICON_PACK ->
+                    app.createdIcon?.let { builder.applyModifier(it, options) }
+                // Text / app-icon sources generate from the source itself
+                else -> builder.previewIcon(app, options, null)
+            }
         }
-        generating = false
     }
 
     /** Reapplies the shared modifier to the hand-edited vector (it isn't built from a source). */
@@ -202,19 +226,14 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
             options.primaryImageEdit == ImageEdit.NONE && options.iconScale == 1f
                 && options.iconShape == IconShape.NONE
                 && options.outlineMode == OutlineMode.NONE -> base
-            else -> {
-                generating = true
-                val result = builder.applyModifier(base, options)
-                generating = false
-                result
-            }
+            else -> trackGeneration { builder.applyModifier(base, options) }
         }
     }
 
     /** Reapplies the shared modifier (edit / color / scale) to the uploaded image. */
     suspend fun regenerateUpload(builder: IconPreviewBuilder, options: GenerationOptions) {
         val base = uploadBase
-        uploadIcon = if (base == null) null else builder.applyModifier(base, options)
+        uploadIcon = if (base == null) null else trackGeneration { builder.applyModifier(base, options) }
     }
 }
 
@@ -403,7 +422,6 @@ fun OptionsDialog(
     val toaster = LocalToaster.current
     val selectIconMessage = stringResource(R.string.selectIconFirst)
     val context = LocalContext.current
-    val view = LocalView.current
 
     LaunchedEffect(selectedTab) {
         // Leaving the icon-pack list re-expands the app bar (other tabs barely scroll).
@@ -468,19 +486,20 @@ fun OptionsDialog(
                     appName = app.appName,
                     previewIcon = draft.iconToConfirm,
                     previewLoading = draft.generating,
+                    confirmEnabled = !draft.generating,
                     onDismiss = startClose,
                     onClear = { showConfirmClear = true },
                     onConfirm = {
                         // Credit the icon to a pack only when it actually came from one: the Create
                         // tab's Icon Pack source. A fresh pick uses the picked pack; keeping the
                         // existing icon keeps its stored source. Upload/vector/text/app-icon = none.
-                        val confirmedSourcePack = when {
-                            draft.origin == IconOrigin.CREATE && source == Source.ICON_PACK ->
-                                if (customIconList.isNotEmpty()) iconPack else app.sourcePackName ?: ""
-                            else -> ""
-                        }
-                        view.performConfirmHaptic()
-                        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, confirmedSourcePack)
+                        val sourcePackToPersist = confirmedSourcePack(
+                            origin = draft.origin,
+                            source = source,
+                            pickedPack = iconPack.takeIf { customIconList.isNotEmpty() },
+                            existingPack = app.sourcePackName
+                        )
+                        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, sourcePackToPersist)
                     },
                     scrollBehavior = headerScrollBehavior,
                     labelExpand = labelExpand,
@@ -596,16 +615,31 @@ fun OptionsDialog(
                                 selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },
                                 appHasMaterialYouIcon = appHasMaterialYouIcon,
                                 applicationIconVariant = applicationIconVariant,
-                                onApplicationIconVariantChange = { applicationIconVariant = it },
+                                onApplicationIconVariantChange = {
+                                    applicationIconVariant = it
+                                    draft.origin = IconOrigin.CREATE
+                                },
                                 invertMonochrome = invertMonochrome,
-                                onInvertMonochromeChange = { invertMonochrome = it },
+                                onInvertMonochromeChange = {
+                                    invertMonochrome = it
+                                    draft.origin = IconOrigin.CREATE
+                                },
                                 materialYouSchemes = materialYouSchemes,
                                 selectedScheme = materialYouScheme,
-                                onSchemeChange = { materialYouScheme = it },
+                                onSchemeChange = {
+                                    materialYouScheme = it
+                                    draft.origin = IconOrigin.CREATE
+                                },
                                 customForeground = iconColor,
                                 customBackground = customBgColor,
-                                onCustomForegroundChange = { iconColor = it },
-                                onCustomBackgroundChange = { customBgColor = it }
+                                onCustomForegroundChange = {
+                                    iconColor = it
+                                    draft.origin = IconOrigin.CREATE
+                                },
+                                onCustomBackgroundChange = {
+                                    customBgColor = it
+                                    draft.origin = IconOrigin.CREATE
+                                }
                             )
                             // The static tabs don't scroll under the header — plain top padding.
                             1 -> Box(Modifier.fillMaxSize().padding(headerPadding)) {
