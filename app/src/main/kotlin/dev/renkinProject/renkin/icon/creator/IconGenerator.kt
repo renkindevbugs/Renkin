@@ -311,15 +311,16 @@ class IconGenerator(
             return generateMaterialYou(application)
         }
 
-        val bitmapIcon = getAppIconBitmap(application) ?: return null
         if (options.applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU) {
             // Apps without an official layer still get a clearly-labelled Renkin-generated
-            // approximation. Luminance is mapped between the chosen background/foreground so
-            // opaque icons keep their internal artwork instead of becoming a solid alpha square.
+            // approximation. Rasterising the complete launcher icon preserves its optical size;
+            // getAppIconBitmap extracts the adaptive foreground and would enlarge it here.
+            val bitmapIcon = application.icon.shrinkIfBiggerThan(500) ?: return null
             val generated = generateMaterialYouFromOriginal(bitmapIcon)
             return if (imageEdit == ImageEdit.NONE) generated
             else applyModifierInner(generated, imageEdit)
         }
+        val bitmapIcon = getAppIconBitmap(application) ?: return null
         if (options.applicationIconVariant == ApplicationIconVariant.MONOCHROME) {
             // This is deliberately based on the regular launcher artwork, not the optional
             // Material You layer: every app is supported and its original design stays intact.
@@ -408,8 +409,18 @@ class IconGenerator(
             )
         }
 
-        val generated = Bitmap.createBitmap(icon.width, icon.height, Bitmap.Config.ARGB_8888)
-        generated.setPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
+        val recolored = Bitmap.createBitmap(icon.width, icon.height, Bitmap.Config.ARGB_8888)
+        recolored.setPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
+
+        // Adaptive launchers display only the inner 72dp of a 108dp foreground. Inset the complete
+        // original icon by that ratio before export; previewScale reverses the inset in the flat
+        // comparison header. Applying both once keeps Current and New at the same optical size.
+        val generated = newArgbBitmap(icon.width, icon.height) { canvas ->
+            canvas.drawColor(options.bgColor)
+            val insetScale = 1f / adaptiveIconScale
+            canvas.scale(insetScale, insetScale, icon.width / 2f, icon.height / 2f)
+            canvas.drawBitmap(recolored, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
+        }
         return BitmapIconDrawable(
             ctx.resources,
             generated,

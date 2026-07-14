@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -56,6 +57,7 @@ fun SegmentCell(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     disabledHint: String? = null,
+    badge: @Composable BoxScope.() -> Unit = {},
     onClick: () -> Unit
 ) {
     val bg = if (selected) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.surface
@@ -76,6 +78,7 @@ fun SegmentCell(
         contentAlignment = Alignment.Center
     ) {
         Text(text = label, style = MaterialTheme.typography.labelLarge, color = fg)
+        badge()
     }
 }
 

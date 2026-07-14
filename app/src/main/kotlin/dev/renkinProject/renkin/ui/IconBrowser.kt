@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
@@ -400,8 +402,9 @@ fun CreateTab(
 }
 
 /**
- * Application Icon source options. Material You uses the app's optional `<monochrome>` layer;
- * Monochrome desaturates the regular icon and therefore works for every app.
+ * Application Icon source options. Material You prefers the app's optional `<monochrome>` layer
+ * and labels Renkin's generated fallback when it is missing. Monochrome desaturates the regular
+ * icon and therefore works for every app.
  */
 @Composable
 private fun ApplicationIconVariantSelector(
@@ -441,7 +444,20 @@ private fun ApplicationIconVariantSelector(
             SegmentCell(
                 label = stringResource(R.string.variantMaterialYou),
                 selected = variant == ApplicationIconVariant.MATERIAL_YOU,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                badge = {
+                    if (!appHasMaterialYouIcon) {
+                        Icon(
+                            imageVector = Icons.Filled.Warning,
+                            contentDescription = stringResource(R.string.materialYouGeneratedTitle),
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 4.dp, end = 5.dp)
+                                .size(14.dp)
+                        )
+                    }
+                }
             ) { onVariantChange(ApplicationIconVariant.MATERIAL_YOU) }
             SegmentCell(
                 label = stringResource(R.string.variantMonochrome),
@@ -449,18 +465,27 @@ private fun ApplicationIconVariantSelector(
                 modifier = Modifier.weight(1f)
             ) { onVariantChange(ApplicationIconVariant.MONOCHROME) }
         }
+        val generatedMaterialYou = variant == ApplicationIconVariant.MATERIAL_YOU && !appHasMaterialYouIcon
         val hint = when {
-            variant == ApplicationIconVariant.MATERIAL_YOU && !appHasMaterialYouIcon ->
-                stringResource(R.string.materialYouGeneratedHint)
+            generatedMaterialYou -> stringResource(R.string.materialYouGeneratedHint)
             variant == ApplicationIconVariant.MATERIAL_YOU -> stringResource(R.string.materialYouRecolorHint)
             variant == ApplicationIconVariant.MONOCHROME -> stringResource(R.string.monochromeHint)
             else -> stringResource(R.string.variantDefaultHint)
+        }
+        if (generatedMaterialYou) {
+            Text(
+                text = stringResource(R.string.materialYouGeneratedTitle),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.padding(top = 10.dp)
+            )
         }
         Text(
             text = hint,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 10.dp)
+            modifier = Modifier.padding(top = if (generatedMaterialYou) 2.dp else 10.dp)
         )
 
         if (variant == ApplicationIconVariant.MONOCHROME) {

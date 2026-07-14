@@ -170,9 +170,10 @@ class IconGeneratorTest {
 
     @Test
     fun materialYouVariantGeneratesUnofficialDuotoneWhenLayerIsMissing() {
-        val sourceBitmap = Bitmap.createBitmap(2, 1, Bitmap.Config.ARGB_8888).apply {
-            setPixel(0, 0, Color.BLACK)
-            setPixel(1, 0, Color.WHITE)
+        val sourceBitmap = Bitmap.createBitmap(90, 90, Bitmap.Config.ARGB_8888).apply {
+            for (y in 0 until height) for (x in 0 until width) {
+                setPixel(x, y, if (x < width / 2) Color.BLACK else Color.WHITE)
+            }
         }
         val sourceApp = app(icon = BitmapDrawable(context.resources, sourceBitmap))
 
@@ -187,7 +188,8 @@ class IconGeneratorTest {
 
         assertTrue(generated.isAdaptiveIcon())
         assertEquals(Color.WHITE, bitmap.getPixel(0, 0))
-        assertEquals(Color.BLACK, bitmap.getPixel(1, 0))
+        assertEquals(Color.WHITE, bitmap.getPixel(30, 45))
+        assertEquals(Color.BLACK, bitmap.getPixel(60, 45))
     }
 
     @Test

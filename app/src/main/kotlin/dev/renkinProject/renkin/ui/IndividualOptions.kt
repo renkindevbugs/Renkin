@@ -329,7 +329,8 @@ fun OptionsDialog(
         runCatching { app.icon.toSafeBitmapOrNull() }.getOrNull()
     }
 
-    // Whether the app ships a Material You <monochrome> layer, enabling that variant.
+    // Whether the app ships an official Material You <monochrome> layer. Apps without one use
+    // Renkin's labelled generated fallback instead.
     val appHasMaterialYouIcon = remember(app.icon) {
         val icon = app.icon
         icon.isAdaptiveIconDrawable() && (icon as AdaptiveIconDrawable).haveMonochrome()
