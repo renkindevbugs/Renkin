@@ -142,7 +142,7 @@ internal fun ModifierTab(
     imageEdit: ImageEdit,
     iconColor: Color,
     useVector: Boolean,
-    useMonochrome: Boolean,
+    useMaterialYou: Boolean,
     adjustments: AdjustmentState,
     // The current preview icon, shown in the position tool to visualise its margins.
     centerPreview: Bitmap?,
@@ -153,7 +153,7 @@ internal fun ModifierTab(
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
-    onMonochromeChange: (Boolean) -> Unit,
+    onMaterialYouChange: (Boolean) -> Unit,
     // Hands the current icon to an external editor; true = ImageToolbox, false = user-picked app.
     onEditExternally: (toolbox: Boolean) -> Unit
 ) {
@@ -254,7 +254,7 @@ internal fun ModifierTab(
                                         ) {
                                             Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                                                 VectorSwitch(useVector) { onVectorChange(it) }
-                                                MonochromeSwitch(useMonochrome) { onMonochromeChange(it) }
+                                                MaterialYouSwitch(useMaterialYou) { onMaterialYouChange(it) }
                                             }
                                         }
                                     }

@@ -7,6 +7,8 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.PixelFormat
+import android.graphics.drawable.AdaptiveIconDrawable
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import dev.renkinProject.renkin.data.ImageEdit
@@ -22,6 +24,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -44,7 +47,8 @@ class IconGeneratorTest {
     private fun options(
         source: Source = Source.APPLICATION_NAME,
         override: Boolean = true,
-        iconScale: Float = 1f
+        iconScale: Float = 1f,
+        applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT
     ) = GenerationOptions(
         primarySource = source,
         primaryImageEdit = ImageEdit.NONE,
@@ -53,10 +57,11 @@ class IconGeneratorTest {
         color = Color.BLACK,
         bgColor = Color.WHITE,
         vector = false,
-        monochrome = false,
+        materialYou = false,
         themed = false,
         override = override,
-        iconScale = iconScale
+        iconScale = iconScale,
+        applicationIconVariant = applicationIconVariant
     )
 
     private fun app(createdIcon: IconPackDrawable? = null) = PackageInfoStruct(
@@ -105,6 +110,57 @@ class IconGeneratorTest {
         val base = bitmapIcon()
         val result = generator(options(iconScale = 1f)).applyModifier(base, ImageEdit.NONE)
         assertSame(base, result)
+    }
+
+    @Test
+    fun monochromeVariantDesaturatesOriginalIconWhileDefaultKeepsItsColor() {
+        val originalColor = Color.argb(180, 210, 70, 25)
+        val sourceBitmap = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(originalColor)
+        }
+        val sourceApp = app().copy(icon = BitmapDrawable(context.resources, sourceBitmap))
+
+        val defaultPixel = generateOnce(
+            options(source = Source.APPLICATION_ICON), sourceApp
+        )!!.toBitmap().getPixel(2, 2)
+        val monochromePixel = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MONOCHROME
+            ),
+            sourceApp
+        )!!.toBitmap().getPixel(2, 2)
+
+        assertEquals(originalColor, defaultPixel)
+        assertEquals(Color.alpha(originalColor), Color.alpha(monochromePixel))
+        assertEquals(Color.red(monochromePixel), Color.green(monochromePixel))
+        assertEquals(Color.green(monochromePixel), Color.blue(monochromePixel))
+        assertTrue(monochromePixel != originalColor)
+    }
+
+    @Test
+    fun materialYouVariantUsesTheDedicatedMonochromeLayer() {
+        fun solidBitmap(color: Int) = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(color)
+        }
+        val adaptiveIcon = AdaptiveIconDrawable(
+            ColorDrawable(Color.TRANSPARENT),
+            BitmapDrawable(context.resources, solidBitmap(Color.RED)),
+            BitmapDrawable(context.resources, solidBitmap(Color.BLUE))
+        )
+        val sourceApp = app().copy(icon = adaptiveIcon)
+
+        val materialYouPixel = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU
+            ),
+            sourceApp
+        )!!.toBitmap().getPixel(216, 216)
+
+        // The configured black tint is painted through the blue Material You mask. If the normal
+        // red foreground were used instead, this pixel would remain red.
+        assertEquals(Color.BLACK, materialYouPixel)
     }
 
     @Test

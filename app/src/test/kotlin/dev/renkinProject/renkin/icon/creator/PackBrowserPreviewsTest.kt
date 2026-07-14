@@ -71,7 +71,7 @@ class PackBrowserPreviewsTest {
         color = color,
         bgColor = 0,
         vector = false,
-        monochrome = false,
+        materialYou = false,
         themed = false,
         override = true
     )

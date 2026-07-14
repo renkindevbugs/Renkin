@@ -55,8 +55,8 @@ fun VectorSwitch(useVector: Boolean, onChange: (newValue: Boolean) -> Unit) {
 }
 
 @Composable
-fun MonochromeSwitch(useMonochrome: Boolean, onChange: (newValue: Boolean) -> Unit) {
-    DefaultSwitchLayoutWithInfo(useMonochrome, R.string.monochrome, R.string.monochromeOptionDescription) { onChange(it) }
+fun MaterialYouSwitch(useMaterialYou: Boolean, onChange: (newValue: Boolean) -> Unit) {
+    DefaultSwitchLayoutWithInfo(useMaterialYou, R.string.materialYou, R.string.materialYouOptionDescription) { onChange(it) }
 }
 
 @Composable

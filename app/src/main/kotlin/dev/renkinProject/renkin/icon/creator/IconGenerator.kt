@@ -3,6 +3,8 @@ package dev.renkinProject.renkin.icon.creator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.ColorMatrix
+import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
@@ -301,14 +303,20 @@ class IconGenerator(
         application: PackageInfoStruct,
         imageEdit: ImageEdit): IconPackDrawable? {
 
-        // Monochrome variant: recolor the app's own <monochrome> layer directly — tint it with
+        // Material You variant: recolor the app's own <monochrome> layer directly — tint it with
         // the chosen foreground over the chosen background. No path-tracing (that produces line
         // art, issue #81), so this only runs for the plain (NONE) modifier.
-        if (options.monochrome && imageEdit == ImageEdit.NONE && hasMonochromeLayer(application)) {
-            return generateMonochrome(application)
+        if (options.applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU &&
+            imageEdit == ImageEdit.NONE && hasMonochromeLayer(application)) {
+            return generateMaterialYou(application)
         }
 
         val bitmapIcon = getAppIconBitmap(application) ?: return null
+        if (options.applicationIconVariant == ApplicationIconVariant.MONOCHROME) {
+            // This is deliberately based on the regular launcher artwork, not the optional
+            // Material You layer: every app is supported and its original design stays intact.
+            return generateImage(toMonochrome(bitmapIcon), null, imageEdit, colorizeMode)
+        }
         val parsedIcon = parseApplicationIcon(application)
 
         return generateImage(bitmapIcon, parsedIcon, imageEdit, colorizeMode)
@@ -320,7 +328,7 @@ class IconGenerator(
         return icon.isAdaptiveIconDrawable() && (icon as AdaptiveIconDrawable).haveMonochrome()
     }
 
-    private fun generateMonochrome(application: PackageInfoStruct): IconPackDrawable? {
+    private fun generateMaterialYou(application: PackageInfoStruct): IconPackDrawable? {
         val icon = application.icon
         if (!icon.isAdaptiveIconDrawable()) return null
         // Read the monochrome layer directly — it may be any Drawable type (often an InsetDrawable
@@ -340,7 +348,7 @@ class IconGenerator(
         // like every other icon — a plain bitmap would be shown as a bare square instead. previewScale
         // zooms only the flat in-app preview to match the launcher's safe-zone zoom (export stays 1:1).
         return BitmapIconDrawable(
-            ctx.resources, recolorMonochrome(mask), exportAsAdaptiveIcon = true, previewScale = adaptiveIconScale
+            ctx.resources, recolorMaterialYouLayer(mask), exportAsAdaptiveIcon = true, previewScale = adaptiveIconScale
         )
     }
 
@@ -349,13 +357,23 @@ class IconGenerator(
      * shape, replaces its colour) and composites it over [options.bgColor]. The background is
      * always applied — unlike [colorizeBitmap] — because the mask itself is transparent.
      */
-    private fun recolorMonochrome(mask: Bitmap): Bitmap {
+    private fun recolorMaterialYouLayer(mask: Bitmap): Bitmap {
         val tinted = mask.emptyLike()
         val paint = Paint().apply {
             colorFilter = PorterDuffColorFilter(options.color, PorterDuff.Mode.SRC_IN)
         }
         Canvas(tinted).drawBitmap(mask, 0F, 0F, paint)
         return tinted.changeBackgroundColor(options.bgColor)
+    }
+
+    /** Removes hue and saturation while retaining the original icon's luminance and alpha. */
+    private fun toMonochrome(icon: Bitmap): Bitmap {
+        val result = icon.emptyLike()
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
+        }
+        Canvas(result).drawBitmap(icon, 0f, 0f, paint)
+        return result
     }
 
     /**
@@ -505,7 +523,7 @@ class IconGenerator(
                 }
             }
 
-            if (parsedIcon.haveMonochrome() && options.monochrome) {
+            if (parsedIcon.haveMonochrome() && options.materialYou) {
                 vectorIcon = parsedIcon.monochrome!!
             }
         }
@@ -576,7 +594,7 @@ class IconGenerator(
                 newIcon = ForegroundIconDrawable(adaptiveIcon.foreground)
             }
 
-            if (PackageVersion.is33OrMore() && adaptiveIcon.monochrome != null && options.monochrome) {
+            if (PackageVersion.is33OrMore() && adaptiveIcon.monochrome != null && options.materialYou) {
                 if (adaptiveIcon.monochrome is BitmapDrawable || adaptiveIcon.monochrome is VectorDrawable) {
                     newIcon = ForegroundIconDrawable(adaptiveIcon.monochrome!!)
                 }
@@ -634,7 +652,7 @@ class IconGenerator(
                 }
             }
 
-            if (PackageVersion.is33OrMore() && options.monochrome) {
+            if (PackageVersion.is33OrMore() && options.materialYou) {
                 if (image.monochrome is VectorDrawable) {
                     return true
                 }
@@ -752,7 +770,7 @@ class IconGenerator(
      * Applies the per-icon Modifier-tab adjustments — position offset, then scale — on top of an
      * already-built icon. No-op with the defaults, so it's safe to run on every generation path.
      * Rasterises once (works for bitmaps and vectors alike) and carries over the source's
-     * adaptive-export flag and preview zoom (e.g. the monochrome variant), so the scale doesn't
+     * adaptive-export flag and preview zoom (e.g. the Material You variant), so the scale doesn't
      * reset the launcher safe-zone preview.
      */
     private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {

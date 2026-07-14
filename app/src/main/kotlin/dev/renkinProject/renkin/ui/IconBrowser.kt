@@ -63,6 +63,7 @@ import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import dev.renkinProject.renkin.icon.creator.TextCase
 import kotlinx.coroutines.delay
@@ -170,15 +171,14 @@ fun CreateTab(
     // Prefix of the picked calendar icon (e.g. "bee_calendar_"), so the grid frames the whole
     // day-rotation set alongside the picked icon. null = no calendar icon selected.
     selectedCalendarPrefix: String? = null,
-    // Whether this app ships a Material You <monochrome> layer, so the Application Icon source
-    // can offer the recolourable Monochrome variant (and disable it otherwise).
-    appHasMonochrome: Boolean = false,
-    // Switches the Application Icon variant between the full-colour icon (false) and the
-    // recoloured monochrome layer (true). Mirrors options.monochrome.
-    onMonochromeChange: (Boolean) -> Unit = {},
-    // Wallpaper-derived colour schemes (foreground, background) offered for the monochrome variant.
-    monochromeSchemes: List<Pair<Color, Color>> = emptyList(),
-    // Index of the chosen scheme; == monochromeSchemes.size means the Custom (manual colour) option.
+    // Whether this app ships a Material You <monochrome> layer, so that variant can be disabled
+    // without affecting the regular Monochrome conversion.
+    appHasMaterialYouIcon: Boolean = false,
+    applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT,
+    onApplicationIconVariantChange: (ApplicationIconVariant) -> Unit = {},
+    // Wallpaper-derived colour schemes (foreground, background) offered for Material You.
+    materialYouSchemes: List<Pair<Color, Color>> = emptyList(),
+    // Index of the chosen scheme; == materialYouSchemes.size means the Custom option.
     selectedScheme: Int = 0,
     onSchemeChange: (Int) -> Unit = {},
     // Custom-scheme foreground/background, edited inline when the Custom swatch is selected.
@@ -330,11 +330,11 @@ fun CreateTab(
                     }
                 }
             }
-            Source.APPLICATION_ICON -> Box(Modifier.fillMaxSize().padding(contentPadding)) { ApplicationIconVariant(
-                monochrome = options.monochrome,
-                appHasMonochrome = appHasMonochrome,
-                onMonochromeChange = onMonochromeChange,
-                schemes = monochromeSchemes,
+            Source.APPLICATION_ICON -> Box(Modifier.fillMaxSize().padding(contentPadding)) { ApplicationIconVariantSelector(
+                variant = applicationIconVariant,
+                appHasMaterialYouIcon = appHasMaterialYouIcon,
+                onVariantChange = onApplicationIconVariantChange,
+                schemes = materialYouSchemes,
                 selectedScheme = selectedScheme,
                 onSchemeChange = onSchemeChange,
                 customForeground = customForeground,
@@ -395,15 +395,14 @@ fun CreateTab(
 }
 
 /**
- * Application Icon source options: pick between the app's full-colour icon and its recoloured
- * Material You monochrome layer. The Monochrome choice is disabled when the app ships no
- * `<monochrome>` layer; its colours are edited in the Modifier tab.
+ * Application Icon source options. Material You uses the app's optional `<monochrome>` layer;
+ * Monochrome desaturates the regular icon and therefore works for every app.
  */
 @Composable
-private fun ApplicationIconVariant(
-    monochrome: Boolean,
-    appHasMonochrome: Boolean,
-    onMonochromeChange: (Boolean) -> Unit,
+private fun ApplicationIconVariantSelector(
+    variant: ApplicationIconVariant,
+    appHasMaterialYouIcon: Boolean,
+    onVariantChange: (ApplicationIconVariant) -> Unit,
     schemes: List<Pair<Color, Color>>,
     selectedScheme: Int,
     onSchemeChange: (Int) -> Unit,
@@ -429,20 +428,27 @@ private fun ApplicationIconVariant(
         SegmentedRow {
             SegmentCell(
                 label = stringResource(R.string.variantDefault),
-                selected = !monochrome,
+                selected = variant == ApplicationIconVariant.DEFAULT,
                 modifier = Modifier.weight(1f)
-            ) { onMonochromeChange(false) }
+            ) { onVariantChange(ApplicationIconVariant.DEFAULT) }
+            SegmentCell(
+                label = stringResource(R.string.variantMaterialYou),
+                selected = variant == ApplicationIconVariant.MATERIAL_YOU,
+                enabled = appHasMaterialYouIcon,
+                disabledHint = stringResource(R.string.materialYouUnavailable),
+                modifier = Modifier.weight(1f)
+            ) { onVariantChange(ApplicationIconVariant.MATERIAL_YOU) }
             SegmentCell(
                 label = stringResource(R.string.variantMonochrome),
-                selected = monochrome,
-                enabled = appHasMonochrome,
-                disabledHint = stringResource(R.string.monochromeUnavailable),
+                selected = variant == ApplicationIconVariant.MONOCHROME,
                 modifier = Modifier.weight(1f)
-            ) { onMonochromeChange(true) }
+            ) { onVariantChange(ApplicationIconVariant.MONOCHROME) }
         }
         val hint = when {
-            !appHasMonochrome -> stringResource(R.string.monochromeUnavailable)
-            monochrome -> stringResource(R.string.monochromeRecolorHint)
+            variant == ApplicationIconVariant.MATERIAL_YOU && !appHasMaterialYouIcon ->
+                stringResource(R.string.materialYouUnavailable)
+            variant == ApplicationIconVariant.MATERIAL_YOU -> stringResource(R.string.materialYouRecolorHint)
+            variant == ApplicationIconVariant.MONOCHROME -> stringResource(R.string.monochromeHint)
             else -> stringResource(R.string.variantDefaultHint)
         }
         Text(
@@ -452,9 +458,9 @@ private fun ApplicationIconVariant(
             modifier = Modifier.padding(top = 10.dp)
         )
 
-        if (monochrome && appHasMonochrome) {
+        if (variant == ApplicationIconVariant.MATERIAL_YOU && appHasMaterialYouIcon) {
             Text(
-                text = stringResource(R.string.monochromeColors),
+                text = stringResource(R.string.materialYouColors),
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(top = 20.dp, bottom = 10.dp)
@@ -484,7 +490,7 @@ private fun ApplicationIconVariant(
                 ColorRow(stringResource(R.string.backgroundColor), customBackground) { bgPickerOpen = true }
             } else {
                 Text(
-                    text = stringResource(R.string.monochromeColorsHint),
+                    text = stringResource(R.string.materialYouColorsHint),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 10.dp)
@@ -577,4 +583,3 @@ private fun SchemeSwatch(
         }
     }
 }
-
