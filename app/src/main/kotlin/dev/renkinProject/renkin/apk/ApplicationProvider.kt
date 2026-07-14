@@ -531,6 +531,9 @@ class ApplicationProvider(private val context: Context) {
     suspend fun resolvePickedSource(app: PackageInfoStruct, sourcePackName: String?): Pair<String?, Boolean> =
         lockManager.resolvePickedSource(app.key, sourcePackName)
 
+    /** Removes a held-back imported icon after an explicit per-app reset. */
+    fun discardLockedIcon(key: String) = lockManager.discard(key)
+
     /** One row of the "pack usage" stats: how many stored icons really came from [packageName]. */
     data class PackUsage(val packageName: String, val label: String, val count: Int, val installed: Boolean)
 
