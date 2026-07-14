@@ -57,7 +57,6 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
                     suggestion.suggestionId,
                     suggestion.packageName,
                     suggestion.packPackages,
-                    suggestion.profileId,
                     profileName
                 )
             }

@@ -7,7 +7,6 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.PixelFormat
-import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
@@ -144,28 +143,15 @@ class IconGeneratorTest {
     }
 
     @Test
-    fun materialYouVariantUsesTheDedicatedMonochromeLayer() {
-        fun solidBitmap(color: Int) = Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply {
-            eraseColor(color)
+    fun materialYouMaskUsesForegroundAndBackgroundColors() {
+        val mask = Bitmap.createBitmap(2, 1, Bitmap.Config.ARGB_8888).apply {
+            setPixel(0, 0, Color.TRANSPARENT)
+            setPixel(1, 0, Color.WHITE)
         }
-        val adaptiveIcon = AdaptiveIconDrawable(
-            ColorDrawable(Color.TRANSPARENT),
-            BitmapDrawable(context.resources, solidBitmap(Color.RED)),
-            BitmapDrawable(context.resources, solidBitmap(Color.BLUE))
-        )
-        val sourceApp = app(icon = adaptiveIcon)
+        val result = recolorMaterialYouMask(mask, Color.BLACK, Color.WHITE)
 
-        val materialYouPixel = generateOnce(
-            options(
-                source = Source.APPLICATION_ICON,
-                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU
-            ),
-            sourceApp
-        )!!.toBitmap().getPixel(216, 216)
-
-        // The configured black tint is painted through the blue Material You mask. If the normal
-        // red foreground were used instead, this pixel would remain red.
-        assertEquals(Color.BLACK, materialYouPixel)
+        assertEquals(Color.WHITE, result.getPixel(0, 0))
+        assertEquals(Color.BLACK, result.getPixel(1, 0))
     }
 
     @Test

@@ -23,31 +23,34 @@ class WatchRepository(private val db: WatchDatabase) {
 
     suspend fun getActiveRules(): List<RuleWithDetails> = dao.getActiveRules()
 
-    /** Creates a new active rule owned by [profileId]. [packPackages] is ignored when [watchAllPacks]. */
-    suspend fun createRule(
+    /**
+     * Creates or updates an active rule and replaces its baseline in one transaction. Icon
+     * resolution happens before this call, so the checker can never observe a half-saved rule.
+     * [packPackages] is ignored when [watchAllPacks].
+     */
+    suspend fun saveRule(
+        ruleId: Long?,
         apps: List<AppComponent>,
         watchAllPacks: Boolean,
         packPackages: List<String>,
-        profileId: Long
+        profileId: Long,
+        baseline: List<BaselineInput> = emptyList()
     ): Long = db.withTransaction {
-        val ruleId = dao.insertRule(WatchRule(watchAllPacks = watchAllPacks, profileId = profileId))
-        writeRuleChildren(ruleId, apps, watchAllPacks, packPackages)
-        ruleId
-    }
-
-    /** Replaces the apps/packs of an existing rule (used when editing). */
-    suspend fun updateRule(
-        ruleId: Long,
-        apps: List<AppComponent>,
-        watchAllPacks: Boolean,
-        packPackages: List<String>
-    ) = db.withTransaction {
-        val rule = dao.getRule(ruleId) ?: return@withTransaction
-        dao.updateRule(rule.copy(watchAllPacks = watchAllPacks))
-        dao.deleteAppsForRule(ruleId)
-        dao.deletePacksForRule(ruleId)
-        writeRuleChildren(ruleId, apps, watchAllPacks, packPackages)
+        val savedRuleId = if (ruleId == null) {
+            dao.insertRule(WatchRule(watchAllPacks = watchAllPacks, profileId = profileId))
+        } else {
+            val rule = dao.getRule(ruleId) ?: return@withTransaction -1L
+            if (rule.completed) return@withTransaction -1L
+            dao.updateRule(rule.copy(watchAllPacks = watchAllPacks))
+            dao.deleteAppsForRule(ruleId)
+            dao.deletePacksForRule(ruleId)
+            dao.deleteStatesForRule(ruleId)
+            ruleId
+        }
+        writeRuleChildren(savedRuleId, apps, watchAllPacks, packPackages)
+        dao.upsertStates(baseline.map { it.toWatchState(savedRuleId) })
         dao.pruneOrphanStates()
+        savedRuleId
     }
 
     private suspend fun writeRuleChildren(
@@ -62,44 +65,41 @@ class WatchRepository(private val db: WatchDatabase) {
         }
     }
 
-    /** Deletes a rule and everything hanging off it (apps, packs, suggestions). */
-    suspend fun deleteRule(ruleId: Long) = db.withTransaction {
-        dao.deleteCandidatesForRule(ruleId)
-        dao.deleteSuggestionsForRule(ruleId)
-        dao.deleteAppsForRule(ruleId)
-        dao.deletePacksForRule(ruleId)
-        dao.deleteRule(ruleId)
-        dao.pruneOrphanStates()
-    }
+    /** Deletes a rule and returns the notification-backed suggestion ids removed with it. */
+    suspend fun deleteRule(ruleId: Long): List<Long> = deleteRules(listOf(ruleId))
 
     /**
      * Deletes every rule owned by [profileId] — called when the profile itself is deleted, so
      * the worker stops firing notifications for a profile that no longer exists.
      */
-    suspend fun deleteRulesForProfile(profileId: Long) = deleteRules(dao.ruleIdsForProfile(profileId))
+    suspend fun deleteRulesForProfile(profileId: Long): List<Long> = deleteRules(dao.ruleIdsForProfile(profileId))
 
-    /** Deletes several rules (and everything hanging off them) in one transaction. */
-    suspend fun deleteRules(ruleIds: List<Long>) = db.withTransaction {
-        ruleIds.forEach { ruleId ->
-            dao.deleteCandidatesForRule(ruleId)
-            dao.deleteSuggestionsForRule(ruleId)
-            dao.deleteAppsForRule(ruleId)
-            dao.deletePacksForRule(ruleId)
-            dao.deleteRule(ruleId)
+    /** Deletes several rules atomically and returns their removed suggestion ids. */
+    suspend fun deleteRules(ruleIds: List<Long>): List<Long> {
+        if (ruleIds.isEmpty()) return emptyList()
+        return db.withTransaction {
+            val suggestionIds = dao.suggestionIdsForRules(ruleIds)
+            ruleIds.forEach { ruleId ->
+                dao.deleteCandidatesForRule(ruleId)
+                dao.deleteSuggestionsForRule(ruleId)
+                dao.deleteAppsForRule(ruleId)
+                dao.deletePacksForRule(ruleId)
+                dao.deleteRule(ruleId)
+            }
+            dao.pruneOrphanStates()
+            suggestionIds
         }
-        dao.pruneOrphanStates()
     }
 
     // --- Backup ---------------------------------------------------------------
 
-    /** Every profile's rules (active and completed) with their children — backup export. */
+    /** Every profile's rules with their children; backup export filters transient completions. */
     suspend fun getAllRules(): List<RuleWithDetails> = dao.getAllRulesWithDetails()
 
     /**
      * Backup import: wipes the whole watch store and inserts [rules] under fresh ids.
-     * Suggestions and baselines are deliberately not restored — suggestions are transient
-     * (their notification is gone anyway) and baselines are facts about the packs installed
-     * on THIS device, so the next check rebuilds them.
+     * Suggestions and baselines are deliberately not restored. Completed rules are skipped too:
+     * without their suggestion candidates they would only create dead Done cards and badges.
      */
     suspend fun replaceAllRules(rules: List<WatchRuleImport>) = db.withTransaction {
         dao.deleteAllCandidates()
@@ -111,13 +111,13 @@ class WatchRepository(private val db: WatchDatabase) {
         insertImportedRules(rules)
     }
 
-    /** Adds [rules] without touching existing ones — a shared-profile import is additive. */
+    /** Adds active [rules] without touching existing ones — a shared-profile import is additive. */
     suspend fun insertRules(rules: List<WatchRuleImport>) = db.withTransaction {
         insertImportedRules(rules)
     }
 
     private suspend fun insertImportedRules(rules: List<WatchRuleImport>) {
-        for (r in rules) {
+        for (r in rules.filterNot { it.completed }) {
             val ruleId = dao.insertRule(
                 WatchRule(
                     watchAllPacks = r.watchAllPacks,
@@ -127,17 +127,41 @@ class WatchRepository(private val db: WatchDatabase) {
                     profileId = r.profileId
                 )
             )
-            dao.insertApps(r.apps.map { WatchRuleApp(ruleId, it.packageName, it.activityName) })
-            dao.insertPacks(r.packs.map { WatchRulePack(ruleId, it) })
+            writeRuleChildren(ruleId, r.apps, r.watchAllPacks, r.packs)
         }
     }
 
     // --- Detection (phase 3) -------------------------------------------------
 
-    suspend fun getState(packageName: String, activityName: String, iconPackPackage: String): WatchState? =
-        dao.getState(packageName, activityName, iconPackPackage)
+    suspend fun getState(ruleId: Long, packageName: String, activityName: String, iconPackPackage: String): WatchState? =
+        dao.getState(ruleId, packageName, activityName, iconPackPackage)
 
     suspend fun upsertState(state: WatchState) = dao.upsertState(state)
+
+    /** Moves a watched app to its sole replacement launcher activity and installs its baseline. */
+    suspend fun migrateRuleApp(
+        ruleId: Long,
+        oldApp: AppComponent,
+        newApp: AppComponent,
+        baseline: List<BaselineInput>
+    ): Boolean = db.withTransaction {
+        val rule = dao.getRuleWithDetails(ruleId) ?: return@withTransaction false
+        if (rule.rule.completed || rule.apps.none {
+                it.packageName == oldApp.packageName && it.activityName == oldApp.activityName
+            }) return@withTransaction false
+
+        val replacementAlreadyWatched = rule.apps.any {
+            it.packageName == newApp.packageName && it.activityName == newApp.activityName
+        }
+        dao.deleteApp(ruleId, oldApp.packageName, oldApp.activityName)
+        dao.deleteStatesForRuleApp(ruleId, oldApp.packageName, oldApp.activityName)
+        if (!replacementAlreadyWatched) {
+            dao.insertApps(listOf(WatchRuleApp(ruleId, newApp.packageName, newApp.activityName)))
+            dao.upsertStates(baseline.map { it.toWatchState(ruleId) })
+        }
+        dao.pruneOrphanStates()
+        true
+    }
 
     /** Debug only: stale all baselines so the next check fires for any app with an icon. */
     suspend fun debugStaleAllStates() = dao.debugStaleAllStates()
@@ -145,6 +169,8 @@ class WatchRepository(private val db: WatchDatabase) {
     suspend fun getSuggestion(id: Long): IconSuggestion? = dao.getSuggestion(id)
 
     suspend fun getCandidates(suggestionId: Long): List<IconSuggestionCandidate> = dao.getCandidates(suggestionId)
+
+    suspend fun suggestionCount(): Int = dao.suggestionCount()
 
     suspend fun deleteSuggestion(id: Long) = db.withTransaction {
         dao.deleteCandidates(id)
@@ -162,6 +188,9 @@ class WatchRepository(private val db: WatchDatabase) {
         candidates: List<CandidateInput>
     ): Long = db.withTransaction {
         val original = dao.getRuleWithDetails(originalRuleId) ?: return@withTransaction -1L
+        if (original.rule.completed || original.apps.none {
+                it.packageName == app.packageName && it.activityName == app.activityName
+            }) return@withTransaction -1L
         val matchedPacks = candidates.map { it.iconPackPackage }.distinct()
         val now = System.currentTimeMillis()
 
@@ -185,6 +214,7 @@ class WatchRepository(private val db: WatchDatabase) {
         dao.insertCandidates(candidates.map {
             IconSuggestionCandidate(suggestionId, it.iconPackPackage, it.drawableName, it.iconHash)
         })
+        dao.pruneOrphanStates()
         suggestionId
     }
 }
@@ -194,6 +224,28 @@ data class CandidateInput(
     val iconPackPackage: String,
     val drawableName: String,
     val iconHash: String
+)
+
+/** A resolved baseline before its new or existing owning rule id is known. */
+data class BaselineInput(
+    val packageName: String,
+    val activityName: String,
+    val iconPackPackage: String,
+    val lastPackVersionCode: Long,
+    val lastIconName: String?,
+    val lastIconHash: String?,
+    val lastCheckedAt: Long
+)
+
+private fun BaselineInput.toWatchState(ruleId: Long) = WatchState(
+    ruleId = ruleId,
+    packageName = packageName,
+    activityName = activityName,
+    iconPackPackage = iconPackPackage,
+    lastPackVersionCode = lastPackVersionCode,
+    lastIconName = lastIconName,
+    lastIconHash = lastIconHash,
+    lastCheckedAt = lastCheckedAt
 )
 
 /** One rule (plus children) to insert during a backup import — rule ids are regenerated. */

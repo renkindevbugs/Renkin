@@ -2,9 +2,11 @@ package dev.renkinProject.renkin.service
 
 import android.content.Context
 import dev.renkinProject.renkin.data.InstalledApplication
+import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.data.watch.AppComponent
+import dev.renkinProject.renkin.data.watch.BaselineInput
 import dev.renkinProject.renkin.data.watch.CandidateInput
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchState
@@ -14,6 +16,8 @@ import dev.renkinProject.renkin.extension.contentHash
 import dev.renkinProject.renkin.packages.ApplicationManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Scans active watch rules and records a suggestion when a watched pack has published a
@@ -22,7 +26,7 @@ import kotlinx.coroutines.withContext
  * Work is gated on each pack's versionCode: if the pack hasn't been updated since the
  * last check for an (app, pack) pair, it's skipped entirely — so a periodic run does
  * almost nothing unless a pack actually changed. Packs installed when a rule is created
- * are baselined by [baselineRule] (no notification for icons that already existed); an
+ * are baselined by [saveRule] (no notification for icons that already existed); an
  * (app, pack) pair the checker has never seen — i.e. a pack installed AFTER the rule —
  * fires immediately when the pack carries an icon for the watched app, and a changed
  * icon content hash fires for known pairs.
@@ -33,7 +37,6 @@ import kotlinx.coroutines.withContext
 class WatchChecker(context: Context) {
     private val appMan = ApplicationManager(context)
     private val repo = WatchRepository(context)
-    private val packageManager = context.packageManager
 
     data class FiredSuggestion(
         val suggestionId: Long,
@@ -45,8 +48,13 @@ class WatchChecker(context: Context) {
     )
 
     suspend fun runCheck(): List<FiredSuggestion> = withContext(Dispatchers.Default) {
+        checkMutex.withLock { runCheckLocked() }
+    }
+
+    private suspend fun runCheckLocked(): List<FiredSuggestion> {
         val fired = mutableListOf<FiredSuggestion>()
         val installedPacks = watchablePacks()
+        val installedAppsByPackage = appMan.getAllInstalledApplications().groupBy { it.packageName }
 
         for (rule in repo.getActiveRules()) {
             val packPackages = if (rule.rule.watchAllPacks) {
@@ -56,16 +64,36 @@ class WatchChecker(context: Context) {
             }
 
             for (ruleApp in rule.apps) {
-                // Imported rules can watch apps this device doesn't have — leave those
-                // dormant (no phantom suggestions for apps the user can't theme); the rule
-                // comes alive by itself once the app is installed.
-                if (!isAppInstalled(ruleApp.packageName)) continue
-                val installedApp = InstalledApplication(ruleApp.packageName, ruleApp.activityName, 0)
+                val packageActivities = installedAppsByPackage[ruleApp.packageName].orEmpty()
+                val storedComponent = AppComponent(ruleApp.packageName, ruleApp.activityName)
+                val resolvedApp = resolveWatchApp(storedComponent, packageActivities) ?: continue
+                val installedApp = resolvedApp.application
+                val activeComponent = if (resolvedApp.componentChanged) {
+                    // A package update may replace its launcher activity. Migrate only when the
+                    // replacement is unambiguous; multiple activities require the user's choice.
+                    val replacementApp = AppComponent(installedApp.packageName, installedApp.activityName)
+                    val baseline = buildBaseline(
+                        listOf(replacementApp), rule.rule.watchAllPacks, packPackages, installedPacks
+                    )
+                    val migrated = repo.migrateRuleApp(
+                        rule.rule.id,
+                        storedComponent,
+                        replacementApp,
+                        baseline
+                    )
+                    if (!migrated) continue
+                    replacementApp
+                } else storedComponent
                 val candidates = mutableListOf<CandidateInput>()
 
                 for (packPackage in packPackages) {
                     val pack = installedPacks[packPackage] ?: continue
-                    val previous = repo.getState(ruleApp.packageName, ruleApp.activityName, packPackage)
+                    val previous = repo.getState(
+                        rule.rule.id,
+                        activeComponent.packageName,
+                        activeComponent.activityName,
+                        packPackage
+                    )
 
                     // No update since last look → nothing to do (keeps periodic runs cheap)
                     if (previous != null && previous.lastPackVersionCode == pack.versionCode) continue
@@ -74,14 +102,15 @@ class WatchChecker(context: Context) {
 
                     // New for the user either way: a pack installed after the rule that already
                     // carries an icon for the app (previous == null — packs present at rule
-                    // creation were baselined by baselineRule), or a known pack whose icon
+                    // creation were baselined by saveRule), or a known pack whose icon
                     // content changed with an update.
                     val isNew = hash != null && (previous == null || hash != previous.lastIconHash)
 
                     repo.upsertState(
                         WatchState(
-                            packageName = ruleApp.packageName,
-                            activityName = ruleApp.activityName,
+                            ruleId = rule.rule.id,
+                            packageName = activeComponent.packageName,
+                            activityName = activeComponent.activityName,
                             iconPackPackage = packPackage,
                             lastPackVersionCode = pack.versionCode,
                             lastIconName = drawableName,
@@ -98,15 +127,15 @@ class WatchChecker(context: Context) {
                 if (candidates.isNotEmpty()) {
                     val suggestionId = repo.completeWithSuggestion(
                         rule.rule.id,
-                        AppComponent(ruleApp.packageName, ruleApp.activityName),
+                        activeComponent,
                         candidates
                     )
                     if (suggestionId > 0) {
                         fired.add(
                             FiredSuggestion(
                                 suggestionId,
-                                ruleApp.packageName,
-                                ruleApp.activityName,
+                                activeComponent.packageName,
+                                activeComponent.activityName,
                                 candidates.map { it.iconPackPackage },
                                 rule.rule.profileId
                             )
@@ -116,41 +145,69 @@ class WatchChecker(context: Context) {
             }
         }
 
-        fired
+        return fired
     }
 
     /**
-     * Records the current icon state for a (newly created or edited) rule's pairs without
-     * notifying, so a later pack update is measured against this baseline instead of being
-     * swallowed as a "first sighting".
+     * Resolves a rule's current icons and commits the rule plus its baseline atomically. The same
+     * mutex guards checks, so no worker can see the rule before its baseline exists.
      */
-    suspend fun baselineRule(ruleId: Long) = withContext(Dispatchers.Default) {
-        val rule = repo.getRule(ruleId) ?: return@withContext
-        val installedPacks = watchablePacks()
-        val packPackages = if (rule.rule.watchAllPacks) {
+    suspend fun saveRule(
+        existingRuleId: Long?,
+        apps: List<AppComponent>,
+        watchAllPacks: Boolean,
+        packPackages: List<String>,
+        profileId: Long
+    ): Long = withContext(Dispatchers.Default) {
+        checkMutex.withLock {
+            val baseline = buildBaseline(apps, watchAllPacks, packPackages)
+            repo.saveRule(existingRuleId, apps, watchAllPacks, packPackages, profileId, baseline)
+        }
+    }
+
+    private fun buildBaseline(
+        apps: List<AppComponent>,
+        watchAllPacks: Boolean,
+        selectedPacks: List<String>,
+        installedPacks: Map<String, IconPack> = watchablePacks()
+    ): List<BaselineInput> {
+        val packPackages = if (watchAllPacks) {
             installedPacks.keys.toList()
         } else {
-            rule.packs.map { it.iconPackPackage }
+            selectedPacks
         }
+        val checkedAt = System.currentTimeMillis()
+        val baseline = mutableListOf<BaselineInput>()
+        val installedApps = apps.map { InstalledApplication(it.packageName, it.activityName, 0) }
 
-        for (ruleApp in rule.apps) {
-            val installedApp = InstalledApplication(ruleApp.packageName, ruleApp.activityName, 0)
-            for (packPackage in packPackages) {
-                val pack = installedPacks[packPackage] ?: continue
-                val (drawableName, hash) = resolveIcon(packPackage, installedApp)
-                repo.upsertState(
-                    WatchState(
-                        packageName = ruleApp.packageName,
-                        activityName = ruleApp.activityName,
+        // Parsing appfilter.xml dominates save time. Resolve every selected app in one pass per
+        // pack instead of reopening and reparsing the same pack once for every app.
+        for (packPackage in packPackages) {
+            val pack = installedPacks[packPackage] ?: continue
+            val elements = appMan.getAppFilterRawElements(packPackage, installedApps)
+            val resources = appMan.getDrawableFromAppFilterElements(packPackage, installedApps, elements)
+            val drawableNames = mutableMapOf<String, String>()
+            elements.filterIsInstance<RawItem>().forEach { item ->
+                drawableNames.putIfAbsent(item.component, item.drawableLink)
+            }
+
+            for (installedApp in installedApps) {
+                val drawableName = drawableNames[installedApp.toComponentInfo()]
+                val hash = resources[installedApp]?.drawable?.toSafeBitmapOrNull()?.contentHash()
+                baseline.add(
+                    BaselineInput(
+                        packageName = installedApp.packageName,
+                        activityName = installedApp.activityName,
                         iconPackPackage = packPackage,
                         lastPackVersionCode = pack.versionCode,
                         lastIconName = drawableName,
                         lastIconHash = hash,
-                        lastCheckedAt = System.currentTimeMillis()
+                        lastCheckedAt = checkedAt
                     )
                 )
             }
         }
+        return baseline
     }
 
     /**
@@ -163,9 +220,6 @@ class WatchChecker(context: Context) {
         .filter { !IconPackBuilder.isOwnPack(it.packageName) }
         .associateBy { it.packageName }
 
-    private fun isAppInstalled(packageName: String): Boolean =
-        runCatching { packageManager.getPackageInfo(packageName, 0) }.isSuccess
-
     /** Resolves the (drawable name, content hash) a pack currently provides for an app, or nulls. */
     private fun resolveIcon(packPackage: String, installedApp: InstalledApplication): Pair<String?, String?> {
         val elements = appMan.getAppFilterRawElements(packPackage, listOf(installedApp))
@@ -175,5 +229,11 @@ class WatchChecker(context: Context) {
         val resource = appMan.getDrawableFromAppFilterElements(packPackage, listOf(installedApp), elements)[installedApp]
         val hash = resource?.drawable?.toSafeBitmapOrNull()?.contentHash()
         return drawableName to hash
+    }
+
+    companion object {
+        // Every entry point (periodic worker, one-shot worker, manual refresh and rule save)
+        // lives in this process, so one shared lock prevents duplicate completion transactions.
+        private val checkMutex = Mutex()
     }
 }

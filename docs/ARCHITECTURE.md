@@ -89,7 +89,7 @@ Switcher = the top-bar title dropdown.
   of the last built/saved pack per profile. Loaded into the app list at startup.
   **Never lower the version once any build was installed** — schema-identical bump +
   migration instead (see the v5/v6/v7 history in `DbApplication.kt`).
-- **Room — `WatchDatabase`** (v2) — icon-watch rules, suggestions and baselines, owned per
+- **Room — `WatchDatabase`** (v3) — icon-watch rules, suggestions and per-rule baselines, owned per
   profile via `WatchRule.profileId`.
 
 ## UI conventions

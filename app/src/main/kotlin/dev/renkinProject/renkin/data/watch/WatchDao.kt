@@ -90,22 +90,37 @@ interface WatchDao {
     @Query("DELETE FROM icon_suggestion WHERE ruleId = :ruleId")
     suspend fun deleteSuggestionsForRule(ruleId: Long)
 
+    @Query("SELECT id FROM icon_suggestion WHERE ruleId IN (:ruleIds)")
+    suspend fun suggestionIdsForRules(ruleIds: List<Long>): List<Long>
+
+    @Query("SELECT COUNT(*) FROM icon_suggestion")
+    suspend fun suggestionCount(): Int
+
     // --- Watch state ---------------------------------------------------------
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertState(state: WatchState)
 
-    @Query("SELECT * FROM watch_state WHERE packageName = :packageName AND activityName = :activityName AND iconPackPackage = :iconPackPackage")
-    suspend fun getState(packageName: String, activityName: String, iconPackPackage: String): WatchState?
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertStates(states: List<WatchState>)
 
-    @Query("DELETE FROM watch_state WHERE packageName = :packageName AND activityName = :activityName")
-    suspend fun deleteStateForApp(packageName: String, activityName: String)
+    @Query("DELETE FROM watch_state WHERE ruleId = :ruleId")
+    suspend fun deleteStatesForRule(ruleId: Long)
 
-    /** Drops baseline rows for apps no longer referenced by any rule. */
+    @Query("DELETE FROM watch_state WHERE ruleId = :ruleId AND packageName = :packageName AND activityName = :activityName")
+    suspend fun deleteStatesForRuleApp(ruleId: Long, packageName: String, activityName: String)
+
+    @Query("SELECT * FROM watch_state WHERE ruleId = :ruleId AND packageName = :packageName AND activityName = :activityName AND iconPackPackage = :iconPackPackage")
+    suspend fun getState(ruleId: Long, packageName: String, activityName: String, iconPackPackage: String): WatchState?
+
+    /** Drops baselines no longer referenced by their owning active rule. */
     @Query(
         "DELETE FROM watch_state WHERE NOT EXISTS (" +
-            "SELECT 1 FROM watch_rule_app ra " +
-            "WHERE ra.packageName = watch_state.packageName AND ra.activityName = watch_state.activityName)"
+            "SELECT 1 FROM watch_rule_app ra JOIN watch_rule r ON r.id = ra.ruleId " +
+            "WHERE ra.ruleId = watch_state.ruleId AND r.completed = 0 " +
+            "AND ra.packageName = watch_state.packageName AND ra.activityName = watch_state.activityName " +
+            "AND (r.watchAllPacks = 1 OR EXISTS (SELECT 1 FROM watch_rule_pack rp " +
+            "WHERE rp.ruleId = r.id AND rp.iconPackPackage = watch_state.iconPackPackage)))"
     )
     suspend fun pruneOrphanStates()
 

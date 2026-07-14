@@ -78,6 +78,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     var selectedPack by remember(suggestionId) { mutableStateOf<String?>(null) }
     var newIcon by remember(suggestionId) { mutableStateOf<IconPackDrawable?>(null) }
     var generating by remember(suggestionId) { mutableStateOf(false) }
+    var candidateChanged by remember(suggestionId) { mutableStateOf(false) }
     var loaded by remember(suggestionId) { mutableStateOf(false) }
 
     LaunchedEffect(suggestionId) {
@@ -105,15 +106,19 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         // App or pack uninstalled since the suggestion fired → nothing to generate
         if (s == null || pack == null || targetApp == null || candidate == null) {
             newIcon = null
+            candidateChanged = false
             generating = false
             return@LaunchedEffect
         }
         generating = true
         newIcon = null
-        newIcon = withContext(Dispatchers.Default) {
+        candidateChanged = false
+        val validated = withContext(Dispatchers.Default) {
             val options = GenerationOptions.fromPreferences(prefs.data.first(), context, override = true)
-            viewModel.iconFromPack(targetApp, pack, candidate.drawableName, options)
+            viewModel.iconFromPack(targetApp, pack, candidate.drawableName, candidate.iconHash, options)
         }
+        newIcon = validated.icon
+        candidateChanged = validated.sourceChanged
         generating = false
     }
 
@@ -167,6 +172,14 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                         )
                     }
                 }
+                if (candidateChanged) {
+                    Text(
+                        text = stringResource(R.string.watchCandidateChanged),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                }
             }
         },
         confirmButton = {
@@ -183,7 +196,9 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                 val applyToast = stringResource(R.string.watchApplyToast)
                 DisabledExplanation(
                     enabled = newIcon != null && app != null,
-                    message = stringResource(R.string.watchApplyDisabledHint)
+                    message = stringResource(
+                        if (candidateChanged) R.string.watchCandidateChanged else R.string.watchApplyDisabledHint
+                    )
                 ) {
                     FilledIconButton(
                         onClick = {
