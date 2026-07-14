@@ -3,8 +3,6 @@ package dev.renkinProject.renkin.icon.creator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.ColorMatrix
-import android.graphics.ColorMatrixColorFilter
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
@@ -367,12 +365,7 @@ class IconGenerator(
      * always applied — unlike [colorizeBitmap] — because the mask itself is transparent.
      */
     private fun recolorMaterialYouLayer(mask: Bitmap): Bitmap {
-        val tinted = mask.emptyLike()
-        val paint = Paint().apply {
-            colorFilter = PorterDuffColorFilter(options.color, PorterDuff.Mode.SRC_IN)
-        }
-        Canvas(tinted).drawBitmap(mask, 0F, 0F, paint)
-        return tinted.changeBackgroundColor(options.bgColor)
+        return recolorMaterialYouMask(mask, options.color, options.bgColor)
     }
 
     /**
@@ -430,29 +423,7 @@ class IconGenerator(
     }
 
     /** Removes hue and saturation while retaining the original icon's luminance and alpha. */
-    private fun toMonochrome(icon: Bitmap): Bitmap {
-        val result = icon.emptyLike()
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            val matrix = if (options.invertMonochrome) {
-                val r = -0.213f
-                val g = -0.715f
-                val b = -0.072f
-                ColorMatrix(
-                    floatArrayOf(
-                        r, g, b, 0f, 255f,
-                        r, g, b, 0f, 255f,
-                        r, g, b, 0f, 255f,
-                        0f, 0f, 0f, 1f, 0f
-                    )
-                )
-            } else {
-                ColorMatrix().apply { setSaturation(0f) }
-            }
-            colorFilter = ColorMatrixColorFilter(matrix)
-        }
-        Canvas(result).drawBitmap(icon, 0f, 0f, paint)
-        return result
-    }
+    private fun toMonochrome(icon: Bitmap): Bitmap = monochromeBitmap(icon, options.invertMonochrome)
 
     /**
      * Single dispatch point for applying an [ImageEdit] to a (bitmap, parsedIcon)
@@ -964,5 +935,45 @@ class IconGenerator(
     private fun fixAdaptiveIconSize(adaptiveIconDrawable: AdaptiveIconDrawable) {
         val vector = adaptiveIconDrawable.foregroundVectorOrNull()
         vector?.resizeAndCenter()?.applyAndRemoveGroup()?.scaleAtCenter(adaptiveIconScale)
+    }
+}
+
+internal fun monochromeBitmap(icon: Bitmap, invert: Boolean): Bitmap {
+    val pixels = IntArray(icon.width * icon.height)
+    icon.getPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
+    for (index in pixels.indices) {
+        val source = pixels[index]
+        val luminance = (
+            0.213f * android.graphics.Color.red(source) +
+                0.715f * android.graphics.Color.green(source) +
+                0.072f * android.graphics.Color.blue(source)
+            ).toInt().coerceIn(0, 255)
+        val value = if (invert) 255 - luminance else luminance
+        pixels[index] = android.graphics.Color.argb(android.graphics.Color.alpha(source), value, value, value)
+    }
+    return Bitmap.createBitmap(pixels, icon.width, icon.height, Bitmap.Config.ARGB_8888).apply {
+        density = icon.density
+    }
+}
+
+internal fun recolorMaterialYouMask(mask: Bitmap, foreground: Int, background: Int): Bitmap {
+    val pixels = IntArray(mask.width * mask.height)
+    mask.getPixels(pixels, 0, mask.width, 0, 0, mask.width, mask.height)
+    val fgR = android.graphics.Color.red(foreground)
+    val fgG = android.graphics.Color.green(foreground)
+    val fgB = android.graphics.Color.blue(foreground)
+    val bgR = android.graphics.Color.red(background)
+    val bgG = android.graphics.Color.green(background)
+    val bgB = android.graphics.Color.blue(background)
+    for (index in pixels.indices) {
+        val alpha = android.graphics.Color.alpha(pixels[index]) / 255f
+        pixels[index] = android.graphics.Color.rgb(
+            (bgR + (fgR - bgR) * alpha).toInt().coerceIn(0, 255),
+            (bgG + (fgG - bgG) * alpha).toInt().coerceIn(0, 255),
+            (bgB + (fgB - bgB) * alpha).toInt().coerceIn(0, 255)
+        )
+    }
+    return Bitmap.createBitmap(pixels, mask.width, mask.height, Bitmap.Config.ARGB_8888).apply {
+        density = mask.density
     }
 }

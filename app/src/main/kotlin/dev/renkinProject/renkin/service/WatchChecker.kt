@@ -66,19 +66,12 @@ class WatchChecker(context: Context) {
             for (ruleApp in rule.apps) {
                 val packageActivities = installedAppsByPackage[ruleApp.packageName].orEmpty()
                 val storedComponent = AppComponent(ruleApp.packageName, ruleApp.activityName)
-                val exactApp = packageActivities.firstOrNull {
-                    it.activityName == ruleApp.activityName
-                }
-                val activeComponent: AppComponent
-                val installedApp: InstalledApplication
-                if (exactApp != null) {
-                    activeComponent = storedComponent
-                    installedApp = exactApp
-                } else {
+                val resolvedApp = resolveWatchApp(storedComponent, packageActivities) ?: continue
+                val installedApp = resolvedApp.application
+                val activeComponent = if (resolvedApp.componentChanged) {
                     // A package update may replace its launcher activity. Migrate only when the
                     // replacement is unambiguous; multiple activities require the user's choice.
-                    val replacement = packageActivities.singleOrNull() ?: continue
-                    val replacementApp = AppComponent(replacement.packageName, replacement.activityName)
+                    val replacementApp = AppComponent(installedApp.packageName, installedApp.activityName)
                     val baseline = buildBaseline(
                         listOf(replacementApp), rule.rule.watchAllPacks, packPackages, installedPacks
                     )
@@ -89,9 +82,8 @@ class WatchChecker(context: Context) {
                         baseline
                     )
                     if (!migrated) continue
-                    activeComponent = replacementApp
-                    installedApp = replacement
-                }
+                    replacementApp
+                } else storedComponent
                 val candidates = mutableListOf<CandidateInput>()
 
                 for (packPackage in packPackages) {

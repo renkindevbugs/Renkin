@@ -71,13 +71,11 @@ class IconGenerationService(
     ): ValidatedPackIcon {
         val ids = appManager.getIconPackDrawableIds(packPackage, listOf(drawableName))
         val resource = appManager.getIconPackDrawables(packPackage, ids).firstOrNull()
-            ?: return ValidatedPackIcon(null, sourceChanged = expectedHash != null)
-        if (expectedHash != null) {
-            val currentHash = resource.drawable.toSafeBitmapOrNull()?.contentHash()
-            if (currentHash == null || currentHash != expectedHash) {
-                return ValidatedPackIcon(null, sourceChanged = true)
-            }
+        val currentHash = resource?.drawable?.toSafeBitmapOrNull()?.contentHash()
+        if (iconSourceChanged(expectedHash, currentHash)) {
+            return ValidatedPackIcon(null, sourceChanged = true)
         }
+        resource ?: return ValidatedPackIcon(null, sourceChanged = false)
         val packOptions = options.copy(
             primarySource = Source.ICON_PACK,
             primaryImageEdit = ImageEdit.NONE,
@@ -158,3 +156,6 @@ class IconGenerationService(
         exportDrawables
     }
 }
+
+internal fun iconSourceChanged(expectedHash: String?, currentHash: String?): Boolean =
+    expectedHash != null && expectedHash != currentHash
