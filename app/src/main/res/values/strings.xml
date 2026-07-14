@@ -276,9 +276,11 @@
     <string name="variantMaterialYou">Material You</string>
     <string name="variantMonochrome">Monochrome</string>
     <string name="variantDefaultHint">Uses the app\'s normal icon, unchanged.</string>
-    <string name="materialYouRecolorHint">Uses the app\'s Material You icon, recolored to your choice.</string>
-    <string name="materialYouUnavailable">This app has no Material You icon.</string>
+    <string name="materialYouRecolorHint">Uses the official Material You icon provided by this app, recolored to your choice.</string>
+    <string name="materialYouGeneratedTitle">No official Material You icon</string>
+    <string name="materialYouGeneratedHint">Renkin generates an unofficial version from the original artwork.</string>
     <string name="monochromeHint">Removes color while keeping the app\'s original icon.</string>
+    <string name="reverseMonochrome">Reverse colors</string>
     <string name="materialYouColors">Color</string>
     <string name="materialYouColorsHint">Wallpaper colors that match Android\'s themed icons. Pick Custom to choose your own in the Modifier tab.</string>
     <string name="custom">Custom</string>

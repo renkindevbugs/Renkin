@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -51,11 +52,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
+import dev.renkinProject.renkin.ui.theme.ChangedOrange
 import dev.renkinProject.renkin.MainViewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
@@ -171,11 +174,13 @@ fun CreateTab(
     // Prefix of the picked calendar icon (e.g. "bee_calendar_"), so the grid frames the whole
     // day-rotation set alongside the picked icon. null = no calendar icon selected.
     selectedCalendarPrefix: String? = null,
-    // Whether this app ships a Material You <monochrome> layer, so that variant can be disabled
-    // without affecting the regular Monochrome conversion.
+    // Whether this app ships a Material You <monochrome> layer. Without one, the option remains
+    // available but is explicitly described as an unofficial Renkin-generated approximation.
     appHasMaterialYouIcon: Boolean = false,
     applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT,
     onApplicationIconVariantChange: (ApplicationIconVariant) -> Unit = {},
+    invertMonochrome: Boolean = false,
+    onInvertMonochromeChange: (Boolean) -> Unit = {},
     // Wallpaper-derived colour schemes (foreground, background) offered for Material You.
     materialYouSchemes: List<Pair<Color, Color>> = emptyList(),
     // Index of the chosen scheme; == materialYouSchemes.size means the Custom option.
@@ -334,6 +339,8 @@ fun CreateTab(
                 variant = applicationIconVariant,
                 appHasMaterialYouIcon = appHasMaterialYouIcon,
                 onVariantChange = onApplicationIconVariantChange,
+                invertMonochrome = invertMonochrome,
+                onInvertMonochromeChange = onInvertMonochromeChange,
                 schemes = materialYouSchemes,
                 selectedScheme = selectedScheme,
                 onSchemeChange = onSchemeChange,
@@ -395,14 +402,17 @@ fun CreateTab(
 }
 
 /**
- * Application Icon source options. Material You uses the app's optional `<monochrome>` layer;
- * Monochrome desaturates the regular icon and therefore works for every app.
+ * Application Icon source options. Material You prefers the app's optional `<monochrome>` layer
+ * and labels Renkin's generated fallback when it is missing. Monochrome desaturates the regular
+ * icon and therefore works for every app.
  */
 @Composable
 private fun ApplicationIconVariantSelector(
     variant: ApplicationIconVariant,
     appHasMaterialYouIcon: Boolean,
     onVariantChange: (ApplicationIconVariant) -> Unit,
+    invertMonochrome: Boolean,
+    onInvertMonochromeChange: (Boolean) -> Unit,
     schemes: List<Pair<Color, Color>>,
     selectedScheme: Int,
     onSchemeChange: (Int) -> Unit,
@@ -434,9 +444,18 @@ private fun ApplicationIconVariantSelector(
             SegmentCell(
                 label = stringResource(R.string.variantMaterialYou),
                 selected = variant == ApplicationIconVariant.MATERIAL_YOU,
-                enabled = appHasMaterialYouIcon,
-                disabledHint = stringResource(R.string.materialYouUnavailable),
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(1f),
+                badge = {
+                    if (!appHasMaterialYouIcon) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 1.dp, end = 6.dp)
+                                .size(6.dp)
+                                .background(ChangedOrange, CircleShape)
+                        )
+                    }
+                }
             ) { onVariantChange(ApplicationIconVariant.MATERIAL_YOU) }
             SegmentCell(
                 label = stringResource(R.string.variantMonochrome),
@@ -444,21 +463,50 @@ private fun ApplicationIconVariantSelector(
                 modifier = Modifier.weight(1f)
             ) { onVariantChange(ApplicationIconVariant.MONOCHROME) }
         }
+        val generatedMaterialYou = variant == ApplicationIconVariant.MATERIAL_YOU && !appHasMaterialYouIcon
         val hint = when {
-            variant == ApplicationIconVariant.MATERIAL_YOU && !appHasMaterialYouIcon ->
-                stringResource(R.string.materialYouUnavailable)
+            generatedMaterialYou -> stringResource(R.string.materialYouGeneratedHint)
             variant == ApplicationIconVariant.MATERIAL_YOU -> stringResource(R.string.materialYouRecolorHint)
             variant == ApplicationIconVariant.MONOCHROME -> stringResource(R.string.monochromeHint)
             else -> stringResource(R.string.variantDefaultHint)
+        }
+        if (generatedMaterialYou) {
+            Text(
+                text = stringResource(R.string.materialYouGeneratedTitle),
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(top = 10.dp)
+            )
         }
         Text(
             text = hint,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 10.dp)
+            modifier = Modifier.padding(top = if (generatedMaterialYou) 2.dp else 10.dp)
         )
 
-        if (variant == ApplicationIconVariant.MATERIAL_YOU && appHasMaterialYouIcon) {
+        if (variant == ApplicationIconVariant.MONOCHROME) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp)
+                    .clickable { onInvertMonochromeChange(!invertMonochrome) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.reverseMonochrome),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = invertMonochrome,
+                    onCheckedChange = onInvertMonochromeChange
+                )
+            }
+        }
+
+        if (variant == ApplicationIconVariant.MATERIAL_YOU) {
             Text(
                 text = stringResource(R.string.materialYouColors),
                 style = MaterialTheme.typography.titleSmall,

@@ -102,7 +102,9 @@ data class GenerationOptions(
         ApplicationIconVariant.MATERIAL_YOU
     } else {
         ApplicationIconVariant.DEFAULT
-    }
+    },
+    // Per-app Monochrome option: invert luminance after desaturation (black ↔ white).
+    val invertMonochrome: Boolean = false
 ) {
     companion object {
         /**

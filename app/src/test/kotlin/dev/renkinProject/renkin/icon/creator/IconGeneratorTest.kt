@@ -48,7 +48,8 @@ class IconGeneratorTest {
         source: Source = Source.APPLICATION_NAME,
         override: Boolean = true,
         iconScale: Float = 1f,
-        applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT
+        applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT,
+        invertMonochrome: Boolean = false
     ) = GenerationOptions(
         primarySource = source,
         primaryImageEdit = ImageEdit.NONE,
@@ -61,14 +62,18 @@ class IconGeneratorTest {
         themed = false,
         override = override,
         iconScale = iconScale,
-        applicationIconVariant = applicationIconVariant
+        applicationIconVariant = applicationIconVariant,
+        invertMonochrome = invertMonochrome
     )
 
-    private fun app(createdIcon: IconPackDrawable? = null) = PackageInfoStruct(
+    private fun app(
+        createdIcon: IconPackDrawable? = null,
+        icon: Drawable = ColorDrawable(Color.RED)
+    ) = PackageInfoStruct(
         appName = "Renkin",
         packageName = "dev.test.app",
         activityName = "dev.test.app.Main",
-        icon = ColorDrawable(Color.RED),
+        icon = icon,
         iconID = 0,
         createdIcon = createdIcon
     )
@@ -118,7 +123,7 @@ class IconGeneratorTest {
         val sourceBitmap = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).apply {
             eraseColor(originalColor)
         }
-        val sourceApp = app().copy(icon = BitmapDrawable(context.resources, sourceBitmap))
+        val sourceApp = app(icon = BitmapDrawable(context.resources, sourceBitmap))
 
         val defaultPixel = generateOnce(
             options(source = Source.APPLICATION_ICON), sourceApp
@@ -148,7 +153,7 @@ class IconGeneratorTest {
             BitmapDrawable(context.resources, solidBitmap(Color.RED)),
             BitmapDrawable(context.resources, solidBitmap(Color.BLUE))
         )
-        val sourceApp = app().copy(icon = adaptiveIcon)
+        val sourceApp = app(icon = adaptiveIcon)
 
         val materialYouPixel = generateOnce(
             options(
@@ -161,6 +166,60 @@ class IconGeneratorTest {
         // The configured black tint is painted through the blue Material You mask. If the normal
         // red foreground were used instead, this pixel would remain red.
         assertEquals(Color.BLACK, materialYouPixel)
+    }
+
+    @Test
+    fun materialYouVariantGeneratesUnofficialDuotoneWhenLayerIsMissing() {
+        val sourceBitmap = Bitmap.createBitmap(90, 90, Bitmap.Config.ARGB_8888).apply {
+            for (y in 0 until height) for (x in 0 until width) {
+                setPixel(x, y, if (x < width / 2) Color.BLACK else Color.WHITE)
+            }
+        }
+        val sourceApp = app(icon = BitmapDrawable(context.resources, sourceBitmap))
+
+        val generated = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU
+            ),
+            sourceApp
+        )!!
+        val bitmap = generated.toBitmap()
+
+        assertTrue(generated.isAdaptiveIcon())
+        assertEquals(Color.WHITE, bitmap.getPixel(0, 0))
+        assertEquals(Color.WHITE, bitmap.getPixel(30, 45))
+        assertEquals(Color.BLACK, bitmap.getPixel(60, 45))
+    }
+
+    @Test
+    fun reverseMonochromeInvertsLuminanceAndPreservesAlpha() {
+        val sourceColor = Color.argb(170, 35, 35, 35)
+        val sourceBitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(sourceColor)
+        }
+        val sourceApp = app(icon = BitmapDrawable(context.resources, sourceBitmap))
+
+        val normal = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MONOCHROME
+            ),
+            sourceApp
+        )!!.toBitmap().getPixel(0, 0)
+        val reversed = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MONOCHROME,
+                invertMonochrome = true
+            ),
+            sourceApp
+        )!!.toBitmap().getPixel(0, 0)
+
+        assertEquals(Color.alpha(normal), Color.alpha(reversed))
+        assertEquals(255, Color.red(normal) + Color.red(reversed))
+        assertEquals(Color.red(reversed), Color.green(reversed))
+        assertEquals(Color.green(reversed), Color.blue(reversed))
     }
 
     @Test
