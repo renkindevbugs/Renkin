@@ -241,6 +241,7 @@ fun OptionsDialog(
     var textFontPath by rememberSaveable(globalFontPath) { mutableStateOf(globalFontPath) }
     var useVector by rememberSaveable { mutableStateOf(false) }
     var applicationIconVariant by rememberSaveable { mutableStateOf(ApplicationIconVariant.DEFAULT) }
+    var invertMonochrome by rememberSaveable { mutableStateOf(false) }
     // Material You variant: which colour scheme tints the icon. 0..schemes-1 pick a wallpaper-derived
     // Material You scheme (foreground+background); the last index is Custom (manual colour below).
     var materialYouScheme by rememberSaveable { mutableIntStateOf(0) }
@@ -379,7 +380,8 @@ fun OptionsDialog(
         textCustom = customText,
         textCase = textCase,
         textFontPath = textFontPath,
-        applicationIconVariant = applicationIconVariant
+        applicationIconVariant = applicationIconVariant,
+        invertMonochrome = invertMonochrome
     )
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
@@ -594,6 +596,8 @@ fun OptionsDialog(
                                 appHasMaterialYouIcon = appHasMaterialYouIcon,
                                 applicationIconVariant = applicationIconVariant,
                                 onApplicationIconVariantChange = { applicationIconVariant = it },
+                                invertMonochrome = invertMonochrome,
+                                onInvertMonochromeChange = { invertMonochrome = it },
                                 materialYouSchemes = materialYouSchemes,
                                 selectedScheme = materialYouScheme,
                                 onSchemeChange = { materialYouScheme = it },

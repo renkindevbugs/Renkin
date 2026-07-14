@@ -312,6 +312,14 @@ class IconGenerator(
         }
 
         val bitmapIcon = getAppIconBitmap(application) ?: return null
+        if (options.applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU) {
+            // Apps without an official layer still get a clearly-labelled Renkin-generated
+            // approximation. Luminance is mapped between the chosen background/foreground so
+            // opaque icons keep their internal artwork instead of becoming a solid alpha square.
+            val generated = generateMaterialYouFromOriginal(bitmapIcon)
+            return if (imageEdit == ImageEdit.NONE) generated
+            else applyModifierInner(generated, imageEdit)
+        }
         if (options.applicationIconVariant == ApplicationIconVariant.MONOCHROME) {
             // This is deliberately based on the regular launcher artwork, not the optional
             // Material You layer: every app is supported and its original design stays intact.
@@ -366,11 +374,70 @@ class IconGenerator(
         return tinted.changeBackgroundColor(options.bgColor)
     }
 
+    /**
+     * Creates an unofficial two-colour Material You approximation from regular icon artwork.
+     * Transparent pixels become the selected background; opaque pixels retain their luminance,
+     * interpolated from background (dark source pixels) to foreground (light source pixels).
+     */
+    private fun generateMaterialYouFromOriginal(icon: Bitmap): BitmapIconDrawable {
+        val pixels = IntArray(icon.width * icon.height)
+        icon.getPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
+
+        val fgR = android.graphics.Color.red(options.color)
+        val fgG = android.graphics.Color.green(options.color)
+        val fgB = android.graphics.Color.blue(options.color)
+        val bgR = android.graphics.Color.red(options.bgColor)
+        val bgG = android.graphics.Color.green(options.bgColor)
+        val bgB = android.graphics.Color.blue(options.bgColor)
+
+        for (i in pixels.indices) {
+            val source = pixels[i]
+            val alpha = android.graphics.Color.alpha(source) / 255f
+            val luminance = (
+                0.2126f * android.graphics.Color.red(source) +
+                    0.7152f * android.graphics.Color.green(source) +
+                    0.0722f * android.graphics.Color.blue(source)
+                ) / 255f
+            val mappedR = bgR + (fgR - bgR) * luminance
+            val mappedG = bgG + (fgG - bgG) * luminance
+            val mappedB = bgB + (fgB - bgB) * luminance
+            pixels[i] = android.graphics.Color.rgb(
+                (bgR + (mappedR - bgR) * alpha).toInt().coerceIn(0, 255),
+                (bgG + (mappedG - bgG) * alpha).toInt().coerceIn(0, 255),
+                (bgB + (mappedB - bgB) * alpha).toInt().coerceIn(0, 255)
+            )
+        }
+
+        val generated = Bitmap.createBitmap(icon.width, icon.height, Bitmap.Config.ARGB_8888)
+        generated.setPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
+        return BitmapIconDrawable(
+            ctx.resources,
+            generated,
+            exportAsAdaptiveIcon = true,
+            previewScale = adaptiveIconScale
+        )
+    }
+
     /** Removes hue and saturation while retaining the original icon's luminance and alpha. */
     private fun toMonochrome(icon: Bitmap): Bitmap {
         val result = icon.emptyLike()
         val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            colorFilter = ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) })
+            val matrix = if (options.invertMonochrome) {
+                val r = -0.213f
+                val g = -0.715f
+                val b = -0.072f
+                ColorMatrix(
+                    floatArrayOf(
+                        r, g, b, 0f, 255f,
+                        r, g, b, 0f, 255f,
+                        r, g, b, 0f, 255f,
+                        0f, 0f, 0f, 1f, 0f
+                    )
+                )
+            } else {
+                ColorMatrix().apply { setSaturation(0f) }
+            }
+            colorFilter = ColorMatrixColorFilter(matrix)
         }
         Canvas(result).drawBitmap(icon, 0f, 0f, paint)
         return result

@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -171,11 +172,13 @@ fun CreateTab(
     // Prefix of the picked calendar icon (e.g. "bee_calendar_"), so the grid frames the whole
     // day-rotation set alongside the picked icon. null = no calendar icon selected.
     selectedCalendarPrefix: String? = null,
-    // Whether this app ships a Material You <monochrome> layer, so that variant can be disabled
-    // without affecting the regular Monochrome conversion.
+    // Whether this app ships a Material You <monochrome> layer. Without one, the option remains
+    // available but is explicitly described as an unofficial Renkin-generated approximation.
     appHasMaterialYouIcon: Boolean = false,
     applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT,
     onApplicationIconVariantChange: (ApplicationIconVariant) -> Unit = {},
+    invertMonochrome: Boolean = false,
+    onInvertMonochromeChange: (Boolean) -> Unit = {},
     // Wallpaper-derived colour schemes (foreground, background) offered for Material You.
     materialYouSchemes: List<Pair<Color, Color>> = emptyList(),
     // Index of the chosen scheme; == materialYouSchemes.size means the Custom option.
@@ -334,6 +337,8 @@ fun CreateTab(
                 variant = applicationIconVariant,
                 appHasMaterialYouIcon = appHasMaterialYouIcon,
                 onVariantChange = onApplicationIconVariantChange,
+                invertMonochrome = invertMonochrome,
+                onInvertMonochromeChange = onInvertMonochromeChange,
                 schemes = materialYouSchemes,
                 selectedScheme = selectedScheme,
                 onSchemeChange = onSchemeChange,
@@ -403,6 +408,8 @@ private fun ApplicationIconVariantSelector(
     variant: ApplicationIconVariant,
     appHasMaterialYouIcon: Boolean,
     onVariantChange: (ApplicationIconVariant) -> Unit,
+    invertMonochrome: Boolean,
+    onInvertMonochromeChange: (Boolean) -> Unit,
     schemes: List<Pair<Color, Color>>,
     selectedScheme: Int,
     onSchemeChange: (Int) -> Unit,
@@ -434,8 +441,6 @@ private fun ApplicationIconVariantSelector(
             SegmentCell(
                 label = stringResource(R.string.variantMaterialYou),
                 selected = variant == ApplicationIconVariant.MATERIAL_YOU,
-                enabled = appHasMaterialYouIcon,
-                disabledHint = stringResource(R.string.materialYouUnavailable),
                 modifier = Modifier.weight(1f)
             ) { onVariantChange(ApplicationIconVariant.MATERIAL_YOU) }
             SegmentCell(
@@ -446,7 +451,7 @@ private fun ApplicationIconVariantSelector(
         }
         val hint = when {
             variant == ApplicationIconVariant.MATERIAL_YOU && !appHasMaterialYouIcon ->
-                stringResource(R.string.materialYouUnavailable)
+                stringResource(R.string.materialYouGeneratedHint)
             variant == ApplicationIconVariant.MATERIAL_YOU -> stringResource(R.string.materialYouRecolorHint)
             variant == ApplicationIconVariant.MONOCHROME -> stringResource(R.string.monochromeHint)
             else -> stringResource(R.string.variantDefaultHint)
@@ -458,7 +463,27 @@ private fun ApplicationIconVariantSelector(
             modifier = Modifier.padding(top = 10.dp)
         )
 
-        if (variant == ApplicationIconVariant.MATERIAL_YOU && appHasMaterialYouIcon) {
+        if (variant == ApplicationIconVariant.MONOCHROME) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp)
+                    .clickable { onInvertMonochromeChange(!invertMonochrome) },
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.reverseMonochrome),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f)
+                )
+                Switch(
+                    checked = invertMonochrome,
+                    onCheckedChange = onInvertMonochromeChange
+                )
+            }
+        }
+
+        if (variant == ApplicationIconVariant.MATERIAL_YOU) {
             Text(
                 text = stringResource(R.string.materialYouColors),
                 style = MaterialTheme.typography.titleSmall,
