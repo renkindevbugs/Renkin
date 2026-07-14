@@ -348,6 +348,24 @@ class MainViewModel @Inject constructor(
         }
 
     /**
+     * Restores one app to its launcher default. Unlike assigning a null icon generically, this
+     * also discards an imported row held behind a missing pack and clears calendar rotation.
+     */
+    fun resetIcon(app: PackageInfoStruct) {
+        viewModelScope.launch {
+            val index = appProvider.applicationList.indexOfFirst { it.key == app.key }
+            if (index < 0) return@launch
+            appProvider.discardLockedIcon(app.key)
+            val live = appProvider.applicationList[index]
+            appProvider.editApplication(
+                index,
+                live.changeExport(null).changeCalendar(false, null, null)
+            )
+            refreshMissingPacks(prompt = false)
+        }
+    }
+
+    /**
      * Applies the icon and the calendar selection together. The edit dialog tracks the
      * calendar prefix/source-pack in local state as the user browses; persisting only the
      * icon (via [applyIcon]) would leave the stored `<calendar>` prefix pointing at the
@@ -592,7 +610,11 @@ class MainViewModel @Inject constructor(
      */
     private suspend fun refreshMissingPacks(prompt: Boolean = true) {
         missingPackSummary = appProvider.missingPackSummary()
-        if (!prompt || missingPackSummary.isEmpty()) return
+        if (missingPackSummary.isEmpty()) {
+            showMissingPacksDialog = false
+            return
+        }
+        if (!prompt) return
         val profileId = appProvider.activeProfileId
         if (!missingPacksPrompted.add(profileId)) return
         if (appProvider.activeProfile()?.hideMissingPackWarning == true) return

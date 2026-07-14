@@ -749,7 +749,7 @@ fun OpenAppOptions(
         onDismiss()
     }) {
         onDismiss()
-        viewModel.applyIcon(app, null)
+        viewModel.resetIcon(app)
     }
 }
 
@@ -906,4 +906,3 @@ fun SearchBar(
     }
     }
 }
-
