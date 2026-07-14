@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.Arrangement
@@ -53,6 +52,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
+import dev.renkinProject.renkin.ui.theme.ChangedOrange
 import dev.renkinProject.renkin.MainViewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -447,14 +447,12 @@ private fun ApplicationIconVariantSelector(
                 modifier = Modifier.weight(1f),
                 badge = {
                     if (!appHasMaterialYouIcon) {
-                        Icon(
-                            imageVector = Icons.Filled.Warning,
-                            contentDescription = stringResource(R.string.materialYouGeneratedTitle),
-                            tint = MaterialTheme.colorScheme.error,
+                        Box(
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
-                                .padding(top = 4.dp, end = 5.dp)
-                                .size(14.dp)
+                                .padding(top = 6.dp, end = 7.dp)
+                                .size(6.dp)
+                                .background(ChangedOrange, CircleShape)
                         )
                     }
                 }
@@ -477,7 +475,7 @@ private fun ApplicationIconVariantSelector(
                 text = stringResource(R.string.materialYouGeneratedTitle),
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.error,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(top = 10.dp)
             )
         }
