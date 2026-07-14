@@ -157,16 +157,26 @@ class WatchChecker(context: Context) {
         }
         val checkedAt = System.currentTimeMillis()
         val baseline = mutableListOf<BaselineInput>()
+        val installedApps = apps.map { InstalledApplication(it.packageName, it.activityName, 0) }
 
-        for (app in apps) {
-            val installedApp = InstalledApplication(app.packageName, app.activityName, 0)
-            for (packPackage in packPackages) {
-                val pack = installedPacks[packPackage] ?: continue
-                val (drawableName, hash) = resolveIcon(packPackage, installedApp)
+        // Parsing appfilter.xml dominates save time. Resolve every selected app in one pass per
+        // pack instead of reopening and reparsing the same pack once for every app.
+        for (packPackage in packPackages) {
+            val pack = installedPacks[packPackage] ?: continue
+            val elements = appMan.getAppFilterRawElements(packPackage, installedApps)
+            val resources = appMan.getDrawableFromAppFilterElements(packPackage, installedApps, elements)
+            val drawableNames = mutableMapOf<String, String>()
+            elements.filterIsInstance<RawItem>().forEach { item ->
+                drawableNames.putIfAbsent(item.component, item.drawableLink)
+            }
+
+            for (installedApp in installedApps) {
+                val drawableName = drawableNames[installedApp.toComponentInfo()]
+                val hash = resources[installedApp]?.drawable?.toSafeBitmapOrNull()?.contentHash()
                 baseline.add(
                     BaselineInput(
-                        packageName = app.packageName,
-                        activityName = app.activityName,
+                        packageName = installedApp.packageName,
+                        activityName = installedApp.activityName,
                         iconPackPackage = packPackage,
                         lastPackVersionCode = pack.versionCode,
                         lastIconName = drawableName,

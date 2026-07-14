@@ -78,6 +78,7 @@ internal fun WatchRuleEditor(
     existing: RuleWithDetails?,
     apps: List<PackageInfoStruct>,
     packs: List<IconPack>,
+    isSaving: Boolean,
     onClose: () -> Unit,
     onSave: (apps: List<AppComponent>, watchAll: Boolean, packs: List<String>) -> Unit
 ) {
@@ -128,7 +129,7 @@ internal fun WatchRuleEditor(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            IconButton(onClick = onClose) {
+            IconButton(onClick = onClose, enabled = !isSaving) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.dismiss))
             }
             Text(
@@ -139,7 +140,7 @@ internal fun WatchRuleEditor(
             )
             val view = LocalView.current
             DisabledExplanation(
-                enabled = canSave,
+                enabled = canSave || isSaving,
                 message = stringResource(R.string.watchSaveDisabledHint)
             ) {
                 Button(
@@ -147,14 +148,17 @@ internal fun WatchRuleEditor(
                         view.performConfirmHaptic()
                         onSave(selectedApps.toList(), watchAll, selectedPacks.toList())
                     },
-                    enabled = canSave,
+                    enabled = canSave && !isSaving,
                     shape = FieldShape
                 ) {
-                    Text(stringResource(R.string.save))
+                    Text(stringResource(if (isSaving) R.string.watchSaving else R.string.save))
                 }
             }
         }
         HorizontalDivider()
+        if (isSaving) {
+            WavyLoadingBar(Modifier.fillMaxWidth())
+        }
 
         Column(
             Modifier

@@ -139,8 +139,10 @@ fun WatchScreen(onDismiss: () -> Unit) {
                 // Back from the editor returns to the rule list rather than closing
                 // the whole watch screen
                 BackHandler(enabled = showEditor) {
-                    showEditor = false
-                    editing = null
+                    if (!watchViewModel.isSavingRule) {
+                        showEditor = false
+                        editing = null
+                    }
                 }
 
                 // Slide the editor in from the right like a forward navigation,
@@ -163,11 +165,18 @@ fun WatchScreen(onDismiss: () -> Unit) {
                         existing = editing,
                         apps = apps,
                         packs = packs,
-                        onClose = { showEditor = false; editing = null },
+                        isSaving = watchViewModel.isSavingRule,
+                        onClose = {
+                            if (!watchViewModel.isSavingRule) {
+                                showEditor = false
+                                editing = null
+                            }
+                        },
                         onSave = { selApps, watchAll, selPacks ->
-                            watchViewModel.saveRule(editing, selApps, watchAll, selPacks)
-                            showEditor = false
-                            editing = null
+                            watchViewModel.saveRule(editing, selApps, watchAll, selPacks) {
+                                showEditor = false
+                                editing = null
+                            }
                         }
                     )
                 } else {
@@ -701,4 +710,3 @@ private fun AppPill(app: PackageInfoStruct?, fallbackPackage: String) {
 private fun PackLabel(packPackage: String, name: String?) {
     Pill(name ?: packPackage) { PackIconImage(packPackage, 18.dp) }
 }
-

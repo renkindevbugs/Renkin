@@ -85,22 +85,34 @@ class WatchViewModel @Inject constructor(
     var isChecking by mutableStateOf(false)
         private set
 
+    /** True while a rule and its baseline are being resolved and committed. */
+    var isSavingRule by mutableStateOf(false)
+        private set
+
     /** Atomically creates or updates a rule together with its current icon baseline. */
     fun saveRule(
         existing: RuleWithDetails?,
         apps: List<AppComponent>,
         watchAll: Boolean,
-        packs: List<String>
+        packs: List<String>,
+        onSaved: () -> Unit = {}
     ) {
+        if (isSavingRule) return
+        isSavingRule = true
         val profileId = appProvider.activeProfileId
         viewModelScope.launch {
-            WatchChecker(getApplication()).saveRule(
-                existingRuleId = existing?.rule?.id,
-                apps = apps,
-                watchAllPacks = watchAll,
-                packPackages = packs,
-                profileId = profileId
-            )
+            val savedId = try {
+                WatchChecker(getApplication()).saveRule(
+                    existingRuleId = existing?.rule?.id,
+                    apps = apps,
+                    watchAllPacks = watchAll,
+                    packPackages = packs,
+                    profileId = profileId
+                )
+            } finally {
+                isSavingRule = false
+            }
+            if (savedId > 0L) onSaved()
         }
     }
 
