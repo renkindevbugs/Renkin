@@ -76,32 +76,30 @@ class WatchRepository(private val db: WatchDatabase) {
         }
     }
 
-    /** Deletes a rule and everything hanging off it (apps, packs, suggestions). */
-    suspend fun deleteRule(ruleId: Long) = db.withTransaction {
-        dao.deleteCandidatesForRule(ruleId)
-        dao.deleteSuggestionsForRule(ruleId)
-        dao.deleteAppsForRule(ruleId)
-        dao.deletePacksForRule(ruleId)
-        dao.deleteRule(ruleId)
-        dao.pruneOrphanStates()
-    }
+    /** Deletes a rule and returns the notification-backed suggestion ids removed with it. */
+    suspend fun deleteRule(ruleId: Long): List<Long> = deleteRules(listOf(ruleId))
 
     /**
      * Deletes every rule owned by [profileId] — called when the profile itself is deleted, so
      * the worker stops firing notifications for a profile that no longer exists.
      */
-    suspend fun deleteRulesForProfile(profileId: Long) = deleteRules(dao.ruleIdsForProfile(profileId))
+    suspend fun deleteRulesForProfile(profileId: Long): List<Long> = deleteRules(dao.ruleIdsForProfile(profileId))
 
-    /** Deletes several rules (and everything hanging off them) in one transaction. */
-    suspend fun deleteRules(ruleIds: List<Long>) = db.withTransaction {
-        ruleIds.forEach { ruleId ->
-            dao.deleteCandidatesForRule(ruleId)
-            dao.deleteSuggestionsForRule(ruleId)
-            dao.deleteAppsForRule(ruleId)
-            dao.deletePacksForRule(ruleId)
-            dao.deleteRule(ruleId)
+    /** Deletes several rules atomically and returns their removed suggestion ids. */
+    suspend fun deleteRules(ruleIds: List<Long>): List<Long> {
+        if (ruleIds.isEmpty()) return emptyList()
+        return db.withTransaction {
+            val suggestionIds = dao.suggestionIdsForRules(ruleIds)
+            ruleIds.forEach { ruleId ->
+                dao.deleteCandidatesForRule(ruleId)
+                dao.deleteSuggestionsForRule(ruleId)
+                dao.deleteAppsForRule(ruleId)
+                dao.deletePacksForRule(ruleId)
+                dao.deleteRule(ruleId)
+            }
+            dao.pruneOrphanStates()
+            suggestionIds
         }
-        dao.pruneOrphanStates()
     }
 
     // --- Backup ---------------------------------------------------------------
@@ -157,6 +155,8 @@ class WatchRepository(private val db: WatchDatabase) {
     suspend fun getSuggestion(id: Long): IconSuggestion? = dao.getSuggestion(id)
 
     suspend fun getCandidates(suggestionId: Long): List<IconSuggestionCandidate> = dao.getCandidates(suggestionId)
+
+    suspend fun suggestionCount(): Int = dao.suggestionCount()
 
     suspend fun deleteSuggestion(id: Long) = db.withTransaction {
         dao.deleteCandidates(id)

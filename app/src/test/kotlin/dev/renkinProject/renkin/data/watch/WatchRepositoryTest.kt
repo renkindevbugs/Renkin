@@ -91,6 +91,20 @@ class WatchRepositoryTest {
     }
 
     @Test
+    fun deleteRuleReturnsItsSuggestionForNotificationCleanup() = runBlocking {
+        val app = AppComponent("com.a", "A")
+        val ruleId = createRule(listOf(app), false, listOf("pack1"), 1L)
+        val suggestionId = repo.completeWithSuggestion(
+            ruleId, app, listOf(CandidateInput("pack1", "drawable", "hash"))
+        )
+
+        val removed = repo.deleteRule(ruleId)
+
+        assertEquals(listOf(suggestionId), removed)
+        assertEquals(0, repo.suggestionCount())
+    }
+
+    @Test
     fun updateRule_replacesAppsAndPacks() = runBlocking {
         val id = createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
 

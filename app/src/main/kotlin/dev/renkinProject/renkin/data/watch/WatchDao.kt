@@ -90,6 +90,12 @@ interface WatchDao {
     @Query("DELETE FROM icon_suggestion WHERE ruleId = :ruleId")
     suspend fun deleteSuggestionsForRule(ruleId: Long)
 
+    @Query("SELECT id FROM icon_suggestion WHERE ruleId IN (:ruleIds)")
+    suspend fun suggestionIdsForRules(ruleIds: List<Long>): List<Long>
+
+    @Query("SELECT COUNT(*) FROM icon_suggestion")
+    suspend fun suggestionCount(): Int
+
     // --- Watch state ---------------------------------------------------------
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)

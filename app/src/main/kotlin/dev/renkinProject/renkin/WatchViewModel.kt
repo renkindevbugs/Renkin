@@ -22,6 +22,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.service.WatchChecker
+import dev.renkinProject.renkin.service.RenkinNotifications
 import dev.renkinProject.renkin.service.WatchWorker
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flatMapLatest
@@ -104,13 +105,23 @@ class WatchViewModel @Inject constructor(
     }
 
     fun deleteRule(ruleId: Long) {
-        viewModelScope.launch { repo.deleteRule(ruleId) }
+        viewModelScope.launch { deleteRulesAndNotifications(listOf(ruleId)) }
     }
 
     fun deleteCompleted() {
         viewModelScope.launch {
-            repo.deleteRules(rules.value.filter { it.rule.completed }.map { it.rule.id })
+            deleteRulesAndNotifications(rules.value.filter { it.rule.completed }.map { it.rule.id })
         }
+    }
+
+    private suspend fun deleteRulesAndNotifications(ruleIds: List<Long>) {
+        if (ruleIds.isEmpty()) return
+        val removedSuggestions = repo.deleteRules(ruleIds)
+        RenkinNotifications().cancelIconAvailable(
+            context = getApplication(),
+            suggestionIds = removedSuggestions,
+            cancelSummary = repo.suggestionCount() == 0
+        )
     }
 
     /** Runs a manual check; [onResult] receives the number of new suggestions found. */
