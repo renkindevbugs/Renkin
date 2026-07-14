@@ -98,7 +98,11 @@ class BackupManager(
 
         val allIcons = packRepo.getAllProfilesApplications()
         val iconsByProfile = allIcons.groupBy { it.profileId }
-        val rulesByProfile = watchRepo.getAllRules().groupBy { it.rule.profileId }
+        // Completed watch entries depend on transient suggestions that cannot be restored.
+        // Keep them out of new archives; the repository also rejects them from older files.
+        val rulesByProfile = watchRepo.getAllRules()
+            .filterNot { it.rule.completed }
+            .groupBy { it.rule.profileId }
         val data = BackupData(
             profiles = packRepo.profiles().map { profile ->
                 BackupProfile(
@@ -150,7 +154,7 @@ class BackupManager(
         val profile = packRepo.profile(profileId) ?: throw IOException("Profile $profileId does not exist")
         val icons = packRepo.getAll(profileId)
         val rules = watchRepo.getAllRules()
-            .filter { it.rule.profileId == profileId }
+            .filter { it.rule.profileId == profileId && !it.rule.completed }
             .map { it.toBackupRule() }
 
         val sourcePacks = icons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet()

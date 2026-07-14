@@ -41,9 +41,17 @@ class WatchRepositoryTest {
         db.close()
     }
 
+    private suspend fun createRule(
+        apps: List<AppComponent>,
+        watchAllPacks: Boolean,
+        packPackages: List<String>,
+        profileId: Long,
+        baseline: List<BaselineInput> = emptyList()
+    ) = repo.saveRule(null, apps, watchAllPacks, packPackages, profileId, baseline)
+
     @Test
     fun createRule_isReturnedByGetActiveRules() = runBlocking {
-        val id = repo.createRule(
+        val id = createRule(
             apps = listOf(AppComponent("com.a", "A")),
             watchAllPacks = false,
             packPackages = listOf("pack1"),
@@ -61,7 +69,7 @@ class WatchRepositoryTest {
 
     @Test
     fun watchAllPacks_doesNotStorePackList() = runBlocking {
-        repo.createRule(
+        createRule(
             apps = listOf(AppComponent("com.a", "A")),
             watchAllPacks = true,
             packPackages = listOf("pack1", "pack2"),
@@ -75,7 +83,7 @@ class WatchRepositoryTest {
 
     @Test
     fun deleteRule_removesIt() = runBlocking {
-        val id = repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
+        val id = createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
 
         repo.deleteRule(id)
 
@@ -84,13 +92,14 @@ class WatchRepositoryTest {
 
     @Test
     fun updateRule_replacesAppsAndPacks() = runBlocking {
-        val id = repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
+        val id = createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
 
-        repo.updateRule(
+        repo.saveRule(
             ruleId = id,
             apps = listOf(AppComponent("com.b", "B")),
             watchAllPacks = false,
-            packPackages = listOf("pack2")
+            packPackages = listOf("pack2"),
+            profileId = 1L
         )
 
         val rule = repo.getRule(id)!!
@@ -100,8 +109,8 @@ class WatchRepositoryTest {
 
     @Test
     fun getAllRules_includesCompletedAndAllProfiles() = runBlocking {
-        repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
-        val completedId = repo.createRule(listOf(AppComponent("com.b", "B")), true, emptyList(), profileId = 2L)
+        createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
+        val completedId = createRule(listOf(AppComponent("com.b", "B")), true, emptyList(), profileId = 2L)
         repo.completeWithSuggestion(
             completedId,
             AppComponent("com.b", "B"),
@@ -115,8 +124,8 @@ class WatchRepositoryTest {
     }
 
     @Test
-    fun replaceAllRules_wipesAndInsertsUnderOwningProfiles() = runBlocking {
-        repo.createRule(listOf(AppComponent("com.old", "Old")), false, listOf("pack.old"), profileId = 1L)
+    fun replaceAllRules_wipesStoreAndSkipsCompletedEntries() = runBlocking {
+        createRule(listOf(AppComponent("com.old", "Old")), false, listOf("pack.old"), profileId = 1L)
 
         repo.replaceAllRules(
             listOf(
@@ -134,17 +143,15 @@ class WatchRepositoryTest {
         )
 
         val all = repo.getAllRules()
-        assertEquals(2, all.size)
+        assertEquals(1, all.size)
         assertTrue(all.none { rule -> rule.apps.any { it.packageName == "com.old" } })
-        val completed = all.single { it.rule.completed }
-        assertEquals(3L, completed.rule.profileId)
-        assertEquals(30L, completed.rule.completedAt)
-        assertEquals(listOf("pack2"), completed.packs.map { it.iconPackPackage })
+        assertEquals(1L, all.single().rule.profileId)
+        assertEquals(false, all.single().rule.completed)
     }
 
     @Test
     fun insertRules_isAdditive() = runBlocking {
-        repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
+        createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
 
         repo.insertRules(
             listOf(
@@ -163,10 +170,54 @@ class WatchRepositoryTest {
 
     @Test
     fun replaceAllRules_empty_clearsStore() = runBlocking {
-        repo.createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
+        createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), profileId = 1L)
 
         repo.replaceAllRules(emptyList())
 
         assertTrue(repo.getAllRules().isEmpty())
+    }
+
+    @Test
+    fun baselinesAreIndependentForOverlappingRules() = runBlocking {
+        val app = AppComponent("com.a", "A")
+        val firstId = createRule(
+            listOf(app), false, listOf("pack1"), 1L,
+            listOf(BaselineInput("com.a", "A", "pack1", 1L, "one", "hash-one", 10L))
+        )
+        val secondId = createRule(
+            listOf(app), false, listOf("pack1"), 2L,
+            listOf(BaselineInput("com.a", "A", "pack1", 2L, "two", "hash-two", 20L))
+        )
+
+        assertEquals("hash-one", repo.getState(firstId, "com.a", "A", "pack1")?.lastIconHash)
+        assertEquals("hash-two", repo.getState(secondId, "com.a", "A", "pack1")?.lastIconHash)
+    }
+
+    @Test
+    fun completedRuleCannotCreateADuplicateSuggestion() = runBlocking {
+        val app = AppComponent("com.a", "A")
+        val ruleId = createRule(listOf(app), false, listOf("pack1"), 1L)
+        val candidate = listOf(CandidateInput("pack1", "drawable", "hash"))
+
+        val first = repo.completeWithSuggestion(ruleId, app, candidate)
+        val duplicate = repo.completeWithSuggestion(ruleId, app, candidate)
+
+        assertTrue(first > 0L)
+        assertEquals(-1L, duplicate)
+        assertEquals(1, repo.getRule(ruleId)?.suggestions?.size)
+    }
+
+    @Test
+    fun completionRejectsAnAppNoLongerInTheRule() = runBlocking {
+        val ruleId = createRule(listOf(AppComponent("com.a", "A")), false, listOf("pack1"), 1L)
+
+        val result = repo.completeWithSuggestion(
+            ruleId,
+            AppComponent("com.other", "Other"),
+            listOf(CandidateInput("pack1", "drawable", "hash"))
+        )
+
+        assertEquals(-1L, result)
+        assertEquals(false, repo.getRule(ruleId)?.rule?.completed)
     }
 }

@@ -27,6 +27,7 @@ import dev.renkinProject.renkin.data.isSystemInDarkTheme
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
+import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
@@ -43,7 +44,6 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -70,7 +70,8 @@ interface IconPreviewBuilder {
 @HiltViewModel
 class MainViewModel @Inject constructor(
     application: Application,
-    private val appProvider: ApplicationProvider
+    private val appProvider: ApplicationProvider,
+    private val watchRepo: WatchRepository
 ) : AndroidViewModel(application), IconPreviewBuilder {
 
     // One shared manager for the pack-preview lookups, instead of a fresh instance per call.
@@ -125,20 +126,22 @@ class MainViewModel @Inject constructor(
      * first (auto-saving the active profile's unsaved work — the user opted into that), then
      * shows the apply modal. Waits out a cold start so the switch doesn't race initialization.
      */
-    fun openSuggestionInProfile(suggestionId: Long, profileId: Long) {
+    fun openSuggestionInProfile(suggestionId: Long) {
         viewModelScope.launch {
             // Cold start from a notification: the app list / saved icons may still be loading.
-            withTimeoutOrNull(10_000) {
-                while (!appProvider.startupComplete) delay(50)
+            // Safety beats a timeout here: opening in the current profile after a slow startup
+            // could apply the icon to the wrong profile. The activity-scoped coroutine is
+            // cancelled naturally if startup cannot finish and the activity goes away.
+            while (!appProvider.startupComplete) delay(50)
+            // The database is authoritative. Intent extras can be stale (or supplied by another
+            // app because MainActivity is exported), so never trust them for profile ownership.
+            val suggestion = watchRepo.getSuggestion(suggestionId) ?: return@launch
+            val profileId = watchRepo.getRule(suggestion.ruleId)?.rule?.profileId ?: return@launch
+            if (!appProvider.profileExists(profileId)) {
+                watchProfileMissing = true
+                return@launch
             }
-            if (profileId > 0 && profileId != appProvider.activeProfileId && appProvider.startupComplete) {
-                // The profile may have been deleted since the notification fired. Dropping the
-                // suggestion (instead of showing it) stops it from being applied to whatever
-                // profile happens to be active; the dialog explains why nothing opened.
-                if (!appProvider.profileExists(profileId)) {
-                    watchProfileMissing = true
-                    return@launch
-                }
+            if (profileId != appProvider.activeProfileId) {
                 performSwitch(profileId, saveFirst = hasUnsavedChanges())
             }
             pendingWatchSuggestionId = suggestionId

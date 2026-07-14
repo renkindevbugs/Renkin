@@ -41,7 +41,6 @@ class RenkinNotifications {
         suggestionId: Long,
         appPackage: String,
         packPackages: List<String>,
-        profileId: Long,
         profileName: String
     ) {
         createIconAvailableChannel(context)
@@ -66,7 +65,6 @@ class RenkinNotifications {
             action = MainActivity.ACTION_OPEN_SUGGESTION
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(MainActivity.EXTRA_SUGGESTION_ID, suggestionId)
-            putExtra(MainActivity.EXTRA_SUGGESTION_PROFILE_ID, profileId)
         }
         val pendingIntent = PendingIntent.getActivity(
             context, suggestionId.toInt(), intent,

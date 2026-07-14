@@ -113,7 +113,8 @@ WatchRulePack                 // explicit packs a rule monitors (only when !watc
   iconPackPackage: String
   (PK: ruleId + iconPackPackage)
 
-WatchState                    // baseline content fingerprint per app+pack
+WatchState                    // baseline content fingerprint per rule+app+pack
+  ruleId: Long               // overlapping rules/profiles advance independently
   packageName: String
   activityName: String
   iconPackPackage: String
@@ -121,7 +122,7 @@ WatchState                    // baseline content fingerprint per app+pack
   lastIconName: String?       // null = pack had no icon for the app last time
   lastIconHash: String?       // CONTENT hash of the resolved drawable bitmap (decided: hash)
   lastCheckedAt: Long
-  (PK: packageName + activityName + iconPackPackage)
+  (PK: ruleId + packageName + activityName + iconPackPackage)
 
 IconSuggestion                // one per (rule, app) — grouped across packs
   id: Long (PK, autoGenerate)
@@ -184,11 +185,11 @@ Mirror the look of the existing full-screen editor
   through the normal generation path:
   `appProvider.getIcon(app, options, customIcon = resolvedResourceDrawable)`
   (see [`ApplicationProvider.getIcon`](app/src/main/kotlin/dev/alembiconsProject/alembicons/apk/ApplicationProvider.kt)).
-- **Confirm = store only (decided):** `editApplication(index, app.changeExport(icon))`
+- **Confirm = store and consume (decided):** `editApplication(index, app.changeExport(icon))`
   (same as the editor's `onConfirm`) and **show a toast** telling the user to press
   **Build** to regenerate the pack with the new icon. **Do NOT auto-rebuild/reinstall.**
-  Then delete the consumed `IconSuggestion`/candidates. The rule was already split &
-  marked completed at suggestion time (see §5), so nothing else changes here.
+  Then delete the consumed completed rule together with its suggestion/candidates. It no
+  longer belongs in Completed after the user applied it.
 - **Cancel/ignore:** nothing is applied; the completed rule + suggestion stay so the
   user can still apply later from the watch screen. The bell badge keeps counting it.
 
@@ -221,7 +222,7 @@ WorkManager periodic tick   (optional fast-path: PACKAGE_REPLACED → expedited 
         ▼
   MainActivity → home modal (original vs new; pick pack if multiple candidates)
         ├─ confirm → store icon (changeExport) + TOAST "press Build to apply";
-        │            delete the suggestion. (NO auto-rebuild.)
+        │            delete the completed rule + suggestion. (NO auto-rebuild.)
         └─ cancel  → keep the completed rule + suggestion (still applyable later)
 
   Completed rules are never re-checked; user deletes them manually → badge decrements.
@@ -262,7 +263,7 @@ WorkManager periodic tick   (optional fast-path: PACKAGE_REPLACED → expedited 
 3. **Ignoring a suggestion** does not re-notify: the app is already split into a
    **completed** rule at suggestion time, so it's never re-checked. The completed
    rule lingers (applyable later) and is counted by the **bell badge** until the user
-   deletes it.
+   applies or deletes it. Applying consumes the completed rule; closing the modal does not.
 4. **Multiple packs → one grouped notification**; the user **picks the pack in the
    modal** (candidates list).
 5. **Engine: WorkManager only** for v1 (most robust + easiest to extend). Event

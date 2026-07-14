@@ -84,23 +84,22 @@ class WatchViewModel @Inject constructor(
     var isChecking by mutableStateOf(false)
         private set
 
-    /** Creates or updates a rule, then snapshots its current icons as the baseline. */
+    /** Atomically creates or updates a rule together with its current icon baseline. */
     fun saveRule(
         existing: RuleWithDetails?,
         apps: List<AppComponent>,
         watchAll: Boolean,
         packs: List<String>
     ) {
+        val profileId = appProvider.activeProfileId
         viewModelScope.launch {
-            val ruleId = if (existing == null) {
-                repo.createRule(apps, watchAll, packs, appProvider.activeProfileId)
-            } else {
-                repo.updateRule(existing.rule.id, apps, watchAll, packs)
-                existing.rule.id
-            }
-            // Snapshot current icons so a later pack update is the trigger, not the
-            // icons that already existed when the rule was made.
-            WatchChecker(getApplication()).baselineRule(ruleId)
+            WatchChecker(getApplication()).saveRule(
+                existingRuleId = existing?.rule?.id,
+                apps = apps,
+                watchAllPacks = watchAll,
+                packPackages = packs,
+                profileId = profileId
+            )
         }
     }
 
