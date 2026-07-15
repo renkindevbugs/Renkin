@@ -442,6 +442,7 @@ class MainViewModel @Inject constructor(
     fun sync() {
         viewModelScope.launch {
             appProvider.forceSync()
+            packBrowserPreviews.clear()
             // The sync may have unlocked held-back icons — the badge/banner must follow.
             refreshMissingPacks(prompt = false)
             _toastEvents.trySend(R.string.packsSynced)
@@ -459,6 +460,7 @@ class MainViewModel @Inject constructor(
             appsRefreshing = true
             try {
                 appProvider.reloadPreservingSession(unsavedKeys())
+                packBrowserPreviews.clear()
                 // An uninstalled app no longer has a visible row to carry a session edit.
                 val liveKeys = appProvider.applicationList.mapTo(mutableSetOf()) { it.key }
                 updatedKeys = updatedKeys.filterTo(mutableSetOf()) { it in liveKeys }
@@ -508,22 +510,22 @@ class MainViewModel @Inject constructor(
 
     /** Collapsed row previews for the icon-pack browser (see [PackBrowserPreviews.rowPreviews]). */
     suspend fun packRowPreviews(
-        packageName: String,
+        iconPack: IconPack,
         sortOrder: IconSortOrder,
         query: String,
         options: GenerationOptions,
         component: InstalledApplication? = null
-    ): PackRowPreviews = packBrowserPreviews.rowPreviews(packageName, sortOrder, query, options, component)
+    ): PackRowPreviews = packBrowserPreviews.rowPreviews(iconPack, sortOrder, query, options, component)
 
     /** Streaming full-pack grid previews for the browser (see [PackBrowserPreviews.detailPreviews]). */
     suspend fun packDetailPreviews(
-        packageName: String,
+        iconPack: IconPack,
         sortOrder: IconSortOrder,
         query: String,
         options: GenerationOptions,
         component: InstalledApplication? = null,
         onChunk: (List<PackIconPreview>) -> Unit
-    ) = packBrowserPreviews.detailPreviews(packageName, sortOrder, query, options, component, onChunk)
+    ) = packBrowserPreviews.detailPreviews(iconPack, sortOrder, query, options, component, onChunk)
 
     /** Clears only the unsaved bulk-refresh icons — see ApplicationProvider.clearRefreshedIcons. */
     fun clearRefreshedIcons() = appProvider.clearRefreshedIcons()

@@ -139,13 +139,13 @@ fun PackIconsRow(
     // an icon (which sets primaryIconPack) re-keys every visible row and flashes the loader.
     val previewOptions = remember(options) { options.copy(primaryIconPack = "") }
 
-    LaunchedEffect(iconPack.packageName, sortOrder, query, previewOptions) {
+    LaunchedEffect(iconPack, sortOrder, query, previewOptions) {
         isLoading = true
         onLoadingChange(true)
         try {
             // The view model serves a cached result instantly (no suspension) when it has one, so
             // a row scrolled back into view shows immediately without a loading flash.
-            val result = viewModel.packRowPreviews(iconPack.packageName, sortOrder, query, previewOptions, component)
+            val result = viewModel.packRowPreviews(iconPack, sortOrder, query, previewOptions, component)
             iconPairs = result.previews
             moreCount = result.moreCount
             isLoading = false
@@ -244,13 +244,13 @@ fun PackDetailGrid(
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(iconPack.packageName, sortOrder, query) {
+    LaunchedEffect(iconPack, sortOrder, query) {
         isLoading = true
         onLoadingChange(true)
         try {
             iconPairs = emptyList()
             // The grid fills progressively as the view model streams chunks back on the main thread.
-            viewModel.packDetailPreviews(iconPack.packageName, sortOrder, query, options, component) { chunk ->
+            viewModel.packDetailPreviews(iconPack, sortOrder, query, options, component) { chunk ->
                 iconPairs = (iconPairs + chunk).distinctBy { it.resource.resourceId }
             }
             isLoading = false

@@ -30,6 +30,7 @@ import dev.renkinProject.renkin.extension.getDrawableOrNull
 import dev.renkinProject.renkin.extension.getIdentifierByName
 import dev.renkinProject.renkin.extension.getXmlOrNull
 import dev.renkinProject.renkin.extension.toDrawable
+import dev.renkinProject.renkin.util.Log
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
@@ -39,7 +40,33 @@ internal fun launcherIconOrFallback(activityIcon: Drawable?, applicationIcon: ()
 internal fun launcherIconIdOrFallback(activityIconId: Int?, applicationIconId: Int): Int =
     activityIconId?.takeIf { it != 0 } ?: applicationIconId
 
-class ApplicationManager(private val ctx: Context) {
+internal data class NamedResourceDrawable(val name: String, val resource: ResourceDrawable)
+
+internal interface PackBrowserDataSource {
+    fun getIconPackDrawableNames(iconPackName: String): List<String>
+    fun getIconPackDrawableEntries(iconPackName: String, drawableNames: List<String>): List<NamedResourceDrawable>
+    fun getAppFilterRawElements(iconPackName: String, applications: List<InstalledApplication>): List<RawElement>
+}
+
+/**
+ * Resolves drawable names independently. Missing or malformed entries are skipped without
+ * shifting the name→resource association of every healthy entry that follows them.
+ */
+internal fun resolveNamedDrawables(
+    names: List<String>,
+    resolveId: (String) -> Int,
+    loadDrawable: (Int) -> Drawable?
+): List<NamedResourceDrawable> {
+    val seenIds = mutableSetOf<Int>()
+    return names.mapNotNull { name ->
+        val id = runCatching { resolveId(name) }.getOrNull() ?: return@mapNotNull null
+        if (id <= 0 || !seenIds.add(id)) return@mapNotNull null
+        val drawable = runCatching { loadDrawable(id) }.getOrNull() ?: return@mapNotNull null
+        NamedResourceDrawable(name, ResourceDrawable(id, drawable))
+    }
+}
+
+internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSource {
 
     companion object {
         /**
@@ -141,7 +168,7 @@ class ApplicationManager(private val ctx: Context) {
         return getIconPacks(Intent("org.adw.launcher.THEMES", null))
     }
 
-    fun getAppFilterRawElements(iconPackName: String, applications: List<InstalledApplication>): List<RawElement> {
+    override fun getAppFilterRawElements(iconPackName: String, applications: List<InstalledApplication>): List<RawElement> {
         val res = getResources(iconPackName) ?: return emptyList()
         val xmlParser = getAppfilter(res, iconPackName)
 
@@ -156,7 +183,8 @@ class ApplicationManager(private val ctx: Context) {
 
     /** The drawable name [iconPackName]'s appfilter maps to [application]'s component, if any. */
     fun appFilterDrawableName(iconPackName: String, application: InstalledApplication): String? =
-        getAppFilterRawElements(iconPackName, listOf(application))
+        runCatching { getAppFilterRawElements(iconPackName, listOf(application)) }
+            .getOrDefault(emptyList())
             .filterIsInstance<RawItem>()
             .firstOrNull { it.component == application.toComponentInfo() }
             ?.drawableLink
@@ -223,10 +251,12 @@ class ApplicationManager(private val ctx: Context) {
 
         for (element in elements) {
             if (element is RawItem) {
-                val resourceId = res.getIdentifierByName(element.drawableLink, "drawable", iconPackName)
+                val resourceId = runCatching {
+                    res.getIdentifierByName(element.drawableLink, "drawable", iconPackName)
+                }.getOrNull() ?: continue
 
                 if (resourceId > 0) {
-                    val drawable = getResIcon(res, resourceId)
+                    val drawable = runCatching { getResIcon(res, resourceId) }.getOrNull()
                     if (drawable != null)
                         map[element.component] = ResourceDrawable(resourceId, drawable)
                 }
@@ -236,7 +266,7 @@ class ApplicationManager(private val ctx: Context) {
         return map
     }
 
-    fun getIconPackDrawableNames(iconPackName: String): List<String> {
+    override fun getIconPackDrawableNames(iconPackName: String): List<String> {
         val res = getResources(iconPackName) ?: return emptyList()
         val xmlParser = getDrawable(res, iconPackName) ?: return emptyList()
 
@@ -262,32 +292,13 @@ class ApplicationManager(private val ctx: Context) {
         return list.distinct()
     }
 
-    fun getIconPackDrawableIds(iconPackName: String, drawableNames: List<String>): List<Int> {
-        val list = mutableListOf<Int>()
-        val res = getResources(iconPackName) ?: return list
-
-        for (name in drawableNames) {
-            val resourceId = res.getIdentifierByName(name, "drawable", iconPackName)
-
-            if (resourceId > 0 && !list.contains(resourceId)) {
-                list.add(resourceId)
-            }
-        }
-
-        return list
-    }
-
-    fun getIconPackDrawables(iconPackName: String, drawableIds: List<Int>): List<ResourceDrawable> {
-        val list = mutableListOf<ResourceDrawable>()
-        val res = getResources(iconPackName) ?: return list
-
-        for (id in drawableIds) {
-            val drawable = getResIcon(res, id)
-            if (drawable != null)
-                list.add(ResourceDrawable(id, drawable))
-        }
-
-        return list
+    override fun getIconPackDrawableEntries(iconPackName: String, drawableNames: List<String>): List<NamedResourceDrawable> {
+        val res = getResources(iconPackName) ?: return emptyList()
+        return resolveNamedDrawables(
+            drawableNames,
+            resolveId = { name -> res.getIdentifierByName(name, "drawable", iconPackName) },
+            loadDrawable = { id -> getResIcon(res, id) }
+        )
     }
 
     fun getCalendarApplications(applications: List<InstalledApplication>, elements: List<RawElement>): Map<InstalledApplication, String> {
@@ -311,18 +322,20 @@ class ApplicationManager(private val ctx: Context) {
         val iconPacks = mutableListOf<IconPack>()
 
         for (resolve in resolves) {
-            val appName = resolve.activityInfo.applicationInfo.loadLabel(pm).toString()
-            val packageName = resolve.activityInfo.packageName
-            val iconID = resolve.activityInfo.applicationInfo.icon
+            try {
+                val appName = resolve.activityInfo.applicationInfo.loadLabel(pm).toString()
+                val packageName = resolve.activityInfo.packageName
+                val iconID = resolve.activityInfo.applicationInfo.icon
+                val pack = getPackage(packageName)
 
-            val pack = getPackage(resolve.activityInfo.packageName)
-
-            if (pack != null) {
-                val versionCode = getVersionCode(pack)
-                val versionName = pack.versionName ?: ""
-
-                val iconPack = IconPack(packageName, appName, versionCode, versionName, iconID)
-                iconPacks.add(iconPack)
+                if (pack != null) {
+                    val versionCode = getVersionCode(pack)
+                    val versionName = pack.versionName ?: ""
+                    iconPacks.add(IconPack(packageName, appName, versionCode, versionName, iconID))
+                }
+            } catch (error: Exception) {
+                // Broken metadata in one advertised theme must not hide every healthy pack.
+                Log.error("ApplicationManager", "Skipping malformed icon pack activity", error)
             }
         }
 
