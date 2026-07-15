@@ -489,7 +489,7 @@ fun ApplicationList(
     ) {
         // Missing-pack banner rides above the hero card while anything stays locked.
         if (viewModel.missingPackSummary.isNotEmpty()) {
-            item(key = "missingPacks") {
+            item(key = "missingPacks", contentType = "missingPacks") {
                 MissingPacksBanner(
                     packCount = viewModel.missingPackSummary.size,
                     iconCount = viewModel.missingPackSummary.sumOf { it.iconCount },
@@ -498,15 +498,15 @@ fun ApplicationList(
             }
         }
         // Scrolls away with the list — only the search bar stays pinned
-        item(key = "hero") {
+        item(key = "hero", contentType = "hero") {
             HeroPackCard(iconPacks)
         }
-        item(key = "options") {
+        item(key = "options", contentType = "options") {
             OptionsCard(iconPacks)
         }
         if (displayList.isEmpty()) {
             // A filter/search matched nothing — say so instead of leaving a blank gap.
-            item(key = "empty") {
+            item(key = "empty", contentType = "empty") {
                 // Offer the way out when an icon filter is what emptied the list.
                 val filtered = filterNoIcon || filterFallback || filterLocked
                 EmptyState(
@@ -520,7 +520,7 @@ fun ApplicationList(
                 )
             }
         } else {
-            items(displayList, key = { it.value.key }) { indexedApp ->
+            items(displayList, key = { it.value.key }, contentType = { "application" }) { indexedApp ->
                 ApplicationItem(iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue, Modifier.animateItem())
             }
         }
@@ -595,14 +595,19 @@ fun ApplicationItem(
             // Decoded once at the on-screen size (56.dp) by the shared helper, so scrolling
             // new rows in doesn't decode oversized bitmaps on the main thread (scroll jank).
             val bitmap = rememberAppBitmap(app, 56.dp)
-            if (bitmap != null) {
-                Image(
-                    painter = BitmapPainter(bitmap),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(IconShape)
-                )
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(IconShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                if (bitmap != null) {
+                    Image(
+                        painter = BitmapPainter(bitmap),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
 
             Text(

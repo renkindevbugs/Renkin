@@ -140,8 +140,9 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(16.dp))
+                val currentBitmap = app?.let { rememberAppBitmap(it) }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ComparePreview(app?.let { rememberAppBitmap(it) }, null, loading = false)
+                    ComparePreview(currentBitmap, null, loading = app != null && currentBitmap == null)
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowForward, null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
