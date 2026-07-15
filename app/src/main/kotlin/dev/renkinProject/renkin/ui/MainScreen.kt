@@ -239,6 +239,31 @@ fun MainColumn(iconPacks: List<IconPack>) {
         )
     }
 
+    if (viewModel.installFallbackPending) {
+        RenkinAlertDialog(
+            onDismissRequest = { viewModel.dismissInstallFallback() },
+            icon = {
+                Icon(
+                    Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text(stringResource(R.string.installFallbackTitle)) },
+            text = { Text(boldStringResource(R.string.installFallbackText)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmInstallFallback() }) {
+                    Text(stringResource(R.string.installFallbackAction))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissInstallFallback() }) {
+                    Text(stringResource(R.string.dismiss))
+                }
+            }
+        )
+    }
+
     // Post-build next steps: launchers need a nudge to pick up a (re)built pack, and the nudge
     // differs between a first install (pick the pack) and an update (switch away and back).
     val buildOutcome = viewModel.buildOutcome

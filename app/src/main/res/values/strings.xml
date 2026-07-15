@@ -56,6 +56,7 @@
     <string name="signApk">Signing apk …</string>
     <string name="buildInstalling">Installing …</string>
     <string name="buildUpdating">Updating …</string>
+    <string name="buildReplacing">Replacing existing pack …</string>
     <string name="followSystem">Follow System</string>
     <string name="darkMode">Dark Mode</string>
     <string name="lightMode">Light Mode</string>
@@ -296,6 +297,9 @@
     <string name="sortZToA">Z → A</string>
     <string name="iconPackBuildFailed">Couldn\'t build the icon pack</string>
     <string name="iconPackInstallFailed">The icon pack wasn\'t installed</string>
+    <string name="installFallbackTitle">Replace existing icon pack?</string>
+    <string name="installFallbackText">Android can\'t update the installed pack, usually because its signing key is different. To continue, Renkin must **uninstall the existing pack and then install the new one**. Complete both system dialogs. If you cancel the second installation, the old pack will no longer be installed.</string>
+    <string name="installFallbackAction">Replace pack</string>
     <string name="settingsBackup">Backup</string>
     <string name="exportBackup">Export backup</string>
     <string name="importBackup">Import backup</string>

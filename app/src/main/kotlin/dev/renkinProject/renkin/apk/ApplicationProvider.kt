@@ -37,6 +37,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
+internal suspend fun installOrReportConflict(
+    canUpdateInPlace: Boolean,
+    install: suspend () -> ApkInstallResult
+): ApkInstallResult =
+    if (canUpdateInPlace) install() else ApkInstallResult.CONFLICT
+
+internal suspend fun replaceAfterConflict(
+    uninstall: suspend () -> Boolean,
+    install: suspend () -> ApkInstallResult
+): ApkInstallResult =
+    if (uninstall()) install() else ApkInstallResult.ABORTED
+
 /**
  * The domain hub between the UI layer (MainViewModel) and everything icon-related: the live
  * app list, icon generation/refresh, pack building and the saved-pack store. Profile state
@@ -263,25 +275,32 @@ class ApplicationProvider(private val context: Context) {
             BuiltIconPack(apk, iconPackGenerator.getIconPackName(), canBeInstalled)
         }
 
-    suspend fun installIconPack(iconPack: BuiltIconPack): Boolean = withContext(Dispatchers.Default) {
-        var success = false
-
-        if (iconPack.canBeInstalled) {
-            success = ApkInstaller(context).install(iconPack.uri)
-        } else {
-            if (ApkUninstaller(context).uninstall(iconPack.packageName)) {
-                success = ApkInstaller(context).install(iconPack.uri)
-            }
+    suspend fun installIconPack(iconPack: BuiltIconPack): ApkInstallResult = withContext(Dispatchers.Default) {
+        val result = installOrReportConflict(iconPack.canBeInstalled) {
+            ApkInstaller(context).install(iconPack.uri)
         }
+        finishInstallAttempt(result)
+        result
+    }
 
+    /** Explicitly approved fallback after an update conflict: uninstall, then install the APK. */
+    suspend fun replaceIconPack(iconPack: BuiltIconPack): ApkInstallResult = withContext(Dispatchers.Default) {
+        val result = replaceAfterConflict(
+            uninstall = { ApkUninstaller(context).uninstall(iconPack.packageName) },
+            install = { ApkInstaller(context).install(iconPack.uri) }
+        )
+        finishInstallAttempt(result)
+        result
+    }
+
+    private suspend fun finishInstallAttempt(result: ApkInstallResult) {
+        val success = result == ApkInstallResult.SUCCESS
         // A successful build IS the pack — the save matches it. A failed/cancelled install
         // leaves the save marked as not yet built.
         persistActiveProfileIcons(unbuiltAfter = !success)
 
         // The just-(re)installed pack carries a fresh provenance map.
         if (success) lockManager.clearProvenanceCache()
-
-        success
     }
 
     /**
