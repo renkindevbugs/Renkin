@@ -33,11 +33,6 @@ class IconPackRepository(private val context: Context) {
     private var appFilterElements: Map<IconPack, List<RawElement>> = emptyMap()
     private var installedApplications: List<InstalledApplication> = listOf()
 
-    var calendarIcon: Map<InstalledApplication, String> = mapOf()
-        private set
-    var calendarIconsDrawable: Map<String, Drawable> = emptyMap()
-        private set
-
     private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
 
     suspend fun load() = withContext(Dispatchers.Default) {
@@ -91,16 +86,14 @@ class IconPackRepository(private val context: Context) {
         )
     }
 
-    fun retrieveCalendarIcons(iconPackageName: String) {
+    /** Calendar mappings declared by the currently installed version of [iconPackageName]. */
+    internal fun declaredCalendarSelections(iconPackageName: String): List<CalendarSelection> {
+        if (iconPackageName.isEmpty()) return emptyList()
         val entry = appFilterElements.entries.find { it.key.packageName == iconPackageName }
-
-        val packApps = entry?.value ?: listOf()
-        calendarIcon = appManager.getCalendarApplications(installedApplications, packApps)
-        calendarIconsDrawable =
-            appManager.getCalendarFromAppFilterElements(
-                iconPackageName,
-                packApps
-            )
+            ?: return emptyList()
+        return appManager.getCalendarApplications(installedApplications, entry.value).map { (app, prefix) ->
+            CalendarSelection(app, iconPackageName, prefix)
+        }
     }
 
     /**
@@ -140,48 +133,11 @@ class IconPackRepository(private val context: Context) {
         return entry.value.filterIsInstance<RawCalendar>().find { it.component == component }?.prefix
     }
 
-    /**
-     * Returns calendar icons (app→prefix map and prefix+day→drawable map) for the given
-     * [appsWithPrefixes] in [iconPackageName]. The prefix is supplied by the caller — it was
-     * derived from the drawable name the user picked, so it doesn't depend on appfilter.xml
-     * having a `<calendar>` entry for that specific app.
-     */
-    fun calendarDataForPrefixes(
-        iconPackageName: String,
-        appsWithPrefixes: List<Pair<InstalledApplication, String>>
-    ): Pair<Map<InstalledApplication, String>, Map<String, Drawable>> {
-        if (appsWithPrefixes.isEmpty()) return emptyMap<InstalledApplication, String>() to emptyMap()
-
-        val apps = appsWithPrefixes.map { it.first }
-        // Synthesise RawCalendar entries from the user-chosen prefixes (no appfilter lookup).
-        val fakeCalendars = appsWithPrefixes.map { (app, prefix) ->
-            RawCalendar(component = app.toComponentInfo(), prefix = prefix)
+    /** Builds one collision-free export from both global and per-app calendar selections. */
+    internal fun calendarBuildData(selections: List<CalendarSelection>): CalendarBuildData<Drawable> =
+        buildCalendarData(selections) { pack, prefix ->
+            loadCalendarDays(prefix) { name -> appManager.getDrawableByName(pack, name) }
         }
-
-        val icons = appManager.getCalendarApplications(apps, fakeCalendars)
-        val raw = appManager.getCalendarFromAppFilterElements(iconPackageName, fakeCalendars)
-
-        // Fill missing calendar days so the icon appears on every date, even when the
-        // source pack only has drawables for the app the icon was *designed* for.
-        // Step 1: some packs zero-pad names (prefix01..prefix09); try that for any gap.
-        // Step 2: any day still missing gets the first drawable found for that prefix.
-        val filled = raw.toMutableMap()
-        for ((_, prefix) in appsWithPrefixes) {
-            for (i in 1..31) {
-                val key = prefix + i
-                if (key !in filled) {
-                    val padded = appManager.getDrawableByName(iconPackageName, prefix + i.toString().padStart(2, '0'))
-                    if (padded != null) filled[key] = padded
-                }
-            }
-            val fallback = filled.entries.firstOrNull { it.key.startsWith(prefix) }?.value
-            if (fallback != null) {
-                for (i in 1..31) filled.putIfAbsent(prefix + i, fallback)
-            }
-        }
-
-        return icons to filled
-    }
 
     /**
      * Day numbers (1..31) the source pack is missing for [prefix], checking both the plain
