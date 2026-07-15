@@ -12,8 +12,26 @@ import dev.renkinProject.renkin.data.RawElement
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+
+internal fun loadIsolatedAppFilters(
+    packs: List<IconPack>,
+    loader: (IconPack) -> List<RawElement>,
+    onFailure: (IconPack, Exception) -> Unit = { _, _ -> }
+): Map<IconPack, List<RawElement>> = buildMap {
+    for (pack in packs) {
+        try {
+            put(pack, loader(pack))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            onFailure(pack, error)
+        }
+    }
+}
 
 /**
  * Owns everything about installed icon packs: the pack list, their app-filter elements,
@@ -45,22 +63,28 @@ class IconPackRepository(private val context: Context) {
     }
 
     private fun loadAppFilterElements() {
-        val map = mutableMapOf<IconPack, List<RawElement>>()
-
         installedApplications = appManager.getAllInstalledApplications()
-
-        for (iconPack in iconPacks) {
-            map[iconPack] = appManager.getAppFilterRawElements(iconPack.packageName, installedApplications)
-        }
-
-        appFilterElements = map
+        appFilterElements = loadIsolatedAppFilters(
+            iconPacks,
+            loader = { pack ->
+                appManager.getAppFilterRawElements(pack.packageName, installedApplications)
+            },
+            onFailure = { pack, error ->
+                Log.error("IconPackRepository", "Skipping malformed appfilter: ${pack.packageName}", error)
+            }
+        )
         iconPackLoaded = true
     }
 
     /** The pack's classic fallback styling (iconback/mask/upon/scale) for unthemed apps. */
     fun getIconPackFallback(iconPack: String): dev.renkinProject.renkin.data.IconPackFallback {
         if (iconPack == "") return dev.renkinProject.renkin.data.IconPackFallback()
-        return appManager.getIconPackFallback(iconPack)
+        return try {
+            appManager.getIconPackFallback(iconPack)
+        } catch (error: Exception) {
+            Log.error("IconPackRepository", "Ignoring malformed fallback: $iconPack", error)
+            dev.renkinProject.renkin.data.IconPackFallback()
+        }
     }
 
     /** Drawables every installed app has in [iconPack], keyed by app. */
@@ -159,13 +183,17 @@ class IconPackRepository(private val context: Context) {
 
             for (pack in iconPacks) {
                 if (application == null) {
-                    val icon = appManager.getResIcon(pack.packageName, pack.iconID)
+                    val icon = runCatching {
+                        appManager.getResIcon(pack.packageName, pack.iconID)
+                    }.getOrNull()
 
                     if (icon != null) {
                         map[pack.packageName] = ResourceDrawable(pack.iconID, icon)
                     }
                 } else {
-                    val icons = getAppDrawable(application, pack.packageName)
+                    val icons = runCatching {
+                        getAppDrawable(application, pack.packageName)
+                    }.getOrDefault(emptyMap())
 
                     if (icons.isNotEmpty()) {
                         map[pack.packageName] = icons[application]!!

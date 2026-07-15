@@ -69,8 +69,9 @@ class IconGenerationService(
         expectedHash: String?,
         options: GenerationOptions
     ): ValidatedPackIcon {
-        val ids = appManager.getIconPackDrawableIds(packPackage, listOf(drawableName))
-        val resource = appManager.getIconPackDrawables(packPackage, ids).firstOrNull()
+        val resource = appManager.getIconPackDrawableEntries(packPackage, listOf(drawableName))
+            .firstOrNull()
+            ?.resource
         val currentHash = resource?.drawable?.toSafeBitmapOrNull()?.contentHash()
         if (iconSourceChanged(expectedHash, currentHash)) {
             return ValidatedPackIcon(null, sourceChanged = true)
