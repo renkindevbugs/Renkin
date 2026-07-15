@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathData
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.vector.VectorRenderer.Companion.renderToCanvas
+import dev.renkinProject.renkin.vector.brush.ReferenceBrush
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -74,5 +75,25 @@ class VectorRendererTest {
         var borderHit = false
         for (x in 0 until 64) if (bitmap.getPixel(x, 32) != 0) { borderHit = true; break }
         assertTrue(borderHit)
+    }
+
+    @Test
+    fun referenceBrush_rendersItsFallbackColor() {
+        val vector = ImageVector.Builder("reference", 24.dp, 24.dp, 24f, 24f)
+            .addPath(
+                pathData = PathData {
+                    moveTo(4f, 4f)
+                    horizontalLineTo(20f)
+                    verticalLineTo(20f)
+                    horizontalLineTo(4f)
+                    close()
+                },
+                fill = ReferenceBrush("@color/icon_color", Color.Blue)
+            )
+            .build()
+
+        val bitmap = render(vector)
+
+        assertNotEquals(0, bitmap.getPixel(32, 32))
     }
 }

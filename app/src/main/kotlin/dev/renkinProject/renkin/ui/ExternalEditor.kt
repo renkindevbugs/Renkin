@@ -7,6 +7,8 @@ import android.net.Uri
 import androidx.core.content.FileProvider
 import dev.renkinProject.renkin.R
 import java.io.File
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 // ImageToolbox keeps its original applicationId for update compatibility, even though its package
 // namespace is now com.t8rin.imagetoolbox.
@@ -22,14 +24,16 @@ fun imageToolboxInstalled(context: Context): Boolean =
  * the user shares the edited image back to Renkin, where the share receiver in
  * [dev.renkinProject.renkin.MainActivity] drops it into the upload gallery.
  */
-fun openInImageToolbox(context: Context, bitmap: Bitmap) {
+internal suspend fun openInImageToolbox(context: Context, bitmap: Bitmap): Boolean {
+    val sharedIcon = runCatching { writeSharedIcon(context, bitmap) }.getOrNull() ?: return false
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "image/png"
-        putExtra(Intent.EXTRA_STREAM, writeSharedIcon(context, bitmap))
+        putExtra(Intent.EXTRA_STREAM, sharedIcon)
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         setPackage(IMAGE_TOOLBOX_PACKAGE)
     }
-    if (intent.resolveActivity(context.packageManager) != null) context.startActivity(intent)
+    if (intent.resolveActivity(context.packageManager) == null) return false
+    return runCatching { context.startActivity(intent) }.isSuccess
 }
 
 /** Opens ImageToolbox's Play Store page (browser fallback) so the user can install it. */
@@ -38,8 +42,9 @@ fun openImageToolboxStore(context: Context) {
     if (market.resolveActivity(context.packageManager) != null) {
         context.startActivity(market)
     } else {
-        context.startActivity(Intent(Intent.ACTION_VIEW,
-            Uri.parse("https://play.google.com/store/apps/details?id=$IMAGE_TOOLBOX_PACKAGE")))
+        val browser = Intent(Intent.ACTION_VIEW,
+            Uri.parse("https://play.google.com/store/apps/details?id=$IMAGE_TOOLBOX_PACKAGE"))
+        if (browser.resolveActivity(context.packageManager) != null) context.startActivity(browser)
     }
 }
 
@@ -48,19 +53,25 @@ fun openImageToolboxStore(context: Context) {
  * unrelated apps like mail or messengers (`ACTION_SEND` would). The edited image comes back the
  * same way as [openInImageToolbox]: shared back to Renkin into the upload gallery.
  */
-fun editInAnotherApp(context: Context, bitmap: Bitmap) {
+internal suspend fun editInAnotherApp(context: Context, bitmap: Bitmap): Boolean {
+    val sharedIcon = runCatching { writeSharedIcon(context, bitmap) }.getOrNull() ?: return false
     val edit = Intent(Intent.ACTION_EDIT).apply {
-        setDataAndType(writeSharedIcon(context, bitmap), "image/*")
+        setDataAndType(sharedIcon, "image/*")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
-    context.startActivity(Intent.createChooser(edit, context.getString(R.string.editInAnotherApp)))
+    if (edit.resolveActivity(context.packageManager) == null) return false
+    return runCatching {
+        context.startActivity(Intent.createChooser(edit, context.getString(R.string.editInAnotherApp)))
+    }.isSuccess
 }
 
-private fun writeSharedIcon(context: Context, bitmap: Bitmap): Uri {
+private suspend fun writeSharedIcon(context: Context, bitmap: Bitmap): Uri = withContext(Dispatchers.IO) {
     val dir = File(context.cacheDir, "shared").apply { mkdirs() }
     // Previous handoffs are stale once a new one starts — don't let them pile up in the cache.
     dir.listFiles()?.forEach { it.delete() }
     val file = File(dir, "icon_${System.currentTimeMillis()}.png")
-    file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-    return FileProvider.getUriForFile(context, "${context.packageName}.fileProvider", file)
+    file.outputStream().use {
+        check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) { "PNG compression failed" }
+    }
+    FileProvider.getUriForFile(context, "${context.packageName}.fileProvider", file)
 }

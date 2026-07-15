@@ -64,7 +64,7 @@ class SvgVectorImporterTest {
     fun perPathAttributesOverrideRoot() {
         val svg = """
             <svg viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="2">
-              <path d="M1 1h4" fill="red" />
+              <path d="M1 1h4" fill="red" stroke="none" />
               <path d="M1 5h4" stroke-width="3" />
             </svg>
         """.trimIndent()
@@ -91,5 +91,37 @@ class SvgVectorImporterTest {
         assertNull(SvgVectorImporter.parse("not xml at all"))
         assertNull(SvgVectorImporter.parse("""<svg viewBox="0 0 24 24"><rect width="5" height="5"/></svg>"""))
         assertNull(SvgVectorImporter.parse("""<svg><path d="M0 0h1"/></svg>"""))
+    }
+
+    @Test
+    fun groupPaintAttributes_areInherited() {
+        val svg = """
+            <svg viewBox="0 0 24 24" fill="none">
+              <g stroke="currentColor" stroke-width="2">
+                <path d="M1 1h10" />
+              </g>
+            </svg>
+        """.trimIndent()
+
+        val imported = SvgVectorImporter.parse(svg)!!
+
+        assertFalse(imported.paths.single().filled)
+        assertEquals(2f, imported.paths.single().strokeWidth)
+    }
+
+    @Test
+    fun unsupportedOrPartialSvg_isRejectedInsteadOfSilentlyChanged() {
+        assertNull(SvgVectorImporter.parse(
+            """<svg viewBox="0 0 24 24"><path transform="translate(2)" d="M0 0h1"/></svg>"""
+        ))
+        assertNull(SvgVectorImporter.parse(
+            """<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>"""
+        ))
+        assertNull(SvgVectorImporter.parse(
+            """<svg viewBox="0 0 24 24" stroke="black"><path d="M0 0h1"/></svg>"""
+        ))
+        assertNull(SvgVectorImporter.parse(
+            """<svg viewBox="1 1 24 24"><path d="M1 1h1"/></svg>"""
+        ))
     }
 }

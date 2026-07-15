@@ -3,8 +3,13 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <queries>
+        <package android:name="ru.tech.imageresizershrinker" />
         <intent>
             <action android:name="android.intent.action.MAIN" /> <!-- Allow to see all apps -->
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.EDIT" />
+            <data android:mimeType="image/*" />
         </intent>
     </queries>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>

@@ -179,6 +179,7 @@
     <string name="edgeContrast">Normalize contrast</string>
     <string name="removeBackground">Remove background</string>
     <string name="editInAnotherApp">Edit in another app</string>
+    <string name="noImageEditorAvailable">No compatible image editor is available</string>
     <string name="openInImageToolbox">Open in ImageToolbox</string>
     <string name="sharedImageAdded">Image added to your uploads</string>
     <string name="centerIcon">Auto-center</string>
