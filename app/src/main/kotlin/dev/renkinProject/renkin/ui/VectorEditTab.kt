@@ -37,6 +37,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -73,16 +74,16 @@ import kotlinx.coroutines.withContext
 
 @Composable
 internal fun PrepareEditVector(app: PackageInfoStruct, state: VectorEditState, onChange: (icon: IconPackDrawable?) -> Unit) {
-    val editedVector = when (app.createdIcon) {
-        is ImageVectorDrawable -> app.createdIcon.applyAndRemoveGroup().toImageVector()
+    val editedVector = remember(app.createdIcon) { when (app.createdIcon) {
+        is ImageVectorDrawable -> app.createdIcon.deepCopy().applyAndRemoveGroup().toImageVector()
         is InsetIconDrawable -> {
             if (app.createdIcon.drawable is ImageVectorDrawable)
-                app.createdIcon.drawable.applyAndRemoveGroup().toImageVector()
+                app.createdIcon.drawable.deepCopy().applyAndRemoveGroup().toImageVector()
             else
                 ImageVector.createEmptyVector()
         }
         else -> ImageVector.createEmptyVector()
-    }
+    } }
 
     EditVectorColumn(editedVector, state) {
         if (app.createdIcon is InsetIconDrawable && it != null) {
@@ -153,6 +154,7 @@ private fun PathEntry.toPreviewVector(template: ImageVector, thickness: Float, v
 
 @Composable
 internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onChange: (icon: IconPackDrawable?) -> Unit) {
+    val currentOnChange by rememberUpdatedState(onChange)
     Column(
         Modifier
             .fillMaxSize()
@@ -182,17 +184,25 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
             state.initialized = true
         }
 
-        val editedVector = vector.toImageVectorDrawable()
-        state.viewportOverride?.let { (w, h) ->
-            editedVector.viewportWidth = w
-            editedVector.viewportHeight = h
+        val editedVector = remember(
+            vector,
+            state.entries,
+            state.thickness,
+            state.automaticallyCenter,
+            state.viewportOverride
+        ) {
+            vector.toImageVectorDrawable().also { edited ->
+                state.viewportOverride?.let { (w, h) ->
+                    edited.viewportWidth = w
+                    edited.viewportHeight = h
+                }
+                edited.root.children.clear()
+                for (entry in state.entries) {
+                    edited.root.children.add(entry.toMutablePath(state.thickness))
+                }
+                if (state.automaticallyCenter) edited.center()
+            }
         }
-        editedVector.root.children.clear()
-        for (entry in state.entries) {
-            editedVector.root.children.add(entry.toMutablePath(state.thickness))
-        }
-        if (state.automaticallyCenter)
-            editedVector.center()
 
         val painter = rememberVectorPainter(editedVector.toImageVector())
         Surface(
@@ -310,8 +320,12 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
             }
         }
 
-        // An empty vector is not a real icon — don't expose it (keeps Modifier greyed)
-        onChange(if (state.entries.isEmpty()) null else editedVector)
+        // Publish only when editor inputs change, never as a side effect of composition itself.
+        LaunchedEffect(state.initialized, editedVector, state.entries.isEmpty()) {
+            if (state.initialized) {
+                currentOnChange(if (state.entries.isEmpty()) null else editedVector)
+            }
+        }
     }
 }
 
@@ -434,7 +448,7 @@ internal fun ImportSvgButton(onImported: (SvgVectorImporter.ImportedSvg) -> Unit
         scope.launch {
             val imported = withContext(Dispatchers.IO) {
                 runCatching {
-                    context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                    context.contentResolver.openInputStream(uri)?.use { it.readUtf8TextLimited() }
                 }.getOrNull()?.let { SvgVectorImporter.parse(it) }
             }
             if (imported == null) toaster.show(errorMessage) else onImported(imported)

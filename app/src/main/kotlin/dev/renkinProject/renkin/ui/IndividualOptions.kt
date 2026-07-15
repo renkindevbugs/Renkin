@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,6 +71,9 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
@@ -421,7 +425,9 @@ fun OptionsDialog(
     val snackbarHostState = remember { SnackbarHostState() }
     val toaster = LocalToaster.current
     val selectIconMessage = stringResource(R.string.selectIconFirst)
+    val externalEditorError = stringResource(R.string.noImageEditorAvailable)
     val context = LocalContext.current
+    val externalEditorScope = rememberCoroutineScope()
 
     LaunchedEffect(selectedTab) {
         // Leaving the icon-pack list re-expands the app bar (other tabs barely scroll).
@@ -666,11 +672,19 @@ fun OptionsDialog(
                                     else ApplicationIconVariant.DEFAULT
                                 },
                                 onEditExternally = { toolbox ->
-                                    val bitmap = draft.iconToConfirm?.toBitmap()
-                                    when {
-                                        bitmap == null -> toaster.show(selectIconMessage)
-                                        toolbox -> openInImageToolbox(context, bitmap)
-                                        else -> editInAnotherApp(context, bitmap)
+                                    val icon = draft.iconToConfirm
+                                    if (icon == null) {
+                                        toaster.show(selectIconMessage)
+                                    } else {
+                                        externalEditorScope.launch {
+                                            val bitmap = withContext(Dispatchers.Default) { icon.toBitmap() }
+                                            val opened = if (toolbox) {
+                                                openInImageToolbox(context, bitmap)
+                                            } else {
+                                                editInAnotherApp(context, bitmap)
+                                            }
+                                            if (!opened) toaster.show(externalEditorError)
+                                        }
                                     }
                                 }
                             ) }

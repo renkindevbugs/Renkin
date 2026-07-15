@@ -31,6 +31,9 @@ class ImageVectorDrawable(imageVector: ImageVector): IconPackDrawable() {
     var autoMirror: Boolean = imageVector.autoMirror
     var root: MutableVectorGroup = MutableVectorGroup(imageVector.root)
 
+    /** A detached mutable copy for editors/exporters that transform vectors in place. */
+    fun deepCopy(): ImageVectorDrawable = ImageVectorDrawable(toImageVector())
+
     fun toImageVector(): ImageVector {
         val builder = ImageVector.Builder(
             name,
@@ -126,7 +129,7 @@ class ImageVectorDrawable(imageVector: ImageVector): IconPackDrawable() {
         // backs the live preview painter — mutating it here would shift/zoom the previewed icon
         // further on every rasterisation (the Position tool and the external-editor hand-off
         // both call toBitmap on the previewed icon).
-        val copy = ImageVectorDrawable(toImageVector())
+        val copy = deepCopy()
         copy.resizeTo(256F, 256F).center()
         copy.renderToCanvas(canvas)
         return bmp

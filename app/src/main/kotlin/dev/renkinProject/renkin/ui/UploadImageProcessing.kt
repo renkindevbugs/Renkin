@@ -8,13 +8,14 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.net.Uri
 import dev.renkinProject.renkin.extension.newArgbBitmap
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color.Companion.Red
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.toArgb
 import com.caverock.androidsvg.SVG
 import com.caverock.androidsvg.SVGParseException
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import kotlin.math.max
 
 // Bitmap/SVG helpers shared by UploadColumn (UploadGallery.kt). internal so the upload
@@ -23,6 +24,7 @@ import kotlin.math.max
 // Imported images end up as icons, so anything bigger than this per side is wasted RAM — a 48 MP
 // camera photo would otherwise materialise as a ~190 MB ARGB_8888 bitmap and risk an OOM.
 private const val MAX_IMPORT_SIZE = 1024
+internal const val MAX_TEXT_IMPORT_BYTES = 5 * 1024 * 1024
 
 internal fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
     val contentResolver = context.contentResolver
@@ -45,7 +47,7 @@ internal fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
         // Not a raster image — try SVG. Reading as text is cheap here: this branch is only
         // reached when the raster decode already failed, and real SVGs are small.
         val markup = runCatching {
-            contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+            contentResolver.openInputStream(uri)?.use { it.readUtf8TextLimited() }
         }.getOrNull()
         if (markup != null && markup.contains("<svg", ignoreCase = true)) {
             bitmap = decodeSvgToBitmap(markup)
@@ -53,6 +55,24 @@ internal fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
     }
 
     return bitmap ?: null
+}
+
+/** Reads text imports without allowing a malformed/renamed file to consume unbounded memory. */
+internal fun InputStream.readUtf8TextLimited(
+    maxBytes: Int = MAX_TEXT_IMPORT_BYTES
+): String? {
+    if (maxBytes < 0) return null
+    val output = ByteArrayOutputStream(minOf(maxBytes, 16 * 1024))
+    val buffer = ByteArray(8 * 1024)
+    var total = 0
+    while (true) {
+        val read = read(buffer)
+        if (read < 0) break
+        total += read
+        if (total > maxBytes) return null
+        output.write(buffer, 0, read)
+    }
+    return output.toString(Charsets.UTF_8.name())
 }
 
 /**
@@ -100,7 +120,6 @@ private fun Bitmap.hasAnyVisiblePixel(): Boolean {
     return false
 }
 
-@Composable
 internal fun zoomBitmap(image: Bitmap, zoomLevel: Float): Bitmap {
     if (zoomLevel == 1f) {
         return image
