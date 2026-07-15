@@ -74,7 +74,6 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 @Composable
 fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     val viewModel: MainViewModel = hiltViewModel()
-    val preferences = getPreferences().getPreferencesValue()
     val view = LocalView.current
     val context = getCurrentContext()
     val toaster = LocalToaster.current
@@ -86,7 +85,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     val previewLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             view.performConfirmHaptic()
-            viewModel.build(preferences)
+            viewModel.build()
         }
     }
 

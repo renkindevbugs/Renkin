@@ -20,8 +20,15 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.extension.toNullableColor
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.enums.enumEntries
+
+// DataStore serializes edits internally, but UI-triggered setter coroutines can still race a
+// snapshot read started by the next tap. This mutex gives writes and action snapshots one order.
+private val preferenceAccessMutex = Mutex()
 
 private const val DARK_MODE_NAME = "NIGHT_THEME"
 private const val INCLUDE_VECTOR_NAME = "INCLUDE_VECTOR"
@@ -146,7 +153,9 @@ fun Preferences.snapshotProfilePrefs(): String {
  * ones removed — a fresh profile starts from the defaults.
  */
 suspend fun DataStore<Preferences>.restoreProfilePrefs(snapshot: String) {
-    edit { it.replaceProfilePrefs(snapshot) }
+    preferenceAccessMutex.withLock {
+        edit { it.replaceProfilePrefs(snapshot) }
+    }
 }
 
 /** Replaces every profile key, removing missing, malformed and wrongly typed values. */
@@ -352,10 +361,16 @@ fun <T : Any> DataStore<Preferences>.getPreferenceValue(key: Preferences.Key<T>,
 }
 
 suspend fun <T> DataStore<Preferences>.setPreferenceValue(key: Preferences.Key<T>, value: T) {
-    edit { settings ->
-        settings[key] = value
+    preferenceAccessMutex.withLock {
+        edit { settings ->
+            settings[key] = value
+        }
     }
 }
+
+/** Reads a snapshot only after every preference write that started before it has completed. */
+suspend fun DataStore<Preferences>.getPreferencesAfterPendingWrites(): Preferences =
+    preferenceAccessMutex.withLock { data.first() }
 
 //Labels
 @Composable

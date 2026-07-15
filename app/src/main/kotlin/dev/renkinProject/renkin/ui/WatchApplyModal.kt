@@ -50,12 +50,12 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.WatchViewModel
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.watch.IconSuggestion
 import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
@@ -114,7 +114,9 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         newIcon = null
         candidateChanged = false
         val validated = withContext(Dispatchers.Default) {
-            val options = GenerationOptions.fromPreferences(prefs.data.first(), context, override = true)
+            val options = GenerationOptions.fromPreferences(
+                prefs.getPreferencesAfterPendingWrites(), context, override = true
+            )
             viewModel.iconFromPack(targetApp, pack, candidate.drawableName, candidate.iconHash, options)
         }
         newIcon = validated.icon

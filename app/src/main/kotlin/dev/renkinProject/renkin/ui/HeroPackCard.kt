@@ -70,7 +70,6 @@ import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.CardShape
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -237,7 +236,7 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
                         // Auto-refresh with the just-written preferences, so the pick takes
                         // effect without knowing about the refresh button. Hand-picked and
                         // built icons are safe.
-                        viewModel.refresh(prefs.data.first())
+                        viewModel.refresh()
                     }
                 }
             }

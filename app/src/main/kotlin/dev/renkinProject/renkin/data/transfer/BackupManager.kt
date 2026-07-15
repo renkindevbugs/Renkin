@@ -22,6 +22,7 @@ import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.snapshotProfilePrefs
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dev.renkinProject.renkin.data.watch.WatchRepository
@@ -29,7 +30,6 @@ import dev.renkinProject.renkin.data.watch.WatchRuleImport
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.packages.ApplicationManager
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
@@ -90,7 +90,7 @@ class BackupManager(
     suspend fun exportBackup(open: () -> OutputStream) = withContext(Dispatchers.IO) {
         // Fold the live generation prefs into the active profile's snapshot first (the same
         // capture a profile switch does), so the exported profile rows are self-consistent.
-        val prefs = context.dataStore.data.first()
+        val prefs = context.dataStore.getPreferencesAfterPendingWrites()
         val activeId = prefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         packRepo.profile(activeId)?.let {
             packRepo.updateProfile(it.copy(prefsSnapshot = prefs.snapshotProfilePrefs()))
@@ -144,7 +144,7 @@ class BackupManager(
      * No uploads or keystore travel with a share.
      */
     suspend fun exportProfile(profileId: Long, open: () -> OutputStream) = withContext(Dispatchers.IO) {
-        val prefs = context.dataStore.data.first()
+        val prefs = context.dataStore.getPreferencesAfterPendingWrites()
         val activeId = prefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         if (profileId == activeId) {
             packRepo.profile(profileId)?.let {
