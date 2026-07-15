@@ -439,7 +439,7 @@ private fun RemovableChip(
             modifier = Modifier.padding(start = 6.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            if (iconApp != null) AppIcon(iconApp, iconApp.packageName, 18.dp)
+            if (iconApp != null) AppIcon(iconApp, 18.dp)
             else if (iconPackPackage != null) PackIconImage(iconPackPackage, 18.dp)
             Text(
                 text = label,

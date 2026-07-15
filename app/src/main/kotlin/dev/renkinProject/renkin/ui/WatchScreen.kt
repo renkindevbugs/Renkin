@@ -624,7 +624,7 @@ private fun CompletedRuleCard(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 val ra = rule.apps.firstOrNull()
                 val app = ra?.let { apps.find { a -> a.packageName == it.packageName && a.activityName == it.activityName } }
-                AppIcon(app, ra?.packageName ?: "", 28.dp)
+                AppIcon(app, 28.dp)
                 Text(
                     text = app?.appName ?: (ra?.packageName ?: ""),
                     style = MaterialTheme.typography.bodyLarge,
@@ -727,7 +727,7 @@ private fun Pill(text: String, icon: @Composable () -> Unit) {
 
 @Composable
 private fun AppPill(app: PackageInfoStruct?, fallbackPackage: String) {
-    Pill(app?.appName ?: fallbackPackage) { AppIcon(app, fallbackPackage, 18.dp) }
+    Pill(app?.appName ?: fallbackPackage) { AppIcon(app, 18.dp) }
 }
 
 /** Pack pill (icon + name) used in the "Watching" / "New icon in" rows. */
