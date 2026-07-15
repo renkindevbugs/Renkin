@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.unsavedApplicationKeys
 import dev.renkinProject.renkin.apk.IconGenerationService
 import dev.renkinProject.renkin.apk.IconLockManager
 import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
@@ -451,13 +452,16 @@ class MainViewModel @Inject constructor(
     var appsRefreshing by mutableStateOf(false)
         private set
 
-    /** Reloads apps, icon packs and the saved Renkin pack from scratch. */
+    /** Reloads apps, icon packs and saved rows while preserving this session's unsaved keys. */
     fun refreshApps() {
         if (appsRefreshing) return
         viewModelScope.launch {
             appsRefreshing = true
             try {
-                appProvider.initialize()
+                appProvider.reloadPreservingSession(unsavedKeys())
+                // An uninstalled app no longer has a visible row to carry a session edit.
+                val liveKeys = appProvider.applicationList.mapTo(mutableSetOf()) { it.key }
+                updatedKeys = updatedKeys.filterTo(mutableSetOf()) { it in liveKeys }
                 _toastEvents.trySend(R.string.appListRefreshed)
             } finally {
                 appsRefreshing = false
@@ -537,12 +541,11 @@ class MainViewModel @Inject constructor(
      * save-before-switch prompt.
      */
     fun hasUnsavedChanges(): Boolean {
-        val apps = appProvider.applicationList
-        if (updatedKeys.isNotEmpty()) return true
-        if (apps.any { it.isRefreshMade }) return true
-        val iconKeys = apps.filter { it.createdIcon != null }.map { it.key }.toSet()
-        return builtKeys.any { it !in iconKeys }
+        return unsavedKeys().isNotEmpty()
     }
+
+    private fun unsavedKeys(): Set<String> =
+        unsavedApplicationKeys(appProvider.applicationList, builtKeys, updatedKeys)
 
     /**
      * Re-reads the change baselines from the (just switched or just saved) profile's stored
