@@ -94,13 +94,33 @@ class ApplicationProvider(private val context: Context) {
         initializeRenkinPack()
     }
 
+    /**
+     * Re-discovers apps/packs and reloads persisted profile state without discarding the keys
+     * edited in this session. Nothing is written to storage: a process restart still returns to
+     * the last build/save. If reloading fails after clearing the list, restore the old session.
+     */
+    suspend fun reloadPreservingSession(preserveKeys: Set<String>) {
+        val session = applicationList.toList()
+        try {
+            initialize()
+            replaceApplications(mergeApplicationReload(session, applicationList.toList(), preserveKeys))
+        } catch (error: Exception) {
+            replaceApplications(session)
+            throw error
+        }
+    }
+
     suspend fun initializeApplications() = withContext(Dispatchers.Default) {
         val apps = appManager.getAllInstalledApps()
         apps.sort()
 
-        _applicationList.clear()
-        _applicationList.addAll(apps.asList())
+        replaceApplications(apps.asList())
         applicationsLoaded = true
+    }
+
+    private fun replaceApplications(apps: List<PackageInfoStruct>) {
+        _applicationList.clear()
+        _applicationList.addAll(apps)
     }
 
     suspend fun initializeIconPacks() {
