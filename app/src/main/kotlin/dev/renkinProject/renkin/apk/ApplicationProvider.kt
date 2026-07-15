@@ -6,7 +6,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.CalendarIconsKey
@@ -71,8 +70,6 @@ class ApplicationProvider(private val context: Context) {
     /** True once apps, packs and the saved icons have all loaded (profile switches are safe). */
     var startupComplete: Boolean by mutableStateOf(false)
         private set
-
-    var defaultColor: Color = Color.Unspecified
 
     private val renkinPackStore = RenkinPackStore(context)
     private val packRepo = RenkinPackRepository(context)
@@ -324,6 +321,10 @@ class ApplicationProvider(private val context: Context) {
 
     private suspend fun loadRenkinPack() {
         lockManager.clear()
+        val prefs = context.dataStore.data.first()
+        // Saved vectors may contain theme references. Resolve their fallback from the user's
+        // explicit theme choice every time a profile is loaded, not from stale system state.
+        val defaultColor = prefs.getDefaultIconColor(context)
         val saved = renkinPackStore.load(activeProfileId, defaultColor)
         if (saved.isEmpty()) return
 
@@ -340,7 +341,6 @@ class ApplicationProvider(private val context: Context) {
             if (key !in appKeys) lockManager.holdOrphan(key, entry.row)
         }
 
-        val prefs = context.dataStore.data.first()
         for (app in applicationList.toList()) {
             val entry = saved[app.key] ?: continue
             if (entry.sourcePackName != null && entry.sourcePackName in lockedPacks) {
@@ -425,6 +425,7 @@ class ApplicationProvider(private val context: Context) {
         if (lockManager.isEmpty()) return@withContext
         val stillLocked = lockManager.lockedPacksAmong(lockManager.lockedSourcePacks().toSet())
         val prefs = context.dataStore.data.first()
+        val defaultColor = prefs.getDefaultIconColor(context)
         for ((key, row) in lockManager.lockedRowsSnapshot()) {
             if (row.sourcePackName in stillLocked) continue
             val app = applicationList.firstOrNull { it.key == key } ?: continue

@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
@@ -16,8 +17,8 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.extension.toColor
 import dev.renkinProject.renkin.extension.toHexString
+import dev.renkinProject.renkin.extension.toNullableColor
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlin.enums.enumEntries
@@ -49,6 +50,7 @@ private const val BUILT_PRIMARY_ICON_PACK_NAME = "BUILT_PRIMARY_ICON_PACK"
 // Icon-watch periodic check interval, in minutes. 24h by default; the debug build can
 // lower it (min 15, WorkManager's periodic floor) to test the watcher quickly.
 const val WATCH_CHECK_INTERVAL_DEFAULT = 24 * 60
+const val WATCH_CHECK_INTERVAL_MIN = 15
 
 val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
 val SOURCE_DEFAULT = Source.NONE
@@ -88,6 +90,8 @@ val OutlineAddKey = booleanPreferencesKey("OUTLINE_ADD")
 val OutlineWidthKey = intPreferencesKey("OUTLINE_WIDTH")
 val OutlineColorKey = stringPreferencesKey("OUTLINE_COLOR")
 const val OUTLINE_WIDTH_DEFAULT = 6
+const val OUTLINE_WIDTH_MIN = 1
+const val OUTLINE_WIDTH_MAX = 16
 val AppSortOrderKey = intPreferencesKey(APP_SORT_ORDER_NAME)
 val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
 val WatchCheckIntervalKey = intPreferencesKey(WATCH_CHECK_INTERVAL_NAME)
@@ -109,14 +113,24 @@ val HideProfileShareWarningKey = booleanPreferencesKey("HIDE_PROFILE_SHARE_WARNI
  * when switching away and restored when switching back, so profiles don't influence each other.
  * App-level settings (dark mode, watch interval, sort/filter) intentionally stay global.
  */
-val ProfilePrefKeys: List<Preferences.Key<*>> = listOf(
-    PrimarySourceKey, PrimaryImageEditKey, PrimaryTextTypeKey, PrimaryIconPackKey,
-    SecondarySourceKey, SecondaryImageEditKey, SecondaryTextTypeKey, SecondaryIconPackKey,
-    IncludeVectorKey, MonochromeKey, ExportThemedKey, IconColorKey, BackgroundColorKey,
-    CalendarIconsKey, OverrideIconKey, FallbackSourceKey, TextFontKey,
-    OutlineAddKey, OutlineWidthKey, OutlineColorKey,
-    BuiltPrimarySourceKey, BuiltPrimaryIconPackKey
+private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
+    IncludeVectorKey, MonochromeKey, ExportThemedKey, CalendarIconsKey, OverrideIconKey,
+    OutlineAddKey
 )
+
+private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
+    PrimarySourceKey, PrimaryImageEditKey, PrimaryTextTypeKey,
+    SecondarySourceKey, SecondaryImageEditKey, SecondaryTextTypeKey,
+    FallbackSourceKey, OutlineWidthKey, BuiltPrimarySourceKey
+)
+
+private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
+    PrimaryIconPackKey, SecondaryIconPackKey, IconColorKey, BackgroundColorKey,
+    TextFontKey, OutlineColorKey, BuiltPrimaryIconPackKey
+)
+
+val ProfilePrefKeys: List<Preferences.Key<*>> =
+    ProfileBooleanPrefKeys + ProfileIntPrefKeys + ProfileStringPrefKeys
 
 /** Serializes the profile-scoped preferences into a JSON snapshot (see [ProfilePrefKeys]). */
 fun Preferences.snapshotProfilePrefs(): String {
@@ -132,23 +146,30 @@ fun Preferences.snapshotProfilePrefs(): String {
  * ones removed — a fresh profile starts from the defaults.
  */
 suspend fun DataStore<Preferences>.restoreProfilePrefs(snapshot: String) {
-    // A corrupt/unparsable snapshot must not crash the profile switch — the profile then
-    // just starts from the defaults, same as an empty snapshot.
+    edit { it.replaceProfilePrefs(snapshot) }
+}
+
+/** Replaces every profile key, removing missing, malformed and wrongly typed values. */
+internal fun MutablePreferences.replaceProfilePrefs(snapshot: String) {
+    // A corrupt/unparsable snapshot starts from defaults. Crucially, an invalid value must
+    // remove the previous profile's value instead of leaking it into the target profile.
     val json = runCatching { org.json.JSONObject(snapshot) }.getOrDefault(org.json.JSONObject())
-    edit { prefs ->
-        for (key in ProfilePrefKeys) {
-            if (json.has(key.name)) {
-                @Suppress("UNCHECKED_CAST")
-                when (val value = json.get(key.name)) {
-                    is Boolean -> prefs[key as Preferences.Key<Boolean>] = value
-                    is Int -> prefs[key as Preferences.Key<Int>] = value
-                    is Long -> prefs[key as Preferences.Key<Int>] = value.toInt()
-                    is String -> prefs[key as Preferences.Key<String>] = value
-                }
-            } else {
-                prefs.remove(key)
-            }
+
+    for (key in ProfileBooleanPrefKeys) {
+        val value = json.opt(key.name)
+        if (value is Boolean) this[key] = value else remove(key)
+    }
+    for (key in ProfileIntPrefKeys) {
+        val value = when (val raw = json.opt(key.name)) {
+            is Int -> raw
+            is Long -> raw.takeIf { it in Int.MIN_VALUE..Int.MAX_VALUE }?.toInt()
+            else -> null
         }
+        if (value != null) this[key] = value else remove(key)
+    }
+    for (key in ProfileStringPrefKeys) {
+        val value = json.opt(key.name)
+        if (value is String) this[key] = value else remove(key)
     }
 }
 
@@ -269,11 +290,16 @@ fun Preferences.getLongValue(key: Preferences.Key<Long>, default: Long = 0L): Lo
     return this[key] ?: default
 }
 
+fun normalizeWatchCheckInterval(minutes: Int): Int =
+    minutes.takeIf { it >= WATCH_CHECK_INTERVAL_MIN } ?: WATCH_CHECK_INTERVAL_DEFAULT
+
+fun normalizeOutlineWidth(width: Int): Int = width.coerceIn(OUTLINE_WIDTH_MIN, OUTLINE_WIDTH_MAX)
+
 //Color
 @Composable
 fun DataStore<Preferences>.getColorValue(key: Preferences.Key<String>, default: Color): Color {
     val hex = getPreferenceValue(key, default.toHexString())
-    return hex.toColor()
+    return hex.toNullableColor() ?: default
 }
 
 suspend fun DataStore<Preferences>.setColorValue(key: Preferences.Key<String>, value: Color) {
@@ -282,7 +308,7 @@ suspend fun DataStore<Preferences>.setColorValue(key: Preferences.Key<String>, v
 
 fun Preferences.getColorValue(key: Preferences.Key<String>, default: Color): Color {
     val hex = this[key] ?: default.toHexString()
-    return hex.toColor()
+    return hex.toNullableColor() ?: default
 }
 
 //Enum

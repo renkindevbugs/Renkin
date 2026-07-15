@@ -92,6 +92,7 @@ import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.setColorValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
+import dev.renkinProject.renkin.data.normalizeOutlineWidth
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import kotlinx.coroutines.launch
 
@@ -139,7 +140,7 @@ fun OptionsCard(
     overrideIcon = prefs.getBooleanValue(OverrideIconKey)
     fallbackSource = prefs.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT)
     outlineAdd = prefs.getBooleanValue(OutlineAddKey)
-    outlineWidth = prefs.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
+    outlineWidth = normalizeOutlineWidth(prefs.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT))
 
     val pathTracing = isPathTracingEnabled(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit)
     val showIconColor = showIconColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)

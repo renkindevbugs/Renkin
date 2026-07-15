@@ -6,7 +6,6 @@ import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -26,7 +25,6 @@ import dev.renkinProject.renkin.data.PrimarySourceKey
 import dev.renkinProject.renkin.data.SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getStringValue
-import dev.renkinProject.renkin.data.isSystemInDarkTheme
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
@@ -177,9 +175,6 @@ class MainViewModel @Inject constructor(
     val toastEvents = _toastEvents.receiveAsFlow()
 
     init {
-        appProvider.defaultColor =
-            if (application.isSystemInDarkTheme()) Color.White else Color.Black
-
         // Loaded once. The Renkin pack reads the app list, so it runs after the
         // apps are loaded; icon packs are independent and load in parallel. The heavy
         // work hops to Dispatchers.Default inside each call, so viewModelScope (main)

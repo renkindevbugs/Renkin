@@ -36,6 +36,19 @@ import dev.renkinProject.renkin.data.getIconColor
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.data.normalizeOutlineWidth
+
+/** Whether the persisted vector/Material You path options are relevant to this source chain. */
+fun arePathOptionsRelevant(
+    primarySource: Source,
+    primaryImageEdit: ImageEdit,
+    secondarySource: Source,
+    secondaryImageEdit: ImageEdit
+): Boolean =
+    (primaryImageEdit == ImageEdit.PATH &&
+        (primarySource == Source.ICON_PACK || primarySource == Source.APPLICATION_ICON)) ||
+        (primarySource == Source.ICON_PACK && secondaryImageEdit == ImageEdit.PATH &&
+            (secondarySource == Source.ICON_PACK || secondarySource == Source.APPLICATION_ICON))
 
 // The secondary* fields default to "no secondary source", so a single-source
 // caller can omit them entirely. They sit at the end so positional construction
@@ -122,27 +135,38 @@ data class GenerationOptions(
         ): GenerationOptions {
             val iconColor = preferences.getIconColor(context)
             val bgColor = preferences.getBackgroundColor(context)
+            val primarySource = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
+            val primaryImageEdit = preferences.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
+            val secondarySource = preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT)
+            val secondaryImageEdit = preferences.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT)
+            val pathOptionsRelevant = arePathOptionsRelevant(
+                primarySource, primaryImageEdit, secondarySource, secondaryImageEdit
+            )
 
             return GenerationOptions(
-                primarySource = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT),
-                primaryImageEdit = preferences.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT),
+                primarySource = primarySource,
+                primaryImageEdit = primaryImageEdit,
                 primaryTextType = preferences.getEnumValue(PrimaryTextTypeKey, TEXT_TYPE_DEFAULT),
                 primaryIconPack = preferences.getStringValue(PrimaryIconPackKey),
-                secondarySource = preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT),
-                secondaryImageEdit = preferences.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT),
+                secondarySource = secondarySource,
+                secondaryImageEdit = secondaryImageEdit,
                 secondaryTextType = preferences.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT),
                 secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey),
                 color = iconColor.toArgb(),
                 bgColor = bgColor.toArgb(),
-                vector = preferences.getBooleanValue(IncludeVectorKey),
-                materialYou = preferences.getBooleanValue(MonochromeKey),
+                // Keep the stored choices for when PATH is selected again, but hidden controls
+                // must not silently affect a different source/modifier combination.
+                vector = pathOptionsRelevant && preferences.getBooleanValue(IncludeVectorKey),
+                materialYou = pathOptionsRelevant && preferences.getBooleanValue(MonochromeKey),
                 themed = preferences.getBooleanValue(ExportThemedKey),
                 override = override,
                 fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
-                textFontPath = preferences.getStringValue(TextFontKey),
+                textFontPath = FontCatalog.usablePathOrDefault(preferences.getStringValue(TextFontKey)),
                 // Only ADD exists pack-wide; RECOLOR stays a per-app Modifier-tab option.
                 outlineMode = if (preferences.getBooleanValue(OutlineAddKey)) OutlineMode.ADD else OutlineMode.NONE,
-                outlineWidth = preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT).toFloat(),
+                outlineWidth = normalizeOutlineWidth(
+                    preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
+                ).toFloat(),
                 outlineColor = preferences.getColorValue(
                     OutlineColorKey, androidx.compose.ui.graphics.Color.Black).toArgb()
             )
