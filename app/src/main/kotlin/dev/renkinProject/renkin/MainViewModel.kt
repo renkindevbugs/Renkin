@@ -12,6 +12,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
+import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.unsavedApplicationKeys
 import dev.renkinProject.renkin.apk.IconGenerationService
@@ -277,6 +278,45 @@ class MainViewModel @Inject constructor(
 
     fun dismissBuildOutcome() { buildOutcome = null }
 
+    private data class PendingInstallFallback(
+        val pack: ApplicationProvider.BuiltIconPack,
+        val wasUpdate: Boolean,
+        val preferences: Preferences,
+        val packLabel: String
+    )
+
+    private var pendingInstallFallback: PendingInstallFallback? = null
+    var installFallbackPending by mutableStateOf(false)
+        private set
+
+    fun dismissInstallFallback() {
+        pendingInstallFallback = null
+        installFallbackPending = false
+    }
+
+    /** Runs only after the user accepts that the conflicting installed pack must be replaced. */
+    fun confirmInstallFallback() {
+        val pending = pendingInstallFallback ?: return
+        dismissInstallFallback()
+        viewModelScope.launch {
+            try {
+                buildStep = getApplication<Application>().getString(R.string.buildReplacing)
+                when (appProvider.replaceIconPack(pending.pack)) {
+                    ApkInstallResult.SUCCESS -> completeSuccessfulInstall(pending)
+                    else -> _toastEvents.trySend(R.string.iconPackInstallFailed)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.error("MainViewModel", "Icon pack replacement failed", e)
+                _toastEvents.trySend(R.string.iconPackInstallFailed)
+            } finally {
+                buildStep = null
+                buildProgress = null
+            }
+        }
+    }
+
     /** Builds, signs and installs the icon pack, surfacing progress through [buildStep]. */
     fun build(preferences: Preferences) {
         if (buildStep != null) return
@@ -294,31 +334,19 @@ class MainViewModel @Inject constructor(
                 // installed, "Installing" for a first build. Decided before installing, so it
                 // also tells us which follow-up instructions dialog to show afterwards.
                 val wasUpdate = isIconPackInstalled()
+                val label = appProvider.activeProfile()?.let { it.packLabel.ifEmpty { it.name } } ?: "Renkin Pack"
+                val pending = PendingInstallFallback(pack, wasUpdate, preferences, label)
                 buildStep = getApplication<Application>().getString(
                     if (wasUpdate) R.string.buildUpdating else R.string.buildInstalling
                 )
-                if (appProvider.installIconPack(pack)) {
-                    // The next-steps dialog replaces the old "installed!" toast: what to do in
-                    // the launcher differs between a first install and an update.
-                    val label = appProvider.activeProfile()?.let { it.packLabel.ifEmpty { it.name } } ?: "Renkin Pack"
-                    buildOutcome = BuildOutcomeInfo(
-                        if (wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL,
-                        label
-                    )
-                    // The saved pack now matches the current icons → reset both change baselines.
-                    builtKeys = appProvider.getSavedPackKeys()
-                    updatedKeys = emptySet()
-                    // The save dropped locked originals the user replaced by hand — the
-                    // missing-pack warning must not keep counting them after a build.
-                    refreshMissingPacks(prompt = false)
-                    // The hero pick only sticks once built: record what was built so startup
-                    // can restore it over any later, unbuilt pick.
-                    val store = getApplication<Application>().dataStore
-                    store.setEnumValue(BuiltPrimarySourceKey, preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT))
-                    store.setStringValue(BuiltPrimaryIconPackKey, preferences.getStringValue(PrimaryIconPackKey))
-                } else {
-                    // install returned false: it failed or the user cancelled the system installer.
-                    _toastEvents.trySend(R.string.iconPackInstallFailed)
+                when (appProvider.installIconPack(pack)) {
+                    ApkInstallResult.SUCCESS -> completeSuccessfulInstall(pending)
+                    ApkInstallResult.CONFLICT -> {
+                        pendingInstallFallback = pending
+                        installFallbackPending = true
+                    }
+                    ApkInstallResult.ABORTED,
+                    ApkInstallResult.FAILED -> _toastEvents.trySend(R.string.iconPackInstallFailed)
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -332,6 +360,32 @@ class MainViewModel @Inject constructor(
                 buildProgress = null
             }
         }
+    }
+
+    private suspend fun completeSuccessfulInstall(pending: PendingInstallFallback) {
+        // The next-steps dialog replaces the old "installed!" toast: what to do in
+        // the launcher differs between a first install and an update.
+        buildOutcome = BuildOutcomeInfo(
+            if (pending.wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL,
+            pending.packLabel
+        )
+        // The saved pack now matches the current icons → reset both change baselines.
+        builtKeys = appProvider.getSavedPackKeys()
+        updatedKeys = emptySet()
+        // The save dropped locked originals the user replaced by hand — the
+        // missing-pack warning must not keep counting them after a build.
+        refreshMissingPacks(prompt = false)
+        // The hero pick only sticks once built: record what was built so startup
+        // can restore it over any later, unbuilt pick.
+        val store = getApplication<Application>().dataStore
+        store.setEnumValue(
+            BuiltPrimarySourceKey,
+            pending.preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
+        )
+        store.setStringValue(
+            BuiltPrimaryIconPackKey,
+            pending.preferences.getStringValue(PrimaryIconPackKey)
+        )
     }
 
     // Records that [app] was hand-edited this session (so the build preview marks it "changed").
