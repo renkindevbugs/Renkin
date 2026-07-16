@@ -157,6 +157,8 @@
     <string name="createProfileAction">Create</string>
     <string name="deleteProfile">Delete profile</string>
     <string name="deleteProfileText">Delete **“%1$s”** and all of its icons? Its installed icon pack **stays on the device** until you uninstall it.</string>
+    <string name="profileUpdated">Profile updated</string>
+    <string name="profileDeleted">Profile deleted</string>
     <string name="packUsageEmpty">No icon packs installed</string>
     <string name="sortIconsHeader">Icons</string>
     <string name="sortPacksHeader">Icon packs</string>
