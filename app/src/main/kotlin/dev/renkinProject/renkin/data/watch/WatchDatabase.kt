@@ -26,7 +26,7 @@ abstract class WatchDatabase : RoomDatabase() {
         private var instance: WatchDatabase? = null
 
         // Profiles: rules gain an owning profileId (existing rules belong to the default).
-        private val MIGRATION_1_2 = object : Migration(1, 2) {
+        internal val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE watch_rule ADD COLUMN profileId INTEGER NOT NULL DEFAULT 1")
             }
@@ -35,7 +35,7 @@ abstract class WatchDatabase : RoomDatabase() {
         // Baselines used to be shared by every rule watching the same app/pack pair. Re-key
         // them by rule and copy the existing fingerprint to each active matching rule so an
         // upgrade does not turn already-known artwork into a fresh suggestion.
-        private val MIGRATION_2_3 = object : Migration(2, 3) {
+        internal val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `watch_state_new` (" +
@@ -62,13 +62,18 @@ abstract class WatchDatabase : RoomDatabase() {
             }
         }
 
+        internal val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+
+        internal fun open(context: Context, name: String): WatchDatabase =
+            Room.databaseBuilder(
+                context.applicationContext,
+                WatchDatabase::class.java,
+                name
+            ).addMigrations(*ALL_MIGRATIONS).build()
+
         fun get(context: Context): WatchDatabase {
             return instance ?: synchronized(this) {
-                instance ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    WatchDatabase::class.java,
-                    "watch"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+                instance ?: open(context, "watch").also { instance = it }
             }
         }
     }

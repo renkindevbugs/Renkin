@@ -6,6 +6,7 @@ import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
@@ -143,6 +144,9 @@ interface ProfileDao {
     @Insert
     fun insert(profile: Profile): Long
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insertIfMissing(profile: Profile): Long
+
     @Update
     fun update(profile: Profile)
 
@@ -172,38 +176,38 @@ abstract class RenkinPackDatabase : RoomDatabase() {
         @Volatile
         private var instance: RenkinPackDatabase? = null
 
-        private val MIGRATION_1_2 = object : Migration(1, 2) {
+        internal val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE DbApplication ADD COLUMN calendarEnabled INTEGER NOT NULL DEFAULT 0")
             }
         }
 
-        private val MIGRATION_2_3 = object : Migration(2, 3) {
+        internal val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE DbApplication ADD COLUMN calendarPrefix TEXT NOT NULL DEFAULT ''")
             }
         }
 
-        private val MIGRATION_3_4 = object : Migration(3, 4) {
+        internal val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE DbApplication ADD COLUMN calendarPackName TEXT NOT NULL DEFAULT ''")
             }
         }
 
-        private val MIGRATION_4_5 = object : Migration(4, 5) {
+        internal val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE DbApplication ADD COLUMN sourcePackName TEXT NOT NULL DEFAULT ''")
             }
         }
 
         // 5 and 7 are schema-identical (see the @Database note), so this is a version-stamp bump.
-        private val MIGRATION_5_7 = object : Migration(5, 7) {
+        internal val MIGRATION_5_7 = object : Migration(5, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {}
         }
 
         // 6 was a development-only schema with an extra isCustomIcon column; rebuild the table
         // without it (SQLite can't reliably drop columns on older APIs).
-        private val MIGRATION_6_7 = object : Migration(6, 7) {
+        internal val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `DbApplication_new` (`packageName` TEXT NOT NULL, " +
@@ -227,7 +231,7 @@ abstract class RenkinPackDatabase : RoomDatabase() {
 
         // Profiles: the Profile table (with the default row) and profileId on DbApplication,
         // which joins the primary key (table rebuild — SQLite can't alter a PK in place).
-        private val MIGRATION_7_8 = object : Migration(7, 8) {
+        internal val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `Profile` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
@@ -256,13 +260,13 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
-        private val MIGRATION_8_9 = object : Migration(8, 9) {
+        internal val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE Profile ADD COLUMN hasUnbuiltChanges INTEGER NOT NULL DEFAULT 0")
             }
         }
 
-        private val MIGRATION_9_10 = object : Migration(9, 10) {
+        internal val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE DbApplication ADD COLUMN sourceDrawableName TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE Profile ADD COLUMN hideMissingPackWarning INTEGER NOT NULL DEFAULT 0")
@@ -275,24 +279,51 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
-        // The default profile row must exist even on a fresh database (migrations don't run there).
-        private val seedDefaultProfile = object : Callback() {
+        internal val ALL_MIGRATIONS = arrayOf(
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+            MIGRATION_5_7,
+            MIGRATION_6_7,
+            MIGRATION_7_8,
+            MIGRATION_8_9,
+            MIGRATION_9_10
+        )
+
+        private fun insertDefaultProfile(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "INSERT OR IGNORE INTO `Profile` (`id`, `name`, `packLabel`) " +
+                    "VALUES (1, 'Renkin', 'Renkin Pack')"
+            )
+        }
+
+        // The default profile is a database invariant. Repair it on open as well as on create:
+        // an interrupted import or a damaged row must not strand the default profile's icons.
+        private val ensureDefaultProfile = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
-                db.execSQL("INSERT INTO `Profile` (`id`, `name`, `packLabel`) VALUES (1, 'Renkin', 'Renkin Pack')")
+                insertDefaultProfile(db)
+            }
+
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                insertDefaultProfile(db)
             }
         }
 
         // Fresh physical file name: the app id changed to dev.renkinProject.renkin, so there
         // are no existing installs whose data a rename could strand.
+        internal fun open(context: Context, name: String): RenkinPackDatabase =
+            Room.databaseBuilder(
+                context.applicationContext,
+                RenkinPackDatabase::class.java,
+                name
+            ).addMigrations(*ALL_MIGRATIONS)
+                .addCallback(ensureDefaultProfile)
+                .build()
+
         fun get(context: Context): RenkinPackDatabase {
             return instance ?: synchronized(this) {
-                instance ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    RenkinPackDatabase::class.java,
-                    "renkinPack"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_7, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
-                    .addCallback(seedDefaultProfile)
-                    .build().also { instance = it }
+                instance ?: open(context, "renkinPack").also { instance = it }
             }
         }
     }

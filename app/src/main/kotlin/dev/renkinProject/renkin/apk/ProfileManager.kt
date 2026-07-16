@@ -5,6 +5,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.Profile
@@ -22,17 +24,21 @@ import kotlinx.coroutines.flow.first
  * per-profile pack package name. Swapping the in-memory icon set on a switch stays in
  * [ApplicationProvider] — it owns the app list; this class flips the persistent state.
  */
-class ProfileManager(
+class ProfileManager internal constructor(
     private val context: Context,
-    private val packRepo: RenkinPackRepository
+    private val packRepo: RenkinPackRepository,
+    private val store: DataStore<Preferences>
 ) {
+    constructor(context: Context, packRepo: RenkinPackRepository) :
+        this(context, packRepo, context.dataStore)
+
     /** The profile whose icons/preferences are active. Set before the saved pack loads. */
     var activeProfileId: Long by mutableStateOf(DEFAULT_PROFILE_ID)
         private set
 
     /** Reads the persisted active id at startup (before the saved pack loads). */
     suspend fun initActiveId() {
-        activeProfileId = context.dataStore.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
+        reloadActiveId()
     }
 
     fun profilesFlow() = packRepo.profilesFlow()
@@ -93,8 +99,6 @@ class ProfileManager(
     suspend fun switchTo(newProfileId: Long): Boolean {
         if (newProfileId == activeProfileId) return false
         val target = packRepo.profile(newProfileId) ?: return false
-        val store = context.dataStore
-
         packRepo.profile(activeProfileId)?.let { leaving ->
             packRepo.updateProfile(
                 leaving.copy(prefsSnapshot = store.getPreferencesAfterPendingWrites().snapshotProfilePrefs())
@@ -112,10 +116,11 @@ class ProfileManager(
      * default defensively anyway.
      */
     suspend fun reloadActiveId() {
-        val storedId = context.dataStore.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
+        packRepo.ensureDefaultProfile()
+        val storedId = store.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         activeProfileId = if (packRepo.profile(storedId) != null) storedId else DEFAULT_PROFILE_ID
         if (activeProfileId != storedId) {
-            context.dataStore.edit { it[ActiveProfileIdKey] = activeProfileId }
+            store.edit { it[ActiveProfileIdKey] = activeProfileId }
         }
     }
 }
