@@ -366,6 +366,8 @@
     <string name="eraseClear">Clear all strokes</string>
     <string name="eraseCount">%1$d stroke(s)</string>
     <string name="globalOptionsTitle">Global options</string>
+    <string name="globalExperimentalTitle">Global options is experimental</string>
+    <string name="globalExperimentalText">This feature is not finished yet and may still contain bugs. Review the icon previews before saving your changes.</string>
     <string name="advancedSectionSource">Icon source</string>
     <string name="advancedSectionColors">Colours</string>
     <string name="advancedSectionBehavior">Refresh behaviour</string>

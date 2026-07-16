@@ -312,6 +312,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     val applying = viewModel.globalApplyProgress != null
     val previewJobs by viewModel.previewJobs.collectAsState()
     val dirty = baseline != null && baseline != state.snapshot()
+    var showExperimentalNotice by rememberSaveable { mutableStateOf(true) }
     var confirmDiscard by remember { mutableStateOf(false) }
     val close: () -> Unit = {
         if (applying) Unit
@@ -601,6 +602,21 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                     // Transparent: the real wallpaper shows behind the tiles.
                     Box(Modifier.fillMaxSize()) { gridContent(panelVisible) }
                 }
+    }
+
+    if (showExperimentalNotice) {
+        RenkinAlertDialog(
+            onDismissRequest = { showExperimentalNotice = false },
+            title = { Text(stringResource(R.string.globalExperimentalTitle)) },
+            text = { Text(stringResource(R.string.globalExperimentalText)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { showExperimentalNotice = false }
+                ) {
+                    Text(stringResource(R.string.ok))
+                }
+            }
+        )
     }
 
     if (confirmDiscard) {
