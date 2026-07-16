@@ -1,15 +1,8 @@
 package dev.renkinProject.renkin.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -40,15 +32,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
-import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.BackgroundColorKey
@@ -64,10 +52,6 @@ import dev.renkinProject.renkin.data.getBackgroundColor
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.IncludeVectorKey
 import dev.renkinProject.renkin.data.MonochromeKey
-import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
-import dev.renkinProject.renkin.data.OutlineAddKey
-import dev.renkinProject.renkin.data.OutlineColorKey
-import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.OverrideIconKey
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimaryImageEditKey
@@ -81,28 +65,26 @@ import dev.renkinProject.renkin.data.SecondarySourceKey
 import dev.renkinProject.renkin.data.SecondaryTextTypeKey
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
 import dev.renkinProject.renkin.data.getBooleanValue
-import dev.renkinProject.renkin.data.getColorValue
 import dev.renkinProject.renkin.data.getEnumValue
-import dev.renkinProject.renkin.data.getIntValue
-import dev.renkinProject.renkin.data.setIntValue
-import kotlin.math.roundToInt
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.setColorValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
-import dev.renkinProject.renkin.data.normalizeOutlineWidth
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import kotlinx.coroutines.launch
 
+/**
+ * The refresh-wide generation options (sources, fallback, colours, switches), shown inside the
+ * Global options screen. Every control writes straight to the profile's DataStore like the old
+ * Advanced options card did — only the global modifiers on that screen are staged behind Save.
+ */
 @Composable
-fun OptionsCard(
+fun AdvancedOptionsContent(
     iconPacks: List<IconPack>
 ) {
     val prefs = getPreferences()
-
-    var expanded by remember { mutableStateOf(false) }
 
     var primarySource by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
     var primaryImageEdit by rememberSaveable { mutableStateOf(IMAGE_EDIT_DEFAULT) }
@@ -118,12 +100,8 @@ fun OptionsCard(
     var retrieveCalendarIcons by rememberSaveable { mutableStateOf(false) }
     var overrideIcon by rememberSaveable { mutableStateOf(false) }
     var fallbackSource by rememberSaveable { mutableStateOf(FALLBACK_SOURCE_DEFAULT) }
-    var outlineAdd by rememberSaveable { mutableStateOf(false) }
-    var outlineWidth by rememberSaveable { mutableStateOf(OUTLINE_WIDTH_DEFAULT) }
-
     val currentColor = prefs.getIconColor()
     val currentBgColor = prefs.getBackgroundColor()
-    val currentOutlineColor = prefs.getColorValue(OutlineColorKey, androidx.compose.ui.graphics.Color.Black)
 
     primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
@@ -139,8 +117,6 @@ fun OptionsCard(
     retrieveCalendarIcons = prefs.getBooleanValue(CalendarIconsKey)
     overrideIcon = prefs.getBooleanValue(OverrideIconKey)
     fallbackSource = prefs.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT)
-    outlineAdd = prefs.getBooleanValue(OutlineAddKey)
-    outlineWidth = normalizeOutlineWidth(prefs.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT))
 
     val pathTracing = isPathTracingEnabled(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit)
     val showIconColor = showIconColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
@@ -148,46 +124,7 @@ fun OptionsCard(
 
     val scope = rememberCoroutineScope()
 
-    Surface(
-        shape = CardShape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp, 8.dp)
-    ) {
-        // No inner scroll — the card lives inside the app list and scrolls with it
-        Column {
-            Row(modifier = Modifier
-                .fillMaxWidth()
-                .clickable(role = Role.Button, onClick = { expanded = !expanded })
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(id = R.string.advancedOptions),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-
-                val chevronRotation by animateFloatAsState(
-                    targetValue = if (expanded) 180f else 0f,
-                    label = "optionsChevron"
-                )
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.rotate(chevronRotation)
-                )
-            }
-
-            AnimatedVisibility(
-                visible = expanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Column(Modifier.padding(bottom = 12.dp)) {
+    Column(Modifier.padding(bottom = 12.dp)) {
                 // Users otherwise don't know these settings only take effect after a refresh
                 Surface(
                     shape = FieldShape,
@@ -305,36 +242,6 @@ fun OptionsCard(
                 }
 
                 ThemedIconsSwitch(useThemed) { scope.launch { prefs.setBooleanValue(ExportThemedKey, it) } }
-
-                // Pack-wide outline (Add only): a contour around every generated icon.
-                // Recolor needs the individual icon's artwork, so it stays per app.
-                OutlineAddSwitch(outlineAdd) { scope.launch { prefs.setBooleanValue(OutlineAddKey, it) } }
-                AnimatedVisibility(visible = outlineAdd) {
-                    Column {
-                        Column(Modifier.padding(horizontal = 16.dp)) {
-                            // Local echo while dragging; DataStore only sees the released value.
-                            var dragWidth by remember { mutableStateOf<Float?>(null) }
-                            val shownWidth = dragWidth ?: outlineWidth.toFloat()
-                            LabeledSlider(
-                                label = stringResource(R.string.outlineThickness),
-                                value = shownWidth,
-                                onValueChange = { dragWidth = it },
-                                valueRange = 1f..16f,
-                                valueLabel = "${shownWidth.roundToInt()} px",
-                                onValueChangeFinished = {
-                                    val released = dragWidth?.roundToInt()
-                                    dragWidth = null
-                                    if (released != null) scope.launch { prefs.setIntValue(OutlineWidthKey, released) }
-                                }
-                            )
-                        }
-                        ColorButton(stringResource(R.string.outlineColor), currentOutlineColor) { scope.launch { prefs.setColorValue(
-                            OutlineColorKey, it) } }
-                    }
-                }
-                }
-            }
-        }
     }
 }
 

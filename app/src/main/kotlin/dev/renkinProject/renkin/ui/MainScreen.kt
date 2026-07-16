@@ -497,6 +497,13 @@ fun ApplicationList(
         listState.scrollToItem(0)
     }
 
+    // Hoisted above the LazyColumn: the entry card scrolls away with the list, but the
+    // fullscreen Global options dialog must survive its item being disposed.
+    var openGlobalOptions by rememberSaveable { mutableStateOf(false) }
+    if (openGlobalOptions) {
+        GlobalOptionsScreen(iconPacks) { openGlobalOptions = false }
+    }
+
     // The app list is loaded off the main thread at startup; show a spinner until
     // it arrives instead of a blank screen that looks frozen
     if (!viewModel.applicationsLoaded && applications.isEmpty()) {
@@ -527,7 +534,7 @@ fun ApplicationList(
             HeroPackCard(iconPacks)
         }
         item(key = "options", contentType = "options") {
-            OptionsCard(iconPacks)
+            GlobalOptionsCard { openGlobalOptions = true }
         }
         if (displayList.isEmpty()) {
             // A filter/search matched nothing — say so instead of leaving a blank gap.

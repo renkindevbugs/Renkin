@@ -109,6 +109,7 @@ object BackupCodec {
                         .put("calendarPackName", icon.calendarPackName)
                         .put("sourcePackName", icon.sourcePackName)
                         .put("sourceDrawableName", icon.sourceDrawableName)
+                        .put("isCustomIcon", icon.isCustomIcon)
                 )
             }
             p.put("icons", icons)
@@ -197,7 +198,9 @@ object BackupCodec {
                         calendarPackName = icon.optString("calendarPackName"),
                         sourcePackName = icon.optString("sourcePackName"),
                         profileId = profileId,
-                        sourceDrawableName = icon.optString("sourceDrawableName")
+                        sourceDrawableName = icon.optString("sourceDrawableName"),
+                        // Absent in pre-v11 files — those icons load as generated.
+                        isCustomIcon = icon.optBoolean("isCustomIcon")
                     )
                 )
             }

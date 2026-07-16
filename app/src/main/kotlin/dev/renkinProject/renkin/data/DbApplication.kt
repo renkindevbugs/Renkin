@@ -60,7 +60,11 @@ data class DbApplication(
     // Drawable name inside sourcePackName, written only by profile/backup import for icons
     // shared as references (no image data). A row with an empty [drawable] and a non-empty
     // [sourcePackName] is such a reference: the icon is rebuilt from the installed pack.
-    @ColumnInfo(defaultValue = "") val sourceDrawableName: String = ""
+    @ColumnInfo(defaultValue = "") val sourceDrawableName: String = "",
+    // True when the icon was hand-picked/edited by the user (per-app dialog, upload, vector,
+    // watch-apply) rather than produced by a bulk refresh. Splits the global-options preview
+    // grid into generated vs custom icons; rows saved before v11 default to generated.
+    @ColumnInfo(defaultValue = "0") val isCustomIcon: Boolean = false
 )
 
 /**
@@ -163,9 +167,11 @@ interface ProfileDao {
 // Version 9 adds Profile.hasUnbuiltChanges (saved-but-not-built marker).
 // Version 10 adds the PackVerdict table (paid-pack locks), DbApplication.sourceDrawableName
 // (imported icon references) and Profile.hideMissingPackWarning.
+// Version 11 adds DbApplication.isCustomIcon (hand-picked vs refresh-generated, for the
+// global-options grid split). Unrelated to the dev-only isCustomIcon that v6 dropped.
 @Database(
     entities = [DbApplication::class, Profile::class, PackVerdict::class],
-    version = 10
+    version = 11
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -279,6 +285,12 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN isCustomIcon INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -288,7 +300,8 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_6_7,
             MIGRATION_7_8,
             MIGRATION_8_9,
-            MIGRATION_9_10
+            MIGRATION_9_10,
+            MIGRATION_10_11
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {

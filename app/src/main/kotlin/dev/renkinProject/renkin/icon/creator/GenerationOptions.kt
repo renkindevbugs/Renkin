@@ -37,6 +37,15 @@ import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
+import dev.renkinProject.renkin.data.GlobalColorizeColorKey
+import dev.renkinProject.renkin.data.GlobalColorizeFlatKey
+import dev.renkinProject.renkin.data.GlobalColorizeKey
+import dev.renkinProject.renkin.data.GlobalIconScaleKey
+import dev.renkinProject.renkin.data.GlobalShapeColorKey
+import dev.renkinProject.renkin.data.GlobalShapeCropKey
+import dev.renkinProject.renkin.data.GlobalShapeKey
+import dev.renkinProject.renkin.data.GlobalShapeScaleKey
+import dev.renkinProject.renkin.data.normalizeGlobalScalePercent
 
 /** Whether the persisted vector/Material You path options are relevant to this source chain. */
 fun arePathOptionsRelevant(
@@ -136,7 +145,30 @@ data class GenerationOptions(
             val iconColor = preferences.getIconColor(context)
             val bgColor = preferences.getBackgroundColor(context)
             val primarySource = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
-            val primaryImageEdit = preferences.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
+            var primaryImageEdit = preferences.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
+
+            // Global modifiers (the Global options screen) applied to every generated icon.
+            val globalShape = IconShape.entries.getOrNull(
+                preferences.getIntValue(GlobalShapeKey, IconShape.NONE.ordinal)
+            ) ?: IconShape.NONE
+            val globalShapeCrop = preferences.getBooleanValue(GlobalShapeCropKey, true)
+            val globalShapeColor = preferences.getColorValue(GlobalShapeColorKey, androidx.compose.ui.graphics.Color.White)
+            // Global colorize only steps in when no image edit is chosen — an explicit
+            // Path/Edge/Colorize/Remove-background pick keeps its own colour handling.
+            val globalColorize = preferences.getBooleanValue(GlobalColorizeKey)
+            var effectiveColor = iconColor.toArgb()
+            var colorizeFlat = false
+            if (globalColorize && primaryImageEdit == ImageEdit.NONE) {
+                primaryImageEdit = ImageEdit.COLORIZE
+                effectiveColor = preferences.getColorValue(
+                    GlobalColorizeColorKey, iconColor).toArgb()
+                colorizeFlat = preferences.getBooleanValue(GlobalColorizeFlatKey)
+            }
+            // The shape plate is filled from options.bgColor (same conflation as the per-app
+            // dialog), so a plate-mode global shape carries its colour through it.
+            val effectiveBgColor = if (globalShape != IconShape.NONE && !globalShapeCrop) {
+                globalShapeColor.toArgb()
+            } else bgColor.toArgb()
             val secondarySource = preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT)
             val secondaryImageEdit = preferences.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT)
             val pathOptionsRelevant = arePathOptionsRelevant(
@@ -152,8 +184,15 @@ data class GenerationOptions(
                 secondaryImageEdit = secondaryImageEdit,
                 secondaryTextType = preferences.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT),
                 secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey),
-                color = iconColor.toArgb(),
-                bgColor = bgColor.toArgb(),
+                color = effectiveColor,
+                bgColor = effectiveBgColor,
+                colorizeFlat = colorizeFlat,
+                iconScale = normalizeGlobalScalePercent(
+                    preferences.getIntValue(GlobalIconScaleKey, 100)) / 100f,
+                iconShape = globalShape,
+                iconShapeCrop = globalShapeCrop,
+                iconShapeScale = normalizeGlobalScalePercent(
+                    preferences.getIntValue(GlobalShapeScaleKey, 100)) / 100f,
                 // Keep the stored choices for when PATH is selected again, but hidden controls
                 // must not silently affect a different source/modifier combination.
                 vector = pathOptionsRelevant && preferences.getBooleanValue(IncludeVectorKey),

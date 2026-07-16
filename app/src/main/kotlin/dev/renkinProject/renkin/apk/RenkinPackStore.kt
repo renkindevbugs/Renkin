@@ -27,6 +27,7 @@ class RenkinPackStore(private val context: Context) {
         val calendarPrefix: String?,
         val calendarPackName: String?,
         val sourcePackName: String?,
+        val isCustom: Boolean,
         // The raw row, so held-back entries (locked packs, reference icons, absent apps)
         // can be written back verbatim on the next save instead of being dropped.
         val row: DbApplication
@@ -59,6 +60,7 @@ class RenkinPackStore(private val context: Context) {
             dbApp.calendarPrefix.ifEmpty { null },
             dbApp.calendarPackName.ifEmpty { null },
             dbApp.sourcePackName.ifEmpty { null },
+            dbApp.isCustomIcon,
             dbApp
         )
     }
@@ -87,7 +89,8 @@ class RenkinPackStore(private val context: Context) {
                 app.calendarPrefix ?: "",
                 app.calendarPackName ?: "",
                 app.sourcePackName ?: "",
-                profileId
+                profileId,
+                isCustomIcon = app.isCustom
             )
         }
         val liveKeys = dbApps.map { "${it.packageName}/${it.activityName}" }.toSet()

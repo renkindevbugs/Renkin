@@ -404,7 +404,7 @@ class MainViewModel @Inject constructor(
     fun applyIcon(app: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String? = null) =
         applyPickedIcon(app, icon, sourcePackName) { live, origin ->
             // Hand-picked icons are locked immediately: a refresh never replaces them.
-            live.changeExport(icon, sourcePackName = origin, isRefreshMade = false)
+            live.changeExport(icon, sourcePackName = origin, isRefreshMade = false, isCustom = true)
         }
 
     /**
@@ -440,7 +440,7 @@ class MainViewModel @Inject constructor(
         calendarPackName: String?,
         sourcePackName: String?
     ) = applyPickedIcon(app, icon, sourcePackName) { live, origin ->
-        live.changeExport(icon, sourcePackName = origin, isRefreshMade = false)
+        live.changeExport(icon, sourcePackName = origin, isRefreshMade = false, isCustom = true)
             .changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
     }
 
@@ -467,6 +467,48 @@ class MainViewModel @Inject constructor(
             if (index < 0) return@launch
             appProvider.editApplication(index, edit(appProvider.applicationList[index], origin))
             markUpdated(app, icon)
+        }
+    }
+
+    // ---- Global icon modifiers -----------------------------------------------------
+
+    /** (done, total) while the global modifiers bake into the icons; null when idle. */
+    var globalApplyProgress by mutableStateOf<Pair<Int, Int>?>(null)
+        private set
+
+    /**
+     * Bakes the global modifiers into the stored icons (the Global options screen's Save).
+     * The screen persists the modifier preferences first; this snapshots them after those
+     * writes so the empty-slot generation and future refreshes agree on the same values.
+     */
+    fun applyGlobalModifiers(
+        modifierOptions: GenerationOptions,
+        applyToCustom: Boolean,
+        includeEmpty: Boolean,
+        onDone: () -> Unit = {}
+    ) {
+        if (globalApplyProgress != null) return
+        globalApplyProgress = 0 to 0
+        viewModelScope.launch {
+            try {
+                val preferences = getApplication<Application>().dataStore
+                    .getPreferencesAfterPendingWrites()
+                appProvider.applyGlobalModifiers(
+                    preferences, modifierOptions, applyToCustom, includeEmpty
+                ) { done, total -> globalApplyProgress = done to total }
+                // The bake saved the profile — the change baselines follow, like any save.
+                resetChangeBaselines()
+                refreshMissingPacks(prompt = false)
+                _toastEvents.trySend(R.string.globalOptionsApplied)
+                onDone()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.error("MainViewModel", "Applying global modifiers failed", e)
+                _toastEvents.trySend(R.string.globalOptionsApplyFailed)
+            } finally {
+                globalApplyProgress = null
+            }
         }
     }
 

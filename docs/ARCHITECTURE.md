@@ -85,8 +85,9 @@ Switcher = the top-bar title dropdown.
 - **DataStore Preferences** (`data/DataPreferences.kt`) — all settings. Typed accessors:
   Composable `DataStore.getXValue()` for reading in composition; `Preferences.getXValue()`
   for reading a captured snapshot off the main thread.
-- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v10) — profiles + the generated icons
-  of the last built/saved pack per profile. Loaded into the app list at startup.
+- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v11) — profiles + the generated icons
+  of the last built/saved pack per profile (`isCustomIcon` marks hand-picked vs
+  refresh-generated rows for the Global options grid). Loaded into the app list at startup.
   **Never lower the version once any build was installed** — schema-identical bump +
   migration instead (see the v5/v6/v7 history in `DbApplication.kt`).
 - **Room — `WatchDatabase`** (v3) — icon-watch rules, suggestions and per-rule baselines, owned per

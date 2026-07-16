@@ -365,6 +365,25 @@
     <string name="eraseUndo">Undo stroke</string>
     <string name="eraseClear">Clear all strokes</string>
     <string name="eraseCount">%1$d stroke(s)</string>
+    <string name="globalOptionsTitle">Global options</string>
+    <string name="globalOptionsEntryHint">Refresh options, global modifiers and a preview of every icon</string>
+    <string name="globalModifiersTitle">Global modifiers</string>
+    <string name="globalModifiersHint">Applied to every icon in the preview below. Save bakes them into the icons; new icons from a refresh get them too.</string>
+    <string name="globalColorize">Colorize all icons</string>
+    <string name="globalApplyCustom">Also apply to custom icons</string>
+    <string name="globalIncludeEmpty">Include apps without an icon</string>
+    <string name="globalGeneratedSection">Generated icons · %1$d</string>
+    <string name="globalCustomSection">Custom icons · %1$d</string>
+    <string name="globalEmptySection">Without an icon · %1$d</string>
+    <string name="globalCustomHint">Hand-picked and edited icons keep their look unless **Also apply to custom icons** is on.</string>
+    <string name="globalEmptyHint">These apps get a new icon generated from the current source and modifiers.</string>
+    <string name="globalGridHint">Tap any icon to fine-tune its modifiers.</string>
+    <string name="globalNoIcons">No icons yet — pick a source on the home screen and refresh first.</string>
+    <string name="globalDiscardTitle">Discard changes?</string>
+    <string name="globalDiscardText">The modifier changes on this screen haven\'t been applied yet.</string>
+    <string name="globalOptionsApplied">Global modifiers applied</string>
+    <string name="globalOptionsApplyFailed">Applying global modifiers failed</string>
+    <string name="globalApplying">Applying…</string>
 
     <!-- First-run intro -->
     <string name="onboardingSourceTitle">Pick your icon source</string>

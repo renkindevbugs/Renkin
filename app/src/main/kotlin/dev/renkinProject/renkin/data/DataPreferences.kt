@@ -99,6 +99,27 @@ val OutlineColorKey = stringPreferencesKey("OUTLINE_COLOR")
 const val OUTLINE_WIDTH_DEFAULT = 6
 const val OUTLINE_WIDTH_MIN = 1
 const val OUTLINE_WIDTH_MAX = 16
+// Global icon modifiers (the Global options screen): shape, icon scale and colorize applied
+// to every icon the refresh generates, alongside the pack-wide outline above. Scales are
+// stored as Int percent (50..150) — the profile snapshot restore only carries Bool/Int/Long/
+// String. Shape is the IconShape ordinal.
+val GlobalShapeKey = intPreferencesKey("GLOBAL_SHAPE")
+val GlobalShapeCropKey = booleanPreferencesKey("GLOBAL_SHAPE_CROP")
+val GlobalShapeScaleKey = intPreferencesKey("GLOBAL_SHAPE_SCALE")
+val GlobalShapeColorKey = stringPreferencesKey("GLOBAL_SHAPE_COLOR")
+val GlobalIconScaleKey = intPreferencesKey("GLOBAL_ICON_SCALE")
+val GlobalColorizeKey = booleanPreferencesKey("GLOBAL_COLORIZE")
+val GlobalColorizeColorKey = stringPreferencesKey("GLOBAL_COLORIZE_COLOR")
+val GlobalColorizeFlatKey = booleanPreferencesKey("GLOBAL_COLORIZE_FLAT")
+// The two grid gates on the Global options screen: also restyle hand-picked (custom) icons,
+// and also generate icons for apps that have none yet.
+val GlobalApplyCustomKey = booleanPreferencesKey("GLOBAL_APPLY_CUSTOM")
+val GlobalIncludeEmptyKey = booleanPreferencesKey("GLOBAL_INCLUDE_EMPTY")
+const val GLOBAL_SCALE_PERCENT_MIN = 50
+const val GLOBAL_SCALE_PERCENT_MAX = 150
+
+fun normalizeGlobalScalePercent(percent: Int): Int =
+    percent.coerceIn(GLOBAL_SCALE_PERCENT_MIN, GLOBAL_SCALE_PERCENT_MAX)
 val AppSortOrderKey = intPreferencesKey(APP_SORT_ORDER_NAME)
 val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
 val WatchCheckIntervalKey = intPreferencesKey(WATCH_CHECK_INTERVAL_NAME)
@@ -122,18 +143,21 @@ val HideProfileShareWarningKey = booleanPreferencesKey("HIDE_PROFILE_SHARE_WARNI
  */
 private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
     IncludeVectorKey, MonochromeKey, ExportThemedKey, CalendarIconsKey, OverrideIconKey,
-    OutlineAddKey
+    OutlineAddKey, GlobalShapeCropKey, GlobalColorizeKey, GlobalColorizeFlatKey,
+    GlobalApplyCustomKey, GlobalIncludeEmptyKey
 )
 
 private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
     PrimarySourceKey, PrimaryImageEditKey, PrimaryTextTypeKey,
     SecondarySourceKey, SecondaryImageEditKey, SecondaryTextTypeKey,
-    FallbackSourceKey, OutlineWidthKey, BuiltPrimarySourceKey
+    FallbackSourceKey, OutlineWidthKey, BuiltPrimarySourceKey,
+    GlobalShapeKey, GlobalShapeScaleKey, GlobalIconScaleKey
 )
 
 private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
     PrimaryIconPackKey, SecondaryIconPackKey, IconColorKey, BackgroundColorKey,
-    TextFontKey, OutlineColorKey, BuiltPrimaryIconPackKey
+    TextFontKey, OutlineColorKey, BuiltPrimaryIconPackKey,
+    GlobalShapeColorKey, GlobalColorizeColorKey
 )
 
 val ProfilePrefKeys: List<Preferences.Key<*>> =
