@@ -490,6 +490,7 @@ class MainViewModel @Inject constructor(
         preferences: Preferences,
         modifierOptions: GenerationOptions,
         applyGenerated: Boolean,
+        applyExisting: Boolean,
         applyCustom: Boolean,
         includeEmpty: Boolean
     ): Boolean {
@@ -497,7 +498,8 @@ class MainViewModel @Inject constructor(
         globalApplyProgress = 0 to 0
         return try {
             appProvider.applyGlobalModifiers(
-                preferences, modifierOptions, applyGenerated, applyCustom, includeEmpty
+                preferences, modifierOptions,
+                applyGenerated, applyExisting, applyCustom, includeEmpty
             ) { done, total -> globalApplyProgress = done to total }
             getApplication<Application>().dataStore.persistGlobalModifierPrefs(preferences)
             resetChangeBaselines()

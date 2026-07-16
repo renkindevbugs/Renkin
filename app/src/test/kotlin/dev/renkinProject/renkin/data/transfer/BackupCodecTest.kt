@@ -118,7 +118,7 @@ class BackupCodecTest {
     }
 
     @Test
-    fun decode_preClassificationIconsBecomeProtectedLegacy() {
+    fun decode_preClassificationIconsKeepHistoricalOriginMarker() {
         val root = JSONObject(BackupCodec.encode(sampleData()))
         val icon = root.getJSONArray("profiles").getJSONObject(0)
             .getJSONArray("icons").getJSONObject(0)

@@ -23,6 +23,7 @@ class RenkinPackStore(private val context: Context) {
 
     data class SavedEntry(
         val icon: IconPackDrawable?,
+        val baseIcon: IconPackDrawable?,
         val calendarEnabled: Boolean,
         val calendarPrefix: String?,
         val calendarPackName: String?,
@@ -45,22 +46,23 @@ class RenkinPackStore(private val context: Context) {
     fun decodeRow(dbApp: DbApplication, defaultColor: Color): SavedEntry {
         // Per-row guard: one corrupt base64/XML record loses that single icon (the row's
         // calendar flags survive) instead of crashing the whole profile load.
-        val hasBase = dbApp.baseDrawable.isNotEmpty()
-        val storedDrawable = if (hasBase) dbApp.baseDrawable else dbApp.drawable
-        val storedIsXml = if (hasBase) dbApp.baseIsXml else dbApp.isXml
-        val storedIsAdaptive = if (hasBase) dbApp.baseIsAdaptiveIcon else dbApp.isAdaptiveIcon
-        val icon: IconPackDrawable? = runCatching {
+        fun decode(drawable: String, isXml: Boolean, isAdaptive: Boolean): IconPackDrawable? = runCatching {
             when {
-                storedDrawable.isEmpty() -> null
-                storedIsXml -> {
-                    val nodes = XmlDecoder.fromBase64(storedDrawable)
+                drawable.isEmpty() -> null
+                isXml -> {
+                    val nodes = XmlDecoder.fromBase64(drawable)
                     XmlNodeParser.parse(context.resources, nodes, defaultColor)
                 }
-                else -> BitmapIconDrawable(bitmapFromBase64(storedDrawable), storedIsAdaptive)
+                else -> BitmapIconDrawable(bitmapFromBase64(drawable), isAdaptive)
             }
         }.getOrNull()
+        val icon = decode(dbApp.drawable, dbApp.isXml, dbApp.isAdaptiveIcon)
+        val baseIcon = if (dbApp.baseDrawable.isNotEmpty()) {
+            decode(dbApp.baseDrawable, dbApp.baseIsXml, dbApp.baseIsAdaptiveIcon)
+        } else icon
         return SavedEntry(
             icon,
+            baseIcon,
             dbApp.calendarEnabled,
             dbApp.calendarPrefix.ifEmpty { null },
             dbApp.calendarPackName.ifEmpty { null },

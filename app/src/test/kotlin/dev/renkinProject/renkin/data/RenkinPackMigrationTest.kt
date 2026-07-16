@@ -51,7 +51,7 @@ class RenkinPackMigrationTest {
     }
 
     @Test
-    fun preV12RowsBecomeProtectedLegacyIcons() {
+    fun preV12RowsKeepAnExplicitHistoricalOriginMarker() {
         val name = historical(10, "v10-origin") { db ->
             db.execSQL(
                 "INSERT INTO DbApplication " +

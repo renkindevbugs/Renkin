@@ -116,6 +116,7 @@ val GlobalColorizeFlatKey = booleanPreferencesKey("GLOBAL_COLORIZE_FLAT")
 // refresh), hand-picked (custom) icons, and apps that have no icon yet (those get one
 // generated at Save).
 val GlobalApplyGeneratedKey = booleanPreferencesKey("GLOBAL_APPLY_GENERATED")
+val GlobalApplyExistingKey = booleanPreferencesKey("GLOBAL_APPLY_EXISTING")
 val GlobalApplyCustomKey = booleanPreferencesKey("GLOBAL_APPLY_CUSTOM")
 val GlobalIncludeEmptyKey = booleanPreferencesKey("GLOBAL_INCLUDE_EMPTY")
 const val GLOBAL_SCALE_PERCENT_MIN = 50
@@ -147,7 +148,7 @@ val HideProfileShareWarningKey = booleanPreferencesKey("HIDE_PROFILE_SHARE_WARNI
 private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
     IncludeVectorKey, MonochromeKey, ExportThemedKey, CalendarIconsKey, OverrideIconKey,
     OutlineAddKey, GlobalShapeCropKey, GlobalColorizeKey, GlobalColorizeFlatKey,
-    GlobalApplyGeneratedKey, GlobalApplyCustomKey, GlobalIncludeEmptyKey
+    GlobalApplyGeneratedKey, GlobalApplyExistingKey, GlobalApplyCustomKey, GlobalIncludeEmptyKey
 )
 
 private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
@@ -182,6 +183,7 @@ suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preference
             target[GlobalColorizeColorKey] = source.getStringValue(GlobalColorizeColorKey)
             target[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
             target[GlobalApplyGeneratedKey] = source.getBooleanValue(GlobalApplyGeneratedKey, true)
+            target[GlobalApplyExistingKey] = source.getBooleanValue(GlobalApplyExistingKey)
             target[GlobalApplyCustomKey] = source.getBooleanValue(GlobalApplyCustomKey)
             target[GlobalIncludeEmptyKey] = source.getBooleanValue(GlobalIncludeEmptyKey)
         }

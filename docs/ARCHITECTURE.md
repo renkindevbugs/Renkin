@@ -87,7 +87,9 @@ Switcher = the top-bar title dropdown.
   for reading a captured snapshot off the main thread.
 - **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v12) — profiles + rendered and base icons
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
-  rows; `isLegacyIcon` protects pre-classification rows instead of guessing their origin. Global
+  rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the
+  Global options UI, only unsaved refresh output is Generated; saved/built non-custom rows are
+  Existing and have their own apply toggle. Global
   modifiers are a derived render layer, never destructively baked into the stored base. The
   rendered payload remains in exports for backward compatibility. Loaded into the app list.
   **Never lower the version once any build was installed** — schema-identical bump +

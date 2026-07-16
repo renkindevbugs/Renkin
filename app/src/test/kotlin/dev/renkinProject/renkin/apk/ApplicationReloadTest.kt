@@ -144,11 +144,35 @@ class ApplicationReloadTest {
     }
 
     @Test
-    fun globalCategoriesAreIndependentAndLegacyIsAlwaysProtected() {
-        assertTrue(shouldApplyGlobalLayer(false, false, applyGenerated = true, applyCustom = false))
-        assertFalse(shouldApplyGlobalLayer(true, false, applyGenerated = true, applyCustom = false))
-        assertTrue(shouldApplyGlobalLayer(true, false, applyGenerated = false, applyCustom = true))
-        assertFalse(shouldApplyGlobalLayer(false, true, applyGenerated = true, applyCustom = true))
-        assertFalse(shouldApplyGlobalLayer(true, true, applyGenerated = true, applyCustom = true))
+    fun globalCategoriesDistinguishFreshGeneratedExistingAndCustom() {
+        assertTrue(shouldApplyGlobalLayer(false, true, applyGenerated = true, applyExisting = false, applyCustom = false))
+        assertFalse(shouldApplyGlobalLayer(false, false, applyGenerated = true, applyExisting = false, applyCustom = false))
+        assertTrue(shouldApplyGlobalLayer(false, false, applyGenerated = false, applyExisting = true, applyCustom = false))
+        assertTrue(shouldApplyGlobalLayer(true, false, applyGenerated = false, applyExisting = false, applyCustom = true))
+        assertFalse(shouldApplyGlobalLayer(true, true, applyGenerated = true, applyExisting = true, applyCustom = false))
+    }
+
+    @Test
+    fun lockingSavedRefreshOutputMovesItFromGeneratedToExisting() {
+        val generated = app(
+            "Generated", "com.generated", createdIcon = FakeIcon(), refreshMade = true
+        )
+
+        val existing = generated.locked()
+
+        assertTrue(generated.isRefreshMade)
+        assertFalse(existing.isRefreshMade)
+        assertFalse(
+            shouldApplyGlobalLayer(
+                existing.isCustom, existing.isRefreshMade,
+                applyGenerated = true, applyExisting = false, applyCustom = false
+            )
+        )
+        assertTrue(
+            shouldApplyGlobalLayer(
+                existing.isCustom, existing.isRefreshMade,
+                applyGenerated = false, applyExisting = true, applyCustom = false
+            )
+        )
     }
 }

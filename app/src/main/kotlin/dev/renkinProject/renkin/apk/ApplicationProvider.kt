@@ -21,6 +21,7 @@ import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.data.GlobalApplyCustomKey
+import dev.renkinProject.renkin.data.GlobalApplyExistingKey
 import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getDefaultBackgroundColor
@@ -54,10 +55,15 @@ internal suspend fun replaceAfterConflict(
 
 internal fun shouldApplyGlobalLayer(
     isCustom: Boolean,
-    isLegacy: Boolean,
+    isRefreshMade: Boolean,
     applyGenerated: Boolean,
+    applyExisting: Boolean,
     applyCustom: Boolean
-): Boolean = !isLegacy && if (isCustom) applyCustom else applyGenerated
+): Boolean = when {
+    isCustom -> applyCustom
+    isRefreshMade -> applyGenerated
+    else -> applyExisting
+}
 
 /**
  * The domain hub between the UI layer (MainViewModel) and everything icon-related: the live
@@ -239,13 +245,18 @@ class ApplicationProvider(private val context: Context) {
         preferences: Preferences,
         modifierOptions: GenerationOptions,
         applyGenerated: Boolean,
+        applyExisting: Boolean,
         applyCustom: Boolean,
         includeEmpty: Boolean,
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
     ) = withContext(Dispatchers.Default) {
-        val targets = applicationList.toList().filter {
-            it.key !in lockManager.lockedKeys && !it.isLegacy &&
-                (it.createdIcon != null || includeEmpty)
+        val targets = applicationList.toList().filter { app ->
+            app.key !in lockManager.lockedKeys && when {
+                app.createdIcon == null -> includeEmpty
+                app.isCustom -> applyCustom
+                app.isRefreshMade -> applyGenerated
+                else -> applyExisting
+            }
         }
         var done = 0
         onProgress(0, targets.size)
@@ -253,7 +264,8 @@ class ApplicationProvider(private val context: Context) {
             val base = app.baseIcon ?: app.createdIcon
             if (base != null) {
                 val apply = shouldApplyGlobalLayer(
-                    app.isCustom, app.isLegacy, applyGenerated, applyCustom
+                    app.isCustom, app.isRefreshMade,
+                    applyGenerated, applyExisting, applyCustom
                 )
                 val rendered = if (apply && modifierOptions.hasVisibleModifierEffect()) {
                     iconGenService.applyModifier(base, modifierOptions)
@@ -427,25 +439,30 @@ class ApplicationProvider(private val context: Context) {
             // A reference row (no image data, source pack known) whose pack is usable:
             // rebuild the icon from the pack. Failure keeps the row held back for retry.
             val isReference = entry.icon == null && entry.row.drawable.isEmpty() && entry.sourcePackName != null
-            val baseIcon = if (isReference) {
+            val storedIcon = if (isReference) {
                 val rebuilt = materializeReference(app, entry, prefs)
                 if (rebuilt == null) {
                     lockManager.lock(app.key, entry.row)
                     continue
                 }
                 rebuilt
-            } else entry.icon
+            } else entry.icon ?: entry.baseIcon
             val updated = when {
                 // Loaded from the DB = built/saved before, so it arrives locked (isRefreshMade
                 // defaults to false): a refresh won't replace it.
-                baseIcon != null -> {
-                    val apply = shouldApplyGlobalLayer(
-                        entry.isCustom,
-                        entry.isLegacy,
-                        prefs.getBooleanValue(GlobalApplyGeneratedKey, true),
-                        prefs.getBooleanValue(GlobalApplyCustomKey)
-                    )
-                    val rendered = renderGlobal(baseIcon, prefs, apply)
+                storedIcon != null -> {
+                    val baseIcon = entry.baseIcon ?: storedIcon
+                    val rendered = if (isReference) {
+                        renderGlobal(
+                            storedIcon,
+                            prefs,
+                            if (entry.isCustom) {
+                                prefs.getBooleanValue(GlobalApplyCustomKey)
+                            } else {
+                                prefs.getBooleanValue(GlobalApplyExistingKey)
+                            }
+                        )
+                    } else storedIcon
                     app.changeExport(
                         rendered,
                         sourcePackName = entry.sourcePackName,
@@ -529,14 +546,20 @@ class ApplicationProvider(private val context: Context) {
             if (row.sourcePackName in stillLocked) continue
             val app = applicationList.firstOrNull { it.key == key } ?: continue
             val entry = renkinPackStore.decodeRow(row, defaultColor)
-            val baseIcon = entry.icon ?: materializeReference(app, entry, prefs) ?: continue
-            val apply = shouldApplyGlobalLayer(
-                entry.isCustom,
-                entry.isLegacy,
-                prefs.getBooleanValue(GlobalApplyGeneratedKey, true),
-                prefs.getBooleanValue(GlobalApplyCustomKey)
-            )
-            val rendered = renderGlobal(baseIcon, prefs, apply)
+            val isReference = entry.icon == null && entry.row.drawable.isEmpty() && entry.sourcePackName != null
+            val storedIcon = entry.icon ?: materializeReference(app, entry, prefs) ?: continue
+            val baseIcon = entry.baseIcon ?: storedIcon
+            val rendered = if (isReference) {
+                renderGlobal(
+                    storedIcon,
+                    prefs,
+                    if (entry.isCustom) {
+                        prefs.getBooleanValue(GlobalApplyCustomKey)
+                    } else {
+                        prefs.getBooleanValue(GlobalApplyExistingKey)
+                    }
+                )
+            } else storedIcon
             editApplication(
                 app,
                 app.changeExport(

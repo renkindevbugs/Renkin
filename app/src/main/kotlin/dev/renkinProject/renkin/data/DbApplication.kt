@@ -62,10 +62,10 @@ data class DbApplication(
     // [sourcePackName] is such a reference: the icon is rebuilt from the installed pack.
     @ColumnInfo(defaultValue = "") val sourceDrawableName: String = "",
     // True when the icon was hand-picked/edited by the user (per-app dialog, upload, vector,
-    // watch-apply) rather than produced by a bulk refresh. Splits the global-options preview
-    // grid into generated vs custom icons. Unknown upgraded rows are separately protected.
+    // watch-apply) rather than produced by a bulk refresh. Together with the in-memory refresh
+    // marker, splits global options into generated, existing and custom icons.
     @ColumnInfo(defaultValue = "0") val isCustomIcon: Boolean = false,
-    // Rows upgraded from before persistent classification are protected instead of guessed.
+    // Records that the generated-vs-custom origin predates reliable classification.
     @ColumnInfo(defaultValue = "0") val isLegacyIcon: Boolean = false,
     // Non-destructive source for re-rendering global modifiers. drawable remains the rendered
     // compatibility/export payload, so older importers still receive the visible result.

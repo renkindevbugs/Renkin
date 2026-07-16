@@ -155,6 +155,7 @@ class DataPreferencesTest {
                 GlobalIconScaleKey to 80,
                 OutlineAddKey to true,
                 GlobalApplyGeneratedKey to false,
+                GlobalApplyExistingKey to true,
                 GlobalApplyCustomKey to true
             )
 
@@ -165,6 +166,7 @@ class DataPreferencesTest {
             assertEquals(80, saved[GlobalIconScaleKey])
             assertTrue(saved[OutlineAddKey] == true)
             assertFalse(saved[GlobalApplyGeneratedKey] == true)
+            assertTrue(saved[GlobalApplyExistingKey] == true)
             assertTrue(saved[GlobalApplyCustomKey] == true)
         } finally {
             scope.cancel()
