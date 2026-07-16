@@ -399,12 +399,25 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                     }
                 }
 
+                // While the pinned options panel is open the tiles shrink so more of the
+                // preview stays visible; scrolling collapses the panel and they grow back.
+                var panelVisible by remember { mutableStateOf(true) }
+                LaunchedEffect(gridState) {
+                    androidx.compose.runtime.snapshotFlow { gridState.isScrollInProgress }
+                        .collect { scrolling -> if (scrolling) panelVisible = false }
+                }
+
                 // The icon grid, shared by both layouts below (single-pane phones and the
-                // side-by-side pane on wide screens).
-                val gridContent: @Composable () -> Unit = {
+                // side-by-side pane on wide screens). [compact] = smaller tiles while the
+                // options panel is expanded.
+                val gridContent: @Composable (compact: Boolean) -> Unit = { compact ->
+                val tileSize = androidx.compose.animation.core.animateDpAsState(
+                    targetValue = if (compact) 40.dp else 56.dp,
+                    label = "tileSize"
+                ).value
                 LazyVerticalGrid(
                     state = gridState,
-                    columns = GridCells.Adaptive(84.dp),
+                    columns = GridCells.Adaptive(if (compact) 62.dp else 84.dp),
                     contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -434,7 +447,8 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                             IconPreviewTile(
                                 app,
                                 if (state.applyGenerated) tileOptions else null,
-                                viewModel
+                                viewModel,
+                                iconSize = tileSize
                             ) { editApp = app }
                         }
                     }
@@ -451,7 +465,8 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                                 app,
                                 if (state.applyCustom) tileOptions else null,
                                 viewModel,
-                                showEditBadge = true
+                                showEditBadge = true,
+                                iconSize = tileSize
                             ) { editApp = app }
                         }
                     }
@@ -470,7 +485,8 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                             IconPreviewTile(
                                 app,
                                 if (state.applyExisting) tileOptions else null,
-                                viewModel
+                                viewModel,
+                                iconSize = tileSize
                             ) { editApp = app }
                         }
                     }
@@ -484,12 +500,20 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                         }
                         items(iconless, key = { "e/${it.key}" }) { app ->
                             GeneratedPreviewTile(
-                                app, emptySourceOptions, tileOptions, viewModel
+                                app, emptySourceOptions, tileOptions, viewModel,
+                                iconSize = tileSize
                             ) { editApp = app }
                         }
                     }
                 }
                 }
+
+                // Wallpaper-toned backdrop behind the icon area only, so the preview hints
+                // at how the icons will sit on the user's background.
+                val wallpaperBrush = rememberWallpaperBrush()
+                val backdrop: Modifier = if (wallpaperBrush != null) {
+                    Modifier.background(brush = wallpaperBrush, alpha = 0.30f)
+                } else Modifier
 
                 val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
                 if (wide) {
@@ -518,21 +542,17 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                                 CurrentSectionBar(section, generated.size, custom.size, existing.size, iconless.size, state)
                             }
                             HorizontalDivider()
-                            gridContent()
+                            Box(Modifier.fillMaxSize().then(backdrop)) { gridContent(false) }
                         }
                     }
                 } else {
-                    // Phones: the WHOLE pinned block (category toggles + arrow handle +
-                    // expandable options panel) fits inside a third of the screen — the
-                    // toggles and handle are fixed, the panel gets whatever height is left
-                    // and scrolls internally. Scrolling the grid auto-collapses the panel.
-                    var panelVisible by remember { mutableStateOf(true) }
-                    LaunchedEffect(gridState) {
-                        androidx.compose.runtime.snapshotFlow { gridState.isScrollInProgress }
-                            .collect { scrolling -> if (scrolling) panelVisible = false }
-                    }
+                    // Phones: the pinned block (category toggles + arrow handle + expandable
+                    // options panel) is capped a bit under half the screen; in exchange the
+                    // tiles below shrink while it is open. The toggles and handle are fixed,
+                    // the panel gets the remaining height and scrolls internally. Scrolling
+                    // the grid auto-collapses the panel and the tiles grow back.
                     val pinnedMax = (androidx.compose.ui.platform.LocalConfiguration
-                        .current.screenHeightDp / 3).dp
+                        .current.screenHeightDp * 0.45f).dp
                     Column(Modifier.heightIn(max = pinnedMax)) {
                         CategoryToggleRow(state)
                         PanelHandle(panelVisible) { panelVisible = !panelVisible }
@@ -556,7 +576,7 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                         CurrentSectionBar(section, generated.size, custom.size, existing.size, iconless.size, state)
                     }
                     HorizontalDivider()
-                    gridContent()
+                    Box(Modifier.fillMaxSize().then(backdrop)) { gridContent(panelVisible) }
                 }
             }
         }
@@ -594,7 +614,8 @@ private fun AdvancedOptionsPanel(iconPacks: List<IconPack>) {
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
             )
-            AdvancedOptionsContent(iconPacks)
+            // No refresh hint here: the live grid below already shows what the options do.
+            AdvancedOptionsContent(iconPacks, showHint = false)
         }
     }
 }
@@ -980,6 +1001,7 @@ private fun IconPreviewTile(
     options: GenerationOptions?,
     viewModel: MainViewModel,
     showEditBadge: Boolean = false,
+    iconSize: androidx.compose.ui.unit.Dp = 56.dp,
     onClick: () -> Unit
 ) {
     val base = app.baseIcon ?: app.createdIcon
@@ -992,7 +1014,7 @@ private fun IconPreviewTile(
             }
         } else base
     }
-    PreviewTileFrame(app, showEditBadge, onClick) {
+    PreviewTileFrame(app, showEditBadge, iconSize, onClick) {
         val icon = preview
         if (icon != null) {
             Image(
@@ -1017,6 +1039,7 @@ private fun GeneratedPreviewTile(
     sourceOptions: GenerationOptions?,
     modifierOptions: GenerationOptions?,
     viewModel: MainViewModel,
+    iconSize: androidx.compose.ui.unit.Dp = 56.dp,
     onClick: () -> Unit
 ) {
     val preview by produceState<IconPackDrawable?>(null, app.key, sourceOptions, modifierOptions) {
@@ -1030,7 +1053,7 @@ private fun GeneratedPreviewTile(
             }.getOrNull()
         }
     }
-    PreviewTileFrame(app, showEditBadge = false, onClick = onClick) {
+    PreviewTileFrame(app, showEditBadge = false, iconSize = iconSize, onClick = onClick) {
         val icon = preview
         if (icon != null) {
             Image(
@@ -1058,11 +1081,33 @@ private fun GeneratedPreviewTile(
     }
 }
 
+/**
+ * A vertical wash of the system wallpaper's palette (no permission needed — unlike the
+ * wallpaper image itself, the colours are public API). Null below API 27 or with no colours.
+ */
+@Composable
+private fun rememberWallpaperBrush(): androidx.compose.ui.graphics.Brush? {
+    val context = LocalContext.current
+    return remember {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O_MR1) {
+            return@remember null
+        }
+        val colors = runCatching {
+            android.app.WallpaperManager.getInstance(context)
+                .getWallpaperColors(android.app.WallpaperManager.FLAG_SYSTEM)
+        }.getOrNull() ?: return@remember null
+        val primary = Color(colors.primaryColor.toArgb())
+        val secondary = colors.secondaryColor?.let { Color(it.toArgb()) } ?: primary
+        androidx.compose.ui.graphics.Brush.verticalGradient(listOf(primary, secondary))
+    }
+}
+
 /** The shared tile chrome: icon slot on top, single-line app name below, optional edit badge. */
 @Composable
 private fun PreviewTileFrame(
     app: PackageInfoStruct,
     showEditBadge: Boolean,
+    iconSize: androidx.compose.ui.unit.Dp = 56.dp,
     onClick: () -> Unit,
     iconContent: @Composable () -> Unit
 ) {
@@ -1073,7 +1118,7 @@ private fun PreviewTileFrame(
             .clickable(role = Role.Button, onClick = onClick)
             .padding(vertical = 6.dp, horizontal = 2.dp)
     ) {
-        Box(Modifier.size(56.dp)) {
+        Box(Modifier.size(iconSize)) {
             iconContent()
             if (showEditBadge) {
                 Surface(

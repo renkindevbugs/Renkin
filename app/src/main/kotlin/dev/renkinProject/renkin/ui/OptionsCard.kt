@@ -146,10 +146,13 @@ fun AdvancedOptionsCard(iconPacks: List<IconPack>, onOpenGlobal: () -> Unit) {
  * The refresh-wide generation options (sources, fallback, colours, switches), shared by the
  * home card above and the Global options screen's panel. Every control writes straight to the
  * profile's DataStore — only the global modifiers on that screen are staged behind Save.
+ * [showHint] shows the "takes effect after a refresh" note — true on the home card, false on
+ * the Global options screen where the live grid already answers that question.
  */
 @Composable
 fun AdvancedOptionsContent(
-    iconPacks: List<IconPack>
+    iconPacks: List<IconPack>,
+    showHint: Boolean = true
 ) {
     val prefs = getPreferences()
 
@@ -193,6 +196,7 @@ fun AdvancedOptionsContent(
 
     Column(Modifier.padding(bottom = 12.dp)) {
                 // Users otherwise don't know these settings only take effect after a refresh
+                if (showHint) {
                 Surface(
                     shape = FieldShape,
                     color = MaterialTheme.colorScheme.secondaryContainer,
@@ -217,6 +221,7 @@ fun AdvancedOptionsContent(
                             modifier = Modifier.padding(start = 8.dp)
                         )
                     }
+                }
                 }
 
                 // The primary source/pack itself is picked in the hero card on the home screen;
