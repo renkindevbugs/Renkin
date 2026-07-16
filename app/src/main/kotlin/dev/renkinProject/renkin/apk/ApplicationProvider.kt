@@ -217,23 +217,25 @@ class ApplicationProvider(private val context: Context) {
 
     /**
      * Bakes the global modifiers into the stored icons (the Global options screen's Save):
-     * every generated icon gets [modifierOptions] applied over its current pixels; custom
-     * (hand-picked) icons only when [applyToCustom]; apps with no icon get one generated from
-     * the current preferences when [includeEmpty] (the prefs already carry the globals).
-     * The result is persisted like a save-before-switch, so shares/exports carry the baked
-     * icons. Icons locked behind a missing pack are never touched.
+     * icons in the toggled-on categories get [modifierOptions] applied over their current
+     * pixels — refresh-generated icons when [applyGenerated], custom (hand-picked) icons when
+     * [applyCustom] — and apps with no icon get one generated from the current preferences
+     * when [includeEmpty] (the prefs already carry the globals). The result is persisted like
+     * a save-before-switch, so shares/exports carry the baked icons. Icons locked behind a
+     * missing pack are never touched.
      */
     suspend fun applyGlobalModifiers(
         preferences: Preferences,
         modifierOptions: GenerationOptions,
-        applyToCustom: Boolean,
+        applyGenerated: Boolean,
+        applyCustom: Boolean,
         includeEmpty: Boolean,
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
     ) = withContext(Dispatchers.Default) {
         val targets = applicationList.toList().filter { app ->
             when {
                 app.key in lockManager.lockedKeys -> false
-                app.createdIcon != null -> !app.isCustom || applyToCustom
+                app.createdIcon != null -> if (app.isCustom) applyCustom else applyGenerated
                 else -> includeEmpty
             }
         }

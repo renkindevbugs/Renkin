@@ -483,7 +483,8 @@ class MainViewModel @Inject constructor(
      */
     fun applyGlobalModifiers(
         modifierOptions: GenerationOptions,
-        applyToCustom: Boolean,
+        applyGenerated: Boolean,
+        applyCustom: Boolean,
         includeEmpty: Boolean,
         onDone: () -> Unit = {}
     ) {
@@ -494,7 +495,7 @@ class MainViewModel @Inject constructor(
                 val preferences = getApplication<Application>().dataStore
                     .getPreferencesAfterPendingWrites()
                 appProvider.applyGlobalModifiers(
-                    preferences, modifierOptions, applyToCustom, includeEmpty
+                    preferences, modifierOptions, applyGenerated, applyCustom, includeEmpty
                 ) { done, total -> globalApplyProgress = done to total }
                 // The bake saved the profile — the change baselines follow, like any save.
                 resetChangeBaselines()

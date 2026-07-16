@@ -37,6 +37,7 @@ import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
+import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
 import dev.renkinProject.renkin.data.GlobalColorizeColorKey
 import dev.renkinProject.renkin.data.GlobalColorizeFlatKey
 import dev.renkinProject.renkin.data.GlobalColorizeKey
@@ -147,15 +148,17 @@ data class GenerationOptions(
             val primarySource = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
             var primaryImageEdit = preferences.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
 
-            // Global modifiers (the Global options screen) applied to every generated icon.
-            val globalShape = IconShape.entries.getOrNull(
+            // Global modifiers (the Global options screen) applied to every generated icon —
+            // only while the "Generated" category toggle is on (the default).
+            val applyGlobals = preferences.getBooleanValue(GlobalApplyGeneratedKey, true)
+            val globalShape = if (!applyGlobals) IconShape.NONE else IconShape.entries.getOrNull(
                 preferences.getIntValue(GlobalShapeKey, IconShape.NONE.ordinal)
             ) ?: IconShape.NONE
             val globalShapeCrop = preferences.getBooleanValue(GlobalShapeCropKey, true)
             val globalShapeColor = preferences.getColorValue(GlobalShapeColorKey, androidx.compose.ui.graphics.Color.White)
             // Global colorize only steps in when no image edit is chosen — an explicit
             // Path/Edge/Colorize/Remove-background pick keeps its own colour handling.
-            val globalColorize = preferences.getBooleanValue(GlobalColorizeKey)
+            val globalColorize = applyGlobals && preferences.getBooleanValue(GlobalColorizeKey)
             var effectiveColor = iconColor.toArgb()
             var colorizeFlat = false
             if (globalColorize && primaryImageEdit == ImageEdit.NONE) {
@@ -187,7 +190,7 @@ data class GenerationOptions(
                 color = effectiveColor,
                 bgColor = effectiveBgColor,
                 colorizeFlat = colorizeFlat,
-                iconScale = normalizeGlobalScalePercent(
+                iconScale = if (!applyGlobals) 1f else normalizeGlobalScalePercent(
                     preferences.getIntValue(GlobalIconScaleKey, 100)) / 100f,
                 iconShape = globalShape,
                 iconShapeCrop = globalShapeCrop,
@@ -202,7 +205,7 @@ data class GenerationOptions(
                 fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
                 textFontPath = FontCatalog.usablePathOrDefault(preferences.getStringValue(TextFontKey)),
                 // Only ADD exists pack-wide; RECOLOR stays a per-app Modifier-tab option.
-                outlineMode = if (preferences.getBooleanValue(OutlineAddKey)) OutlineMode.ADD else OutlineMode.NONE,
+                outlineMode = if (applyGlobals && preferences.getBooleanValue(OutlineAddKey)) OutlineMode.ADD else OutlineMode.NONE,
                 outlineWidth = normalizeOutlineWidth(
                     preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
                 ).toFloat(),

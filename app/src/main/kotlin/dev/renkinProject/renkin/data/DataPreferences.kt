@@ -111,8 +111,11 @@ val GlobalIconScaleKey = intPreferencesKey("GLOBAL_ICON_SCALE")
 val GlobalColorizeKey = booleanPreferencesKey("GLOBAL_COLORIZE")
 val GlobalColorizeColorKey = stringPreferencesKey("GLOBAL_COLORIZE_COLOR")
 val GlobalColorizeFlatKey = booleanPreferencesKey("GLOBAL_COLORIZE_FLAT")
-// The two grid gates on the Global options screen: also restyle hand-picked (custom) icons,
-// and also generate icons for apps that have none yet.
+// Which icon categories the global modifiers apply to (the Global options screen's toggle
+// buttons): refresh-generated icons (on by default — also gates the globals during a bulk
+// refresh), hand-picked (custom) icons, and apps that have no icon yet (those get one
+// generated at Save).
+val GlobalApplyGeneratedKey = booleanPreferencesKey("GLOBAL_APPLY_GENERATED")
 val GlobalApplyCustomKey = booleanPreferencesKey("GLOBAL_APPLY_CUSTOM")
 val GlobalIncludeEmptyKey = booleanPreferencesKey("GLOBAL_INCLUDE_EMPTY")
 const val GLOBAL_SCALE_PERCENT_MIN = 50
@@ -144,7 +147,7 @@ val HideProfileShareWarningKey = booleanPreferencesKey("HIDE_PROFILE_SHARE_WARNI
 private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
     IncludeVectorKey, MonochromeKey, ExportThemedKey, CalendarIconsKey, OverrideIconKey,
     OutlineAddKey, GlobalShapeCropKey, GlobalColorizeKey, GlobalColorizeFlatKey,
-    GlobalApplyCustomKey, GlobalIncludeEmptyKey
+    GlobalApplyGeneratedKey, GlobalApplyCustomKey, GlobalIncludeEmptyKey
 )
 
 private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
