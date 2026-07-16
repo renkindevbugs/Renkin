@@ -84,7 +84,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.datastore.preferences.core.Preferences
 import androidx.hilt.navigation.compose.hiltViewModel
-import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.GlobalOptionsViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.GlobalApplyCustomKey
 import dev.renkinProject.renkin.data.GlobalApplyExistingKey
@@ -275,19 +275,26 @@ internal class GlobalModifierState {
 }
 
 /**
- * Fullscreen Global options: the refresh-wide generation options (immediate, like the old
- * Advanced options card), the staged global modifiers, and a live preview grid of every icon
- * split into generated / custom / existing / iconless apps. Save re-renders the global layer
- * from immutable icon bases and persists the profile; tapping a tile opens a per-app editor.
+ * Fullscreen Global options, hosted by [dev.renkinProject.renkin.GlobalOptionsActivity] whose
+ * windowShowWallpaper theme puts the REAL wallpaper behind the transparent icon grid: the
+ * refresh-wide generation options (immediate, like the old Advanced options card), the staged
+ * global modifiers, and a live preview grid of every icon split into generated / custom /
+ * existing / iconless apps. Save re-renders the global layer from immutable icon bases and
+ * persists the profile; tapping a tile opens a per-app editor. [onClose] reports the per-icon
+ * edits and whether a Save happened, so MainViewModel can update its session bookkeeping.
  */
 @Composable
-fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
-    val viewModel: MainViewModel = hiltViewModel()
+fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> Unit) {
+    val viewModel: GlobalOptionsViewModel = hiltViewModel()
+    val iconPacks = viewModel.iconPacks
     val prefs = getPreferences()
     val prefsValue = prefs.getPreferencesValue()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val view = LocalView.current
+    val toaster = LocalToaster.current
+    val appliedMessage = stringResource(R.string.globalOptionsApplied)
+    val applyFailedMessage = stringResource(R.string.globalOptionsApplyFailed)
 
     val state = rememberSaveable(saver = GlobalModifierState.Saver) { GlobalModifierState() }
     // The baseline snapshot the dirty check compares against; null until seeding completes.
@@ -305,8 +312,9 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
     val close: () -> Unit = {
         if (applying) Unit
         else if (dirty) confirmDiscard = true
-        else onDismiss()
+        else onClose(viewModel.editedKeys, viewModel.appliedGlobal)
     }
+    androidx.activity.compose.BackHandler(enabled = true) { close() }
 
     // Staged modifiers → the preview options. null = nothing to apply (tiles show the icon
     // as-is without spinning up a generation per tile).
@@ -337,20 +345,19 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
         }
     }
 
-    Dialog(
-        onDismissRequest = close,
-        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    // No Surface around everything: the activity window is transparent over the wallpaper, so
+    // each non-grid area paints its own opaque background and the grid area paints none.
+    Column(
+        Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
     ) {
-        Surface(
-            modifier = Modifier.fillMaxSize(),
-            color = MaterialTheme.colorScheme.surfaceContainerLow
-        ) {
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .statusBarsPadding()
-                    .navigationBarsPadding()
-            ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .statusBarsPadding()
+                ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -376,6 +383,7 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                                     state.applyGenerated, state.applyExisting,
                                     state.applyCustom, state.includeEmpty
                                 )
+                                toaster.show(if (applied) appliedMessage else applyFailedMessage)
                                 if (applied) {
                                     baseline = state.snapshot()
                                 }
@@ -397,6 +405,7 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                     } else {
                         WavyLoadingBar(Modifier.fillMaxWidth())
                     }
+                }
                 }
 
                 // While the pinned options panel is open the tiles shrink so more of the
@@ -513,22 +522,17 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                 }
                 }
 
-                // Wallpaper-toned backdrop behind the icon area only, so the preview hints
-                // at how the icons will sit on the user's background.
-                val wallpaperBrush = rememberWallpaperBrush()
-                val backdrop: Modifier = if (wallpaperBrush != null) {
-                    Modifier.background(brush = wallpaperBrush, alpha = 0.30f)
-                } else Modifier
-
                 val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
                 if (wide) {
                     // Foldables/tablets/desktop: options pane on the left, the icon grid on
-                    // the right — no collapsing needed, both scroll independently.
+                    // the right (transparent, over the real wallpaper) — no collapsing
+                    // needed, both scroll independently.
                     Row(Modifier.fillMaxSize()) {
                         Column(
                             Modifier
                                 .width(340.dp)
                                 .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.surfaceContainerLow)
                                 .verticalScroll(rememberScrollState())
                                 .padding(bottom = 12.dp)
                         ) {
@@ -547,18 +551,22 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                                 CurrentSectionBar(section, generated.size, custom.size, existing.size, iconless.size, state)
                             }
                             HorizontalDivider()
-                            Box(Modifier.fillMaxSize().then(backdrop)) { gridContent(false) }
+                            // Transparent: the real wallpaper shows behind the tiles.
+                            Box(Modifier.fillMaxSize()) { gridContent(false) }
                         }
                     }
                 } else {
                     // Phones: the pinned block (category toggles + arrow handle + expandable
                     // options panel) is capped a bit under half the screen; in exchange the
                     // tiles below shrink while it is open. The toggles and handle are fixed,
-                    // the panel gets the remaining height and scrolls internally. Scrolling
-                    // the grid auto-collapses the panel and the tiles grow back.
+                    // the panel gets the remaining height and scrolls internally.
                     val pinnedMax = (androidx.compose.ui.platform.LocalConfiguration
                         .current.screenHeightDp * 0.45f).dp
-                    Column(Modifier.heightIn(max = pinnedMax)) {
+                    Column(
+                        Modifier
+                            .heightIn(max = pinnedMax)
+                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    ) {
                         CategoryToggleRow(state)
                         AnimatedVisibility(
                             visible = panelVisible,
@@ -583,10 +591,9 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                         CurrentSectionBar(section, generated.size, custom.size, existing.size, iconless.size, state)
                     }
                     HorizontalDivider()
-                    Box(Modifier.fillMaxSize().then(backdrop)) { gridContent(panelVisible) }
+                    // Transparent: the real wallpaper shows behind the tiles.
+                    Box(Modifier.fillMaxSize()) { gridContent(panelVisible) }
                 }
-            }
-        }
     }
 
     if (confirmDiscard) {
@@ -595,7 +602,7 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
             text = stringResource(R.string.globalDiscardText),
             onConfirm = {
                 confirmDiscard = false
-                onDismiss()
+                onClose(viewModel.editedKeys, viewModel.appliedGlobal)
             },
             onDismiss = { confirmDiscard = false }
         )
@@ -969,6 +976,10 @@ private fun SectionHeader(
     hint: androidx.compose.ui.text.AnnotatedString? = null
 ) {
     val marker = if (applies) AddedGreen else MaterialTheme.colorScheme.error
+    // Sits directly on the wallpaper — white text with a shadow, like the tile labels.
+    val onWallpaperShadow = androidx.compose.ui.graphics.Shadow(
+        color = Color.Black.copy(alpha = 0.85f), blurRadius = 6f
+    )
     Column(Modifier.padding(top = 6.dp)) {
         HorizontalDivider(thickness = 2.dp, color = marker)
         Row(
@@ -979,24 +990,24 @@ private fun SectionHeader(
         ) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleSmall.copy(shadow = onWallpaperShadow),
                 fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
+                color = Color.White,
                 modifier = Modifier.weight(1f)
             )
             Text(
                 text = stringResource(
                     if (applies) R.string.globalSectionApplies else R.string.globalSectionSkipped
                 ),
-                style = MaterialTheme.typography.labelMedium,
+                style = MaterialTheme.typography.labelMedium.copy(shadow = onWallpaperShadow),
                 color = marker
             )
         }
         if (hint != null) {
             Text(
                 text = hint,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.bodySmall.copy(shadow = onWallpaperShadow),
+                color = Color.White.copy(alpha = 0.85f),
                 modifier = Modifier.padding(top = 2.dp)
             )
         }
@@ -1011,7 +1022,7 @@ private fun SectionHeader(
 private fun IconPreviewTile(
     app: PackageInfoStruct,
     options: GenerationOptions?,
-    viewModel: MainViewModel,
+    viewModel: GlobalOptionsViewModel,
     showEditBadge: Boolean = false,
     iconSize: androidx.compose.ui.unit.Dp = 56.dp,
     modifier: Modifier = Modifier,
@@ -1051,7 +1062,7 @@ private fun GeneratedPreviewTile(
     app: PackageInfoStruct,
     sourceOptions: GenerationOptions?,
     modifierOptions: GenerationOptions?,
-    viewModel: MainViewModel,
+    viewModel: GlobalOptionsViewModel,
     iconSize: androidx.compose.ui.unit.Dp = 56.dp,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
@@ -1095,27 +1106,6 @@ private fun GeneratedPreviewTile(
     }
 }
 
-/**
- * A vertical wash of the system wallpaper's palette (no permission needed — unlike the
- * wallpaper image itself, the colours are public API). Null below API 27 or with no colours.
- */
-@Composable
-private fun rememberWallpaperBrush(): androidx.compose.ui.graphics.Brush? {
-    val context = LocalContext.current
-    return remember {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.O_MR1) {
-            return@remember null
-        }
-        val colors = runCatching {
-            android.app.WallpaperManager.getInstance(context)
-                .getWallpaperColors(android.app.WallpaperManager.FLAG_SYSTEM)
-        }.getOrNull() ?: return@remember null
-        val primary = Color(colors.primaryColor.toArgb())
-        val secondary = colors.secondaryColor?.let { Color(it.toArgb()) } ?: primary
-        androidx.compose.ui.graphics.Brush.verticalGradient(listOf(primary, secondary))
-    }
-}
-
 /** The shared tile chrome: icon slot on top, single-line app name below, optional edit badge. */
 @Composable
 private fun PreviewTileFrame(
@@ -1153,13 +1143,19 @@ private fun PreviewTileFrame(
                 }
             }
         }
+        // Launcher-style label: white with a soft shadow, readable on any wallpaper (the
+        // grid sits directly on the transparent, wallpaper-showing area).
         Text(
             text = app.appName,
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall.copy(
+                shadow = androidx.compose.ui.graphics.Shadow(
+                    color = Color.Black.copy(alpha = 0.85f), blurRadius = 6f
+                )
+            ),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurface,
+            color = Color.White,
             modifier = Modifier
                 .padding(top = 4.dp)
                 .fillMaxWidth()
@@ -1174,12 +1170,13 @@ private fun PreviewTileFrame(
  */
 @Composable
 private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) {
-    val viewModel: MainViewModel = hiltViewModel()
+    val viewModel: GlobalOptionsViewModel = hiltViewModel()
     val view = LocalView.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val externalEditorError = stringResource(R.string.noImageEditorAvailable)
+    val originLockedMessage = stringResource(R.string.iconOriginLocked)
 
     var imageEdit by remember { mutableStateOf(ImageEdit.NONE) }
     var iconColor by remember { mutableStateOf(Color.White) }
@@ -1282,10 +1279,18 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                     Button(
                         onClick = {
                             view.performConfirmHaptic()
-                            preview?.let {
-                                viewModel.applyIcon(app, it, sourcePackName = app.sourcePackName)
+                            val edited = preview
+                            if (edited != null) {
+                                scope.launch {
+                                    val stored = viewModel.applyEditedIcon(
+                                        app, edited, sourcePackName = app.sourcePackName
+                                    )
+                                    if (!stored) toaster.show(originLockedMessage)
+                                    onDismiss()
+                                }
+                            } else {
+                                onDismiss()
                             }
-                            onDismiss()
                         },
                         enabled = preview != null && !generating && preview !== base,
                         shape = dev.renkinProject.renkin.ui.theme.FieldShape

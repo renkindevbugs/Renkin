@@ -25,7 +25,6 @@ import dev.renkinProject.renkin.data.PrimarySourceKey
 import dev.renkinProject.renkin.data.SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
-import dev.renkinProject.renkin.data.persistGlobalModifierPrefs
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
@@ -478,42 +477,19 @@ class MainViewModel @Inject constructor(
 
     // ---- Global icon modifiers -----------------------------------------------------
 
-    /** (done, total) while the global layer is re-rendered from icon bases; null when idle. */
-    var globalApplyProgress by mutableStateOf<Pair<Int, Int>?>(null)
-        private set
-
     /**
-     * Re-renders the global layer without mutating persisted bases. [preferences] already
-     * contains the screen's staged values, so empty generation and future refresh agree.
+     * Called when the Global options activity returns: the work happened on the shared
+     * provider (via GlobalOptionsViewModel), so this only refreshes the session bookkeeping —
+     * hand-edited keys count as this session's edits, and a Save (which persisted the
+     * profile) moves the change baselines exactly like a save-before-switch does.
      */
-    suspend fun applyGlobalModifiers(
-        preferences: Preferences,
-        modifierOptions: GenerationOptions,
-        applyGenerated: Boolean,
-        applyExisting: Boolean,
-        applyCustom: Boolean,
-        includeEmpty: Boolean
-    ): Boolean {
-        if (globalApplyProgress != null) return false
-        globalApplyProgress = 0 to 0
-        return try {
-            appProvider.applyGlobalModifiers(
-                preferences, modifierOptions,
-                applyGenerated, applyExisting, applyCustom, includeEmpty
-            ) { done, total -> globalApplyProgress = done to total }
-            getApplication<Application>().dataStore.persistGlobalModifierPrefs(preferences)
-            resetChangeBaselines()
-            refreshMissingPacks(prompt = false)
-            _toastEvents.trySend(R.string.globalOptionsApplied)
-            true
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.error("MainViewModel", "Applying global modifiers failed", e)
-            _toastEvents.trySend(R.string.globalOptionsApplyFailed)
-            false
-        } finally {
-            globalApplyProgress = null
+    fun onGlobalOptionsClosed(editedKeys: Set<String>, applied: Boolean) {
+        updatedKeys = updatedKeys + editedKeys
+        if (applied) {
+            viewModelScope.launch {
+                resetChangeBaselines()
+                refreshMissingPacks(prompt = false)
+            }
         }
     }
 

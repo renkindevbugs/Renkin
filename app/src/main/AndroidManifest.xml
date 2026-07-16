@@ -56,6 +56,11 @@
             android:name=".WallpaperPreviewActivity"
             android:exported="false"
             android:theme="@style/Theme.Renkin.WallpaperPreview" />
+        <!-- Global options: the icon grid previews over the real wallpaper (same theme trick). -->
+        <activity
+            android:name=".GlobalOptionsActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Renkin.WallpaperPreview" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

@@ -1,6 +1,9 @@
 package dev.renkinProject.renkin.ui
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -99,6 +102,7 @@ import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.setEnumValue
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.GlobalOptionsActivity
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.WatchViewModel
 import kotlinx.coroutines.flow.map
@@ -497,11 +501,19 @@ fun ApplicationList(
         listState.scrollToItem(0)
     }
 
-    // Hoisted above the LazyColumn: the entry card scrolls away with the list, but the
-    // fullscreen Global options dialog must survive its item being disposed.
-    var openGlobalOptions by rememberSaveable { mutableStateOf(false) }
-    if (openGlobalOptions) {
-        GlobalOptionsScreen(iconPacks) { openGlobalOptions = false }
+    // Global options runs in its own activity (windowShowWallpaper — the icon grid previews
+    // over the real wallpaper). Its result carries the session bookkeeping back: hand-edited
+    // keys and whether a Save persisted the profile.
+    val globalOptionsContext = LocalContext.current
+    val globalOptionsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val edited = result.data
+            ?.getStringArrayListExtra(GlobalOptionsActivity.EXTRA_EDITED_KEYS)
+            ?.toSet() ?: emptySet()
+        val applied = result.data
+            ?.getBooleanExtra(GlobalOptionsActivity.EXTRA_GLOBAL_APPLIED, false) ?: false
+        if (edited.isNotEmpty() || applied) viewModel.onGlobalOptionsClosed(edited, applied)
     }
 
     // The app list is loaded off the main thread at startup; show a spinner until
@@ -534,7 +546,11 @@ fun ApplicationList(
             HeroPackCard(iconPacks)
         }
         item(key = "options", contentType = "options") {
-            AdvancedOptionsCard(iconPacks) { openGlobalOptions = true }
+            AdvancedOptionsCard(iconPacks) {
+                globalOptionsLauncher.launch(
+                    Intent(globalOptionsContext, GlobalOptionsActivity::class.java)
+                )
+            }
         }
         if (displayList.isEmpty()) {
             // A filter/search matched nothing — say so instead of leaving a blank gap.
