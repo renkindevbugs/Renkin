@@ -221,6 +221,12 @@ fun AdvancedOptionsContent(
 
                 // The primary source/pack itself is picked in the hero card on the home screen;
                 // only its tweaks (image modifier, text type) live here.
+                val hasSourceControls = needImageEdit(primarySource) || needTextType(primarySource) ||
+                    needTextType(secondarySource) || needSecondarySource(primarySource) ||
+                    isIconPackSelected(primarySource, primaryIconPack)
+                if (hasSourceControls) {
+                    OptionsSectionLabel(R.string.advancedSectionSource)
+                }
                 if (needImageEdit(primarySource)) {
                     ImageEditDropdown(R.string.primaryImageEdit, primaryImageEdit) { scope.launch { prefs.setEnumValue(
                         PrimaryImageEditKey, it) } }
@@ -290,6 +296,9 @@ fun AdvancedOptionsContent(
                     }
                 }
 
+                if (showIconColor || showBgColor) {
+                    OptionsSectionLabel(R.string.advancedSectionColors)
+                }
                 if (showIconColor) {
                     ColorButton(stringResource(R.string.iconColor), currentColor) { scope.launch { prefs.setColorValue(
                         IconColorKey, it) } }
@@ -299,6 +308,7 @@ fun AdvancedOptionsContent(
                         BackgroundColorKey, it) } }
                 }
 
+                OptionsSectionLabel(R.string.advancedSectionBehavior)
                 OverrideIconSwitch(overrideIcon) { scope.launch { prefs.setBooleanValue(
                     OverrideIconKey, it) } }
 
@@ -310,6 +320,17 @@ fun AdvancedOptionsContent(
 
                 ThemedIconsSwitch(useThemed) { scope.launch { prefs.setBooleanValue(ExportThemedKey, it) } }
     }
+}
+
+/** Small section label splitting the advanced options into readable groups. */
+@Composable
+private fun OptionsSectionLabel(@androidx.annotation.StringRes id: Int) {
+    Text(
+        text = stringResource(id),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 20.dp, top = 10.dp, bottom = 2.dp)
+    )
 }
 
 /**

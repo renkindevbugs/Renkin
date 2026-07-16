@@ -509,7 +509,7 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 GlobalModifierControls(state)
-                                AdvancedOptionsSection(iconPacks)
+                                AdvancedOptionsPanel(iconPacks)
                             }
                         }
                         VerticalDivider()
@@ -522,29 +522,34 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                         }
                     }
                 } else {
-                    // Phones: the category toggles stay visible; the modifier +
-                    // advanced-options panel collapses into the arrow handle (automatically
-                    // as soon as the grid scrolls) and is capped at a third of the screen.
-                    CategoryToggleRow(state)
+                    // Phones: the WHOLE pinned block (category toggles + arrow handle +
+                    // expandable options panel) fits inside a third of the screen — the
+                    // toggles and handle are fixed, the panel gets whatever height is left
+                    // and scrolls internally. Scrolling the grid auto-collapses the panel.
                     var panelVisible by remember { mutableStateOf(true) }
                     LaunchedEffect(gridState) {
                         androidx.compose.runtime.snapshotFlow { gridState.isScrollInProgress }
                             .collect { scrolling -> if (scrolling) panelVisible = false }
                     }
-                    PanelHandle(panelVisible) { panelVisible = !panelVisible }
-                    AnimatedVisibility(visible = panelVisible) {
-                        val maxPanelHeight = (androidx.compose.ui.platform.LocalConfiguration
-                            .current.screenHeightDp / 3).dp
-                        Column(
-                            Modifier
-                                .heightIn(max = maxPanelHeight)
-                                .verticalScroll(rememberScrollState())
-                                .padding(horizontal = 12.dp)
-                                .padding(bottom = 6.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                    val pinnedMax = (androidx.compose.ui.platform.LocalConfiguration
+                        .current.screenHeightDp / 3).dp
+                    Column(Modifier.heightIn(max = pinnedMax)) {
+                        CategoryToggleRow(state)
+                        PanelHandle(panelVisible) { panelVisible = !panelVisible }
+                        AnimatedVisibility(
+                            visible = panelVisible,
+                            modifier = Modifier.weight(1f, fill = false)
                         ) {
-                            GlobalModifierControls(state)
-                            AdvancedOptionsSection(iconPacks)
+                            Column(
+                                Modifier
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 6.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                GlobalModifierControls(state)
+                                AdvancedOptionsPanel(iconPacks)
+                            }
                         }
                     }
                     currentSection?.let { section ->
@@ -574,40 +579,22 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
     }
 }
 
-/** The old Advanced options card content, collapsed by default inside its own card. */
+/**
+ * Advanced options inside the pinned panel: always expanded (the panel itself already
+ * collapses and scrolls), so no nested chevron to hunt for.
+ */
 @Composable
-private fun AdvancedOptionsSection(iconPacks: List<IconPack>) {
-    var expanded by remember { mutableStateOf(false) }
+private fun AdvancedOptionsPanel(iconPacks: List<IconPack>) {
     Surface(shape = CardShape, color = MaterialTheme.colorScheme.surfaceContainer) {
         Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(role = Role.Button, onClick = { expanded = !expanded })
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.advancedOptions),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                val chevronRotation by animateFloatAsState(
-                    targetValue = if (expanded) 180f else 0f,
-                    label = "advancedChevron"
-                )
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.rotate(chevronRotation)
-                )
-            }
-            AnimatedVisibility(visible = expanded) {
-                AdvancedOptionsContent(iconPacks)
-            }
+            Text(
+                text = stringResource(R.string.advancedOptions),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
+            )
+            AdvancedOptionsContent(iconPacks)
         }
     }
 }

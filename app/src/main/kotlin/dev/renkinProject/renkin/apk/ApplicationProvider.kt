@@ -250,13 +250,12 @@ class ApplicationProvider(private val context: Context) {
         includeEmpty: Boolean,
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
     ) = withContext(Dispatchers.Default) {
+        // Every icon is a target, not only the toggled-on categories: a category switched
+        // OFF must have its base restored by the loop below (apply = false → rendered = base),
+        // otherwise a previously applied global layer would stick forever. Empty slots join
+        // only when the "Without icon" toggle asks for a generation.
         val targets = applicationList.toList().filter { app ->
-            app.key !in lockManager.lockedKeys && when {
-                app.createdIcon == null -> includeEmpty
-                app.isCustom -> applyCustom
-                app.isRefreshMade -> applyGenerated
-                else -> applyExisting
-            }
+            app.key !in lockManager.lockedKeys && (app.createdIcon != null || includeEmpty)
         }
         var done = 0
         onProgress(0, targets.size)
