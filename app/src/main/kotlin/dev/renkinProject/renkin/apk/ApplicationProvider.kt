@@ -39,6 +39,8 @@ import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.dataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 internal suspend fun installOrReportConflict(
@@ -63,6 +65,22 @@ internal fun shouldApplyGlobalLayer(
     isCustom -> applyCustom
     isRefreshMade -> applyGenerated
     else -> applyExisting
+}
+
+internal fun shouldProcessGlobalLayer(
+    hasIcon: Boolean,
+    isCustom: Boolean,
+    isRefreshMade: Boolean,
+    applyGenerated: Boolean,
+    applyExisting: Boolean,
+    applyCustom: Boolean,
+    includeEmpty: Boolean
+): Boolean = if (!hasIcon) {
+    includeEmpty
+} else {
+    shouldApplyGlobalLayer(
+        isCustom, isRefreshMade, applyGenerated, applyExisting, applyCustom
+    )
 }
 
 /**
@@ -101,6 +119,7 @@ class ApplicationProvider(private val context: Context) {
     val activeProfileId: Long get() = profileManager.activeProfileId
 
     private val iconGenService = IconGenerationService(context, iconPackRepo)
+    private val initialLoadMutex = Mutex()
 
     private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
 
@@ -108,6 +127,11 @@ class ApplicationProvider(private val context: Context) {
         initializeApplications()
         initializeIconPacks()
         initializeRenkinPack()
+    }
+
+    /** Cold recreation can open a secondary activity before MainViewModel exists. */
+    suspend fun ensureInitialized() = initialLoadMutex.withLock {
+        if (!startupComplete) initialize()
     }
 
     /**
@@ -238,8 +262,8 @@ class ApplicationProvider(private val context: Context) {
         renderGlobal(base, preferences, preferences.getBooleanValue(GlobalApplyCustomKey))
 
     /**
-     * Re-renders the global layer from every icon's immutable base. Turning a category off
-     * restores its base, so repeated saves and changed modifier values never accumulate.
+     * Re-renders enabled categories from each icon's immutable base. Disabled categories stay
+     * untouched; selecting a category with no visible modifier explicitly restores its base.
      */
     suspend fun applyGlobalModifiers(
         preferences: Preferences,
@@ -250,12 +274,16 @@ class ApplicationProvider(private val context: Context) {
         includeEmpty: Boolean,
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
     ) = withContext(Dispatchers.Default) {
-        // Every icon is a target, not only the toggled-on categories: a category switched
-        // OFF must have its base restored by the loop below (apply = false → rendered = base),
-        // otherwise a previously applied global layer would stick forever. Empty slots join
-        // only when the "Without icon" toggle asks for a generation.
         val targets = applicationList.toList().filter { app ->
-            app.key !in lockManager.lockedKeys && (app.createdIcon != null || includeEmpty)
+            app.key !in lockManager.lockedKeys && shouldProcessGlobalLayer(
+                hasIcon = app.createdIcon != null,
+                isCustom = app.isCustom,
+                isRefreshMade = app.isRefreshMade,
+                applyGenerated = applyGenerated,
+                applyExisting = applyExisting,
+                applyCustom = applyCustom,
+                includeEmpty = includeEmpty
+            )
         }
         var done = 0
         onProgress(0, targets.size)

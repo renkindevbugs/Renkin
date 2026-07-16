@@ -153,6 +153,38 @@ class ApplicationReloadTest {
     }
 
     @Test
+    fun globalSaveProcessesOnlyEnabledCategories() {
+        assertTrue(
+            shouldProcessGlobalLayer(
+                true, false, true,
+                applyGenerated = true, applyExisting = false, applyCustom = false,
+                includeEmpty = false
+            )
+        )
+        assertFalse(
+            shouldProcessGlobalLayer(
+                true, false, false,
+                applyGenerated = true, applyExisting = false, applyCustom = false,
+                includeEmpty = false
+            )
+        )
+        assertFalse(
+            shouldProcessGlobalLayer(
+                true, true, false,
+                applyGenerated = true, applyExisting = true, applyCustom = false,
+                includeEmpty = false
+            )
+        )
+        assertTrue(
+            shouldProcessGlobalLayer(
+                false, false, false,
+                applyGenerated = false, applyExisting = false, applyCustom = false,
+                includeEmpty = true
+            )
+        )
+    }
+
+    @Test
     fun lockingSavedRefreshOutputMovesItFromGeneratedToExisting() {
         val generated = app(
             "Generated", "com.generated", createdIcon = FakeIcon(), refreshMade = true

@@ -55,6 +55,7 @@ import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -70,9 +71,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -307,6 +310,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     }
 
     val applying = viewModel.globalApplyProgress != null
+    val previewJobs by viewModel.previewJobs.collectAsState()
     val dirty = baseline != null && baseline != state.snapshot()
     var confirmDiscard by remember { mutableStateOf(false) }
     val close: () -> Unit = {
@@ -324,6 +328,9 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     val emptySourceOptions = if (state.includeEmpty) {
         GenerationOptions.fromPreferences(state.overlay(prefsValue), context, override = true)
     } else null
+    LaunchedEffect(emptySourceOptions, tileOptions) {
+        viewModel.updatePreviewConfiguration(emptySourceOptions, tileOptions)
+    }
 
     val apps = viewModel.applicationList
     val locked = viewModel.lockedIconKeys
@@ -396,13 +403,13 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                     }
                 }
                 HorizontalDivider()
-                viewModel.globalApplyProgress?.let { (done, total) ->
-                    if (total > 0) {
-                        LinearProgressIndicator(
-                            progress = { done / total.toFloat() },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    } else {
+                val progress = viewModel.globalApplyProgress
+                when {
+                    progress != null && progress.second > 0 -> LinearProgressIndicator(
+                        progress = { progress.first / progress.second.toFloat() },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    progress != null || previewJobs > 0 || viewModel.initialLoadRunning -> {
                         WavyLoadingBar(Modifier.fillMaxWidth())
                     }
                 }
@@ -1029,20 +1036,32 @@ private fun IconPreviewTile(
     onClick: () -> Unit
 ) {
     val base = app.baseIcon ?: app.createdIcon
-    // Recomputes when the staged modifiers change; shows the unmodified icon meanwhile.
-    val preview by produceState(base, base, options) {
-        delay(120)
-        value = if (base != null && options != null) {
-            withContext(Dispatchers.Default) {
-                runCatching { viewModel.applyModifier(base, options) }.getOrDefault(base)
-            }
-        } else base
+    // Cache at the largest tile size. The animated 40→56 dp resize must not create a new
+    // raster and cache entry for every animation frame.
+    val targetPx = with(LocalDensity.current) { 56.dp.roundToPx() }
+    val cached = remember(app.key, app.internalVersion, options, targetPx) {
+        options?.let { viewModel.cachedModifiedPreview(app, it, targetPx) }
+    }
+    // ViewModel-scoped work survives LazyGrid disposing the tile; returning to it reuses the
+    // memory-bounded raster cache instead of applying the same modifier again.
+    val preview by produceState(cached, app.key, app.internalVersion, options, targetPx) {
+        if (value == null && base != null && options != null) {
+            delay(120)
+            value = viewModel.modifiedPreview(app, options, targetPx)
+        }
     }
     PreviewTileFrame(app, showEditBadge, iconSize, modifier, onClick) {
-        val icon = preview
-        if (icon != null) {
+        if (preview != null) {
             Image(
-                painter = icon.getPainter(),
+                painter = BitmapPainter(preview!!.asImageBitmap()),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(IconTileShape)
+            )
+        } else if (base != null) {
+            Image(
+                painter = base.getPainter(),
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxSize()
@@ -1067,22 +1086,22 @@ private fun GeneratedPreviewTile(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
-    val preview by produceState<IconPackDrawable?>(null, app.key, sourceOptions, modifierOptions) {
-        delay(120)
-        value = if (sourceOptions == null) null else withContext(Dispatchers.Default) {
-            runCatching {
-                val base = viewModel.previewIcon(app, sourceOptions, null)
-                if (base != null && modifierOptions != null) {
-                    viewModel.applyModifier(base, modifierOptions)
-                } else base
-            }.getOrNull()
+    val targetPx = with(LocalDensity.current) { 56.dp.roundToPx() }
+    val cached = remember(app.key, app.internalVersion, sourceOptions, modifierOptions, targetPx) {
+        sourceOptions?.let {
+            viewModel.cachedGeneratedPreview(app, it, modifierOptions, targetPx)
+        }
+    }
+    val preview by produceState(cached, app.key, app.internalVersion, sourceOptions, modifierOptions, targetPx) {
+        if (value == null && sourceOptions != null) {
+            delay(120)
+            value = viewModel.generatedPreview(app, sourceOptions, modifierOptions, targetPx)
         }
     }
     PreviewTileFrame(app, showEditBadge = false, iconSize = iconSize, modifier = modifier, onClick = onClick) {
-        val icon = preview
-        if (icon != null) {
+        if (preview != null) {
             Image(
-                painter = icon.getPainter(),
+                painter = BitmapPainter(preview!!.asImageBitmap()),
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxSize()

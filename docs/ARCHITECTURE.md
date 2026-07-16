@@ -53,6 +53,9 @@ Activity operations (`finish()`, starting services, permission requests).
 ## Activities
 
 - **MainActivity** — the whole app UI; provides `LocalMainActivity` and `LocalToaster`.
+- **GlobalOptionsActivity** — wallpaper-backed Global options grid. It uses a lightweight
+  view model over the shared provider and performs guarded provider initialization when Android
+  recreates it in a cold process without MainActivity/MainViewModel.
 - **WallpaperPreviewActivity** — the pack preview before a build. Its theme sets
   `windowShowWallpaper` + a transparent background so the system draws the real wallpaper
   behind it (the launcher trick — no permission; `WallpaperManager.getDrawable` is locked
@@ -79,6 +82,9 @@ Switcher = the top-bar title dropdown.
 - `lifecycleScope.launch` is the Main dispatcher — never touch Room / PackageManager from it
   directly; go through a suspend function with `withContext(Default)` inside.
 - Loaded lists / flags are Compose `mutableStateOf` so the UI recomposes when they change.
+- Global-options modifier previews use ViewModel-scoped, shared jobs and a byte-bounded bitmap
+  LRU. Lazy-grid disposal therefore does not discard an in-flight/current preview, while a new
+  modifier configuration cancels obsolete work. Cache misses drive the shared `WavyLoadingBar`.
 
 ## Persistence
 

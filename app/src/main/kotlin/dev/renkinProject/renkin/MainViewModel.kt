@@ -181,8 +181,7 @@ class MainViewModel @Inject constructor(
         // work hops to Dispatchers.Default inside each call, so viewModelScope (main)
         // is fine here.
         viewModelScope.launch {
-            appProvider.initializeApplications()
-            appProvider.initializeRenkinPack()
+            appProvider.ensureInitialized()
             builtKeys = appProvider.getSavedPackKeys()
             refreshMissingPacks()
             // Classify any source packs that still lack a paid/free verdict (quiet best
@@ -194,7 +193,6 @@ class MainViewModel @Inject constructor(
                 refreshMissingPacks(prompt = false)
             }
         }
-        viewModelScope.launch { appProvider.initializeIconPacks() }
     }
 
     // ---- Operation orchestration -------------------------------------------------
