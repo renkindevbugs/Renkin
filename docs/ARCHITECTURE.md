@@ -160,6 +160,8 @@ Packs identify apps by `ComponentInfo` in appfilter.xml — never by name.
   they aren't `Parcelable` and crash on background save. Use plain `remember`.
 - Adaptive (XML) launcher icons can't be loaded by `painterResource`; go through
   `packageManager.getApplicationIcon(...).toSafeBitmapOrNull()?.asImageBitmap()`.
+- Third-party inset/vector icons can report `-1` intrinsic dimensions (Lawnicons does); modifier
+  rasterization must request the explicit 256 px working size instead of relying on intrinsic size.
 - Downscale list icons to their on-screen size (`toSafeBitmapOrNull(px, px)`, never upscale)
   to avoid scroll jank.
 - `LazyColumn`/grid keys must be unique — duplicate keys crash.
