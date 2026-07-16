@@ -16,6 +16,7 @@ import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.renkinProject.renkin.data.transfer.PackVerdictManager
 import dev.renkinProject.renkin.data.getLongValue
+import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
 import dev.renkinProject.renkin.data.setLongValue
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.util.Log
@@ -73,7 +74,9 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
 
     /** True if at least ~80% of the configured interval has really elapsed since the last check. */
     private suspend fun enoughTimeElapsed(): Boolean {
-        val intervalMinutes = inputData.getInt(KEY_INTERVAL_MINUTES, WATCH_CHECK_INTERVAL_DEFAULT)
+        val intervalMinutes = normalizeWatchCheckInterval(
+            inputData.getInt(KEY_INTERVAL_MINUTES, WATCH_CHECK_INTERVAL_DEFAULT)
+        )
         val last = applicationContext.dataStore.data.first().getLongValue(LastWatchCheckAtKey, 0L)
         if (last == 0L) return true
         val elapsed = System.currentTimeMillis() - last
@@ -99,13 +102,14 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
             intervalMinutes: Int = WATCH_CHECK_INTERVAL_DEFAULT,
             policy: ExistingPeriodicWorkPolicy = ExistingPeriodicWorkPolicy.KEEP
         ) {
-            val request = PeriodicWorkRequestBuilder<WatchWorker>(intervalMinutes.toLong(), TimeUnit.MINUTES)
+            val normalized = normalizeWatchCheckInterval(intervalMinutes)
+            val request = PeriodicWorkRequestBuilder<WatchWorker>(normalized.toLong(), TimeUnit.MINUTES)
                 .setConstraints(
                     Constraints.Builder()
                         .setRequiresBatteryNotLow(true)
                         .build()
                 )
-                .setInputData(workDataOf(KEY_PERIODIC to true, KEY_INTERVAL_MINUTES to intervalMinutes))
+                .setInputData(workDataOf(KEY_PERIODIC to true, KEY_INTERVAL_MINUTES to normalized))
                 .build()
 
             WorkManager.getInstance(context)

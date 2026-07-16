@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.ui
 import androidx.compose.runtime.Composable
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.icon.creator.arePathOptionsRelevant
 import dev.renkinProject.renkin.packages.supportDynamicColors
 
 // Pure predicates that decide which option controls are relevant for a given source /
@@ -25,13 +26,7 @@ fun needSecondarySource(source: Source): Boolean {
 }
 
 fun isPathTracingEnabled(primarySource: Source, primaryImageEdit: ImageEdit, secondarySource: Source, secondaryImageEdit: ImageEdit): Boolean {
-    if (primarySource == Source.ICON_PACK) {
-        if (isPathTracingEnabled(secondarySource, secondaryImageEdit)) {
-            return true
-        }
-    }
-
-    return isPathTracingEnabled(primarySource, primaryImageEdit)
+    return arePathOptionsRelevant(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit)
 }
 
 fun isIconPackSelected(source: Source, iconPack: String): Boolean {

@@ -10,6 +10,7 @@ import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.restoreProfilePrefs
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.snapshotProfilePrefs
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.dataStore
@@ -95,7 +96,9 @@ class ProfileManager(
         val store = context.dataStore
 
         packRepo.profile(activeProfileId)?.let { leaving ->
-            packRepo.updateProfile(leaving.copy(prefsSnapshot = store.data.first().snapshotProfilePrefs()))
+            packRepo.updateProfile(
+                leaving.copy(prefsSnapshot = store.getPreferencesAfterPendingWrites().snapshotProfilePrefs())
+            )
         }
         store.restoreProfilePrefs(target.prefsSnapshot)
         store.edit { it[ActiveProfileIdKey] = newProfileId }

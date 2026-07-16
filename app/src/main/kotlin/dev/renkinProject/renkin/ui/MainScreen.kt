@@ -784,22 +784,24 @@ fun OpenAppOptions(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 fun RefreshButton() {
-    val preferences = getPreferences().getPreferencesValue()
     val viewModel: MainViewModel = hiltViewModel()
-    val toaster = LocalToaster.current
-    val syncWarning = stringResource(id = R.string.syncText)
+    val isRefreshing = viewModel.isRefreshing
 
-    IconButton(onClick = {
-        if (!viewModel.refresh(preferences)) {
-            toaster.show(syncWarning)
+    IconButton(enabled = !isRefreshing, onClick = viewModel::refresh) {
+        if (isRefreshing) {
+            LoadingIndicator(
+                modifier = Modifier.size(24.dp),
+                color = MaterialTheme.colorScheme.primary
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.Refresh,
+                contentDescription = stringResource(R.string.refreshIcons),
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
-    }) {
-        Icon(
-            imageVector = Icons.Filled.Refresh,
-            contentDescription = stringResource(R.string.refreshIcons),
-            tint = MaterialTheme.colorScheme.primary
-        )
     }
 }
 

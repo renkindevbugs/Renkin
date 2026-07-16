@@ -38,6 +38,7 @@ import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.apk.IconPackBuilder
@@ -104,6 +105,7 @@ class MainActivity : ComponentActivity() {
             // user's chosen interval is applied immediately (UPDATE) when they change it.
             val intervalMinutes = applicationContext.dataStore.data.first()
                 .getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)
+                .let(::normalizeWatchCheckInterval)
             WatchWorker.schedulePeriodic(applicationContext, intervalMinutes)
             // Drop crash logs older than the retention window (and migrate any legacy log).
             CrashReporter.prune(applicationContext)

@@ -6,7 +6,6 @@ import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -25,8 +24,8 @@ import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimarySourceKey
 import dev.renkinProject.renkin.data.SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.getEnumValue
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.getStringValue
-import dev.renkinProject.renkin.data.isSystemInDarkTheme
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
@@ -177,9 +176,6 @@ class MainViewModel @Inject constructor(
     val toastEvents = _toastEvents.receiveAsFlow()
 
     init {
-        appProvider.defaultColor =
-            if (application.isSystemInDarkTheme()) Color.White else Color.Black
-
         // Loaded once. The Renkin pack reads the app list, so it runs after the
         // apps are loaded; icon packs are independent and load in parallel. The heavy
         // work hops to Dispatchers.Default inside each call, so viewModelScope (main)
@@ -211,18 +207,21 @@ class MainViewModel @Inject constructor(
     var isRefreshing by mutableStateOf(false)
         private set
 
-    /**
-     * Regenerates every app's icon from the current preferences. Returns false (without
-     * starting) when an icon pack is configured but not yet loaded, so the caller can warn.
-     */
-    fun refresh(preferences: Preferences): Boolean {
-        val iconPackageName = preferences.getStringValue(PrimaryIconPackKey)
-        if (!appProvider.iconPackLoaded && iconPackageName != "") return false
-        if (isRefreshing) return true
-
+    /** Regenerates every app from a snapshot taken after pending DataStore writes complete. */
+    fun refresh() {
+        if (isRefreshing) return
+        // Set synchronously so a second tap cannot enqueue another refresh before the coroutine
+        // starts, and so the top-bar action immediately communicates that work is running.
+        isRefreshing = true
         viewModelScope.launch {
-            isRefreshing = true
             try {
+                val preferences = getApplication<Application>().dataStore
+                    .getPreferencesAfterPendingWrites()
+                val iconPackageName = preferences.getStringValue(PrimaryIconPackKey)
+                if (!appProvider.iconPackLoaded && iconPackageName.isNotEmpty()) {
+                    _toastEvents.trySend(R.string.syncText)
+                    return@launch
+                }
                 // Icons whose real origin (via an own pack used as source) isn't owned on
                 // this device are withheld — say so instead of leaving silent empty slots.
                 if (appProvider.refreshIcons(preferences) > 0) {
@@ -233,7 +232,6 @@ class MainViewModel @Inject constructor(
                 isRefreshing = false
             }
         }
-        return true
     }
 
     /** Current build step text while a pack is building; null when no build is in progress. */
@@ -317,12 +315,15 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Builds, signs and installs the icon pack, surfacing progress through [buildStep]. */
-    fun build(preferences: Preferences) {
+    /** Builds from a preference snapshot taken after pending UI writes have completed. */
+    fun build() {
         if (buildStep != null) return
+        // Claim the operation synchronously so the preview result cannot enqueue it twice.
+        buildStep = ""
         viewModelScope.launch {
             try {
-                buildStep = ""
+                val preferences = getApplication<Application>().dataStore
+                    .getPreferencesAfterPendingWrites()
                 val pack = appProvider.buildAndSignIconPack(
                     preferences,
                     // A new step ends the per-app phase, so the bar goes back to indeterminate.

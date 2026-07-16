@@ -41,8 +41,11 @@ import kotlinx.coroutines.withContext
 @Composable
 fun FontPickerRow(selectedPath: String, onChange: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    val selectedLabel = if (selectedPath.isEmpty()) FontCatalog.DEFAULT.label
-        else remember(selectedPath) { FontCatalog.prettyLabelFor(selectedPath) }
+    val effectivePath by produceState("", selectedPath) {
+        value = withContext(Dispatchers.IO) { FontCatalog.usablePathOrDefault(selectedPath) }
+    }
+    val selectedLabel = if (effectivePath.isEmpty()) FontCatalog.DEFAULT.label
+        else remember(effectivePath) { FontCatalog.prettyLabelFor(effectivePath) }
 
     OptionCard(
         label = stringResource(R.string.textFont),
@@ -60,7 +63,7 @@ fun FontPickerRow(selectedPath: String, onChange: (String) -> Unit) {
 
     if (open) {
         FontPickerDialog(
-            selectedPath = selectedPath,
+            selectedPath = effectivePath,
             onSelect = {
                 onChange(it)
                 open = false

@@ -10,6 +10,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.WatchCheckIntervalKey
+import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
 import dev.renkinProject.renkin.data.getPreferenceFlow
 import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.setLongValue
@@ -69,15 +70,16 @@ class WatchViewModel @Inject constructor(
     /** Configured periodic check interval in minutes (24h default; debug can lower it). */
     val checkIntervalMinutes: StateFlow<Int> =
         application.dataStore.getPreferenceFlow(WatchCheckIntervalKey)
-            .map { it ?: WATCH_CHECK_INTERVAL_DEFAULT }
+            .map { normalizeWatchCheckInterval(it ?: WATCH_CHECK_INTERVAL_DEFAULT) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WATCH_CHECK_INTERVAL_DEFAULT)
 
     /** Debug: change how often the periodic check runs and reschedule it immediately. */
     fun setCheckIntervalMinutes(minutes: Int) {
         viewModelScope.launch {
             val app = getApplication<Application>()
-            app.dataStore.setIntValue(WatchCheckIntervalKey, minutes)
-            WatchWorker.schedulePeriodic(app, minutes, ExistingPeriodicWorkPolicy.UPDATE)
+            val normalized = normalizeWatchCheckInterval(minutes)
+            app.dataStore.setIntValue(WatchCheckIntervalKey, normalized)
+            WatchWorker.schedulePeriodic(app, normalized, ExistingPeriodicWorkPolicy.UPDATE)
         }
     }
 
