@@ -226,7 +226,16 @@ fun Bitmap.contentHash(): String {
     return digest.joinToString("") { "%02x".format(it) }
 }
 
+private val standardBase64Pattern = Regex("[A-Za-z0-9+/]*={0,2}")
+
 fun bitmapFromBase64(base64: String, base64Flag: Int = Base64.NO_WRAP): Bitmap {
+    if (base64Flag == Base64.NO_WRAP) {
+        require(base64.length % 4 == 0 && standardBase64Pattern.matches(base64)) {
+            "Stored bitmap data is not valid Base64"
+        }
+    }
     val bytes = Base64.decode(base64, base64Flag)
-    return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+    return requireNotNull(BitmapFactory.decodeByteArray(bytes, 0, bytes.size)) {
+        "Stored bitmap data could not be decoded"
+    }
 }
