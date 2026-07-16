@@ -635,7 +635,10 @@ class MainViewModel @Inject constructor(
 
     /** Updates a profile's user-facing details (name, description, built-pack label). */
     fun updateProfileDetails(id: Long, name: String, description: String, packLabel: String) {
-        viewModelScope.launch { appProvider.updateProfileDetails(id, name, description, packLabel) }
+        viewModelScope.launch {
+            appProvider.updateProfileDetails(id, name, description, packLabel)
+            _toastEvents.trySend(R.string.profileUpdated)
+        }
     }
 
     /** Deletes a profile (never the default); switches to the default first when active. */
@@ -643,6 +646,7 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             appProvider.deleteProfile(id)
             resetChangeBaselines()
+            _toastEvents.trySend(R.string.profileDeleted)
         }
     }
 

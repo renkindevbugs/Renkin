@@ -117,4 +117,40 @@ class ProfileManagerTest {
         assertEquals(profileId, manager.activeProfileId)
         assertEquals(profileId, store.data.first()[ActiveProfileIdKey])
     }
+
+    @Test
+    fun updateProfileDetailsPersistsEveryEditableField() = runBlocking {
+        val profileId = repo.createProfile(Profile(name = "Old", packLabel = "Old Pack"))
+
+        manager().updateProfileDetails(profileId, "New", "Description", "New Pack")
+
+        val updated = repo.profile(profileId)
+        assertEquals("New", updated?.name)
+        assertEquals("Description", updated?.description)
+        assertEquals("New Pack", updated?.packLabel)
+    }
+
+    @Test
+    fun deleteProfileRemovesProfileAndItsIcons() = runBlocking {
+        repo.ensureDefaultProfile()
+        val profileId = repo.createProfile(Profile(name = "Disposable"))
+        repo.replaceAll(
+            profileId,
+            listOf(
+                DbApplication(
+                    "com.disposable",
+                    "com.disposable.Main",
+                    isAdaptiveIcon = false,
+                    isXml = false,
+                    drawable = "saved",
+                    profileId = profileId
+                )
+            )
+        )
+
+        manager().deleteProfile(profileId)
+
+        assertEquals(null, repo.profile(profileId))
+        assertEquals(emptyList<DbApplication>(), repo.getAll(profileId))
+    }
 }
