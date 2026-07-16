@@ -400,12 +400,9 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                 }
 
                 // While the pinned options panel is open the tiles shrink so more of the
-                // preview stays visible; scrolling collapses the panel and they grow back.
+                // preview stays visible; the user collapses/expands it with the arrow button
+                // under the panel (no auto-hide — scrolling mid-tune felt like losing it).
                 var panelVisible by remember { mutableStateOf(true) }
-                LaunchedEffect(gridState) {
-                    androidx.compose.runtime.snapshotFlow { gridState.isScrollInProgress }
-                        .collect { scrolling -> if (scrolling) panelVisible = false }
-                }
 
                 // The icon grid, shared by both layouts below (single-pane phones and the
                 // side-by-side pane on wide screens). [compact] = smaller tiles while the
@@ -413,6 +410,10 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                 val gridContent: @Composable (compact: Boolean) -> Unit = { compact ->
                 val tileSize = androidx.compose.animation.core.animateDpAsState(
                     targetValue = if (compact) 40.dp else 56.dp,
+                    animationSpec = androidx.compose.animation.core.spring(
+                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
+                        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+                    ),
                     label = "tileSize"
                 ).value
                 LazyVerticalGrid(
@@ -448,7 +449,8 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                                 app,
                                 if (state.applyGenerated) tileOptions else null,
                                 viewModel,
-                                iconSize = tileSize
+                                iconSize = tileSize,
+                                modifier = Modifier.animateItem()
                             ) { editApp = app }
                         }
                     }
@@ -466,7 +468,8 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                                 if (state.applyCustom) tileOptions else null,
                                 viewModel,
                                 showEditBadge = true,
-                                iconSize = tileSize
+                                iconSize = tileSize,
+                                modifier = Modifier.animateItem()
                             ) { editApp = app }
                         }
                     }
@@ -486,7 +489,8 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                                 app,
                                 if (state.applyExisting) tileOptions else null,
                                 viewModel,
-                                iconSize = tileSize
+                                iconSize = tileSize,
+                                modifier = Modifier.animateItem()
                             ) { editApp = app }
                         }
                     }
@@ -501,7 +505,8 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                         items(iconless, key = { "e/${it.key}" }) { app ->
                             GeneratedPreviewTile(
                                 app, emptySourceOptions, tileOptions, viewModel,
-                                iconSize = tileSize
+                                iconSize = tileSize,
+                                modifier = Modifier.animateItem()
                             ) { editApp = app }
                         }
                     }
@@ -555,7 +560,6 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                         .current.screenHeightDp * 0.45f).dp
                     Column(Modifier.heightIn(max = pinnedMax)) {
                         CategoryToggleRow(state)
-                        PanelHandle(panelVisible) { panelVisible = !panelVisible }
                         AnimatedVisibility(
                             visible = panelVisible,
                             modifier = Modifier.weight(1f, fill = false)
@@ -571,6 +575,9 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                                 AdvancedOptionsPanel(iconPacks)
                             }
                         }
+                        // The expand/collapse control sits UNDER the panel, right where the
+                        // grid starts, so the thumb doesn't travel to the top to reach it.
+                        PanelHandle(panelVisible) { panelVisible = !panelVisible }
                     }
                     currentSection?.let { section ->
                         CurrentSectionBar(section, generated.size, custom.size, existing.size, iconless.size, state)
@@ -870,8 +877,9 @@ private fun CategoryToggleRow(state: GlobalModifierState) {
 }
 
 /**
- * The slim always-visible handle under the category toggles: tapping it re-opens (or hides)
- * the modifier/advanced-options panel after scrolling auto-collapsed it.
+ * The always-visible handle UNDER the options panel: a proper tonal icon button (a bare
+ * chevron was easy to miss) that collapses or re-opens the panel. Up = collapse, down =
+ * expand.
  */
 @Composable
 private fun PanelHandle(panelVisible: Boolean, onToggle: () -> Unit) {
@@ -882,17 +890,21 @@ private fun PanelHandle(panelVisible: Boolean, onToggle: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(role = Role.Button, onClick = onToggle),
+            .padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.Center
     ) {
-        Icon(
-            imageVector = Icons.Filled.KeyboardArrowDown,
-            contentDescription = stringResource(R.string.globalModifiersTitle),
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier
-                .size(22.dp)
-                .rotate(chevronRotation)
-        )
+        androidx.compose.material3.FilledTonalIconButton(
+            onClick = onToggle,
+            modifier = Modifier.size(34.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = stringResource(R.string.globalModifiersTitle),
+                modifier = Modifier
+                    .size(22.dp)
+                    .rotate(chevronRotation)
+            )
+        }
     }
 }
 
@@ -1002,6 +1014,7 @@ private fun IconPreviewTile(
     viewModel: MainViewModel,
     showEditBadge: Boolean = false,
     iconSize: androidx.compose.ui.unit.Dp = 56.dp,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val base = app.baseIcon ?: app.createdIcon
@@ -1014,7 +1027,7 @@ private fun IconPreviewTile(
             }
         } else base
     }
-    PreviewTileFrame(app, showEditBadge, iconSize, onClick) {
+    PreviewTileFrame(app, showEditBadge, iconSize, modifier, onClick) {
         val icon = preview
         if (icon != null) {
             Image(
@@ -1040,6 +1053,7 @@ private fun GeneratedPreviewTile(
     modifierOptions: GenerationOptions?,
     viewModel: MainViewModel,
     iconSize: androidx.compose.ui.unit.Dp = 56.dp,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val preview by produceState<IconPackDrawable?>(null, app.key, sourceOptions, modifierOptions) {
@@ -1053,7 +1067,7 @@ private fun GeneratedPreviewTile(
             }.getOrNull()
         }
     }
-    PreviewTileFrame(app, showEditBadge = false, iconSize = iconSize, onClick = onClick) {
+    PreviewTileFrame(app, showEditBadge = false, iconSize = iconSize, modifier = modifier, onClick = onClick) {
         val icon = preview
         if (icon != null) {
             Image(
@@ -1108,12 +1122,13 @@ private fun PreviewTileFrame(
     app: PackageInfoStruct,
     showEditBadge: Boolean,
     iconSize: androidx.compose.ui.unit.Dp = 56.dp,
+    modifier: Modifier = Modifier,
     onClick: () -> Unit,
     iconContent: @Composable () -> Unit
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
+        modifier = modifier
             .clip(CardShape)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(vertical = 6.dp, horizontal = 2.dp)
