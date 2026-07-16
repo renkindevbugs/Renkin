@@ -368,7 +368,6 @@
     <string name="globalOptionsTitle">Global options</string>
     <string name="globalOptionsEntryHint">Refresh options, global modifiers and a preview of every icon</string>
     <string name="globalModifiersTitle">Global modifiers</string>
-    <string name="globalModifiersHint">Applied to every icon in the preview below. Save bakes them into the icons; new icons from a refresh get them too.</string>
     <string name="globalColorize">Colorize all icons</string>
     <string name="globalApplyToLabel">Apply modifiers to</string>
     <string name="globalToggleGenerated">Generated</string>

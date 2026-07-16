@@ -394,11 +394,31 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                     }
                 }
 
-                // Pinned above the grid: the category toggles and the (collapsible) modifier
-                // controls stay reachable however deep the icon grid is scrolled.
+                // Pinned above the grid: the category toggles are always visible; the
+                // modifier + advanced-options panel below them collapses into the arrow
+                // handle (automatically as soon as the grid scrolls) and is capped at a
+                // third of the screen so the icons stay in view.
                 CategoryToggleRow(state)
-                Box(Modifier.padding(horizontal = 12.dp)) {
-                    GlobalModifierControls(state)
+                var panelVisible by remember { mutableStateOf(true) }
+                LaunchedEffect(gridState) {
+                    androidx.compose.runtime.snapshotFlow { gridState.isScrollInProgress }
+                        .collect { scrolling -> if (scrolling) panelVisible = false }
+                }
+                PanelHandle(panelVisible) { panelVisible = !panelVisible }
+                AnimatedVisibility(visible = panelVisible) {
+                    val maxPanelHeight = (androidx.compose.ui.platform.LocalConfiguration
+                        .current.screenHeightDp / 3).dp
+                    Column(
+                        Modifier
+                            .heightIn(max = maxPanelHeight)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 12.dp)
+                            .padding(bottom = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        GlobalModifierControls(state)
+                        AdvancedOptionsSection(iconPacks)
+                    }
                 }
                 currentSection?.let { section ->
                     CurrentSectionBar(section, generated.size, custom.size, iconless.size, state)
@@ -413,10 +433,6 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    item(key = "advanced", span = { GridItemSpan(maxLineSpan) }) {
-                        AdvancedOptionsSection(iconPacks)
-                    }
-
                     if (generated.isEmpty() && custom.isEmpty() && iconless.isEmpty()) {
                         item(key = "noIcons", span = { GridItemSpan(maxLineSpan) }) {
                             EmptyState(
@@ -535,57 +551,25 @@ private fun AdvancedOptionsSection(iconPacks: List<IconPack>) {
 }
 
 /**
- * The staged global modifier controls: shape, icon scale, outline and colorize. Lives in the
- * PINNED part of the screen, so it collapses to its header row and caps its expanded height
- * with an inner scroll — the icon grid below must stay usable either way.
+ * The staged global modifier controls: shape, icon scale, outline and colorize. Plain card —
+ * the pinned panel wrapping it (see GlobalOptionsScreen) owns collapsing and the height cap.
  */
 @Composable
 private fun GlobalModifierControls(state: GlobalModifierState) {
     var shapeColorPickerOpen by remember { mutableStateOf(false) }
     var outlineColorPickerOpen by remember { mutableStateOf(false) }
     var colorizeColorPickerOpen by remember { mutableStateOf(false) }
-    var expanded by remember { mutableStateOf(true) }
 
     Surface(shape = CardShape, color = MaterialTheme.colorScheme.surfaceContainer) {
-        Column {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(role = Role.Button, onClick = { expanded = !expanded })
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = stringResource(R.string.globalModifiersTitle),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
-                )
-                val chevronRotation by animateFloatAsState(
-                    targetValue = if (expanded) 180f else 0f,
-                    label = "modifiersChevron"
-                )
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowDown,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.rotate(chevronRotation)
-                )
-            }
-            AnimatedVisibility(visible = expanded) {
         Column(
-            Modifier
-                .heightIn(max = 320.dp)
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp)
-                .padding(bottom = 12.dp),
+            Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                text = stringResource(R.string.globalModifiersHint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = stringResource(R.string.globalModifiersTitle),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
             )
 
             // Shape — same swatches and controls as the per-app Modifier tab.
@@ -701,8 +685,6 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
                 }
             }
         }
-            }
-        }
     }
 
     if (shapeColorPickerOpen) {
@@ -806,6 +788,33 @@ private fun CategoryToggleRow(state: GlobalModifierState) {
                 Text(stringResource(R.string.globalToggleEmpty), maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
+    }
+}
+
+/**
+ * The slim always-visible handle under the category toggles: tapping it re-opens (or hides)
+ * the modifier/advanced-options panel after scrolling auto-collapsed it.
+ */
+@Composable
+private fun PanelHandle(panelVisible: Boolean, onToggle: () -> Unit) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (panelVisible) 180f else 0f,
+        label = "panelChevron"
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(role = Role.Button, onClick = onToggle),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        Icon(
+            imageVector = Icons.Filled.KeyboardArrowDown,
+            contentDescription = stringResource(R.string.globalModifiersTitle),
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier
+                .size(22.dp)
+                .rotate(chevronRotation)
+        )
     }
 }
 
