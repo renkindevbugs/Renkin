@@ -273,8 +273,11 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
     }
 
     private fun inset(rect: Rect) {
-        val scaleX = (rect.left + rect.right) / mutableVector.viewportWidth
-        val scaleY = (rect.top + rect.bottom) / mutableVector.viewportHeight
+        // Insets are margins, so the remaining content is 1 - start - end. The previous
+        // start + end formula made a 16.7% Lawnicons inset render at 33% in Compose while
+        // Android's InsetDrawable raster used 67%, causing a large jump when modifiers ran.
+        val scaleX = (1f - (rect.left + rect.right) / mutableVector.viewportWidth).coerceAtLeast(0f)
+        val scaleY = (1f - (rect.top + rect.bottom) / mutableVector.viewportHeight).coerceAtLeast(0f)
 
         val pivotX = mutableVector.viewportWidth / 2
         val pivotY = mutableVector.viewportHeight / 2

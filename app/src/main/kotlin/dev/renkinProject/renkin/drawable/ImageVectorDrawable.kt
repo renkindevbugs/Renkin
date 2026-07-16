@@ -105,7 +105,20 @@ class ImageVectorDrawable(imageVector: ImageVector): IconPackDrawable() {
     }
 
     override fun draw(canvas: Canvas) {
-        this.renderToCanvas(canvas)
+        val target = bounds
+        if (target.width() <= 0 || target.height() <= 0) {
+            this.renderToCanvas(canvas)
+            return
+        }
+
+        // Wrappers such as InsetDrawable communicate their scale through child bounds. The
+        // custom renderer previously ignored those bounds and always used the full canvas,
+        // so raster-only modifiers made inset vectors much larger than their Compose preview.
+        val checkpoint = canvas.save()
+        canvas.translate(target.left.toFloat(), target.top.toFloat())
+        canvas.clipRect(0, 0, target.width(), target.height())
+        this.renderToCanvas(canvas, targetWidth = target.width(), targetHeight = target.height())
+        canvas.restoreToCount(checkpoint)
     }
 
     // The custom vector renderer ignores alpha / colour filter, so these are no-ops rather

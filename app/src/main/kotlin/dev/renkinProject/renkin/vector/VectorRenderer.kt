@@ -24,19 +24,24 @@ class VectorRenderer(private val imageVector: ImageVector) {
     private val matrixStack = ArrayDeque<Matrix>()
     private var currentMatrix = Matrix()
 
-    fun renderToCanvas(canvas: Canvas, nonScalingStroke: Boolean = true) {
+    fun renderToCanvas(
+        canvas: Canvas,
+        nonScalingStroke: Boolean = true,
+        targetWidth: Int = canvas.width,
+        targetHeight: Int = canvas.height
+    ) {
         if (nonScalingStroke) {
-            renderNonScalingStroke(canvas)
+            renderNonScalingStroke(canvas, targetWidth, targetHeight)
         } else {
-            render(canvas)
+            render(canvas, targetWidth, targetHeight)
         }
     }
 
-    private fun render(canvas: Canvas) {
+    private fun render(canvas: Canvas, targetWidth: Int, targetHeight: Int) {
         val matrix = Matrix()
         matrix.preScale(
-            canvas.width / imageVector.viewportWidth,
-            canvas.height / imageVector.viewportHeight
+            targetWidth / imageVector.viewportWidth,
+            targetHeight / imageVector.viewportHeight
         )
 
         canvas.concat(matrix)
@@ -69,10 +74,10 @@ class VectorRenderer(private val imageVector: ImageVector) {
         drawPath(canvas, androidPath, path)
     }
 
-    private fun renderNonScalingStroke(canvas: Canvas) {
+    private fun renderNonScalingStroke(canvas: Canvas, targetWidth: Int, targetHeight: Int) {
         currentMatrix.preScale(
-            canvas.width / imageVector.viewportWidth,
-            canvas.height / imageVector.viewportHeight
+            targetWidth / imageVector.viewportWidth,
+            targetHeight / imageVector.viewportHeight
         )
         matrixStack.addLast(currentMatrix)
 
@@ -196,15 +201,23 @@ class VectorRenderer(private val imageVector: ImageVector) {
     }
 
     companion object {
-        fun ImageVectorDrawable.renderToCanvas(canvas: Canvas
-                                               , nonScalingStroke: Boolean = true) {
-            this.toImageVector().renderToCanvas(canvas, nonScalingStroke)
+        fun ImageVectorDrawable.renderToCanvas(
+            canvas: Canvas,
+            nonScalingStroke: Boolean = true,
+            targetWidth: Int = canvas.width,
+            targetHeight: Int = canvas.height
+        ) {
+            this.toImageVector().renderToCanvas(canvas, nonScalingStroke, targetWidth, targetHeight)
         }
 
-        fun ImageVector.renderToCanvas(canvas: Canvas
-                                       , nonScalingStroke: Boolean = true) {
+        fun ImageVector.renderToCanvas(
+            canvas: Canvas,
+            nonScalingStroke: Boolean = true,
+            targetWidth: Int = canvas.width,
+            targetHeight: Int = canvas.height
+        ) {
             val renderer = VectorRenderer(this)
-            renderer.renderToCanvas(canvas, nonScalingStroke)
+            renderer.renderToCanvas(canvas, nonScalingStroke, targetWidth, targetHeight)
         }
     }
 }
