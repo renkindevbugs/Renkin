@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -76,9 +79,73 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import kotlinx.coroutines.launch
 
 /**
- * The refresh-wide generation options (sources, fallback, colours, switches), shown inside the
- * Global options screen. Every control writes straight to the profile's DataStore like the old
- * Advanced options card did — only the global modifiers on that screen are staged behind Save.
+ * The home list's Advanced options card, back in its old place: the expandable generation
+ * options plus (for now, while the new screen is being evaluated) a test button that opens
+ * the fullscreen Global options screen — the same content is reachable from both.
+ */
+@Composable
+fun AdvancedOptionsCard(iconPacks: List<IconPack>, onOpenGlobal: () -> Unit) {
+    var expanded by remember { mutableStateOf(false) }
+    Surface(
+        shape = dev.renkinProject.renkin.ui.theme.CardShape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp, 8.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        role = androidx.compose.ui.semantics.Role.Button,
+                        onClick = { expanded = !expanded }
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.advancedOptions),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                val chevronRotation by androidx.compose.animation.core.animateFloatAsState(
+                    targetValue = if (expanded) 180f else 0f,
+                    label = "optionsChevron"
+                )
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowDown,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.rotate(chevronRotation)
+                )
+            }
+            androidx.compose.animation.AnimatedVisibility(visible = expanded) {
+                Column {
+                    // Trial entry point for the fullscreen Global options screen; sits above
+                    // the option controls so testers actually find it.
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = onOpenGlobal,
+                        shape = FieldShape,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        Text(stringResource(R.string.globalScreenButton))
+                    }
+                    AdvancedOptionsContent(iconPacks)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * The refresh-wide generation options (sources, fallback, colours, switches), shared by the
+ * home card above and the Global options screen's panel. Every control writes straight to the
+ * profile's DataStore — only the global modifiers on that screen are staged behind Save.
  */
 @Composable
 fun AdvancedOptionsContent(

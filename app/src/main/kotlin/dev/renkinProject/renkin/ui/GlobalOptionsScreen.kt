@@ -13,9 +13,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -48,6 +51,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
@@ -236,45 +240,6 @@ internal class GlobalModifierState {
     )
 }
 
-/** The home-list entry card that opens the fullscreen [GlobalOptionsScreen]. */
-@Composable
-fun GlobalOptionsCard(onOpen: () -> Unit) {
-    Surface(
-        shape = CardShape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp, 8.dp)
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(role = Role.Button, onClick = onOpen)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text(
-                    text = stringResource(R.string.globalOptionsTitle),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Text(
-                    text = stringResource(R.string.globalOptionsEntryHint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
-        }
-    }
-}
-
 /**
  * Fullscreen Global options: the refresh-wide generation options (immediate, like the old
  * Advanced options card), the staged global modifiers, and a live preview grid of every icon
@@ -394,37 +359,9 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                     }
                 }
 
-                // Pinned above the grid: the category toggles are always visible; the
-                // modifier + advanced-options panel below them collapses into the arrow
-                // handle (automatically as soon as the grid scrolls) and is capped at a
-                // third of the screen so the icons stay in view.
-                CategoryToggleRow(state)
-                var panelVisible by remember { mutableStateOf(true) }
-                LaunchedEffect(gridState) {
-                    androidx.compose.runtime.snapshotFlow { gridState.isScrollInProgress }
-                        .collect { scrolling -> if (scrolling) panelVisible = false }
-                }
-                PanelHandle(panelVisible) { panelVisible = !panelVisible }
-                AnimatedVisibility(visible = panelVisible) {
-                    val maxPanelHeight = (androidx.compose.ui.platform.LocalConfiguration
-                        .current.screenHeightDp / 3).dp
-                    Column(
-                        Modifier
-                            .heightIn(max = maxPanelHeight)
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 12.dp)
-                            .padding(bottom = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        GlobalModifierControls(state)
-                        AdvancedOptionsSection(iconPacks)
-                    }
-                }
-                currentSection?.let { section ->
-                    CurrentSectionBar(section, generated.size, custom.size, iconless.size, state)
-                }
-                HorizontalDivider()
-
+                // The icon grid, shared by both layouts below (single-pane phones and the
+                // side-by-side pane on wide screens).
+                val gridContent: @Composable () -> Unit = {
                 LazyVerticalGrid(
                     state = gridState,
                     columns = GridCells.Adaptive(84.dp),
@@ -490,6 +427,70 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                             GeneratedPreviewTile(app, emptyOptions, viewModel) { editApp = app }
                         }
                     }
+                }
+                }
+
+                val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
+                if (wide) {
+                    // Foldables/tablets/desktop: options pane on the left, the icon grid on
+                    // the right — no collapsing needed, both scroll independently.
+                    Row(Modifier.fillMaxSize()) {
+                        Column(
+                            Modifier
+                                .width(340.dp)
+                                .fillMaxHeight()
+                                .verticalScroll(rememberScrollState())
+                                .padding(bottom = 12.dp)
+                        ) {
+                            CategoryToggleRow(state)
+                            Column(
+                                Modifier.padding(horizontal = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                GlobalModifierControls(state)
+                                AdvancedOptionsSection(iconPacks)
+                            }
+                        }
+                        VerticalDivider()
+                        Column(Modifier.weight(1f)) {
+                            currentSection?.let { section ->
+                                CurrentSectionBar(section, generated.size, custom.size, iconless.size, state)
+                            }
+                            HorizontalDivider()
+                            gridContent()
+                        }
+                    }
+                } else {
+                    // Phones: the category toggles stay visible; the modifier +
+                    // advanced-options panel collapses into the arrow handle (automatically
+                    // as soon as the grid scrolls) and is capped at a third of the screen.
+                    CategoryToggleRow(state)
+                    var panelVisible by remember { mutableStateOf(true) }
+                    LaunchedEffect(gridState) {
+                        androidx.compose.runtime.snapshotFlow { gridState.isScrollInProgress }
+                            .collect { scrolling -> if (scrolling) panelVisible = false }
+                    }
+                    PanelHandle(panelVisible) { panelVisible = !panelVisible }
+                    AnimatedVisibility(visible = panelVisible) {
+                        val maxPanelHeight = (androidx.compose.ui.platform.LocalConfiguration
+                            .current.screenHeightDp / 3).dp
+                        Column(
+                            Modifier
+                                .heightIn(max = maxPanelHeight)
+                                .verticalScroll(rememberScrollState())
+                                .padding(horizontal = 12.dp)
+                                .padding(bottom = 6.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            GlobalModifierControls(state)
+                            AdvancedOptionsSection(iconPacks)
+                        }
+                    }
+                    currentSection?.let { section ->
+                        CurrentSectionBar(section, generated.size, custom.size, iconless.size, state)
+                    }
+                    HorizontalDivider()
+                    gridContent()
                 }
             }
         }
@@ -765,27 +766,29 @@ private fun CategoryToggleRow(state: GlobalModifierState) {
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        // Scrollable so the labels are never clipped on narrow screens — each button sizes
+        // to its own text.
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
             ToggleButton(
                 checked = state.applyGenerated,
-                onCheckedChange = { state.applyGenerated = it },
-                modifier = Modifier.weight(1f)
+                onCheckedChange = { state.applyGenerated = it }
             ) {
-                Text(stringResource(R.string.globalToggleGenerated), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(R.string.globalToggleGenerated), maxLines = 1)
             }
             ToggleButton(
                 checked = state.applyCustom,
-                onCheckedChange = { state.applyCustom = it },
-                modifier = Modifier.weight(1f)
+                onCheckedChange = { state.applyCustom = it }
             ) {
-                Text(stringResource(R.string.globalToggleCustom), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(R.string.globalToggleCustom), maxLines = 1)
             }
             ToggleButton(
                 checked = state.includeEmpty,
-                onCheckedChange = { state.includeEmpty = it },
-                modifier = Modifier.weight(1f)
+                onCheckedChange = { state.includeEmpty = it }
             ) {
-                Text(stringResource(R.string.globalToggleEmpty), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(R.string.globalToggleEmpty), maxLines = 1)
             }
         }
     }

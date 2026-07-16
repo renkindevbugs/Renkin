@@ -366,7 +366,7 @@
     <string name="eraseClear">Clear all strokes</string>
     <string name="eraseCount">%1$d stroke(s)</string>
     <string name="globalOptionsTitle">Global options</string>
-    <string name="globalOptionsEntryHint">Refresh options, global modifiers and a preview of every icon</string>
+    <string name="globalScreenButton">New global screen</string>
     <string name="globalModifiersTitle">Global modifiers</string>
     <string name="globalColorize">Colorize all icons</string>
     <string name="globalApplyToLabel">Apply modifiers to</string>

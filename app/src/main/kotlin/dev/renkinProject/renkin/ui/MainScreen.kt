@@ -534,7 +534,7 @@ fun ApplicationList(
             HeroPackCard(iconPacks)
         }
         item(key = "options", contentType = "options") {
-            GlobalOptionsCard { openGlobalOptions = true }
+            AdvancedOptionsCard(iconPacks) { openGlobalOptions = true }
         }
         if (displayList.isEmpty()) {
             // A filter/search matched nothing — say so instead of leaving a blank gap.
