@@ -365,6 +365,34 @@
     <string name="eraseUndo">Undo stroke</string>
     <string name="eraseClear">Clear all strokes</string>
     <string name="eraseCount">%1$d stroke(s)</string>
+    <string name="globalOptionsTitle">Global options</string>
+    <string name="globalExperimentalTitle">Global options is experimental</string>
+    <string name="globalExperimentalText">This feature is not finished yet and may still contain bugs. Review the icon previews before saving your changes.</string>
+    <string name="advancedSectionSource">Icon source</string>
+    <string name="advancedSectionColors">Colours</string>
+    <string name="advancedSectionBehavior">Refresh behaviour</string>
+    <string name="globalScreenButton">New global screen</string>
+    <string name="globalModifiersTitle">Global modifiers</string>
+    <string name="globalColorize">Colorize all icons</string>
+    <string name="globalApplyToLabel">Apply modifiers to</string>
+    <string name="globalToggleGenerated">Generated</string>
+    <string name="globalToggleExisting">Existing</string>
+    <string name="globalToggleCustom">Custom</string>
+    <string name="globalToggleEmpty">Without icon</string>
+    <string name="globalGeneratedSection">Generated icons · %1$d</string>
+    <string name="globalCustomSection">Custom icons · %1$d</string>
+    <string name="globalExistingSection">Existing icons · %1$d</string>
+    <string name="globalExistingHint">Saved or built automatic icons. Enable Existing to apply the staged modifiers.</string>
+    <string name="globalEmptySection">Without an icon · %1$d</string>
+    <string name="globalSectionApplies">Modifiers apply</string>
+    <string name="globalSectionSkipped">Not affected</string>
+    <string name="globalGridHint">Tap any icon to fine-tune its modifiers.</string>
+    <string name="globalNoIcons">No icons yet — pick a source on the home screen and refresh first.</string>
+    <string name="globalDiscardTitle">Discard changes?</string>
+    <string name="globalDiscardText">The modifier changes on this screen haven\'t been applied yet.</string>
+    <string name="globalOptionsApplied">Global modifiers applied</string>
+    <string name="globalOptionsApplyFailed">Applying global modifiers failed</string>
+    <string name="globalApplying">Applying…</string>
 
     <!-- First-run intro -->
     <string name="onboardingSourceTitle">Pick your icon source</string>

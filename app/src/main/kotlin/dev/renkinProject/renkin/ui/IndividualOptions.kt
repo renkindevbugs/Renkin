@@ -213,7 +213,7 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
                 // rather than pulling a fresh one from the first pack (which would swap the icon
                 // out from under the user). Null until a tap if none.
                 options.primarySource == Source.ICON_PACK ->
-                    app.createdIcon?.let { builder.applyModifier(it, options) }
+                    (app.baseIcon ?: app.createdIcon)?.let { builder.applyModifier(it, options) }
                 // Text / app-icon sources generate from the source itself
                 else -> builder.previewIcon(app, options, null)
             }
@@ -291,7 +291,7 @@ fun OptionsDialog(
     // The draft icon being built (create/upload/vector previews) and the generation logic
     // that produces it. See IconDraftState — keeps the dozen drawable states + the regen
     // effects out of this composable.
-    val draft = remember { IconDraftState(app.createdIcon) }
+    val draft = remember { IconDraftState(app.baseIcon ?: app.createdIcon) }
     // Hoisted above the tab AnimatedContent so leaving the vector tab and coming back
     // keeps the user's paths instead of disposing the editor and resetting them.
     val vectorEditState = remember { VectorEditState() }

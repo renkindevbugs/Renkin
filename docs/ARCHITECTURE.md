@@ -53,6 +53,9 @@ Activity operations (`finish()`, starting services, permission requests).
 ## Activities
 
 - **MainActivity** — the whole app UI; provides `LocalMainActivity` and `LocalToaster`.
+- **GlobalOptionsActivity** — wallpaper-backed Global options grid. It uses a lightweight
+  view model over the shared provider and performs guarded provider initialization when Android
+  recreates it in a cold process without MainActivity/MainViewModel.
 - **WallpaperPreviewActivity** — the pack preview before a build. Its theme sets
   `windowShowWallpaper` + a transparent background so the system draws the real wallpaper
   behind it (the launcher trick — no permission; `WallpaperManager.getDrawable` is locked
@@ -79,14 +82,22 @@ Switcher = the top-bar title dropdown.
 - `lifecycleScope.launch` is the Main dispatcher — never touch Room / PackageManager from it
   directly; go through a suspend function with `withContext(Default)` inside.
 - Loaded lists / flags are Compose `mutableStateOf` so the UI recomposes when they change.
+- Global-options modifier previews use ViewModel-scoped, shared jobs and a byte-bounded bitmap
+  LRU. Lazy-grid disposal therefore does not discard an in-flight/current preview, while a new
+  modifier configuration cancels obsolete work. Cache misses drive the shared `WavyLoadingBar`.
 
 ## Persistence
 
 - **DataStore Preferences** (`data/DataPreferences.kt`) — all settings. Typed accessors:
   Composable `DataStore.getXValue()` for reading in composition; `Preferences.getXValue()`
   for reading a captured snapshot off the main thread.
-- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v10) — profiles + the generated icons
-  of the last built/saved pack per profile. Loaded into the app list at startup.
+- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v12) — profiles + rendered and base icons
+  of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
+  rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the
+  Global options UI, only unsaved refresh output is Generated; saved/built non-custom rows are
+  Existing and have their own apply toggle. Global
+  modifiers are a derived render layer, never destructively baked into the stored base. The
+  rendered payload remains in exports for backward compatibility. Loaded into the app list.
   **Never lower the version once any build was installed** — schema-identical bump +
   migration instead (see the v5/v6/v7 history in `DbApplication.kt`).
 - **Room — `WatchDatabase`** (v3) — icon-watch rules, suggestions and per-rule baselines, owned per

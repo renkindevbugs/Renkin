@@ -181,8 +181,7 @@ class MainViewModel @Inject constructor(
         // work hops to Dispatchers.Default inside each call, so viewModelScope (main)
         // is fine here.
         viewModelScope.launch {
-            appProvider.initializeApplications()
-            appProvider.initializeRenkinPack()
+            appProvider.ensureInitialized()
             builtKeys = appProvider.getSavedPackKeys()
             refreshMissingPacks()
             // Classify any source packs that still lack a paid/free verdict (quiet best
@@ -194,7 +193,6 @@ class MainViewModel @Inject constructor(
                 refreshMissingPacks(prompt = false)
             }
         }
-        viewModelScope.launch { appProvider.initializeIconPacks() }
     }
 
     // ---- Operation orchestration -------------------------------------------------
@@ -402,9 +400,9 @@ class MainViewModel @Inject constructor(
      * withheld (with a toast) when that origin is a pack this device doesn't own.
      */
     fun applyIcon(app: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String? = null) =
-        applyPickedIcon(app, icon, sourcePackName) { live, origin ->
+        applyPickedIcon(app, icon, sourcePackName) { live, origin, rendered ->
             // Hand-picked icons are locked immediately: a refresh never replaces them.
-            live.changeExport(icon, sourcePackName = origin, isRefreshMade = false)
+            live.changeExport(rendered, sourcePackName = origin, isRefreshMade = false, isCustom = true, isLegacy = false, baseIcon = icon)
         }
 
     /**
@@ -439,8 +437,8 @@ class MainViewModel @Inject constructor(
         calendarPrefix: String?,
         calendarPackName: String?,
         sourcePackName: String?
-    ) = applyPickedIcon(app, icon, sourcePackName) { live, origin ->
-        live.changeExport(icon, sourcePackName = origin, isRefreshMade = false)
+    ) = applyPickedIcon(app, icon, sourcePackName) { live, origin, rendered ->
+        live.changeExport(rendered, sourcePackName = origin, isRefreshMade = false, isCustom = true, isLegacy = false, baseIcon = icon)
             .changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
     }
 
@@ -455,7 +453,7 @@ class MainViewModel @Inject constructor(
         app: PackageInfoStruct,
         icon: IconPackDrawable?,
         sourcePackName: String?,
-        edit: (live: PackageInfoStruct, origin: String?) -> PackageInfoStruct
+        edit: (live: PackageInfoStruct, origin: String?, rendered: IconPackDrawable?) -> PackageInfoStruct
     ) {
         viewModelScope.launch {
             val (origin, locked) = appProvider.resolvePickedSource(app, if (icon == null) null else sourcePackName)
@@ -463,10 +461,33 @@ class MainViewModel @Inject constructor(
                 _toastEvents.trySend(R.string.iconOriginLocked)
                 return@launch
             }
+            val rendered = icon?.let {
+                val preferences = getApplication<Application>().dataStore
+                    .getPreferencesAfterPendingWrites()
+                appProvider.renderCustomIcon(it, preferences)
+            }
             val index = appProvider.applicationList.indexOfFirst { it.key == app.key }
             if (index < 0) return@launch
-            appProvider.editApplication(index, edit(appProvider.applicationList[index], origin))
+            appProvider.editApplication(index, edit(appProvider.applicationList[index], origin, rendered))
             markUpdated(app, icon)
+        }
+    }
+
+    // ---- Global icon modifiers -----------------------------------------------------
+
+    /**
+     * Called when the Global options activity returns: the work happened on the shared
+     * provider (via GlobalOptionsViewModel), so this only refreshes the session bookkeeping —
+     * hand-edited keys count as this session's edits, and a Save (which persisted the
+     * profile) moves the change baselines exactly like a save-before-switch does.
+     */
+    fun onGlobalOptionsClosed(editedKeys: Set<String>, applied: Boolean) {
+        updatedKeys = updatedKeys + editedKeys
+        if (applied) {
+            viewModelScope.launch {
+                resetChangeBaselines()
+                refreshMissingPacks(prompt = false)
+            }
         }
     }
 

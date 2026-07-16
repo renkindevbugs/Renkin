@@ -7,6 +7,12 @@ import androidx.test.core.app.ApplicationProvider
 import dev.renkinProject.renkin.data.DarkMode
 import dev.renkinProject.renkin.data.DarkModeKey
 import dev.renkinProject.renkin.data.ImageEdit
+import dev.renkinProject.renkin.data.GlobalColorizeKey
+import dev.renkinProject.renkin.data.GlobalColorizeColorKey
+import dev.renkinProject.renkin.data.GlobalIconScaleKey
+import dev.renkinProject.renkin.data.GlobalShapeKey
+import dev.renkinProject.renkin.data.OutlineAddKey
+import dev.renkinProject.renkin.data.SecondaryImageEditKey
 import dev.renkinProject.renkin.data.IncludeVectorKey
 import dev.renkinProject.renkin.data.MonochromeKey
 import dev.renkinProject.renkin.data.PrimaryImageEditKey
@@ -73,5 +79,30 @@ class GenerationOptionsPreferencesTest {
 
         assertEquals(Color.White, dark.getDefaultIconColor(context))
         assertEquals(Color.Black, light.getDefaultIconColor(context))
+    }
+
+    @Test
+    fun globalModifiers_areASeparateFinalLayer() {
+        val prefs = preferencesOf(
+            PrimaryImageEditKey to ImageEdit.PATH.ordinal,
+            SecondaryImageEditKey to ImageEdit.EDGE.ordinal,
+            GlobalColorizeKey to true,
+            GlobalColorizeColorKey to "#FF336699",
+            GlobalIconScaleKey to 80,
+            GlobalShapeKey to IconShape.CIRCLE.ordinal,
+            OutlineAddKey to true
+        )
+
+        val source = GenerationOptions.fromPreferences(prefs, context)
+        val global = globalModifierOptions(prefs)
+
+        assertEquals(ImageEdit.PATH, source.primaryImageEdit)
+        assertEquals(ImageEdit.EDGE, source.secondaryImageEdit)
+        assertEquals(OutlineMode.NONE, source.outlineMode)
+        assertEquals(ImageEdit.COLORIZE, global.primaryImageEdit)
+        assertEquals(0.8f, global.iconScale)
+        assertEquals(IconShape.CIRCLE, global.iconShape)
+        assertEquals(OutlineMode.ADD, global.outlineMode)
+        assertTrue(global.hasVisibleModifierEffect())
     }
 }

@@ -20,6 +20,9 @@ import dev.renkinProject.renkin.data.OverrideIconKey
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.FallbackSource
+import dev.renkinProject.renkin.data.GlobalApplyCustomKey
+import dev.renkinProject.renkin.data.GlobalApplyExistingKey
+import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getDefaultBackgroundColor
 import dev.renkinProject.renkin.data.getDefaultIconColor
@@ -27,6 +30,8 @@ import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.globalModifierOptions
+import dev.renkinProject.renkin.icon.creator.hasVisibleModifierEffect
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.extension.toHexString
@@ -34,6 +39,8 @@ import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.dataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 internal suspend fun installOrReportConflict(
@@ -47,6 +54,34 @@ internal suspend fun replaceAfterConflict(
     install: suspend () -> ApkInstallResult
 ): ApkInstallResult =
     if (uninstall()) install() else ApkInstallResult.ABORTED
+
+internal fun shouldApplyGlobalLayer(
+    isCustom: Boolean,
+    isRefreshMade: Boolean,
+    applyGenerated: Boolean,
+    applyExisting: Boolean,
+    applyCustom: Boolean
+): Boolean = when {
+    isCustom -> applyCustom
+    isRefreshMade -> applyGenerated
+    else -> applyExisting
+}
+
+internal fun shouldProcessGlobalLayer(
+    hasIcon: Boolean,
+    isCustom: Boolean,
+    isRefreshMade: Boolean,
+    applyGenerated: Boolean,
+    applyExisting: Boolean,
+    applyCustom: Boolean,
+    includeEmpty: Boolean
+): Boolean = if (!hasIcon) {
+    includeEmpty
+} else {
+    shouldApplyGlobalLayer(
+        isCustom, isRefreshMade, applyGenerated, applyExisting, applyCustom
+    )
+}
 
 /**
  * The domain hub between the UI layer (MainViewModel) and everything icon-related: the live
@@ -84,6 +119,7 @@ class ApplicationProvider(private val context: Context) {
     val activeProfileId: Long get() = profileManager.activeProfileId
 
     private val iconGenService = IconGenerationService(context, iconPackRepo)
+    private val initialLoadMutex = Mutex()
 
     private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
 
@@ -91,6 +127,11 @@ class ApplicationProvider(private val context: Context) {
         initializeApplications()
         initializeIconPacks()
         initializeRenkinPack()
+    }
+
+    /** Cold recreation can open a secondary activity before MainViewModel exists. */
+    suspend fun ensureInitialized() = initialLoadMutex.withLock {
+        if (!startupComplete) initialize()
     }
 
     /**
@@ -140,13 +181,14 @@ class ApplicationProvider(private val context: Context) {
 
     suspend fun refreshIcon(application: PackageInfoStruct, preferences: Preferences) = withContext(Dispatchers.Default) {
         // A newly installed app always gets its icon (re)generated
-        val genOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
-        val lockedOrigins = lockManager.lockedOriginsFor(genOptions)
-        iconGenService.refreshIcon(application, genOptions) { app, icon, sourcePack ->
+        val sourceOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
+        val modifierOptions = modifierFor(preferences, apply = preferences.getBooleanValue(GlobalApplyGeneratedKey, true))
+        val lockedOrigins = lockManager.lockedOriginsFor(sourceOptions)
+        iconGenService.refreshIcon(application, sourceOptions, modifierOptions) { app, base, rendered, sourcePack ->
             val origin = lockManager.resolveOrigin(app.key, sourcePack)
             // An own pack handing out an icon whose real origin isn't owned here → withhold.
-            if (icon == null || origin == null || origin !in lockedOrigins) {
-                editApplication(app, app.changeExport(icon, sourcePackName = origin, isRefreshMade = true))
+            if (rendered == null || origin == null || origin !in lockedOrigins) {
+                editApplication(app, app.changeExport(rendered, sourcePackName = origin, isRefreshMade = true, isCustom = false, isLegacy = false, baseIcon = base))
             }
         }
     }
@@ -171,15 +213,16 @@ class ApplicationProvider(private val context: Context) {
         val targets = if (preferences.getBooleanValue(OverrideIconKey)) applicationList.toList()
             else applicationList.toList().filter { it.key !in lockManager.lockedKeys }
         val lockedOrigins = lockManager.lockedOriginsFor(opt)
+        val modifierOptions = modifierFor(preferences, apply = preferences.getBooleanValue(GlobalApplyGeneratedKey, true))
         var withheld = 0
-        iconGenService.refreshIcons(targets, opt) { application, icon, isFallback, sourcePack ->
+        iconGenService.refreshIcons(targets, opt, modifierOptions) { application, base, rendered, isFallback, sourcePack ->
             val origin = lockManager.resolveOrigin(application.key, sourcePack) ?: sourcePack
-            if (icon != null && origin in lockedOrigins) {
+            if (rendered != null && origin in lockedOrigins) {
                 // An own pack used as source handed out an icon whose real origin isn't
                 // owned on this device — withhold it (the slot stays empty).
                 withheld++
             } else {
-                editApplication(application, application.changeExport(icon, isFallback, origin, isRefreshMade = true))
+                editApplication(application, application.changeExport(rendered, isFallback, origin, isRefreshMade = true, isCustom = false, isLegacy = false, baseIcon = base))
             }
         }
         withheld
@@ -214,6 +257,77 @@ class ApplicationProvider(private val context: Context) {
     /** Applies the modifier from [options] to an already-built icon (e.g. a hand-edited vector). */
     suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =
         iconGenService.applyModifier(icon, options)
+
+    suspend fun renderCustomIcon(base: IconPackDrawable, preferences: Preferences): IconPackDrawable =
+        renderGlobal(base, preferences, preferences.getBooleanValue(GlobalApplyCustomKey))
+
+    /**
+     * Re-renders enabled categories from each icon's immutable base. Disabled categories stay
+     * untouched; selecting a category with no visible modifier explicitly restores its base.
+     */
+    suspend fun applyGlobalModifiers(
+        preferences: Preferences,
+        modifierOptions: GenerationOptions,
+        applyGenerated: Boolean,
+        applyExisting: Boolean,
+        applyCustom: Boolean,
+        includeEmpty: Boolean,
+        onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
+    ) = withContext(Dispatchers.Default) {
+        val targets = applicationList.toList().filter { app ->
+            app.key !in lockManager.lockedKeys && shouldProcessGlobalLayer(
+                hasIcon = app.createdIcon != null,
+                isCustom = app.isCustom,
+                isRefreshMade = app.isRefreshMade,
+                applyGenerated = applyGenerated,
+                applyExisting = applyExisting,
+                applyCustom = applyCustom,
+                includeEmpty = includeEmpty
+            )
+        }
+        var done = 0
+        onProgress(0, targets.size)
+        for (app in targets) {
+            val base = app.baseIcon ?: app.createdIcon
+            if (base != null) {
+                val apply = shouldApplyGlobalLayer(
+                    app.isCustom, app.isRefreshMade,
+                    applyGenerated, applyExisting, applyCustom
+                )
+                val rendered = if (apply && modifierOptions.hasVisibleModifierEffect()) {
+                    iconGenService.applyModifier(base, modifierOptions)
+                } else base
+                editApplication(app, app.changeRenderedIcon(rendered))
+            } else {
+                generateEmptyIcon(app, preferences, modifierOptions)
+            }
+            done++
+            onProgress(done, targets.size)
+        }
+        // Room stores both the immutable bases and compatibility renders; profile prefs carry
+        // the recipe that lets a new app version re-render without accumulating modifiers.
+        saveActiveProfileIcons()
+    }
+
+    private suspend fun generateEmptyIcon(
+        application: PackageInfoStruct,
+        preferences: Preferences,
+        modifierOptions: GenerationOptions
+    ) {
+        val sourceOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
+        val lockedOrigins = lockManager.lockedOriginsFor(sourceOptions)
+        iconGenService.refreshIcon(application, sourceOptions, modifierOptions) { app, base, rendered, sourcePack ->
+            val origin = lockManager.resolveOrigin(app.key, sourcePack)
+            if (rendered == null || origin == null || origin !in lockedOrigins) {
+                editApplication(app, app.changeExport(rendered, sourcePackName = origin, isRefreshMade = true, isCustom = false, isLegacy = false, baseIcon = base))
+            }
+        }
+    }
+
+    private fun modifierFor(preferences: Preferences, apply: Boolean): GenerationOptions? {
+        if (!apply) return null
+        return globalModifierOptions(preferences).takeIf { it.hasVisibleModifierEffect() }
+    }
 
     suspend fun buildAndSignIconPack(
         preferences: Preferences,
@@ -352,23 +466,52 @@ class ApplicationProvider(private val context: Context) {
             // A reference row (no image data, source pack known) whose pack is usable:
             // rebuild the icon from the pack. Failure keeps the row held back for retry.
             val isReference = entry.icon == null && entry.row.drawable.isEmpty() && entry.sourcePackName != null
-            val icon = if (isReference) {
+            val storedIcon = if (isReference) {
                 val rebuilt = materializeReference(app, entry, prefs)
                 if (rebuilt == null) {
                     lockManager.lock(app.key, entry.row)
                     continue
                 }
                 rebuilt
-            } else entry.icon
+            } else entry.icon ?: entry.baseIcon
             val updated = when {
                 // Loaded from the DB = built/saved before, so it arrives locked (isRefreshMade
                 // defaults to false): a refresh won't replace it.
-                icon != null -> app.changeExport(icon, sourcePackName = entry.sourcePackName).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
+                storedIcon != null -> {
+                    val baseIcon = entry.baseIcon ?: storedIcon
+                    val rendered = if (isReference) {
+                        renderGlobal(
+                            storedIcon,
+                            prefs,
+                            if (entry.isCustom) {
+                                prefs.getBooleanValue(GlobalApplyCustomKey)
+                            } else {
+                                prefs.getBooleanValue(GlobalApplyExistingKey)
+                            }
+                        )
+                    } else storedIcon
+                    app.changeExport(
+                        rendered,
+                        sourcePackName = entry.sourcePackName,
+                        isCustom = entry.isCustom,
+                        isLegacy = entry.isLegacy,
+                        baseIcon = baseIcon
+                    ).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
+                }
                 else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
             }
             editApplication(app, updated)
         }
         lockManager.publish()
+    }
+
+    private suspend fun renderGlobal(
+        base: IconPackDrawable,
+        preferences: Preferences,
+        apply: Boolean
+    ): IconPackDrawable {
+        val options = modifierFor(preferences, apply) ?: return base
+        return runCatching { iconGenService.applyModifier(base, options) }.getOrDefault(base)
     }
 
     /**
@@ -430,10 +573,29 @@ class ApplicationProvider(private val context: Context) {
             if (row.sourcePackName in stillLocked) continue
             val app = applicationList.firstOrNull { it.key == key } ?: continue
             val entry = renkinPackStore.decodeRow(row, defaultColor)
-            val icon = entry.icon ?: materializeReference(app, entry, prefs) ?: continue
+            val isReference = entry.icon == null && entry.row.drawable.isEmpty() && entry.sourcePackName != null
+            val storedIcon = entry.icon ?: materializeReference(app, entry, prefs) ?: continue
+            val baseIcon = entry.baseIcon ?: storedIcon
+            val rendered = if (isReference) {
+                renderGlobal(
+                    storedIcon,
+                    prefs,
+                    if (entry.isCustom) {
+                        prefs.getBooleanValue(GlobalApplyCustomKey)
+                    } else {
+                        prefs.getBooleanValue(GlobalApplyExistingKey)
+                    }
+                )
+            } else storedIcon
             editApplication(
                 app,
-                app.changeExport(icon, sourcePackName = entry.sourcePackName)
+                app.changeExport(
+                    rendered,
+                    sourcePackName = entry.sourcePackName,
+                    isCustom = entry.isCustom,
+                    isLegacy = entry.isLegacy,
+                    baseIcon = baseIcon
+                )
                     .changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
             )
             lockManager.release(key)

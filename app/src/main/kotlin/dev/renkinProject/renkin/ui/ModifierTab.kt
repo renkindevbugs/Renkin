@@ -588,7 +588,7 @@ internal fun ModifierTab(
  * generator uses, so what's drawn here is exactly what the icon gets.
  */
 @Composable
-private fun ShapeSwatch(shape: IconShape, selected: Boolean, onClick: () -> Unit) {
+internal fun ShapeSwatch(shape: IconShape, selected: Boolean, onClick: () -> Unit) {
     val label = shapeLabel(shape)
     val fill = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     RenkinTooltipBox(label) {
@@ -622,7 +622,7 @@ private fun ShapeSwatch(shape: IconShape, selected: Boolean, onClick: () -> Unit
 }
 
 @Composable
-private fun shapeLabel(shape: IconShape): String = stringResource(
+internal fun shapeLabel(shape: IconShape): String = stringResource(
     when (shape) {
         IconShape.NONE -> R.string.shapeNone
         IconShape.CIRCLE -> R.string.shapeCircle

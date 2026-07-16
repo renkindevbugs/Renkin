@@ -1,0 +1,1411 @@
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+
+package dev.renkinProject.renkin.ui
+
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Create
+import androidx.compose.material.icons.filled.ImageSearch
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.Stable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.datastore.preferences.core.Preferences
+import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.GlobalOptionsViewModel
+import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.data.GlobalApplyCustomKey
+import dev.renkinProject.renkin.data.GlobalApplyExistingKey
+import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
+import dev.renkinProject.renkin.data.GlobalColorizeColorKey
+import dev.renkinProject.renkin.data.GlobalColorizeFlatKey
+import dev.renkinProject.renkin.data.GlobalColorizeKey
+import dev.renkinProject.renkin.data.GlobalIconScaleKey
+import dev.renkinProject.renkin.data.GlobalIncludeEmptyKey
+import dev.renkinProject.renkin.data.GlobalShapeColorKey
+import dev.renkinProject.renkin.data.GlobalShapeCropKey
+import dev.renkinProject.renkin.data.GlobalShapeKey
+import dev.renkinProject.renkin.data.GlobalShapeScaleKey
+import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.data.ImageEdit
+import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
+import dev.renkinProject.renkin.data.OutlineAddKey
+import dev.renkinProject.renkin.data.OutlineColorKey
+import dev.renkinProject.renkin.data.OutlineWidthKey
+import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
+import dev.renkinProject.renkin.data.getBooleanValue
+import dev.renkinProject.renkin.data.getColorValue
+import dev.renkinProject.renkin.data.getIntValue
+import dev.renkinProject.renkin.data.getPreferencesValue
+import dev.renkinProject.renkin.data.normalizeGlobalScalePercent
+import dev.renkinProject.renkin.data.normalizeOutlineWidth
+import dev.renkinProject.renkin.drawable.BitmapIconDrawable
+import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
+import dev.renkinProject.renkin.extension.toHexString
+import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.icon.creator.OutlineMode
+import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.ui.theme.AddedGreen
+import dev.renkinProject.renkin.ui.theme.CardShape
+import dev.renkinProject.renkin.ui.theme.SwatchShape
+import dev.renkinProject.renkin.ui.theme.IconShape as IconTileShape
+import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+/**
+ * The Global options screen's staged modifier values. Nothing here touches DataStore until
+ * Save — the grid below previews these values live, and Back discards them (after a prompt).
+ */
+@Stable
+internal class GlobalModifierState {
+    var initialized by mutableStateOf(false)
+        private set
+    var shape by mutableStateOf(IconShape.NONE)
+    var shapeCrop by mutableStateOf(true)
+    var shapeScale by mutableFloatStateOf(1f)
+    var shapeColor by mutableStateOf(Color.White)
+    var iconScale by mutableFloatStateOf(1f)
+    var outlineAdd by mutableStateOf(false)
+    var outlineWidth by mutableFloatStateOf(OUTLINE_WIDTH_DEFAULT.toFloat())
+    var outlineColor by mutableStateOf(Color.Black)
+    var colorize by mutableStateOf(false)
+    var colorizeColor by mutableStateOf(Color.White)
+    var colorizeFlat by mutableStateOf(false)
+    // Which icon categories the modifiers apply to (the toggle-button row).
+    var applyGenerated by mutableStateOf(true)
+    var applyExisting by mutableStateOf(false)
+    var applyCustom by mutableStateOf(false)
+    var includeEmpty by mutableStateOf(false)
+
+    /** True when the staged values would visibly change an icon at all. */
+    val hasAnyEffect: Boolean
+        get() = shape != IconShape.NONE || iconScale != 1f || outlineAdd || colorize
+
+    fun seedFrom(preferences: Preferences) {
+        shape = IconShape.entries.getOrElse(
+            preferences.getIntValue(GlobalShapeKey, IconShape.NONE.ordinal)
+        ) { IconShape.NONE }
+        shapeCrop = preferences.getBooleanValue(GlobalShapeCropKey, true)
+        shapeScale = normalizeGlobalScalePercent(preferences.getIntValue(GlobalShapeScaleKey, 100)) / 100f
+        shapeColor = preferences.getColorValue(GlobalShapeColorKey, Color.White)
+        iconScale = normalizeGlobalScalePercent(preferences.getIntValue(GlobalIconScaleKey, 100)) / 100f
+        outlineAdd = preferences.getBooleanValue(OutlineAddKey)
+        outlineWidth = normalizeOutlineWidth(
+            preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)).toFloat()
+        outlineColor = preferences.getColorValue(OutlineColorKey, Color.Black)
+        colorize = preferences.getBooleanValue(GlobalColorizeKey)
+        colorizeColor = preferences.getColorValue(GlobalColorizeColorKey, Color.White)
+        colorizeFlat = preferences.getBooleanValue(GlobalColorizeFlatKey)
+        applyGenerated = preferences.getBooleanValue(GlobalApplyGeneratedKey, true)
+        applyExisting = preferences.getBooleanValue(GlobalApplyExistingKey)
+        applyCustom = preferences.getBooleanValue(GlobalApplyCustomKey)
+        includeEmpty = preferences.getBooleanValue(GlobalIncludeEmptyKey)
+        initialized = true
+    }
+
+    /** All values as one comparable list — the screen's dirty check against its baseline. */
+    fun snapshot(): String = listOf(
+        shape.ordinal, shapeCrop, (shapeScale * 100).roundToInt(), shapeColor.toArgb(),
+        (iconScale * 100).roundToInt(), outlineAdd, outlineWidth.roundToInt(),
+        outlineColor.toArgb(), colorize, colorizeColor.toArgb(), colorizeFlat,
+        applyGenerated, applyExisting, applyCustom, includeEmpty
+    ).joinToString("|")
+
+    private fun restore(snapshot: String) {
+        val values = snapshot.split('|')
+        if (values.size != 15) return
+        runCatching {
+            shape = IconShape.entries[values[0].toInt()]
+            shapeCrop = values[1].toBooleanStrict()
+            shapeScale = values[2].toInt() / 100f
+            shapeColor = Color(values[3].toInt())
+            iconScale = values[4].toInt() / 100f
+            outlineAdd = values[5].toBooleanStrict()
+            outlineWidth = values[6].toInt().toFloat()
+            outlineColor = Color(values[7].toInt())
+            colorize = values[8].toBooleanStrict()
+            colorizeColor = Color(values[9].toInt())
+            colorizeFlat = values[10].toBooleanStrict()
+            applyGenerated = values[11].toBooleanStrict()
+            applyExisting = values[12].toBooleanStrict()
+            applyCustom = values[13].toBooleanStrict()
+            includeEmpty = values[14].toBooleanStrict()
+            initialized = true
+        }
+    }
+
+    companion object {
+        val Saver = Saver<GlobalModifierState, String>(
+            save = { it.snapshot() },
+            restore = { snapshot -> GlobalModifierState().apply { restore(snapshot) } }
+        )
+    }
+
+    /** Writes staged values into [mutable] for the preview and ViewModel commit snapshot. */
+    private fun writeInto(mutable: androidx.datastore.preferences.core.MutablePreferences) {
+        mutable[GlobalShapeKey] = shape.ordinal
+        mutable[GlobalShapeCropKey] = shapeCrop
+        mutable[GlobalShapeScaleKey] = (shapeScale * 100).roundToInt()
+        mutable[GlobalShapeColorKey] = shapeColor.toHexString()
+        mutable[GlobalIconScaleKey] = (iconScale * 100).roundToInt()
+        mutable[OutlineAddKey] = outlineAdd
+        mutable[OutlineWidthKey] = outlineWidth.roundToInt()
+        mutable[OutlineColorKey] = outlineColor.toHexString()
+        mutable[GlobalColorizeKey] = colorize
+        mutable[GlobalColorizeColorKey] = colorizeColor.toHexString()
+        mutable[GlobalColorizeFlatKey] = colorizeFlat
+        mutable[GlobalApplyGeneratedKey] = applyGenerated
+        mutable[GlobalApplyExistingKey] = applyExisting
+        mutable[GlobalApplyCustomKey] = applyCustom
+        mutable[GlobalIncludeEmptyKey] = includeEmpty
+    }
+
+    /**
+     * A preferences snapshot with the STAGED values overlaid, so the empty-slot preview and
+     * a real refresh after Save produce exactly the same icons ([GenerationOptions
+     * .fromPreferences] reads the global keys).
+     */
+    fun overlay(preferences: Preferences): Preferences =
+        preferences.toMutablePreferences().also { writeInto(it) }
+
+    /**
+     * Modifier-only options for previewing/baking over an EXISTING icon: colorize as the image
+     * edit (when on), plus scale, shape and outline. Sources are irrelevant to applyModifier.
+     */
+    fun toModifierOptions(): GenerationOptions = GenerationOptions(
+        primarySource = Source.NONE,
+        primaryImageEdit = if (colorize) ImageEdit.COLORIZE else ImageEdit.NONE,
+        primaryTextType = TEXT_TYPE_DEFAULT,
+        primaryIconPack = "",
+        color = colorizeColor.toArgb(),
+        bgColor = if (shape != IconShape.NONE && !shapeCrop) shapeColor.toArgb()
+            else android.graphics.Color.TRANSPARENT,
+        vector = false,
+        materialYou = false,
+        themed = false,
+        override = true,
+        colorizeFlat = colorizeFlat,
+        iconScale = iconScale,
+        iconShape = shape,
+        iconShapeCrop = shapeCrop,
+        iconShapeScale = shapeScale,
+        outlineMode = if (outlineAdd) OutlineMode.ADD else OutlineMode.NONE,
+        outlineWidth = outlineWidth,
+        outlineColor = outlineColor.toArgb()
+    )
+}
+
+/**
+ * Fullscreen Global options, hosted by [dev.renkinProject.renkin.GlobalOptionsActivity] whose
+ * windowShowWallpaper theme puts the REAL wallpaper behind the transparent icon grid: the
+ * refresh-wide generation options (immediate, like the old Advanced options card), the staged
+ * global modifiers, and a live preview grid of every icon split into generated / custom /
+ * existing / iconless apps. Save re-renders the global layer from immutable icon bases and
+ * persists the profile; tapping a tile opens a per-app editor. [onClose] reports the per-icon
+ * edits and whether a Save happened, so MainViewModel can update its session bookkeeping.
+ */
+@Composable
+fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> Unit) {
+    val viewModel: GlobalOptionsViewModel = hiltViewModel()
+    val iconPacks = viewModel.iconPacks
+    val prefs = getPreferences()
+    val prefsValue = prefs.getPreferencesValue()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val view = LocalView.current
+    val toaster = LocalToaster.current
+    val appliedMessage = stringResource(R.string.globalOptionsApplied)
+    val applyFailedMessage = stringResource(R.string.globalOptionsApplyFailed)
+
+    val state = rememberSaveable(saver = GlobalModifierState.Saver) { GlobalModifierState() }
+    // The baseline snapshot the dirty check compares against; null until seeding completes.
+    var baseline by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(Unit) {
+        if (!state.initialized) {
+            state.seedFrom(prefs.data.first())
+            baseline = state.snapshot()
+        }
+    }
+
+    val applying = viewModel.globalApplyProgress != null
+    val previewJobs by viewModel.previewJobs.collectAsState()
+    val dirty = baseline != null && baseline != state.snapshot()
+    var showExperimentalNotice by rememberSaveable { mutableStateOf(true) }
+    var confirmDiscard by remember { mutableStateOf(false) }
+    val close: () -> Unit = {
+        if (applying) Unit
+        else if (dirty) confirmDiscard = true
+        else onClose(viewModel.editedKeys, viewModel.appliedGlobal)
+    }
+    androidx.activity.compose.BackHandler(enabled = true) { close() }
+
+    // Staged modifiers → the preview options. null = nothing to apply (tiles show the icon
+    // as-is without spinning up a generation per tile).
+    val tileOptions = if (state.hasAnyEffect) state.toModifierOptions() else null
+    // Empty slots preview a full generation with the staged globals overlaid, so what's shown
+    // matches what Save (and a later refresh) actually produces.
+    val emptySourceOptions = if (state.includeEmpty) {
+        GenerationOptions.fromPreferences(state.overlay(prefsValue), context, override = true)
+    } else null
+    LaunchedEffect(emptySourceOptions, tileOptions) {
+        viewModel.updatePreviewConfiguration(emptySourceOptions, tileOptions)
+    }
+
+    val apps = viewModel.applicationList
+    val locked = viewModel.lockedIconKeys
+    val generated = apps.filter { it.createdIcon != null && !it.isCustom && it.isRefreshMade }
+    val custom = apps.filter { it.createdIcon != null && it.isCustom }
+    val existing = apps.filter { it.createdIcon != null && !it.isCustom && !it.isRefreshMade }
+    val iconless = apps.filter { it.createdIcon == null && it.key !in locked }
+
+    var editApp by remember { mutableStateOf<PackageInfoStruct?>(null) }
+
+    // Which section the top visible tile belongs to ('g'/'c'/'e'), read from the item keys —
+    // drives the pinned "you are here" bar while the grid scrolls.
+    val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+    val currentSection by remember {
+        androidx.compose.runtime.derivedStateOf {
+            gridState.layoutInfo.visibleItemsInfo.firstNotNullOfOrNull { info ->
+                (info.key as? String)?.takeIf { it.length > 2 && it[1] == '/' }?.get(0)
+            }
+        }
+    }
+
+    // No Surface around everything: the activity window is transparent over the wallpaper, so
+    // each non-grid area paints its own opaque background and the grid area paints none.
+    Column(
+        Modifier
+            .fillMaxSize()
+            .navigationBarsPadding()
+    ) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                        .statusBarsPadding()
+                ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IconButton(onClick = close, enabled = !applying) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.dismiss))
+                    }
+                    Text(
+                        text = stringResource(R.string.globalOptionsTitle),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        onClick = {
+                            view.performConfirmHaptic()
+                            scope.launch {
+                                val applied = viewModel.applyGlobalModifiers(
+                                    state.overlay(prefsValue), state.toModifierOptions(),
+                                    state.applyGenerated, state.applyExisting,
+                                    state.applyCustom, state.includeEmpty
+                                )
+                                toaster.show(if (applied) appliedMessage else applyFailedMessage)
+                                if (applied) {
+                                    baseline = state.snapshot()
+                                }
+                            }
+                        },
+                        enabled = dirty && !applying,
+                        shape = dev.renkinProject.renkin.ui.theme.FieldShape
+                    ) {
+                        Text(stringResource(if (applying) R.string.globalApplying else R.string.save))
+                    }
+                }
+                HorizontalDivider()
+                val progress = viewModel.globalApplyProgress
+                when {
+                    progress != null && progress.second > 0 -> LinearProgressIndicator(
+                        progress = { progress.first / progress.second.toFloat() },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    progress != null || previewJobs > 0 || viewModel.initialLoadRunning -> {
+                        WavyLoadingBar(Modifier.fillMaxWidth())
+                    }
+                }
+                }
+
+                // While the pinned options panel is open the tiles shrink so more of the
+                // preview stays visible; the user collapses/expands it with the arrow button
+                // under the panel (no auto-hide — scrolling mid-tune felt like losing it).
+                var panelVisible by remember { mutableStateOf(true) }
+
+                // The icon grid, shared by both layouts below (single-pane phones and the
+                // side-by-side pane on wide screens). [compact] = smaller tiles while the
+                // options panel is expanded.
+                val gridContent: @Composable (compact: Boolean) -> Unit = { compact ->
+                val tileSize = androidx.compose.animation.core.animateDpAsState(
+                    targetValue = if (compact) 40.dp else 56.dp,
+                    animationSpec = androidx.compose.animation.core.spring(
+                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
+                        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
+                    ),
+                    label = "tileSize"
+                ).value
+                LazyVerticalGrid(
+                    state = gridState,
+                    columns = GridCells.Adaptive(if (compact) 62.dp else 84.dp),
+                    contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    if (generated.isEmpty() && custom.isEmpty() && existing.isEmpty() && iconless.isEmpty()) {
+                        item(key = "noIcons", span = { GridItemSpan(maxLineSpan) }) {
+                            EmptyState(
+                                icon = Icons.Filled.ImageSearch,
+                                text = stringResource(R.string.globalNoIcons),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp)
+                            )
+                        }
+                    }
+
+                    if (generated.isNotEmpty()) {
+                        item(key = "genHeader", span = { GridItemSpan(maxLineSpan) }) {
+                            SectionHeader(
+                                title = stringResource(R.string.globalGeneratedSection, generated.size),
+                                applies = state.applyGenerated,
+                                hint = androidx.compose.ui.text.AnnotatedString(stringResource(R.string.globalGridHint))
+                            )
+                        }
+                        items(generated, key = { "g/${it.key}" }) { app ->
+                            IconPreviewTile(
+                                app,
+                                if (state.applyGenerated) tileOptions else null,
+                                viewModel,
+                                iconSize = tileSize,
+                                modifier = Modifier.animateItem()
+                            ) { editApp = app }
+                        }
+                    }
+
+                    if (custom.isNotEmpty()) {
+                        item(key = "customHeader", span = { GridItemSpan(maxLineSpan) }) {
+                            SectionHeader(
+                                title = stringResource(R.string.globalCustomSection, custom.size),
+                                applies = state.applyCustom
+                            )
+                        }
+                        items(custom, key = { "c/${it.key}" }) { app ->
+                            IconPreviewTile(
+                                app,
+                                if (state.applyCustom) tileOptions else null,
+                                viewModel,
+                                showEditBadge = true,
+                                iconSize = tileSize,
+                                modifier = Modifier.animateItem()
+                            ) { editApp = app }
+                        }
+                    }
+
+                    if (existing.isNotEmpty()) {
+                        item(key = "existingHeader", span = { GridItemSpan(maxLineSpan) }) {
+                            SectionHeader(
+                                title = stringResource(R.string.globalExistingSection, existing.size),
+                                applies = state.applyExisting,
+                                hint = androidx.compose.ui.text.AnnotatedString(
+                                    stringResource(R.string.globalExistingHint)
+                                )
+                            )
+                        }
+                        items(existing, key = { "s/${it.key}" }) { app ->
+                            IconPreviewTile(
+                                app,
+                                if (state.applyExisting) tileOptions else null,
+                                viewModel,
+                                iconSize = tileSize,
+                                modifier = Modifier.animateItem()
+                            ) { editApp = app }
+                        }
+                    }
+
+                    if (iconless.isNotEmpty()) {
+                        item(key = "emptyHeader", span = { GridItemSpan(maxLineSpan) }) {
+                            SectionHeader(
+                                title = stringResource(R.string.globalEmptySection, iconless.size),
+                                applies = state.includeEmpty
+                            )
+                        }
+                        items(iconless, key = { "e/${it.key}" }) { app ->
+                            GeneratedPreviewTile(
+                                app, emptySourceOptions, tileOptions, viewModel,
+                                iconSize = tileSize,
+                                modifier = Modifier.animateItem()
+                            ) { editApp = app }
+                        }
+                    }
+                }
+                }
+
+                val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
+                if (wide) {
+                    // Foldables/tablets/desktop: options pane on the left, the icon grid on
+                    // the right (transparent, over the real wallpaper) — no collapsing
+                    // needed, both scroll independently.
+                    Row(Modifier.fillMaxSize()) {
+                        Column(
+                            Modifier
+                                .width(340.dp)
+                                .fillMaxHeight()
+                                .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                                .verticalScroll(rememberScrollState())
+                                .padding(bottom = 12.dp)
+                        ) {
+                            CategoryToggleRow(state)
+                            Column(
+                                Modifier.padding(horizontal = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                GlobalModifierControls(state)
+                                AdvancedOptionsPanel(iconPacks)
+                            }
+                        }
+                        VerticalDivider()
+                        Column(Modifier.weight(1f)) {
+                            currentSection?.let { section ->
+                                CurrentSectionBar(section, generated.size, custom.size, existing.size, iconless.size, state)
+                            }
+                            HorizontalDivider()
+                            // Transparent: the real wallpaper shows behind the tiles.
+                            Box(Modifier.fillMaxSize()) { gridContent(false) }
+                        }
+                    }
+                } else {
+                    // Phones: the pinned block (category toggles + arrow handle + expandable
+                    // options panel) is capped a bit under half the screen; in exchange the
+                    // tiles below shrink while it is open. The toggles and handle are fixed,
+                    // the panel gets the remaining height and scrolls internally.
+                    val pinnedMax = (androidx.compose.ui.platform.LocalConfiguration
+                        .current.screenHeightDp * 0.45f).dp
+                    Column(
+                        Modifier
+                            .heightIn(max = pinnedMax)
+                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    ) {
+                        CategoryToggleRow(state)
+                        AnimatedVisibility(
+                            visible = panelVisible,
+                            modifier = Modifier.weight(1f, fill = false)
+                        ) {
+                            Column(
+                                Modifier
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(horizontal = 12.dp)
+                                    .padding(bottom = 6.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                GlobalModifierControls(state)
+                                AdvancedOptionsPanel(iconPacks)
+                            }
+                        }
+                        // The expand/collapse control sits UNDER the panel, right where the
+                        // grid starts, so the thumb doesn't travel to the top to reach it.
+                        PanelHandle(panelVisible) { panelVisible = !panelVisible }
+                    }
+                    currentSection?.let { section ->
+                        CurrentSectionBar(section, generated.size, custom.size, existing.size, iconless.size, state)
+                    }
+                    HorizontalDivider()
+                    // Transparent: the real wallpaper shows behind the tiles.
+                    Box(Modifier.fillMaxSize()) { gridContent(panelVisible) }
+                }
+    }
+
+    if (showExperimentalNotice) {
+        RenkinAlertDialog(
+            onDismissRequest = { showExperimentalNotice = false },
+            title = { Text(stringResource(R.string.globalExperimentalTitle)) },
+            text = { Text(stringResource(R.string.globalExperimentalText)) },
+            confirmButton = {
+                androidx.compose.material3.TextButton(
+                    onClick = { showExperimentalNotice = false }
+                ) {
+                    Text(stringResource(R.string.ok))
+                }
+            }
+        )
+    }
+
+    if (confirmDiscard) {
+        ConfirmDialog(
+            title = stringResource(R.string.globalDiscardTitle),
+            text = stringResource(R.string.globalDiscardText),
+            onConfirm = {
+                confirmDiscard = false
+                onClose(viewModel.editedKeys, viewModel.appliedGlobal)
+            },
+            onDismiss = { confirmDiscard = false }
+        )
+    }
+
+    editApp?.let { app ->
+        GlobalIconEditDialog(app = app, onDismiss = { editApp = null })
+    }
+}
+
+/**
+ * Advanced options inside the pinned panel: always expanded (the panel itself already
+ * collapses and scrolls), so no nested chevron to hunt for.
+ */
+@Composable
+private fun AdvancedOptionsPanel(iconPacks: List<IconPack>) {
+    Surface(shape = CardShape, color = MaterialTheme.colorScheme.surfaceContainer) {
+        Column {
+            Text(
+                text = stringResource(R.string.advancedOptions),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
+            )
+            // No refresh hint here: the live grid below already shows what the options do.
+            AdvancedOptionsContent(iconPacks, showHint = false)
+        }
+    }
+}
+
+/**
+ * The staged global modifier controls: shape, icon scale, outline and colorize. Plain card —
+ * the pinned panel wrapping it (see GlobalOptionsScreen) owns collapsing and the height cap.
+ */
+@Composable
+private fun GlobalModifierControls(state: GlobalModifierState) {
+    var shapeColorPickerOpen by remember { mutableStateOf(false) }
+    var outlineColorPickerOpen by remember { mutableStateOf(false) }
+    var colorizeColorPickerOpen by remember { mutableStateOf(false) }
+
+    Surface(shape = CardShape, color = MaterialTheme.colorScheme.surfaceContainer) {
+        Column(
+            Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.globalModifiersTitle),
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+
+            // Shape — same swatches and controls as the per-app Modifier tab.
+            Text(
+                text = stringResource(R.string.iconShapeTitle),
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                IconShape.entries.forEach { shape ->
+                    ShapeSwatch(
+                        shape = shape,
+                        selected = state.shape == shape,
+                        onClick = { state.shape = shape }
+                    )
+                }
+            }
+            AnimatedVisibility(visible = state.shape != IconShape.NONE) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = state.shapeCrop,
+                            onClick = { state.shapeCrop = true },
+                            label = { Text(stringResource(R.string.shapeCrop)) }
+                        )
+                        FilterChip(
+                            selected = !state.shapeCrop,
+                            onClick = { state.shapeCrop = false },
+                            label = { Text(stringResource(R.string.shapePlate)) }
+                        )
+                    }
+                    LabeledSlider(
+                        label = stringResource(R.string.shapeIconScale),
+                        value = state.shapeScale,
+                        onValueChange = { state.shapeScale = it },
+                        valueRange = 0.5f..1.5f,
+                        valueLabel = "${(state.shapeScale * 100).roundToInt()}%",
+                        centered = true
+                    )
+                    if (!state.shapeCrop) {
+                        ColorRow(stringResource(R.string.shapeColor), state.shapeColor) {
+                            shapeColorPickerOpen = true
+                        }
+                    }
+                }
+            }
+
+            LabeledSlider(
+                label = stringResource(R.string.iconScale),
+                value = state.iconScale,
+                onValueChange = { state.iconScale = it },
+                valueRange = 0.5f..1.5f,
+                valueLabel = "${(state.iconScale * 100).roundToInt()}%",
+                centered = true
+            )
+
+            ControlledSwitchRow(
+                label = stringResource(R.string.outlineGlobal),
+                checked = state.outlineAdd,
+                horizontalPadding = 4.dp
+            ) { state.outlineAdd = it }
+            AnimatedVisibility(visible = state.outlineAdd) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LabeledSlider(
+                        label = stringResource(R.string.outlineThickness),
+                        value = state.outlineWidth,
+                        onValueChange = { state.outlineWidth = it },
+                        valueRange = 1f..16f,
+                        valueLabel = "${state.outlineWidth.roundToInt()} px"
+                    )
+                    ColorRow(stringResource(R.string.outlineColor), state.outlineColor) {
+                        outlineColorPickerOpen = true
+                    }
+                }
+            }
+
+            ControlledSwitchRow(
+                label = stringResource(R.string.globalColorize),
+                checked = state.colorize,
+                horizontalPadding = 4.dp
+            ) { state.colorize = it }
+            AnimatedVisibility(visible = state.colorize) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ColorRow(stringResource(R.string.iconColor), state.colorizeColor) {
+                        colorizeColorPickerOpen = true
+                    }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = stringResource(R.string.colorizeSolid),
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = stringResource(R.string.colorizeSolidHint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Switch(
+                            checked = state.colorizeFlat,
+                            onCheckedChange = { state.colorizeFlat = it }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    if (shapeColorPickerOpen) {
+        ColorDialog(
+            onDismiss = { shapeColorPickerOpen = false },
+            currentlySelected = state.shapeColor,
+            onColorSelected = { state.shapeColor = it }
+        )
+    }
+    if (outlineColorPickerOpen) {
+        ColorDialog(
+            onDismiss = { outlineColorPickerOpen = false },
+            currentlySelected = state.outlineColor,
+            onColorSelected = { state.outlineColor = it }
+        )
+    }
+    if (colorizeColorPickerOpen) {
+        ColorDialog(
+            onDismiss = { colorizeColorPickerOpen = false },
+            currentlySelected = state.colorizeColor,
+            onColorSelected = { state.colorizeColor = it }
+        )
+    }
+}
+
+/** A colour-picking row: label plus the current colour as a tappable swatch. */
+@Composable
+private fun ColorRow(label: String, color: Color, onClick: () -> Unit) {
+    OptionCard(
+        label = label,
+        onClick = onClick,
+        trailing = {
+            Surface(
+                shape = CircleShape,
+                color = color,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.size(28.dp)
+            ) {}
+        }
+    )
+}
+
+/** A switch row bound directly to caller state (unlike DefaultSwitchLayout's remembered copy). */
+@Composable
+private fun ControlledSwitchRow(
+    label: String,
+    checked: Boolean,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
+    onChange: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = horizontalPadding, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+/**
+ * The pinned category picker: M3 toggle buttons (round → square when checked) for which icon
+ * groups the global modifiers apply to. Generated is on by default; the grid marks each
+ * section green/red to match.
+ */
+@Composable
+private fun CategoryToggleRow(state: GlobalModifierState) {
+    Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
+        Text(
+            text = stringResource(R.string.globalApplyToLabel),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
+        )
+        // Scrollable so the labels are never clipped on narrow screens — each button sizes
+        // to its own text.
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            ToggleButton(
+                checked = state.applyGenerated,
+                onCheckedChange = { state.applyGenerated = it }
+            ) {
+                Text(stringResource(R.string.globalToggleGenerated), maxLines = 1)
+            }
+            ToggleButton(
+                checked = state.applyExisting,
+                onCheckedChange = { state.applyExisting = it }
+            ) {
+                Text(stringResource(R.string.globalToggleExisting), maxLines = 1)
+            }
+            ToggleButton(
+                checked = state.applyCustom,
+                onCheckedChange = { state.applyCustom = it }
+            ) {
+                Text(stringResource(R.string.globalToggleCustom), maxLines = 1)
+            }
+            ToggleButton(
+                checked = state.includeEmpty,
+                onCheckedChange = { state.includeEmpty = it }
+            ) {
+                Text(stringResource(R.string.globalToggleEmpty), maxLines = 1)
+            }
+        }
+    }
+}
+
+/**
+ * The always-visible handle UNDER the options panel: a proper tonal icon button (a bare
+ * chevron was easy to miss) that collapses or re-opens the panel. Up = collapse, down =
+ * expand.
+ */
+@Composable
+private fun PanelHandle(panelVisible: Boolean, onToggle: () -> Unit) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (panelVisible) 180f else 0f,
+        label = "panelChevron"
+    )
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp),
+        horizontalArrangement = Arrangement.Center
+    ) {
+        androidx.compose.material3.FilledTonalIconButton(
+            onClick = onToggle,
+            modifier = Modifier.size(34.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Filled.KeyboardArrowDown,
+                contentDescription = stringResource(R.string.globalModifiersTitle),
+                modifier = Modifier
+                    .size(22.dp)
+                    .rotate(chevronRotation)
+            )
+        }
+    }
+}
+
+/**
+ * The pinned "you are here" bar: names the section the top visible tiles belong to while the
+ * grid scrolls, with the same green/red applies-marker as the section headers.
+ */
+@Composable
+private fun CurrentSectionBar(
+    section: Char,
+    generatedCount: Int,
+    customCount: Int,
+    existingCount: Int,
+    iconlessCount: Int,
+    state: GlobalModifierState
+) {
+    val (title, applies) = when (section) {
+        'g' -> stringResource(R.string.globalGeneratedSection, generatedCount) to state.applyGenerated
+        'c' -> stringResource(R.string.globalCustomSection, customCount) to state.applyCustom
+        's' -> stringResource(R.string.globalExistingSection, existingCount) to state.applyExisting
+        else -> stringResource(R.string.globalEmptySection, iconlessCount) to state.includeEmpty
+    }
+    val marker = if (applies) AddedGreen else MaterialTheme.colorScheme.error
+    Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(marker)
+            )
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .weight(1f)
+            )
+            Text(
+                text = stringResource(
+                    if (applies) R.string.globalSectionApplies else R.string.globalSectionSkipped
+                ),
+                style = MaterialTheme.typography.labelMedium,
+                color = marker
+            )
+        }
+    }
+}
+
+/**
+ * A grid section title under its coloured rule: green when the global modifiers apply to the
+ * section, red when it is left untouched.
+ */
+@Composable
+private fun SectionHeader(
+    title: String,
+    applies: Boolean,
+    hint: androidx.compose.ui.text.AnnotatedString? = null
+) {
+    val marker = if (applies) AddedGreen else MaterialTheme.colorScheme.error
+    // Sits directly on the wallpaper — white text with a shadow, like the tile labels.
+    val onWallpaperShadow = androidx.compose.ui.graphics.Shadow(
+        color = Color.Black.copy(alpha = 0.85f), blurRadius = 6f
+    )
+    Column(Modifier.padding(top = 6.dp)) {
+        HorizontalDivider(thickness = 2.dp, color = marker)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall.copy(shadow = onWallpaperShadow),
+                fontWeight = FontWeight.SemiBold,
+                color = Color.White,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = stringResource(
+                    if (applies) R.string.globalSectionApplies else R.string.globalSectionSkipped
+                ),
+                style = MaterialTheme.typography.labelMedium.copy(shadow = onWallpaperShadow),
+                color = marker
+            )
+        }
+        if (hint != null) {
+            Text(
+                text = hint,
+                style = MaterialTheme.typography.bodySmall.copy(shadow = onWallpaperShadow),
+                color = Color.White.copy(alpha = 0.85f),
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+    }
+}
+
+/**
+ * One preview tile for an app that already has an icon: shows the icon with [options]
+ * applied (or as-is when null), the app name, and an edit badge for custom icons.
+ */
+@Composable
+private fun IconPreviewTile(
+    app: PackageInfoStruct,
+    options: GenerationOptions?,
+    viewModel: GlobalOptionsViewModel,
+    showEditBadge: Boolean = false,
+    iconSize: androidx.compose.ui.unit.Dp = 56.dp,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val base = app.baseIcon ?: app.createdIcon
+    // Cache at the largest tile size. The animated 40→56 dp resize must not create a new
+    // raster and cache entry for every animation frame.
+    val targetPx = with(LocalDensity.current) { 56.dp.roundToPx() }
+    val cached = remember(app.key, app.internalVersion, options, targetPx) {
+        options?.let { viewModel.cachedModifiedPreview(app, it, targetPx) }
+    }
+    // ViewModel-scoped work survives LazyGrid disposing the tile; returning to it reuses the
+    // memory-bounded raster cache instead of applying the same modifier again.
+    val preview by produceState(cached, app.key, app.internalVersion, options, targetPx) {
+        if (value == null && base != null && options != null) {
+            delay(120)
+            value = viewModel.modifiedPreview(app, options, targetPx)
+        }
+    }
+    PreviewTileFrame(app, showEditBadge, iconSize, modifier, onClick) {
+        if (preview != null) {
+            Image(
+                painter = BitmapPainter(preview!!.asImageBitmap()),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(IconTileShape)
+            )
+        } else if (base != null) {
+            Image(
+                painter = base.getPainter(),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(IconTileShape)
+            )
+        }
+    }
+}
+
+/**
+ * A tile for an app with no created icon yet. With the "Without icon" toggle on it previews
+ * the icon a generation with the staged globals would produce (the app's launcher icon shows
+ * dimmed until that arrives); toggled off it just shows the launcher icon as-is.
+ */
+@Composable
+private fun GeneratedPreviewTile(
+    app: PackageInfoStruct,
+    sourceOptions: GenerationOptions?,
+    modifierOptions: GenerationOptions?,
+    viewModel: GlobalOptionsViewModel,
+    iconSize: androidx.compose.ui.unit.Dp = 56.dp,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val targetPx = with(LocalDensity.current) { 56.dp.roundToPx() }
+    val cached = remember(app.key, app.internalVersion, sourceOptions, modifierOptions, targetPx) {
+        sourceOptions?.let {
+            viewModel.cachedGeneratedPreview(app, it, modifierOptions, targetPx)
+        }
+    }
+    val preview by produceState(cached, app.key, app.internalVersion, sourceOptions, modifierOptions, targetPx) {
+        if (value == null && sourceOptions != null) {
+            delay(120)
+            value = viewModel.generatedPreview(app, sourceOptions, modifierOptions, targetPx)
+        }
+    }
+    PreviewTileFrame(app, showEditBadge = false, iconSize = iconSize, modifier = modifier, onClick = onClick) {
+        if (preview != null) {
+            Image(
+                painter = BitmapPainter(preview!!.asImageBitmap()),
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(IconTileShape)
+            )
+        } else {
+            val fallback = rememberAppBitmap(app)
+            if (fallback != null) {
+                Image(
+                    painter = BitmapPainter(fallback),
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(IconTileShape)
+                        // Dim only while an actual preview is on its way; with the category
+                        // toggled off the launcher icon IS the content.
+                        .alpha(if (sourceOptions == null) 1f else 0.35f)
+                )
+            }
+        }
+    }
+}
+
+/** The shared tile chrome: icon slot on top, single-line app name below, optional edit badge. */
+@Composable
+private fun PreviewTileFrame(
+    app: PackageInfoStruct,
+    showEditBadge: Boolean,
+    iconSize: androidx.compose.ui.unit.Dp = 56.dp,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+    iconContent: @Composable () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .clip(CardShape)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(vertical = 6.dp, horizontal = 2.dp)
+    ) {
+        Box(Modifier.size(iconSize)) {
+            iconContent()
+            if (showEditBadge) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .size(20.dp),
+                    shape = SwatchShape,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Create,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(3.dp)
+                    )
+                }
+            }
+        }
+        // Launcher-style label: white with a soft shadow, readable on any wallpaper (the
+        // grid sits directly on the transparent, wallpaper-showing area).
+        Text(
+            text = app.appName,
+            style = MaterialTheme.typography.labelSmall.copy(
+                shadow = androidx.compose.ui.graphics.Shadow(
+                    color = Color.Black.copy(alpha = 0.85f), blurRadius = 6f
+                )
+            ),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+            color = Color.White,
+            modifier = Modifier
+                .padding(top = 4.dp)
+                .fillMaxWidth()
+        )
+    }
+}
+
+/**
+ * The modifiers-only per-app editor opened from the grid: the full Modifier tab over the
+ * app's current icon with a before/after preview. Apply stores the result as a custom icon
+ * (a refresh won't replace it), exactly like the main edit dialog's Apply.
+ */
+@Composable
+private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) {
+    val viewModel: GlobalOptionsViewModel = hiltViewModel()
+    val view = LocalView.current
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val toaster = LocalToaster.current
+    val externalEditorError = stringResource(R.string.noImageEditorAvailable)
+    val originLockedMessage = stringResource(R.string.iconOriginLocked)
+
+    var imageEdit by remember { mutableStateOf(ImageEdit.NONE) }
+    var iconColor by remember { mutableStateOf(Color.White) }
+    var useVector by remember { mutableStateOf(false) }
+    val adjustments = remember { AdjustmentState() }
+
+    // The icon the modifiers act on: the stored icon, or the app's own launcher icon for
+    // apps that don't have one yet.
+    val heroBitmap = remember(app) {
+        runCatching { app.icon.toSafeBitmapOrNull() }.getOrNull()
+    }
+    val base = remember(app) {
+        app.baseIcon ?: app.createdIcon ?: heroBitmap?.let { BitmapIconDrawable(it, false) }
+    }
+
+    val options = GenerationOptions(
+        primarySource = Source.APPLICATION_ICON,
+        primaryImageEdit = imageEdit,
+        primaryTextType = TEXT_TYPE_DEFAULT,
+        primaryIconPack = "",
+        color = iconColor.toArgb(),
+        bgColor = if (adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop) {
+            adjustments.shapeColor.toArgb()
+        } else android.graphics.Color.TRANSPARENT,
+        vector = useVector,
+        materialYou = false,
+        themed = false,
+        override = true,
+        edgeLowThreshold = adjustments.edgeThreshold,
+        edgeHighThreshold = adjustments.edgeThreshold * 3f,
+        edgeGaussianRadius = adjustments.edgeSmoothing,
+        edgeContrastNormalized = adjustments.edgeContrast,
+        iconScale = adjustments.iconScale,
+        bgRemovalTolerance = adjustments.bgRemovalTolerance,
+        iconOffsetX = adjustments.iconOffsetX,
+        iconOffsetY = adjustments.iconOffsetY,
+        colorizeFlat = adjustments.colorizeFlat,
+        iconShape = adjustments.iconShape,
+        iconShapeCrop = adjustments.shapeCrop,
+        iconShapeScale = adjustments.shapeScale,
+        outlineMode = adjustments.outlineMode,
+        outlineWidth = adjustments.outlineWidth,
+        outlineColor = adjustments.outlineColor.toArgb(),
+        outlineEraseMask = remember(adjustments.eraseStrokes) {
+            if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
+        }
+    )
+
+    var preview by remember { mutableStateOf(base) }
+    var generating by remember { mutableStateOf(false) }
+    // Skip the very first pass: an untouched run through applyModifier would needlessly
+    // rasterise a stored vector icon, and Apply must stay disabled until an actual edit.
+    var touched by remember { mutableStateOf(false) }
+    LaunchedEffect(options) {
+        val source = base ?: return@LaunchedEffect
+        if (!touched) {
+            touched = true
+            preview = source
+            return@LaunchedEffect
+        }
+        generating = true
+        preview = withContext(Dispatchers.Default) {
+            runCatching { viewModel.applyModifier(source, options) }.getOrDefault(source)
+        }
+        generating = false
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surfaceContainerLow
+        ) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.dismiss))
+                    }
+                    Text(
+                        text = app.appName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Button(
+                        onClick = {
+                            view.performConfirmHaptic()
+                            val edited = preview
+                            if (edited != null) {
+                                scope.launch {
+                                    val stored = viewModel.applyEditedIcon(
+                                        app, edited, sourcePackName = app.sourcePackName
+                                    )
+                                    if (!stored) toaster.show(originLockedMessage)
+                                    onDismiss()
+                                }
+                            } else {
+                                onDismiss()
+                            }
+                        },
+                        enabled = preview != null && !generating && preview !== base,
+                        shape = dev.renkinProject.renkin.ui.theme.FieldShape
+                    ) {
+                        Text(stringResource(R.string.apply))
+                    }
+                }
+                HorizontalDivider()
+
+                // Before/after strip so the modifier's effect is visible while scrolled deep
+                // into the controls below.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainer)
+                        .padding(vertical = 10.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(Modifier.size(56.dp)) {
+                        base?.let {
+                            Image(
+                                painter = it.getPainter(),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(IconTileShape)
+                            )
+                        }
+                    }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 20.dp)
+                    )
+                    Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+                        preview?.let {
+                            Image(
+                                painter = it.getPainter(),
+                                contentDescription = null,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(IconTileShape)
+                            )
+                        }
+                        if (generating) {
+                            LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
+                HorizontalDivider()
+
+                ModifierTab(
+                    source = Source.APPLICATION_ICON,
+                    imageEdit = imageEdit,
+                    iconColor = iconColor,
+                    useVector = useVector,
+                    useMaterialYou = false,
+                    adjustments = adjustments,
+                    centerPreview = remember(preview) { preview?.toBitmap() },
+                    previewGenerating = generating,
+                    sampleBitmap = heroBitmap,
+                    onImageEditChange = { imageEdit = it },
+                    onColorChange = { iconColor = it },
+                    onVectorChange = { useVector = it },
+                    onMaterialYouChange = { },
+                    onEditExternally = { toolbox ->
+                        val icon = preview
+                        if (icon != null) {
+                            scope.launch {
+                                val bitmap = withContext(Dispatchers.Default) { icon.toBitmap() }
+                                val opened = if (toolbox) openInImageToolbox(context, bitmap)
+                                    else editInAnotherApp(context, bitmap)
+                                if (!opened) toaster.show(externalEditorError)
+                            }
+                        }
+                    }
+                )
+            }
+        }
+    }
+}

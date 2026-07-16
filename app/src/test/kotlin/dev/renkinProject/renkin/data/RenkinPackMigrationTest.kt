@@ -43,9 +43,58 @@ class RenkinPackMigrationTest {
 
     @Test
     fun everyReleasedSchemaMigratesToCurrent() {
-        listOf(1, 2, 3, 4, 5, 7, 8, 9).forEach { version ->
+        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11).forEach { version ->
             RenkinPackDatabase.open(context, historical(version, "from-$version")).useDatabase { database ->
                 database.openHelper.writableDatabase
+            }
+        }
+    }
+
+    @Test
+    fun preV12RowsKeepAnExplicitHistoricalOriginMarker() {
+        val name = historical(10, "v10-origin") { db ->
+            db.execSQL(
+                "INSERT INTO DbApplication " +
+                    "(packageName, activityName, isAdaptiveIcon, isXml, drawable, profileId) " +
+                    "VALUES ('com.old', 'com.old.Main', 0, 0, 'pixels', 1)"
+            )
+        }
+
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            database.openHelper.writableDatabase.query(
+                "SELECT isCustomIcon, isLegacyIcon, drawable, baseDrawable, " +
+                    "baseIsAdaptiveIcon, baseIsXml FROM DbApplication " +
+                    "WHERE packageName = 'com.old'"
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertFalse(cursor.getInt(0) != 0)
+                assertTrue(cursor.getInt(1) != 0)
+                assertEquals("pixels", cursor.getString(2))
+                assertEquals("pixels", cursor.getString(3))
+                assertFalse(cursor.getInt(4) != 0)
+                assertFalse(cursor.getInt(5) != 0)
+            }
+        }
+    }
+
+    @Test
+    fun explicitV11CustomRowsKeepTheirKnownOrigin() {
+        val name = historical(11, "v11-custom") { db ->
+            db.execSQL(
+                "INSERT INTO DbApplication " +
+                    "(packageName, activityName, isAdaptiveIcon, isXml, drawable, profileId, isCustomIcon) " +
+                    "VALUES ('com.custom', 'com.custom.Main', 0, 0, 'pixels', 1, 1)"
+            )
+        }
+
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            database.openHelper.writableDatabase.query(
+                "SELECT isCustomIcon, isLegacyIcon FROM DbApplication " +
+                    "WHERE packageName = 'com.custom'"
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertTrue(cursor.getInt(0) != 0)
+                assertFalse(cursor.getInt(1) != 0)
             }
         }
     }

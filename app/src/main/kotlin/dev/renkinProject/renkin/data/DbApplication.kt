@@ -60,7 +60,18 @@ data class DbApplication(
     // Drawable name inside sourcePackName, written only by profile/backup import for icons
     // shared as references (no image data). A row with an empty [drawable] and a non-empty
     // [sourcePackName] is such a reference: the icon is rebuilt from the installed pack.
-    @ColumnInfo(defaultValue = "") val sourceDrawableName: String = ""
+    @ColumnInfo(defaultValue = "") val sourceDrawableName: String = "",
+    // True when the icon was hand-picked/edited by the user (per-app dialog, upload, vector,
+    // watch-apply) rather than produced by a bulk refresh. Together with the in-memory refresh
+    // marker, splits global options into generated, existing and custom icons.
+    @ColumnInfo(defaultValue = "0") val isCustomIcon: Boolean = false,
+    // Records that the generated-vs-custom origin predates reliable classification.
+    @ColumnInfo(defaultValue = "0") val isLegacyIcon: Boolean = false,
+    // Non-destructive source for re-rendering global modifiers. drawable remains the rendered
+    // compatibility/export payload, so older importers still receive the visible result.
+    @ColumnInfo(defaultValue = "") val baseDrawable: String = "",
+    @ColumnInfo(defaultValue = "0") val baseIsAdaptiveIcon: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val baseIsXml: Boolean = false
 )
 
 /**
@@ -163,9 +174,13 @@ interface ProfileDao {
 // Version 9 adds Profile.hasUnbuiltChanges (saved-but-not-built marker).
 // Version 10 adds the PackVerdict table (paid-pack locks), DbApplication.sourceDrawableName
 // (imported icon references) and Profile.hideMissingPackWarning.
+// Version 11 adds DbApplication.isCustomIcon (hand-picked vs refresh-generated).
+// Version 12 adds isLegacyIcon plus an immutable base drawable for non-destructive global
+// rendering. Non-custom v11 rows are marked legacy because false may have been guessed during
+// 10→11; true was only ever written by an explicit user edit.
 @Database(
     entities = [DbApplication::class, Profile::class, PackVerdict::class],
-    version = 10
+    version = 12
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -279,6 +294,26 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN isCustomIcon INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        internal val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN isLegacyIcon INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN baseDrawable TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN baseIsAdaptiveIcon INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN baseIsXml INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "UPDATE DbApplication SET baseDrawable = drawable, " +
+                        "baseIsAdaptiveIcon = isAdaptiveIcon, baseIsXml = isXml"
+                )
+                db.execSQL("UPDATE DbApplication SET isLegacyIcon = 1 WHERE isCustomIcon = 0")
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -288,7 +323,9 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_6_7,
             MIGRATION_7_8,
             MIGRATION_8_9,
-            MIGRATION_9_10
+            MIGRATION_9_10,
+            MIGRATION_10_11,
+            MIGRATION_11_12
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {

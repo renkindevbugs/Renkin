@@ -42,7 +42,10 @@ internal fun mergeApplicationReload(
             sourcePackName = session.sourcePackName,
             originalName = fresh.originalName,
             isFallback = session.isFallback,
-            isRefreshMade = session.isRefreshMade
+            isRefreshMade = session.isRefreshMade,
+            isCustom = session.isCustom,
+            isLegacy = session.isLegacy,
+            baseIcon = session.baseIcon
         )
     }
 }

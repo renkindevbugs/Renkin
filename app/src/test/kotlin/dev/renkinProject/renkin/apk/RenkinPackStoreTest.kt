@@ -27,7 +27,9 @@ class RenkinPackStoreTest {
             calendarEnabled = true,
             calendarPrefix = "day_",
             calendarPackName = "calendar.pack",
-            sourcePackName = "source.pack"
+            sourcePackName = "source.pack",
+            isCustomIcon = true,
+            isLegacyIcon = true
         )
 
         val entry = RenkinPackStore(RuntimeEnvironment.getApplication())
@@ -38,6 +40,8 @@ class RenkinPackStoreTest {
         assertEquals("day_", entry.calendarPrefix)
         assertEquals("calendar.pack", entry.calendarPackName)
         assertEquals("source.pack", entry.sourcePackName)
+        assertEquals(true, entry.isCustom)
+        assertEquals(true, entry.isLegacy)
         assertSame(row, entry.row)
     }
 }

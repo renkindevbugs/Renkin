@@ -36,7 +36,17 @@ class PackageInfoStruct(
      * icons a later refresh may replace. Hand-picked icons, and anything loaded from the DB
      * (i.e. built or saved), are locked. Transient: not persisted, so a restart locks everything.
      */
-    val isRefreshMade: Boolean = false
+    val isRefreshMade: Boolean = false,
+    /**
+     * True when [createdIcon] was hand-picked/edited by the user (per-app dialog, upload,
+     * vector, watch-apply) rather than produced by a bulk refresh. Persisted — splits the
+     * global-options grid into generated vs custom icons across restarts.
+     */
+    val isCustom: Boolean = false,
+    /** Existing row whose generated-vs-custom origin predates the persisted classification. */
+    val isLegacy: Boolean = false,
+    /** Unmodified icon persisted to Room; [createdIcon] is its current global render. */
+    val baseIcon: IconPackDrawable? = createdIcon
 ) : Comparable<PackageInfoStruct> {
     override fun equals(other: Any?): Boolean {
         if (other is PackageInfoStruct) {
@@ -61,9 +71,12 @@ class PackageInfoStruct(
         calendarPackName: String? = this.calendarPackName,
         sourcePackName: String? = this.sourcePackName,
         isFallback: Boolean = this.isFallback,
-        isRefreshMade: Boolean = this.isRefreshMade
+        isRefreshMade: Boolean = this.isRefreshMade,
+        isCustom: Boolean = this.isCustom,
+        isLegacy: Boolean = this.isLegacy,
+        baseIcon: IconPackDrawable? = this.baseIcon
     ): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade)
+        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon)
 
     // Clearing the icon (createdIcon == null) also drops the recorded source pack and the
     // refresh-made flag, so a removed icon never lingers in the usage counts.
@@ -71,14 +84,24 @@ class PackageInfoStruct(
         createdIcon: IconPackDrawable?,
         isFallback: Boolean = false,
         sourcePackName: String? = this.sourcePackName,
-        isRefreshMade: Boolean = this.isRefreshMade
+        isRefreshMade: Boolean = this.isRefreshMade,
+        isCustom: Boolean = this.isCustom,
+        isLegacy: Boolean = this.isLegacy,
+        baseIcon: IconPackDrawable? = createdIcon
     ): PackageInfoStruct =
         copyWith(
             createdIcon = createdIcon,
             isFallback = isFallback,
             sourcePackName = if (createdIcon == null) null else sourcePackName,
-            isRefreshMade = if (createdIcon == null) false else isRefreshMade
+            isRefreshMade = if (createdIcon == null) false else isRefreshMade,
+            isCustom = if (createdIcon == null) false else isCustom,
+            isLegacy = if (createdIcon == null) false else isLegacy,
+            baseIcon = if (createdIcon == null) null else baseIcon
         )
+
+    /** Replaces only the derived global render and keeps the persisted base untouched. */
+    fun changeRenderedIcon(renderedIcon: IconPackDrawable?): PackageInfoStruct =
+        copyWith(createdIcon = renderedIcon)
 
     /** The built/saved copy of this icon: identical, but no longer refresh-replaceable. */
     fun locked(): PackageInfoStruct = copyWith(isRefreshMade = false)

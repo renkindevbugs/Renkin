@@ -37,6 +37,15 @@ import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
+import dev.renkinProject.renkin.data.GlobalColorizeColorKey
+import dev.renkinProject.renkin.data.GlobalColorizeFlatKey
+import dev.renkinProject.renkin.data.GlobalColorizeKey
+import dev.renkinProject.renkin.data.GlobalIconScaleKey
+import dev.renkinProject.renkin.data.GlobalShapeColorKey
+import dev.renkinProject.renkin.data.GlobalShapeCropKey
+import dev.renkinProject.renkin.data.GlobalShapeKey
+import dev.renkinProject.renkin.data.GlobalShapeScaleKey
+import dev.renkinProject.renkin.data.normalizeGlobalScalePercent
 
 /** Whether the persisted vector/Material You path options are relevant to this source chain. */
 fun arePathOptionsRelevant(
@@ -163,16 +172,61 @@ data class GenerationOptions(
                 fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
                 textFontPath = FontCatalog.usablePathOrDefault(preferences.getStringValue(TextFontKey)),
                 // Only ADD exists pack-wide; RECOLOR stays a per-app Modifier-tab option.
-                outlineMode = if (preferences.getBooleanValue(OutlineAddKey)) OutlineMode.ADD else OutlineMode.NONE,
-                outlineWidth = normalizeOutlineWidth(
-                    preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
-                ).toFloat(),
-                outlineColor = preferences.getColorValue(
-                    OutlineColorKey, androidx.compose.ui.graphics.Color.Black).toArgb()
+                outlineMode = OutlineMode.NONE
             )
         }
     }
 }
+
+/** Final global layer, deliberately separate from primary/secondary source generation. */
+fun globalModifierOptions(preferences: Preferences): GenerationOptions {
+    val shape = IconShape.entries.getOrNull(
+        preferences.getIntValue(GlobalShapeKey, IconShape.NONE.ordinal)
+    ) ?: IconShape.NONE
+    val shapeCrop = preferences.getBooleanValue(GlobalShapeCropKey, true)
+    return GenerationOptions(
+        primarySource = Source.NONE,
+        primaryImageEdit = if (preferences.getBooleanValue(GlobalColorizeKey)) {
+            ImageEdit.COLORIZE
+        } else ImageEdit.NONE,
+        primaryTextType = TEXT_TYPE_DEFAULT,
+        primaryIconPack = "",
+        color = preferences.getColorValue(
+            GlobalColorizeColorKey, androidx.compose.ui.graphics.Color.White
+        ).toArgb(),
+        bgColor = if (shape != IconShape.NONE && !shapeCrop) {
+            preferences.getColorValue(
+                GlobalShapeColorKey, androidx.compose.ui.graphics.Color.White
+            ).toArgb()
+        } else android.graphics.Color.TRANSPARENT,
+        vector = false,
+        materialYou = false,
+        themed = false,
+        override = true,
+        colorizeFlat = preferences.getBooleanValue(GlobalColorizeFlatKey),
+        iconScale = normalizeGlobalScalePercent(
+            preferences.getIntValue(GlobalIconScaleKey, 100)
+        ) / 100f,
+        iconShape = shape,
+        iconShapeCrop = shapeCrop,
+        iconShapeScale = normalizeGlobalScalePercent(
+            preferences.getIntValue(GlobalShapeScaleKey, 100)
+        ) / 100f,
+        outlineMode = if (preferences.getBooleanValue(OutlineAddKey)) {
+            OutlineMode.ADD
+        } else OutlineMode.NONE,
+        outlineWidth = normalizeOutlineWidth(
+            preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
+        ).toFloat(),
+        outlineColor = preferences.getColorValue(
+            OutlineColorKey, androidx.compose.ui.graphics.Color.Black
+        ).toArgb()
+    )
+}
+
+fun GenerationOptions.hasVisibleModifierEffect(): Boolean =
+    primaryImageEdit != ImageEdit.NONE || iconScale != 1f ||
+        iconShape != IconShape.NONE || outlineMode != OutlineMode.NONE
 
 /** Letter-case transform for text icons (per-app option; not persisted globally). */
 enum class TextCase { AS_IS, UPPER, LOWER }
