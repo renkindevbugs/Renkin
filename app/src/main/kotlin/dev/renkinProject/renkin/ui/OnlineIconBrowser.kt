@@ -21,12 +21,11 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -58,54 +57,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.data.OnlineLibrariesKey
-import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.online.OnlineIcon
 import dev.renkinProject.renkin.data.online.OnlineIconLibraries
+import dev.renkinProject.renkin.data.online.OnlineIconLibrary
 import dev.renkinProject.renkin.data.online.OnlineIconRepository
+import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import kotlinx.coroutines.launch
 
 /**
- * The vector editor's entry into the online libraries. Hidden entirely until the user opts
- * in via Settings ([OnlineLibrariesKey]) — the browser is the only feature besides the store
- * lookups that touches the network.
- */
-@Composable
-internal fun OnlineIconsButton(onPicked: (SvgVectorImporter.ImportedSvg, sourceUrl: String) -> Unit) {
-    val enabled = getPreferences().getBooleanValue(OnlineLibrariesKey)
-    if (!enabled) return
-    var open by remember { mutableStateOf(false) }
-    FilledTonalButton(
-        onClick = { open = true },
-        modifier = Modifier.padding(end = 8.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Filled.TravelExplore,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp)
-        )
-        Text(
-            text = stringResource(R.string.onlineIconsButton),
-            modifier = Modifier.padding(start = 6.dp)
-        )
-    }
-    if (open) {
-        OnlineIconBrowserDialog(
-            onPicked = { imported, url ->
-                open = false
-                onPicked(imported, url)
-            },
-            onDismiss = { open = false }
-        )
-    }
-}
-
-/**
- * Fullscreen browser over the curated FOSS icon libraries (see [OnlineIconLibraries]): pick a
- * library, search its index, tap an icon. Only the index and the tapped/visible SVGs are
- * downloaded (cached on disk). [onPicked] receives the parsed SVG plus its public source URL,
- * which the caller stores as the icon's attribution reference.
+ * Fullscreen browser over the curated FOSS icon libraries (see [OnlineIconLibraries]),
+ * structured like the Create tab's pack browser: a library list first, then the tapped
+ * library's searchable grid. Only the index and the visible/tapped SVGs are downloaded
+ * (cached on disk). [onPicked] receives the parsed SVG plus its public source URL, which
+ * the caller stores as the icon's attribution reference.
  */
 @Composable
 internal fun OnlineIconBrowserDialog(
@@ -118,27 +83,21 @@ internal fun OnlineIconBrowserDialog(
     val toaster = LocalToaster.current
     val importFailedMessage = stringResource(R.string.svgImportFailed)
 
-    var library by remember { mutableStateOf(OnlineIconLibraries.first()) }
+    // null = the library list; non-null = that library's icon grid (back returns to the list).
+    var library by remember { mutableStateOf<OnlineIconLibrary?>(null) }
     var query by remember { mutableStateOf("") }
-    var retry by remember { mutableIntStateOf(0) }
-    var loadFailed by remember { mutableStateOf(false) }
-    // null while (re)loading; the produceState is keyed on the library and the retry counter.
-    val icons by produceState<List<OnlineIcon>?>(null, library, retry) {
-        value = null
-        loadFailed = false
-        val loaded = repository.icons(library)
-        loadFailed = loaded == null
-        value = loaded
-    }
-    val filtered = remember(icons, query) {
-        val needle = query.trim().lowercase().replace(' ', '-')
-        val list = icons.orEmpty()
-        if (needle.isEmpty()) list else list.filter { needle in it.slug }
-    }
     var importing by remember { mutableStateOf(false) }
+    val back: () -> Unit = {
+        if (library != null) {
+            library = null
+            query = ""
+        } else {
+            onDismiss()
+        }
+    }
 
     Dialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = back,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
     ) {
         Surface(
@@ -158,11 +117,12 @@ internal fun OnlineIconBrowserDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    IconButton(onClick = onDismiss) {
+                    IconButton(onClick = back) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.dismiss))
                     }
+                    // Inside a library the title names it — like a pack's own browser page.
                     Text(
-                        text = stringResource(R.string.onlineIconsTitle),
+                        text = library?.label ?: stringResource(R.string.onlineIconsTitle),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         modifier = Modifier.weight(1f)
@@ -172,99 +132,170 @@ internal fun OnlineIconBrowserDialog(
                     }
                 }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OnlineIconLibraries.forEach { candidate ->
-                        FilterChip(
-                            selected = library == candidate,
-                            onClick = { library = candidate },
-                            label = { Text(candidate.label) }
-                        )
-                    }
-                }
-                // Licence + source, always visible: the whole point of the curated list is
-                // that reuse is allowed — say under which terms, and link the project.
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 20.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = stringResource(R.string.onlineIconsLicense, library.license),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    LinkText(text = "GitHub", url = library.projectUrl)
-                }
-
-                Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
-                    SearchField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-                HorizontalDivider()
-
-                when {
-                    icons == null && !loadFailed -> Box(
-                        Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        LoadingIndicator(color = MaterialTheme.colorScheme.primary)
-                    }
-
-                    loadFailed -> EmptyState(
-                        icon = Icons.Filled.CloudOff,
-                        text = stringResource(R.string.onlineIconsLoadFailed),
-                        modifier = Modifier.fillMaxSize(),
-                        actionLabel = stringResource(R.string.reload),
-                        onAction = { retry++ }
-                    )
-
-                    filtered.isEmpty() -> EmptyState(
-                        icon = Icons.Filled.SearchOff,
-                        text = stringResource(R.string.noIconsFound),
-                        modifier = Modifier.fillMaxSize()
-                    )
-
-                    else -> {
-                        val gridState = rememberLazyGridState()
-                        LazyVerticalGrid(
-                            state = gridState,
-                            columns = GridCells.Adaptive(84.dp),
-                            contentPadding = PaddingValues(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .drawVerticalScrollbar(gridState)
-                        ) {
-                            items(filtered, key = { "${it.library.id}/${it.slug}" }) { icon ->
-                                OnlineIconTile(icon, repository, enabled = !importing) {
-                                    if (importing) return@OnlineIconTile
-                                    importing = true
-                                    scope.launch {
-                                        val imported = repository.svg(icon)
-                                            ?.let { SvgVectorImporter.parse(it) }
-                                        importing = false
-                                        if (imported == null) {
-                                            toaster.show(importFailedMessage)
-                                        } else {
-                                            onPicked(imported, icon.svgUrl)
-                                        }
+                val current = library
+                if (current == null) {
+                    LibraryList(onOpen = { library = it })
+                } else {
+                    LibraryGrid(
+                        library = current,
+                        repository = repository,
+                        query = query,
+                        onQueryChange = { query = it },
+                        enabled = !importing,
+                        onPick = { icon ->
+                            if (!importing) {
+                                importing = true
+                                scope.launch {
+                                    val imported = repository.svg(icon)
+                                        ?.let { SvgVectorImporter.parse(it) }
+                                    importing = false
+                                    if (imported == null) {
+                                        toaster.show(importFailedMessage)
+                                    } else {
+                                        onPicked(imported, icon.svgUrl)
                                     }
                                 }
                             }
                         }
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** The curated libraries as tappable rows: name, licence and the project link. */
+@Composable
+private fun LibraryList(onOpen: (OnlineIconLibrary) -> Unit) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        OnlineIconLibraries.forEach { library ->
+            Surface(
+                shape = CardShape,
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable(role = Role.Button, onClick = { onOpen(library) })
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.TravelExplore,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Column(
+                        Modifier
+                            .weight(1f)
+                            .padding(start = 16.dp, end = 8.dp)
+                    ) {
+                        Text(
+                            text = library.label,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.onlineIconsLicense, library.license),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            LinkText(text = "GitHub", url = library.projectUrl)
+                        }
                     }
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** One library's searchable icon grid, index loaded (and disk-cached) on entry. */
+@Composable
+private fun LibraryGrid(
+    library: OnlineIconLibrary,
+    repository: OnlineIconRepository,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    enabled: Boolean,
+    onPick: (OnlineIcon) -> Unit
+) {
+    var retry by remember { mutableIntStateOf(0) }
+    var loadFailed by remember { mutableStateOf(false) }
+    val icons by produceState<List<OnlineIcon>?>(null, library, retry) {
+        value = null
+        loadFailed = false
+        val loaded = repository.icons(library)
+        loadFailed = loaded == null
+        value = loaded
+    }
+    val filtered = remember(icons, query) {
+        val needle = query.trim().lowercase().replace(' ', '-')
+        val list = icons.orEmpty()
+        if (needle.isEmpty()) list else list.filter { needle in it.slug }
+    }
+
+    Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+        SearchField(
+            value = query,
+            onValueChange = onQueryChange,
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = stringResource(R.string.searchIcons)
+        )
+    }
+    HorizontalDivider()
+
+    when {
+        icons == null && !loadFailed -> Box(
+            Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+        }
+
+        loadFailed -> EmptyState(
+            icon = Icons.Filled.CloudOff,
+            text = stringResource(R.string.onlineIconsLoadFailed),
+            modifier = Modifier.fillMaxSize(),
+            actionLabel = stringResource(R.string.reload),
+            onAction = { retry++ }
+        )
+
+        filtered.isEmpty() -> EmptyState(
+            icon = Icons.Filled.SearchOff,
+            text = stringResource(R.string.noIconsFound),
+            modifier = Modifier.fillMaxSize()
+        )
+
+        else -> {
+            val gridState = rememberLazyGridState()
+            LazyVerticalGrid(
+                state = gridState,
+                columns = GridCells.Adaptive(84.dp),
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawVerticalScrollbar(gridState)
+            ) {
+                items(filtered, key = { "${it.library.id}/${it.slug}" }) { icon ->
+                    OnlineIconTile(icon, repository, enabled = enabled) { onPick(icon) }
                 }
             }
         }

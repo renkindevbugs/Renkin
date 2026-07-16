@@ -27,6 +27,7 @@ import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getDefaultBackgroundColor
 import dev.renkinProject.renkin.data.getDefaultIconColor
 import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.data.online.libraryForUrl
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
@@ -745,7 +746,7 @@ class ApplicationProvider(private val context: Context) {
             ).groupingBy { it }.eachCount()
         val installed = iconPacks.associateBy { it.packageName }
         val cachedLabels = packRepo.verdicts(counts.keys.filter { it !in installed })
-        (installed.keys + counts.keys).distinct().map { pack ->
+        val packRows = (installed.keys + counts.keys).distinct().map { pack ->
             PackUsage(
                 packageName = pack,
                 label = installed[pack]?.applicationName
@@ -754,7 +755,18 @@ class ApplicationProvider(private val context: Context) {
                 count = counts[pack] ?: 0,
                 installed = pack in installed
             )
-        }.sortedWith(compareByDescending<PackUsage> { it.count }.thenBy { it.label.lowercase() })
+        }
+        // Online FOSS libraries count like packs — attributed by the stored source URL.
+        // "installed" on purpose: there is nothing to install, so no missing-pack scare.
+        val onlineRows = applicationList
+            .mapNotNull { it.sourceUrl?.let(::libraryForUrl) }
+            .groupingBy { it }
+            .eachCount()
+            .map { (library, count) ->
+                PackUsage("online:${library.id}", library.label, count, installed = true)
+            }
+        (packRows + onlineRows)
+            .sortedWith(compareByDescending<PackUsage> { it.count }.thenBy { it.label.lowercase() })
     }
 
     /**

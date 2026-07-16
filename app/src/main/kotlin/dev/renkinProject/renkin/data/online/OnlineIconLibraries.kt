@@ -51,6 +51,10 @@ val OnlineIconLibraries: List<OnlineIconLibrary> = listOf(
     )
 )
 
+/** The curated library a stored attribution URL points into, if any. */
+fun libraryForUrl(url: String): OnlineIconLibrary? =
+    OnlineIconLibraries.firstOrNull { url.contains("/gh/${it.owner}/${it.repo}@") }
+
 /** One icon in a library's index; the SVG itself is fetched only when needed. */
 data class OnlineIcon(
     val library: OnlineIconLibrary,

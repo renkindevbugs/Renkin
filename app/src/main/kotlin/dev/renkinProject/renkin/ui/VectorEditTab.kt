@@ -23,6 +23,9 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -59,6 +62,8 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
+import dev.renkinProject.renkin.data.OnlineLibrariesKey
+import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
 import dev.renkinProject.renkin.drawable.MutableVectorPath
 import dev.renkinProject.renkin.drawable.toImageVectorDrawable
@@ -226,6 +231,34 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
 
         ThicknessSlider(state.thickness) { state.thickness = it }
 
+        // Shared by "Import SVG" and the online-library browser: the document replaces
+        // what's being edited — its own coordinate space, its paths (fill/stroke split
+        // and stroke widths as authored). White like every editor path — the Modifier
+        // tab recolors. [sourceUrl] records the online origin (null for local files).
+        val applyImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit = { imported, sourceUrl ->
+            state.viewportOverride = imported.viewportWidth to imported.viewportHeight
+            val importStroke = (imported.viewportHeight / 48f).takeIf { it > 0f } ?: 1f
+            state.entries = imported.paths.mapNotNull { spec ->
+                runCatching {
+                    val nodes = PathParser().parsePathString(spec.pathData).toNodes()
+                    val builder = ImageVector.Builder(
+                        defaultWidth = vector.defaultWidth,
+                        defaultHeight = vector.defaultHeight,
+                        viewportWidth = imported.viewportWidth,
+                        viewportHeight = imported.viewportHeight
+                    )
+                    builder.addPath(nodes, stroke = SolidColor(Color.White), strokeLineWidth = spec.strokeWidth ?: importStroke)
+                    val path = builder.build().root.first() as VectorPath
+                    PathEntry(path, filled = spec.filled, baseStroke = spec.strokeWidth ?: importStroke)
+                }.getOrNull()
+            }
+            state.thickness = 1f
+            state.sourceUrl = sourceUrl
+        }
+        // Create-tab-style pill row: full width instead of buttons squeezed next to the
+        // "Paths" title (which used to wrap the title vertically on narrow screens).
+        ImportSourcePills { imported, url -> applyImported(imported, url) }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -239,32 +272,6 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
             )
-            // Shared by "Import SVG" and the online-library browser: the document replaces
-            // what's being edited — its own coordinate space, its paths (fill/stroke split
-            // and stroke widths as authored). White like every editor path — the Modifier
-            // tab recolors. [sourceUrl] records the online origin (null for local files).
-            val applyImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit = { imported, sourceUrl ->
-                state.viewportOverride = imported.viewportWidth to imported.viewportHeight
-                val importStroke = (imported.viewportHeight / 48f).takeIf { it > 0f } ?: 1f
-                state.entries = imported.paths.mapNotNull { spec ->
-                    runCatching {
-                        val nodes = PathParser().parsePathString(spec.pathData).toNodes()
-                        val builder = ImageVector.Builder(
-                            defaultWidth = vector.defaultWidth,
-                            defaultHeight = vector.defaultHeight,
-                            viewportWidth = imported.viewportWidth,
-                            viewportHeight = imported.viewportHeight
-                        )
-                        builder.addPath(nodes, stroke = SolidColor(Color.White), strokeLineWidth = spec.strokeWidth ?: importStroke)
-                        val path = builder.build().root.first() as VectorPath
-                        PathEntry(path, filled = spec.filled, baseStroke = spec.strokeWidth ?: importStroke)
-                    }.getOrNull()
-                }
-                state.thickness = 1f
-                state.sourceUrl = sourceUrl
-            }
-            OnlineIconsButton { imported, url -> applyImported(imported, url) }
-            ImportSvgButton { applyImported(it, null) }
             NewPath {
                 if (it.trim() == "") {
                     return@NewPath
@@ -447,7 +454,7 @@ fun VectorPathItem(
  * shapes) toast an error and leave the current edit untouched.
  */
 @Composable
-internal fun ImportSvgButton(onImported: (SvgVectorImporter.ImportedSvg) -> Unit) {
+internal fun rememberSvgImportAction(onImported: (SvgVectorImporter.ImportedSvg) -> Unit): () -> Unit {
     val context = getCurrentContext()
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
@@ -465,18 +472,49 @@ internal fun ImportSvgButton(onImported: (SvgVectorImporter.ImportedSvg) -> Unit
         }
     }
 
-    FilledTonalButton(
-        onClick = { launcher.launch(arrayOf("image/svg+xml", "*/*")) },
-        modifier = Modifier.padding(end = 8.dp)
+    return { launcher.launch(arrayOf("image/svg+xml", "*/*")) }
+}
+
+/**
+ * Create-tab-style segmented pills for the two SVG sources: a local file, and — once the
+ * user opted in via Settings — the online FOSS libraries. [onImported] gets the parsed
+ * document plus the online source URL (null for local files).
+ */
+@Composable
+private fun ImportSourcePills(onImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit) {
+    val importFromFile = rememberSvgImportAction { onImported(it, null) }
+    val onlineEnabled = getPreferences().getBooleanValue(OnlineLibrariesKey)
+    var browserOpen by remember { mutableStateOf(false) }
+
+    SingleChoiceSegmentedButtonRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
     ) {
-        Icon(
-            imageVector = Icons.Filled.FileUpload,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp)
-        )
-        Text(
-            text = stringResource(R.string.importSvg),
-            modifier = Modifier.padding(start = 6.dp)
+        val count = if (onlineEnabled) 2 else 1
+        SegmentedButton(
+            selected = false,
+            onClick = importFromFile,
+            shape = SegmentedButtonDefaults.itemShape(index = 0, count = count),
+            icon = {}
+        ) { Text(stringResource(R.string.importSvg)) }
+        if (onlineEnabled) {
+            SegmentedButton(
+                selected = false,
+                onClick = { browserOpen = true },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = count),
+                icon = {}
+            ) { Text(stringResource(R.string.onlineIconsButton)) }
+        }
+    }
+
+    if (browserOpen) {
+        OnlineIconBrowserDialog(
+            onPicked = { imported, url ->
+                browserOpen = false
+                onImported(imported, url)
+            },
+            onDismiss = { browserOpen = false }
         )
     }
 }
