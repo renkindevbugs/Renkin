@@ -117,6 +117,11 @@ internal class VectorEditState {
     // vector's viewport, so the imported paths keep their proportions (a 24-unit heroicon
     // in a 48-unit viewport would render at half size).
     var viewportOverride: Pair<Float, Float>? by mutableStateOf(null)
+
+    // Attribution reference when the paths came from an online FOSS library (the source
+    // SVG's public URL); null for file imports and hand-drawn paths. Travels with the
+    // confirmed icon into its stored row.
+    var sourceUrl: String? by mutableStateOf(null)
 }
 
 /**
@@ -234,10 +239,11 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
             )
-            ImportSvgButton { imported ->
-                // The document replaces what's being edited: its own coordinate space, its
-                // paths (fill/stroke split and stroke widths as authored). White like every
-                // editor path — the Modifier tab recolors.
+            // Shared by "Import SVG" and the online-library browser: the document replaces
+            // what's being edited — its own coordinate space, its paths (fill/stroke split
+            // and stroke widths as authored). White like every editor path — the Modifier
+            // tab recolors. [sourceUrl] records the online origin (null for local files).
+            val applyImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit = { imported, sourceUrl ->
                 state.viewportOverride = imported.viewportWidth to imported.viewportHeight
                 val importStroke = (imported.viewportHeight / 48f).takeIf { it > 0f } ?: 1f
                 state.entries = imported.paths.mapNotNull { spec ->
@@ -255,7 +261,10 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
                     }.getOrNull()
                 }
                 state.thickness = 1f
+                state.sourceUrl = sourceUrl
             }
+            OnlineIconsButton { imported, url -> applyImported(imported, url) }
+            ImportSvgButton { applyImported(it, null) }
             NewPath {
                 if (it.trim() == "") {
                     return@NewPath

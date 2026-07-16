@@ -246,7 +246,7 @@ fun OptionsDialog(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?) -> Unit,
+    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?, sourceUrl: String?) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
@@ -505,7 +505,11 @@ fun OptionsDialog(
                             pickedPack = iconPack.takeIf { customIconList.isNotEmpty() },
                             existingPack = app.sourcePackName
                         )
-                        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, sourcePackToPersist)
+                        // Online-library attribution only makes sense for a confirmed vector —
+                        // the browser lives in the vector tab and writes its URL there.
+                        val sourceUrlToPersist = vectorEditState.sourceUrl
+                            .takeIf { draft.origin == IconOrigin.VECTOR }
+                        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, sourcePackToPersist, sourceUrlToPersist)
                     },
                     scrollBehavior = headerScrollBehavior,
                     labelExpand = labelExpand,

@@ -114,6 +114,7 @@ object BackupCodec {
                         .put("baseDrawable", icon.baseDrawable)
                         .put("baseIsAdaptiveIcon", icon.baseIsAdaptiveIcon)
                         .put("baseIsXml", icon.baseIsXml)
+                        .put("sourceUrl", icon.sourceUrl)
                 )
             }
             p.put("icons", icons)
@@ -217,7 +218,9 @@ object BackupCodec {
                         } else icon.getBoolean("isAdaptiveIcon"),
                         baseIsXml = if (icon.has("baseIsXml")) {
                             icon.optBoolean("baseIsXml")
-                        } else icon.getBoolean("isXml")
+                        } else icon.getBoolean("isXml"),
+                        // Absent in pre-v13 files — no online attribution to carry.
+                        sourceUrl = icon.optString("sourceUrl")
                     )
                 )
             }

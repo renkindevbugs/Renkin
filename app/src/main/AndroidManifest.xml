@@ -13,8 +13,10 @@
         </intent>
     </queries>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <!-- Only used to ask the Play Store whether an icon pack referenced by an imported
-         profile/backup is paid or free (PlayStoreLookup). Nothing else touches the network. -->
+    <!-- Used for exactly two things: asking the Play Store whether an icon pack referenced
+         by an imported profile/backup is paid or free (PlayStoreLookup), and — only after the
+         user opts in via Settings — fetching FOSS SVG icons from GitHub via the jsDelivr CDN
+         (data/online). Nothing else touches the network. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <uses-permission

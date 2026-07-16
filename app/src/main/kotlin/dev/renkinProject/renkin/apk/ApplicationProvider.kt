@@ -495,7 +495,8 @@ class ApplicationProvider(private val context: Context) {
                         sourcePackName = entry.sourcePackName,
                         isCustom = entry.isCustom,
                         isLegacy = entry.isLegacy,
-                        baseIcon = baseIcon
+                        baseIcon = baseIcon,
+                        sourceUrl = entry.sourceUrl
                     ).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
                 }
                 else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
@@ -594,7 +595,8 @@ class ApplicationProvider(private val context: Context) {
                     sourcePackName = entry.sourcePackName,
                     isCustom = entry.isCustom,
                     isLegacy = entry.isLegacy,
-                    baseIcon = baseIcon
+                    baseIcon = baseIcon,
+                    sourceUrl = entry.sourceUrl
                 )
                     .changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
             )

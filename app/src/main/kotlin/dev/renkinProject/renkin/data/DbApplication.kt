@@ -71,7 +71,11 @@ data class DbApplication(
     // compatibility/export payload, so older importers still receive the visible result.
     @ColumnInfo(defaultValue = "") val baseDrawable: String = "",
     @ColumnInfo(defaultValue = "0") val baseIsAdaptiveIcon: Boolean = false,
-    @ColumnInfo(defaultValue = "0") val baseIsXml: Boolean = false
+    @ColumnInfo(defaultValue = "0") val baseIsXml: Boolean = false,
+    // Attribution reference for icons picked from an online FOSS library: the source file's
+    // public URL (GitHub via jsDelivr). Purely informational — the drawable itself is stored;
+    // this only records where it was taken from. Never fed into the pack-verdict/lock logic.
+    @ColumnInfo(defaultValue = "") val sourceUrl: String = ""
 )
 
 /**
@@ -178,9 +182,10 @@ interface ProfileDao {
 // Version 12 adds isLegacyIcon plus an immutable base drawable for non-destructive global
 // rendering. Non-custom v11 rows are marked legacy because false may have been guessed during
 // 10→11; true was only ever written by an explicit user edit.
+// Version 13 adds DbApplication.sourceUrl (attribution reference for online-library icons).
 @Database(
     entities = [DbApplication::class, Profile::class, PackVerdict::class],
-    version = 12
+    version = 13
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -314,6 +319,12 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN sourceUrl TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -325,7 +336,8 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_8_9,
             MIGRATION_9_10,
             MIGRATION_10_11,
-            MIGRATION_11_12
+            MIGRATION_11_12,
+            MIGRATION_12_13
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {

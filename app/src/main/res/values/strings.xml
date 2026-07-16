@@ -366,6 +366,12 @@
     <string name="eraseClear">Clear all strokes</string>
     <string name="eraseCount">%1$d stroke(s)</string>
     <string name="globalOptionsTitle">Global options</string>
+    <string name="onlineIconsTitle">Online icons</string>
+    <string name="onlineIconsButton">Online</string>
+    <string name="onlineIconsLicense">%1$s licence · fetched from GitHub</string>
+    <string name="onlineIconsLoadFailed">Couldn\'t load the icon list. Check your connection and try again.</string>
+    <string name="onlineIconsSetting">Online icon libraries (BETA)</string>
+    <string name="onlineIconsSettingDesc">Browse free, open-source SVG icon sets in the icon editor\'s Vector tab. Only the list and the icons you view are downloaded (from GitHub via the jsDelivr CDN).</string>
     <string name="globalExperimentalTitle">Global options is experimental</string>
     <string name="globalExperimentalText">This feature is not finished yet and may still contain bugs. Review the icon previews before saving your changes.</string>
     <string name="advancedSectionSource">Icon source</string>
