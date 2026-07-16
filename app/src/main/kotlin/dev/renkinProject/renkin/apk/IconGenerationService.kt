@@ -96,21 +96,35 @@ class IconGenerationService(
     /** Regenerates one app's icon from both packs, handing the result to [onResult]. */
     suspend fun refreshIcon(
         application: PackageInfoStruct,
-        options: GenerationOptions,
-        onResult: (PackageInfoStruct, IconPackDrawable?, sourcePackName: String) -> Unit
+        sourceOptions: GenerationOptions,
+        modifierOptions: GenerationOptions?,
+        onResult: (PackageInfoStruct, IconPackDrawable?, IconPackDrawable?, sourcePackName: String) -> Unit
     ) = withContext(Dispatchers.Default) {
-        val builder = buildGenerator(options)
-        builder.generateIcon(application, onResult)
+        val builder = buildGenerator(sourceOptions)
+        val modifier = modifierOptions?.let { modifierBuilder(it) }
+        builder.generateIcon(application) { app, base, sourcePack ->
+            onResult(app, base, base?.let { modifier?.applyModifier(it, modifierOptions!!.primaryImageEdit) ?: it }, sourcePack)
+        }
     }
 
     /** Regenerates every app's icon from both packs, streaming each result to [onResult]. */
     suspend fun refreshIcons(
         applications: List<PackageInfoStruct>,
-        options: GenerationOptions,
-        onResult: (PackageInfoStruct, IconPackDrawable?, isFallback: Boolean, sourcePackName: String) -> Unit
+        sourceOptions: GenerationOptions,
+        modifierOptions: GenerationOptions?,
+        onResult: (PackageInfoStruct, IconPackDrawable?, IconPackDrawable?, isFallback: Boolean, sourcePackName: String) -> Unit
     ) = withContext(Dispatchers.Default) {
-        val builder = buildGenerator(options)
-        builder.generateIcons(applications, onResult)
+        val builder = buildGenerator(sourceOptions)
+        val modifier = modifierOptions?.let { modifierBuilder(it) }
+        builder.generateIcons(applications) { app, base, fallback, sourcePack ->
+            onResult(
+                app,
+                base,
+                base?.let { modifier?.applyModifier(it, modifierOptions!!.primaryImageEdit) ?: it },
+                fallback,
+                sourcePack
+            )
+        }
     }
 
     /** Previews the fallback styling for [options]' source on each of [samples]. */
@@ -133,6 +147,11 @@ class IconGenerationService(
         }
         val fallback = iconPackRepo.getIconPackFallback(fallbackPack)
         return IconGenerator(context, options, pack1, pack2, fallback, fallbackPack)
+    }
+
+    private fun modifierBuilder(options: GenerationOptions): IconGenerator {
+        val emptyPack = IconPackContainer("", emptyMap())
+        return IconGenerator(context, options, emptyPack, emptyPack)
     }
 
     suspend fun getIconPackIcons(

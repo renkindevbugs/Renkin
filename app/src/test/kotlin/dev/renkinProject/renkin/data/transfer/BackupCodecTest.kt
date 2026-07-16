@@ -9,6 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.json.JSONObject
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
@@ -39,11 +40,12 @@ class BackupCodecTest {
                 "com.a", "com.a.Main", isAdaptiveIcon = true, isXml = false,
                 drawable = "aGVsbG8=", calendarEnabled = true, calendarPrefix = "day_",
                 calendarPackName = "pack.cal", sourcePackName = "pack.x",
-                profileId = DEFAULT_PROFILE_ID
+                profileId = DEFAULT_PROFILE_ID, isCustomIcon = true
             ),
             DbApplication(
                 "com.b", "com.b.Main", isAdaptiveIcon = false, isXml = true,
-                drawable = "PHZlY3Rvci8+", profileId = DEFAULT_PROFILE_ID
+                drawable = "PHZlY3Rvci8+", profileId = DEFAULT_PROFILE_ID,
+                isLegacyIcon = true
             )
         )
         val rules = listOf(
@@ -113,5 +115,34 @@ class BackupCodecTest {
         val decoded = BackupCodec.decode(BackupCodec.encode(sampleData()))
 
         assertTrue(decoded.profiles.first().icons.all { it.profileId == DEFAULT_PROFILE_ID })
+    }
+
+    @Test
+    fun decode_preClassificationIconsBecomeProtectedLegacy() {
+        val root = JSONObject(BackupCodec.encode(sampleData()))
+        val icon = root.getJSONArray("profiles").getJSONObject(0)
+            .getJSONArray("icons").getJSONObject(0)
+        icon.remove("isCustomIcon")
+        icon.remove("isLegacyIcon")
+
+        val decoded = BackupCodec.decode(root.toString())
+
+        assertTrue(decoded.profiles.first().icons.first().isLegacyIcon)
+    }
+
+    @Test
+    fun decode_preBasePayloadUsesRenderedIconAsSafeBase() {
+        val root = JSONObject(BackupCodec.encode(sampleData()))
+        val icon = root.getJSONArray("profiles").getJSONObject(0)
+            .getJSONArray("icons").getJSONObject(0)
+        icon.remove("baseDrawable")
+        icon.remove("baseIsAdaptiveIcon")
+        icon.remove("baseIsXml")
+
+        val decoded = BackupCodec.decode(root.toString()).profiles.first().icons.first()
+
+        assertEquals(decoded.drawable, decoded.baseDrawable)
+        assertEquals(decoded.isAdaptiveIcon, decoded.baseIsAdaptiveIcon)
+        assertEquals(decoded.isXml, decoded.baseIsXml)
     }
 }

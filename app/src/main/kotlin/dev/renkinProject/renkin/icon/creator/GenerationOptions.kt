@@ -37,7 +37,6 @@ import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
-import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
 import dev.renkinProject.renkin.data.GlobalColorizeColorKey
 import dev.renkinProject.renkin.data.GlobalColorizeFlatKey
 import dev.renkinProject.renkin.data.GlobalColorizeKey
@@ -146,32 +145,7 @@ data class GenerationOptions(
             val iconColor = preferences.getIconColor(context)
             val bgColor = preferences.getBackgroundColor(context)
             val primarySource = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
-            var primaryImageEdit = preferences.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
-
-            // Global modifiers (the Global options screen) applied to every generated icon —
-            // only while the "Generated" category toggle is on (the default).
-            val applyGlobals = preferences.getBooleanValue(GlobalApplyGeneratedKey, true)
-            val globalShape = if (!applyGlobals) IconShape.NONE else IconShape.entries.getOrNull(
-                preferences.getIntValue(GlobalShapeKey, IconShape.NONE.ordinal)
-            ) ?: IconShape.NONE
-            val globalShapeCrop = preferences.getBooleanValue(GlobalShapeCropKey, true)
-            val globalShapeColor = preferences.getColorValue(GlobalShapeColorKey, androidx.compose.ui.graphics.Color.White)
-            // Global colorize only steps in when no image edit is chosen — an explicit
-            // Path/Edge/Colorize/Remove-background pick keeps its own colour handling.
-            val globalColorize = applyGlobals && preferences.getBooleanValue(GlobalColorizeKey)
-            var effectiveColor = iconColor.toArgb()
-            var colorizeFlat = false
-            if (globalColorize && primaryImageEdit == ImageEdit.NONE) {
-                primaryImageEdit = ImageEdit.COLORIZE
-                effectiveColor = preferences.getColorValue(
-                    GlobalColorizeColorKey, iconColor).toArgb()
-                colorizeFlat = preferences.getBooleanValue(GlobalColorizeFlatKey)
-            }
-            // The shape plate is filled from options.bgColor (same conflation as the per-app
-            // dialog), so a plate-mode global shape carries its colour through it.
-            val effectiveBgColor = if (globalShape != IconShape.NONE && !globalShapeCrop) {
-                globalShapeColor.toArgb()
-            } else bgColor.toArgb()
+            val primaryImageEdit = preferences.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
             val secondarySource = preferences.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT)
             val secondaryImageEdit = preferences.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT)
             val pathOptionsRelevant = arePathOptionsRelevant(
@@ -187,15 +161,8 @@ data class GenerationOptions(
                 secondaryImageEdit = secondaryImageEdit,
                 secondaryTextType = preferences.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT),
                 secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey),
-                color = effectiveColor,
-                bgColor = effectiveBgColor,
-                colorizeFlat = colorizeFlat,
-                iconScale = if (!applyGlobals) 1f else normalizeGlobalScalePercent(
-                    preferences.getIntValue(GlobalIconScaleKey, 100)) / 100f,
-                iconShape = globalShape,
-                iconShapeCrop = globalShapeCrop,
-                iconShapeScale = normalizeGlobalScalePercent(
-                    preferences.getIntValue(GlobalShapeScaleKey, 100)) / 100f,
+                color = iconColor.toArgb(),
+                bgColor = bgColor.toArgb(),
                 // Keep the stored choices for when PATH is selected again, but hidden controls
                 // must not silently affect a different source/modifier combination.
                 vector = pathOptionsRelevant && preferences.getBooleanValue(IncludeVectorKey),
@@ -205,16 +172,61 @@ data class GenerationOptions(
                 fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
                 textFontPath = FontCatalog.usablePathOrDefault(preferences.getStringValue(TextFontKey)),
                 // Only ADD exists pack-wide; RECOLOR stays a per-app Modifier-tab option.
-                outlineMode = if (applyGlobals && preferences.getBooleanValue(OutlineAddKey)) OutlineMode.ADD else OutlineMode.NONE,
-                outlineWidth = normalizeOutlineWidth(
-                    preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
-                ).toFloat(),
-                outlineColor = preferences.getColorValue(
-                    OutlineColorKey, androidx.compose.ui.graphics.Color.Black).toArgb()
+                outlineMode = OutlineMode.NONE
             )
         }
     }
 }
+
+/** Final global layer, deliberately separate from primary/secondary source generation. */
+fun globalModifierOptions(preferences: Preferences): GenerationOptions {
+    val shape = IconShape.entries.getOrNull(
+        preferences.getIntValue(GlobalShapeKey, IconShape.NONE.ordinal)
+    ) ?: IconShape.NONE
+    val shapeCrop = preferences.getBooleanValue(GlobalShapeCropKey, true)
+    return GenerationOptions(
+        primarySource = Source.NONE,
+        primaryImageEdit = if (preferences.getBooleanValue(GlobalColorizeKey)) {
+            ImageEdit.COLORIZE
+        } else ImageEdit.NONE,
+        primaryTextType = TEXT_TYPE_DEFAULT,
+        primaryIconPack = "",
+        color = preferences.getColorValue(
+            GlobalColorizeColorKey, androidx.compose.ui.graphics.Color.White
+        ).toArgb(),
+        bgColor = if (shape != IconShape.NONE && !shapeCrop) {
+            preferences.getColorValue(
+                GlobalShapeColorKey, androidx.compose.ui.graphics.Color.White
+            ).toArgb()
+        } else android.graphics.Color.TRANSPARENT,
+        vector = false,
+        materialYou = false,
+        themed = false,
+        override = true,
+        colorizeFlat = preferences.getBooleanValue(GlobalColorizeFlatKey),
+        iconScale = normalizeGlobalScalePercent(
+            preferences.getIntValue(GlobalIconScaleKey, 100)
+        ) / 100f,
+        iconShape = shape,
+        iconShapeCrop = shapeCrop,
+        iconShapeScale = normalizeGlobalScalePercent(
+            preferences.getIntValue(GlobalShapeScaleKey, 100)
+        ) / 100f,
+        outlineMode = if (preferences.getBooleanValue(OutlineAddKey)) {
+            OutlineMode.ADD
+        } else OutlineMode.NONE,
+        outlineWidth = normalizeOutlineWidth(
+            preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
+        ).toFloat(),
+        outlineColor = preferences.getColorValue(
+            OutlineColorKey, androidx.compose.ui.graphics.Color.Black
+        ).toArgb()
+    )
+}
+
+fun GenerationOptions.hasVisibleModifierEffect(): Boolean =
+    primaryImageEdit != ImageEdit.NONE || iconScale != 1f ||
+        iconShape != IconShape.NONE || outlineMode != OutlineMode.NONE
 
 /** Letter-case transform for text icons (per-app option; not persisted globally). */
 enum class TextCase { AS_IS, UPPER, LOWER }

@@ -28,6 +28,7 @@ class RenkinPackStore(private val context: Context) {
         val calendarPackName: String?,
         val sourcePackName: String?,
         val isCustom: Boolean,
+        val isLegacy: Boolean,
         // The raw row, so held-back entries (locked packs, reference icons, absent apps)
         // can be written back verbatim on the next save instead of being dropped.
         val row: DbApplication
@@ -44,14 +45,18 @@ class RenkinPackStore(private val context: Context) {
     fun decodeRow(dbApp: DbApplication, defaultColor: Color): SavedEntry {
         // Per-row guard: one corrupt base64/XML record loses that single icon (the row's
         // calendar flags survive) instead of crashing the whole profile load.
+        val hasBase = dbApp.baseDrawable.isNotEmpty()
+        val storedDrawable = if (hasBase) dbApp.baseDrawable else dbApp.drawable
+        val storedIsXml = if (hasBase) dbApp.baseIsXml else dbApp.isXml
+        val storedIsAdaptive = if (hasBase) dbApp.baseIsAdaptiveIcon else dbApp.isAdaptiveIcon
         val icon: IconPackDrawable? = runCatching {
             when {
-                dbApp.drawable.isEmpty() -> null
-                dbApp.isXml -> {
-                    val nodes = XmlDecoder.fromBase64(dbApp.drawable)
+                storedDrawable.isEmpty() -> null
+                storedIsXml -> {
+                    val nodes = XmlDecoder.fromBase64(storedDrawable)
                     XmlNodeParser.parse(context.resources, nodes, defaultColor)
                 }
-                else -> BitmapIconDrawable(bitmapFromBase64(dbApp.drawable), dbApp.isAdaptiveIcon)
+                else -> BitmapIconDrawable(bitmapFromBase64(storedDrawable), storedIsAdaptive)
             }
         }.getOrNull()
         return SavedEntry(
@@ -61,6 +66,7 @@ class RenkinPackStore(private val context: Context) {
             dbApp.calendarPackName.ifEmpty { null },
             dbApp.sourcePackName.ifEmpty { null },
             dbApp.isCustomIcon,
+            dbApp.isLegacyIcon,
             dbApp
         )
     }
@@ -77,20 +83,25 @@ class RenkinPackStore(private val context: Context) {
         preservedRows: Collection<DbApplication> = emptyList()
     ) = withContext(Dispatchers.Default) {
         val dbApps = apps.mapNotNull { app ->
-            val icon = app.createdIcon
-            if (icon == null && !app.calendarEnabled) return@mapNotNull null
+            val rendered = app.createdIcon
+            val base = app.baseIcon ?: rendered
+            if (rendered == null && !app.calendarEnabled) return@mapNotNull null
             DbApplication(
                 app.packageName,
                 app.activityName,
-                icon?.isAdaptiveIcon() ?: false,
-                icon != null && icon !is BitmapIconDrawable,
-                icon?.toDbString() ?: "",
+                rendered?.isAdaptiveIcon() ?: false,
+                rendered != null && rendered !is BitmapIconDrawable,
+                rendered?.toDbString() ?: "",
                 app.calendarEnabled,
                 app.calendarPrefix ?: "",
                 app.calendarPackName ?: "",
                 app.sourcePackName ?: "",
                 profileId,
-                isCustomIcon = app.isCustom
+                isCustomIcon = app.isCustom,
+                isLegacyIcon = app.isLegacy,
+                baseDrawable = base?.toDbString() ?: "",
+                baseIsAdaptiveIcon = base?.isAdaptiveIcon() ?: false,
+                baseIsXml = base != null && base !is BitmapIconDrawable
             )
         }
         val liveKeys = dbApps.map { "${it.packageName}/${it.activityName}" }.toSet()

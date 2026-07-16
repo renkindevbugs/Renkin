@@ -74,11 +74,12 @@ import kotlinx.coroutines.withContext
 
 @Composable
 internal fun PrepareEditVector(app: PackageInfoStruct, state: VectorEditState, onChange: (icon: IconPackDrawable?) -> Unit) {
-    val editedVector = remember(app.createdIcon) { when (app.createdIcon) {
-        is ImageVectorDrawable -> app.createdIcon.deepCopy().applyAndRemoveGroup().toImageVector()
+    val sourceIcon = app.baseIcon ?: app.createdIcon
+    val editedVector = remember(sourceIcon) { when (sourceIcon) {
+        is ImageVectorDrawable -> sourceIcon.deepCopy().applyAndRemoveGroup().toImageVector()
         is InsetIconDrawable -> {
-            if (app.createdIcon.drawable is ImageVectorDrawable)
-                app.createdIcon.drawable.deepCopy().applyAndRemoveGroup().toImageVector()
+            if (sourceIcon.drawable is ImageVectorDrawable)
+                sourceIcon.drawable.deepCopy().applyAndRemoveGroup().toImageVector()
             else
                 ImageVector.createEmptyVector()
         }
@@ -86,8 +87,8 @@ internal fun PrepareEditVector(app: PackageInfoStruct, state: VectorEditState, o
     } }
 
     EditVectorColumn(editedVector, state) {
-        if (app.createdIcon is InsetIconDrawable && it != null) {
-            onChange(InsetIconDrawable(it, app.createdIcon.dimensions, app.createdIcon.fractions))
+        if (sourceIcon is InsetIconDrawable && it != null) {
+            onChange(InsetIconDrawable(it, sourceIcon.dimensions, sourceIcon.fractions))
         } else {
             onChange(it)
         }

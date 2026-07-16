@@ -166,6 +166,28 @@ private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
 val ProfilePrefKeys: List<Preferences.Key<*>> =
     ProfileBooleanPrefKeys + ProfileIntPrefKeys + ProfileStringPrefKeys
 
+/** Commits only the staged Global options keys from [source], under the shared write mutex. */
+suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preferences) {
+    preferenceAccessMutex.withLock {
+        edit { target ->
+            target[GlobalShapeKey] = source.getIntValue(GlobalShapeKey, 0)
+            target[GlobalShapeCropKey] = source.getBooleanValue(GlobalShapeCropKey, true)
+            target[GlobalShapeScaleKey] = source.getIntValue(GlobalShapeScaleKey, 100)
+            target[GlobalShapeColorKey] = source.getStringValue(GlobalShapeColorKey)
+            target[GlobalIconScaleKey] = source.getIntValue(GlobalIconScaleKey, 100)
+            target[OutlineAddKey] = source.getBooleanValue(OutlineAddKey)
+            target[OutlineWidthKey] = source.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
+            target[OutlineColorKey] = source.getStringValue(OutlineColorKey)
+            target[GlobalColorizeKey] = source.getBooleanValue(GlobalColorizeKey)
+            target[GlobalColorizeColorKey] = source.getStringValue(GlobalColorizeColorKey)
+            target[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
+            target[GlobalApplyGeneratedKey] = source.getBooleanValue(GlobalApplyGeneratedKey, true)
+            target[GlobalApplyCustomKey] = source.getBooleanValue(GlobalApplyCustomKey)
+            target[GlobalIncludeEmptyKey] = source.getBooleanValue(GlobalIncludeEmptyKey)
+        }
+    }
+}
+
 /** Serializes the profile-scoped preferences into a JSON snapshot (see [ProfilePrefKeys]). */
 fun Preferences.snapshotProfilePrefs(): String {
     val json = org.json.JSONObject()

@@ -110,6 +110,10 @@ object BackupCodec {
                         .put("sourcePackName", icon.sourcePackName)
                         .put("sourceDrawableName", icon.sourceDrawableName)
                         .put("isCustomIcon", icon.isCustomIcon)
+                        .put("isLegacyIcon", icon.isLegacyIcon)
+                        .put("baseDrawable", icon.baseDrawable)
+                        .put("baseIsAdaptiveIcon", icon.baseIsAdaptiveIcon)
+                        .put("baseIsXml", icon.baseIsXml)
                 )
             }
             p.put("icons", icons)
@@ -199,8 +203,21 @@ object BackupCodec {
                         sourcePackName = icon.optString("sourcePackName"),
                         profileId = profileId,
                         sourceDrawableName = icon.optString("sourceDrawableName"),
-                        // Absent in pre-v11 files — those icons load as generated.
-                        isCustomIcon = icon.optBoolean("isCustomIcon")
+                        // The separate legacy flag below protects pre-classification files.
+                        isCustomIcon = icon.optBoolean("isCustomIcon"),
+                        isLegacyIcon = if (icon.has("isLegacyIcon")) {
+                            icon.optBoolean("isLegacyIcon")
+                        } else {
+                            // Files created before classification cannot be inferred safely.
+                            !icon.has("isCustomIcon")
+                        },
+                        baseDrawable = icon.optString("baseDrawable", icon.getString("drawable")),
+                        baseIsAdaptiveIcon = if (icon.has("baseIsAdaptiveIcon")) {
+                            icon.optBoolean("baseIsAdaptiveIcon")
+                        } else icon.getBoolean("isAdaptiveIcon"),
+                        baseIsXml = if (icon.has("baseIsXml")) {
+                            icon.optBoolean("baseIsXml")
+                        } else icon.getBoolean("isXml")
                     )
                 )
             }

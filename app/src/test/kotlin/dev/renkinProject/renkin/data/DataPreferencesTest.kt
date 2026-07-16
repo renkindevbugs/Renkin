@@ -142,4 +142,32 @@ class DataPreferencesTest {
             scope.cancel()
         }
     }
+
+    @Test
+    fun persistGlobalModifierPrefs_updatesOnlyStagedGlobalKeys() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val store = PreferenceDataStoreFactory.create(scope = scope) {
+            temporaryFolder.root.resolve("global-settings.preferences_pb")
+        }
+        try {
+            store.setStringValue(PrimaryIconPackKey, "keep.pack")
+            val staged = preferencesOf(
+                GlobalIconScaleKey to 80,
+                OutlineAddKey to true,
+                GlobalApplyGeneratedKey to false,
+                GlobalApplyCustomKey to true
+            )
+
+            store.persistGlobalModifierPrefs(staged)
+            val saved = store.getPreferencesAfterPendingWrites()
+
+            assertEquals("keep.pack", saved[PrimaryIconPackKey])
+            assertEquals(80, saved[GlobalIconScaleKey])
+            assertTrue(saved[OutlineAddKey] == true)
+            assertFalse(saved[GlobalApplyGeneratedKey] == true)
+            assertTrue(saved[GlobalApplyCustomKey] == true)
+        } finally {
+            scope.cancel()
+        }
+    }
 }

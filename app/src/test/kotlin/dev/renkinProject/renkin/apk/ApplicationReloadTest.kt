@@ -41,7 +41,10 @@ class ApplicationReloadTest {
         iconId: Int = 0,
         createdIcon: IconPackDrawable? = null,
         calendar: Boolean = false,
-        refreshMade: Boolean = false
+        refreshMade: Boolean = false,
+        custom: Boolean = false,
+        legacy: Boolean = false,
+        baseIcon: IconPackDrawable? = createdIcon
     ) = PackageInfoStruct(
         appName = name,
         packageName = pkg,
@@ -55,13 +58,20 @@ class ApplicationReloadTest {
         sourcePackName = createdIcon?.let { "pack.source" },
         originalName = "$name original",
         isFallback = createdIcon != null,
-        isRefreshMade = refreshMade
+        isRefreshMade = refreshMade,
+        isCustom = custom,
+        isLegacy = legacy,
+        baseIcon = baseIcon
     )
 
     @Test
     fun editedComponent_keepsSessionStateButUsesFreshSystemMetadata() {
         val icon = FakeIcon()
-        val current = app("Old label", "com.app", iconId = 1, createdIcon = icon, calendar = true, refreshMade = true)
+        val base = FakeIcon()
+        val current = app(
+            "Old label", "com.app", iconId = 1, createdIcon = icon, calendar = true,
+            refreshMade = true, custom = true, legacy = true, baseIcon = base
+        )
         val fresh = app("New label", "com.app", iconId = 9)
 
         val merged = mergeApplicationReload(listOf(current), listOf(fresh), setOf(current.key)).single()
@@ -76,6 +86,9 @@ class ApplicationReloadTest {
         assertEquals("day_", merged.calendarPrefix)
         assertTrue(merged.isFallback)
         assertTrue(merged.isRefreshMade)
+        assertTrue(merged.isCustom)
+        assertTrue(merged.isLegacy)
+        assertSame(base, merged.baseIcon)
     }
 
     @Test
@@ -115,5 +128,27 @@ class ApplicationReloadTest {
 
         assertEquals(setOf(edited.key, refreshed.key, removed.key), keys)
         assertFalse("com.uninstalled/com.uninstalled.Main" in keys)
+    }
+
+    @Test
+    fun replacingGlobalRenderNeverReplacesPersistedBase() {
+        val base = FakeIcon()
+        val firstRender = FakeIcon()
+        val secondRender = FakeIcon()
+        val original = app("App", "com.app", createdIcon = firstRender, baseIcon = base)
+
+        val rerendered = original.changeRenderedIcon(secondRender)
+
+        assertSame(secondRender, rerendered.createdIcon)
+        assertSame(base, rerendered.baseIcon)
+    }
+
+    @Test
+    fun globalCategoriesAreIndependentAndLegacyIsAlwaysProtected() {
+        assertTrue(shouldApplyGlobalLayer(false, false, applyGenerated = true, applyCustom = false))
+        assertFalse(shouldApplyGlobalLayer(true, false, applyGenerated = true, applyCustom = false))
+        assertTrue(shouldApplyGlobalLayer(true, false, applyGenerated = false, applyCustom = true))
+        assertFalse(shouldApplyGlobalLayer(false, true, applyGenerated = true, applyCustom = true))
+        assertFalse(shouldApplyGlobalLayer(true, true, applyGenerated = true, applyCustom = true))
     }
 }

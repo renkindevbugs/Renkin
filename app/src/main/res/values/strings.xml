@@ -375,6 +375,8 @@
     <string name="globalToggleEmpty">Without icon</string>
     <string name="globalGeneratedSection">Generated icons · %1$d</string>
     <string name="globalCustomSection">Custom icons · %1$d</string>
+    <string name="globalLegacySection">Existing icons · %1$d</string>
+    <string name="globalLegacyHint">Saved before icon origin tracking. Protected from global changes until refreshed or edited.</string>
     <string name="globalEmptySection">Without an icon · %1$d</string>
     <string name="globalSectionApplies">Modifiers apply</string>
     <string name="globalSectionSkipped">Not affected</string>

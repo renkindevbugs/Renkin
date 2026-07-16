@@ -62,6 +62,8 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -80,9 +82,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
@@ -125,6 +125,7 @@ import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.ui.theme.IconShape as IconTileShape
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -135,6 +136,8 @@ import kotlinx.coroutines.withContext
  */
 @Stable
 internal class GlobalModifierState {
+    var initialized by mutableStateOf(false)
+        private set
     var shape by mutableStateOf(IconShape.NONE)
     var shapeCrop by mutableStateOf(true)
     var shapeScale by mutableFloatStateOf(1f)
@@ -173,17 +176,47 @@ internal class GlobalModifierState {
         applyGenerated = preferences.getBooleanValue(GlobalApplyGeneratedKey, true)
         applyCustom = preferences.getBooleanValue(GlobalApplyCustomKey)
         includeEmpty = preferences.getBooleanValue(GlobalIncludeEmptyKey)
+        initialized = true
     }
 
     /** All values as one comparable list — the screen's dirty check against its baseline. */
-    fun snapshot(): List<Any> = listOf(
+    fun snapshot(): String = listOf(
         shape.ordinal, shapeCrop, (shapeScale * 100).roundToInt(), shapeColor.toArgb(),
         (iconScale * 100).roundToInt(), outlineAdd, outlineWidth.roundToInt(),
         outlineColor.toArgb(), colorize, colorizeColor.toArgb(), colorizeFlat,
         applyGenerated, applyCustom, includeEmpty
-    )
+    ).joinToString("|")
 
-    /** Writes the staged values into [mutable] — shared by [persist] and the empty-slot preview. */
+    private fun restore(snapshot: String) {
+        val values = snapshot.split('|')
+        if (values.size != 14) return
+        runCatching {
+            shape = IconShape.entries[values[0].toInt()]
+            shapeCrop = values[1].toBooleanStrict()
+            shapeScale = values[2].toInt() / 100f
+            shapeColor = Color(values[3].toInt())
+            iconScale = values[4].toInt() / 100f
+            outlineAdd = values[5].toBooleanStrict()
+            outlineWidth = values[6].toInt().toFloat()
+            outlineColor = Color(values[7].toInt())
+            colorize = values[8].toBooleanStrict()
+            colorizeColor = Color(values[9].toInt())
+            colorizeFlat = values[10].toBooleanStrict()
+            applyGenerated = values[11].toBooleanStrict()
+            applyCustom = values[12].toBooleanStrict()
+            includeEmpty = values[13].toBooleanStrict()
+            initialized = true
+        }
+    }
+
+    companion object {
+        val Saver = Saver<GlobalModifierState, String>(
+            save = { it.snapshot() },
+            restore = { snapshot -> GlobalModifierState().apply { restore(snapshot) } }
+        )
+    }
+
+    /** Writes staged values into [mutable] for the preview and ViewModel commit snapshot. */
     private fun writeInto(mutable: androidx.datastore.preferences.core.MutablePreferences) {
         mutable[GlobalShapeKey] = shape.ordinal
         mutable[GlobalShapeCropKey] = shapeCrop
@@ -199,10 +232,6 @@ internal class GlobalModifierState {
         mutable[GlobalApplyGeneratedKey] = applyGenerated
         mutable[GlobalApplyCustomKey] = applyCustom
         mutable[GlobalIncludeEmptyKey] = includeEmpty
-    }
-
-    suspend fun persist(store: DataStore<Preferences>) {
-        store.edit { writeInto(it) }
     }
 
     /**
@@ -243,8 +272,8 @@ internal class GlobalModifierState {
 /**
  * Fullscreen Global options: the refresh-wide generation options (immediate, like the old
  * Advanced options card), the staged global modifiers, and a live preview grid of every icon
- * split into generated / custom / iconless apps. Save bakes the modifiers into the icons and
- * persists them; tapping a tile opens a modifiers-only per-app editor.
+ * split into generated / custom / existing / iconless apps. Save re-renders the global layer
+ * from immutable icon bases and persists the profile; tapping a tile opens a per-app editor.
  */
 @Composable
 fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
@@ -255,12 +284,14 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
     val scope = rememberCoroutineScope()
     val view = LocalView.current
 
-    val state = remember { GlobalModifierState() }
+    val state = rememberSaveable(saver = GlobalModifierState.Saver) { GlobalModifierState() }
     // The baseline snapshot the dirty check compares against; null until seeding completes.
-    var baseline by remember { mutableStateOf<List<Any>?>(null) }
+    var baseline by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
-        state.seedFrom(prefs.data.first())
-        baseline = state.snapshot()
+        if (!state.initialized) {
+            state.seedFrom(prefs.data.first())
+            baseline = state.snapshot()
+        }
     }
 
     val applying = viewModel.globalApplyProgress != null
@@ -277,14 +308,15 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
     val tileOptions = if (state.hasAnyEffect) state.toModifierOptions() else null
     // Empty slots preview a full generation with the staged globals overlaid, so what's shown
     // matches what Save (and a later refresh) actually produces.
-    val emptyOptions = if (state.includeEmpty) {
+    val emptySourceOptions = if (state.includeEmpty) {
         GenerationOptions.fromPreferences(state.overlay(prefsValue), context, override = true)
     } else null
 
     val apps = viewModel.applicationList
     val locked = viewModel.lockedIconKeys
-    val generated = apps.filter { it.createdIcon != null && !it.isCustom }
-    val custom = apps.filter { it.createdIcon != null && it.isCustom }
+    val generated = apps.filter { it.createdIcon != null && !it.isCustom && !it.isLegacy }
+    val custom = apps.filter { it.createdIcon != null && it.isCustom && !it.isLegacy }
+    val legacy = apps.filter { it.createdIcon != null && it.isLegacy }
     val iconless = apps.filter { it.createdIcon == null && it.key !in locked }
 
     var editApp by remember { mutableStateOf<PackageInfoStruct?>(null) }
@@ -334,14 +366,16 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                         onClick = {
                             view.performConfirmHaptic()
                             scope.launch {
-                                state.persist(prefs)
-                                viewModel.applyGlobalModifiers(
-                                    state.toModifierOptions(),
+                                val applied = viewModel.applyGlobalModifiers(
+                                    state.overlay(prefsValue), state.toModifierOptions(),
                                     state.applyGenerated, state.applyCustom, state.includeEmpty
-                                ) { baseline = state.snapshot() }
+                                )
+                                if (applied) {
+                                    baseline = state.snapshot()
+                                }
                             }
                         },
-                        enabled = !applying,
+                        enabled = dirty && !applying,
                         shape = dev.renkinProject.renkin.ui.theme.FieldShape
                     ) {
                         Text(stringResource(if (applying) R.string.globalApplying else R.string.save))
@@ -370,7 +404,7 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    if (generated.isEmpty() && custom.isEmpty() && iconless.isEmpty()) {
+                    if (generated.isEmpty() && custom.isEmpty() && legacy.isEmpty() && iconless.isEmpty()) {
                         item(key = "noIcons", span = { GridItemSpan(maxLineSpan) }) {
                             EmptyState(
                                 icon = Icons.Filled.ImageSearch,
@@ -416,6 +450,21 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                         }
                     }
 
+                    if (legacy.isNotEmpty()) {
+                        item(key = "legacyHeader", span = { GridItemSpan(maxLineSpan) }) {
+                            SectionHeader(
+                                title = stringResource(R.string.globalLegacySection, legacy.size),
+                                applies = false,
+                                hint = androidx.compose.ui.text.AnnotatedString(
+                                    stringResource(R.string.globalLegacyHint)
+                                )
+                            )
+                        }
+                        items(legacy, key = { "l/${it.key}" }) { app ->
+                            IconPreviewTile(app, null, viewModel) { editApp = app }
+                        }
+                    }
+
                     if (iconless.isNotEmpty()) {
                         item(key = "emptyHeader", span = { GridItemSpan(maxLineSpan) }) {
                             SectionHeader(
@@ -424,7 +473,9 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                             )
                         }
                         items(iconless, key = { "e/${it.key}" }) { app ->
-                            GeneratedPreviewTile(app, emptyOptions, viewModel) { editApp = app }
+                            GeneratedPreviewTile(
+                                app, emptySourceOptions, tileOptions, viewModel
+                            ) { editApp = app }
                         }
                     }
                 }
@@ -454,7 +505,7 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                         VerticalDivider()
                         Column(Modifier.weight(1f)) {
                             currentSection?.let { section ->
-                                CurrentSectionBar(section, generated.size, custom.size, iconless.size, state)
+                                CurrentSectionBar(section, generated.size, custom.size, legacy.size, iconless.size, state)
                             }
                             HorizontalDivider()
                             gridContent()
@@ -487,7 +538,7 @@ fun GlobalOptionsScreen(iconPacks: List<IconPack>, onDismiss: () -> Unit) {
                         }
                     }
                     currentSection?.let { section ->
-                        CurrentSectionBar(section, generated.size, custom.size, iconless.size, state)
+                        CurrentSectionBar(section, generated.size, custom.size, legacy.size, iconless.size, state)
                     }
                     HorizontalDivider()
                     gridContent()
@@ -830,12 +881,14 @@ private fun CurrentSectionBar(
     section: Char,
     generatedCount: Int,
     customCount: Int,
+    legacyCount: Int,
     iconlessCount: Int,
     state: GlobalModifierState
 ) {
     val (title, applies) = when (section) {
         'g' -> stringResource(R.string.globalGeneratedSection, generatedCount) to state.applyGenerated
         'c' -> stringResource(R.string.globalCustomSection, customCount) to state.applyCustom
+        'l' -> stringResource(R.string.globalLegacySection, legacyCount) to false
         else -> stringResource(R.string.globalEmptySection, iconlessCount) to state.includeEmpty
     }
     val marker = if (applies) AddedGreen else MaterialTheme.colorScheme.error
@@ -926,9 +979,10 @@ private fun IconPreviewTile(
     showEditBadge: Boolean = false,
     onClick: () -> Unit
 ) {
-    val base = app.createdIcon
+    val base = app.baseIcon ?: app.createdIcon
     // Recomputes when the staged modifiers change; shows the unmodified icon meanwhile.
     val preview by produceState(base, base, options) {
+        delay(120)
         value = if (base != null && options != null) {
             withContext(Dispatchers.Default) {
                 runCatching { viewModel.applyModifier(base, options) }.getOrDefault(base)
@@ -957,13 +1011,20 @@ private fun IconPreviewTile(
 @Composable
 private fun GeneratedPreviewTile(
     app: PackageInfoStruct,
-    options: GenerationOptions?,
+    sourceOptions: GenerationOptions?,
+    modifierOptions: GenerationOptions?,
     viewModel: MainViewModel,
     onClick: () -> Unit
 ) {
-    val preview by produceState<IconPackDrawable?>(null, app.key, options) {
-        value = if (options == null) null else withContext(Dispatchers.Default) {
-            runCatching { viewModel.previewIcon(app, options, null) }.getOrNull()
+    val preview by produceState<IconPackDrawable?>(null, app.key, sourceOptions, modifierOptions) {
+        delay(120)
+        value = if (sourceOptions == null) null else withContext(Dispatchers.Default) {
+            runCatching {
+                val base = viewModel.previewIcon(app, sourceOptions, null)
+                if (base != null && modifierOptions != null) {
+                    viewModel.applyModifier(base, modifierOptions)
+                } else base
+            }.getOrNull()
         }
     }
     PreviewTileFrame(app, showEditBadge = false, onClick = onClick) {
@@ -987,7 +1048,7 @@ private fun GeneratedPreviewTile(
                         .clip(IconTileShape)
                         // Dim only while an actual preview is on its way; with the category
                         // toggled off the launcher icon IS the content.
-                        .alpha(if (options == null) 1f else 0.35f)
+                        .alpha(if (sourceOptions == null) 1f else 0.35f)
                 )
             }
         }
@@ -1068,7 +1129,7 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         runCatching { app.icon.toSafeBitmapOrNull() }.getOrNull()
     }
     val base = remember(app) {
-        app.createdIcon ?: heroBitmap?.let { BitmapIconDrawable(it, false) }
+        app.baseIcon ?: app.createdIcon ?: heroBitmap?.let { BitmapIconDrawable(it, false) }
     }
 
     val options = GenerationOptions(
