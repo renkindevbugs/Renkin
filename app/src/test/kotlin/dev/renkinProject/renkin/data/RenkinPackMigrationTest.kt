@@ -43,9 +43,30 @@ class RenkinPackMigrationTest {
 
     @Test
     fun everyReleasedSchemaMigratesToCurrent() {
-        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11).forEach { version ->
+        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12).forEach { version ->
             RenkinPackDatabase.open(context, historical(version, "from-$version")).useDatabase { database ->
                 database.openHelper.writableDatabase
+            }
+        }
+    }
+
+    @Test
+    fun preV13RowsGetAnEmptyOnlineSourceReference() {
+        val name = historical(12, "v12-source-url") { db ->
+            db.execSQL(
+                "INSERT INTO DbApplication " +
+                    "(packageName, activityName, isAdaptiveIcon, isXml, drawable, profileId) " +
+                    "VALUES ('com.plain', 'com.plain.Main', 0, 0, 'pixels', 1)"
+            )
+        }
+
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            database.openHelper.writableDatabase.query(
+                "SELECT sourceUrl, drawable FROM DbApplication WHERE packageName = 'com.plain'"
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("", cursor.getString(0))
+                assertEquals("pixels", cursor.getString(1))
             }
         }
     }

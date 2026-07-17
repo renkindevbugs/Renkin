@@ -388,7 +388,12 @@ private fun NewSlot(
                             Image(
                                 painter = icon.getPainter(),
                                 contentDescription = null,
-                                modifier = Modifier.fillMaxSize()
+                                // Keep full-viewBox vectors out from under the slot's 2 dp
+                                // border and rounded clip. The enlarged preview has no border,
+                                // so both previews now expose the same complete artwork.
+                                modifier = Modifier
+                                    .padding(2.dp)
+                                    .fillMaxSize()
                             )
                         } else {
                             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

@@ -16,6 +16,8 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.*
 import androidx.compose.ui.unit.Dp
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.center
+import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyModifierTransform
+import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyViewportInset
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.resizeTo
 import dev.renkinProject.renkin.vector.VectorExporter.Companion.toXml
 import dev.renkinProject.renkin.vector.VectorRenderer.Companion.renderToCanvas
@@ -34,18 +36,48 @@ class ImageVectorDrawable(imageVector: ImageVector): IconPackDrawable() {
     /** A detached mutable copy for editors/exporters that transform vectors in place. */
     fun deepCopy(): ImageVectorDrawable = ImageVectorDrawable(toImageVector())
 
-    fun toImageVector(): ImageVector {
-        val builder = ImageVector.Builder(
-            name,
-            defaultWidth,
-            defaultHeight,
-            viewportWidth,
-            viewportHeight,
-            tintColor,
-            tintBlendMode,
-            autoMirror
-        )
+    /**
+     * Applies the Modifier tab's canvas-space position and scale directly to a detached vector.
+     * Baking the transform into path coordinates keeps it resolution-independent without
+     * persisting helper groups that the path editor would have to flatten again after reload.
+     */
+    fun withModifierTransform(scale: Float, offsetX: Float, offsetY: Float): ImageVectorDrawable {
+        return deepCopy().applyModifierTransform(scale, offsetX, offsetY)
+    }
 
+    /** Converts an InsetIconDrawable's margins into an equivalent vector group. */
+    fun withViewportInset(left: Float, top: Float, right: Float, bottom: Float): ImageVectorDrawable? {
+        val scaleX = 1f - left - right
+        val scaleY = 1f - top - bottom
+        if (scaleX <= 0f || scaleY <= 0f) return null
+        return deepCopy().applyViewportInset(left, top, scaleX, scaleY)
+    }
+
+    /** Raster fallback after vector-safe modifiers, without re-centering away a user offset. */
+    fun toModifierBitmap(size: Int = 256): Bitmap {
+        val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        renderToCanvas(Canvas(bitmap), nonScalingStroke = false, targetWidth = size, targetHeight = size)
+        return bitmap
+    }
+
+    private fun newBuilder(): ImageVector.Builder = ImageVector.Builder(
+        name,
+        defaultWidth,
+        defaultHeight,
+        viewportWidth,
+        viewportHeight,
+        tintColor,
+        tintBlendMode,
+        autoMirror
+    )
+
+    fun toImageVector(): ImageVector {
+        val builder = newBuilder()
+        addRootChildren(builder)
+        return builder.build()
+    }
+
+    private fun addRootChildren(builder: ImageVector.Builder) {
         for (child in root.children) {
             if (child is MutableVectorGroup) {
                 toVectorGroup(builder, child)
@@ -55,8 +87,6 @@ class ImageVectorDrawable(imageVector: ImageVector): IconPackDrawable() {
                 toVectorPath(builder, child)
             }
         }
-
-        return builder.build()
     }
 
     private fun toVectorGroup(builder: ImageVector.Builder, mutableVectorGroup: MutableVectorGroup) {
@@ -105,7 +135,20 @@ class ImageVectorDrawable(imageVector: ImageVector): IconPackDrawable() {
     }
 
     override fun draw(canvas: Canvas) {
-        this.renderToCanvas(canvas)
+        val target = bounds
+        if (target.width() <= 0 || target.height() <= 0) {
+            this.renderToCanvas(canvas)
+            return
+        }
+
+        // Wrappers such as InsetDrawable communicate their scale through child bounds. The
+        // custom renderer previously ignored those bounds and always used the full canvas,
+        // so raster-only modifiers made inset vectors much larger than their Compose preview.
+        val checkpoint = canvas.save()
+        canvas.translate(target.left.toFloat(), target.top.toFloat())
+        canvas.clipRect(0, 0, target.width(), target.height())
+        this.renderToCanvas(canvas, targetWidth = target.width(), targetHeight = target.height())
+        canvas.restoreToCount(checkpoint)
     }
 
     // The custom vector renderer ignores alpha / colour filter, so these are no-ops rather

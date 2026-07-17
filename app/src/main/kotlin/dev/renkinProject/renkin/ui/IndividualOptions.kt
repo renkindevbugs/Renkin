@@ -52,6 +52,7 @@ import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.icon.creator.TextCase
 import android.graphics.drawable.AdaptiveIconDrawable
 import androidx.compose.ui.platform.LocalContext
+import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.haveMonochrome
 import dev.renkinProject.renkin.drawable.isAdaptiveIconDrawable
@@ -228,6 +229,7 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
             // Only skip when there's truly nothing to apply — scale, shape and outline are
             // applied by applyModifier too, so those changes with no image-edit must run it.
             options.primaryImageEdit == ImageEdit.NONE && options.iconScale == 1f
+                && options.iconOffsetX == 0f && options.iconOffsetY == 0f
                 && options.iconShape == IconShape.NONE
                 && options.outlineMode == OutlineMode.NONE -> base
             else -> trackGeneration { builder.applyModifier(base, options) }
@@ -246,7 +248,7 @@ fun OptionsDialog(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?) -> Unit,
+    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?, sourceUrl: String?) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
@@ -295,6 +297,11 @@ fun OptionsDialog(
     // Hoisted above the tab AnimatedContent so leaving the vector tab and coming back
     // keeps the user's paths instead of disposing the editor and resetting them.
     val vectorEditState = remember { VectorEditState() }
+    // Attribution URL for an online icon imported "as image" (it lands in the upload draft,
+    // not the vector editor) and the gallery file it was saved as. The attribution is
+    // dropped as soon as the gallery selects any other picture.
+    var onlineImageUrl by remember { mutableStateOf<String?>(null) }
+    var onlineImagePath by remember { mutableStateOf<String?>(null) }
     var showConfirmClear by remember { mutableStateOf(false) }
     // Enter-always app bar: the header (close / name / overflow) collapses pixel-by-pixel as the
     // icon list scrolls down and slides back in on scroll up.
@@ -505,7 +512,15 @@ fun OptionsDialog(
                             pickedPack = iconPack.takeIf { customIconList.isNotEmpty() },
                             existingPack = app.sourcePackName
                         )
-                        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, sourcePackToPersist)
+                        // Online-library attribution follows how the icon was imported: a
+                        // confirmed vector carries the vector tab's URL, an "as image"
+                        // import the upload draft's; other origins have no online source.
+                        val sourceUrlToPersist = when (draft.origin) {
+                            IconOrigin.VECTOR -> vectorEditState.sourceUrl
+                            IconOrigin.UPLOAD -> onlineImageUrl
+                            else -> null
+                        }
+                        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, sourcePackToPersist, sourceUrlToPersist)
                     },
                     scrollBehavior = headerScrollBehavior,
                     labelExpand = labelExpand,
@@ -649,9 +664,17 @@ fun OptionsDialog(
                             )
                             // The static tabs don't scroll under the header — plain top padding.
                             1 -> Box(Modifier.fillMaxSize().padding(headerPadding)) {
-                                UploadColumn(app = app, snackbarHostState = snackbarHostState) {
-                                    draft.uploadBase = it
-                                    if (it != null) draft.origin = IconOrigin.UPLOAD
+                                UploadColumn(
+                                    app = app,
+                                    snackbarHostState = snackbarHostState,
+                                    initialSelectedPath = onlineImagePath
+                                ) { icon, path ->
+                                    draft.uploadBase = icon
+                                    // A manual gallery pick replaces an online "as image"
+                                    // import, so its attribution must not outlive the
+                                    // picture; re-selecting the online file keeps it.
+                                    if (path != onlineImagePath) onlineImageUrl = null
+                                    if (icon != null) draft.origin = IconOrigin.UPLOAD
                                 }
                             }
                             2 -> Box(Modifier.fillMaxSize().padding(headerPadding)) { ModifierTab(
@@ -689,7 +712,20 @@ fun OptionsDialog(
                                 }
                             ) }
                             else -> Box(Modifier.fillMaxSize().padding(headerPadding)) {
-                                PrepareEditVector(app, vectorEditState) {
+                                PrepareEditVector(
+                                    app = app,
+                                    state = vectorEditState,
+                                    onImportedImage = { imported, url ->
+                                        // "Use as image" from the online browser: route the
+                                        // full-size raster through the upload pipeline so the
+                                        // shared modifier applies like any uploaded picture;
+                                        // the gallery copy arrives preselected in Upload.
+                                        draft.uploadBase = BitmapIconDrawable(imported.bitmap, false)
+                                        draft.origin = IconOrigin.UPLOAD
+                                        onlineImageUrl = url
+                                        onlineImagePath = imported.galleryPath
+                                    }
+                                ) {
                                     draft.vectorIcon = it
                                     if (it != null) draft.origin = IconOrigin.VECTOR
                                 }

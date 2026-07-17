@@ -46,7 +46,12 @@ class PackageInfoStruct(
     /** Existing row whose generated-vs-custom origin predates the persisted classification. */
     val isLegacy: Boolean = false,
     /** Unmodified icon persisted to Room; [createdIcon] is its current global render. */
-    val baseIcon: IconPackDrawable? = createdIcon
+    val baseIcon: IconPackDrawable? = createdIcon,
+    /**
+     * Attribution reference for icons picked from an online FOSS library: the source file's
+     * public URL. Informational only — the drawable itself is stored; this records origin.
+     */
+    val sourceUrl: String? = null
 ) : Comparable<PackageInfoStruct> {
     override fun equals(other: Any?): Boolean {
         if (other is PackageInfoStruct) {
@@ -74,9 +79,10 @@ class PackageInfoStruct(
         isRefreshMade: Boolean = this.isRefreshMade,
         isCustom: Boolean = this.isCustom,
         isLegacy: Boolean = this.isLegacy,
-        baseIcon: IconPackDrawable? = this.baseIcon
+        baseIcon: IconPackDrawable? = this.baseIcon,
+        sourceUrl: String? = this.sourceUrl
     ): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon)
+        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon, sourceUrl)
 
     // Clearing the icon (createdIcon == null) also drops the recorded source pack and the
     // refresh-made flag, so a removed icon never lingers in the usage counts.
@@ -87,7 +93,10 @@ class PackageInfoStruct(
         isRefreshMade: Boolean = this.isRefreshMade,
         isCustom: Boolean = this.isCustom,
         isLegacy: Boolean = this.isLegacy,
-        baseIcon: IconPackDrawable? = createdIcon
+        baseIcon: IconPackDrawable? = createdIcon,
+        // A replaced icon must not inherit the previous one's online attribution, so the
+        // reference travels explicitly with each new icon (null unless it came from a library).
+        sourceUrl: String? = null
     ): PackageInfoStruct =
         copyWith(
             createdIcon = createdIcon,
@@ -96,7 +105,8 @@ class PackageInfoStruct(
             isRefreshMade = if (createdIcon == null) false else isRefreshMade,
             isCustom = if (createdIcon == null) false else isCustom,
             isLegacy = if (createdIcon == null) false else isLegacy,
-            baseIcon = if (createdIcon == null) null else baseIcon
+            baseIcon = if (createdIcon == null) null else baseIcon,
+            sourceUrl = if (createdIcon == null) null else sourceUrl
         )
 
     /** Replaces only the derived global render and keeps the persisted base untouched. */

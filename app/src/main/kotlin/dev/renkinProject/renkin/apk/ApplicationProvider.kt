@@ -27,6 +27,7 @@ import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getDefaultBackgroundColor
 import dev.renkinProject.renkin.data.getDefaultIconColor
 import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.data.online.onlineAttributionLabel
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
@@ -495,7 +496,8 @@ class ApplicationProvider(private val context: Context) {
                         sourcePackName = entry.sourcePackName,
                         isCustom = entry.isCustom,
                         isLegacy = entry.isLegacy,
-                        baseIcon = baseIcon
+                        baseIcon = baseIcon,
+                        sourceUrl = entry.sourceUrl
                     ).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
                 }
                 else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
@@ -594,7 +596,8 @@ class ApplicationProvider(private val context: Context) {
                     sourcePackName = entry.sourcePackName,
                     isCustom = entry.isCustom,
                     isLegacy = entry.isLegacy,
-                    baseIcon = baseIcon
+                    baseIcon = baseIcon,
+                    sourceUrl = entry.sourceUrl
                 )
                     .changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
             )
@@ -743,7 +746,7 @@ class ApplicationProvider(private val context: Context) {
             ).groupingBy { it }.eachCount()
         val installed = iconPacks.associateBy { it.packageName }
         val cachedLabels = packRepo.verdicts(counts.keys.filter { it !in installed })
-        (installed.keys + counts.keys).distinct().map { pack ->
+        val packRows = (installed.keys + counts.keys).distinct().map { pack ->
             PackUsage(
                 packageName = pack,
                 label = installed[pack]?.applicationName
@@ -752,7 +755,19 @@ class ApplicationProvider(private val context: Context) {
                 count = counts[pack] ?: 0,
                 installed = pack in installed
             )
-        }.sortedWith(compareByDescending<PackUsage> { it.count }.thenBy { it.label.lowercase() })
+        }
+        // Online FOSS libraries count like packs — attributed by the stored source URL
+        // (curated sets by name, community repos as "owner/repo"). "installed" on purpose:
+        // there is nothing to install, so no missing-pack scare.
+        val onlineRows = applicationList
+            .mapNotNull { it.sourceUrl?.let(::onlineAttributionLabel) }
+            .groupingBy { it }
+            .eachCount()
+            .map { (label, count) ->
+                PackUsage("online:$label", label, count, installed = true)
+            }
+        (packRows + onlineRows)
+            .sortedWith(compareByDescending<PackUsage> { it.count }.thenBy { it.label.lowercase() })
     }
 
     /**

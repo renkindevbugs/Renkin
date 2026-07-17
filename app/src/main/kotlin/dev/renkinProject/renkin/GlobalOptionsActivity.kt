@@ -339,7 +339,9 @@ class GlobalOptionsViewModel @Inject constructor(
                 isRefreshMade = false,
                 isCustom = true,
                 isLegacy = false,
-                baseIcon = icon
+                baseIcon = icon,
+                // A modifier tweak reworks the same artwork — its attribution stays.
+                sourceUrl = app.sourceUrl
             )
         )
         editedKeys += app.key

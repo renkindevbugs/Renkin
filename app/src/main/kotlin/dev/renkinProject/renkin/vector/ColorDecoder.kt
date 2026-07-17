@@ -98,5 +98,60 @@ class ColorDecoder(val resources: Resources, private val defaultColor: Color = C
             val decoder = ColorDecoder(resources, defaultColor)
             return decoder.decode(value)
         }
+
+        /** Parses SVG/CSS solid colours without applying Android's different 8-digit hex order. */
+        fun decodeSvgCss(value: String): Color {
+            val raw = value.trim().lowercase()
+            if (raw == "transparent") return Color.Transparent
+            if (raw.startsWith("#")) return decodeSvgHex(raw)
+            if (raw.startsWith("rgb(")) return decodeSvgRgb(raw, hasAlpha = false)
+            if (raw.startsWith("rgba(")) return decodeSvgRgb(raw, hasAlpha = true)
+            return runCatching { Color(android.graphics.Color.parseColor(raw)) }
+                .getOrDefault(Color.Unspecified)
+        }
+
+        private fun decodeSvgHex(value: String): Color = runCatching {
+            val digits = value.drop(1)
+            fun hex(pair: String) = pair.toInt(16) / 255f
+            when (digits.length) {
+                3 -> Color(hex("${digits[0]}${digits[0]}"), hex("${digits[1]}${digits[1]}"), hex("${digits[2]}${digits[2]}"))
+                4 -> Color(
+                    hex("${digits[0]}${digits[0]}"),
+                    hex("${digits[1]}${digits[1]}"),
+                    hex("${digits[2]}${digits[2]}"),
+                    hex("${digits[3]}${digits[3]}")
+                )
+                6 -> Color(hex(digits.substring(0, 2)), hex(digits.substring(2, 4)), hex(digits.substring(4, 6)))
+                8 -> Color(
+                    hex(digits.substring(0, 2)),
+                    hex(digits.substring(2, 4)),
+                    hex(digits.substring(4, 6)),
+                    hex(digits.substring(6, 8))
+                )
+                else -> Color.Unspecified
+            }
+        }.getOrDefault(Color.Unspecified)
+
+        private fun decodeSvgRgb(value: String, hasAlpha: Boolean): Color = runCatching {
+            val components = value.substringAfter('(').substringBeforeLast(')')
+                .split(',').map(String::trim)
+            if (components.size != if (hasAlpha) 4 else 3) return Color.Unspecified
+            fun channel(component: String): Float = if (component.endsWith('%')) {
+                component.dropLast(1).toFloat().div(100f)
+            } else {
+                component.toFloat().div(255f)
+            }.coerceIn(0f, 1f)
+            fun alpha(component: String): Float = if (component.endsWith('%')) {
+                component.dropLast(1).toFloat().div(100f)
+            } else {
+                component.toFloat()
+            }.coerceIn(0f, 1f)
+            Color(
+                channel(components[0]),
+                channel(components[1]),
+                channel(components[2]),
+                if (hasAlpha) alpha(components[3]) else 1f
+            )
+        }.getOrDefault(Color.Unspecified)
     }
 }
