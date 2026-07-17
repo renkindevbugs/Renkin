@@ -86,6 +86,7 @@ class OnlineIconRepository @Inject constructor(
     private val svgMemory = object : LruCache<String, String>(SVG_MEMORY_BYTES) {
         override fun sizeOf(key: String, value: String): Int = value.toByteArray(Charsets.UTF_8).size
     }
+    private val searchMemory = LruCache<String, List<OnlineIcon>>(SEARCH_MEMORY_QUERIES)
 
     private val cacheRoot: File
         get() = File(context.cacheDir, "online-icons").apply { mkdirs() }
@@ -113,6 +114,22 @@ class OnlineIconRepository @Inject constructor(
                 parses = { parseCollection(it) != null }
             )?.let(::parseCollection)?.also { memoryIndexes[collection.prefix] = it }
         }
+    }
+
+    /**
+     * Cross-set icon search through the API — matches icon NAMES across every set at once,
+     * like the search box on iconify.design. Memory-cached per query for the session; an
+     * empty list is a valid "no matches", null means the request failed.
+     */
+    suspend fun search(query: String): List<OnlineIcon>? = withContext(Dispatchers.IO) {
+        val key = query.trim().lowercase()
+        searchMemory.get(key)?.let { return@withContext it }
+        val json = httpGetText(
+            "https://api.iconify.design/search?query=" +
+                URLEncoder.encode(key, "UTF-8") + "&limit=$SEARCH_LIMIT",
+            MAX_INDEX_BYTES
+        ) ?: return@withContext null
+        parseSearch(json)?.also { searchMemory.put(key, it) }
     }
 
     /** The icon's SVG markup, from the per-icon disk cache or the API. */
@@ -183,6 +200,24 @@ class OnlineIconRepository @Inject constructor(
         private const val MAX_SVG_BYTES = 512 * 1024
         private const val SVG_MEMORY_BYTES = 2 * 1024 * 1024
         private const val SVG_FETCH_CONCURRENCY = 6
+        private const val SEARCH_LIMIT = 120
+        private const val SEARCH_MEMORY_QUERIES = 24
+
+        /**
+         * Parses a /search response ({"icons":["prefix:name",…]}) into icons. Null when the
+         * JSON is unreadable; an empty array is a legitimate empty result.
+         */
+        fun parseSearch(json: String): List<OnlineIcon>? = runCatching {
+            val array = JSONObject(json).optJSONArray("icons") ?: return null
+            val icons = mutableListOf<OnlineIcon>()
+            for (i in 0 until array.length()) {
+                val full = array.optString(i)
+                val split = full.indexOf(':')
+                if (split <= 0 || split >= full.length - 1) continue
+                icons.add(OnlineIcon(full.substring(0, split), full.substring(split + 1)))
+            }
+            icons.toList()
+        }.getOrNull()
 
         internal fun isWellFormedSvg(markup: String): Boolean = runCatching {
             val parser = Xml.newPullParser().apply { setInput(StringReader(markup)) }

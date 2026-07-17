@@ -140,28 +140,31 @@ internal fun OnlineIconBrowserDialog(
                     }
                 }
 
+                // One import path for every surface an icon can be tapped on (set grid and
+                // the cross-set search results).
+                val pickIcon: (OnlineIcon) -> Unit = { icon ->
+                    if (!importing) {
+                        importing = true
+                        scope.launch {
+                            val imported = viewModel.importedSvg(icon)
+                            importing = false
+                            if (imported == null) {
+                                toaster.show(importFailedMessage)
+                            } else {
+                                viewModel.endSession()
+                                onPicked(imported, icon.svgUrl)
+                            }
+                        }
+                    }
+                }
                 val current = viewModel.selectedCollection
                 if (current == null) {
-                    CollectionList(viewModel)
+                    CollectionList(viewModel, enabled = !importing, onPick = pickIcon)
                 } else {
                     CollectionGrid(
                         viewModel = viewModel,
                         enabled = !importing,
-                        onPick = { icon ->
-                            if (!importing) {
-                                importing = true
-                                scope.launch {
-                                    val imported = viewModel.importedSvg(icon)
-                                    importing = false
-                                    if (imported == null) {
-                                        toaster.show(importFailedMessage)
-                                    } else {
-                                        viewModel.endSession()
-                                        onPicked(imported, icon.svgUrl)
-                                    }
-                                }
-                            }
-                        }
+                        onPick = pickIcon
                     )
                 }
             }
@@ -176,7 +179,9 @@ internal fun OnlineIconBrowserDialog(
  */
 @Composable
 private fun CollectionList(
-    viewModel: OnlineIconBrowserViewModel
+    viewModel: OnlineIconBrowserViewModel,
+    enabled: Boolean,
+    onPick: (OnlineIcon) -> Unit
 ) {
     val collections = viewModel.collections
     val query = viewModel.collectionQuery
@@ -204,10 +209,18 @@ private fun CollectionList(
     Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
         SearchField(
             value = query,
-            onValueChange = { viewModel.collectionQuery = it },
+            onValueChange = viewModel::onCollectionQueryChange,
             modifier = Modifier.fillMaxWidth(),
             placeholder = stringResource(R.string.onlineFilterSets)
         )
+    }
+    // Two or more characters flip the field from "filter the set list" to a cross-set icon
+    // search through the API — results show the icon with the set it comes from, like the
+    // search on iconify.design.
+    if (viewModel.searchActive) {
+        HorizontalDivider()
+        SearchResults(viewModel, enabled, onPick)
+        return
     }
     // Palette toggle + category chips in one horizontally scrolling row, like the site's
     // filter bar. The palette chips sit first — they're the ones users reach for.
@@ -300,6 +313,67 @@ private fun CollectionList(
                             filterScrollState.value
                         )
                     }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Cross-set search results as a grid of icons, each labelled with its name and the set it
+ * belongs to — tapping imports it directly, no need to know which set to look in.
+ */
+@Composable
+private fun SearchResults(
+    viewModel: OnlineIconBrowserViewModel,
+    enabled: Boolean,
+    onPick: (OnlineIcon) -> Unit
+) {
+    val results = viewModel.searchResults
+    val setNames = remember(viewModel.collections) {
+        viewModel.collections.orEmpty().associate { it.prefix to it.name }
+    }
+    when {
+        viewModel.searching || (results == null && !viewModel.searchFailed) -> Box(
+            Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+        }
+
+        viewModel.searchFailed -> EmptyState(
+            icon = Icons.Filled.CloudOff,
+            text = stringResource(R.string.onlineIconsLoadFailed),
+            modifier = Modifier.fillMaxSize(),
+            actionLabel = stringResource(R.string.reload),
+            onAction = viewModel::retrySearch
+        )
+
+        results.isNullOrEmpty() -> EmptyState(
+            icon = Icons.Filled.SearchOff,
+            text = stringResource(R.string.noIconsFound),
+            modifier = Modifier.fillMaxSize()
+        )
+
+        else -> {
+            val gridState = rememberLazyGridState()
+            LazyVerticalGrid(
+                state = gridState,
+                columns = GridCells.Adaptive(96.dp),
+                contentPadding = PaddingValues(12.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawVerticalScrollbar(gridState)
+            ) {
+                items(results, key = { "${it.prefix}/${it.name}" }) { icon ->
+                    OnlineIconTile(
+                        icon,
+                        viewModel,
+                        enabled = enabled,
+                        subLabel = setNames[icon.prefix] ?: icon.prefix
+                    ) { onPick(icon) }
                 }
             }
         }
@@ -448,12 +522,16 @@ private fun CollectionGrid(
     }
 }
 
-/** One grid tile: lazily fetches (disk-cached) and renders the icon's SVG, name below. */
+/**
+ * One grid tile: lazily fetches (disk-cached) and renders the icon's SVG, name below —
+ * plus the set name ([subLabel]) in the cross-set search results.
+ */
 @Composable
 private fun OnlineIconTile(
     icon: OnlineIcon,
     viewModel: OnlineIconBrowserViewModel,
     enabled: Boolean,
+    subLabel: String? = null,
     onClick: () -> Unit
 ) {
     val tint = MaterialTheme.colorScheme.onSurface
@@ -494,6 +572,17 @@ private fun OnlineIconTile(
                 .padding(top = 4.dp)
                 .fillMaxWidth()
         )
+        if (subLabel != null) {
+            Text(
+                text = subLabel,
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
     }
 }
 

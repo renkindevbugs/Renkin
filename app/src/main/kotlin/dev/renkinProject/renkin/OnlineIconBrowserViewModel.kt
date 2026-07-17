@@ -14,6 +14,8 @@ import dev.renkinProject.renkin.data.online.OnlineIconRepository
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -35,9 +37,47 @@ class OnlineIconBrowserViewModel @Inject constructor(
         private set
 
     var collectionQuery by mutableStateOf("")
+        private set
     var category by mutableStateOf<String?>(null)
     var palette by mutableStateOf<Boolean?>(null)
     var iconQuery by mutableStateOf("")
+
+    // Cross-set search (the list screen's field doubles as a global icon search): null while
+    // idle/typing, empty list = no matches. Debounced so every keystroke doesn't hit the API.
+    var searchResults: List<OnlineIcon>? by mutableStateOf(null)
+        private set
+    var searchFailed by mutableStateOf(false)
+        private set
+    var searching by mutableStateOf(false)
+        private set
+    private var searchJob: Job? = null
+
+    /** True once the query is long enough to mean "search icons" rather than "filter sets". */
+    val searchActive: Boolean get() = collectionQuery.trim().length >= MIN_SEARCH_LENGTH
+
+    fun onCollectionQueryChange(value: String) {
+        collectionQuery = value
+        searchJob?.cancel()
+        val query = value.trim()
+        if (query.length < MIN_SEARCH_LENGTH) {
+            searchResults = null
+            searchFailed = false
+            searching = false
+            return
+        }
+        searching = true
+        searchFailed = false
+        searchJob = viewModelScope.launch {
+            delay(SEARCH_DEBOUNCE_MS)
+            val results = repository.search(query)
+            if (!sessionActive || collectionQuery.trim() != query) return@launch
+            searchResults = results
+            searchFailed = results == null
+            searching = false
+        }
+    }
+
+    fun retrySearch() = onCollectionQueryChange(collectionQuery)
 
     var collectionListIndex by mutableIntStateOf(0)
         private set
@@ -131,6 +171,11 @@ class OnlineIconBrowserViewModel @Inject constructor(
         category = null
         palette = null
         iconQuery = ""
+        searchJob?.cancel()
+        searchJob = null
+        searchResults = null
+        searchFailed = false
+        searching = false
         collectionListIndex = 0
         collectionListOffset = 0
         filterRowOffset = 0
@@ -138,5 +183,7 @@ class OnlineIconBrowserViewModel @Inject constructor(
 
     private companion object {
         const val PARSED_SVG_COUNT = 160
+        const val MIN_SEARCH_LENGTH = 2
+        const val SEARCH_DEBOUNCE_MS = 350L
     }
 }

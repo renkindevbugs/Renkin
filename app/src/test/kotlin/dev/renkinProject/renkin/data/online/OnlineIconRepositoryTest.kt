@@ -84,6 +84,18 @@ class OnlineIconRepositoryTest {
     }
 
     @Test
+    fun parseSearch_readsPrefixedNamesAndAllowsEmptyResults() {
+        val icons = OnlineIconRepository.parseSearch(
+            """{"icons":["mdi:home","tabler:anchor","broken","also:",":nope"],"total":2}"""
+        )!!
+
+        assertEquals(listOf("mdi" to "home", "tabler" to "anchor"), icons.map { it.prefix to it.name })
+        assertEquals(emptyList<OnlineIcon>(), OnlineIconRepository.parseSearch("""{"icons":[]}"""))
+        assertNull(OnlineIconRepository.parseSearch("""{"total":0}"""))
+        assertNull(OnlineIconRepository.parseSearch("not json"))
+    }
+
+    @Test
     fun svgCacheValidationRejectsPartialOrNonSvgMarkup() {
         assertTrue(OnlineIconRepository.isWellFormedSvg("<svg viewBox=\"0 0 1 1\"><path d=\"M0 0\"/></svg>"))
         assertFalse(OnlineIconRepository.isWellFormedSvg("<svg><path>"))

@@ -369,7 +369,7 @@
     <string name="onlineIconsTitle">Online icons</string>
     <string name="onlineIconsButton">Online</string>
     <string name="onlineIconsLoadFailed">Couldn\'t load the icon list. Check your connection and try again.</string>
-    <string name="onlineFilterSets">Filter icon sets…</string>
+    <string name="onlineFilterSets">Search icons or filter sets…</string>
     <string name="onlineFilterColor">Colour</string>
     <string name="onlineFilterMono">Monochrome</string>
     <string name="onlineSetCount">%1$d icons</string>
