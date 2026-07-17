@@ -96,6 +96,9 @@ class MainViewModel @Inject constructor(
     /** True once the app list has finished loading. */
     val applicationsLoaded: Boolean get() = appProvider.applicationsLoaded
 
+    /** True once apps, icon packs AND the saved profile icons have all loaded (cold start). */
+    val startupComplete: Boolean get() = appProvider.startupComplete
+
     // Keys ("package/activity") of the apps already in the last built/saved pack.
     // An app with an icon whose key is NOT here is "added" (pending build); a key here
     // whose app no longer has an icon is "removed". Reloaded after each successful build,

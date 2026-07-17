@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.util.LruCache
 import androidx.compose.runtime.getValue
@@ -11,6 +12,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIcon
 import dev.renkinProject.renkin.data.online.OnlineIconRepository
@@ -40,10 +43,18 @@ sealed interface OnlineIconImport {
     data object LoadFailed : OnlineIconImport
 }
 
+/**
+ * An online icon imported "as image": the full-size raster plus, when the disk write
+ * succeeded, the upload-gallery copy it was saved as (so the picture stays reusable like
+ * any uploaded image).
+ */
+data class OnlineImageImport(val bitmap: Bitmap, val galleryPath: String?)
+
 /** Owns one open Online Icons browsing session; closing the browser explicitly resets it. */
 @HiltViewModel
 class OnlineIconBrowserViewModel @Inject constructor(
-    private val repository: OnlineIconRepository
+    private val repository: OnlineIconRepository,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
 
     var selectedCollection: IconifyCollection? by mutableStateOf(null)
@@ -191,13 +202,19 @@ class OnlineIconBrowserViewModel @Inject constructor(
 
     /**
      * Full-size raster for "use as image": the icon exactly as its SVG paints it, at the
-     * same resolution the upload gallery imports at. Not cached — it's a one-off on confirm.
+     * same resolution the upload gallery imports at — and saved into the gallery so it can
+     * be reused like any uploaded picture. A failed disk write still imports the bitmap
+     * (galleryPath null); only fetch/render failures return null.
      */
-    suspend fun importImage(icon: OnlineIcon): Bitmap? {
+    suspend fun importImage(icon: OnlineIcon): OnlineImageImport? {
         val markup = repository.svg(icon) ?: return null
-        return withContext(Dispatchers.Default) {
+        val bitmap = withContext(Dispatchers.Default) {
             SvgRasterizer.rasterize(markup, IMAGE_IMPORT_SIZE)
+        } ?: return null
+        val saved = withContext(Dispatchers.IO) {
+            runCatching { UploadedImageStore.save(context, bitmap) }.getOrNull()
         }
+        return OnlineImageImport(bitmap, saved?.absolutePath)
     }
 
     /** Import resolution for a tapped icon: distinguishes "couldn't fetch" from "fetched,

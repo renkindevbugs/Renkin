@@ -516,9 +516,11 @@ fun ApplicationList(
         if (edited.isNotEmpty() || applied) viewModel.onGlobalOptionsClosed(edited, applied)
     }
 
-    // The app list is loaded off the main thread at startup; show a spinner until
-    // it arrives instead of a blank screen that looks frozen
-    if (!viewModel.applicationsLoaded && applications.isEmpty()) {
+    // Startup loads apps, then icon packs, then the profile's saved icons — all off the main
+    // thread. Hold the spinner until ALL of it is done: revealing the list earlier shows rows
+    // whose icons pop in seconds later, because the per-row bitmap decodes queue behind the
+    // pack/DB loading still running on the same worker pool.
+    if (!viewModel.startupComplete) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             LoadingIndicator(color = MaterialTheme.colorScheme.primary)
         }

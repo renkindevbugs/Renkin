@@ -379,7 +379,7 @@
     <string name="onlineIconLoadFailed">Couldn\'t download this icon. Check your connection and try again.</string>
     <string name="onlineIconUse">Use icon</string>
     <string name="onlineIconUseAsImage">Use as image</string>
-    <string name="onlineIconImageNote">This icon uses gradients or effects that can\'t be edited as vector paths — **Use as image** adds it as a picture instead. Modifiers still apply.</string>
+    <string name="onlineIconImageNote">This icon uses gradients or effects that can\'t be edited as vector paths — **Use as image** saves it to your uploaded images and uses it as a picture. Modifiers still apply.</string>
     <string name="onlineIconsSetting">Online icon libraries (BETA)</string>
     <string name="onlineIconsSettingDesc">Browse 200+ free, open-source SVG icon sets in the icon editor\'s Vector tab (via the Iconify API). Only the set list and the icons you view are downloaded.</string>
     <string name="globalExperimentalTitle">Global options is experimental</string>

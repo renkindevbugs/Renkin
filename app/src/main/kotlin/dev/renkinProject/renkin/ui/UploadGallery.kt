@@ -94,10 +94,17 @@ const val MIME_TYPE_IMAGE = "image/*"
 fun UploadColumn(app: PackageInfoStruct,
                  // The edit dialog's snackbar surface — deleting images offers Undo through it.
                  snackbarHostState: SnackbarHostState,
-                 onChange: (icon: IconPackDrawable?) -> Unit) {
+                 // Gallery image to arrive selected (an online "as image" import); a new value
+                 // re-keys the selection so the tab reflects the freshly saved picture.
+                 initialSelectedPath: String? = null,
+                 // The selected file's path travels with the icon so the caller can tell the
+                 // online import apart from a manual gallery pick (attribution bookkeeping).
+                 onChange: (icon: IconPackDrawable?, path: String?) -> Unit) {
     var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
     var zoomLevel by rememberSaveable { mutableFloatStateOf(1f) }
-    var selectedImagePath by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedImagePath by rememberSaveable(initialSelectedPath) {
+        mutableStateOf(initialSelectedPath)
+    }
     var savedImages by remember { mutableStateOf<List<File>>(emptyList()) }
     var uploadedImage by remember { mutableStateOf(null as Bitmap?) }
     var mask by remember { mutableStateOf(null as Bitmap?) }
@@ -198,7 +205,7 @@ fun UploadColumn(app: PackageInfoStruct,
         val path = selectedImagePath
         if (path == null) {
             uploadedImage = null
-            onChange(null)
+            onChange(null, null)
             return@LaunchedEffect
         }
         val bitmap = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path) }
@@ -210,7 +217,7 @@ fun UploadColumn(app: PackageInfoStruct,
             // Never leave the previously selected bitmap active under a corrupt file's highlight.
             uploadedImage = null
             mask = null
-            onChange(null)
+            onChange(null, null)
             selectedImagePath = null
             toaster.show(uploadErrorMessage)
         }
@@ -278,7 +285,7 @@ fun UploadColumn(app: PackageInfoStruct,
                             zoomBitmap(editedImage, zoomLevel)
                         }
                         LaunchedEffect(zoomedImage, asAdaptiveIcon) {
-                            onChange(BitmapIconDrawable(zoomedImage, asAdaptiveIcon))
+                            onChange(BitmapIconDrawable(zoomedImage, asAdaptiveIcon), selectedImagePath)
                         }
 
                         // Editor lives in a rounded card for a cleaner, modern look

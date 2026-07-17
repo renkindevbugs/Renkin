@@ -69,6 +69,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.OnlineIconBrowserViewModel
 import dev.renkinProject.renkin.OnlineIconImport
 import dev.renkinProject.renkin.OnlineIconPreview
+import dev.renkinProject.renkin.OnlineImageImport
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIcon
@@ -90,7 +91,7 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun OnlineIconBrowserDialog(
     onPicked: (SvgVectorImporter.ImportedSvg, sourceUrl: String) -> Unit,
-    onPickedImage: (android.graphics.Bitmap, sourceUrl: String) -> Unit,
+    onPickedImage: (OnlineImageImport, sourceUrl: String) -> Unit,
     onDismiss: () -> Unit,
     viewModel: OnlineIconBrowserViewModel = hiltViewModel()
 ) {
@@ -195,13 +196,13 @@ internal fun OnlineIconBrowserDialog(
             onUseImage = {
                 importing = true
                 scope.launch {
-                    val bitmap = viewModel.importImage(icon)
+                    val imported = viewModel.importImage(icon)
                     importing = false
-                    if (bitmap == null) {
+                    if (imported == null) {
                         toaster.show(loadFailedMessage)
                     } else {
                         viewModel.endSession()
-                        onPickedImage(bitmap, icon.svgUrl)
+                        onPickedImage(imported, icon.svgUrl)
                     }
                 }
             }

@@ -298,8 +298,10 @@ fun OptionsDialog(
     // keeps the user's paths instead of disposing the editor and resetting them.
     val vectorEditState = remember { VectorEditState() }
     // Attribution URL for an online icon imported "as image" (it lands in the upload draft,
-    // not the vector editor); cleared when the upload gallery replaces the image.
+    // not the vector editor) and the gallery file it was saved as. The attribution is
+    // dropped as soon as the gallery selects any other picture.
     var onlineImageUrl by remember { mutableStateOf<String?>(null) }
+    var onlineImagePath by remember { mutableStateOf<String?>(null) }
     var showConfirmClear by remember { mutableStateOf(false) }
     // Enter-always app bar: the header (close / name / overflow) collapses pixel-by-pixel as the
     // icon list scrolls down and slides back in on scroll up.
@@ -662,12 +664,17 @@ fun OptionsDialog(
                             )
                             // The static tabs don't scroll under the header — plain top padding.
                             1 -> Box(Modifier.fillMaxSize().padding(headerPadding)) {
-                                UploadColumn(app = app, snackbarHostState = snackbarHostState) {
-                                    draft.uploadBase = it
-                                    // Any gallery change replaces an online "as image" import,
-                                    // so its attribution must not outlive the picture.
-                                    onlineImageUrl = null
-                                    if (it != null) draft.origin = IconOrigin.UPLOAD
+                                UploadColumn(
+                                    app = app,
+                                    snackbarHostState = snackbarHostState,
+                                    initialSelectedPath = onlineImagePath
+                                ) { icon, path ->
+                                    draft.uploadBase = icon
+                                    // A manual gallery pick replaces an online "as image"
+                                    // import, so its attribution must not outlive the
+                                    // picture; re-selecting the online file keeps it.
+                                    if (path != onlineImagePath) onlineImageUrl = null
+                                    if (icon != null) draft.origin = IconOrigin.UPLOAD
                                 }
                             }
                             2 -> Box(Modifier.fillMaxSize().padding(headerPadding)) { ModifierTab(
@@ -708,13 +715,15 @@ fun OptionsDialog(
                                 PrepareEditVector(
                                     app = app,
                                     state = vectorEditState,
-                                    onImportedImage = { bitmap, url ->
+                                    onImportedImage = { imported, url ->
                                         // "Use as image" from the online browser: route the
                                         // full-size raster through the upload pipeline so the
-                                        // shared modifier applies like any uploaded picture.
-                                        draft.uploadBase = BitmapIconDrawable(bitmap, false)
+                                        // shared modifier applies like any uploaded picture;
+                                        // the gallery copy arrives preselected in Upload.
+                                        draft.uploadBase = BitmapIconDrawable(imported.bitmap, false)
                                         draft.origin = IconOrigin.UPLOAD
                                         onlineImageUrl = url
+                                        onlineImagePath = imported.galleryPath
                                     }
                                 ) {
                                     draft.vectorIcon = it

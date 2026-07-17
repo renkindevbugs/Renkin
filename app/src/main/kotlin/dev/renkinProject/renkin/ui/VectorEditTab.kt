@@ -61,6 +61,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.ui.theme.IconShape
+import dev.renkinProject.renkin.OnlineImageImport
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -87,7 +88,7 @@ internal fun PrepareEditVector(
     state: VectorEditState,
     // An online icon the editor can't model as paths, imported as a full-size picture
     // instead — the dialog routes it into the upload draft.
-    onImportedImage: (android.graphics.Bitmap, sourceUrl: String) -> Unit,
+    onImportedImage: (OnlineImageImport, sourceUrl: String) -> Unit,
     onChange: (icon: IconPackDrawable?) -> Unit
 ) {
     val sourceIcon = app.baseIcon ?: app.createdIcon
@@ -181,7 +182,7 @@ private fun PathEntry.toPreviewVector(template: ImageVector, thickness: Float, v
 internal fun EditVectorColumn(
     vector: ImageVector,
     state: VectorEditState,
-    onImportedImage: (android.graphics.Bitmap, sourceUrl: String) -> Unit,
+    onImportedImage: (OnlineImageImport, sourceUrl: String) -> Unit,
     onChange: (icon: IconPackDrawable?) -> Unit
 ) {
     val currentOnChange by rememberUpdatedState(onChange)
@@ -528,7 +529,7 @@ internal fun rememberSvgImportAction(onImported: (SvgVectorImporter.ImportedSvg)
 @Composable
 private fun ImportSourcePills(
     onImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit,
-    onImportedImage: (android.graphics.Bitmap, String) -> Unit
+    onImportedImage: (OnlineImageImport, String) -> Unit
 ) {
     val importFromFile = rememberSvgImportAction { onImported(it, null) }
     val onlineEnabled = getPreferences().getBooleanValue(OnlineLibrariesKey)
@@ -562,9 +563,9 @@ private fun ImportSourcePills(
                 browserOpen = false
                 onImported(imported, url)
             },
-            onPickedImage = { bitmap, url ->
+            onPickedImage = { imported, url ->
                 browserOpen = false
-                onImportedImage(bitmap, url)
+                onImportedImage(imported, url)
             },
             onDismiss = { browserOpen = false }
         )
