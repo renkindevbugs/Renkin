@@ -165,11 +165,15 @@ class ApplicationProvider(private val context: Context) {
     }
 
     suspend fun initializeIconPacks() {
-        iconPackRepo.load()
+        iconPackRepo.load(installedApplicationRefs())
         // Every pack seen installed is owned on this device forever — the paid-pack lock
         // never applies to it again, even after an uninstall.
         lockManager.recordInstalledPacks(iconPacks)
     }
+
+    /** The already-loaded app list as lightweight identity refs for appfilter matching. */
+    private fun installedApplicationRefs(): List<InstalledApplication> =
+        applicationList.map { InstalledApplication(it.packageName, it.activityName, it.iconID) }
 
     suspend fun initializeRenkinPack() {
         profileManager.initActiveId()
@@ -552,7 +556,7 @@ class ApplicationProvider(private val context: Context) {
 
     suspend fun forceSync() {
         if (iconPackRepo.iconPackLoaded) {
-            iconPackRepo.load()
+            iconPackRepo.load(installedApplicationRefs())
             lockManager.recordInstalledPacks(iconPacks)
             // Packs may have been updated/rebuilt — their provenance maps can be stale.
             lockManager.clearProvenanceCache()

@@ -15,22 +15,32 @@ import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
-internal fun loadIsolatedAppFilters(
+internal suspend fun loadIsolatedAppFilters(
     packs: List<IconPack>,
     loader: (IconPack) -> List<RawElement>,
     onFailure: (IconPack, Exception) -> Unit = { _, _ -> }
-): Map<IconPack, List<RawElement>> = buildMap {
-    for (pack in packs) {
-        try {
-            put(pack, loader(pack))
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            onFailure(pack, error)
+): Map<IconPack, List<RawElement>> = coroutineScope {
+    // Each pack's appfilter parses on its own worker: big packs (Lawnicons & co. carry
+    // thousands of entries) no longer serialize cold start. Isolation is preserved — one
+    // malformed pack is reported and skipped without affecting the others.
+    val parsed = packs.map { pack ->
+        async(Dispatchers.Default) {
+            try {
+                pack to loader(pack)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                onFailure(pack, error)
+                null
+            }
         }
-    }
+    }.awaitAll()
+    buildMap { parsed.filterNotNull().forEach { (pack, elements) -> put(pack, elements) } }
 }
 
 /**
@@ -53,17 +63,21 @@ class IconPackRepository(private val context: Context) {
 
     private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
 
-    suspend fun load() = withContext(Dispatchers.Default) {
+    /**
+     * [installedApps] comes from the caller's already-loaded app list — re-scanning the
+     * launcher here used to repeat the whole per-app label/icon work a second time at startup.
+     */
+    suspend fun load(installedApps: List<InstalledApplication>) = withContext(Dispatchers.Default) {
         iconPackLoaded = false
         // Drop our own generated pack — it only ever holds icons we just built, so offering
         // it as an icon source (or a watch target) is pointless and just clutters the lists.
         // startsWith: profile packs share the base package with a ".p<id>" suffix.
         iconPacks = appManager.getIconPacks().filter { !it.packageName.startsWith(IconPackBuilder.PACKAGE_NAME) }
-        loadAppFilterElements()
+        loadAppFilterElements(installedApps)
     }
 
-    private fun loadAppFilterElements() {
-        installedApplications = appManager.getAllInstalledApplications()
+    private suspend fun loadAppFilterElements(installedApps: List<InstalledApplication>) {
+        installedApplications = installedApps
         appFilterElements = loadIsolatedAppFilters(
             iconPacks,
             loader = { pack ->

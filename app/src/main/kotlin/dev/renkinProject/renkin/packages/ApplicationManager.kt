@@ -31,6 +31,10 @@ import dev.renkinProject.renkin.extension.getIdentifierByName
 import dev.renkinProject.renkin.extension.getXmlOrNull
 import dev.renkinProject.renkin.extension.toDrawable
 import dev.renkinProject.renkin.util.Log
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import org.xmlpull.v1.XmlPullParser
 import org.xmlpull.v1.XmlPullParserFactory
 
@@ -80,29 +84,42 @@ internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSou
     }
     private val pm = ctx.packageManager
 
+    /**
+     * Lightweight component references (package/activity/icon id) for every launcher entry.
+     * Deliberately loads NO labels or drawables — callers that only need identity (appfilter
+     * matching, the watch checker) must not pay for the full [getAllInstalledApps] scan.
+     */
     fun getAllInstalledApplications(): List<InstalledApplication> {
-        val apps = getAllInstalledApps()
-        val packs = mutableListOf<InstalledApplication>()
-
-        for (app in apps) {
-            val pack = InstalledApplication(app.packageName, app.activityName, app.iconID)
-            packs.add(pack)
-        }
-
-        return packs.toList()
-    }
-
-    fun getAllInstalledApps(): Array<PackageInfoStruct> {
         val userManager = ctx.getSystemService(Context.USER_SERVICE) as UserManager
         val apps = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
 
-        val packInfoStructs = mutableListOf<PackageInfoStruct>()
-
+        val packs = linkedSetOf<InstalledApplication>()
         for (user in userManager.userProfiles) {
-            val usrApps = apps.getActivityList(null, user)
+            for (app in apps.getActivityList(null, user)) {
+                @Suppress("DEPRECATION")
+                val iconID = launcherIconIdOrFallback(
+                    runCatching { pm.getActivityInfo(app.componentName, 0).iconResource }.getOrNull(),
+                    app.applicationInfo.icon
+                )
+                packs.add(
+                    InstalledApplication(app.componentName.packageName, app.componentName.className, iconID)
+                )
+            }
+        }
+        return packs.toList()
+    }
 
-            if (usrApps.isNotEmpty()) {
-                for (app in usrApps) {
+    suspend fun getAllInstalledApps(): Array<PackageInfoStruct> = coroutineScope {
+        val userManager = ctx.getSystemService(Context.USER_SERVICE) as UserManager
+        val apps = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
+
+        // The per-app work — labels, an English-locale resource lookup and the icon drawable —
+        // is a few binder/resource round-trips each. Sequentially that dominates cold start on
+        // large app lists, so the apps resolve in parallel; order is restored by awaitAll.
+        val structs = userManager.userProfiles
+            .flatMap { user -> apps.getActivityList(null, user) }
+            .map { app ->
+                async(Dispatchers.Default) {
                     val appName = app.applicationInfo.loadLabel(pm).toString()
                     val originalName = loadEnglishLabel(app.applicationInfo, appName)
                     val packageName = app.componentName.packageName
@@ -124,7 +141,7 @@ internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSou
                     } else
                         icon
 
-                    val packInfo = PackageInfoStruct(
+                    PackageInfoStruct(
                         appName,
                         packageName,
                         activityName,
@@ -132,14 +149,14 @@ internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSou
                         iconID,
                         originalName = originalName
                     )
-
-                    if (!packInfoStructs.contains(packInfo))
-                        packInfoStructs.add(packInfo)
                 }
             }
-        }
+            .awaitAll()
 
-        return packInfoStructs.toTypedArray()
+        // Set-based dedupe: the old List.contains check compared every pair (O(n²)).
+        val deduped = linkedSetOf<PackageInfoStruct>()
+        deduped.addAll(structs)
+        deduped.toTypedArray()
     }
 
     /**
