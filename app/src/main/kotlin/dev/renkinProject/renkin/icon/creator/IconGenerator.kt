@@ -235,6 +235,14 @@ class IconGenerator(
     private fun applyModifierInner(icon: IconPackDrawable, imageEdit: ImageEdit): IconPackDrawable {
         if (imageEdit == ImageEdit.NONE) return icon
 
+        if (imageEdit == ImageEdit.COLORIZE) {
+            modifierVector(icon)?.let { vector ->
+                vector.root.setReferenceColorPaths(SolidColor(Color(options.color)))
+                vector.tintColor = Color.Unspecified
+                return vector
+            }
+        }
+
         if (icon is ImageVectorDrawable) {
             val copy = ImageVectorDrawable(icon.toImageVector())
             return when (imageEdit) {
@@ -818,9 +826,9 @@ class IconGenerator(
     /**
      * Applies the per-icon Modifier-tab adjustments — position offset, then scale — on top of an
      * already-built icon. No-op with the defaults, so it's safe to run on every generation path.
-     * Rasterises once (works for bitmaps and vectors alike) and carries over the source's
-     * adaptive-export flag and preview zoom (e.g. the Material You variant), so the scale doesn't
-     * reset the launcher safe-zone preview.
+     * Vectors keep scale/position as vector groups; bitmap sources use the raster path. A vector
+     * is rasterised only when a later outline or shape operation requires pixels. Bitmap results
+     * carry over the source's adaptive-export flag and preview zoom (e.g. Material You).
      */
     private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {
         val offset = options.iconOffsetX != 0f || options.iconOffsetY != 0f
@@ -828,13 +836,25 @@ class IconGenerator(
         val outlined = options.outlineMode != OutlineMode.NONE
         if (!offset && options.iconScale == 1f && !shaped && !outlined) return icon
 
-        var bitmap = icon.toBitmap()
+        // Keep vector-safe operations as groups. If no raster-only step follows, the result
+        // remains XML all the way through DB persistence and pack export. When outline/shape
+        // follows, rasterise only once after vector scale/position so enlarged SVG pixels are
+        // never resampled from an earlier 256px bitmap.
+        val vectorAdjusted = modifierVector(icon)?.withModifierTransform(
+            options.iconScale,
+            options.iconOffsetX,
+            options.iconOffsetY
+        )
+        if (vectorAdjusted != null && !shaped && !outlined) return vectorAdjusted
+
+        var bitmap = vectorAdjusted?.toModifierBitmap() ?: icon.toBitmap()
         if (bitmap.width <= 0 || bitmap.height <= 0) return icon
 
-        if (offset) {
+        // Vector adjustments above are already consumed; bitmap sources keep the old path.
+        if (vectorAdjusted == null && offset) {
             bitmap = bitmap.translated(options.iconOffsetX * bitmap.width, options.iconOffsetY * bitmap.height)
         }
-        if (options.iconScale != 1f) {
+        if (vectorAdjusted == null && options.iconScale != 1f) {
             val src = bitmap
             bitmap = newArgbBitmap(src.width, src.height) { canvas ->
                 canvas.scale(options.iconScale, options.iconScale, src.width / 2f, src.height / 2f)
@@ -871,6 +891,33 @@ class IconGenerator(
             exportAsAdaptiveIcon = if (shaped) false else source?.isAdaptiveIcon() ?: false,
             previewScale = if (shaped) 1f else source?.previewScale ?: 1f
         )
+    }
+
+    /** A detached vector representation, including an InsetIconDrawable's canvas margins. */
+    private fun modifierVector(icon: IconPackDrawable): ImageVectorDrawable? {
+        return when (icon) {
+            is ImageVectorDrawable -> icon.deepCopy()
+            is InsetIconDrawable -> {
+                val child = icon.drawable as? ImageVectorDrawable ?: return null
+                val left: Float
+                val top: Float
+                val right: Float
+                val bottom: Float
+                if (icon.isFractionsNotEmpty) {
+                    left = icon.fractions.left
+                    top = icon.fractions.top
+                    right = icon.fractions.right
+                    bottom = icon.fractions.bottom
+                } else {
+                    left = icon.dimensions.left / child.viewportWidth
+                    top = icon.dimensions.top / child.viewportHeight
+                    right = icon.dimensions.right / child.viewportWidth
+                    bottom = icon.dimensions.bottom / child.viewportHeight
+                }
+                child.withViewportInset(left, top, right, bottom)
+            }
+            else -> null
+        }
     }
 
     /**

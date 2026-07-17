@@ -136,8 +136,11 @@ internal class VectorEditState {
  * solid — [setReferenceColorPaths] keys the fill/stroke choice off a zero stroke
  * width, so [filled] maps straight onto `strokeLineWidth == 0`.
  */
-private fun PathEntry.toMutablePath(thickness: Float): MutableVectorPath {
-    val color = path.stroke ?: path.fill ?: SolidColor(Color.White)
+internal fun PathEntry.toMutablePath(thickness: Float): MutableVectorPath {
+    // XML persistence represents an absent brush as transparent (#00000000), which parses
+    // back as a non-null brush. Select the brush that belongs to this path's actual paint
+    // mode; preferring stroke unconditionally made every reloaded filled SVG transparent.
+    val color = (if (filled) path.fill else path.stroke) ?: SolidColor(Color.White)
     return MutableVectorPath(path).also { mp ->
         if (filled) {
             mp.fill = color

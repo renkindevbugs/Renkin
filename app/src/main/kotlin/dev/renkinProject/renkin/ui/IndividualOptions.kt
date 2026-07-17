@@ -228,6 +228,7 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
             // Only skip when there's truly nothing to apply — scale, shape and outline are
             // applied by applyModifier too, so those changes with no image-edit must run it.
             options.primaryImageEdit == ImageEdit.NONE && options.iconScale == 1f
+                && options.iconOffsetX == 0f && options.iconOffsetY == 0f
                 && options.iconShape == IconShape.NONE
                 && options.outlineMode == OutlineMode.NONE -> base
             else -> trackGeneration { builder.applyModifier(base, options) }
