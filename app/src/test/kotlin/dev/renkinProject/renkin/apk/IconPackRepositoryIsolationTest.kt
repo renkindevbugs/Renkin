@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.apk
 
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.RawItem
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -12,7 +13,7 @@ class IconPackRepositoryIsolationTest {
     private val broken = IconPack("com.broken", "Broken", 1, "1", 0)
 
     @Test
-    fun malformedAppFilter_skipsOnlyItsPack() {
+    fun malformedAppFilter_skipsOnlyItsPack() = runBlocking {
         val failures = mutableListOf<IconPack>()
 
         val loaded = loadIsolatedAppFilters(

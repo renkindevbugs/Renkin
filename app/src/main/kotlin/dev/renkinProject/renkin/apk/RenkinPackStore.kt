@@ -11,6 +11,9 @@ import dev.renkinProject.renkin.icon.parser.XmlNodeParser
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.xml.XmlDecoder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 /**
@@ -38,8 +41,14 @@ class RenkinPackStore(private val context: Context) {
 
     /** Loads [profileId]'s saved icons + calendar flags, keyed by "package/activity". */
     suspend fun load(profileId: Long, defaultColor: Color): Map<String, SavedEntry> = withContext(Dispatchers.Default) {
-        repo.getAll(profileId).associate { dbApp ->
-            "${dbApp.packageName}/${dbApp.activityName}" to decodeRow(dbApp, defaultColor)
+        // Row decoding (bitmap decompress / vector XML parse) is independent per row —
+        // decode in parallel so a profile full of icons doesn't gate startup serially.
+        coroutineScope {
+            repo.getAll(profileId).map { dbApp ->
+                async {
+                    "${dbApp.packageName}/${dbApp.activityName}" to decodeRow(dbApp, defaultColor)
+                }
+            }.awaitAll().toMap()
         }
     }
 
