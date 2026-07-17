@@ -121,6 +121,24 @@ class SvgVectorImporterTest {
     }
 
     @Test
+    fun authoredColours_surviveImportButGradientsReject() {
+        val coloured = SvgVectorImporter.parse(
+            """<svg viewBox="0 0 24 24">
+                 <path fill="#e91e63" d="M0 0h10v10H0Z"/>
+                 <path fill="currentColor" d="M2 2h6"/>
+               </svg>"""
+        )!!
+
+        assertEquals("#e91e63", coloured.paths[0].color)
+        // currentColor means "let the renderer decide" — the editor paints those white.
+        assertNull(coloured.paths[1].color)
+
+        assertNull(SvgVectorImporter.parse(
+            """<svg viewBox="0 0 24 24"><path fill="url(#g)" d="M0 0h1"/></svg>"""
+        ))
+    }
+
+    @Test
     fun roundedRect_usesArcCorners() {
         val svg = """<svg viewBox="0 0 24 24"><rect x="0" y="0" width="10" height="10" rx="2"/></svg>"""
 

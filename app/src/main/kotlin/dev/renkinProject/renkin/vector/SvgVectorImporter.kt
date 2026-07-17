@@ -20,8 +20,18 @@ import java.io.StringReader
  */
 object SvgVectorImporter {
 
-    /** One path: its `d` data, solid-fill vs stroke, and the stroke width when stroked. */
-    data class ImportedPath(val pathData: String, val filled: Boolean, val strokeWidth: Float?)
+    /**
+     * One path: its `d` data, solid-fill vs stroke, the stroke width when stroked, and the
+     * active paint's raw colour value ("#e91e63", "rgb(…)", …) — null when the document
+     * leaves it to the renderer ("currentColor", or nothing declared), which the editor
+     * paints white for the Modifier tab to recolour.
+     */
+    data class ImportedPath(
+        val pathData: String,
+        val filled: Boolean,
+        val strokeWidth: Float?,
+        val color: String? = null
+    )
 
     data class ImportedSvg(
         val viewportWidth: Float,
@@ -95,7 +105,17 @@ object SvgVectorImporter {
                             if (filled && stroked) unsupported = true
                             val nodes = runCatching { PathParser().parsePathString(d).toNodes() }.getOrNull()
                             if (nodes == null || nodes == EmptyPath) unsupported = true
-                            paths.add(ImportedPath(d, filled, strokeWidth?.takeIf { stroked }))
+                            // The active paint's own colour (multicolour icon sets); gradients
+                            // and other paint servers can't become a solid path colour, so they
+                            // reject the document rather than silently flattening it.
+                            val paint = if (filled) fill else stroke
+                            if (paint != null && paint.trim().startsWith("url(", ignoreCase = true)) {
+                                unsupported = true
+                            }
+                            val color = paint?.trim()?.takeIf {
+                                !it.equals("none", true) && !it.equals("currentColor", true)
+                            }
+                            paths.add(ImportedPath(d, filled, strokeWidth?.takeIf { stroked }, color))
                         }
                     }
                     "use", "image", "text",

@@ -6,143 +6,94 @@ import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.net.URLEncoder
 import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 
 /**
- * A curated FOSS SVG icon library browsable from the vector editor. Only the file index and
- * the individually picked SVGs are ever downloaded — never the whole set — via the jsDelivr
- * CDN (no GitHub API rate limits, aggressively cached).
+ * Online icons come from the Iconify API (api.iconify.design) — an open-source aggregator of
+ * 200+ FOSS icon sets with unified licence metadata, categories and a colour/monochrome flag.
+ * Only the set list, one set's icon-name index and the individually viewed SVGs are ever
+ * downloaded — never a whole set.
  *
- * Curation rule: only sets WITHOUT an installable Android icon pack belong here. Sets that
- * ship one (Arcticons, Lawnicons, …) go through the normal installed-pack flow instead.
+ * Note this deliberately lists SETS OF SVG FILES, not Android icon packs — packs install
+ * normally and go through the pack browser.
  */
-data class OnlineIconLibrary(
-    val id: String,
-    val label: String,
-    /** SPDX-ish licence label shown in the browser. */
+data class IconifyCollection(
+    /** Iconify's set id, e.g. "mdi" or "simple-icons". */
+    val prefix: String,
+    val name: String,
+    val total: Int,
+    /** SPDX licence id (falls back to the licence title); empty when the API lists none. */
     val license: String,
-    val owner: String,
-    val repo: String,
-    /** Repo subfolder holding the SVGs (with trailing slash). */
-    val pathPrefix: String,
-    val projectUrl: String
+    /** Iconify category ("General", "Brands / Social", …); empty when uncategorised. */
+    val category: String,
+    /** True = a multicolour set (emoji, flags, flat-colour icons); false = monochrome glyphs. */
+    val palette: Boolean,
+    /** A few icon names the API suggests as previews. */
+    val samples: List<String>
 )
 
-val OnlineIconLibraries: List<OnlineIconLibrary> = listOf(
-    OnlineIconLibrary(
-        id = "simple-icons",
-        label = "Simple Icons",
-        license = "CC0-1.0",
-        owner = "simple-icons",
-        repo = "simple-icons",
-        pathPrefix = "icons/",
-        projectUrl = "https://github.com/simple-icons/simple-icons"
-    ),
-    OnlineIconLibrary(
-        id = "tabler-icons",
-        label = "Tabler Icons",
-        license = "MIT",
-        owner = "tabler",
-        repo = "tabler-icons",
-        pathPrefix = "icons/outline/",
-        projectUrl = "https://github.com/tabler/tabler-icons"
-    )
-)
+/** One icon in a set; the SVG itself is fetched only when needed. */
+data class OnlineIcon(val prefix: String, val name: String) {
+    val label: String get() = name.replace('-', ' ')
+
+    /** Public URL of the SVG — also stored as the icon's attribution reference. */
+    val svgUrl: String get() = "https://api.iconify.design/$prefix/$name.svg"
+}
 
 /**
- * Human label for a stored attribution URL: the curated library's name when it is one of
- * ours, otherwise the plain "owner/repo" of the community repository it points into.
+ * Human label for a stored attribution URL: the Iconify set prefix for API URLs, and the
+ * "owner/repo" of the GitHub CDN URLs an earlier build of this feature stored.
  */
 fun onlineAttributionLabel(url: String): String? {
-    val match = Regex("/gh/([^/@]+)/([^/@]+)@").find(url) ?: return null
-    val (owner, repo) = match.destructured
-    return OnlineIconLibraries.firstOrNull { it.owner == owner && it.repo == repo }?.label
-        ?: "$owner/$repo"
+    Regex("api\\.iconify\\.design/([^/]+)/").find(url)?.let { return it.groupValues[1] }
+    val gh = Regex("/gh/([^/@]+)/([^/@]+)@").find(url) ?: return null
+    val (owner, repo) = gh.destructured
+    return "$owner/$repo"
 }
 
 /**
- * A community repository discovered through GitHub's `icon-pack` topic — browsable exactly
- * like a curated library (empty path prefix: every SVG in the repo, wherever it sits).
- */
-data class DiscoveredRepo(
-    val owner: String,
-    val repo: String,
-    val description: String,
-    val stars: Int,
-    /** SPDX id from GitHub, or null when the repo declares no recognised licence. */
-    val license: String?
-) {
-    fun toLibrary(): OnlineIconLibrary = OnlineIconLibrary(
-        id = "gh-$owner-$repo",
-        label = "$owner/$repo",
-        license = license ?: "",
-        owner = owner,
-        repo = repo,
-        pathPrefix = "",
-        projectUrl = "https://github.com/$owner/$repo"
-    )
-}
-
-/** One icon in a library's index; the SVG itself is fetched only when needed. */
-data class OnlineIcon(
-    val library: OnlineIconLibrary,
-    val slug: String,
-    /** The resolved repo version the index was read from — pins the CDN URL. */
-    val version: String
-) {
-    // Community repos index nested paths — label by the file name, not the folders.
-    val label: String get() = slug.substringAfterLast('/').replace('-', ' ')
-
-    /** Public, versioned URL of the SVG — also stored as the icon's attribution reference. */
-    val svgUrl: String
-        get() = "https://cdn.jsdelivr.net/gh/${library.owner}/${library.repo}@$version/${library.pathPrefix}$slug.svg"
-}
-
-/**
- * Fetches library indexes (one jsDelivr file listing per library) and individual SVGs, with
- * a disk cache under cacheDir so browsing works offline once visited. Every method returns
- * null on failure instead of throwing — the browser shows a retryable error state.
+ * Fetches the Iconify set list, per-set icon indexes and individual SVGs, with a disk cache
+ * under cacheDir so browsing works offline once visited. Every method returns null on failure
+ * instead of throwing — the browser shows a retryable error state.
  */
 class OnlineIconRepository(private val context: Context) {
 
+    private var memoryCollections: List<IconifyCollection>? = null
     private val memoryIndexes = mutableMapOf<String, List<OnlineIcon>>()
 
     private val cacheRoot: File
         get() = File(context.cacheDir, "online-icons").apply { mkdirs() }
 
-    /** The library's icon index, newest cached copy first (refreshed after [INDEX_TTL_MS]). */
-    suspend fun icons(library: OnlineIconLibrary): List<OnlineIcon>? = withContext(Dispatchers.IO) {
-        // A display id made from owner/repo with separators is not unique (for example,
-        // a-b/c and a/b-c). Hash the canonical identity so unrelated community repos can
-        // never share an in-memory or disk index.
-        val libraryKey = cacheKey(library.canonicalCacheIdentity())
-        memoryIndexes[libraryKey]?.let { return@withContext it }
-        val cache = File(cacheRoot, "$libraryKey-index.json")
-        val cached = cache.takeIf { it.isFile }?.let { file ->
-            runCatching { file.readText() }.getOrNull()
-        }
-        val fresh = if (cached == null || cache.ageMs() > INDEX_TTL_MS) fetchIndexJson(library) else null
-        val json = fresh ?: cached ?: return@withContext null
-        val parsed = parseIndex(json, library)
-        if (parsed.isNullOrEmpty()) {
-            // A fetch that yielded garbage must not clobber a still-parsable cache.
-            return@withContext cached?.let { parseIndex(it, library) }?.takeIf { it.isNotEmpty() }
-                ?.also { memoryIndexes[libraryKey] = it }
-        }
-        if (fresh != null) runCatching { cache.writeText(fresh) }
-        memoryIndexes[libraryKey] = parsed
-        parsed
+    /** Every Iconify set with its metadata (licence, category, palette), cached for a week. */
+    suspend fun collections(): List<IconifyCollection>? = withContext(Dispatchers.IO) {
+        memoryCollections?.let { return@withContext it }
+        val json = cachedOrFetch(
+            cache = File(cacheRoot, "iconify-collections.json"),
+            url = "https://api.iconify.design/collections",
+            parses = { parseCollections(it) != null }
+        ) ?: return@withContext null
+        parseCollections(json)?.also { memoryCollections = it }
     }
 
-    /** The icon's SVG markup, from the per-icon disk cache or the CDN. */
+    /** One set's icon names, cached for a week. */
+    suspend fun icons(collection: IconifyCollection): List<OnlineIcon>? = withContext(Dispatchers.IO) {
+        memoryIndexes[collection.prefix]?.let { return@withContext it }
+        val json = cachedOrFetch(
+            cache = File(cacheRoot, "iconify-set-${cacheKey(collection.prefix)}.json"),
+            url = "https://api.iconify.design/collection?prefix=" +
+                URLEncoder.encode(collection.prefix, "UTF-8"),
+            parses = { parseCollection(it) != null }
+        ) ?: return@withContext null
+        parseCollection(json)?.also { memoryIndexes[collection.prefix] = it }
+    }
+
+    /** The icon's SVG markup, from the per-icon disk cache or the API. */
     suspend fun svg(icon: OnlineIcon): String? = withContext(Dispatchers.IO) {
-        val dir = File(cacheRoot, cacheKey(icon.library.canonicalCacheIdentity())).apply { mkdirs() }
-        // The full pinned URL includes both the exact nested path and repository version.
-        // Hashing it prevents path-normalisation collisions and makes an updated version use
-        // fresh bytes instead of silently returning an older SVG from disk.
+        val dir = File(cacheRoot, "iconify-${cacheKey(icon.prefix)}").apply { mkdirs() }
         val cache = File(dir, "${cacheKey(icon.svgUrl)}.svg")
         if (cache.isFile) {
             runCatching { cache.readText() }.getOrNull()?.let { return@withContext it }
@@ -153,62 +104,28 @@ class OnlineIconRepository(private val context: Context) {
     }
 
     /**
-     * One page of community repositories from GitHub's `icon-pack` topic, most-starred first
-     * (30 per page). Cached per page for a day — the unauthenticated search API allows only
-     * 10 requests/min, which manual browsing plus this cache stays well under. Null on
-     * failure ONLY when no cache exists; a stale cache is better than an error.
+     * Shared cache policy: serve a fresh fetch when the cache is missing or older than
+     * [INDEX_TTL_MS], otherwise the cached copy; a fetch that fails [parses] must never
+     * clobber a still-parsable cache.
      */
-    suspend fun discoverRepos(page: Int): List<DiscoveredRepo>? = withContext(Dispatchers.IO) {
-        val cache = File(cacheRoot, "gh-topic-page-$page.json")
+    private fun cachedOrFetch(cache: File, url: String, parses: (String) -> Boolean): String? {
         val cached = cache.takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }
-        val fresh = if (cached == null || cache.ageMs() > SEARCH_TTL_MS) {
-            httpGetText(
-                "https://api.github.com/search/repositories" +
-                    "?q=topic:icon-pack&sort=stars&order=desc&per_page=30&page=$page",
-                MAX_INDEX_BYTES
-            )
+        val fresh = if (cached == null || cache.ageMs() > INDEX_TTL_MS) {
+            httpGetText(url, MAX_INDEX_BYTES)
         } else null
-        val parsedFresh = fresh?.let { parseSearch(it) }
-        if (parsedFresh != null) {
+        if (fresh != null && parses(fresh)) {
             runCatching { cache.writeText(fresh) }
-            return@withContext parsedFresh
+            return fresh
         }
-        cached?.let { parseSearch(it) }
-    }
-
-    /**
-     * Downloads the index: resolves the repo's latest tagged version, then lists its files —
-     * two small requests total. Stored as one JSON with the version embedded.
-     */
-    private fun fetchIndexJson(library: OnlineIconLibrary): String? {
-        val resolved = httpGetText(
-            "https://data.jsdelivr.com/v1/packages/gh/${library.owner}/${library.repo}/resolved",
-            MAX_INDEX_BYTES
-        ) ?: return null
-        val version = runCatching { JSONObject(resolved).optString("version") }.getOrNull()
-            ?.takeIf { it.isNotEmpty() } ?: return null
-        val listing = httpGetText(
-            "https://data.jsdelivr.com/v1/packages/gh/${library.owner}/${library.repo}@$version?structure=flat",
-            MAX_INDEX_BYTES
-        ) ?: return null
-        // Re-wrap so the cache file carries the version the listing belongs to.
-        return runCatching {
-            JSONObject().put("version", version)
-                .put("files", JSONObject(listing).getJSONArray("files"))
-                .toString()
-        }.getOrNull()
+        return cached
     }
 
     private fun File.ageMs(): Long = System.currentTimeMillis() - lastModified()
 
     companion object {
         private const val INDEX_TTL_MS = 7L * 24 * 60 * 60 * 1000
-        private const val SEARCH_TTL_MS = 24L * 60 * 60 * 1000
         private const val MAX_INDEX_BYTES = 8 * 1024 * 1024
         private const val MAX_SVG_BYTES = 512 * 1024
-
-        private fun OnlineIconLibrary.canonicalCacheIdentity(): String =
-            listOf(owner, repo, pathPrefix).joinToString("\u0000")
 
         private fun cacheKey(value: String): String =
             MessageDigest.getInstance("SHA-256")
@@ -216,58 +133,65 @@ class OnlineIconRepository(private val context: Context) {
                 .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
         /**
-         * Parses a cached index ({"version", "files":[{"name":"/icons/x.svg"}…]}) into icons:
-         * .svg files under the library's path prefix, sorted by slug. Curated libraries pin a
-         * folder and take only its direct children; community repos (empty prefix) take every
-         * SVG wherever it sits, skipping dot-directories. Null when the JSON is unreadable.
+         * Parses the /collections response ({prefix: {name, total, license, category,
+         * palette, samples}, …}) into sets sorted by name. Null when unreadable.
          */
-        fun parseIndex(json: String, library: OnlineIconLibrary): List<OnlineIcon>? = runCatching {
+        fun parseCollections(json: String): List<IconifyCollection>? = runCatching {
             val root = JSONObject(json)
-            val version = root.getString("version")
-            val files = root.getJSONArray("files")
-            val prefix = "/${library.pathPrefix}"
-            val icons = mutableListOf<OnlineIcon>()
-            for (i in 0 until files.length()) {
-                val name = files.getJSONObject(i).optString("name")
-                if (!name.startsWith(prefix) || !name.endsWith(".svg")) continue
-                val slug = name.removePrefix(prefix).removeSuffix(".svg")
-                if (slug.isEmpty()) continue
-                if (library.pathPrefix.isNotEmpty() && '/' in slug) continue
-                if (slug.split('/').any { it.startsWith('.') || it.isEmpty() }) continue
-                icons.add(OnlineIcon(library, slug, version))
-            }
-            icons.sortBy { it.slug }
-            icons.toList()
-        }.getOrNull()
-
-        /**
-         * Parses a GitHub repository-search response into browsable repos. Kotlin/Java repos
-         * are dropped — those are Android icon-pack APPS, which belong in the installed-pack
-         * flow, not here. "NOASSERTION" counts as no licence.
-         */
-        fun parseSearch(json: String): List<DiscoveredRepo>? = runCatching {
-            val items = JSONObject(json).getJSONArray("items")
-            val repos = mutableListOf<DiscoveredRepo>()
-            for (i in 0 until items.length()) {
-                val item = items.getJSONObject(i)
-                val fullName = item.optString("full_name")
-                val parts = fullName.split('/')
-                if (parts.size != 2 || parts.any { it.isEmpty() }) continue
-                val language = item.optString("language")
-                if (language.equals("kotlin", true) || language.equals("java", true)) continue
-                val spdx = item.optJSONObject("license")?.optString("spdx_id")
-                    ?.takeIf { it.isNotEmpty() && it != "NOASSERTION" }
-                repos.add(
-                    DiscoveredRepo(
-                        owner = parts[0],
-                        repo = parts[1],
-                        description = item.optString("description").take(120),
-                        stars = item.optInt("stargazers_count"),
-                        license = spdx
+            val collections = mutableListOf<IconifyCollection>()
+            for (prefix in root.keys()) {
+                val entry = root.optJSONObject(prefix) ?: continue
+                val name = entry.optString("name")
+                val total = entry.optInt("total")
+                if (name.isEmpty() || total <= 0) continue
+                val license = entry.optJSONObject("license")?.let { license ->
+                    license.optString("spdx").ifEmpty { license.optString("title") }
+                }.orEmpty()
+                val samples = entry.optJSONArray("samples")?.let { array ->
+                    (0 until array.length()).mapNotNull { i ->
+                        array.optString(i).takeIf { it.isNotEmpty() }
+                    }
+                }.orEmpty()
+                collections.add(
+                    IconifyCollection(
+                        prefix = prefix,
+                        name = name,
+                        total = total,
+                        license = license,
+                        category = entry.optString("category"),
+                        palette = entry.optBoolean("palette"),
+                        samples = samples.take(3)
                     )
                 )
             }
-            repos.toList()
+            collections.sortBy { it.name.lowercase() }
+            collections.toList().takeIf { it.isNotEmpty() }
+        }.getOrNull()
+
+        /**
+         * Parses one /collection response into its icon names: "uncategorized" plus every
+         * category list, deduplicated and sorted. Null when unreadable or empty.
+         */
+        fun parseCollection(json: String): List<OnlineIcon>? = runCatching {
+            val root = JSONObject(json)
+            val prefix = root.optString("prefix").takeIf { it.isNotEmpty() } ?: return null
+            val names = linkedSetOf<String>()
+            root.optJSONArray("uncategorized")?.let { array ->
+                for (i in 0 until array.length()) {
+                    array.optString(i).takeIf { it.isNotEmpty() }?.let(names::add)
+                }
+            }
+            root.optJSONObject("categories")?.let { categories ->
+                for (category in categories.keys()) {
+                    val array = categories.optJSONArray(category) ?: continue
+                    for (i in 0 until array.length()) {
+                        array.optString(i).takeIf { it.isNotEmpty() }?.let(names::add)
+                    }
+                }
+            }
+            names.map { OnlineIcon(prefix, it) }
+                .sortedBy { it.name }
+                .takeIf { it.isNotEmpty() }
         }.getOrNull()
 
         /** Small GET returning the body as text; null on any failure or oversized response. */

@@ -4,6 +4,7 @@ package dev.renkinProject.renkin.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,13 +23,14 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.SearchOff
-import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,9 +38,7 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -50,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -62,21 +63,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.data.online.DiscoveredRepo
+import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIcon
-import dev.renkinProject.renkin.data.online.OnlineIconLibraries
-import dev.renkinProject.renkin.data.online.OnlineIconLibrary
 import dev.renkinProject.renkin.data.online.OnlineIconRepository
 import dev.renkinProject.renkin.ui.theme.CardShape
+import dev.renkinProject.renkin.vector.ColorDecoder
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import kotlinx.coroutines.launch
 
 /**
- * Fullscreen browser over the curated FOSS icon libraries (see [OnlineIconLibraries]),
- * structured like the Create tab's pack browser: a library list first, then the tapped
- * library's searchable grid. Only the index and the visible/tapped SVGs are downloaded
- * (cached on disk). [onPicked] receives the parsed SVG plus its public source URL, which
- * the caller stores as the icon's attribution reference.
+ * Fullscreen browser over the Iconify catalogue (200+ FOSS icon sets): a filterable set list
+ * (keyword, category, colour-vs-monochrome — mirroring iconify.design's own filters), then
+ * the tapped set's searchable grid. Only the set list, one set's name index and the
+ * visible/tapped SVGs are downloaded (cached on disk). [onPicked] receives the parsed SVG
+ * plus its public source URL, which the caller stores as the icon's attribution reference.
  */
 @Composable
 internal fun OnlineIconBrowserDialog(
@@ -89,13 +89,13 @@ internal fun OnlineIconBrowserDialog(
     val toaster = LocalToaster.current
     val importFailedMessage = stringResource(R.string.svgImportFailed)
 
-    // null = the library list; non-null = that library's icon grid (back returns to the list).
-    var library by remember { mutableStateOf<OnlineIconLibrary?>(null) }
+    // null = the set list; non-null = that set's icon grid (back returns to the list).
+    var collection by remember { mutableStateOf<IconifyCollection?>(null) }
     var query by remember { mutableStateOf("") }
     var importing by remember { mutableStateOf(false) }
     val back: () -> Unit = {
-        if (library != null) {
-            library = null
+        if (collection != null) {
+            collection = null
             query = ""
         } else {
             onDismiss()
@@ -126,11 +126,12 @@ internal fun OnlineIconBrowserDialog(
                     IconButton(onClick = back) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.dismiss))
                     }
-                    // Inside a library the title names it — like a pack's own browser page.
                     Text(
-                        text = library?.label ?: stringResource(R.string.onlineIconsTitle),
+                        text = collection?.name ?: stringResource(R.string.onlineIconsTitle),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
                     )
                     if (importing) {
@@ -138,12 +139,12 @@ internal fun OnlineIconBrowserDialog(
                     }
                 }
 
-                val current = library
+                val current = collection
                 if (current == null) {
-                    LibraryList(repository = repository, onOpen = { library = it })
+                    CollectionList(repository = repository, onOpen = { collection = it })
                 } else {
-                    LibraryGrid(
-                        library = current,
+                    CollectionGrid(
+                        collection = current,
                         repository = repository,
                         query = query,
                         onQueryChange = { query = it },
@@ -171,121 +172,147 @@ internal fun OnlineIconBrowserDialog(
 }
 
 /**
- * The library picker: the curated sets on top, then an endless, scrollable community section
- * fed by GitHub's `icon-pack` topic (most-starred first, "Load more" appends pages). The
- * community rows show stars and the declared licence — or an explicit unknown-licence
- * warning, since anything on GitHub can appear there.
+ * The Iconify set list with the site's filters: a keyword field, category chips, and an
+ * all/colour/monochrome palette toggle. Rows carry name, size, licence and live sample
+ * previews (lazily fetched, disk-cached).
  */
 @Composable
-private fun LibraryList(repository: OnlineIconRepository, onOpen: (OnlineIconLibrary) -> Unit) {
-    val scope = rememberCoroutineScope()
-    var pages by remember { mutableStateOf<List<List<DiscoveredRepo>>>(emptyList()) }
-    var loadingPage by remember { mutableStateOf(false) }
-    var discoverFailed by remember { mutableStateOf(false) }
-    val loadNext: () -> Unit = {
-        if (!loadingPage) {
-            loadingPage = true
-            discoverFailed = false
-            scope.launch {
-                val next = repository.discoverRepos(pages.size + 1)
-                if (next == null) discoverFailed = true else pages = pages + listOf(next)
-                loadingPage = false
-            }
-        }
+private fun CollectionList(
+    repository: OnlineIconRepository,
+    onOpen: (IconifyCollection) -> Unit
+) {
+    var retry by remember { mutableIntStateOf(0) }
+    var loadFailed by remember { mutableStateOf(false) }
+    val collections by produceState<List<IconifyCollection>?>(null, retry) {
+        value = null
+        loadFailed = false
+        val loaded = repository.collections()
+        loadFailed = loaded == null
+        value = loaded
     }
-    LaunchedEffect(Unit) { if (pages.isEmpty()) loadNext() }
-    // The curated sets also live in the topic — don't list them twice.
-    val discovered = remember(pages) {
-        pages.flatten().distinctBy { "${it.owner}/${it.repo}" }.filterNot { repo ->
-            OnlineIconLibraries.any { it.owner == repo.owner && it.repo == repo.repo }
+
+    var query by remember { mutableStateOf("") }
+    var category by remember { mutableStateOf<String?>(null) }
+    // null = all; true = colour sets only; false = monochrome only.
+    var palette by remember { mutableStateOf<Boolean?>(null) }
+
+    val categories = remember(collections) {
+        collections.orEmpty().mapNotNull { it.category.takeIf(String::isNotEmpty) }
+            .distinct().sorted()
+    }
+    val filtered = remember(collections, query, category, palette) {
+        val needle = query.trim().lowercase()
+        collections.orEmpty().filter { set ->
+            (needle.isEmpty() || needle in set.name.lowercase() || needle in set.prefix) &&
+                (category == null || set.category == category) &&
+                (palette == null || set.palette == palette)
         }
     }
 
-    val listState = rememberLazyListState()
-    LazyColumn(
-        state = listState,
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
+        SearchField(
+            value = query,
+            onValueChange = { query = it },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder = stringResource(R.string.onlineFilterSets)
+        )
+    }
+    // Palette toggle + category chips in one horizontally scrolling row, like the site's
+    // filter bar. The palette chips sit first — they're the ones users reach for.
+    Row(
         modifier = Modifier
-            .fillMaxSize()
-            .drawVerticalScrollbar(listState)
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        item(key = "curatedHeader") { ListSectionLabel(stringResource(R.string.onlineCuratedSection)) }
-        items(OnlineIconLibraries, key = { it.id }) { library ->
-            LibraryRow(
-                title = library.label,
-                subtitle = stringResource(R.string.onlineIconsLicense, library.license),
-                subtitleTint = null,
-                projectUrl = library.projectUrl,
-                description = when (library.id) {
-                    "simple-icons" -> stringResource(R.string.onlineSimpleIconsDesc)
-                    "tabler-icons" -> stringResource(R.string.onlineTablerIconsDesc)
-                    else -> null
-                }
-            ) { onOpen(library) }
+        FilterChip(
+            selected = palette == true,
+            onClick = { palette = if (palette == true) null else true },
+            label = { Text(stringResource(R.string.onlineFilterColor)) }
+        )
+        FilterChip(
+            selected = palette == false,
+            onClick = { palette = if (palette == false) null else false },
+            label = { Text(stringResource(R.string.onlineFilterMono)) }
+        )
+        if (categories.isNotEmpty()) {
+            Text(
+                text = "·",
+                color = MaterialTheme.colorScheme.outline,
+                modifier = Modifier.padding(horizontal = 2.dp)
+            )
+        }
+        categories.forEach { candidate ->
+            FilterChip(
+                selected = category == candidate,
+                onClick = { category = if (category == candidate) null else candidate },
+                label = { Text(candidate) }
+            )
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.onlinePoweredBy),
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        LinkText(text = "iconify.design", url = "https://iconify.design")
+    }
+    HorizontalDivider()
+
+    when {
+        collections == null && !loadFailed -> Box(
+            Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            LoadingIndicator(color = MaterialTheme.colorScheme.primary)
         }
 
-        item(key = "communityHeader") {
-            Column {
-                ListSectionLabel(stringResource(R.string.onlineCommunitySection))
-                Text(
-                    text = stringResource(R.string.onlineCommunityHint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        items(discovered, key = { "${it.owner}/${it.repo}" }) { repo ->
-            LibraryRow(
-                title = "${repo.owner}/${repo.repo}",
-                subtitle = "★ ${repo.stars} · " + (repo.license
-                    ?: stringResource(R.string.onlineUnknownLicense)),
-                subtitleTint = if (repo.license == null) MaterialTheme.colorScheme.error else null,
-                projectUrl = "https://github.com/${repo.owner}/${repo.repo}",
-                description = repo.description.takeIf { it.isNotBlank() }
-            ) { onOpen(repo.toLibrary()) }
-        }
+        loadFailed -> EmptyState(
+            icon = Icons.Filled.CloudOff,
+            text = stringResource(R.string.onlineIconsLoadFailed),
+            modifier = Modifier.fillMaxSize(),
+            actionLabel = stringResource(R.string.reload),
+            onAction = { retry++ }
+        )
 
-        item(key = "communityFooter") {
-            Box(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp),
-                contentAlignment = Alignment.Center
+        filtered.isEmpty() -> EmptyState(
+            icon = Icons.Filled.SearchOff,
+            text = stringResource(R.string.noIconsFound),
+            modifier = Modifier.fillMaxSize()
+        )
+
+        else -> {
+            val listState = rememberLazyListState()
+            LazyColumn(
+                state = listState,
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawVerticalScrollbar(listState)
             ) {
-                when {
-                    loadingPage -> LoadingIndicator(color = MaterialTheme.colorScheme.primary)
-                    discoverFailed -> TextButton(onClick = loadNext) {
-                        Text(stringResource(R.string.reload))
-                    }
-                    else -> TextButton(onClick = loadNext) {
-                        Text(stringResource(R.string.onlineLoadMore))
-                    }
+                items(filtered, key = { it.prefix }) { set ->
+                    CollectionRow(set, repository) { onOpen(set) }
                 }
             }
         }
     }
 }
 
-/** Small section label splitting the curated sets from the community results. */
+/** One set row: name, size + licence line, and up to three live sample previews. */
 @Composable
-private fun ListSectionLabel(text: String) {
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp)
-    )
-}
-
-/** One tappable library/repo row: name, licence/stars line, optional description, GitHub link. */
-@Composable
-private fun LibraryRow(
-    title: String,
-    subtitle: String,
-    subtitleTint: Color?,
-    projectUrl: String,
-    description: String? = null,
+private fun CollectionRow(
+    set: IconifyCollection,
+    repository: OnlineIconRepository,
     onOpen: () -> Unit
 ) {
     Surface(
@@ -297,52 +324,35 @@ private fun LibraryRow(
             modifier = Modifier
                 .fillMaxWidth()
                 .clickable(role = Role.Button, onClick = onOpen)
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Icon(
-                imageVector = Icons.Filled.TravelExplore,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary
-            )
+            set.samples.take(3).forEach { sample ->
+                SamplePreview(OnlineIcon(set.prefix, sample), repository)
+            }
             Column(
                 Modifier
                     .weight(1f)
-                    .padding(start = 16.dp, end = 8.dp)
+                    .padding(start = 6.dp, end = 4.dp)
             ) {
                 Text(
-                    text = title,
+                    text = set.name,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                if (description != null) {
-                    Text(
-                        text = description,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // fill = false + one line: a long licence must ellipsize, never squeeze
-                    // the GitHub link into a vertical letter stack.
-                    Text(
-                        text = subtitle,
-                        style = MaterialTheme.typography.labelMedium,
-                        color = subtitleTint ?: MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false)
-                    )
-                    LinkText(text = "GitHub", url = projectUrl)
-                }
+                Text(
+                    text = stringResource(R.string.onlineSetCount, set.total) + " · " +
+                        set.license.ifEmpty { stringResource(R.string.onlineUnknownLicense) },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (set.license.isEmpty()) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
             Icon(
                 imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
@@ -353,10 +363,32 @@ private fun LibraryRow(
     }
 }
 
-/** One library's searchable icon grid, index loaded (and disk-cached) on entry. */
+/** A small lazily-fetched sample icon for a set row. */
 @Composable
-private fun LibraryGrid(
-    library: OnlineIconLibrary,
+private fun SamplePreview(icon: OnlineIcon, repository: OnlineIconRepository) {
+    val tint = MaterialTheme.colorScheme.onSurface
+    val resources = getCurrentContext().resources
+    val vector by produceState<ImageVector?>(null, icon) {
+        value = repository.svg(icon)
+            ?.let { SvgVectorImporter.parse(it) }
+            ?.toPreviewVector(tint, resources)
+    }
+    Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
+        val image = vector
+        if (image != null) {
+            Image(
+                painter = rememberVectorPainter(image),
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+    }
+}
+
+/** One set's searchable icon grid, index loaded (and disk-cached) on entry. */
+@Composable
+private fun CollectionGrid(
+    collection: IconifyCollection,
     repository: OnlineIconRepository,
     query: String,
     onQueryChange: (String) -> Unit,
@@ -365,17 +397,17 @@ private fun LibraryGrid(
 ) {
     var retry by remember { mutableIntStateOf(0) }
     var loadFailed by remember { mutableStateOf(false) }
-    val icons by produceState<List<OnlineIcon>?>(null, library, retry) {
+    val icons by produceState<List<OnlineIcon>?>(null, collection, retry) {
         value = null
         loadFailed = false
-        val loaded = repository.icons(library)
+        val loaded = repository.icons(collection)
         loadFailed = loaded == null
         value = loaded
     }
     val filtered = remember(icons, query) {
         val needle = query.trim().lowercase().replace(' ', '-')
         val list = icons.orEmpty()
-        if (needle.isEmpty()) list else list.filter { needle in it.slug }
+        if (needle.isEmpty()) list else list.filter { needle in it.name }
     }
 
     Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
@@ -422,7 +454,7 @@ private fun LibraryGrid(
                     .fillMaxSize()
                     .drawVerticalScrollbar(gridState)
             ) {
-                items(filtered, key = { "${it.library.id}/${it.slug}" }) { icon ->
+                items(filtered, key = { "${it.prefix}/${it.name}" }) { icon ->
                     OnlineIconTile(icon, repository, enabled = enabled) { onPick(icon) }
                 }
             }
@@ -439,10 +471,11 @@ private fun OnlineIconTile(
     onClick: () -> Unit
 ) {
     val tint = MaterialTheme.colorScheme.onSurface
+    val resources = getCurrentContext().resources
     val vector by produceState<ImageVector?>(null, icon) {
         value = repository.svg(icon)
             ?.let { SvgVectorImporter.parse(it) }
-            ?.toPreviewVector(tint)
+            ?.toPreviewVector(tint, resources)
     }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -481,10 +514,14 @@ private fun OnlineIconTile(
 }
 
 /**
- * A theme-tinted preview vector from an imported SVG — same path semantics as the vector
- * editor's import (fill vs stroke with authored widths), just coloured for the browser grid.
+ * A preview vector from an imported SVG — same path semantics as the vector editor's import
+ * (fill vs stroke with authored widths). Multicolour sets render their own per-path colours;
+ * monochrome paths take the theme [tint].
  */
-private fun SvgVectorImporter.ImportedSvg.toPreviewVector(tint: Color): ImageVector? = runCatching {
+private fun SvgVectorImporter.ImportedSvg.toPreviewVector(
+    tint: Color,
+    resources: android.content.res.Resources
+): ImageVector? = runCatching {
     val builder = ImageVector.Builder(
         defaultWidth = 44.dp,
         defaultHeight = 44.dp,
@@ -493,12 +530,17 @@ private fun SvgVectorImporter.ImportedSvg.toPreviewVector(tint: Color): ImageVec
     )
     for (path in paths) {
         val nodes = PathParser().parsePathString(path.pathData).toNodes()
+        val solid = SolidColor(
+            path.color?.let { raw ->
+                ColorDecoder.decode(resources, raw).takeIf { it.isSpecified }
+            } ?: tint
+        )
         if (path.filled) {
-            builder.addPath(nodes, fill = SolidColor(tint))
+            builder.addPath(nodes, fill = solid)
         } else {
             builder.addPath(
                 nodes,
-                stroke = SolidColor(tint),
+                stroke = solid,
                 strokeLineWidth = path.strokeWidth ?: (viewportHeight / 24f)
             )
         }

@@ -49,6 +49,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.vector.EmptyPath
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
@@ -71,6 +72,7 @@ import dev.renkinProject.renkin.drawable.MutableVectorPath
 import dev.renkinProject.renkin.drawable.toImageVectorDrawable
 import dev.renkinProject.renkin.extension.createEmptyVector
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.vector.ColorDecoder
 import dev.renkinProject.renkin.vector.PathExporter.Companion.toStringPath
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyAndRemoveGroup
@@ -250,6 +252,7 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
         // what's being edited — its own coordinate space, its paths (fill/stroke split
         // and stroke widths as authored). White like every editor path — the Modifier
         // tab recolors. [sourceUrl] records the online origin (null for local files).
+        val importResources = getCurrentContext().resources
         val applyImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit = { imported, sourceUrl ->
             state.viewportOverride = imported.viewportWidth to imported.viewportHeight
             val importStroke = (imported.viewportHeight / 48f).takeIf { it > 0f } ?: 1f
@@ -262,7 +265,18 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
                         viewportWidth = imported.viewportWidth,
                         viewportHeight = imported.viewportHeight
                     )
-                    builder.addPath(nodes, stroke = SolidColor(Color.White), strokeLineWidth = spec.strokeWidth ?: importStroke)
+                    // Multicolour sets keep their authored per-path colours; monochrome
+                    // paths stay white and get their colour from the Modifier tab. Both
+                    // brushes carry the colour so toMutablePath picks the active one.
+                    val decoded = spec.color?.let { raw ->
+                        ColorDecoder.decode(importResources, raw).takeIf { it.isSpecified }
+                    } ?: Color.White
+                    builder.addPath(
+                        nodes,
+                        fill = SolidColor(decoded),
+                        stroke = SolidColor(decoded),
+                        strokeLineWidth = spec.strokeWidth ?: importStroke
+                    )
                     val path = builder.build().root.first() as VectorPath
                     PathEntry(path, filled = spec.filled, baseStroke = spec.strokeWidth ?: importStroke)
                 }.getOrNull()

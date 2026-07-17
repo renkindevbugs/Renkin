@@ -1,7 +1,9 @@
 package dev.renkinProject.renkin.data.online
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -9,110 +11,75 @@ import org.robolectric.RobolectricTestRunner
 @RunWith(RobolectricTestRunner::class)
 class OnlineIconRepositoryTest {
 
-    private val library = OnlineIconLibrary(
-        id = "test",
-        label = "Test",
-        license = "MIT",
-        owner = "owner",
-        repo = "repo",
-        pathPrefix = "icons/outline/",
-        projectUrl = "https://github.com/owner/repo"
-    )
-
     @Test
-    fun parseIndex_keepsOnlySvgFilesDirectlyUnderThePrefixSorted() {
+    fun parseCollections_readsMetadataAndSortsByName() {
         val json = """
-            {"version":"3.1.0","files":[
-                {"name":"/icons/outline/zoom.svg","size":1},
-                {"name":"/icons/outline/anchor.svg","size":1},
-                {"name":"/icons/outline/nested/skip.svg","size":1},
-                {"name":"/icons/filled/anchor.svg","size":1},
-                {"name":"/icons/outline/readme.md","size":1},
-                {"name":"/package.json","size":1}
-            ]}
+            {
+              "mdi": {"name":"Material Design Icons","total":7447,
+                      "license":{"title":"Apache 2.0","spdx":"Apache-2.0"},
+                      "samples":["account","home","alert"],
+                      "category":"General","palette":false},
+              "twemoji": {"name":"Twitter Emoji","total":3000,
+                          "license":{"title":"CC BY 4.0"},
+                          "samples":["1f600"],"category":"Emoji","palette":true},
+              "broken": {"total":0}
+            }
         """.trimIndent()
 
-        val icons = OnlineIconRepository.parseIndex(json, library)
+        val sets = OnlineIconRepository.parseCollections(json)!!
 
-        assertEquals(listOf("anchor", "zoom"), icons?.map { it.slug })
-        assertEquals("3.1.0", icons?.first()?.version)
+        assertEquals(listOf("mdi", "twemoji"), sets.map { it.prefix })
+        assertEquals("Apache-2.0", sets[0].license)
+        assertEquals("CC BY 4.0", sets[1].license)
+        assertTrue(sets[1].palette)
+        assertFalse(sets[0].palette)
+        assertEquals(listOf("account", "home", "alert"), sets[0].samples)
+        assertEquals("Emoji", sets[1].category)
+    }
+
+    @Test
+    fun parseCollections_rejectsUnreadableJson() {
+        assertNull(OnlineIconRepository.parseCollections("not json"))
+        assertNull(OnlineIconRepository.parseCollections("{}"))
+    }
+
+    @Test
+    fun parseCollection_mergesUncategorizedAndCategoriesDeduplicated() {
+        val json = """
+            {"prefix":"mdi",
+             "uncategorized":["zebra","account"],
+             "categories":{"Home":["home","account"],"Alert":["alert"]}}
+        """.trimIndent()
+
+        val icons = OnlineIconRepository.parseCollection(json)!!
+
+        assertEquals(listOf("account", "alert", "home", "zebra"), icons.map { it.name })
+        assertEquals("mdi", icons.first().prefix)
+        assertEquals("https://api.iconify.design/mdi/account.svg", icons.first().svgUrl)
+    }
+
+    @Test
+    fun parseCollection_rejectsMissingPrefixOrEmptySets() {
+        assertNull(OnlineIconRepository.parseCollection("""{"uncategorized":["a"]}"""))
+        assertNull(OnlineIconRepository.parseCollection("""{"prefix":"mdi"}"""))
+    }
+
+    @Test
+    fun onlineAttributionLabel_handlesIconifyAndLegacyGitHubUrls() {
         assertEquals(
-            "https://cdn.jsdelivr.net/gh/owner/repo@3.1.0/icons/outline/anchor.svg",
-            icons?.first()?.svgUrl
+            "simple-icons",
+            onlineAttributionLabel("https://api.iconify.design/simple-icons/firefox.svg")
         )
-    }
-
-    @Test
-    fun parseIndex_rejectsUnreadableJson() {
-        assertNull(OnlineIconRepository.parseIndex("not json", library))
-        assertNull(OnlineIconRepository.parseIndex("{\"files\":[]}", library))
-    }
-
-    @Test
-    fun onlineIcon_labelIsTheSlugWithSpaces() {
-        val icon = OnlineIcon(library, "arrow-back-up", "1.0.0")
-        assertEquals("arrow back up", icon.label)
-    }
-
-    @Test
-    fun parseIndex_communityRepoTakesNestedSvgsButSkipsDotDirectories() {
-        val community = library.copy(pathPrefix = "")
-        val json = """
-            {"version":"2.0.0","files":[
-                {"name":"/svg/social/github.svg"},
-                {"name":"/top.svg"},
-                {"name":"/.github/logo.svg"},
-                {"name":"/readme.md"}
-            ]}
-        """.trimIndent()
-
-        val icons = OnlineIconRepository.parseIndex(json, community)
-
-        assertEquals(listOf("svg/social/github", "top"), icons?.map { it.slug })
-        assertEquals("github", icons?.first()?.label?.trim())
-    }
-
-    @Test
-    fun parseSearch_dropsAndroidAppReposAndNormalisesLicences() {
-        val json = """
-            {"items":[
-                {"full_name":"a/svgset","description":"icons","stargazers_count":12,
-                 "language":"JavaScript","license":{"spdx_id":"MIT"}},
-                {"full_name":"b/androidpack","language":"Kotlin","stargazers_count":99},
-                {"full_name":"c/unlicensed","stargazers_count":3,
-                 "license":{"spdx_id":"NOASSERTION"}}
-            ]}
-        """.trimIndent()
-
-        val repos = OnlineIconRepository.parseSearch(json)
-
-        assertEquals(listOf("a/svgset", "c/unlicensed"), repos?.map { "${it.owner}/${it.repo}" })
-        assertEquals("MIT", repos?.first()?.license)
-        assertNull(repos?.last()?.license)
-    }
-
-    @Test
-    fun onlineAttributionLabel_curatedByNameCommunityByOwnerRepo() {
-        assertEquals(
-            "Simple Icons",
-            onlineAttributionLabel("https://cdn.jsdelivr.net/gh/simple-icons/simple-icons@16.0.0/icons/firefox.svg")
-        )
+        // Icons stored by the earlier GitHub-CDN build keep their attribution.
         assertEquals(
             "someone/some-icons",
             onlineAttributionLabel("https://cdn.jsdelivr.net/gh/someone/some-icons@1.2/svg/a.svg")
         )
-        assertNull(onlineAttributionLabel("https://example.com/not-a-cdn-url.svg"))
+        assertNull(onlineAttributionLabel("https://example.com/not-a-known-url.svg"))
     }
 
     @Test
-    fun curatedLibraries_excludeSetsThatShipAnAndroidIconPack() {
-        // Arcticons/Lawnicons and friends install as normal packs — the online browser is
-        // only for sets with no Android pack. Guard against them sneaking into the list.
-        val forbidden = listOf("arcticons", "lawnicons")
-        OnlineIconLibraries.forEach { library ->
-            forbidden.forEach { name ->
-                org.junit.Assert.assertFalse(library.repo.lowercase().contains(name))
-            }
-        }
+    fun onlineIcon_labelIsTheNameWithSpaces() {
+        assertEquals("arrow back up", OnlineIcon("tabler", "arrow-back-up").label)
     }
 }
