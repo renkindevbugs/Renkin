@@ -30,12 +30,14 @@ object SvgRasterizer {
     /**
      * Raster size for [svg]: the longest side always lands on [longestSide] — up or down,
      * because an SVG's document size is a hint, not pixels; a 24x24 icon document rendered
-     * 1:1 and enlarged later is exactly the blur vectors exist to avoid. Documents without
-     * width/height fall back to their viewBox; null when neither yields a drawable area.
+     * 1:1 and enlarged later is exactly the blur vectors exist to avoid. The aspect comes
+     * from the viewBox when there is one (always plain user units) and the document
+     * width/height otherwise; null when neither yields a drawable area.
      */
     fun renderSize(svg: SVG, longestSide: Int): Pair<Int, Int>? {
-        val docWidth = if (svg.documentWidth > 0) svg.documentWidth else svg.documentViewBox?.width() ?: 0f
-        val docHeight = if (svg.documentHeight > 0) svg.documentHeight else svg.documentViewBox?.height() ?: 0f
+        val viewBox = svg.documentViewBox
+        val docWidth = viewBox?.width() ?: svg.documentWidth
+        val docHeight = viewBox?.height() ?: svg.documentHeight
         if (docWidth <= 0 || docHeight <= 0) return null
         val scale = longestSide / max(docWidth, docHeight)
         val width = (docWidth * scale).toInt().coerceAtLeast(1)
@@ -51,6 +53,16 @@ object SvgRasterizer {
     ): Bitmap? {
         val svg = decode(markup, currentColorArgb) ?: return null
         val (width, height) = renderSize(svg, longestSide) ?: return null
+        // Make the document fill the render viewport. Declared sizes like "1em" resolve
+        // against the font size at render time, drawing the art tiny in a corner of the
+        // bitmap; a percentage width scales the viewBox to whatever viewport we pick.
+        runCatching {
+            if (svg.documentViewBox == null) {
+                svg.setDocumentViewBox(0f, 0f, svg.documentWidth, svg.documentHeight)
+            }
+            svg.setDocumentWidth("100%")
+            svg.setDocumentHeight("100%")
+        }.getOrElse { return null }
         return newArgbBitmap(width, height) {
             svg.renderToCanvas(it, RectF(0f, 0f, width.toFloat(), height.toFloat()))
         }

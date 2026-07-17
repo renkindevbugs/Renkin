@@ -32,7 +32,7 @@ class SvgUploadTest {
     // Gradient + defs/use document in the style of devicon's full-colour brand icons: the
     // strict vector importer must reject it while the rasteriser still renders it.
     private val gradientIcon = """
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+        <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 128 128">
           <defs><ellipse id="disc" cx="64" cy="64" rx="58" ry="58"/></defs>
           <radialGradient id="grad"><stop offset="0" stop-color="#67c5d5"/>
             <stop offset="1" stop-color="#596aad"/></radialGradient>
