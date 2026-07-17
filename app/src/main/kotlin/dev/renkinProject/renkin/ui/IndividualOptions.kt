@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.Done
@@ -67,6 +68,11 @@ import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
@@ -445,6 +451,33 @@ fun OptionsDialog(
         }
     }
 
+    // Shared by both layouts' Apply buttons (phone header card, wide preview pane).
+    val confirmIcon: () -> Unit = {
+        // Credit the icon to a pack only when it actually came from one: the Create
+        // tab's Icon Pack source. A fresh pick uses the picked pack; keeping the
+        // existing icon keeps its stored source. Upload/vector/text/app-icon = none.
+        val sourcePackToPersist = confirmedSourcePack(
+            origin = draft.origin,
+            source = source,
+            pickedPack = iconPack.takeIf { customIconList.isNotEmpty() },
+            existingPack = app.sourcePackName
+        )
+        // Online-library attribution follows how the icon was imported: a
+        // confirmed vector carries the vector tab's URL, an "as image"
+        // import the upload draft's; other origins have no online source.
+        val sourceUrlToPersist = when (draft.origin) {
+            IconOrigin.VECTOR -> vectorEditState.sourceUrl
+            IconOrigin.UPLOAD -> onlineImageUrl
+            else -> null
+        }
+        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, sourcePackToPersist, sourceUrlToPersist)
+    }
+
+    // Tablets / unfolded foldables (and landscape phones): two panes — persistent preview
+    // pane left, tabs right — instead of the collapsing phone header. Same threshold as the
+    // wide ComparisonHeader and Global options.
+    val wideLayout = LocalConfiguration.current.screenWidthDp >= 600
+
     Dialog(
         onDismissRequest = startClose,
         properties = DialogProperties(
@@ -472,111 +505,18 @@ fun OptionsDialog(
                 Modifier
                     .fillMaxSize()
                     .statusBarsPadding()
-                    .nestedScroll(headerScrollBehavior.nestedScrollConnection)
+                    .then(
+                        // The collapsing header exists only in the phone layout; the wide
+                        // layout's chrome is static, so no scroll connection to feed.
+                        if (wideLayout) Modifier
+                        else Modifier.nestedScroll(headerScrollBehavior.nestedScrollConnection)
+                    )
             ) {
-            Column(Modifier.fillMaxSize()) {
                 // The Create tab's icon-pack browser gets the Mihon-style search bar chrome.
                 val packBrowsing = selectedTab == 0 && source == Source.ICON_PACK
-                // Mihon-style scroll-under chrome: the header overlays the tab content instead of
-                // stacking above it, so the enter-always bar collapse only moves the header — the
-                // content keeps its size and just scrolls beneath, which keeps flings smooth.
-                OverlayHeaderLayout(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    header = {
-                // Opaque header background: content scrolling underneath must not show through
-                // the transparent app bar or around the comparison card.
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                ) {
-                // Sticky comparison header — close/delete/apply live in the same row
-                // and the icons shrink while the icon list is scrolled
-                ComparisonHeader(
-                    heroBitmap = heroBitmap,
-                    appName = app.appName,
-                    previewIcon = draft.iconToConfirm,
-                    previewLoading = draft.generating,
-                    confirmEnabled = !draft.generating,
-                    onDismiss = startClose,
-                    onClear = { showConfirmClear = true },
-                    onConfirm = {
-                        // Credit the icon to a pack only when it actually came from one: the Create
-                        // tab's Icon Pack source. A fresh pick uses the picked pack; keeping the
-                        // existing icon keeps its stored source. Upload/vector/text/app-icon = none.
-                        val sourcePackToPersist = confirmedSourcePack(
-                            origin = draft.origin,
-                            source = source,
-                            pickedPack = iconPack.takeIf { customIconList.isNotEmpty() },
-                            existingPack = app.sourcePackName
-                        )
-                        // Online-library attribution follows how the icon was imported: a
-                        // confirmed vector carries the vector tab's URL, an "as image"
-                        // import the upload draft's; other origins have no online source.
-                        val sourceUrlToPersist = when (draft.origin) {
-                            IconOrigin.VECTOR -> vectorEditState.sourceUrl
-                            IconOrigin.UPLOAD -> onlineImageUrl
-                            else -> null
-                        }
-                        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, sourcePackToPersist, sourceUrlToPersist)
-                    },
-                    scrollBehavior = headerScrollBehavior,
-                    labelExpand = labelExpand,
-                    // Mihon-style bar on the icon-pack browser: back arrow + inline search +
-                    // sort menu, with a thin activity line while the search still resolves.
-                    titleContent = if (packBrowsing) {
-                        {
-                            AppBarSearchField(
-                                query = createSearchQuery,
-                                onQueryChange = { createSearchQuery = it },
-                                placeholder = stringResource(R.string.searchIcons)
-                            )
-                        }
-                    } else null,
-                    extraActions = if (packBrowsing) {
-                        {
-                            IconSortMenuButton(
-                                sortOrder = iconSortOrder,
-                                onSortOrderChange = { iconSortOrder = it },
-                                packSortOrder = packSortOrder,
-                                onPackSortOrderChange = { packSortOrder = it }
-                            )
-                        }
-                    } else null,
-                    // Unified chrome: every tab uses the back arrow. Inside a pack it returns
-                    // to the pack list; everywhere else it closes the dialog.
-                    onNavigateBack = {
-                        if (packBrowsing && expandedPack != null) expandedPack = null else startClose()
-                    },
-                    showProgress = packBrowsing && createBusy
-                )
-
-                // The Create tab draws its own divider under the search bar;
-                // the other tabs get one right below the header
-                if (selectedTab != 0) {
-                    HorizontalDivider()
-                }
-
-                // Calendar card: visible only on Create tab with Icon Pack source when
-                // the selected pack declares a <calendar> entry for this app.
-                AnimatedVisibility(
-                    visible = selectedTab == 0 && source == Source.ICON_PACK && calendarPrefix != null
-                ) {
-                    CalendarCard(
-                        packName = calendarPackLabel,
-                        calendarPrefix = calendarPrefix ?: "",
-                        calendarEnabled = calendarEnabled,
-                        // Local state only: the calendar choice commits together with the icon
-                        // on Apply (the applyIcon overload). Persisting it here leaked the
-                        // prefix of a browsed-but-never-confirmed icon into the stored app.
-                        onToggle = { enabled -> calendarEnabled = enabled }
-                    )
-                }
-                }
-                    }
-                ) { headerPadding ->
+                // The tab contents, shared by the phone and wide layouts (all state is hoisted
+                // above, so folding/unfolding mid-edit keeps everything).
+                val tabContent: @Composable (PaddingValues) -> Unit = { headerPadding ->
                     AnimatedContent(
                         targetState = selectedTab,
                         transitionSpec = {
@@ -734,25 +674,184 @@ fun OptionsDialog(
                     }
                 }
 
-                // Source pills — only when Create tab is active
-                AnimatedVisibility(visible = selectedTab == 0) {
-                    SourcePills(source = source) { newSource ->
-                        source = newSource
-                        customIconList = listOf()
-                        draft.origin = IconOrigin.CREATE
+                // Source pills + bottom tab bar, identical on both layouts.
+                val bottomSection: @Composable () -> Unit = {
+                    AnimatedVisibility(visible = selectedTab == 0) {
+                        SourcePills(source = source) { newSource ->
+                            source = newSource
+                            customIconList = listOf()
+                            draft.origin = IconOrigin.CREATE
+                        }
+                    }
+                    HorizontalDivider()
+                    OptionsBottomBar(
+                        selectedTab = selectedTab,
+                        modifierEnabled = draft.hasIcon,
+                        onSelectTab = { selectedTab = it },
+                        onModifierBlocked = {
+                            toaster.show(selectIconMessage)
+                        }
+                    )
+                }
+
+                if (wideLayout) {
+                    // Tablets / unfolded foldables: persistent preview pane (big live New
+                    // preview + always-visible Apply) left, the tabs at full height right.
+                    Row(Modifier.fillMaxSize()) {
+                        EditPreviewPane(
+                            heroBitmap = heroBitmap,
+                            appName = app.appName,
+                            previewIcon = draft.iconToConfirm,
+                            previewLoading = draft.generating,
+                            confirmEnabled = !draft.generating,
+                            onDismiss = startClose,
+                            onClear = { showConfirmClear = true },
+                            onConfirm = confirmIcon,
+                            modifier = Modifier.width(320.dp),
+                            extraCard = if (selectedTab == 0 && source == Source.ICON_PACK && calendarPrefix != null) {
+                                {
+                                    CalendarCard(
+                                        packName = calendarPackLabel,
+                                        calendarPrefix = calendarPrefix ?: "",
+                                        calendarEnabled = calendarEnabled,
+                                        onToggle = { enabled -> calendarEnabled = enabled }
+                                    )
+                                }
+                            } else null
+                        )
+                        VerticalDivider()
+                        Column(Modifier.weight(1f)) {
+                            // The pack browser's chrome moves atop the right pane: back arrow
+                            // (inside a pack), inline search and the sort menu.
+                            if (packBrowsing) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (expandedPack != null) {
+                                        IconButton(onClick = { expandedPack = null }) {
+                                            Icon(
+                                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                                contentDescription = stringResource(R.string.dismiss)
+                                            )
+                                        }
+                                    }
+                                    Box(Modifier.weight(1f)) {
+                                        AppBarSearchField(
+                                            query = createSearchQuery,
+                                            onQueryChange = { createSearchQuery = it },
+                                            placeholder = stringResource(R.string.searchIcons)
+                                        )
+                                    }
+                                    IconSortMenuButton(
+                                        sortOrder = iconSortOrder,
+                                        onSortOrderChange = { iconSortOrder = it },
+                                        packSortOrder = packSortOrder,
+                                        onPackSortOrderChange = { packSortOrder = it }
+                                    )
+                                }
+                                if (createBusy) {
+                                    LinearProgressIndicator(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(3.dp)
+                                    )
+                                }
+                            }
+                            HorizontalDivider()
+                            Box(Modifier.weight(1f)) { tabContent(PaddingValues(0.dp)) }
+                            bottomSection()
+                        }
+                    }
+                } else {
+                    Column(Modifier.fillMaxSize()) {
+                // Mihon-style scroll-under chrome: the header overlays the tab content instead of
+                // stacking above it, so the enter-always bar collapse only moves the header — the
+                // content keeps its size and just scrolls beneath, which keeps flings smooth.
+                OverlayHeaderLayout(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    header = {
+                // Opaque header background: content scrolling underneath must not show through
+                // the transparent app bar or around the comparison card.
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                ) {
+                // Sticky comparison header — close/delete/apply live in the same row
+                // and the icons shrink while the icon list is scrolled
+                ComparisonHeader(
+                    heroBitmap = heroBitmap,
+                    appName = app.appName,
+                    previewIcon = draft.iconToConfirm,
+                    previewLoading = draft.generating,
+                    confirmEnabled = !draft.generating,
+                    onDismiss = startClose,
+                    onClear = { showConfirmClear = true },
+                    onConfirm = confirmIcon,
+                    scrollBehavior = headerScrollBehavior,
+                    labelExpand = labelExpand,
+                    // Mihon-style bar on the icon-pack browser: back arrow + inline search +
+                    // sort menu, with a thin activity line while the search still resolves.
+                    titleContent = if (packBrowsing) {
+                        {
+                            AppBarSearchField(
+                                query = createSearchQuery,
+                                onQueryChange = { createSearchQuery = it },
+                                placeholder = stringResource(R.string.searchIcons)
+                            )
+                        }
+                    } else null,
+                    extraActions = if (packBrowsing) {
+                        {
+                            IconSortMenuButton(
+                                sortOrder = iconSortOrder,
+                                onSortOrderChange = { iconSortOrder = it },
+                                packSortOrder = packSortOrder,
+                                onPackSortOrderChange = { packSortOrder = it }
+                            )
+                        }
+                    } else null,
+                    // Unified chrome: every tab uses the back arrow. Inside a pack it returns
+                    // to the pack list; everywhere else it closes the dialog.
+                    onNavigateBack = {
+                        if (packBrowsing && expandedPack != null) expandedPack = null else startClose()
+                    },
+                    showProgress = packBrowsing && createBusy
+                )
+
+                // The Create tab draws its own divider under the search bar;
+                // the other tabs get one right below the header
+                if (selectedTab != 0) {
+                    HorizontalDivider()
+                }
+
+                // Calendar card: visible only on Create tab with Icon Pack source when
+                // the selected pack declares a <calendar> entry for this app.
+                AnimatedVisibility(
+                    visible = selectedTab == 0 && source == Source.ICON_PACK && calendarPrefix != null
+                ) {
+                    CalendarCard(
+                        packName = calendarPackLabel,
+                        calendarPrefix = calendarPrefix ?: "",
+                        calendarEnabled = calendarEnabled,
+                        // Local state only: the calendar choice commits together with the icon
+                        // on Apply (the applyIcon overload). Persisting it here leaked the
+                        // prefix of a browsed-but-never-confirmed icon into the stored app.
+                        onToggle = { enabled -> calendarEnabled = enabled }
+                    )
+                }
+                }
+                    }
+                ) { headerPadding -> tabContent(headerPadding) }
+
+                bottomSection()
                     }
                 }
-                HorizontalDivider()
-
-                OptionsBottomBar(
-                    selectedTab = selectedTab,
-                    modifierEnabled = draft.hasIcon,
-                    onSelectTab = { selectedTab = it },
-                    onModifierBlocked = {
-                        toaster.show(selectIconMessage)
-                    }
-                )
-            }
 
             SnackbarHost(
                 hostState = snackbarHostState,

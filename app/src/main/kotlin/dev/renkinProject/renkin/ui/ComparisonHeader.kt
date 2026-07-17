@@ -52,7 +52,11 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.MutableTransitionState
@@ -247,6 +251,103 @@ internal fun ComparisonHeader(
                     )
                 }
             }
+        }
+    }
+}
+
+/**
+ * Wide-screen (tablet / unfolded foldable) edit-dialog left pane: dialog chrome (close, app
+ * name, overflow), the Current icon feeding into a LARGE live New preview — big enough to
+ * judge modifier/shape/vector detail without applying — an optional extra card slot (the
+ * calendar toggle) and the always-visible Apply/Clear actions pinned to the bottom.
+ */
+@Composable
+internal fun EditPreviewPane(
+    heroBitmap: Bitmap?,
+    appName: String,
+    previewIcon: IconPackDrawable?,
+    previewLoading: Boolean,
+    confirmEnabled: Boolean,
+    onDismiss: () -> Unit,
+    onClear: () -> Unit,
+    onConfirm: () -> Unit,
+    modifier: Modifier = Modifier,
+    extraCard: (@Composable () -> Unit)? = null
+) {
+    val flyIn = remember { MutableTransitionState(false).apply { targetState = true } }
+    val flyInSpec = spring<androidx.compose.ui.unit.IntOffset>(
+        Spring.DampingRatioMediumBouncy, Spring.StiffnessMediumLow
+    )
+    val flyInEnter = remember(flyInSpec) {
+        slideInVertically(flyInSpec) { it * 2 } + fadeIn() + scaleIn(initialScale = 0.5f)
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxHeight()
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
+        // Everything above the actions scrolls when the pane is short (landscape phones also
+        // cross the 600 dp width threshold); Apply stays pinned and always reachable.
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                CloseButton(onDismiss)
+                Text(
+                    text = appName,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 8.dp)
+                )
+                OverflowMenu(onClear)
+            }
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 20.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                CurrentSlot(heroBitmap, flyIn, flyInEnter, 48.dp, labelExpand = 1f)
+                ComparisonArrow(48.dp)
+            }
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 176.dp, labelExpand = 1f)
+            }
+
+            extraCard?.let {
+                Box(Modifier.padding(top = 16.dp)) { it() }
+            }
+        }
+
+        ApplyButton(
+            onConfirm,
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 12.dp),
+            enabled = confirmEnabled
+        )
+        OutlinedButton(
+            onClick = onClear,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 8.dp)
+        ) {
+            Text(stringResource(R.string.resetToDefault))
         }
     }
 }
