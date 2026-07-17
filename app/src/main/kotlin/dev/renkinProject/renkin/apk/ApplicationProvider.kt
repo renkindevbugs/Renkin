@@ -38,6 +38,7 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -125,9 +126,17 @@ class ApplicationProvider(private val context: Context) {
     private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
 
     suspend fun initialize() {
-        initializeApplications()
-        initializeIconPacks()
-        initializeRenkinPack()
+        // Startup phase timings land in logcat (tag "Startup") so a slow cold start can be
+        // attributed to a phase instead of guessed at. Debug-level: silent in release logs.
+        timedPhase("apps") { initializeApplications() }
+        timedPhase("icon packs") { initializeIconPacks() }
+        timedPhase("saved icons") { initializeRenkinPack() }
+    }
+
+    private suspend fun timedPhase(name: String, block: suspend () -> Unit) {
+        val startMs = android.os.SystemClock.elapsedRealtime()
+        block()
+        Log.debug("Startup", "$name loaded in ${android.os.SystemClock.elapsedRealtime() - startMs} ms")
     }
 
     /** Cold recreation can open a secondary activity before MainViewModel exists. */
