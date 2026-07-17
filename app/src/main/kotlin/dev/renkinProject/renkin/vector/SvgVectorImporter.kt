@@ -121,64 +121,88 @@ object SvgVectorImporter {
         attr(name)?.trim()?.removeSuffix("px")?.toFloatOrNull()
 
     /**
+     * SVG coordinates default only when the attribute is absent. An explicit unsupported
+     * value (percentages, other units or malformed text) returns null so the whole document
+     * is rejected instead of quietly moving the shape to zero.
+     */
+    private fun XmlPullParser.attrFOrDefault(name: String, default: Float): Float? {
+        if (attr(name) == null) return default
+        return attrF(name)
+    }
+
+    /**
      * The current basic shape as equivalent path data, or null when its attributes don't
      * describe a drawable shape. Pure coordinate maths — the SVG spec defines each shape
      * exactly in these terms, so nothing is approximated.
      */
-    private fun XmlPullParser.shapePathData(): String? = when (name) {
-        "rect" -> {
-            val x = attrF("x") ?: 0f
-            val y = attrF("y") ?: 0f
-            val w = attrF("width") ?: 0f
-            val h = attrF("height") ?: 0f
-            // rx/ry default to each other and clamp to half the side, per the spec.
-            var rx = attrF("rx") ?: attrF("ry") ?: 0f
-            var ry = attrF("ry") ?: attrF("rx") ?: 0f
-            rx = rx.coerceIn(0f, w / 2f)
-            ry = ry.coerceIn(0f, h / 2f)
-            when {
-                w <= 0f || h <= 0f -> null
-                rx <= 0f || ry <= 0f -> "M$x $y h$w v$h h${-w} Z"
-                else -> "M${x + rx} $y H${x + w - rx} A$rx $ry 0 0 1 ${x + w} ${y + ry} " +
-                    "V${y + h - ry} A$rx $ry 0 0 1 ${x + w - rx} ${y + h} H${x + rx} " +
-                    "A$rx $ry 0 0 1 $x ${y + h - ry} V${y + ry} A$rx $ry 0 0 1 ${x + rx} $y Z"
+    private fun XmlPullParser.shapePathData(): String? {
+        return when (name) {
+            "rect" -> {
+                val x = attrFOrDefault("x", 0f) ?: return null
+                val y = attrFOrDefault("y", 0f) ?: return null
+                val w = attrFOrDefault("width", 0f) ?: return null
+                val h = attrFOrDefault("height", 0f) ?: return null
+                // rx/ry default to each other and clamp to half the side, per the spec.
+                val declaredRx = attrFOrDefault("rx", Float.NaN) ?: return null
+                val declaredRy = attrFOrDefault("ry", Float.NaN) ?: return null
+                var rx = declaredRx.takeUnless { it.isNaN() }
+                    ?: declaredRy.takeUnless { it.isNaN() }
+                    ?: 0f
+                var ry = declaredRy.takeUnless { it.isNaN() }
+                    ?: declaredRx.takeUnless { it.isNaN() }
+                    ?: 0f
+                rx = rx.coerceIn(0f, w / 2f)
+                ry = ry.coerceIn(0f, h / 2f)
+                when {
+                    w <= 0f || h <= 0f -> null
+                    rx <= 0f || ry <= 0f -> "M$x $y h$w v$h h${-w} Z"
+                    else -> "M${x + rx} $y H${x + w - rx} A$rx $ry 0 0 1 ${x + w} ${y + ry} " +
+                        "V${y + h - ry} A$rx $ry 0 0 1 ${x + w - rx} ${y + h} H${x + rx} " +
+                        "A$rx $ry 0 0 1 $x ${y + h - ry} V${y + ry} A$rx $ry 0 0 1 ${x + rx} $y Z"
+                }
             }
-        }
 
-        "circle" -> {
-            val r = attrF("r") ?: 0f
-            if (r <= 0f) null else ellipsePathData(attrF("cx") ?: 0f, attrF("cy") ?: 0f, r, r)
-        }
-
-        "ellipse" -> {
-            val rx = attrF("rx") ?: 0f
-            val ry = attrF("ry") ?: 0f
-            if (rx <= 0f || ry <= 0f) null
-            else ellipsePathData(attrF("cx") ?: 0f, attrF("cy") ?: 0f, rx, ry)
-        }
-
-        "line" -> {
-            val x1 = attrF("x1") ?: 0f
-            val y1 = attrF("y1") ?: 0f
-            val x2 = attrF("x2") ?: 0f
-            val y2 = attrF("y2") ?: 0f
-            if (x1 == x2 && y1 == y2) null else "M$x1 $y1 L$x2 $y2"
-        }
-
-        "polyline", "polygon" -> {
-            val points = attr("points")?.trim()
-                ?.split(Regex("[ ,\\n\\t]+"))
-                ?.mapNotNull { it.toFloatOrNull() }
-                .orEmpty()
-            if (points.size < 4 || points.size % 2 != 0) null
-            else buildString {
-                append("M${points[0]} ${points[1]}")
-                for (i in 2 until points.size step 2) append(" L${points[i]} ${points[i + 1]}")
-                if (this@shapePathData.name == "polygon") append(" Z")
+            "circle" -> {
+                val cx = attrFOrDefault("cx", 0f) ?: return null
+                val cy = attrFOrDefault("cy", 0f) ?: return null
+                val r = attrFOrDefault("r", 0f) ?: return null
+                if (r <= 0f) null else ellipsePathData(cx, cy, r, r)
             }
-        }
 
-        else -> null
+            "ellipse" -> {
+                val cx = attrFOrDefault("cx", 0f) ?: return null
+                val cy = attrFOrDefault("cy", 0f) ?: return null
+                val rx = attrFOrDefault("rx", 0f) ?: return null
+                val ry = attrFOrDefault("ry", 0f) ?: return null
+                if (rx <= 0f || ry <= 0f) null
+                else ellipsePathData(cx, cy, rx, ry)
+            }
+
+            "line" -> {
+                val x1 = attrFOrDefault("x1", 0f) ?: return null
+                val y1 = attrFOrDefault("y1", 0f) ?: return null
+                val x2 = attrFOrDefault("x2", 0f) ?: return null
+                val y2 = attrFOrDefault("y2", 0f) ?: return null
+                if (x1 == x2 && y1 == y2) null else "M$x1 $y1 L$x2 $y2"
+            }
+
+            "polyline", "polygon" -> {
+                val pointValues = attr("points")?.trim()
+                    ?.split(Regex("[ ,\\n\\t]+"))
+                    ?.map { it.toFloatOrNull() }
+                    .orEmpty()
+                if (pointValues.any { it == null }) return null
+                val points = pointValues.filterNotNull()
+                if (points.size < 4 || points.size % 2 != 0) null
+                else buildString {
+                    append("M${points[0]} ${points[1]}")
+                    for (i in 2 until points.size step 2) append(" L${points[i]} ${points[i + 1]}")
+                    if (this@shapePathData.name == "polygon") append(" Z")
+                }
+            }
+
+            else -> null
+        }
     }
 
     /** An ellipse as two arcs, starting at its left-most point. */

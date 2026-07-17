@@ -6,6 +6,7 @@ import java.io.File
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.security.MessageDigest
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -114,8 +115,12 @@ class OnlineIconRepository(private val context: Context) {
 
     /** The library's icon index, newest cached copy first (refreshed after [INDEX_TTL_MS]). */
     suspend fun icons(library: OnlineIconLibrary): List<OnlineIcon>? = withContext(Dispatchers.IO) {
-        memoryIndexes[library.id]?.let { return@withContext it }
-        val cache = File(cacheRoot, "${library.id}-index.json")
+        // A display id made from owner/repo with separators is not unique (for example,
+        // a-b/c and a/b-c). Hash the canonical identity so unrelated community repos can
+        // never share an in-memory or disk index.
+        val libraryKey = cacheKey(library.canonicalCacheIdentity())
+        memoryIndexes[libraryKey]?.let { return@withContext it }
+        val cache = File(cacheRoot, "$libraryKey-index.json")
         val cached = cache.takeIf { it.isFile }?.let { file ->
             runCatching { file.readText() }.getOrNull()
         }
@@ -125,19 +130,20 @@ class OnlineIconRepository(private val context: Context) {
         if (parsed.isNullOrEmpty()) {
             // A fetch that yielded garbage must not clobber a still-parsable cache.
             return@withContext cached?.let { parseIndex(it, library) }?.takeIf { it.isNotEmpty() }
-                ?.also { memoryIndexes[library.id] = it }
+                ?.also { memoryIndexes[libraryKey] = it }
         }
         if (fresh != null) runCatching { cache.writeText(fresh) }
-        memoryIndexes[library.id] = parsed
+        memoryIndexes[libraryKey] = parsed
         parsed
     }
 
     /** The icon's SVG markup, from the per-icon disk cache or the CDN. */
     suspend fun svg(icon: OnlineIcon): String? = withContext(Dispatchers.IO) {
-        val dir = File(cacheRoot, icon.library.id).apply { mkdirs() }
-        // Slugs are filenames from the repo listing, but never trust them as paths.
-        val safeName = icon.slug.replace(Regex("[^A-Za-z0-9._-]"), "_")
-        val cache = File(dir, "$safeName.svg")
+        val dir = File(cacheRoot, cacheKey(icon.library.canonicalCacheIdentity())).apply { mkdirs() }
+        // The full pinned URL includes both the exact nested path and repository version.
+        // Hashing it prevents path-normalisation collisions and makes an updated version use
+        // fresh bytes instead of silently returning an older SVG from disk.
+        val cache = File(dir, "${cacheKey(icon.svgUrl)}.svg")
         if (cache.isFile) {
             runCatching { cache.readText() }.getOrNull()?.let { return@withContext it }
         }
@@ -200,6 +206,14 @@ class OnlineIconRepository(private val context: Context) {
         private const val SEARCH_TTL_MS = 24L * 60 * 60 * 1000
         private const val MAX_INDEX_BYTES = 8 * 1024 * 1024
         private const val MAX_SVG_BYTES = 512 * 1024
+
+        private fun OnlineIconLibrary.canonicalCacheIdentity(): String =
+            listOf(owner, repo, pathPrefix).joinToString("\u0000")
+
+        private fun cacheKey(value: String): String =
+            MessageDigest.getInstance("SHA-256")
+                .digest(value.toByteArray(Charsets.UTF_8))
+                .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
 
         /**
          * Parses a cached index ({"version", "files":[{"name":"/icons/x.svg"}…]}) into icons:
