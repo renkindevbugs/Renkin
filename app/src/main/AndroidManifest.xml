@@ -15,8 +15,8 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Used for exactly two things: asking the Play Store whether an icon pack referenced
          by an imported profile/backup is paid or free (PlayStoreLookup), and — only after the
-         user opts in via Settings — fetching FOSS SVG icons from GitHub via the jsDelivr CDN
-         (data/online). Nothing else touches the network. -->
+         user opts in via Settings — browsing FOSS SVG icon libraries (GitHub topic search +
+         jsDelivr CDN, data/online). Nothing else touches the network. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <uses-permission

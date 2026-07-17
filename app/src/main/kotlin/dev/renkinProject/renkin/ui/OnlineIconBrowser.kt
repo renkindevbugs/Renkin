@@ -15,6 +15,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -33,7 +36,9 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.data.online.DiscoveredRepo
 import dev.renkinProject.renkin.data.online.OnlineIcon
 import dev.renkinProject.renkin.data.online.OnlineIconLibraries
 import dev.renkinProject.renkin.data.online.OnlineIconLibrary
@@ -134,7 +140,7 @@ internal fun OnlineIconBrowserDialog(
 
                 val current = library
                 if (current == null) {
-                    LibraryList(onOpen = { library = it })
+                    LibraryList(repository = repository, onOpen = { library = it })
                 } else {
                     LibraryGrid(
                         library = current,
@@ -164,63 +170,175 @@ internal fun OnlineIconBrowserDialog(
     }
 }
 
-/** The curated libraries as tappable rows: name, licence and the project link. */
+/**
+ * The library picker: the curated sets on top, then an endless, scrollable community section
+ * fed by GitHub's `icon-pack` topic (most-starred first, "Load more" appends pages). The
+ * community rows show stars and the declared licence — or an explicit unknown-licence
+ * warning, since anything on GitHub can appear there.
+ */
 @Composable
-private fun LibraryList(onOpen: (OnlineIconLibrary) -> Unit) {
-    Column(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+private fun LibraryList(repository: OnlineIconRepository, onOpen: (OnlineIconLibrary) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var pages by remember { mutableStateOf<List<List<DiscoveredRepo>>>(emptyList()) }
+    var loadingPage by remember { mutableStateOf(false) }
+    var discoverFailed by remember { mutableStateOf(false) }
+    val loadNext: () -> Unit = {
+        if (!loadingPage) {
+            loadingPage = true
+            discoverFailed = false
+            scope.launch {
+                val next = repository.discoverRepos(pages.size + 1)
+                if (next == null) discoverFailed = true else pages = pages + listOf(next)
+                loadingPage = false
+            }
+        }
+    }
+    LaunchedEffect(Unit) { if (pages.isEmpty()) loadNext() }
+    // The curated sets also live in the topic — don't list them twice.
+    val discovered = remember(pages) {
+        pages.flatten().distinctBy { "${it.owner}/${it.repo}" }.filterNot { repo ->
+            OnlineIconLibraries.any { it.owner == repo.owner && it.repo == repo.repo }
+        }
+    }
+
+    val listState = rememberLazyListState()
+    LazyColumn(
+        state = listState,
+        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxSize()
+            .drawVerticalScrollbar(listState)
     ) {
-        OnlineIconLibraries.forEach { library ->
-            Surface(
-                shape = CardShape,
-                color = MaterialTheme.colorScheme.surfaceContainer,
-                modifier = Modifier.fillMaxWidth()
+        item(key = "curatedHeader") { ListSectionLabel(stringResource(R.string.onlineCuratedSection)) }
+        items(OnlineIconLibraries, key = { it.id }) { library ->
+            LibraryRow(
+                title = library.label,
+                subtitle = stringResource(R.string.onlineIconsLicense, library.license),
+                subtitleTint = null,
+                projectUrl = library.projectUrl
+            ) { onOpen(library) }
+        }
+
+        item(key = "communityHeader") {
+            Column {
+                ListSectionLabel(stringResource(R.string.onlineCommunitySection))
+                Text(
+                    text = stringResource(R.string.onlineCommunityHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        items(discovered, key = { "${it.owner}/${it.repo}" }) { repo ->
+            LibraryRow(
+                title = "${repo.owner}/${repo.repo}",
+                subtitle = "★ ${repo.stars} · " + (repo.license
+                    ?: stringResource(R.string.onlineUnknownLicense)),
+                subtitleTint = if (repo.license == null) MaterialTheme.colorScheme.error else null,
+                projectUrl = "https://github.com/${repo.owner}/${repo.repo}",
+                description = repo.description.takeIf { it.isNotBlank() }
+            ) { onOpen(repo.toLibrary()) }
+        }
+
+        item(key = "communityFooter") {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(role = Role.Button, onClick = { onOpen(library) })
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.TravelExplore,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Column(
-                        Modifier
-                            .weight(1f)
-                            .padding(start = 16.dp, end = 8.dp)
-                    ) {
-                        Text(
-                            text = library.label,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.onlineIconsLicense, library.license),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            LinkText(text = "GitHub", url = library.projectUrl)
-                        }
+                when {
+                    loadingPage -> LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+                    discoverFailed -> TextButton(onClick = loadNext) {
+                        Text(stringResource(R.string.reload))
                     }
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
+                    else -> TextButton(onClick = loadNext) {
+                        Text(stringResource(R.string.onlineLoadMore))
+                    }
                 }
             }
+        }
+    }
+}
+
+/** Small section label splitting the curated sets from the community results. */
+@Composable
+private fun ListSectionLabel(text: String) {
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 4.dp, top = 6.dp, bottom = 2.dp)
+    )
+}
+
+/** One tappable library/repo row: name, licence/stars line, optional description, GitHub link. */
+@Composable
+private fun LibraryRow(
+    title: String,
+    subtitle: String,
+    subtitleTint: Color?,
+    projectUrl: String,
+    description: String? = null,
+    onOpen: () -> Unit
+) {
+    Surface(
+        shape = CardShape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(role = Role.Button, onClick = onOpen)
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Filled.TravelExplore,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Column(
+                Modifier
+                    .weight(1f)
+                    .padding(start = 16.dp, end = 8.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (description != null) {
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.labelMedium,
+                        color = subtitleTint ?: MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LinkText(text = "GitHub", url = projectUrl)
+                }
+            }
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
     }
 }

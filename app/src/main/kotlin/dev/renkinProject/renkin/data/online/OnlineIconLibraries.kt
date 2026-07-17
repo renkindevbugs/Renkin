@@ -51,9 +51,39 @@ val OnlineIconLibraries: List<OnlineIconLibrary> = listOf(
     )
 )
 
-/** The curated library a stored attribution URL points into, if any. */
-fun libraryForUrl(url: String): OnlineIconLibrary? =
-    OnlineIconLibraries.firstOrNull { url.contains("/gh/${it.owner}/${it.repo}@") }
+/**
+ * Human label for a stored attribution URL: the curated library's name when it is one of
+ * ours, otherwise the plain "owner/repo" of the community repository it points into.
+ */
+fun onlineAttributionLabel(url: String): String? {
+    val match = Regex("/gh/([^/@]+)/([^/@]+)@").find(url) ?: return null
+    val (owner, repo) = match.destructured
+    return OnlineIconLibraries.firstOrNull { it.owner == owner && it.repo == repo }?.label
+        ?: "$owner/$repo"
+}
+
+/**
+ * A community repository discovered through GitHub's `icon-pack` topic — browsable exactly
+ * like a curated library (empty path prefix: every SVG in the repo, wherever it sits).
+ */
+data class DiscoveredRepo(
+    val owner: String,
+    val repo: String,
+    val description: String,
+    val stars: Int,
+    /** SPDX id from GitHub, or null when the repo declares no recognised licence. */
+    val license: String?
+) {
+    fun toLibrary(): OnlineIconLibrary = OnlineIconLibrary(
+        id = "gh-$owner-$repo",
+        label = "$owner/$repo",
+        license = license ?: "",
+        owner = owner,
+        repo = repo,
+        pathPrefix = "",
+        projectUrl = "https://github.com/$owner/$repo"
+    )
+}
 
 /** One icon in a library's index; the SVG itself is fetched only when needed. */
 data class OnlineIcon(
@@ -62,7 +92,8 @@ data class OnlineIcon(
     /** The resolved repo version the index was read from — pins the CDN URL. */
     val version: String
 ) {
-    val label: String get() = slug.replace('-', ' ')
+    // Community repos index nested paths — label by the file name, not the folders.
+    val label: String get() = slug.substringAfterLast('/').replace('-', ' ')
 
     /** Public, versioned URL of the SVG — also stored as the icon's attribution reference. */
     val svgUrl: String
@@ -116,6 +147,30 @@ class OnlineIconRepository(private val context: Context) {
     }
 
     /**
+     * One page of community repositories from GitHub's `icon-pack` topic, most-starred first
+     * (30 per page). Cached per page for a day — the unauthenticated search API allows only
+     * 10 requests/min, which manual browsing plus this cache stays well under. Null on
+     * failure ONLY when no cache exists; a stale cache is better than an error.
+     */
+    suspend fun discoverRepos(page: Int): List<DiscoveredRepo>? = withContext(Dispatchers.IO) {
+        val cache = File(cacheRoot, "gh-topic-page-$page.json")
+        val cached = cache.takeIf { it.isFile }?.let { runCatching { it.readText() }.getOrNull() }
+        val fresh = if (cached == null || cache.ageMs() > SEARCH_TTL_MS) {
+            httpGetText(
+                "https://api.github.com/search/repositories" +
+                    "?q=topic:icon-pack&sort=stars&order=desc&per_page=30&page=$page",
+                MAX_INDEX_BYTES
+            )
+        } else null
+        val parsedFresh = fresh?.let { parseSearch(it) }
+        if (parsedFresh != null) {
+            runCatching { cache.writeText(fresh) }
+            return@withContext parsedFresh
+        }
+        cached?.let { parseSearch(it) }
+    }
+
+    /**
      * Downloads the index: resolves the repo's latest tagged version, then lists its files —
      * two small requests total. Stored as one JSON with the version embedded.
      */
@@ -142,13 +197,15 @@ class OnlineIconRepository(private val context: Context) {
 
     companion object {
         private const val INDEX_TTL_MS = 7L * 24 * 60 * 60 * 1000
+        private const val SEARCH_TTL_MS = 24L * 60 * 60 * 1000
         private const val MAX_INDEX_BYTES = 8 * 1024 * 1024
         private const val MAX_SVG_BYTES = 512 * 1024
 
         /**
          * Parses a cached index ({"version", "files":[{"name":"/icons/x.svg"}…]}) into icons:
-         * .svg files directly under the library's path prefix, sorted by slug. Null when the
-         * JSON is unreadable.
+         * .svg files under the library's path prefix, sorted by slug. Curated libraries pin a
+         * folder and take only its direct children; community repos (empty prefix) take every
+         * SVG wherever it sits, skipping dot-directories. Null when the JSON is unreadable.
          */
         fun parseIndex(json: String, library: OnlineIconLibrary): List<OnlineIcon>? = runCatching {
             val root = JSONObject(json)
@@ -160,11 +217,43 @@ class OnlineIconRepository(private val context: Context) {
                 val name = files.getJSONObject(i).optString("name")
                 if (!name.startsWith(prefix) || !name.endsWith(".svg")) continue
                 val slug = name.removePrefix(prefix).removeSuffix(".svg")
-                if (slug.isEmpty() || '/' in slug) continue
+                if (slug.isEmpty()) continue
+                if (library.pathPrefix.isNotEmpty() && '/' in slug) continue
+                if (slug.split('/').any { it.startsWith('.') || it.isEmpty() }) continue
                 icons.add(OnlineIcon(library, slug, version))
             }
             icons.sortBy { it.slug }
             icons.toList()
+        }.getOrNull()
+
+        /**
+         * Parses a GitHub repository-search response into browsable repos. Kotlin/Java repos
+         * are dropped — those are Android icon-pack APPS, which belong in the installed-pack
+         * flow, not here. "NOASSERTION" counts as no licence.
+         */
+        fun parseSearch(json: String): List<DiscoveredRepo>? = runCatching {
+            val items = JSONObject(json).getJSONArray("items")
+            val repos = mutableListOf<DiscoveredRepo>()
+            for (i in 0 until items.length()) {
+                val item = items.getJSONObject(i)
+                val fullName = item.optString("full_name")
+                val parts = fullName.split('/')
+                if (parts.size != 2 || parts.any { it.isEmpty() }) continue
+                val language = item.optString("language")
+                if (language.equals("kotlin", true) || language.equals("java", true)) continue
+                val spdx = item.optJSONObject("license")?.optString("spdx_id")
+                    ?.takeIf { it.isNotEmpty() && it != "NOASSERTION" }
+                repos.add(
+                    DiscoveredRepo(
+                        owner = parts[0],
+                        repo = parts[1],
+                        description = item.optString("description").take(120),
+                        stars = item.optInt("stargazers_count"),
+                        license = spdx
+                    )
+                )
+            }
+            repos.toList()
         }.getOrNull()
 
         /** Small GET returning the body as text; null on any failure or oversized response. */

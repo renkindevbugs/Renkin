@@ -370,6 +370,11 @@
     <string name="onlineIconsButton">Online</string>
     <string name="onlineIconsLicense">%1$s licence · fetched from GitHub</string>
     <string name="onlineIconsLoadFailed">Couldn\'t load the icon list. Check your connection and try again.</string>
+    <string name="onlineCuratedSection">Recommended</string>
+    <string name="onlineCommunitySection">Community · GitHub topic “icon-pack”</string>
+    <string name="onlineCommunityHint">Anything on GitHub can show up here — check a project\'s licence before using its icons.</string>
+    <string name="onlineLoadMore">Load more</string>
+    <string name="onlineUnknownLicense">Unknown licence</string>
     <string name="onlineIconsSetting">Online icon libraries (BETA)</string>
     <string name="onlineIconsSettingDesc">Browse free, open-source SVG icon sets in the icon editor\'s Vector tab. Only the list and the icons you view are downloaded (from GitHub via the jsDelivr CDN).</string>
     <string name="globalExperimentalTitle">Global options is experimental</string>

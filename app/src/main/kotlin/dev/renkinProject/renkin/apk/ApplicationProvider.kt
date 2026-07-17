@@ -27,7 +27,7 @@ import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getDefaultBackgroundColor
 import dev.renkinProject.renkin.data.getDefaultIconColor
 import dev.renkinProject.renkin.data.getStringValue
-import dev.renkinProject.renkin.data.online.libraryForUrl
+import dev.renkinProject.renkin.data.online.onlineAttributionLabel
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
@@ -756,14 +756,15 @@ class ApplicationProvider(private val context: Context) {
                 installed = pack in installed
             )
         }
-        // Online FOSS libraries count like packs — attributed by the stored source URL.
-        // "installed" on purpose: there is nothing to install, so no missing-pack scare.
+        // Online FOSS libraries count like packs — attributed by the stored source URL
+        // (curated sets by name, community repos as "owner/repo"). "installed" on purpose:
+        // there is nothing to install, so no missing-pack scare.
         val onlineRows = applicationList
-            .mapNotNull { it.sourceUrl?.let(::libraryForUrl) }
+            .mapNotNull { it.sourceUrl?.let(::onlineAttributionLabel) }
             .groupingBy { it }
             .eachCount()
-            .map { (library, count) ->
-                PackUsage("online:${library.id}", library.label, count, installed = true)
+            .map { (label, count) ->
+                PackUsage("online:$label", label, count, installed = true)
             }
         (packRows + onlineRows)
             .sortedWith(compareByDescending<PackUsage> { it.count }.thenBy { it.label.lowercase() })

@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.SegmentedButton
@@ -496,14 +497,14 @@ private fun ImportSourcePills(onImported: (SvgVectorImporter.ImportedSvg, String
             selected = false,
             onClick = importFromFile,
             shape = SegmentedButtonDefaults.itemShape(index = 0, count = count),
-            icon = {}
+            icon = { Icon(Icons.Filled.FileUpload, null, Modifier.size(18.dp)) }
         ) { Text(stringResource(R.string.importSvg)) }
         if (onlineEnabled) {
             SegmentedButton(
                 selected = false,
                 onClick = { browserOpen = true },
                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = count),
-                icon = {}
+                icon = { Icon(Icons.Filled.TravelExplore, null, Modifier.size(18.dp)) }
             ) { Text(stringResource(R.string.onlineIconsButton)) }
         }
     }
