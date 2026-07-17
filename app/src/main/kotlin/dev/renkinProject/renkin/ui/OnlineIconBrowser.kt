@@ -28,6 +28,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.EditOff
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilterChip
@@ -51,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.isSpecified
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -64,10 +66,13 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.OnlineIconBrowserViewModel
+import dev.renkinProject.renkin.OnlineIconImport
+import dev.renkinProject.renkin.OnlineIconPreview
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIcon
 import dev.renkinProject.renkin.ui.theme.CardShape
+import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.vector.ColorDecoder
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import kotlinx.coroutines.launch
@@ -87,7 +92,8 @@ internal fun OnlineIconBrowserDialog(
 ) {
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
-    val importFailedMessage = stringResource(R.string.svgImportFailed)
+    val notImportableMessage = stringResource(R.string.onlineIconNotImportable)
+    val loadFailedMessage = stringResource(R.string.onlineIconLoadFailed)
 
     // null = the set list; non-null = that set's icon grid (back returns to the list).
     var importing by remember { mutableStateOf(false) }
@@ -146,13 +152,15 @@ internal fun OnlineIconBrowserDialog(
                     if (!importing) {
                         importing = true
                         scope.launch {
-                            val imported = viewModel.importedSvg(icon)
+                            val outcome = viewModel.importIcon(icon)
                             importing = false
-                            if (imported == null) {
-                                toaster.show(importFailedMessage)
-                            } else {
-                                viewModel.endSession()
-                                onPicked(imported, icon.svgUrl)
+                            when (outcome) {
+                                is OnlineIconImport.Imported -> {
+                                    viewModel.endSession()
+                                    onPicked(outcome.svg, icon.svgUrl)
+                                }
+                                OnlineIconImport.NotImportable -> toaster.show(notImportableMessage)
+                                OnlineIconImport.LoadFailed -> toaster.show(loadFailedMessage)
                             }
                         }
                     }
@@ -439,19 +447,11 @@ private fun CollectionRow(
 @Composable
 private fun SamplePreview(icon: OnlineIcon, viewModel: OnlineIconBrowserViewModel) {
     val tint = MaterialTheme.colorScheme.onSurface
-    val vector by produceState<ImageVector?>(null, icon) {
-        value = viewModel.importedSvg(icon)
-            ?.toPreviewVector(tint)
+    val preview by produceState<OnlineIconPreview?>(null, icon, tint) {
+        value = viewModel.preview(icon, tint.toArgb())
     }
     Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
-        val image = vector
-        if (image != null) {
-            Image(
-                painter = rememberVectorPainter(image),
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize()
-            )
-        }
+        OnlinePreviewImage(preview, tint, contentDescription = null)
     }
 }
 
@@ -535,9 +535,8 @@ private fun OnlineIconTile(
     onClick: () -> Unit
 ) {
     val tint = MaterialTheme.colorScheme.onSurface
-    val vector by produceState<ImageVector?>(null, icon) {
-        value = viewModel.importedSvg(icon)
-            ?.toPreviewVector(tint)
+    val preview by produceState<OnlineIconPreview?>(null, icon, tint) {
+        value = viewModel.preview(icon, tint.toArgb())
     }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -546,19 +545,32 @@ private fun OnlineIconTile(
             .padding(vertical = 6.dp, horizontal = 2.dp)
     ) {
         Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-            val image = vector
-            if (image != null) {
-                Image(
-                    painter = rememberVectorPainter(image),
-                    contentDescription = icon.label,
-                    modifier = Modifier.fillMaxSize()
-                )
-            } else {
+            if (preview == null) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     shape = dev.renkinProject.renkin.ui.theme.InnerShape,
                     color = MaterialTheme.colorScheme.surfaceContainer
                 ) {}
+            } else {
+                OnlinePreviewImage(preview, tint, contentDescription = icon.label)
+            }
+            // Faithful raster previews can't become editable vectors — flag them so the
+            // rejection toast on tap isn't the first hint.
+            if (preview is OnlineIconPreview.PreviewOnly) {
+                Surface(
+                    shape = SwatchShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                    modifier = Modifier.align(Alignment.BottomEnd)
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.EditOff,
+                        contentDescription = stringResource(R.string.onlineIconNotImportable),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier
+                            .padding(2.dp)
+                            .size(12.dp)
+                    )
+                }
             }
         }
         Text(
@@ -583,6 +595,38 @@ private fun OnlineIconTile(
                 modifier = Modifier.fillMaxWidth()
             )
         }
+    }
+}
+
+/**
+ * Renders either preview kind at the size of its container: editable icons as tinted
+ * vectors, preview-only icons as their faithful raster. Nothing while still loading.
+ */
+@Composable
+private fun OnlinePreviewImage(
+    preview: OnlineIconPreview?,
+    tint: Color,
+    contentDescription: String?
+) {
+    when (preview) {
+        is OnlineIconPreview.Editable -> {
+            val image = remember(preview, tint) { preview.svg.toPreviewVector(tint) }
+            if (image != null) {
+                Image(
+                    painter = rememberVectorPainter(image),
+                    contentDescription = contentDescription,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+        }
+
+        is OnlineIconPreview.PreviewOnly -> Image(
+            bitmap = preview.bitmap,
+            contentDescription = contentDescription,
+            modifier = Modifier.fillMaxSize()
+        )
+
+        null -> Unit
     }
 }
 

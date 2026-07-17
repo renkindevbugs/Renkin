@@ -5,12 +5,15 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIcon
 import dev.renkinProject.renkin.data.online.OnlineIconRepository
+import dev.renkinProject.renkin.vector.SvgRasterizer
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +21,23 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * How a browsed icon can be shown: [Editable] parsed by the strict vector importer (tap
+ * imports it into the editor), or [PreviewOnly] rendered faithfully by AndroidSVG because
+ * the document uses paints the editor can't model (gradients, clips, `<use>`).
+ */
+sealed interface OnlineIconPreview {
+    data class Editable(val svg: SvgVectorImporter.ImportedSvg) : OnlineIconPreview
+    data class PreviewOnly(val bitmap: ImageBitmap) : OnlineIconPreview
+}
+
+/** Import resolution for a tapped icon — the UI explains each failure differently. */
+sealed interface OnlineIconImport {
+    data class Imported(val svg: SvgVectorImporter.ImportedSvg) : OnlineIconImport
+    data object NotImportable : OnlineIconImport
+    data object LoadFailed : OnlineIconImport
+}
 
 /** Owns one open Online Icons browsing session; closing the browser explicitly resets it. */
 @HiltViewModel
@@ -89,6 +109,12 @@ class OnlineIconBrowserViewModel @Inject constructor(
     private var sessionActive = false
     private val parsedSvgCache = LruCache<String, SvgVectorImporter.ImportedSvg>(PARSED_SVG_COUNT)
 
+    // Rasterised previews for icons the strict importer rejects (gradient/clip documents).
+    // Keyed by URL + tint because currentColor is substituted at render time.
+    private val rasterCache = object : LruCache<String, ImageBitmap>(RASTER_CACHE_BYTES) {
+        override fun sizeOf(key: String, value: ImageBitmap): Int = value.width * value.height * 4
+    }
+
     fun beginSession() {
         if (sessionActive) return
         sessionActive = true
@@ -130,13 +156,38 @@ class OnlineIconBrowserViewModel @Inject constructor(
         selectedCollection?.let(::loadIcons)
     }
 
-    suspend fun importedSvg(icon: OnlineIcon): SvgVectorImporter.ImportedSvg? {
-        parsedSvgCache.get(icon.svgUrl)?.let { return it }
-        val parsed = repository.svg(icon)?.let { markup ->
-            withContext(Dispatchers.Default) { SvgVectorImporter.parse(markup) }
+    /**
+     * The tile preview: the strict import parse when the editor can model the icon,
+     * otherwise a faithful AndroidSVG raster with `currentColor` resolved to [tintArgb].
+     * Null when the icon can't be fetched or rendered at all.
+     */
+    suspend fun preview(icon: OnlineIcon, tintArgb: Int): OnlineIconPreview? {
+        parsedSvgCache.get(icon.svgUrl)?.let { return OnlineIconPreview.Editable(it) }
+        val rasterKey = "${icon.svgUrl}#$tintArgb"
+        rasterCache.get(rasterKey)?.let { return OnlineIconPreview.PreviewOnly(it) }
+        val markup = repository.svg(icon) ?: return null
+        return withContext(Dispatchers.Default) {
+            SvgVectorImporter.parse(markup)?.let { parsed ->
+                parsedSvgCache.put(icon.svgUrl, parsed)
+                OnlineIconPreview.Editable(parsed)
+            } ?: SvgRasterizer.rasterize(markup, PREVIEW_RASTER_SIZE, tintArgb)
+                ?.asImageBitmap()
+                ?.let { bitmap ->
+                    rasterCache.put(rasterKey, bitmap)
+                    OnlineIconPreview.PreviewOnly(bitmap)
+                }
         }
-        if (parsed != null) parsedSvgCache.put(icon.svgUrl, parsed)
-        return parsed
+    }
+
+    /** Import resolution for a tapped icon: distinguishes "couldn't fetch" from "fetched,
+     * but not modellable as editable vector paths" so the UI can explain which happened. */
+    suspend fun importIcon(icon: OnlineIcon): OnlineIconImport {
+        parsedSvgCache.get(icon.svgUrl)?.let { return OnlineIconImport.Imported(it) }
+        val markup = repository.svg(icon) ?: return OnlineIconImport.LoadFailed
+        val parsed = withContext(Dispatchers.Default) { SvgVectorImporter.parse(markup) }
+            ?: return OnlineIconImport.NotImportable
+        parsedSvgCache.put(icon.svgUrl, parsed)
+        return OnlineIconImport.Imported(parsed)
     }
 
     private fun loadCollections() {
@@ -183,6 +234,10 @@ class OnlineIconBrowserViewModel @Inject constructor(
 
     private companion object {
         const val PARSED_SVG_COUNT = 160
+        // 128px covers the 44dp tile on ~3x screens; ~64KB per icon, 4MB keeps roughly the
+        // last 60 colour previews without competing with real image work for memory.
+        const val PREVIEW_RASTER_SIZE = 128
+        const val RASTER_CACHE_BYTES = 4 * 1024 * 1024
         const val MIN_SEARCH_LENGTH = 2
         const val SEARCH_DEBOUNCE_MS = 350L
     }

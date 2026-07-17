@@ -375,6 +375,8 @@
     <string name="onlineSetCount">%1$d icons</string>
     <string name="onlinePoweredBy">Icon data by</string>
     <string name="onlineUnknownLicense">Unknown licence</string>
+    <string name="onlineIconNotImportable">Preview only — this icon uses gradients or effects the vector editor can\'t import</string>
+    <string name="onlineIconLoadFailed">Couldn\'t download this icon. Check your connection and try again.</string>
     <string name="onlineIconsSetting">Online icon libraries (BETA)</string>
     <string name="onlineIconsSettingDesc">Browse 200+ free, open-source SVG icon sets in the icon editor\'s Vector tab (via the Iconify API). Only the set list and the icons you view are downloaded.</string>
     <string name="globalExperimentalTitle">Global options is experimental</string>
