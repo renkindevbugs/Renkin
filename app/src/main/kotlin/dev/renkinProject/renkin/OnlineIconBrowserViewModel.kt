@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin
 
+import android.graphics.Bitmap
 import android.util.LruCache
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -157,25 +158,45 @@ class OnlineIconBrowserViewModel @Inject constructor(
     }
 
     /**
-     * The tile preview: the strict import parse when the editor can model the icon,
-     * otherwise a faithful AndroidSVG raster with `currentColor` resolved to [tintArgb].
-     * Null when the icon can't be fetched or rendered at all.
+     * The preview for one icon: the strict import parse when the editor can model it,
+     * otherwise a faithful AndroidSVG raster with `currentColor` resolved to [tintArgb],
+     * rendered [rasterSize] px on its longest side (tiles use the small default, the detail
+     * dialog asks for more). Null when the icon can't be fetched or rendered at all.
      */
-    suspend fun preview(icon: OnlineIcon, tintArgb: Int): OnlineIconPreview? {
+    suspend fun preview(
+        icon: OnlineIcon,
+        tintArgb: Int,
+        rasterSize: Int = PREVIEW_RASTER_SIZE
+    ): OnlineIconPreview? {
         parsedSvgCache.get(icon.svgUrl)?.let { return OnlineIconPreview.Editable(it) }
-        val rasterKey = "${icon.svgUrl}#$tintArgb"
+        val rasterKey = "${icon.svgUrl}#$tintArgb#$rasterSize"
         rasterCache.get(rasterKey)?.let { return OnlineIconPreview.PreviewOnly(it) }
         val markup = repository.svg(icon) ?: return null
         return withContext(Dispatchers.Default) {
             SvgVectorImporter.parse(markup)?.let { parsed ->
                 parsedSvgCache.put(icon.svgUrl, parsed)
                 OnlineIconPreview.Editable(parsed)
-            } ?: SvgRasterizer.rasterize(markup, PREVIEW_RASTER_SIZE, tintArgb)
+            } ?: SvgRasterizer.rasterize(markup, rasterSize, tintArgb)
                 ?.asImageBitmap()
                 ?.let { bitmap ->
                     rasterCache.put(rasterKey, bitmap)
                     OnlineIconPreview.PreviewOnly(bitmap)
                 }
+        }
+    }
+
+    /** The close-up preview for the detail dialog — rasters render at [DETAIL_RASTER_SIZE]. */
+    suspend fun detailPreview(icon: OnlineIcon, tintArgb: Int): OnlineIconPreview? =
+        preview(icon, tintArgb, DETAIL_RASTER_SIZE)
+
+    /**
+     * Full-size raster for "use as image": the icon exactly as its SVG paints it, at the
+     * same resolution the upload gallery imports at. Not cached — it's a one-off on confirm.
+     */
+    suspend fun importImage(icon: OnlineIcon): Bitmap? {
+        val markup = repository.svg(icon) ?: return null
+        return withContext(Dispatchers.Default) {
+            SvgRasterizer.rasterize(markup, IMAGE_IMPORT_SIZE)
         }
     }
 
@@ -234,10 +255,14 @@ class OnlineIconBrowserViewModel @Inject constructor(
 
     private companion object {
         const val PARSED_SVG_COUNT = 160
-        // 128px covers the 44dp tile on ~3x screens; ~64KB per icon, 4MB keeps roughly the
-        // last 60 colour previews without competing with real image work for memory.
+        // 128px covers the 44dp tile on ~3x screens; ~64KB per icon. The cache also holds a
+        // few 512px detail renders (~1MB each), so 6MB keeps browsing smooth without
+        // competing with real image work for memory.
         const val PREVIEW_RASTER_SIZE = 128
-        const val RASTER_CACHE_BYTES = 4 * 1024 * 1024
+        const val DETAIL_RASTER_SIZE = 512
+        const val RASTER_CACHE_BYTES = 6 * 1024 * 1024
+        // Same resolution the upload gallery imports at (UploadImageProcessing).
+        const val IMAGE_IMPORT_SIZE = 1024
         const val MIN_SEARCH_LENGTH = 2
         const val SEARCH_DEBOUNCE_MS = 350L
     }

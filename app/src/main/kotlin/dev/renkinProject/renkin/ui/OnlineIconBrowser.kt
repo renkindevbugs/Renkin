@@ -39,6 +39,7 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -81,12 +82,15 @@ import kotlinx.coroutines.launch
  * Fullscreen browser over the Iconify catalogue (200+ FOSS icon sets): a filterable set list
  * (keyword, category, colour-vs-monochrome — mirroring iconify.design's own filters), then
  * the tapped set's searchable grid. Only the set list, one set's name index and the
- * visible/tapped SVGs are downloaded (cached on disk). [onPicked] receives the parsed SVG
- * plus its public source URL, which the caller stores as the icon's attribution reference.
+ * visible/tapped SVGs are downloaded (cached on disk). Tapping an icon opens a close-up
+ * detail dialog first — browsing without committing. [onPicked] receives the parsed SVG of
+ * an editable icon; [onPickedImage] the full-size raster of a preview-only one (gradients
+ * etc.). Both get the public source URL, stored as the icon's attribution reference.
  */
 @Composable
 internal fun OnlineIconBrowserDialog(
     onPicked: (SvgVectorImporter.ImportedSvg, sourceUrl: String) -> Unit,
+    onPickedImage: (android.graphics.Bitmap, sourceUrl: String) -> Unit,
     onDismiss: () -> Unit,
     viewModel: OnlineIconBrowserViewModel = hiltViewModel()
 ) {
@@ -97,6 +101,8 @@ internal fun OnlineIconBrowserDialog(
 
     // null = the set list; non-null = that set's icon grid (back returns to the list).
     var importing by remember { mutableStateOf(false) }
+    // The icon whose close-up detail dialog is open.
+    var detailIcon by remember { mutableStateOf<OnlineIcon?>(null) }
     LaunchedEffect(Unit) { viewModel.beginSession() }
     val back: () -> Unit = {
         if (!importing) {
@@ -146,24 +152,10 @@ internal fun OnlineIconBrowserDialog(
                     }
                 }
 
-                // One import path for every surface an icon can be tapped on (set grid and
-                // the cross-set search results).
+                // Every surface an icon can be tapped on (set grid and the cross-set search
+                // results) opens the close-up detail first — importing happens from there.
                 val pickIcon: (OnlineIcon) -> Unit = { icon ->
-                    if (!importing) {
-                        importing = true
-                        scope.launch {
-                            val outcome = viewModel.importIcon(icon)
-                            importing = false
-                            when (outcome) {
-                                is OnlineIconImport.Imported -> {
-                                    viewModel.endSession()
-                                    onPicked(outcome.svg, icon.svgUrl)
-                                }
-                                OnlineIconImport.NotImportable -> toaster.show(notImportableMessage)
-                                OnlineIconImport.LoadFailed -> toaster.show(loadFailedMessage)
-                            }
-                        }
-                    }
+                    if (!importing) detailIcon = icon
                 }
                 val current = viewModel.selectedCollection
                 if (current == null) {
@@ -178,6 +170,136 @@ internal fun OnlineIconBrowserDialog(
             }
         }
     }
+
+    detailIcon?.let { icon ->
+        OnlineIconDetailDialog(
+            icon = icon,
+            viewModel = viewModel,
+            importing = importing,
+            onDismiss = { if (!importing) detailIcon = null },
+            onUseVector = {
+                importing = true
+                scope.launch {
+                    val outcome = viewModel.importIcon(icon)
+                    importing = false
+                    when (outcome) {
+                        is OnlineIconImport.Imported -> {
+                            viewModel.endSession()
+                            onPicked(outcome.svg, icon.svgUrl)
+                        }
+                        OnlineIconImport.NotImportable -> toaster.show(notImportableMessage)
+                        OnlineIconImport.LoadFailed -> toaster.show(loadFailedMessage)
+                    }
+                }
+            },
+            onUseImage = {
+                importing = true
+                scope.launch {
+                    val bitmap = viewModel.importImage(icon)
+                    importing = false
+                    if (bitmap == null) {
+                        toaster.show(loadFailedMessage)
+                    } else {
+                        viewModel.endSession()
+                        onPickedImage(bitmap, icon.svgUrl)
+                    }
+                }
+            }
+        )
+    }
+}
+
+/**
+ * Close-up look at one icon before committing: a large faithful preview, the set + licence
+ * line, and a single action — **Use icon** imports editable paths into the vector editor,
+ * **Use as image** imports a preview-only icon (gradients, clips) as a full-size picture.
+ * Dismissing just returns to browsing; nothing is imported by merely looking.
+ */
+@Composable
+private fun OnlineIconDetailDialog(
+    icon: OnlineIcon,
+    viewModel: OnlineIconBrowserViewModel,
+    importing: Boolean,
+    onDismiss: () -> Unit,
+    onUseVector: () -> Unit,
+    onUseImage: () -> Unit
+) {
+    val tint = MaterialTheme.colorScheme.onSurface
+    // Bumping the attempt key re-runs the fetch after a connection failure.
+    var attempt by remember(icon) { mutableStateOf(0) }
+    var failed by remember(icon) { mutableStateOf(false) }
+    val preview by produceState<OnlineIconPreview?>(null, icon, tint, attempt) {
+        failed = false
+        value = viewModel.detailPreview(icon, tint.toArgb())
+        failed = value == null
+    }
+    val collection = remember(viewModel.collections, icon.prefix) {
+        viewModel.collections?.firstOrNull { it.prefix == icon.prefix }
+    }
+
+    RenkinAlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(icon.label) },
+        text = {
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                Surface(
+                    shape = CardShape,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .size(160.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        when {
+                            failed -> EmptyState(
+                                icon = Icons.Filled.CloudOff,
+                                text = stringResource(R.string.onlineIconLoadFailed),
+                                actionLabel = stringResource(R.string.reload),
+                                onAction = { attempt++ }
+                            )
+                            preview == null -> LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+                            else -> OnlinePreviewImage(preview, tint, contentDescription = icon.label)
+                        }
+                    }
+                }
+                collection?.let { set ->
+                    Text(
+                        text = set.name + " · " +
+                            set.license.ifEmpty { stringResource(R.string.onlineUnknownLicense) },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                }
+                if (preview is OnlineIconPreview.PreviewOnly) {
+                    Text(
+                        text = boldStringResource(R.string.onlineIconImageNote),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            when (preview) {
+                is OnlineIconPreview.Editable -> TextButton(onClick = onUseVector, enabled = !importing) {
+                    Text(stringResource(R.string.onlineIconUse))
+                }
+                is OnlineIconPreview.PreviewOnly -> TextButton(onClick = onUseImage, enabled = !importing) {
+                    Text(stringResource(R.string.onlineIconUseAsImage))
+                }
+                null -> Unit
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss, enabled = !importing) {
+                Text(stringResource(R.string.dismiss))
+            }
+        }
+    )
 }
 
 /**

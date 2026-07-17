@@ -82,7 +82,14 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-internal fun PrepareEditVector(app: PackageInfoStruct, state: VectorEditState, onChange: (icon: IconPackDrawable?) -> Unit) {
+internal fun PrepareEditVector(
+    app: PackageInfoStruct,
+    state: VectorEditState,
+    // An online icon the editor can't model as paths, imported as a full-size picture
+    // instead — the dialog routes it into the upload draft.
+    onImportedImage: (android.graphics.Bitmap, sourceUrl: String) -> Unit,
+    onChange: (icon: IconPackDrawable?) -> Unit
+) {
     val sourceIcon = app.baseIcon ?: app.createdIcon
     val editedVector = remember(sourceIcon) { when (sourceIcon) {
         is ImageVectorDrawable -> sourceIcon.deepCopy().applyAndRemoveGroup().toImageVector()
@@ -95,7 +102,7 @@ internal fun PrepareEditVector(app: PackageInfoStruct, state: VectorEditState, o
         else -> ImageVector.createEmptyVector()
     } }
 
-    EditVectorColumn(editedVector, state) {
+    EditVectorColumn(editedVector, state, onImportedImage) {
         if (sourceIcon is InsetIconDrawable && it != null) {
             onChange(InsetIconDrawable(it, sourceIcon.dimensions, sourceIcon.fractions))
         } else {
@@ -171,7 +178,12 @@ private fun PathEntry.toPreviewVector(template: ImageVector, thickness: Float, v
 }
 
 @Composable
-internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onChange: (icon: IconPackDrawable?) -> Unit) {
+internal fun EditVectorColumn(
+    vector: ImageVector,
+    state: VectorEditState,
+    onImportedImage: (android.graphics.Bitmap, sourceUrl: String) -> Unit,
+    onChange: (icon: IconPackDrawable?) -> Unit
+) {
     val currentOnChange by rememberUpdatedState(onChange)
     // Horizontal padding lives in the lazy list's contentPadding below.
     Column(Modifier.fillMaxSize()) {
@@ -289,7 +301,10 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
         }
         // Create-tab-style pill row: full width instead of buttons squeezed next to the
         // "Paths" title (which used to wrap the title vertically on narrow screens).
-        ImportSourcePills { imported, url -> applyImported(imported, url) }
+        ImportSourcePills(
+            onImported = { imported, url -> applyImported(imported, url) },
+            onImportedImage = onImportedImage
+        )
 
         Row(
             modifier = Modifier
@@ -507,10 +522,14 @@ internal fun rememberSvgImportAction(onImported: (SvgVectorImporter.ImportedSvg)
 /**
  * Create-tab-style segmented pills for the two SVG sources: a local file, and — once the
  * user opted in via Settings — the online FOSS libraries. [onImported] gets the parsed
- * document plus the online source URL (null for local files).
+ * document plus the online source URL (null for local files); [onImportedImage] the
+ * full-size raster of an online icon the editor can't model as paths (gradients etc.).
  */
 @Composable
-private fun ImportSourcePills(onImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit) {
+private fun ImportSourcePills(
+    onImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit,
+    onImportedImage: (android.graphics.Bitmap, String) -> Unit
+) {
     val importFromFile = rememberSvgImportAction { onImported(it, null) }
     val onlineEnabled = getPreferences().getBooleanValue(OnlineLibrariesKey)
     var browserOpen by remember { mutableStateOf(false) }
@@ -542,6 +561,10 @@ private fun ImportSourcePills(onImported: (SvgVectorImporter.ImportedSvg, String
             onPicked = { imported, url ->
                 browserOpen = false
                 onImported(imported, url)
+            },
+            onPickedImage = { bitmap, url ->
+                browserOpen = false
+                onImportedImage(bitmap, url)
             },
             onDismiss = { browserOpen = false }
         )

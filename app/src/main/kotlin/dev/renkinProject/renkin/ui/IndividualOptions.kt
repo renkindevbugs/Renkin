@@ -52,6 +52,7 @@ import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.icon.creator.TextCase
 import android.graphics.drawable.AdaptiveIconDrawable
 import androidx.compose.ui.platform.LocalContext
+import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.haveMonochrome
 import dev.renkinProject.renkin.drawable.isAdaptiveIconDrawable
@@ -296,6 +297,9 @@ fun OptionsDialog(
     // Hoisted above the tab AnimatedContent so leaving the vector tab and coming back
     // keeps the user's paths instead of disposing the editor and resetting them.
     val vectorEditState = remember { VectorEditState() }
+    // Attribution URL for an online icon imported "as image" (it lands in the upload draft,
+    // not the vector editor); cleared when the upload gallery replaces the image.
+    var onlineImageUrl by remember { mutableStateOf<String?>(null) }
     var showConfirmClear by remember { mutableStateOf(false) }
     // Enter-always app bar: the header (close / name / overflow) collapses pixel-by-pixel as the
     // icon list scrolls down and slides back in on scroll up.
@@ -506,10 +510,14 @@ fun OptionsDialog(
                             pickedPack = iconPack.takeIf { customIconList.isNotEmpty() },
                             existingPack = app.sourcePackName
                         )
-                        // Online-library attribution only makes sense for a confirmed vector —
-                        // the browser lives in the vector tab and writes its URL there.
-                        val sourceUrlToPersist = vectorEditState.sourceUrl
-                            .takeIf { draft.origin == IconOrigin.VECTOR }
+                        // Online-library attribution follows how the icon was imported: a
+                        // confirmed vector carries the vector tab's URL, an "as image"
+                        // import the upload draft's; other origins have no online source.
+                        val sourceUrlToPersist = when (draft.origin) {
+                            IconOrigin.VECTOR -> vectorEditState.sourceUrl
+                            IconOrigin.UPLOAD -> onlineImageUrl
+                            else -> null
+                        }
                         onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, sourcePackToPersist, sourceUrlToPersist)
                     },
                     scrollBehavior = headerScrollBehavior,
@@ -656,6 +664,9 @@ fun OptionsDialog(
                             1 -> Box(Modifier.fillMaxSize().padding(headerPadding)) {
                                 UploadColumn(app = app, snackbarHostState = snackbarHostState) {
                                     draft.uploadBase = it
+                                    // Any gallery change replaces an online "as image" import,
+                                    // so its attribution must not outlive the picture.
+                                    onlineImageUrl = null
                                     if (it != null) draft.origin = IconOrigin.UPLOAD
                                 }
                             }
@@ -694,7 +705,18 @@ fun OptionsDialog(
                                 }
                             ) }
                             else -> Box(Modifier.fillMaxSize().padding(headerPadding)) {
-                                PrepareEditVector(app, vectorEditState) {
+                                PrepareEditVector(
+                                    app = app,
+                                    state = vectorEditState,
+                                    onImportedImage = { bitmap, url ->
+                                        // "Use as image" from the online browser: route the
+                                        // full-size raster through the upload pipeline so the
+                                        // shared modifier applies like any uploaded picture.
+                                        draft.uploadBase = BitmapIconDrawable(bitmap, false)
+                                        draft.origin = IconOrigin.UPLOAD
+                                        onlineImageUrl = url
+                                    }
+                                ) {
                                     draft.vectorIcon = it
                                     if (it != null) draft.origin = IconOrigin.VECTOR
                                 }
