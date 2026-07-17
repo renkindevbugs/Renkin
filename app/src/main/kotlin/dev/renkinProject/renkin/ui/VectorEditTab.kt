@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.FilledTonalButton
@@ -167,12 +168,8 @@ private fun PathEntry.toPreviewVector(template: ImageVector, thickness: Float, v
 @Composable
 internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onChange: (icon: IconPackDrawable?) -> Unit) {
     val currentOnChange by rememberUpdatedState(onChange)
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    // Horizontal padding lives in the lazy list's contentPadding below.
+    Column(Modifier.fillMaxSize()) {
         // The imported document's coordinate space wins over the template's (see Import SVG).
         val viewportWidth = state.viewportOverride?.first ?: vector.viewportWidth
         val viewportHeight = state.viewportOverride?.second ?: vector.viewportHeight
@@ -217,6 +214,20 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
         }
 
         val painter = rememberVectorPainter(editedVector.toImageVector())
+
+        // One lazy list for the WHOLE tab: with the header (preview, switches, pills)
+        // outside the list only the path rows could scroll — on small screens everything
+        // above "Paths" was simply unreachable.
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            item(key = "editorHeader") {
+                Column(
+                    Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
         Surface(
             shape = CardShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -301,12 +312,9 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
                 modifier = Modifier.padding(vertical = 16.dp)
             )
         }
+                }
+            }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(bottom = 16.dp)
-        ) {
             itemsIndexed(state.entries) { index, entry ->
                 VectorPathItem(
                     previewVector = entry.toPreviewVector(vector, state.thickness, state.viewportOverride),
@@ -497,7 +505,7 @@ private fun ImportSourcePills(onImported: (SvgVectorImporter.ImportedSvg, String
             selected = false,
             onClick = importFromFile,
             shape = SegmentedButtonDefaults.itemShape(index = 0, count = count),
-            icon = { Icon(Icons.Filled.FileUpload, null, Modifier.size(18.dp)) }
+            icon = { Icon(Icons.Filled.FileDownload, null, Modifier.size(18.dp)) }
         ) { Text(stringResource(R.string.importSvg)) }
         if (onlineEnabled) {
             SegmentedButton(

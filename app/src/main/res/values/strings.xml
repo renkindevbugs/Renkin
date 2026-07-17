@@ -368,7 +368,9 @@
     <string name="globalOptionsTitle">Global options</string>
     <string name="onlineIconsTitle">Online icons</string>
     <string name="onlineIconsButton">Online</string>
-    <string name="onlineIconsLicense">%1$s licence · fetched from GitHub</string>
+    <string name="onlineIconsLicense">%1$s licence</string>
+    <string name="onlineSimpleIconsDesc">3,400+ brand and app logos</string>
+    <string name="onlineTablerIconsDesc">6,000+ clean outline UI icons</string>
     <string name="onlineIconsLoadFailed">Couldn\'t load the icon list. Check your connection and try again.</string>
     <string name="onlineCuratedSection">Recommended</string>
     <string name="onlineCommunitySection">Community · GitHub topic “icon-pack”</string>

@@ -89,8 +89,44 @@ class SvgVectorImporterTest {
     @Test
     fun unusableInputs_areNull() {
         assertNull(SvgVectorImporter.parse("not xml at all"))
-        assertNull(SvgVectorImporter.parse("""<svg viewBox="0 0 24 24"><rect width="5" height="5"/></svg>"""))
+        // A shape whose attributes describe nothing drawable rejects the document.
+        assertNull(SvgVectorImporter.parse("""<svg viewBox="0 0 24 24"><rect width="0" height="5"/></svg>"""))
         assertNull(SvgVectorImporter.parse("""<svg><path d="M0 0h1"/></svg>"""))
+    }
+
+    @Test
+    fun basicShapes_convertToEquivalentPaths() {
+        val svg = """
+            <svg viewBox="0 0 24 24">
+              <rect x="2" y="3" width="10" height="4"/>
+              <circle cx="12" cy="12" r="5"/>
+              <polygon points="1,1 5,1 3,4"/>
+              <line x1="0" y1="0" x2="6" y2="6" stroke="black" stroke-width="2"/>
+              <polyline points="0 0 2 2 4 0" stroke="black"/>
+            </svg>
+        """.trimIndent()
+
+        val imported = SvgVectorImporter.parse(svg)!!
+
+        assertEquals(5, imported.paths.size)
+        assertEquals("M2.0 3.0 h10.0 v4.0 h-10.0 Z", imported.paths[0].pathData)
+        assertTrue(imported.paths[0].filled)
+        assertTrue(imported.paths[1].filled)
+        assertTrue(imported.paths[2].filled)
+        // Lines and polylines are never filled — the implicit SVG polyline fill is always
+        // an accident in icons.
+        assertFalse(imported.paths[3].filled)
+        assertEquals(2f, imported.paths[3].strokeWidth)
+        assertFalse(imported.paths[4].filled)
+    }
+
+    @Test
+    fun roundedRect_usesArcCorners() {
+        val svg = """<svg viewBox="0 0 24 24"><rect x="0" y="0" width="10" height="10" rx="2"/></svg>"""
+
+        val imported = SvgVectorImporter.parse(svg)!!
+
+        assertTrue(imported.paths.single().pathData.contains("A2.0 2.0"))
     }
 
     @Test
@@ -115,7 +151,7 @@ class SvgVectorImporterTest {
             """<svg viewBox="0 0 24 24"><path transform="translate(2)" d="M0 0h1"/></svg>"""
         ))
         assertNull(SvgVectorImporter.parse(
-            """<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>"""
+            """<svg viewBox="0 0 24 24"><use href="#other"/></svg>"""
         ))
         assertNull(SvgVectorImporter.parse(
             """<svg viewBox="0 0 24 24" stroke="black"><path d="M0 0h1"/></svg>"""

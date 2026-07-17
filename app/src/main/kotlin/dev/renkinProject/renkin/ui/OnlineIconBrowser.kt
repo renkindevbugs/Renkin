@@ -216,7 +216,12 @@ private fun LibraryList(repository: OnlineIconRepository, onOpen: (OnlineIconLib
                 title = library.label,
                 subtitle = stringResource(R.string.onlineIconsLicense, library.license),
                 subtitleTint = null,
-                projectUrl = library.projectUrl
+                projectUrl = library.projectUrl,
+                description = when (library.id) {
+                    "simple-icons" -> stringResource(R.string.onlineSimpleIconsDesc)
+                    "tabler-icons" -> stringResource(R.string.onlineTablerIconsDesc)
+                    else -> null
+                }
             ) { onOpen(library) }
         }
 
@@ -326,10 +331,15 @@ private fun LibraryRow(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // fill = false + one line: a long licence must ellipsize, never squeeze
+                    // the GitHub link into a vertical letter stack.
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.labelMedium,
-                        color = subtitleTint ?: MaterialTheme.colorScheme.onSurfaceVariant
+                        color = subtitleTint ?: MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
                     LinkText(text = "GitHub", url = projectUrl)
                 }
