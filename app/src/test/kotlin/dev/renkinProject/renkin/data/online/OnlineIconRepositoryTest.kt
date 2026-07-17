@@ -82,4 +82,11 @@ class OnlineIconRepositoryTest {
     fun onlineIcon_labelIsTheNameWithSpaces() {
         assertEquals("arrow back up", OnlineIcon("tabler", "arrow-back-up").label)
     }
+
+    @Test
+    fun svgCacheValidationRejectsPartialOrNonSvgMarkup() {
+        assertTrue(OnlineIconRepository.isWellFormedSvg("<svg viewBox=\"0 0 1 1\"><path d=\"M0 0\"/></svg>"))
+        assertFalse(OnlineIconRepository.isWellFormedSvg("<svg><path>"))
+        assertFalse(OnlineIconRepository.isWellFormedSvg("<html></html>"))
+    }
 }

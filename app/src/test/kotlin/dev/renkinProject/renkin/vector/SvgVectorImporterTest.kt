@@ -1,6 +1,9 @@
 package dev.renkinProject.renkin.vector
 
 import android.app.Application
+import androidx.compose.ui.graphics.PathFillType
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -49,6 +52,7 @@ class SvgVectorImporterTest {
         assertEquals(1, imported.paths.size)
         assertTrue(imported.paths.single().filled)
         assertNull(imported.paths.single().strokeWidth)
+        assertEquals(PathFillType.EvenOdd, imported.paths.single().fillType)
     }
 
     @Test
@@ -164,6 +168,34 @@ class SvgVectorImporterTest {
     }
 
     @Test
+    fun opacityFillRuleAndStrokeGeometrySurviveImport() {
+        val imported = SvgVectorImporter.parse(
+            """<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                     stroke-width="2px" stroke-linecap="round" stroke-linejoin="bevel">
+                 <path opacity="50%" stroke-opacity="0.5" d="M1 1h10"/>
+                 <path fill="red" fill-rule="evenodd" fill-opacity="25%" stroke="none"
+                       d="M2 2h8v8H2Z M4 4v4h4V4Z"/>
+               </svg>"""
+        )!!
+
+        assertEquals(0.25f, imported.paths[0].alpha)
+        assertEquals(2f, imported.paths[0].strokeWidth)
+        assertEquals(StrokeCap.Round, imported.paths[0].strokeLineCap)
+        assertEquals(StrokeJoin.Bevel, imported.paths[0].strokeLineJoin)
+        assertEquals(0.25f, imported.paths[1].alpha)
+        assertEquals(PathFillType.EvenOdd, imported.paths[1].fillType)
+    }
+
+    @Test
+    fun defaultStrokeWidthIsOneSvgUnit() {
+        val imported = SvgVectorImporter.parse(
+            """<svg viewBox="0 0 48 48" fill="none" stroke="black"><path d="M1 1h10"/></svg>"""
+        )!!
+
+        assertEquals(1f, imported.paths.single().strokeWidth)
+    }
+
+    @Test
     fun unsupportedOrPartialSvg_isRejectedInsteadOfSilentlyChanged() {
         assertNull(SvgVectorImporter.parse(
             """<svg viewBox="0 0 24 24"><path transform="translate(2)" d="M0 0h1"/></svg>"""
@@ -176,6 +208,12 @@ class SvgVectorImporterTest {
         ))
         assertNull(SvgVectorImporter.parse(
             """<svg viewBox="1 1 24 24"><path d="M1 1h1"/></svg>"""
+        ))
+        assertNull(SvgVectorImporter.parse(
+            """<svg viewBox="0 0 24 24"><g opacity="0.5"><path d="M1 1h1"/></g></svg>"""
+        ))
+        assertNull(SvgVectorImporter.parse(
+            """<svg viewBox="0 0 24 24" fill="none" stroke="black" stroke-width="wide"><path d="M1 1h1"/></svg>"""
         ))
     }
 }

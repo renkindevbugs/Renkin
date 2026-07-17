@@ -39,8 +39,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -62,10 +62,11 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.OnlineIconBrowserViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIcon
-import dev.renkinProject.renkin.data.online.OnlineIconRepository
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.vector.ColorDecoder
 import dev.renkinProject.renkin.vector.SvgVectorImporter
@@ -81,24 +82,24 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun OnlineIconBrowserDialog(
     onPicked: (SvgVectorImporter.ImportedSvg, sourceUrl: String) -> Unit,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    viewModel: OnlineIconBrowserViewModel = hiltViewModel()
 ) {
-    val context = getCurrentContext()
-    val repository = remember { OnlineIconRepository(context) }
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val importFailedMessage = stringResource(R.string.svgImportFailed)
 
     // null = the set list; non-null = that set's icon grid (back returns to the list).
-    var collection by remember { mutableStateOf<IconifyCollection?>(null) }
-    var query by remember { mutableStateOf("") }
     var importing by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { viewModel.beginSession() }
     val back: () -> Unit = {
-        if (collection != null) {
-            collection = null
-            query = ""
-        } else {
-            onDismiss()
+        if (!importing) {
+            if (viewModel.selectedCollection != null) {
+                viewModel.backToCollections()
+            } else {
+                viewModel.endSession()
+                onDismiss()
+            }
         }
     }
 
@@ -123,11 +124,11 @@ internal fun OnlineIconBrowserDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    IconButton(onClick = back) {
+                    IconButton(onClick = back, enabled = !importing) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.dismiss))
                     }
                     Text(
-                        text = collection?.name ?: stringResource(R.string.onlineIconsTitle),
+                        text = viewModel.selectedCollection?.name ?: stringResource(R.string.onlineIconsTitle),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold,
                         maxLines = 1,
@@ -139,26 +140,23 @@ internal fun OnlineIconBrowserDialog(
                     }
                 }
 
-                val current = collection
+                val current = viewModel.selectedCollection
                 if (current == null) {
-                    CollectionList(repository = repository, onOpen = { collection = it })
+                    CollectionList(viewModel)
                 } else {
                     CollectionGrid(
-                        collection = current,
-                        repository = repository,
-                        query = query,
-                        onQueryChange = { query = it },
+                        viewModel = viewModel,
                         enabled = !importing,
                         onPick = { icon ->
                             if (!importing) {
                                 importing = true
                                 scope.launch {
-                                    val imported = repository.svg(icon)
-                                        ?.let { SvgVectorImporter.parse(it) }
+                                    val imported = viewModel.importedSvg(icon)
                                     importing = false
                                     if (imported == null) {
                                         toaster.show(importFailedMessage)
                                     } else {
+                                        viewModel.endSession()
                                         onPicked(imported, icon.svgUrl)
                                     }
                                 }
@@ -178,23 +176,17 @@ internal fun OnlineIconBrowserDialog(
  */
 @Composable
 private fun CollectionList(
-    repository: OnlineIconRepository,
-    onOpen: (IconifyCollection) -> Unit
+    viewModel: OnlineIconBrowserViewModel
 ) {
-    var retry by remember { mutableIntStateOf(0) }
-    var loadFailed by remember { mutableStateOf(false) }
-    val collections by produceState<List<IconifyCollection>?>(null, retry) {
-        value = null
-        loadFailed = false
-        val loaded = repository.collections()
-        loadFailed = loaded == null
-        value = loaded
-    }
-
-    var query by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf<String?>(null) }
-    // null = all; true = colour sets only; false = monochrome only.
-    var palette by remember { mutableStateOf<Boolean?>(null) }
+    val collections = viewModel.collections
+    val query = viewModel.collectionQuery
+    val category = viewModel.category
+    val palette = viewModel.palette
+    val listState = rememberLazyListState(
+        initialFirstVisibleItemIndex = viewModel.collectionListIndex,
+        initialFirstVisibleItemScrollOffset = viewModel.collectionListOffset
+    )
+    val filterScrollState = rememberScrollState(viewModel.filterRowOffset)
 
     val categories = remember(collections) {
         collections.orEmpty().mapNotNull { it.category.takeIf(String::isNotEmpty) }
@@ -212,7 +204,7 @@ private fun CollectionList(
     Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
         SearchField(
             value = query,
-            onValueChange = { query = it },
+            onValueChange = { viewModel.collectionQuery = it },
             modifier = Modifier.fillMaxWidth(),
             placeholder = stringResource(R.string.onlineFilterSets)
         )
@@ -222,19 +214,19 @@ private fun CollectionList(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .horizontalScroll(rememberScrollState())
+            .horizontalScroll(filterScrollState)
             .padding(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         FilterChip(
             selected = palette == true,
-            onClick = { palette = if (palette == true) null else true },
+            onClick = { viewModel.palette = if (palette == true) null else true },
             label = { Text(stringResource(R.string.onlineFilterColor)) }
         )
         FilterChip(
             selected = palette == false,
-            onClick = { palette = if (palette == false) null else false },
+            onClick = { viewModel.palette = if (palette == false) null else false },
             label = { Text(stringResource(R.string.onlineFilterMono)) }
         )
         if (categories.isNotEmpty()) {
@@ -247,7 +239,7 @@ private fun CollectionList(
         categories.forEach { candidate ->
             FilterChip(
                 selected = category == candidate,
-                onClick = { category = if (category == candidate) null else candidate },
+                onClick = { viewModel.category = if (category == candidate) null else candidate },
                 label = { Text(candidate) }
             )
         }
@@ -269,19 +261,19 @@ private fun CollectionList(
     HorizontalDivider()
 
     when {
-        collections == null && !loadFailed -> Box(
+        collections == null && !viewModel.collectionsFailed -> Box(
             Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
             LoadingIndicator(color = MaterialTheme.colorScheme.primary)
         }
 
-        loadFailed -> EmptyState(
+        viewModel.collectionsFailed -> EmptyState(
             icon = Icons.Filled.CloudOff,
             text = stringResource(R.string.onlineIconsLoadFailed),
             modifier = Modifier.fillMaxSize(),
             actionLabel = stringResource(R.string.reload),
-            onAction = { retry++ }
+            onAction = viewModel::retryCollections
         )
 
         filtered.isEmpty() -> EmptyState(
@@ -291,7 +283,6 @@ private fun CollectionList(
         )
 
         else -> {
-            val listState = rememberLazyListState()
             LazyColumn(
                 state = listState,
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -301,7 +292,14 @@ private fun CollectionList(
                     .drawVerticalScrollbar(listState)
             ) {
                 items(filtered, key = { it.prefix }) { set ->
-                    CollectionRow(set, repository) { onOpen(set) }
+                    CollectionRow(set, viewModel) {
+                        viewModel.openCollection(
+                            set,
+                            listState.firstVisibleItemIndex,
+                            listState.firstVisibleItemScrollOffset,
+                            filterScrollState.value
+                        )
+                    }
                 }
             }
         }
@@ -312,7 +310,7 @@ private fun CollectionList(
 @Composable
 private fun CollectionRow(
     set: IconifyCollection,
-    repository: OnlineIconRepository,
+    viewModel: OnlineIconBrowserViewModel,
     onOpen: () -> Unit
 ) {
     Surface(
@@ -329,7 +327,7 @@ private fun CollectionRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             set.samples.take(3).forEach { sample ->
-                SamplePreview(OnlineIcon(set.prefix, sample), repository)
+                SamplePreview(OnlineIcon(set.prefix, sample), viewModel)
             }
             Column(
                 Modifier
@@ -365,13 +363,11 @@ private fun CollectionRow(
 
 /** A small lazily-fetched sample icon for a set row. */
 @Composable
-private fun SamplePreview(icon: OnlineIcon, repository: OnlineIconRepository) {
+private fun SamplePreview(icon: OnlineIcon, viewModel: OnlineIconBrowserViewModel) {
     val tint = MaterialTheme.colorScheme.onSurface
-    val resources = getCurrentContext().resources
     val vector by produceState<ImageVector?>(null, icon) {
-        value = repository.svg(icon)
-            ?.let { SvgVectorImporter.parse(it) }
-            ?.toPreviewVector(tint, resources)
+        value = viewModel.importedSvg(icon)
+            ?.toPreviewVector(tint)
     }
     Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
         val image = vector
@@ -388,22 +384,12 @@ private fun SamplePreview(icon: OnlineIcon, repository: OnlineIconRepository) {
 /** One set's searchable icon grid, index loaded (and disk-cached) on entry. */
 @Composable
 private fun CollectionGrid(
-    collection: IconifyCollection,
-    repository: OnlineIconRepository,
-    query: String,
-    onQueryChange: (String) -> Unit,
+    viewModel: OnlineIconBrowserViewModel,
     enabled: Boolean,
     onPick: (OnlineIcon) -> Unit
 ) {
-    var retry by remember { mutableIntStateOf(0) }
-    var loadFailed by remember { mutableStateOf(false) }
-    val icons by produceState<List<OnlineIcon>?>(null, collection, retry) {
-        value = null
-        loadFailed = false
-        val loaded = repository.icons(collection)
-        loadFailed = loaded == null
-        value = loaded
-    }
+    val icons = viewModel.icons
+    val query = viewModel.iconQuery
     val filtered = remember(icons, query) {
         val needle = query.trim().lowercase().replace(' ', '-')
         val list = icons.orEmpty()
@@ -413,7 +399,7 @@ private fun CollectionGrid(
     Box(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {
         SearchField(
             value = query,
-            onValueChange = onQueryChange,
+            onValueChange = { viewModel.iconQuery = it },
             modifier = Modifier.fillMaxWidth(),
             placeholder = stringResource(R.string.searchIcons)
         )
@@ -421,19 +407,19 @@ private fun CollectionGrid(
     HorizontalDivider()
 
     when {
-        icons == null && !loadFailed -> Box(
+        icons == null && !viewModel.iconsFailed -> Box(
             Modifier.fillMaxSize(),
             contentAlignment = Alignment.Center
         ) {
             LoadingIndicator(color = MaterialTheme.colorScheme.primary)
         }
 
-        loadFailed -> EmptyState(
+        viewModel.iconsFailed -> EmptyState(
             icon = Icons.Filled.CloudOff,
             text = stringResource(R.string.onlineIconsLoadFailed),
             modifier = Modifier.fillMaxSize(),
             actionLabel = stringResource(R.string.reload),
-            onAction = { retry++ }
+            onAction = viewModel::retryIcons
         )
 
         filtered.isEmpty() -> EmptyState(
@@ -455,7 +441,7 @@ private fun CollectionGrid(
                     .drawVerticalScrollbar(gridState)
             ) {
                 items(filtered, key = { "${it.prefix}/${it.name}" }) { icon ->
-                    OnlineIconTile(icon, repository, enabled = enabled) { onPick(icon) }
+                    OnlineIconTile(icon, viewModel, enabled = enabled) { onPick(icon) }
                 }
             }
         }
@@ -466,16 +452,14 @@ private fun CollectionGrid(
 @Composable
 private fun OnlineIconTile(
     icon: OnlineIcon,
-    repository: OnlineIconRepository,
+    viewModel: OnlineIconBrowserViewModel,
     enabled: Boolean,
     onClick: () -> Unit
 ) {
     val tint = MaterialTheme.colorScheme.onSurface
-    val resources = getCurrentContext().resources
     val vector by produceState<ImageVector?>(null, icon) {
-        value = repository.svg(icon)
-            ?.let { SvgVectorImporter.parse(it) }
-            ?.toPreviewVector(tint, resources)
+        value = viewModel.importedSvg(icon)
+            ?.toPreviewVector(tint)
     }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -519,8 +503,7 @@ private fun OnlineIconTile(
  * monochrome paths take the theme [tint].
  */
 private fun SvgVectorImporter.ImportedSvg.toPreviewVector(
-    tint: Color,
-    resources: android.content.res.Resources
+    tint: Color
 ): ImageVector? = runCatching {
     val builder = ImageVector.Builder(
         defaultWidth = 44.dp,
@@ -532,16 +515,19 @@ private fun SvgVectorImporter.ImportedSvg.toPreviewVector(
         val nodes = PathParser().parsePathString(path.pathData).toNodes()
         val solid = SolidColor(
             path.color?.let { raw ->
-                ColorDecoder.decode(resources, raw).takeIf { it.isSpecified }
-            } ?: tint
+                ColorDecoder.decodeSvgCss(raw).takeIf { it.isSpecified }
+            }?.let { it.copy(alpha = it.alpha * path.alpha) }
+                ?: tint.copy(alpha = tint.alpha * path.alpha)
         )
         if (path.filled) {
-            builder.addPath(nodes, fill = solid)
+            builder.addPath(nodes, pathFillType = path.fillType, fill = solid)
         } else {
             builder.addPath(
                 nodes,
                 stroke = solid,
-                strokeLineWidth = path.strokeWidth ?: (viewportHeight / 24f)
+                strokeLineWidth = path.strokeWidth ?: (viewportHeight / 24f),
+                strokeLineCap = path.strokeLineCap,
+                strokeLineJoin = path.strokeLineJoin
             )
         }
     }

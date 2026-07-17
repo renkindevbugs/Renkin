@@ -2,7 +2,10 @@ package dev.renkinProject.renkin.vector
 
 import android.util.Xml
 import androidx.compose.ui.graphics.vector.EmptyPath
+import androidx.compose.ui.graphics.PathFillType
 import androidx.compose.ui.graphics.vector.PathParser
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import org.xmlpull.v1.XmlPullParser
 import java.io.StringReader
 
@@ -30,7 +33,11 @@ object SvgVectorImporter {
         val pathData: String,
         val filled: Boolean,
         val strokeWidth: Float?,
-        val color: String? = null
+        val color: String? = null,
+        val alpha: Float = 1f,
+        val fillType: PathFillType = PathFillType.NonZero,
+        val strokeLineCap: StrokeCap = StrokeCap.Butt,
+        val strokeLineJoin: StrokeJoin = StrokeJoin.Miter
     )
 
     data class ImportedSvg(
@@ -60,6 +67,9 @@ object SvgVectorImporter {
                         sawSvg = true
                         stylesByDepth[parser.depth] = SvgStyle().merge(parser)
                         if (!parser.attr("transform").isNullOrBlank()) unsupported = true
+                        parser.property("opacity")?.let { opacity ->
+                            if (opacity.toUnitFloatOrNull() != 1f) unsupported = true
+                        }
                         val viewBox = parser.attr("viewBox")?.trim()
                             ?.split(Regex("[ ,]+"))
                             ?.mapNotNull { it.toFloatOrNull() }
@@ -78,6 +88,9 @@ object SvgVectorImporter {
                         val inherited = stylesByDepth[parser.depth - 1] ?: SvgStyle()
                         stylesByDepth[parser.depth] = inherited.merge(parser)
                         if (!parser.attr("transform").isNullOrBlank()) unsupported = true
+                        parser.property("opacity")?.let { opacity ->
+                            if (opacity.toUnitFloatOrNull() != 1f) unsupported = true
+                        }
                     }
                     "path", "rect", "circle", "ellipse", "line", "polyline", "polygon" -> {
                         if (!parser.attr("transform").isNullOrBlank()) unsupported = true
@@ -91,7 +104,7 @@ object SvgVectorImporter {
                             val style = inherited.merge(parser)
                             val fill = style.fill
                             val stroke = style.stroke
-                            val strokeWidth = style.strokeWidth?.toFloatOrNull()
+                            val parsedStrokeWidth = style.strokeWidth?.trim()?.removeSuffix("px")?.toFloatOrNull()
                             // SVG paints fills black unless something says "none" — so an
                             // unspecified fill means a solid path, not a stroked one. Lines
                             // and polylines are never filled: for icons the spec's implicit
@@ -100,6 +113,10 @@ object SvgVectorImporter {
                             val filled = !neverFilled &&
                                 (fill == null || !fill.equals("none", ignoreCase = true))
                             val stroked = stroke != null && !stroke.equals("none", ignoreCase = true)
+                            if (stroked && style.strokeWidth != null && parsedStrokeWidth == null) {
+                                unsupported = true
+                            }
+                            val strokeWidth = parsedStrokeWidth ?: 1f
                             // The editor models a path as fill OR stroke. Reject dual-painted paths
                             // instead of silently dropping one paint during import.
                             if (filled && stroked) unsupported = true
@@ -115,7 +132,42 @@ object SvgVectorImporter {
                             val color = paint?.trim()?.takeIf {
                                 !it.equals("none", true) && !it.equals("currentColor", true)
                             }
-                            paths.add(ImportedPath(d, filled, strokeWidth?.takeIf { stroked }, color))
+                            val paintAlphaRaw = if (filled) style.fillOpacity else style.strokeOpacity
+                            val paintAlpha = paintAlphaRaw?.toUnitFloatOrNull() ?: 1f
+                            val elementAlpha = parser.property("opacity")?.toUnitFloatOrNull() ?: 1f
+                            if ((paintAlphaRaw != null && paintAlphaRaw.toUnitFloatOrNull() == null) ||
+                                (parser.property("opacity") != null &&
+                                    parser.property("opacity")?.toUnitFloatOrNull() == null)
+                            ) unsupported = true
+                            val fillType = when (style.fillRule?.lowercase()) {
+                                null, "nonzero" -> PathFillType.NonZero
+                                "evenodd" -> PathFillType.EvenOdd
+                                else -> { unsupported = true; PathFillType.NonZero }
+                            }
+                            val lineCap = when (style.strokeLineCap?.lowercase()) {
+                                null, "butt" -> StrokeCap.Butt
+                                "round" -> StrokeCap.Round
+                                "square" -> StrokeCap.Square
+                                else -> { unsupported = true; StrokeCap.Butt }
+                            }
+                            val lineJoin = when (style.strokeLineJoin?.lowercase()) {
+                                null, "miter" -> StrokeJoin.Miter
+                                "round" -> StrokeJoin.Round
+                                "bevel" -> StrokeJoin.Bevel
+                                else -> { unsupported = true; StrokeJoin.Miter }
+                            }
+                            paths.add(
+                                ImportedPath(
+                                    d,
+                                    filled,
+                                    strokeWidth.takeIf { stroked },
+                                    color,
+                                    (paintAlpha * elementAlpha).coerceIn(0f, 1f),
+                                    fillType,
+                                    lineCap,
+                                    lineJoin
+                                )
+                            )
                         }
                     }
                     "use", "image", "text",
@@ -136,6 +188,19 @@ object SvgVectorImporter {
     }
 
     private fun XmlPullParser.attr(name: String): String? = getAttributeValue(null, name)
+
+    private fun XmlPullParser.property(name: String): String? {
+        attr(name)?.let { return it }
+        return attr("style")?.split(';')?.firstNotNullOfOrNull { declaration ->
+            val parts = declaration.split(':', limit = 2)
+            parts.takeIf { it.size == 2 && it[0].trim() == name }?.get(1)?.trim()
+        }
+    }
+
+    private fun String.toUnitFloatOrNull(): Float? {
+        val parsed = if (endsWith('%')) dropLast(1).toFloatOrNull()?.div(100f) else toFloatOrNull()
+        return parsed?.takeIf { it in 0f..1f }
+    }
 
     private fun XmlPullParser.attrF(name: String): Float? =
         attr(name)?.trim()?.removeSuffix("px")?.toFloatOrNull()
@@ -232,7 +297,12 @@ object SvgVectorImporter {
     private data class SvgStyle(
         val fill: String? = null,
         val stroke: String? = null,
-        val strokeWidth: String? = null
+        val strokeWidth: String? = null,
+        val fillRule: String? = null,
+        val fillOpacity: String? = null,
+        val strokeOpacity: String? = null,
+        val strokeLineCap: String? = null,
+        val strokeLineJoin: String? = null
     ) {
         fun merge(parser: XmlPullParser): SvgStyle {
             val declarations = parser.attr("style")
@@ -246,7 +316,12 @@ object SvgVectorImporter {
             return SvgStyle(
                 fill = parser.attr("fill") ?: declarations["fill"] ?: fill,
                 stroke = parser.attr("stroke") ?: declarations["stroke"] ?: stroke,
-                strokeWidth = parser.attr("stroke-width") ?: declarations["stroke-width"] ?: strokeWidth
+                strokeWidth = parser.attr("stroke-width") ?: declarations["stroke-width"] ?: strokeWidth,
+                fillRule = parser.attr("fill-rule") ?: declarations["fill-rule"] ?: fillRule,
+                fillOpacity = parser.attr("fill-opacity") ?: declarations["fill-opacity"] ?: fillOpacity,
+                strokeOpacity = parser.attr("stroke-opacity") ?: declarations["stroke-opacity"] ?: strokeOpacity,
+                strokeLineCap = parser.attr("stroke-linecap") ?: declarations["stroke-linecap"] ?: strokeLineCap,
+                strokeLineJoin = parser.attr("stroke-linejoin") ?: declarations["stroke-linejoin"] ?: strokeLineJoin
             )
         }
     }
