@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
@@ -313,23 +314,29 @@ internal fun EditPreviewPane(
                 OverflowMenu(onClear)
             }
 
-            Row(
+            // Vertical comparison: label above the small Current icon, a downward arrow, then
+            // the large New preview with its own label below — one clear top-to-bottom flow.
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 20.dp),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(top = 16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                CurrentSlot(heroBitmap, flyIn, flyInEnter, 48.dp, labelExpand = 1f)
-                ComparisonArrow(48.dp)
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
+                Text(
+                    text = stringResource(R.string.iconCurrent),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+                CurrentSlot(heroBitmap, flyIn, flyInEnter, 48.dp, labelExpand = 0f)
+                Icon(
+                    imageVector = Icons.Filled.ArrowDownward,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier
+                        .padding(vertical = 8.dp)
+                        .size(20.dp)
+                )
                 NewSlot(previewIcon, previewLoading, flyIn, flyInEnter, 176.dp, labelExpand = 1f)
             }
 
