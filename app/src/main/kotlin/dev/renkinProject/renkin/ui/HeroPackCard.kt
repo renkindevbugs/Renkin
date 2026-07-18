@@ -41,7 +41,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
+import kotlin.math.PI
+import kotlin.math.sin
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -401,24 +408,68 @@ private fun rememberPackIcon(packageName: String?): ImageBitmap? {
 /**
  * Segmented completion bar: blue = icons already in the last built pack, green = added
  * since (pending build), red = removed since. Material 3 has no multi-colour progress
- * bar, so this is a small custom one with the same rounded look.
+ * bar (and the Expressive wavy one is single-colour), so this hand-draws the same wavy
+ * look: one continuous wave stroked per-segment, the remainder a flat thin track with
+ * the indicator's signature gap.
  */
 @Composable
 internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
     val builtF by animateFloatAsState(if (total > 0) built / total.toFloat() else 0f, label = "builtFrac")
     val addedF by animateFloatAsState(if (total > 0) added / total.toFloat() else 0f, label = "addedFrac")
     val removedF by animateFloatAsState(if (total > 0) removed / total.toFloat() else 0f, label = "removedFrac")
-    val rest = (1f - builtF - addedF - removedF).coerceAtLeast(0f)
-    Row(
+    val primary = MaterialTheme.colorScheme.primary
+    val errorColor = MaterialTheme.colorScheme.error
+    val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    Canvas(
         Modifier
             .fillMaxWidth()
-            .height(8.dp)
-            .clip(RoundedCornerShape(50))
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
+            .height(12.dp)
     ) {
-        if (builtF > 0f) Box(Modifier.fillMaxHeight().weight(builtF).background(MaterialTheme.colorScheme.primary))
-        if (addedF > 0f) Box(Modifier.fillMaxHeight().weight(addedF).background(AddedGreen))
-        if (removedF > 0f) Box(Modifier.fillMaxHeight().weight(removedF).background(MaterialTheme.colorScheme.error))
-        if (rest > 0f) Spacer(Modifier.weight(rest))
+        val strokeWidth = 4.dp.toPx()
+        val amplitude = (size.height - strokeWidth) / 2f
+        val wavelength = 24.dp.toPx()
+        val midY = size.height / 2f
+        val progressEnd = size.width * (builtF + addedF + removedF).coerceAtMost(1f)
+
+        if (progressEnd > strokeWidth) {
+            // One shared sine path, sampled finely enough to look smooth at 4 dp stroke.
+            val wave = Path().apply {
+                moveTo(0f, midY)
+                var x = 0f
+                while (x <= progressEnd) {
+                    lineTo(x, midY - amplitude * sin(x / wavelength * 2f * PI.toFloat()))
+                    x += 4f
+                }
+            }
+            val stops = listOf(
+                Triple(0f, builtF, primary),
+                Triple(builtF, builtF + addedF, AddedGreen),
+                Triple(builtF + addedF, builtF + addedF + removedF, errorColor)
+            )
+            for ((from, to, color) in stops) {
+                if (to > from) {
+                    clipRect(
+                        left = size.width * from,
+                        top = 0f,
+                        right = size.width * to.coerceAtMost(1f),
+                        bottom = size.height
+                    ) {
+                        drawPath(wave, color, style = Stroke(strokeWidth, cap = StrokeCap.Round))
+                    }
+                }
+            }
+        }
+
+        // Flat thin remainder with a small gap, like the stock wavy indicator's track.
+        val gap = 6.dp.toPx()
+        if (progressEnd + gap < size.width - strokeWidth) {
+            drawLine(
+                color = trackColor,
+                start = Offset(progressEnd + gap, midY),
+                end = Offset(size.width - strokeWidth / 2f, midY),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round
+            )
+        }
     }
 }
