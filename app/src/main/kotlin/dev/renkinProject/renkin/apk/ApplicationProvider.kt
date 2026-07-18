@@ -595,6 +595,7 @@ class ApplicationProvider(private val context: Context) {
                     } else storedIcon
                     app.changeExport(
                         rendered,
+                        isFallback = entry.isFallback,
                         sourcePackName = entry.sourcePackName,
                         isCustom = entry.isCustom,
                         isLegacy = entry.isLegacy,
@@ -695,6 +696,7 @@ class ApplicationProvider(private val context: Context) {
                 app,
                 app.changeExport(
                     rendered,
+                    isFallback = entry.isFallback,
                     sourcePackName = entry.sourcePackName,
                     isCustom = entry.isCustom,
                     isLegacy = entry.isLegacy,

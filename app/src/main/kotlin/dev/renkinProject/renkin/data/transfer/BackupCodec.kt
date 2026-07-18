@@ -115,6 +115,7 @@ object BackupCodec {
                         .put("baseIsAdaptiveIcon", icon.baseIsAdaptiveIcon)
                         .put("baseIsXml", icon.baseIsXml)
                         .put("sourceUrl", icon.sourceUrl)
+                        .put("isFallbackIcon", icon.isFallbackIcon)
                 )
             }
             p.put("icons", icons)
@@ -220,7 +221,9 @@ object BackupCodec {
                             icon.optBoolean("baseIsXml")
                         } else icon.getBoolean("isXml"),
                         // Absent in pre-v13 files — no online attribution to carry.
-                        sourceUrl = icon.optString("sourceUrl")
+                        sourceUrl = icon.optString("sourceUrl"),
+                        // Absent in pre-v14 files — safe default: not fallback-styled.
+                        isFallbackIcon = icon.optBoolean("isFallbackIcon")
                     )
                 )
             }

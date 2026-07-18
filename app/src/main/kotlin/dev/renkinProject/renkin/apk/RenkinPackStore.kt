@@ -34,6 +34,7 @@ class RenkinPackStore(private val context: Context) {
         val isCustom: Boolean,
         val isLegacy: Boolean,
         val sourceUrl: String?,
+        val isFallback: Boolean,
         // The raw row, so held-back entries (locked packs, reference icons, absent apps)
         // can be written back verbatim on the next save instead of being dropped.
         val row: DbApplication
@@ -80,6 +81,7 @@ class RenkinPackStore(private val context: Context) {
             dbApp.isCustomIcon,
             dbApp.isLegacyIcon,
             dbApp.sourceUrl.ifEmpty { null },
+            dbApp.isFallbackIcon,
             dbApp
         )
     }
@@ -115,7 +117,8 @@ class RenkinPackStore(private val context: Context) {
                 baseDrawable = base?.toDbString() ?: "",
                 baseIsAdaptiveIcon = base?.isAdaptiveIcon() ?: false,
                 baseIsXml = base != null && base !is BitmapIconDrawable,
-                sourceUrl = app.sourceUrl ?: ""
+                sourceUrl = app.sourceUrl ?: "",
+                isFallbackIcon = app.isFallback
             )
         }
         val liveKeys = dbApps.map { "${it.packageName}/${it.activityName}" }.toSet()

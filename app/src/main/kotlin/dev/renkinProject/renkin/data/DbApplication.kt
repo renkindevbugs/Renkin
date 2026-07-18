@@ -75,7 +75,12 @@ data class DbApplication(
     // Attribution reference for icons picked from an online FOSS library: the source file's
     // public URL (GitHub via jsDelivr). Purely informational — the drawable itself is stored;
     // this only records where it was taken from. Never fed into the pack-verdict/lock logic.
-    @ColumnInfo(defaultValue = "") val sourceUrl: String = ""
+    @ColumnInfo(defaultValue = "") val sourceUrl: String = "",
+    // True when the bulk refresh could not find this app in the source pack and generated the
+    // icon with the pack's fallback styling. Persisted so the home card's fallback count and
+    // the Fallback list filter survive profile switches and restarts (the flag can't be
+    // re-derived from the stored bitmap).
+    @ColumnInfo(defaultValue = "0") val isFallbackIcon: Boolean = false
 )
 
 /**
@@ -183,9 +188,11 @@ interface ProfileDao {
 // rendering. Non-custom v11 rows are marked legacy because false may have been guessed during
 // 10→11; true was only ever written by an explicit user edit.
 // Version 13 adds DbApplication.sourceUrl (attribution reference for online-library icons).
+// Version 14 adds DbApplication.isFallbackIcon (fallback-styled refresh output) so the
+// fallback count/filter survive restarts.
 @Database(
     entities = [DbApplication::class, Profile::class, PackVerdict::class],
-    version = 13
+    version = 14
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -325,6 +332,12 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN isFallbackIcon INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -337,7 +350,8 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_9_10,
             MIGRATION_10_11,
             MIGRATION_11_12,
-            MIGRATION_12_13
+            MIGRATION_12_13,
+            MIGRATION_13_14
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {
