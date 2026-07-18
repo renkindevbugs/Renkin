@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package dev.renkinProject.renkin.ui
 
 import android.content.Context
@@ -49,6 +50,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -231,7 +233,10 @@ fun RenkinAlertDialog(
         modifier = modifier,
         dismissButton = dismissButton,
         icon = icon,
-        title = title,
+        // Expressive emphasized titles across every Renkin dialog, in one place.
+        title = title?.let {
+            { ProvideTextStyle(MaterialTheme.typography.headlineSmallEmphasized) { it() } }
+        },
         text = text,
         shape = DialogShape,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,

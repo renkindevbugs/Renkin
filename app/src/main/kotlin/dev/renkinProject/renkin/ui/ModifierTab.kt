@@ -22,11 +22,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.BorderStyle
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.LayersClear
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import dev.renkinProject.renkin.ui.theme.FieldShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DropdownMenu
@@ -180,42 +190,74 @@ internal fun ModifierTab(
     ) {
         Text(
             text = stringResource(R.string.imageEdit),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmallEmphasized,
             color = MaterialTheme.colorScheme.onSurface
         )
 
-        // Selecting an edit expands its settings inside the same envelope surface as its card,
-        // so the controls visually belong to the chosen option instead of floating below the list.
-        editLabels.forEach { (edit, label) ->
-            val selected = imageEdit == edit
-            val envelope by animateColorAsState(
-                if (selected) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
-                label = "editEnvelope"
-            )
-            Surface(shape = CardShape, color = envelope, modifier = Modifier.fillMaxWidth()) {
-                Column {
-                    OptionCard(
-                        label = label,
-                        selected = selected,
-                        onClick = { onImageEditChange(edit) },
-                        trailing = if (selected) {
-                            {
-                                Icon(
-                                    imageVector = Icons.Filled.Done,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        } else null
-                    )
-                    androidx.compose.animation.AnimatedVisibility(visible = selected) {
+        // Compact icon tiles instead of five stacked full-width cards: every modifier gets a
+        // glyph and the selection stands out with a primary border — the same visual language
+        // as the Icon shape picker below and the watch editor's tiles.
+        editLabels.entries.toList().chunked(3).forEach { rowEdits ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowEdits.forEach { (edit, label) ->
+                    val selected = imageEdit == edit
+                    Surface(
+                        shape = FieldShape,
+                        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainer,
+                        border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(76.dp)
+                            .clip(FieldShape)
+                            .clickable(role = Role.Button) { onImageEditChange(edit) }
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = imageEditIcon(edit),
+                                contentDescription = null,
+                                tint = if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                                    else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+                repeat(3 - rowEdits.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+
+        // The chosen modifier's own controls live in one envelope card under the grid.
+        androidx.compose.animation.AnimatedVisibility(visible = imageEdit != ImageEdit.NONE) {
+            Surface(
+                shape = CardShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                         Column(
                             modifier = Modifier.padding(6.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            when (edit) {
+                            when (imageEdit) {
                                 ImageEdit.EDGE -> {
                                     OptionGroup {
                                         // Detail: inverse of the Canny threshold — right = more edges kept
@@ -315,16 +357,13 @@ internal fun ModifierTab(
                                 ImageEdit.NONE -> {}
                             }
                         }
-                    }
-                }
             }
         }
 
         // Per-icon adjustments, independent of the modifier chosen above
         Text(
             text = stringResource(R.string.adjustments),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmallEmphasized,
             color = MaterialTheme.colorScheme.onSurface
         )
         OptionGroup {
@@ -356,8 +395,7 @@ internal fun ModifierTab(
         // same Material You shape presets launchers use.
         Text(
             text = stringResource(R.string.iconShapeTitle),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmallEmphasized,
             color = MaterialTheme.colorScheme.onSurface
         )
         OptionGroup {
@@ -420,8 +458,7 @@ internal fun ModifierTab(
         // icon already carries (Recolor) — the shape crop above still applies afterwards.
         Text(
             text = stringResource(R.string.outlineTitle),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmallEmphasized,
             color = MaterialTheme.colorScheme.onSurface
         )
         OptionGroup {
@@ -489,8 +526,7 @@ internal fun ModifierTab(
         // Upload tab.
         Text(
             text = stringResource(R.string.externalEditorTitle),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmallEmphasized,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = 8.dp)
         )
@@ -685,4 +721,13 @@ private fun ColorizeSwitchRow(
         }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
+}
+
+/** The tile glyph giving each image modifier a visual identity in the selector grid. */
+private fun imageEditIcon(edit: ImageEdit): ImageVector = when (edit) {
+    ImageEdit.NONE -> Icons.Filled.Block
+    ImageEdit.PATH -> Icons.Filled.Gesture
+    ImageEdit.EDGE -> Icons.Filled.BorderStyle
+    ImageEdit.COLORIZE -> Icons.Filled.Palette
+    ImageEdit.REMOVE_BACKGROUND -> Icons.Filled.LayersClear
 }

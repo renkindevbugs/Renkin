@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 
 package dev.renkinProject.renkin.ui
 
@@ -149,8 +149,7 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
                         source == Source.APPLICATION_NAME -> stringResource(R.string.sourceTextIcons)
                         else -> stringResource(R.string.chooseYourPack)
                     },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                     modifier = Modifier.weight(1f)
                 )
@@ -284,8 +283,7 @@ private fun PackPickerSheet(
             item {
                 Text(
                     text = stringResource(R.string.choosePackTitle),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
                     color = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
                 )

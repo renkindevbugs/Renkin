@@ -152,7 +152,7 @@ internal fun ComparisonHeader(
                     } else {
                         Text(
                             text = appName,
-                            style = MaterialTheme.typography.titleMedium,
+                            style = MaterialTheme.typography.titleMediumEmphasized,
                             color = MaterialTheme.colorScheme.onSurface,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -303,7 +303,7 @@ internal fun EditPreviewPane(
                 CloseButton(onDismiss)
                 Text(
                     text = appName,
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 
 package dev.renkinProject.renkin.ui
 
@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SearchOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -152,8 +153,7 @@ internal fun WatchRuleEditor(
             }
             Text(
                 text = stringResource(if (existing == null) R.string.newWatchRule else R.string.editWatchRule),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleMediumEmphasized,
                 modifier = Modifier.weight(1f)
             )
             val view = LocalView.current
@@ -257,8 +257,7 @@ internal fun WatchRuleEditor(
             ) {
                 Text(
                     text = stringResource(R.string.watchAllPacksLabel),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
                     modifier = Modifier.weight(1f)
                 )
                 Switch(checked = watchAll, onCheckedChange = { watchAll = it })
@@ -267,8 +266,7 @@ internal fun WatchRuleEditor(
             if (!watchAll) {
                 Text(
                     text = stringResource(R.string.iconPacksToCheck),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 Box(modifier = Modifier.padding(top = 8.dp)) {
@@ -349,8 +347,7 @@ internal fun WatchRuleEditor(
                     ) {
                         Text(
                             text = stringResource(R.string.watchAllPacksLabel),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleSmallEmphasized,
                             modifier = Modifier.weight(1f)
                         )
                         Switch(checked = watchAll, onCheckedChange = { watchAll = it })
@@ -358,8 +355,7 @@ internal fun WatchRuleEditor(
                     if (!watchAll) {
                         Text(
                             text = stringResource(R.string.iconPacksToCheck),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleSmallEmphasized,
                             modifier = Modifier.padding(top = 8.dp)
                         )
                         LazyVerticalGrid(

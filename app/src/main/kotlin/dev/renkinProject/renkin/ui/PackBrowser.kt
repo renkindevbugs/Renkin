@@ -81,8 +81,7 @@ fun PackSectionHeader(iconPack: IconPack, onClick: (() -> Unit)? = null) {
         PackIconImage(iconPack.packageName, 24.dp)
         Text(
             text = iconPack.applicationName,
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmallEmphasized,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
@@ -276,8 +275,7 @@ fun PackDetailGrid(
             PackIconImage(iconPack.packageName, 28.dp)
             Text(
                 text = iconPack.applicationName,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleMediumEmphasized,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,

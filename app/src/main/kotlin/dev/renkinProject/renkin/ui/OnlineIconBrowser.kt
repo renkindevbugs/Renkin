@@ -144,8 +144,7 @@ internal fun OnlineIconBrowserDialog(
                     }
                     Text(
                         text = viewModel.selectedCollection?.name ?: stringResource(R.string.onlineIconsTitle),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleMediumEmphasized,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)
@@ -557,8 +556,7 @@ private fun CollectionRow(
             ) {
                 Text(
                     text = set.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
                     color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

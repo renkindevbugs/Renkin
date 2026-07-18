@@ -111,6 +111,9 @@ fun ProfileSwitcherTitle() {
             Text(
                 text = if (activeId == DEFAULT_PROFILE_ID) stringResource(R.string.app_name)
                     else active?.name ?: stringResource(R.string.app_name),
+                // Expressive-style emphasis: only the weight is raised so the large app bar's
+                // expanded/collapsed size animation keeps driving the rest of the style.
+                fontWeight = FontWeight.SemiBold,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false)
