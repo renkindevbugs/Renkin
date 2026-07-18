@@ -58,7 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.mapSaver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -119,34 +119,52 @@ internal class AdjustmentState {
     var eraseStrokes by mutableStateOf<List<EraseStroke>>(emptyList())
 
     companion object {
-        val Saver = listSaver<AdjustmentState, Any>(
+        // Keyed by field name (mapSaver): adding a new adjustment can never silently shift
+        // every later value the way the old positional listSaver could, and state saved by
+        // an older build simply restores the missing keys as their defaults.
+        val Saver = mapSaver(
             save = {
-                listOf(it.edgeThreshold, it.edgeSmoothing, it.edgeContrast, it.iconScale,
-                    it.bgRemovalTolerance, it.autoCenter, it.iconOffsetX, it.iconOffsetY,
-                    it.colorizeFlat, it.iconShape.ordinal, it.shapeCrop, it.shapeColor.toArgb(),
-                    it.shapeScale, it.outlineMode.ordinal, it.outlineWidth, it.outlineColor.toArgb(),
-                    it.colorizeMonochrome, it.colorizeInverse)
+                mapOf(
+                    "edgeThreshold" to it.edgeThreshold,
+                    "edgeSmoothing" to it.edgeSmoothing,
+                    "edgeContrast" to it.edgeContrast,
+                    "iconScale" to it.iconScale,
+                    "bgRemovalTolerance" to it.bgRemovalTolerance,
+                    "autoCenter" to it.autoCenter,
+                    "iconOffsetX" to it.iconOffsetX,
+                    "iconOffsetY" to it.iconOffsetY,
+                    "colorizeFlat" to it.colorizeFlat,
+                    "colorizeMonochrome" to it.colorizeMonochrome,
+                    "colorizeInverse" to it.colorizeInverse,
+                    "iconShape" to it.iconShape.ordinal,
+                    "shapeCrop" to it.shapeCrop,
+                    "shapeColor" to it.shapeColor.toArgb(),
+                    "shapeScale" to it.shapeScale,
+                    "outlineMode" to it.outlineMode.ordinal,
+                    "outlineWidth" to it.outlineWidth,
+                    "outlineColor" to it.outlineColor.toArgb()
+                )
             },
             restore = { saved ->
                 AdjustmentState().apply {
-                    edgeThreshold = saved[0] as Float
-                    edgeSmoothing = saved[1] as Float
-                    edgeContrast = saved[2] as Boolean
-                    iconScale = saved[3] as Float
-                    bgRemovalTolerance = saved[4] as Float
-                    autoCenter = saved[5] as Boolean
-                    iconOffsetX = saved[6] as Float
-                    iconOffsetY = saved[7] as Float
-                    colorizeFlat = saved[8] as Boolean
-                    iconShape = IconShape.entries.getOrElse(saved[9] as Int) { IconShape.NONE }
-                    shapeCrop = saved[10] as Boolean
-                    shapeColor = Color(saved[11] as Int)
-                    shapeScale = saved[12] as Float
-                    outlineMode = OutlineMode.entries.getOrElse(saved[13] as Int) { OutlineMode.NONE }
-                    outlineWidth = saved[14] as Float
-                    outlineColor = Color(saved[15] as Int)
-                    colorizeMonochrome = saved.getOrNull(16) as? Boolean ?: false
-                    colorizeInverse = saved.getOrNull(17) as? Boolean ?: false
+                    edgeThreshold = saved["edgeThreshold"] as? Float ?: edgeThreshold
+                    edgeSmoothing = saved["edgeSmoothing"] as? Float ?: edgeSmoothing
+                    edgeContrast = saved["edgeContrast"] as? Boolean ?: edgeContrast
+                    iconScale = saved["iconScale"] as? Float ?: iconScale
+                    bgRemovalTolerance = saved["bgRemovalTolerance"] as? Float ?: bgRemovalTolerance
+                    autoCenter = saved["autoCenter"] as? Boolean ?: autoCenter
+                    iconOffsetX = saved["iconOffsetX"] as? Float ?: iconOffsetX
+                    iconOffsetY = saved["iconOffsetY"] as? Float ?: iconOffsetY
+                    colorizeFlat = saved["colorizeFlat"] as? Boolean ?: colorizeFlat
+                    colorizeMonochrome = saved["colorizeMonochrome"] as? Boolean ?: colorizeMonochrome
+                    colorizeInverse = saved["colorizeInverse"] as? Boolean ?: colorizeInverse
+                    iconShape = IconShape.entries.getOrElse(saved["iconShape"] as? Int ?: 0) { IconShape.NONE }
+                    shapeCrop = saved["shapeCrop"] as? Boolean ?: shapeCrop
+                    (saved["shapeColor"] as? Int)?.let { argb -> shapeColor = Color(argb) }
+                    shapeScale = saved["shapeScale"] as? Float ?: shapeScale
+                    outlineMode = OutlineMode.entries.getOrElse(saved["outlineMode"] as? Int ?: 0) { OutlineMode.NONE }
+                    outlineWidth = saved["outlineWidth"] as? Float ?: outlineWidth
+                    (saved["outlineColor"] as? Int)?.let { argb -> outlineColor = Color(argb) }
                 }
             }
         )
