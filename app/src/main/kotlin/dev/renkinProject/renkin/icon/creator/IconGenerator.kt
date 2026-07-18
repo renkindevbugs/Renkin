@@ -659,8 +659,15 @@ class IconGenerator(
     }
 
     private fun generateColorQuantizationDetection(bitmapIcon: Bitmap): IconPackDrawable {
-        val imageVector = ImageTracer.imageToVector(bitmapIcon.asImageBitmap()
-            , ImageTracer.TracingOptions())
+        // Deterministic tracing: the library's default 16-colour palette seeds indices 8..15
+        // with kotlin.random.Random, so the same bitmap could trace to slightly different
+        // geometry on every regeneration. Exactly 8 colours uses only the fixed RGB-corner
+        // seeds (the random fill loop never runs) while the quantization cycles still adapt
+        // them to the image.
+        val imageVector = ImageTracer.imageToVector(
+            bitmapIcon.asImageBitmap(),
+            ImageTracer.TracingOptions().apply { numberOfColors = 8 }
+        )
 
         val vector = imageVector.toImageVectorDrawable()
         recolorVectorStrokes(vector)
@@ -904,7 +911,9 @@ class IconGenerator(
             val src = bitmap
             bitmap = newArgbBitmap(src.width, src.height) { canvas ->
                 canvas.scale(options.iconScale, options.iconScale, src.width / 2f, src.height / 2f)
-                canvas.drawBitmap(src, 0f, 0f, null)
+                // Bilinear filtering: a null paint may fall back to nearest-neighbour sampling
+                // on software canvases, giving jagged diagonals on scaled icons.
+                canvas.drawBitmap(src, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
             }
         }
         if (outlined) {

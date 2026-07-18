@@ -105,7 +105,8 @@ internal fun zoomBitmap(image: Bitmap, zoomLevel: Float): Bitmap {
     mtx.postScale(zoomLevel, zoomLevel)
     mtx.postTranslate(x, y)
 
-    return newArgbBitmap(image.width, image.height) { it.drawBitmap(image, mtx, Paint()) }
+    // FILTER_BITMAP: a bare Paint samples nearest-neighbour when scaling on some canvases.
+    return newArgbBitmap(image.width, image.height) { it.drawBitmap(image, mtx, Paint(Paint.FILTER_BITMAP_FLAG)) }
 }
 
 internal fun squareBitmap(image: Bitmap): Bitmap {

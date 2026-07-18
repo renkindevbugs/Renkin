@@ -124,8 +124,16 @@ internal fun CenterDialog(
                             // whatever is needed to put the content box in the middle. The sliders
                             // move to show it, and the pipeline stays offset-only.
                             if (on && iconBitmap != null && bounds != null) {
-                                val dx = ((iconBitmap.width - bounds.width()) / 2f - bounds.left) / iconBitmap.width
-                                val dy = ((iconBitmap.height - bounds.height()) / 2f - bounds.top) / iconBitmap.height
+                                // The preview is measured AFTER the pipeline's scale step, but the
+                                // offset is applied BEFORE it (translate → scale), so a correction
+                                // read off the preview gets multiplied by the scale again. Divide
+                                // it out or a 150% icon overshoots the centre and a 50% one stops
+                                // halfway there.
+                                val scale = adjustments.iconScale.takeIf { it > 0f } ?: 1f
+                                val dx = ((iconBitmap.width - bounds.width()) / 2f - bounds.left) /
+                                    iconBitmap.width / scale
+                                val dy = ((iconBitmap.height - bounds.height()) / 2f - bounds.top) /
+                                    iconBitmap.height / scale
                                 adjustments.iconOffsetX = (adjustments.iconOffsetX + dx).coerceIn(-0.5f, 0.5f)
                                 adjustments.iconOffsetY = (adjustments.iconOffsetY + dy).coerceIn(-0.5f, 0.5f)
                             }
