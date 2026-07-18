@@ -116,6 +116,7 @@
     <string name="sourceText">Text</string>
     <string name="modifierTab">Modifier</string>
     <string name="buildIconPack">Build icon pack</string>
+    <string name="profileStillLoading">Profile is still loading</string>
     <string name="sortByName">Name</string>
     <string name="sortByInstallDate">Recently installed</string>
     <string name="sortApps">Sort apps</string>

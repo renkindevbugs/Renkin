@@ -200,6 +200,18 @@ suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preference
     }
 }
 
+/** Records the hero source that a successful build actually used as one atomic profile write. */
+suspend fun DataStore<Preferences>.persistBuiltPrimaryPrefs(source: Preferences) {
+    preferenceAccessMutex.withLock {
+        edit { target ->
+            target[BuiltPrimarySourceKey] = source.getIntValue(
+                PrimarySourceKey, SOURCE_DEFAULT.ordinal
+            )
+            target[BuiltPrimaryIconPackKey] = source.getStringValue(PrimaryIconPackKey)
+        }
+    }
+}
+
 /** Serializes the profile-scoped preferences into a JSON snapshot (see [ProfilePrefKeys]). */
 fun Preferences.snapshotProfilePrefs(): String {
     val json = org.json.JSONObject()
