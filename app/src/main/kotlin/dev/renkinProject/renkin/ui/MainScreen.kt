@@ -952,24 +952,25 @@ fun SearchBar(
     }
 
     Surface(color = containerColor, modifier = Modifier.fillMaxWidth()) {
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
+        // The sort/filter menu lives INSIDE the field as its trailing control — beside the
+        // field it looked like a stray icon with no surface of its own.
         SearchField(
             value = text,
             onValueChange = {
                 text = it
                 onSearch(it)
             },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            extraTrailing = {
+                AppSortFilterMenu(
+                    sortOrder, filterNoIcon, filterFallback, onSortChange, onFilterChange, onFallbackFilterChange,
+                    filterLocked = filterLocked,
+                    showLockedFilter = showLockedFilter,
+                    onLockedFilterChange = onLockedFilterChange
+                )
+            }
         )
-        AppSortFilterMenu(
-            sortOrder, filterNoIcon, filterFallback, onSortChange, onFilterChange, onFallbackFilterChange,
-            filterLocked = filterLocked,
-            showLockedFilter = showLockedFilter,
-            onLockedFilterChange = onLockedFilterChange
-        )
-    }
     }
 }

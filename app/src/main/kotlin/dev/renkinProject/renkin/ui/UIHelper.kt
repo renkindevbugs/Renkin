@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -181,7 +182,10 @@ fun SearchField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String? = null
+    placeholder: String? = null,
+    // Extra control(s) rendered inside the field after the clear button — e.g. the home
+    // list's sort/filter menu, so it belongs to the field instead of floating beside it.
+    extraTrailing: (@Composable () -> Unit)? = null
 ) {
     val focusManager = LocalFocusManager.current
     OutlinedTextField(
@@ -198,14 +202,17 @@ fun SearchField(
             Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         },
         trailingIcon = {
-            if (value.isNotEmpty()) {
-                IconButton(onClick = { onValueChange("") }) {
-                    Icon(
-                        Icons.Filled.Close,
-                        stringResource(R.string.clear),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (value.isNotEmpty()) {
+                    IconButton(onClick = { onValueChange("") }) {
+                        Icon(
+                            Icons.Filled.Close,
+                            stringResource(R.string.clear),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
+                extraTrailing?.invoke()
             }
         },
         modifier = modifier
