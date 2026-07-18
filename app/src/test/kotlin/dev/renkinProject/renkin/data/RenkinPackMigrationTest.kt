@@ -43,7 +43,7 @@ class RenkinPackMigrationTest {
 
     @Test
     fun everyReleasedSchemaMigratesToCurrent() {
-        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12).forEach { version ->
+        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13).forEach { version ->
             RenkinPackDatabase.open(context, historical(version, "from-$version")).useDatabase { database ->
                 database.openHelper.writableDatabase
             }
@@ -66,6 +66,27 @@ class RenkinPackMigrationTest {
             ).use { cursor ->
                 assertTrue(cursor.moveToFirst())
                 assertEquals("", cursor.getString(0))
+                assertEquals("pixels", cursor.getString(1))
+            }
+        }
+    }
+
+    @Test
+    fun preV14RowsDefaultToNotFallbackStyled() {
+        val name = historical(13, "v13-fallback") { db ->
+            db.execSQL(
+                "INSERT INTO DbApplication " +
+                    "(packageName, activityName, isAdaptiveIcon, isXml, drawable, profileId) " +
+                    "VALUES ('com.plain', 'com.plain.Main', 0, 0, 'pixels', 1)"
+            )
+        }
+
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            database.openHelper.writableDatabase.query(
+                "SELECT isFallbackIcon, drawable FROM DbApplication WHERE packageName = 'com.plain'"
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertFalse(cursor.getInt(0) != 0)
                 assertEquals("pixels", cursor.getString(1))
             }
         }
