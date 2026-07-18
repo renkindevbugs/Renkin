@@ -52,7 +52,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
@@ -355,6 +357,10 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
 
     // No Surface around everything: the activity window is transparent over the wallpaper, so
     // each non-grid area paints its own opaque background and the grid area paints none.
+    // Without a Surface, LocalContentColor stays at its Black default — provide the theme's
+    // onSurface explicitly so the top bar (and any other default-coloured content) is
+    // readable in dark mode too.
+    CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
     Column(
         Modifier
             .fillMaxSize()
@@ -602,6 +608,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                     // Transparent: the real wallpaper shows behind the tiles.
                     Box(Modifier.fillMaxSize()) { gridContent(panelVisible) }
                 }
+    }
     }
 
     if (showExperimentalNotice) {
