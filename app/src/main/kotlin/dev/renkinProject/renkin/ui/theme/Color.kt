@@ -74,3 +74,8 @@ val AddedGreen = Color(0xFF34C759)
 // Marks icons changed (re-edited) since the last build, and the calendar "missing days"
 // warning — distinct from AddedGreen so "new" and "changed" read differently in the preview.
 val ChangedOrange = Color(0xFFFF9500)
+
+// The hero completion bar's "everything themed and built" celebration: the gold fill and
+// the lighter highlight that sweeps across it.
+val GoldBase = Color(0xFFDAA520)
+val GoldShimmer = Color(0xFFFFEFB0)

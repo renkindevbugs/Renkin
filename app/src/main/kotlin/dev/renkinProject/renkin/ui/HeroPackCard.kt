@@ -2,7 +2,14 @@
 
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
@@ -41,7 +48,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -68,6 +81,8 @@ import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.ui.theme.AddedGreen
+import dev.renkinProject.renkin.ui.theme.GoldBase
+import dev.renkinProject.renkin.ui.theme.GoldShimmer
 import dev.renkinProject.renkin.ui.theme.CardShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -401,24 +416,96 @@ private fun rememberPackIcon(packageName: String?): ImageBitmap? {
 /**
  * Segmented completion bar: blue = icons already in the last built pack, green = added
  * since (pending build), red = removed since. Material 3 has no multi-colour progress
- * bar, so this is a small custom one with the same rounded look.
+ * bar, so this hand-draws one with the stock indicator's modern traits: rounded capsule
+ * ends, the gap before the remainder track, and the stop-indicator dot at the far end.
  */
 @Composable
 internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
     val builtF by animateFloatAsState(if (total > 0) built / total.toFloat() else 0f, label = "builtFrac")
     val addedF by animateFloatAsState(if (total > 0) added / total.toFloat() else 0f, label = "addedFrac")
     val removedF by animateFloatAsState(if (total > 0) removed / total.toFloat() else 0f, label = "removedFrac")
-    val rest = (1f - builtF - addedF - removedF).coerceAtLeast(0f)
-    Row(
+    val primary = MaterialTheme.colorScheme.primary
+    val errorColor = MaterialTheme.colorScheme.error
+    val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+
+    // Fully themed AND fully persisted (no pending +added/-removed): the bar celebrates in
+    // gold with a soft highlight sweeping left to right. Any pending change keeps the sober
+    // segmented palette — green/red still means "there is something to build".
+    val complete = total > 0 && built == total && added == 0 && removed == 0
+    val shimmerProgress = if (complete) {
+        rememberInfiniteTransition(label = "goldShimmer").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)),
+            label = "shimmerSweep"
+        ).value
+    } else 0f
+
+    Canvas(
         Modifier
             .fillMaxWidth()
             .height(8.dp)
-            .clip(RoundedCornerShape(50))
-            .background(MaterialTheme.colorScheme.surfaceContainerHighest)
     ) {
-        if (builtF > 0f) Box(Modifier.fillMaxHeight().weight(builtF).background(MaterialTheme.colorScheme.primary))
-        if (addedF > 0f) Box(Modifier.fillMaxHeight().weight(addedF).background(AddedGreen))
-        if (removedF > 0f) Box(Modifier.fillMaxHeight().weight(removedF).background(MaterialTheme.colorScheme.error))
-        if (rest > 0f) Spacer(Modifier.weight(rest))
+        val radius = size.height / 2f
+        val progressEnd = size.width * (builtF + addedF + removedF).coerceAtMost(1f)
+
+        // The coloured segments share one rounded-capsule clip, so the bar's outer ends are
+        // round while the internal colour joins stay flush.
+        if (progressEnd > 0f) {
+            val capsule = Path().apply {
+                addRoundRect(RoundRect(0f, 0f, progressEnd, size.height, CornerRadius(radius)))
+            }
+            clipPath(capsule) {
+                if (complete) {
+                    drawRect(color = GoldBase)
+                    // The moving band travels a bit past both edges so the sweep fades in/out.
+                    val band = size.width * 0.22f
+                    val x = shimmerProgress * (size.width + 2f * band) - band
+                    drawRect(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                GoldShimmer.copy(alpha = 0.85f),
+                                Color.Transparent
+                            ),
+                            startX = x - band,
+                            endX = x + band
+                        )
+                    )
+                } else {
+                    val stops = listOf(
+                        Triple(0f, builtF, primary),
+                        Triple(builtF, builtF + addedF, AddedGreen),
+                        Triple(builtF + addedF, builtF + addedF + removedF, errorColor)
+                    )
+                    for ((from, to, color) in stops) {
+                        if (to > from) {
+                            drawRect(
+                                color = color,
+                                topLeft = Offset(size.width * from, 0f),
+                                size = Size(size.width * (to - from), size.height)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // Remainder track after the M3 progress gap, with the stop-indicator dot at its end.
+        val gap = 4.dp.toPx()
+        val trackStart = if (progressEnd > 0f) progressEnd + gap else 0f
+        if (trackStart < size.width) {
+            drawRoundRect(
+                color = trackColor,
+                topLeft = Offset(trackStart, 0f),
+                size = Size(size.width - trackStart, size.height),
+                cornerRadius = CornerRadius(radius)
+            )
+        }
+        drawCircle(
+            color = if (complete) GoldBase else primary,
+            radius = 2.dp.toPx(),
+            center = Offset(size.width - radius, size.height / 2f)
+        )
     }
 }
