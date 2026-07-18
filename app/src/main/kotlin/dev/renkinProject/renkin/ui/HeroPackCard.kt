@@ -2,7 +2,14 @@
 
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
@@ -74,6 +81,8 @@ import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.ui.theme.AddedGreen
+import dev.renkinProject.renkin.ui.theme.GoldBase
+import dev.renkinProject.renkin.ui.theme.GoldShimmer
 import dev.renkinProject.renkin.ui.theme.CardShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -418,6 +427,20 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
     val primary = MaterialTheme.colorScheme.primary
     val errorColor = MaterialTheme.colorScheme.error
     val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+
+    // Fully themed AND fully persisted (no pending +added/-removed): the bar celebrates in
+    // gold with a soft highlight sweeping left to right. Any pending change keeps the sober
+    // segmented palette — green/red still means "there is something to build".
+    val complete = total > 0 && built == total && added == 0 && removed == 0
+    val shimmerProgress = if (complete) {
+        rememberInfiniteTransition(label = "goldShimmer").animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing)),
+            label = "shimmerSweep"
+        ).value
+    } else 0f
+
     Canvas(
         Modifier
             .fillMaxWidth()
@@ -433,18 +456,36 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
                 addRoundRect(RoundRect(0f, 0f, progressEnd, size.height, CornerRadius(radius)))
             }
             clipPath(capsule) {
-                val stops = listOf(
-                    Triple(0f, builtF, primary),
-                    Triple(builtF, builtF + addedF, AddedGreen),
-                    Triple(builtF + addedF, builtF + addedF + removedF, errorColor)
-                )
-                for ((from, to, color) in stops) {
-                    if (to > from) {
-                        drawRect(
-                            color = color,
-                            topLeft = Offset(size.width * from, 0f),
-                            size = Size(size.width * (to - from), size.height)
+                if (complete) {
+                    drawRect(color = GoldBase)
+                    // The moving band travels a bit past both edges so the sweep fades in/out.
+                    val band = size.width * 0.22f
+                    val x = shimmerProgress * (size.width + 2f * band) - band
+                    drawRect(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                GoldShimmer.copy(alpha = 0.85f),
+                                Color.Transparent
+                            ),
+                            startX = x - band,
+                            endX = x + band
                         )
+                    )
+                } else {
+                    val stops = listOf(
+                        Triple(0f, builtF, primary),
+                        Triple(builtF, builtF + addedF, AddedGreen),
+                        Triple(builtF + addedF, builtF + addedF + removedF, errorColor)
+                    )
+                    for ((from, to, color) in stops) {
+                        if (to > from) {
+                            drawRect(
+                                color = color,
+                                topLeft = Offset(size.width * from, 0f),
+                                size = Size(size.width * (to - from), size.height)
+                            )
+                        }
                     }
                 }
             }
@@ -462,7 +503,7 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
             )
         }
         drawCircle(
-            color = primary,
+            color = if (complete) GoldBase else primary,
             radius = 2.dp.toPx(),
             center = Offset(size.width - radius, size.height / 2f)
         )
