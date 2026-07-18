@@ -41,12 +41,15 @@ import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Hosts the Global options screen in its own activity for the same reason as
@@ -297,17 +300,32 @@ class GlobalOptionsViewModel @Inject constructor(
     ): Boolean {
         if (globalApplyProgress != null) return false
         globalApplyProgress = 0 to 0
+        val store = getApplication<Application>().dataStore
+        var previousPreferences: Preferences? = null
+        var preferencesPersisted = false
         return try {
+            previousPreferences = store.data.first()
+            // Commit the recipe first. The provider prepares every render before it swaps the
+            // live list and Room writes the whole profile transactionally.
+            store.persistGlobalModifierPrefs(preferences)
+            preferencesPersisted = true
             appProvider.applyGlobalModifiers(
                 preferences, modifierOptions,
                 applyGenerated, applyExisting, applyCustom, includeEmpty
             ) { done, total -> globalApplyProgress = done to total }
-            getApplication<Application>().dataStore.persistGlobalModifierPrefs(preferences)
             appliedGlobal = true
             true
         } catch (e: CancellationException) {
+            if (preferencesPersisted) previousPreferences?.let { previous ->
+                withContext(NonCancellable) { store.persistGlobalModifierPrefs(previous) }
+            }
             throw e
         } catch (e: Exception) {
+            if (preferencesPersisted) previousPreferences?.let { previous ->
+                runCatching { store.persistGlobalModifierPrefs(previous) }.onFailure { rollbackError ->
+                    Log.error("GlobalOptionsViewModel", "Rolling back global preferences failed", rollbackError)
+                }
+            }
             Log.error("GlobalOptionsViewModel", "Applying global modifiers failed", e)
             false
         } finally {

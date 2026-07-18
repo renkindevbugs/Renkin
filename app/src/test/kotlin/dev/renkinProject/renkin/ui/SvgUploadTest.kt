@@ -49,6 +49,15 @@ class SvgUploadTest {
     }
 
     @Test
+    fun currentColorDocumentRasterisesWithExplicitImportTint() {
+        val bitmap = SvgRasterizer.rasterize(heroicon, 96, android.graphics.Color.MAGENTA)
+
+        assertNotNull(bitmap)
+        assertEquals(96, bitmap!!.width)
+        assertEquals(96, bitmap.height)
+    }
+
+    @Test
     fun explicitSize_scalesUpKeepingAspect() {
         val svg = SvgRasterizer.decode(
             """<svg xmlns="http://www.w3.org/2000/svg" width="24" height="12" fill="currentColor">

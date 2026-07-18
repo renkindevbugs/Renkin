@@ -90,6 +90,7 @@
     <string name="newIconPackTitle">New icon pack installed</string>
     <string name="newIconPackText">Reload Renkin to use **\"%1$s\"** for your icons.</string>
     <string name="reload">Reload</string>
+    <string name="startupLoadFailed">Couldn\'t finish loading your apps and saved icons.</string>
     <string name="overrideIcon">Refresh replaces existing icons</string>
     <string name="deleteIconPack">Uninstall icon pack</string>
     <string name="iconPackUninstalled">Renkin Pack uninstalled</string>

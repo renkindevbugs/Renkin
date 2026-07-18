@@ -78,6 +78,7 @@ import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.vector.ColorDecoder
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 
 /**
  * Fullscreen browser over the Iconify catalogue (200+ FOSS icon sets): a filterable set list
@@ -99,6 +100,7 @@ internal fun OnlineIconBrowserDialog(
     val toaster = LocalToaster.current
     val notImportableMessage = stringResource(R.string.onlineIconNotImportable)
     val loadFailedMessage = stringResource(R.string.onlineIconLoadFailed)
+    val rasterTintArgb = MaterialTheme.colorScheme.onSurface.toArgb()
 
     // null = the set list; non-null = that set's icon grid (back returns to the list).
     var importing by remember { mutableStateOf(false) }
@@ -181,8 +183,15 @@ internal fun OnlineIconBrowserDialog(
             onUseVector = {
                 importing = true
                 scope.launch {
-                    val outcome = viewModel.importIcon(icon)
-                    importing = false
+                    val outcome = try {
+                        viewModel.importIcon(icon)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        OnlineIconImport.LoadFailed
+                    } finally {
+                        importing = false
+                    }
                     when (outcome) {
                         is OnlineIconImport.Imported -> {
                             viewModel.endSession()
@@ -196,8 +205,15 @@ internal fun OnlineIconBrowserDialog(
             onUseImage = {
                 importing = true
                 scope.launch {
-                    val imported = viewModel.importImage(icon)
-                    importing = false
+                    val imported = try {
+                        viewModel.importImage(icon, rasterTintArgb)
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        null
+                    } finally {
+                        importing = false
+                    }
                     if (imported == null) {
                         toaster.show(loadFailedMessage)
                     } else {

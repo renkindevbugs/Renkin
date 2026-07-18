@@ -99,6 +99,12 @@ class MainViewModel @Inject constructor(
     /** True once apps, icon packs AND the saved profile icons have all loaded (cold start). */
     val startupComplete: Boolean get() = appProvider.startupComplete
 
+    var startupLoading by mutableStateOf(false)
+        private set
+
+    var startupFailed by mutableStateOf(false)
+        private set
+
     // Keys ("package/activity") of the apps already in the last built/saved pack.
     // An app with an icon whose key is NOT here is "added" (pending build); a key here
     // whose app no longer has an icon is "removed". Reloaded after each successful build,
@@ -178,24 +184,42 @@ class MainViewModel @Inject constructor(
     private val _toastEvents = Channel<Int>(Channel.BUFFERED)
     val toastEvents = _toastEvents.receiveAsFlow()
 
+    private fun loadStartup() {
+        if (startupLoading || appProvider.startupComplete) return
+        startupLoading = true
+        startupFailed = false
+        viewModelScope.launch {
+            try {
+                appProvider.ensureInitialized()
+                builtKeys = appProvider.getSavedPackKeys()
+                refreshMissingPacks()
+                // Classify any source packs that still lack a paid/free verdict (quiet best
+                // effort; imported-offline icons stay locked until a lookup succeeds). A verdict
+                // becoming decisive can unlock icons — reload so that shows without a restart.
+                if (runCatching { appProvider.verifyPendingVerdicts() }.getOrDefault(false)) {
+                    appProvider.reloadActiveProfile()
+                    resetChangeBaselines()
+                    refreshMissingPacks(prompt = false)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                startupFailed = true
+                Log.error("MainViewModel", "Startup loading failed", e)
+            } finally {
+                startupLoading = false
+            }
+        }
+    }
+
+    fun retryStartup() = loadStartup()
+
     init {
         // Loaded once. The Renkin pack reads the app list, so it runs after the
         // apps are loaded; icon packs are independent and load in parallel. The heavy
         // work hops to Dispatchers.Default inside each call, so viewModelScope (main)
         // is fine here.
-        viewModelScope.launch {
-            appProvider.ensureInitialized()
-            builtKeys = appProvider.getSavedPackKeys()
-            refreshMissingPacks()
-            // Classify any source packs that still lack a paid/free verdict (quiet best
-            // effort; imported-offline icons stay locked until a lookup succeeds). A verdict
-            // becoming decisive can unlock icons — reload so that shows without a restart.
-            if (runCatching { appProvider.verifyPendingVerdicts() }.getOrDefault(false)) {
-                appProvider.reloadActiveProfile()
-                resetChangeBaselines()
-                refreshMissingPacks(prompt = false)
-            }
-        }
+        loadStartup()
     }
 
     // ---- Operation orchestration -------------------------------------------------

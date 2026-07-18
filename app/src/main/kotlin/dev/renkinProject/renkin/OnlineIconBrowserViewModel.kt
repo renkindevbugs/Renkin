@@ -206,10 +206,10 @@ class OnlineIconBrowserViewModel @Inject constructor(
      * be reused like any uploaded picture. A failed disk write still imports the bitmap
      * (galleryPath null); only fetch/render failures return null.
      */
-    suspend fun importImage(icon: OnlineIcon): OnlineImageImport? {
+    suspend fun importImage(icon: OnlineIcon, currentColorArgb: Int): OnlineImageImport? {
         val markup = repository.svg(icon) ?: return null
         val bitmap = withContext(Dispatchers.Default) {
-            SvgRasterizer.rasterize(markup, IMAGE_IMPORT_SIZE)
+            SvgRasterizer.rasterize(markup, IMAGE_IMPORT_SIZE, currentColorArgb)
         } ?: return null
         val saved = withContext(Dispatchers.IO) {
             runCatching { UploadedImageStore.save(context, bitmap) }.getOrNull()
