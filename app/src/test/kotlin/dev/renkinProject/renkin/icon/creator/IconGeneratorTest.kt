@@ -47,11 +47,13 @@ class IconGeneratorTest {
         source: Source = Source.APPLICATION_NAME,
         override: Boolean = true,
         iconScale: Float = 1f,
+        imageEdit: ImageEdit = ImageEdit.NONE,
         applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT,
-        invertMonochrome: Boolean = false
+        invertMonochrome: Boolean = false,
+        iconShape: IconShape = IconShape.NONE
     ) = GenerationOptions(
         primarySource = source,
-        primaryImageEdit = ImageEdit.NONE,
+        primaryImageEdit = imageEdit,
         primaryTextType = TextType.ONE_LETTER,
         primaryIconPack = "",
         color = Color.BLACK,
@@ -62,7 +64,8 @@ class IconGeneratorTest {
         override = override,
         iconScale = iconScale,
         applicationIconVariant = applicationIconVariant,
-        invertMonochrome = invertMonochrome
+        invertMonochrome = invertMonochrome,
+        iconShape = iconShape
     )
 
     private fun app(
@@ -176,6 +179,54 @@ class IconGeneratorTest {
         assertEquals(Color.WHITE, bitmap.getPixel(0, 0))
         assertEquals(Color.WHITE, bitmap.getPixel(30, 45))
         assertEquals(Color.BLACK, bitmap.getPixel(60, 45))
+    }
+
+    @Test
+    fun materialYouBitmapModifierKeepsAdaptivePreviewPresentation() {
+        val sourceBitmap = Bitmap.createBitmap(90, 90, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.WHITE)
+        }
+
+        val modified = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                imageEdit = ImageEdit.COLORIZE,
+                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU
+            ),
+            app(icon = BitmapDrawable(context.resources, sourceBitmap))
+        ) as BitmapIconDrawable
+
+        assertTrue(modified.isAdaptiveIcon())
+        assertEquals(1.5f, modified.previewScale)
+    }
+
+    @Test
+    fun materialYouShapeBakesPreviewZoomBeforeDroppingAdaptiveMetadata() {
+        val sourceBitmap = Bitmap.createBitmap(90, 90, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.BLACK)
+            for (y in 30 until 60) for (x in 30 until 60) setPixel(x, y, Color.WHITE)
+        }
+        val sourceApp = app(icon = BitmapDrawable(context.resources, sourceBitmap))
+        val plain = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU
+            ),
+            sourceApp
+        ) as BitmapIconDrawable
+        val shaped = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU,
+                iconShape = IconShape.CIRCLE
+            ),
+            sourceApp
+        ) as BitmapIconDrawable
+
+        assertEquals(1.5f, previewScaleToBakeForShape(plain, shaped = true))
+        assertEquals(1f, previewScaleToBakeForShape(plain, shaped = false))
+        assertFalse(shaped.isAdaptiveIcon())
+        assertEquals(1f, shaped.previewScale)
     }
 
     @Test

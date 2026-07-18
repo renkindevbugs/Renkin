@@ -63,6 +63,9 @@ import dev.alembiconsProject.imagetracer.ImageTracer
 import dev.alembiconsProject.tgCannyEdgeCompose.CannyEdgeDetector
 import dev.alembiconsProject.tgCannyEdgeCompose.DetectionOptions
 
+internal fun previewScaleToBakeForShape(icon: IconPackDrawable, shaped: Boolean): Float =
+    if (shaped) (icon as? BitmapIconDrawable)?.previewScale ?: 1f else 1f
+
 class IconGenerator(
     private val ctx: Context,
     private val options: GenerationOptions,
@@ -262,7 +265,27 @@ class IconGenerator(
 
         // Non-vector icons rasterise, then run through the shared modifier dispatch
         // (NONE is already handled by the early return at the top of this method).
-        return generateImage(icon.toBitmap(), null, imageEdit, colorizeMode)
+        val modified = generateImage(icon.toBitmap(), null, imageEdit, colorizeMode)
+        return preserveBitmapPresentation(icon, modified)
+    }
+
+    /**
+     * Destructive bitmap modifiers may return a new bitmap or traced vector, but an adaptive
+     * Material You source still needs its adaptive export flag and safe-zone preview zoom.
+     * Ordinary bitmaps have the defaults and keep their original vector/bitmap result.
+     */
+    private fun preserveBitmapPresentation(
+        source: IconPackDrawable,
+        modified: IconPackDrawable
+    ): IconPackDrawable {
+        val bitmapSource = source as? BitmapIconDrawable ?: return modified
+        if (!bitmapSource.isAdaptiveIcon() && bitmapSource.previewScale == 1f) return modified
+        return BitmapIconDrawable(
+            ctx.resources,
+            modified.toBitmap(),
+            exportAsAdaptiveIcon = bitmapSource.isAdaptiveIcon(),
+            previewScale = bitmapSource.previewScale
+        )
     }
 
     fun colorizeFromIconPack(iconPackName: String, icon: ResourceDrawable): IconPackDrawable? {
@@ -850,6 +873,15 @@ class IconGenerator(
         var bitmap = vectorAdjusted?.toModifierBitmap() ?: icon.toBitmap()
         if (bitmap.width <= 0 || bitmap.height <= 0) return icon
 
+        val source = icon as? BitmapIconDrawable
+        // A shape is exported as a legacy bitmap and therefore cannot keep previewScale. Bake
+        // the Material You safe-zone zoom into the pixels before shaping so its optical size
+        // stays identical to the unshaped preview. Normal bitmaps use 1f and are untouched.
+        val previewScaleToBake = previewScaleToBakeForShape(icon, shaped)
+        if (previewScaleToBake != 1f) {
+            bitmap = bitmap.scaleFromCenter(previewScaleToBake)
+        }
+
         // Vector adjustments above are already consumed; bitmap sources keep the old path.
         if (vectorAdjusted == null && offset) {
             bitmap = bitmap.translated(options.iconOffsetX * bitmap.width, options.iconOffsetY * bitmap.height)
@@ -882,7 +914,6 @@ class IconGenerator(
             bitmap = applyShape(bitmap)
         }
 
-        val source = icon as? BitmapIconDrawable
         return BitmapIconDrawable(
             ctx.resources,
             bitmap,
