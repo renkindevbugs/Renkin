@@ -403,6 +403,8 @@ fun OptionsDialog(
         iconOffsetX = adjustments.iconOffsetX,
         iconOffsetY = adjustments.iconOffsetY,
         colorizeFlat = adjustments.colorizeFlat,
+        colorizeMonochrome = adjustments.colorizeMonochrome,
+        colorizeInverse = adjustments.colorizeInverse,
         iconShape = adjustments.iconShape,
         iconShapeCrop = adjustments.shapeCrop,
         iconShapeScale = adjustments.shapeScale,

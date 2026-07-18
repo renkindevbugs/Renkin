@@ -39,7 +39,9 @@ import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
 import dev.renkinProject.renkin.data.GlobalColorizeColorKey
 import dev.renkinProject.renkin.data.GlobalColorizeFlatKey
+import dev.renkinProject.renkin.data.GlobalColorizeInverseKey
 import dev.renkinProject.renkin.data.GlobalColorizeKey
+import dev.renkinProject.renkin.data.GlobalColorizeMonochromeKey
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
 import dev.renkinProject.renkin.data.GlobalShapeColorKey
 import dev.renkinProject.renkin.data.GlobalShapeCropKey
@@ -94,6 +96,9 @@ data class GenerationOptions(
     // Colorize as a flat fill (SRC_IN) rather than the default multiply blend, so the picked colour
     // replaces the icon's own colours instead of mixing with them. Per-icon Modifier-tab option.
     val colorizeFlat: Boolean = false,
+    // Alternative Colorize results: grayscale, plus optional inversion of either grayscale or RGB.
+    val colorizeMonochrome: Boolean = false,
+    val colorizeInverse: Boolean = false,
     // Icon shape applied as the LAST step: NONE leaves the icon untouched; otherwise the icon
     // is cropped into the shape (the default — most icons are full-bleed) or laid on a
     // [bgColor]-filled shape plate. [iconShapeScale] sizes the SHAPE itself (the icon stays
@@ -204,6 +209,8 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         themed = false,
         override = true,
         colorizeFlat = preferences.getBooleanValue(GlobalColorizeFlatKey),
+        colorizeMonochrome = preferences.getBooleanValue(GlobalColorizeMonochromeKey),
+        colorizeInverse = preferences.getBooleanValue(GlobalColorizeInverseKey),
         iconScale = normalizeGlobalScalePercent(
             preferences.getIntValue(GlobalIconScaleKey, 100)
         ) / 100f,

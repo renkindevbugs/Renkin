@@ -111,6 +111,8 @@ val GlobalIconScaleKey = intPreferencesKey("GLOBAL_ICON_SCALE")
 val GlobalColorizeKey = booleanPreferencesKey("GLOBAL_COLORIZE")
 val GlobalColorizeColorKey = stringPreferencesKey("GLOBAL_COLORIZE_COLOR")
 val GlobalColorizeFlatKey = booleanPreferencesKey("GLOBAL_COLORIZE_FLAT")
+val GlobalColorizeMonochromeKey = booleanPreferencesKey("GLOBAL_COLORIZE_MONOCHROME")
+val GlobalColorizeInverseKey = booleanPreferencesKey("GLOBAL_COLORIZE_INVERSE")
 // Which icon categories the global modifiers apply to (the Global options screen's toggle
 // buttons): refresh-generated icons (on by default — also gates the globals during a bulk
 // refresh), hand-picked (custom) icons, and apps that have no icon yet (those get one
@@ -153,6 +155,7 @@ val HideProfileShareWarningKey = booleanPreferencesKey("HIDE_PROFILE_SHARE_WARNI
 private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
     IncludeVectorKey, MonochromeKey, ExportThemedKey, CalendarIconsKey, OverrideIconKey,
     OutlineAddKey, GlobalShapeCropKey, GlobalColorizeKey, GlobalColorizeFlatKey,
+    GlobalColorizeMonochromeKey, GlobalColorizeInverseKey,
     GlobalApplyGeneratedKey, GlobalApplyExistingKey, GlobalApplyCustomKey, GlobalIncludeEmptyKey
 )
 
@@ -187,6 +190,8 @@ suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preference
             target[GlobalColorizeKey] = source.getBooleanValue(GlobalColorizeKey)
             target[GlobalColorizeColorKey] = source.getStringValue(GlobalColorizeColorKey)
             target[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
+            target[GlobalColorizeMonochromeKey] = source.getBooleanValue(GlobalColorizeMonochromeKey)
+            target[GlobalColorizeInverseKey] = source.getBooleanValue(GlobalColorizeInverseKey)
             target[GlobalApplyGeneratedKey] = source.getBooleanValue(GlobalApplyGeneratedKey, true)
             target[GlobalApplyExistingKey] = source.getBooleanValue(GlobalApplyExistingKey)
             target[GlobalApplyCustomKey] = source.getBooleanValue(GlobalApplyCustomKey)
