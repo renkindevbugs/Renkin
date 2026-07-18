@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -106,13 +107,17 @@ internal fun WatchRuleEditor(
     val filteredApps = remember(apps, query, sortOrder, filterNoIcon, filterFallback, installTimes) {
         apps.sortedFilteredApps(query, filterNoIcon, filterFallback, sortOrder, installTimes) { it }
     }
-    // 3 rows × 3 columns per page → a horizontally paged grid with dots
-    val appPages = filteredApps.chunked(9)
+    // Tiles keep their phone-like width on every screen: wider screens (tablets, unfolded
+    // foldables) get MORE columns instead of three stretched-out cards. ~110 dp per tile
+    // plus its 8 dp spacing, inside the editor's 16 dp side padding.
+    val columns = ((LocalConfiguration.current.screenWidthDp - 32 + 8) / 118).coerceIn(3, 8)
+    // 3 rows × [columns] per page → a horizontally paged grid with dots
+    val appPages = filteredApps.chunked(3 * columns)
     val pagerState = rememberPagerState(pageCount = { appPages.size.coerceAtLeast(1) })
     // Shrink the grid to the rows actually needed (e.g. a narrow search result),
     // but keep full 3-row height once it pages so swiping doesn't resize it
     val visibleRows = if (appPages.size <= 1) {
-        (((appPages.firstOrNull()?.size ?: 0) + 2) / 3).coerceIn(1, 3)
+        (((appPages.firstOrNull()?.size ?: 0) + columns - 1) / columns).coerceIn(1, 3)
     } else 3
     val gridHeight = (visibleRows * 112 + (visibleRows - 1) * 8).dp
     LaunchedEffect(query, sortOrder, filterNoIcon, filterFallback) {
@@ -214,7 +219,7 @@ internal fun WatchRuleEditor(
                     .padding(top = 10.dp)
                     .height(gridHeight)
             ) { page ->
-                TileRows(appPages.getOrNull(page).orEmpty()) { app ->
+                TileRows(appPages.getOrNull(page).orEmpty(), columns) { app ->
                     val comp = AppComponent(app.packageName, app.activityName)
                     val selected = selectedApps.any { it.packageName == comp.packageName && it.activityName == comp.activityName }
                     IconTile(
@@ -294,7 +299,7 @@ internal fun WatchRuleEditor(
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 Box(modifier = Modifier.padding(top = 8.dp)) {
-                    TileRows(sortedPacks) { pack ->
+                    TileRows(sortedPacks, columns) { pack ->
                         val selected = selectedPacks.contains(pack.packageName)
                         IconTile(rememberPackIcon(pack.packageName), clipLabel(pack.applicationName, 13), selected) {
                             if (selected) selectedPacks.remove(pack.packageName)
