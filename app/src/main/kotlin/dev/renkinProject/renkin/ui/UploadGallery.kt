@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
@@ -350,8 +351,7 @@ fun UploadColumn(app: PackageInfoStruct,
                 item(key = "gallery_header", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
                         text = stringResource(R.string.yourImages),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleSmallEmphasized,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -417,8 +417,7 @@ fun UploadColumn(app: PackageInfoStruct,
                         }
                         Text(
                             text = "${markedForDelete.size}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleMediumEmphasized,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.weight(1f)
                         )

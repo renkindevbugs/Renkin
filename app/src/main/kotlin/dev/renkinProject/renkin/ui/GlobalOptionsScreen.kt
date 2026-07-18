@@ -397,8 +397,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                     }
                     Text(
                         text = stringResource(R.string.globalOptionsTitle),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleMediumEmphasized,
                         modifier = Modifier.weight(1f)
                     )
                     Button(
@@ -666,8 +665,7 @@ private fun AdvancedOptionsPanel(iconPacks: List<IconPack>) {
         Column {
             Text(
                 text = stringResource(R.string.advancedOptions),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleSmallEmphasized,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
             )
@@ -694,8 +692,7 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
         ) {
             Text(
                 text = stringResource(R.string.globalModifiersTitle),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleSmallEmphasized,
                 color = MaterialTheme.colorScheme.onSurface
             )
 
@@ -1353,8 +1350,7 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                     }
                     Text(
                         text = app.appName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleMediumEmphasized,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f)

@@ -28,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.ui.theme.InnerShape
+import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.ui.theme.CardShape
 
 // Small controls shared across the Modifier tab and the Options screens, so each doesn't carry
@@ -156,11 +157,15 @@ fun LabeledSlider(
             modifier = Modifier.weight(1f)
         )
         if (valueLabel != null) {
-            Text(
-                text = valueLabel,
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.primary
-            )
+            // Small tonal badge instead of bare primary text — the value reads as a chip.
+            Surface(shape = SwatchShape, color = MaterialTheme.colorScheme.secondaryContainer) {
+                Text(
+                    text = valueLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
         }
     }
     if (centered) {
