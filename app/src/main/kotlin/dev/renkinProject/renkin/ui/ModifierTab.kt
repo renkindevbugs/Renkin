@@ -34,6 +34,8 @@ import androidx.compose.material.icons.filled.LayersClear
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import dev.renkinProject.renkin.ui.theme.FieldShape
@@ -531,6 +533,8 @@ internal fun ModifierTab(
             modifier = Modifier.padding(top = 8.dp)
         )
         var editorMenuOpen by remember { mutableStateOf(false) }
+        val expandedDescription = stringResource(R.string.stateExpanded)
+        val collapsedDescription = stringResource(R.string.stateCollapsed)
         Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp)) {
             SplitButtonLayout(
                 leadingButton = {
@@ -553,30 +557,39 @@ internal fun ModifierTab(
                     }
                 },
                 trailingButton = {
-                    SplitButtonDefaults.TrailingButton(
-                        checked = editorMenuOpen,
-                        onCheckedChange = { editorMenuOpen = it }
-                    ) {
-                        val rotation by animateFloatAsState(if (editorMenuOpen) 180f else 0f, label = "chevron")
-                        Icon(
-                            imageVector = Icons.Filled.KeyboardArrowDown,
-                            contentDescription = stringResource(R.string.editInAnotherApp),
-                            modifier = Modifier
-                                .size(SplitButtonDefaults.TrailingIconSize)
-                                .graphicsLayer { rotationZ = rotation }
-                        )
+                    // The menu anchors on the trailing button itself (not the whole split
+                    // button), so it opens at the chevron — above it when the button sits at
+                    // the bottom of the screen — instead of drifting to the far left edge.
+                    Box {
+                        SplitButtonDefaults.TrailingButton(
+                            checked = editorMenuOpen,
+                            onCheckedChange = { editorMenuOpen = it },
+                            modifier = Modifier.semantics {
+                                stateDescription = if (editorMenuOpen) expandedDescription
+                                    else collapsedDescription
+                            }
+                        ) {
+                            val rotation by animateFloatAsState(if (editorMenuOpen) 180f else 0f, label = "chevron")
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowDown,
+                                contentDescription = stringResource(R.string.editInAnotherApp),
+                                modifier = Modifier
+                                    .size(SplitButtonDefaults.TrailingIconSize)
+                                    .graphicsLayer { rotationZ = rotation }
+                            )
+                        }
+                        DropdownMenu(expanded = editorMenuOpen, onDismissRequest = { editorMenuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.editInAnotherApp)) },
+                                onClick = {
+                                    editorMenuOpen = false
+                                    onEditExternally(false)
+                                }
+                            )
+                        }
                     }
                 }
             )
-            DropdownMenu(expanded = editorMenuOpen, onDismissRequest = { editorMenuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.editInAnotherApp)) },
-                    onClick = {
-                        editorMenuOpen = false
-                        onEditExternally(false)
-                    }
-                )
-            }
         }
     }
 

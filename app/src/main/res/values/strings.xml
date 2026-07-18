@@ -371,6 +371,8 @@
     <string name="eraseClear">Clear all strokes</string>
     <string name="eraseCount">%1$d stroke(s)</string>
     <string name="globalOptionsTitle">Global options</string>
+    <string name="stateExpanded">Expanded</string>
+    <string name="stateCollapsed">Collapsed</string>
     <string name="onlineIconsTitle">Online icons</string>
     <string name="onlineIconsButton">Online</string>
     <string name="onlineIconsLoadFailed">Couldn\'t load the icon list. Check your connection and try again.</string>
