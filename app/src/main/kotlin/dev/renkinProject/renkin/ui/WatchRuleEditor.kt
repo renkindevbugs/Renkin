@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -307,7 +310,6 @@ internal fun WatchRuleEditor(
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .verticalScroll(rememberScrollState())
                         .padding(16.dp)
                 ) {
                     appsHeader()
@@ -320,8 +322,16 @@ internal fun WatchRuleEditor(
                                 .padding(top = 10.dp)
                         )
                     } else {
-                        Box(Modifier.padding(top = 10.dp)) {
-                            TileRows(filteredApps, paneColumns) { appTile(it) }
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(paneColumns),
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(top = 10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(filteredApps, key = { it.key }) { appTile(it) }
                         }
                     }
                     selectedAppChips()
@@ -331,10 +341,70 @@ internal fun WatchRuleEditor(
                     Modifier
                         .weight(1f)
                         .fillMaxHeight()
-                        .verticalScroll(rememberScrollState())
                         .padding(16.dp)
                 ) {
-                    packsSection(paneColumns, 0.dp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.watchAllPacksLabel),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Switch(checked = watchAll, onCheckedChange = { watchAll = it })
+                    }
+                    if (!watchAll) {
+                        Text(
+                            text = stringResource(R.string.iconPacksToCheck),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(top = 8.dp)
+                        )
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(paneColumns),
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(top = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(sortedPacks, key = { it.packageName }) { pack ->
+                                val selected = selectedPacks.contains(pack.packageName)
+                                IconTile(
+                                    rememberPackIcon(pack.packageName),
+                                    clipLabel(pack.applicationName, 13),
+                                    selected
+                                ) {
+                                    if (selected) selectedPacks.remove(pack.packageName)
+                                    else selectedPacks.add(pack.packageName)
+                                }
+                            }
+                        }
+                        if (selectedPacks.isNotEmpty()) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState())
+                                    .padding(top = 10.dp),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                selectedPacks.toList().forEach { pkg ->
+                                    val pack = packs.find { it.packageName == pkg }
+                                    RemovableChip(
+                                        label = clipLabel(pack?.applicationName ?: pkg, 7),
+                                        iconApp = null,
+                                        iconPackPackage = pkg,
+                                        onRemove = { selectedPacks.remove(pkg) }
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Spacer(Modifier.weight(1f))
+                    }
                 }
             }
         } else {

@@ -521,8 +521,18 @@ fun ApplicationList(
     // whose icons pop in seconds later, because the per-row bitmap decodes queue behind the
     // pack/DB loading still running on the same worker pool.
     if (!viewModel.startupComplete) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+        if (viewModel.startupFailed) {
+            EmptyState(
+                icon = Icons.Filled.Warning,
+                text = stringResource(R.string.startupLoadFailed),
+                modifier = Modifier.fillMaxSize(),
+                actionLabel = stringResource(R.string.reload),
+                onAction = viewModel::retryStartup
+            )
+        } else {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+            }
         }
         return
     }

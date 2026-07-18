@@ -39,6 +39,7 @@ import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
@@ -84,6 +85,12 @@ internal fun shouldProcessGlobalLayer(
         isCustom, isRefreshMade, applyGenerated, applyExisting, applyCustom
     )
 }
+
+/** Builds the all-or-nothing list used by Global Save without mutating the live Compose list. */
+internal fun mergeGlobalRenders(
+    original: List<PackageInfoStruct>,
+    renderedByKey: Map<String, PackageInfoStruct>
+): List<PackageInfoStruct> = original.map { renderedByKey[it.key] ?: it }
 
 /**
  * The domain hub between the UI layer (MainViewModel) and everything icon-related: the live
@@ -288,7 +295,8 @@ class ApplicationProvider(private val context: Context) {
         includeEmpty: Boolean,
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
     ) = withContext(Dispatchers.Default) {
-        val targets = applicationList.toList().filter { app ->
+        val original = applicationList.toList()
+        val targets = original.filter { app ->
             app.key !in lockManager.lockedKeys && shouldProcessGlobalLayer(
                 hasIcon = app.createdIcon != null,
                 isCustom = app.isCustom,
@@ -300,6 +308,7 @@ class ApplicationProvider(private val context: Context) {
             )
         }
         var done = 0
+        val renderedByKey = mutableMapOf<String, PackageInfoStruct>()
         onProgress(0, targets.size)
         for (app in targets) {
             val base = app.baseIcon ?: app.createdIcon
@@ -311,31 +320,47 @@ class ApplicationProvider(private val context: Context) {
                 val rendered = if (apply && modifierOptions.hasVisibleModifierEffect()) {
                     iconGenService.applyModifier(base, modifierOptions)
                 } else base
-                editApplication(app, app.changeRenderedIcon(rendered))
+                renderedByKey[app.key] = app.changeRenderedIcon(rendered)
             } else {
-                generateEmptyIcon(app, preferences, modifierOptions)
+                generateEmptyIconResult(app, preferences, modifierOptions)?.let {
+                    renderedByKey[app.key] = it
+                }
             }
             done++
             onProgress(done, targets.size)
         }
-        // Room stores both the immutable bases and compatibility renders; profile prefs carry
-        // the recipe that lets a new app version re-render without accumulating modifiers.
-        saveActiveProfileIcons()
+        val updated = mergeGlobalRenders(original, renderedByKey)
+        replaceApplications(updated)
+        try {
+            // Room stores both the immutable bases and compatibility renders; profile prefs carry
+            // the recipe that lets a new app version re-render without accumulating modifiers.
+            saveActiveProfileIcons()
+        } catch (e: CancellationException) {
+            replaceApplications(original)
+            throw e
+        } catch (e: Exception) {
+            // Rendering is prepared without touching the live list. If the atomic Room save fails,
+            // restore the exact session the user had before pressing Save.
+            replaceApplications(original)
+            throw e
+        }
     }
 
-    private suspend fun generateEmptyIcon(
+    private suspend fun generateEmptyIconResult(
         application: PackageInfoStruct,
         preferences: Preferences,
         modifierOptions: GenerationOptions
-    ) {
+    ): PackageInfoStruct? {
         val sourceOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
         val lockedOrigins = lockManager.lockedOriginsFor(sourceOptions)
+        var result: PackageInfoStruct? = null
         iconGenService.refreshIcon(application, sourceOptions, modifierOptions) { app, base, rendered, sourcePack ->
             val origin = lockManager.resolveOrigin(app.key, sourcePack)
             if (rendered == null || origin == null || origin !in lockedOrigins) {
-                editApplication(app, app.changeExport(rendered, sourcePackName = origin, isRefreshMade = true, isCustom = false, isLegacy = false, baseIcon = base))
+                result = app.changeExport(rendered, sourcePackName = origin, isRefreshMade = true, isCustom = false, isLegacy = false, baseIcon = base)
             }
         }
+        return result
     }
 
     private fun modifierFor(preferences: Preferences, apply: Boolean): GenerationOptions? {

@@ -63,8 +63,10 @@ object SvgRasterizer {
             svg.setDocumentWidth("100%")
             svg.setDocumentHeight("100%")
         }.getOrElse { return null }
-        return newArgbBitmap(width, height) {
-            svg.renderToCanvas(it, RectF(0f, 0f, width.toFloat(), height.toFloat()))
-        }
+        return runCatching {
+            newArgbBitmap(width, height) {
+                svg.renderToCanvas(it, RectF(0f, 0f, width.toFloat(), height.toFloat()))
+            }
+        }.getOrNull()
     }
 }

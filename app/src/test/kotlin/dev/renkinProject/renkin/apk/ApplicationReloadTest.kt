@@ -144,6 +144,20 @@ class ApplicationReloadTest {
     }
 
     @Test
+    fun globalRendersArePreparedAsOneOrderedSnapshot() {
+        val first = app("First", "com.first", createdIcon = FakeIcon())
+        val second = app("Second", "com.second", createdIcon = FakeIcon())
+        val replacement = second.changeRenderedIcon(FakeIcon())
+
+        val merged = mergeGlobalRenders(listOf(first, second), mapOf(second.key to replacement))
+
+        assertEquals(listOf(first.key, second.key), merged.map { it.key })
+        assertSame(first, merged[0])
+        assertSame(replacement, merged[1])
+        assertFalse(replacement.createdIcon === second.createdIcon)
+    }
+
+    @Test
     fun globalCategoriesDistinguishFreshGeneratedExistingAndCustom() {
         assertTrue(shouldApplyGlobalLayer(false, true, applyGenerated = true, applyExisting = false, applyCustom = false))
         assertFalse(shouldApplyGlobalLayer(false, false, applyGenerated = true, applyExisting = false, applyCustom = false))
