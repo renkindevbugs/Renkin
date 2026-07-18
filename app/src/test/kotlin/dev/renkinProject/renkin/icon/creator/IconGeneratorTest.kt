@@ -50,7 +50,9 @@ class IconGeneratorTest {
         imageEdit: ImageEdit = ImageEdit.NONE,
         applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT,
         invertMonochrome: Boolean = false,
-        iconShape: IconShape = IconShape.NONE
+        iconShape: IconShape = IconShape.NONE,
+        colorizeMonochrome: Boolean = false,
+        colorizeInverse: Boolean = false
     ) = GenerationOptions(
         primarySource = source,
         primaryImageEdit = imageEdit,
@@ -65,7 +67,9 @@ class IconGeneratorTest {
         iconScale = iconScale,
         applicationIconVariant = applicationIconVariant,
         invertMonochrome = invertMonochrome,
-        iconShape = iconShape
+        iconShape = iconShape,
+        colorizeMonochrome = colorizeMonochrome,
+        colorizeInverse = colorizeInverse
     )
 
     private fun app(
@@ -257,6 +261,39 @@ class IconGeneratorTest {
         assertEquals(255, Color.red(normal) + Color.red(reversed))
         assertEquals(Color.red(reversed), Color.green(reversed))
         assertEquals(Color.green(reversed), Color.blue(reversed))
+    }
+
+    @Test
+    fun colorizeMonochromeMatchesApplicationIconMonochromeTransform() {
+        val sourceColor = Color.argb(190, 200, 75, 30)
+        val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(sourceColor)
+        }
+        val base = BitmapIconDrawable(bitmap)
+
+        val normal = generator(
+            options(colorizeMonochrome = true)
+        ).applyModifier(base, ImageEdit.COLORIZE).toBitmap()
+        val inverse = generator(
+            options(colorizeMonochrome = true, colorizeInverse = true)
+        ).applyModifier(base, ImageEdit.COLORIZE).toBitmap()
+
+        assertEquals(monochromeBitmap(bitmap, invert = false).getPixel(0, 0), normal.getPixel(0, 0))
+        assertEquals(monochromeBitmap(bitmap, invert = true).getPixel(0, 0), inverse.getPixel(0, 0))
+    }
+
+    @Test
+    fun invertBitmapColorsPreservesAlphaAndDensity() {
+        val sourceColor = Color.argb(123, 10, 20, 30)
+        val bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
+            density = 420
+            eraseColor(sourceColor)
+        }
+
+        val inverted = invertBitmapColors(bitmap)
+
+        assertEquals(Color.argb(123, 245, 235, 225), inverted.getPixel(0, 0))
+        assertEquals(420, inverted.density)
     }
 
     @Test

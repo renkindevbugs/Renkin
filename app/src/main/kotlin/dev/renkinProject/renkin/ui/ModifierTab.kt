@@ -82,6 +82,8 @@ internal class AdjustmentState {
     // Colorize as a flat fill (SRC_IN) instead of the default multiply blend, so the picked
     // colour lands exactly — a green icon tinted blue no longer muddies to a green/blue mix.
     var colorizeFlat by mutableStateOf(false)
+    var colorizeMonochrome by mutableStateOf(false)
+    var colorizeInverse by mutableStateOf(false)
     var iconScale by mutableFloatStateOf(1f)
     var bgRemovalTolerance by mutableFloatStateOf(0.1f)
     // Auto-center is UI state only: switching it on computes the offsets below (the pipeline's
@@ -110,7 +112,8 @@ internal class AdjustmentState {
                 listOf(it.edgeThreshold, it.edgeSmoothing, it.edgeContrast, it.iconScale,
                     it.bgRemovalTolerance, it.autoCenter, it.iconOffsetX, it.iconOffsetY,
                     it.colorizeFlat, it.iconShape.ordinal, it.shapeCrop, it.shapeColor.toArgb(),
-                    it.shapeScale, it.outlineMode.ordinal, it.outlineWidth, it.outlineColor.toArgb())
+                    it.shapeScale, it.outlineMode.ordinal, it.outlineWidth, it.outlineColor.toArgb(),
+                    it.colorizeMonochrome, it.colorizeInverse)
             },
             restore = { saved ->
                 AdjustmentState().apply {
@@ -130,6 +133,8 @@ internal class AdjustmentState {
                     outlineMode = OutlineMode.entries.getOrElse(saved[13] as Int) { OutlineMode.NONE }
                     outlineWidth = saved[14] as Float
                     outlineColor = Color(saved[15] as Int)
+                    colorizeMonochrome = saved.getOrNull(16) as? Boolean ?: false
+                    colorizeInverse = saved.getOrNull(17) as? Boolean ?: false
                 }
             }
         )
@@ -266,27 +271,29 @@ internal fun ModifierTab(
                                     // Flat fill vs. multiply blend: on a coloured icon the multiply
                                     // default mixes the picked colour with the original, so blue over
                                     // green reads muddy. This makes the picked colour land exactly.
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = stringResource(R.string.colorizeSolid),
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = stringResource(R.string.colorizeSolidHint),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                    ColorizeSwitchRow(
+                                        label = stringResource(R.string.colorizeSolid),
+                                        hint = stringResource(R.string.colorizeSolidHint),
+                                        checked = adjustments.colorizeFlat,
+                                        onCheckedChange = {
+                                            adjustments.colorizeFlat = it
+                                            if (it) adjustments.colorizeMonochrome = false
                                         }
-                                        Switch(
-                                            checked = adjustments.colorizeFlat,
-                                            onCheckedChange = { adjustments.colorizeFlat = it }
-                                        )
-                                    }
+                                    )
+                                    ColorizeSwitchRow(
+                                        label = stringResource(R.string.colorizeMonochrome),
+                                        hint = stringResource(R.string.colorizeMonochromeHint),
+                                        checked = adjustments.colorizeMonochrome,
+                                        onCheckedChange = {
+                                            adjustments.colorizeMonochrome = it
+                                            if (it) adjustments.colorizeFlat = false
+                                        }
+                                    )
+                                    ColorizeSwitchRow(
+                                        label = stringResource(R.string.inverseColors),
+                                        checked = adjustments.colorizeInverse,
+                                        onCheckedChange = { adjustments.colorizeInverse = it }
+                                    )
                                 }
 
                                 ImageEdit.REMOVE_BACKGROUND -> OptionGroup {
@@ -648,4 +655,34 @@ private fun IconColorCard(iconColor: Color, onClick: () -> Unit) {
             ) {}
         }
     )
+}
+
+@Composable
+private fun ColorizeSwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    hint: String? = null,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 4.dp
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (hint != null) {
+                Text(
+                    text = hint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
 }

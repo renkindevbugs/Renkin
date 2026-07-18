@@ -154,6 +154,8 @@ class DataPreferencesTest {
             val staged = preferencesOf(
                 GlobalIconScaleKey to 80,
                 OutlineAddKey to true,
+                GlobalColorizeMonochromeKey to true,
+                GlobalColorizeInverseKey to true,
                 GlobalApplyGeneratedKey to false,
                 GlobalApplyExistingKey to true,
                 GlobalApplyCustomKey to true
@@ -165,6 +167,8 @@ class DataPreferencesTest {
             assertEquals("keep.pack", saved[PrimaryIconPackKey])
             assertEquals(80, saved[GlobalIconScaleKey])
             assertTrue(saved[OutlineAddKey] == true)
+            assertTrue(saved[GlobalColorizeMonochromeKey] == true)
+            assertTrue(saved[GlobalColorizeInverseKey] == true)
             assertFalse(saved[GlobalApplyGeneratedKey] == true)
             assertTrue(saved[GlobalApplyExistingKey] == true)
             assertTrue(saved[GlobalApplyCustomKey] == true)

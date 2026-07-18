@@ -83,7 +83,11 @@ class IconGenerator(
     // Colorize blend for bitmap icons: SRC_IN replaces the icon's colours with the picked one (flat
     // fill), MULTIPLY tints them (mixes with the original). Vectors always recolour flat regardless.
     private val colorizeMode
-        get() = if (options.colorizeFlat) PorterDuff.Mode.SRC_IN else PorterDuff.Mode.MULTIPLY
+        get() = if (options.colorizeFlat && !options.colorizeMonochrome) {
+            PorterDuff.Mode.SRC_IN
+        } else PorterDuff.Mode.MULTIPLY
+    private val colorizeColor
+        get() = if (options.colorizeInverse) invertArgb(options.color) else options.color
 
     fun generateIcon(application: PackageInfoStruct,
                      onUpdate: (application: PackageInfoStruct, icon: IconPackDrawable?, sourcePackName: String) -> Unit) {
@@ -238,9 +242,9 @@ class IconGenerator(
     private fun applyModifierInner(icon: IconPackDrawable, imageEdit: ImageEdit): IconPackDrawable {
         if (imageEdit == ImageEdit.NONE) return icon
 
-        if (imageEdit == ImageEdit.COLORIZE) {
+        if (imageEdit == ImageEdit.COLORIZE && !options.colorizeMonochrome) {
             modifierVector(icon)?.let { vector ->
-                vector.root.setReferenceColorPaths(SolidColor(Color(options.color)))
+                vector.root.setReferenceColorPaths(SolidColor(Color(colorizeColor)))
                 vector.tintColor = Color.Unspecified
                 return vector
             }
@@ -251,11 +255,15 @@ class IconGenerator(
             return when (imageEdit) {
                 ImageEdit.NONE -> icon
                 ImageEdit.COLORIZE -> {
-                    // Recolour while keeping each path's fill-vs-stroke nature (#117),
-                    // unlike colorizeVector which forces everything to a stroke
-                    copy.root.setReferenceColorPaths(SolidColor(Color(options.color)))
-                    copy.tintColor = Color.Unspecified
-                    copy
+                    if (options.colorizeMonochrome) {
+                        colorizeImage(copy.toBitmap(), null, colorizeMode)
+                    } else {
+                        // Recolour while keeping each path's fill-vs-stroke nature (#117),
+                        // unlike colorizeVector which forces everything to a stroke.
+                        copy.root.setReferenceColorPaths(SolidColor(Color(colorizeColor)))
+                        copy.tintColor = Color.Unspecified
+                        copy
+                    }
                 }
                 ImageEdit.PATH -> generatePathTracing(copy.toBitmap(), null)
                 ImageEdit.EDGE -> generateCannyEdgeDetection(copy.toBitmap(), null)
@@ -803,7 +811,8 @@ class IconGenerator(
         if (options.themed) canvas.scale(0.5f, 0.5f, icon.width * 0.5f, icon.height * 0.5f)
         canvas.drawBitmap(icon, 0F, 0F, paint)
 
-        return addBackground(coloredIcon)
+        val result = addBackground(coloredIcon)
+        return if (options.colorizeInverse) invertBitmapColors(result) else result
     }
 
     private fun addBackground(image: Bitmap): Bitmap {
@@ -837,6 +846,11 @@ class IconGenerator(
     }
 
     private fun colorizeImage(bitmapIcon: Bitmap, parsedIcon: Drawable?, mode: PorterDuff.Mode): IconPackDrawable {
+        if (options.colorizeMonochrome) {
+            // Reuse the Application icon → Monochrome result exactly. The Colorize colour is
+            // intentionally irrelevant in this mode; Solid fill and normal tint remain separate.
+            return getDefaultBitmapIcon(monochromeBitmap(bitmapIcon, options.colorizeInverse))
+        }
         return when (parsedIcon) {
             is InsetIconDrawable -> {
                 parsedIcon.newDrawable(colorizeImage(bitmapIcon, parsedIcon.drawable, mode))
@@ -997,7 +1011,7 @@ class IconGenerator(
     }
 
     private fun colorizeVector(vectorIcon: ImageVectorDrawable): ImageVectorDrawable {
-        vectorIcon.root.editPathColors(SolidColor(Color.Unspecified), SolidColor(Color(options.color)))
+        vectorIcon.root.editPathColors(SolidColor(Color.Unspecified), SolidColor(Color(colorizeColor)))
         vectorIcon.tintColor = Color.Unspecified
 
         return vectorIcon
@@ -1013,6 +1027,22 @@ class IconGenerator(
     private fun fixAdaptiveIconSize(adaptiveIconDrawable: AdaptiveIconDrawable) {
         val vector = adaptiveIconDrawable.foregroundVectorOrNull()
         vector?.resizeAndCenter()?.applyAndRemoveGroup()?.scaleAtCenter(adaptiveIconScale)
+    }
+}
+
+internal fun invertArgb(color: Int): Int = android.graphics.Color.argb(
+    android.graphics.Color.alpha(color),
+    255 - android.graphics.Color.red(color),
+    255 - android.graphics.Color.green(color),
+    255 - android.graphics.Color.blue(color)
+)
+
+internal fun invertBitmapColors(icon: Bitmap): Bitmap {
+    val pixels = IntArray(icon.width * icon.height)
+    icon.getPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
+    for (index in pixels.indices) pixels[index] = invertArgb(pixels[index])
+    return Bitmap.createBitmap(pixels, icon.width, icon.height, Bitmap.Config.ARGB_8888).apply {
+        density = icon.density
     }
 }
 
