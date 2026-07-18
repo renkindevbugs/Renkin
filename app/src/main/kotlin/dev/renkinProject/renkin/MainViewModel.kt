@@ -16,18 +16,11 @@ import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.unsavedApplicationKeys
 import dev.renkinProject.renkin.apk.IconGenerationService
 import dev.renkinProject.renkin.apk.IconLockManager
-import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
-import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
-import dev.renkinProject.renkin.data.PrimarySourceKey
-import dev.renkinProject.renkin.data.SOURCE_DEFAULT
-import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.getStringValue
-import dev.renkinProject.renkin.data.setEnumValue
-import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -283,9 +276,9 @@ class MainViewModel @Inject constructor(
             }
         }
 
-    /** True if the active profile's generated icon pack is currently installed on the device. */
-    private suspend fun isIconPackInstalled(): Boolean = runCatching {
-        getApplication<Application>().packageManager.getPackageInfo(appProvider.activePackPackageName(), 0)
+    /** True if the generated pack at [packageName] is currently installed on the device. */
+    private suspend fun isIconPackInstalled(packageName: String): Boolean = runCatching {
+        getApplication<Application>().packageManager.getPackageInfo(packageName, 0)
     }.isSuccess
 
     /**
@@ -304,7 +297,6 @@ class MainViewModel @Inject constructor(
     private data class PendingInstallFallback(
         val pack: ApplicationProvider.BuiltIconPack,
         val wasUpdate: Boolean,
-        val preferences: Preferences,
         val packLabel: String
     )
 
@@ -341,8 +333,12 @@ class MainViewModel @Inject constructor(
     }
 
     /** Builds from a preference snapshot taken after pending UI writes have completed. */
-    fun build() {
+    fun build(profileId: Long) {
         if (buildStep != null) return
+        if (appProvider.isProfileSwitching || profileId != appProvider.activeProfileId) {
+            _toastEvents.trySend(R.string.profileStillLoading)
+            return
+        }
         // Claim the operation synchronously so the preview result cannot enqueue it twice.
         buildStep = ""
         viewModelScope.launch {
@@ -350,6 +346,7 @@ class MainViewModel @Inject constructor(
                 val preferences = getApplication<Application>().dataStore
                     .getPreferencesAfterPendingWrites()
                 val pack = appProvider.buildAndSignIconPack(
+                    profileId,
                     preferences,
                     // A new step ends the per-app phase, so the bar goes back to indeterminate.
                     textMethod = { buildStep = it; buildProgress = null },
@@ -359,9 +356,8 @@ class MainViewModel @Inject constructor(
                 // dialog reflects what's happening. "Updating" when our pack is already
                 // installed, "Installing" for a first build. Decided before installing, so it
                 // also tells us which follow-up instructions dialog to show afterwards.
-                val wasUpdate = isIconPackInstalled()
-                val label = appProvider.activeProfile()?.let { it.packLabel.ifEmpty { it.name } } ?: "Renkin Pack"
-                val pending = PendingInstallFallback(pack, wasUpdate, preferences, label)
+                val wasUpdate = isIconPackInstalled(pack.packageName)
+                val pending = PendingInstallFallback(pack, wasUpdate, pack.packLabel)
                 buildStep = getApplication<Application>().getString(
                     if (wasUpdate) R.string.buildUpdating else R.string.buildInstalling
                 )
@@ -395,23 +391,15 @@ class MainViewModel @Inject constructor(
             if (pending.wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL,
             pending.packLabel
         )
-        // The saved pack now matches the current icons → reset both change baselines.
-        builtKeys = appProvider.getSavedPackKeys()
-        updatedKeys = emptySet()
+        // A watch deep link can switch profiles while the system installer is in front. Never
+        // replace that profile's UI baseline with the pack that finished in the background.
+        if (appProvider.activeProfileId == pending.pack.profileId) {
+            builtKeys = appProvider.getSavedPackKeys(pending.pack.profileId)
+            updatedKeys = emptySet()
+        }
         // The save dropped locked originals the user replaced by hand — the
         // missing-pack warning must not keep counting them after a build.
         refreshMissingPacks(prompt = false)
-        // The hero pick only sticks once built: record what was built so startup
-        // can restore it over any later, unbuilt pick.
-        val store = getApplication<Application>().dataStore
-        store.setEnumValue(
-            BuiltPrimarySourceKey,
-            pending.preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
-        )
-        store.setStringValue(
-            BuiltPrimaryIconPackKey,
-            pending.preferences.getStringValue(PrimaryIconPackKey)
-        )
     }
 
     // Records that [app] was hand-edited this session (so the build preview marks it "changed").
@@ -533,11 +521,12 @@ class MainViewModel @Inject constructor(
     fun deleteIconPack() {
         viewModelScope.launch {
             val context = getApplication<Application>()
-            if (!isIconPackInstalled()) {
+            val packageName = appProvider.activePackPackageName()
+            if (!isIconPackInstalled(packageName)) {
                 _toastEvents.trySend(R.string.iconPackNotInstalled)
                 return@launch
             }
-            if (ApkUninstaller(context).uninstall(appProvider.activePackPackageName())) {
+            if (ApkUninstaller(context).uninstall(packageName)) {
                 _toastEvents.trySend(R.string.iconPackUninstalled)
             }
         }
@@ -641,6 +630,8 @@ class MainViewModel @Inject constructor(
     val profiles = appProvider.profilesFlow()
 
     val activeProfileId: Long get() = appProvider.activeProfileId
+
+    val isProfileSwitching: Boolean get() = appProvider.isProfileSwitching
 
     /**
      * True when the active profile has changes its saved set doesn't: unsaved refresh output,

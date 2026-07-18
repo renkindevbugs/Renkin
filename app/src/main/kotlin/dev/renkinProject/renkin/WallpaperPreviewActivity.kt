@@ -1,12 +1,14 @@
 package dev.renkinProject.renkin
 
 import android.content.pm.ActivityInfo
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import dagger.hilt.android.AndroidEntryPoint
@@ -42,6 +44,7 @@ class WallpaperPreviewActivity : ComponentActivity() {
     companion object {
         const val EXTRA_BUILT_KEYS = "builtKeys"
         const val EXTRA_UPDATED_KEYS = "updatedKeys"
+        const val EXTRA_PROFILE_ID = "profileId"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,6 +59,7 @@ class WallpaperPreviewActivity : ComponentActivity() {
 
         val builtKeys = intent.getStringArrayListExtra(EXTRA_BUILT_KEYS)?.toSet() ?: emptySet()
         val updatedKeys = intent.getStringArrayListExtra(EXTRA_UPDATED_KEYS)?.toSet() ?: emptySet()
+        val profileId = intent.getLongExtra(EXTRA_PROFILE_ID, -1L)
 
         setContent {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
@@ -66,6 +70,16 @@ class WallpaperPreviewActivity : ComponentActivity() {
             // otherwise only provided by MainActivity's composition.
             CompositionLocalProvider(LocalToaster provides toaster) {
                 RenkinTheme(darkMode) {
+                    LaunchedEffect(
+                        appProvider.activeProfileId,
+                        appProvider.isProfileSwitching
+                    ) {
+                        // The reviewed icons must stay tied to one profile. A watch deep link can
+                        // otherwise switch the singleton provider underneath this activity.
+                        if (appProvider.isProfileSwitching || appProvider.activeProfileId != profileId) {
+                            finish()
+                        }
+                    }
                     BuildPackPreviewContent(
                         applications = appProvider.applicationList,
                         builtKeys = builtKeys,
@@ -73,7 +87,10 @@ class WallpaperPreviewActivity : ComponentActivity() {
                         loadCalendarWarnings = { preferences -> appProvider.calendarWarnings(preferences) },
                         onDismiss = { finish() },
                         onBuild = {
-                            setResult(RESULT_OK)
+                            setResult(
+                                RESULT_OK,
+                                Intent().putExtra(EXTRA_PROFILE_ID, profileId)
+                            )
                             finish()
                         }
                     )

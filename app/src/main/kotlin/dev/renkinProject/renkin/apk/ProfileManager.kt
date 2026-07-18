@@ -8,11 +8,19 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
+import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
+import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
+import dev.renkinProject.renkin.data.PrimaryIconPackKey
+import dev.renkinProject.renkin.data.PrimarySourceKey
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.SOURCE_DEFAULT
+import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.restoreProfilePrefs
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
+import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.data.persistBuiltPrimaryPrefs
 import dev.renkinProject.renkin.data.snapshotProfilePrefs
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.dataStore
@@ -76,11 +84,35 @@ class ProfileManager internal constructor(
         WatchRepository(context).deleteRulesForProfile(id)
     }
 
-    /** Records whether the active profile's save is still waiting for a build. */
-    suspend fun markActiveUnbuilt(unbuilt: Boolean) {
-        packRepo.profile(activeProfileId)?.let {
+    /** Records whether [profileId]'s save is still waiting for a build. */
+    suspend fun markUnbuilt(profileId: Long, unbuilt: Boolean) {
+        packRepo.profile(profileId)?.let {
             packRepo.updateProfile(it.copy(hasUnbuiltChanges = unbuilt))
         }
+    }
+
+    /**
+     * Records the source a successful build used in the profile that owned that build. An
+     * inactive profile lives in its Room snapshot; writing the shared DataStore there would
+     * otherwise leak the result into whichever profile the user switched to during install.
+     */
+    suspend fun recordBuiltPrimary(profileId: Long, source: Preferences) {
+        if (profileId == activeProfileId) {
+            store.persistBuiltPrimaryPrefs(source)
+            return
+        }
+        val profile = packRepo.profile(profileId) ?: return
+        val snapshot = runCatching { org.json.JSONObject(profile.prefsSnapshot) }
+            .getOrDefault(org.json.JSONObject())
+        snapshot.put(
+            BuiltPrimarySourceKey.name,
+            source.getIntValue(PrimarySourceKey, SOURCE_DEFAULT.ordinal)
+        )
+        snapshot.put(
+            BuiltPrimaryIconPackKey.name,
+            source.getStringValue(PrimaryIconPackKey)
+        )
+        packRepo.updateProfile(profile.copy(prefsSnapshot = snapshot.toString()))
     }
 
     /** Persists the active profile's "don't show the missing-packs dialog again" choice. */
