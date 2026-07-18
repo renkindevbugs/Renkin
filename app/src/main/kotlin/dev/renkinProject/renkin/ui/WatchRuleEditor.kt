@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -38,6 +39,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -59,6 +61,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
@@ -107,10 +110,17 @@ internal fun WatchRuleEditor(
     val filteredApps = remember(apps, query, sortOrder, filterNoIcon, filterFallback, installTimes) {
         apps.sortedFilteredApps(query, filterNoIcon, filterFallback, sortOrder, installTimes) { it }
     }
+    val configuration = LocalConfiguration.current
+    // Landscape on a wide screen splits the editor into two full-height panes — apps left,
+    // packs right — each scrolling on its own with no pager. Portrait keeps the single flow.
+    val landscapeSplit = configuration.screenWidthDp >= 600 &&
+        configuration.screenWidthDp > configuration.screenHeightDp
     // Tiles keep their phone-like width on every screen: wider screens (tablets, unfolded
     // foldables) get MORE columns instead of three stretched-out cards. ~110 dp per tile
     // plus its 8 dp spacing, inside the editor's 16 dp side padding.
-    val columns = ((LocalConfiguration.current.screenWidthDp - 32 + 8) / 118).coerceIn(3, 8)
+    val columns = ((configuration.screenWidthDp - 32 + 8) / 118).coerceIn(3, 8)
+    // Column count for one pane of the landscape split (half the width available).
+    val paneColumns = ((configuration.screenWidthDp / 2 - 32 + 8) / 118).coerceIn(3, 8)
     // 3 rows × [columns] per page → a horizontally paged grid with dots
     val appPages = filteredApps.chunked(3 * columns)
     val pagerState = rememberPagerState(pageCount = { appPages.size.coerceAtLeast(1) })
@@ -165,18 +175,15 @@ internal fun WatchRuleEditor(
             WavyLoadingBar(Modifier.fillMaxWidth())
         }
 
-        Column(
-            Modifier
-                .weight(1f)
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp)
-        ) {
+        // Shared pieces of both layouts. The apps header (title + search + sort), one app
+        // tile, the selected-app chips and the whole packs section render identically —
+        // portrait stacks them in one flow, the landscape split hosts them per pane.
+        val appsHeader: @Composable () -> Unit = {
             Text(
                 text = stringResource(R.string.appsToWatch),
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold
             )
-
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -201,61 +208,23 @@ internal fun WatchRuleEditor(
                     onFallbackFilterChange = { filterFallback = it; if (it) filterNoIcon = false }
                 )
             }
-
-            if (filteredApps.isEmpty()) {
-                EmptyState(
-                    icon = Icons.Filled.SearchOff,
-                    text = stringResource(R.string.noAppsFound),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(gridHeight)
-                        .padding(top = 10.dp)
-                )
-            } else
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
-                    .height(gridHeight)
-            ) { page ->
-                TileRows(appPages.getOrNull(page).orEmpty(), columns) { app ->
-                    val comp = AppComponent(app.packageName, app.activityName)
-                    val selected = selectedApps.any { it.packageName == comp.packageName && it.activityName == comp.activityName }
-                    IconTile(
-                        bitmap = rememberAppBitmap(app),
-                        label = clipLabel(app.appName, 13),
-                        selected = selected,
-                        overlayIcon = app.createdIcon
-                    ) {
-                        if (selected) selectedApps.removeAll { it.packageName == comp.packageName && it.activityName == comp.activityName }
-                        else selectedApps.add(comp)
-                    }
-                }
+        }
+        val appTile: @Composable (PackageInfoStruct) -> Unit = { app ->
+            val comp = AppComponent(app.packageName, app.activityName)
+            val selected = selectedApps.any { it.packageName == comp.packageName && it.activityName == comp.activityName }
+            IconTile(
+                bitmap = rememberAppBitmap(app),
+                label = clipLabel(app.appName, 13),
+                selected = selected,
+                overlayIcon = app.createdIcon
+            ) {
+                if (selected) selectedApps.removeAll { it.packageName == comp.packageName && it.activityName == comp.activityName }
+                else selectedApps.add(comp)
             }
-
-            if (appPages.size > 1) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 10.dp),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    repeat(appPages.size) { i ->
-                        val sel = pagerState.currentPage == i
-                        Box(
-                            Modifier
-                                .padding(horizontal = 3.dp)
-                                .size(if (sel) 8.dp else 6.dp)
-                                .clip(CircleShape)
-                                .background(if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
-                        )
-                    }
-                }
-            }
-
-            // Selected apps sit below the grid so adding one doesn't shove the grid down;
-            // single scrolling row, labels clipped to keep chips small
+        }
+        // Selected apps sit below the grid so adding one doesn't shove the grid down;
+        // single scrolling row, labels clipped to keep chips small
+        val selectedAppChips: @Composable () -> Unit = {
             if (selectedApps.isNotEmpty()) {
                 Row(
                     modifier = Modifier
@@ -275,11 +244,12 @@ internal fun WatchRuleEditor(
                     }
                 }
             }
-
+        }
+        val packsSection: @Composable (Int, Dp) -> Unit = { cols, topPadding ->
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 18.dp),
+                    .padding(top = topPadding),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -299,7 +269,7 @@ internal fun WatchRuleEditor(
                     modifier = Modifier.padding(top = 8.dp)
                 )
                 Box(modifier = Modifier.padding(top = 8.dp)) {
-                    TileRows(sortedPacks, columns) { pack ->
+                    TileRows(sortedPacks, cols) { pack ->
                         val selected = selectedPacks.contains(pack.packageName)
                         IconTile(rememberPackIcon(pack.packageName), clipLabel(pack.applicationName, 13), selected) {
                             if (selected) selectedPacks.remove(pack.packageName)
@@ -327,6 +297,99 @@ internal fun WatchRuleEditor(
                     }
                 }
             }
+        }
+
+        if (landscapeSplit) {
+            // Apps pane left, packs pane right — each its own full-height scroll, and the
+            // app grid lists everything vertically (no pager: the height is there to use).
+            Row(Modifier.weight(1f)) {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp)
+                ) {
+                    appsHeader()
+                    if (filteredApps.isEmpty()) {
+                        EmptyState(
+                            icon = Icons.Filled.SearchOff,
+                            text = stringResource(R.string.noAppsFound),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 10.dp)
+                        )
+                    } else {
+                        Box(Modifier.padding(top = 10.dp)) {
+                            TileRows(filteredApps, paneColumns) { appTile(it) }
+                        }
+                    }
+                    selectedAppChips()
+                }
+                VerticalDivider()
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp)
+                ) {
+                    packsSection(paneColumns, 0.dp)
+                }
+            }
+        } else {
+        Column(
+            Modifier
+                .weight(1f)
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp)
+        ) {
+            appsHeader()
+
+            if (filteredApps.isEmpty()) {
+                EmptyState(
+                    icon = Icons.Filled.SearchOff,
+                    text = stringResource(R.string.noAppsFound),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(gridHeight)
+                        .padding(top = 10.dp)
+                )
+            } else
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+                    .height(gridHeight)
+            ) { page ->
+                TileRows(appPages.getOrNull(page).orEmpty(), columns) { appTile(it) }
+            }
+
+            if (appPages.size > 1) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp),
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    repeat(appPages.size) { i ->
+                        val sel = pagerState.currentPage == i
+                        Box(
+                            Modifier
+                                .padding(horizontal = 3.dp)
+                                .size(if (sel) 8.dp else 6.dp)
+                                .clip(CircleShape)
+                                .background(if (sel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant)
+                        )
+                    }
+                }
+            }
+
+            selectedAppChips()
+
+            packsSection(columns, 18.dp)
+        }
         }
     }
 }
