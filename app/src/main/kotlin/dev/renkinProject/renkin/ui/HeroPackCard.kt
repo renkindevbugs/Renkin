@@ -42,13 +42,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
-import kotlin.math.PI
-import kotlin.math.sin
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -408,9 +407,8 @@ private fun rememberPackIcon(packageName: String?): ImageBitmap? {
 /**
  * Segmented completion bar: blue = icons already in the last built pack, green = added
  * since (pending build), red = removed since. Material 3 has no multi-colour progress
- * bar (and the Expressive wavy one is single-colour), so this hand-draws the same wavy
- * look: one continuous wave stroked per-segment, the remainder a flat thin track with
- * the indicator's signature gap.
+ * bar, so this hand-draws one with the stock indicator's modern traits: rounded capsule
+ * ends, the gap before the remainder track, and the stop-indicator dot at the far end.
  */
 @Composable
 internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
@@ -423,53 +421,50 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
     Canvas(
         Modifier
             .fillMaxWidth()
-            .height(12.dp)
+            .height(8.dp)
     ) {
-        val strokeWidth = 4.dp.toPx()
-        val amplitude = (size.height - strokeWidth) / 2f
-        val wavelength = 24.dp.toPx()
-        val midY = size.height / 2f
+        val radius = size.height / 2f
         val progressEnd = size.width * (builtF + addedF + removedF).coerceAtMost(1f)
 
-        if (progressEnd > strokeWidth) {
-            // One shared sine path, sampled finely enough to look smooth at 4 dp stroke.
-            val wave = Path().apply {
-                moveTo(0f, midY)
-                var x = 0f
-                while (x <= progressEnd) {
-                    lineTo(x, midY - amplitude * sin(x / wavelength * 2f * PI.toFloat()))
-                    x += 4f
-                }
+        // The coloured segments share one rounded-capsule clip, so the bar's outer ends are
+        // round while the internal colour joins stay flush.
+        if (progressEnd > 0f) {
+            val capsule = Path().apply {
+                addRoundRect(RoundRect(0f, 0f, progressEnd, size.height, CornerRadius(radius)))
             }
-            val stops = listOf(
-                Triple(0f, builtF, primary),
-                Triple(builtF, builtF + addedF, AddedGreen),
-                Triple(builtF + addedF, builtF + addedF + removedF, errorColor)
-            )
-            for ((from, to, color) in stops) {
-                if (to > from) {
-                    clipRect(
-                        left = size.width * from,
-                        top = 0f,
-                        right = size.width * to.coerceAtMost(1f),
-                        bottom = size.height
-                    ) {
-                        drawPath(wave, color, style = Stroke(strokeWidth, cap = StrokeCap.Round))
+            clipPath(capsule) {
+                val stops = listOf(
+                    Triple(0f, builtF, primary),
+                    Triple(builtF, builtF + addedF, AddedGreen),
+                    Triple(builtF + addedF, builtF + addedF + removedF, errorColor)
+                )
+                for ((from, to, color) in stops) {
+                    if (to > from) {
+                        drawRect(
+                            color = color,
+                            topLeft = Offset(size.width * from, 0f),
+                            size = Size(size.width * (to - from), size.height)
+                        )
                     }
                 }
             }
         }
 
-        // Flat thin remainder with a small gap, like the stock wavy indicator's track.
-        val gap = 6.dp.toPx()
-        if (progressEnd + gap < size.width - strokeWidth) {
-            drawLine(
+        // Remainder track after the M3 progress gap, with the stop-indicator dot at its end.
+        val gap = 4.dp.toPx()
+        val trackStart = if (progressEnd > 0f) progressEnd + gap else 0f
+        if (trackStart < size.width) {
+            drawRoundRect(
                 color = trackColor,
-                start = Offset(progressEnd + gap, midY),
-                end = Offset(size.width - strokeWidth / 2f, midY),
-                strokeWidth = strokeWidth,
-                cap = StrokeCap.Round
+                topLeft = Offset(trackStart, 0f),
+                size = Size(size.width - trackStart, size.height),
+                cornerRadius = CornerRadius(radius)
             )
         }
+        drawCircle(
+            color = primary,
+            radius = 2.dp.toPx(),
+            center = Offset(size.width - radius, size.height / 2f)
+        )
     }
 }
