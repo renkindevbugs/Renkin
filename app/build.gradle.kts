@@ -27,8 +27,8 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         // Renkin's own year.month.patch scheme, started for the first release under the new
         // app id (the 2025.02.00 / 44 values were inherited from the Alembicons fork).
-        versionCode = 48
-        versionName = "2026.07.03"
+        versionCode = 49
+        versionName = "2026.07.04"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
