@@ -378,10 +378,18 @@ fun OptionsDialog(
     val materialYouSchemes = rememberMaterialYouSchemes()
     val isCustomScheme = materialYouScheme >= materialYouSchemes.size
     val scheme = materialYouSchemes.getOrNull(materialYouScheme)
-    val effectiveColor = if (isMaterialYouVariant && !isCustomScheme) scheme!!.first else iconColor
+    // The generated approximation maps the regular artwork's light/dark roles in reverse. Swap
+    // only its Custom inputs for now; official monochrome layers and wallpaper schemes stay put.
+    val swapGeneratedCustomColors = isMaterialYouVariant && !appHasMaterialYouIcon && isCustomScheme
+    val effectiveColor = when {
+        swapGeneratedCustomColors -> customBgColor
+        isMaterialYouVariant && !isCustomScheme -> scheme!!.first
+        else -> iconColor
+    }
     // Background only applies to the Material You variant and the shape plate; other sources
     // keep the transparent default.
     val effectiveBgColor = when {
+        swapGeneratedCustomColors -> iconColor
         isMaterialYouVariant && !isCustomScheme -> scheme!!.second
         isMaterialYouVariant -> customBgColor
         adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop -> adjustments.shapeColor

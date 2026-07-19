@@ -52,14 +52,16 @@ class IconGeneratorTest {
         invertMonochrome: Boolean = false,
         iconShape: IconShape = IconShape.NONE,
         colorizeMonochrome: Boolean = false,
-        colorizeInverse: Boolean = false
+        colorizeInverse: Boolean = false,
+        color: Int = Color.BLACK,
+        bgColor: Int = Color.WHITE
     ) = GenerationOptions(
         primarySource = source,
         primaryImageEdit = imageEdit,
         primaryTextType = TextType.ONE_LETTER,
         primaryIconPack = "",
-        color = Color.BLACK,
-        bgColor = Color.WHITE,
+        color = color,
+        bgColor = bgColor,
         vector = false,
         materialYou = false,
         themed = false,
@@ -162,6 +164,19 @@ class IconGeneratorTest {
     }
 
     @Test
+    fun materialYouMaskPreservesTransparentBackground() {
+        val mask = Bitmap.createBitmap(2, 1, Bitmap.Config.ARGB_8888).apply {
+            setPixel(0, 0, Color.TRANSPARENT)
+            setPixel(1, 0, Color.WHITE)
+        }
+
+        val result = recolorMaterialYouMask(mask, Color.RED, Color.TRANSPARENT)
+
+        assertEquals(Color.TRANSPARENT, result.getPixel(0, 0))
+        assertEquals(Color.RED, result.getPixel(1, 0))
+    }
+
+    @Test
     fun materialYouVariantGeneratesUnofficialDuotoneWhenLayerIsMissing() {
         val sourceBitmap = Bitmap.createBitmap(90, 90, Bitmap.Config.ARGB_8888).apply {
             for (y in 0 until height) for (x in 0 until width) {
@@ -180,9 +195,27 @@ class IconGeneratorTest {
         val bitmap = generated.toBitmap()
 
         assertTrue(generated.isAdaptiveIcon())
-        assertEquals(Color.WHITE, bitmap.getPixel(0, 0))
-        assertEquals(Color.WHITE, bitmap.getPixel(30, 45))
-        assertEquals(Color.BLACK, bitmap.getPixel(60, 45))
+        assertEquals(Color.BLACK, bitmap.getPixel(30, 45))
+    }
+
+    @Test
+    fun generatedMaterialYouWithTransparentBackgroundUsesFlatExport() {
+        val sourceBitmap = Bitmap.createBitmap(90, 90, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.BLACK)
+        }
+
+        val generated = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU,
+                color = Color.RED,
+                bgColor = Color.TRANSPARENT
+            ),
+            app(icon = BitmapDrawable(context.resources, sourceBitmap))
+        ) as BitmapIconDrawable
+
+        assertFalse(generated.isAdaptiveIcon())
+        assertEquals(1f, generated.previewScale)
     }
 
     @Test
