@@ -3,13 +3,20 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <queries>
+        <package android:name="ru.tech.imageresizershrinker" />
         <intent>
             <action android:name="android.intent.action.MAIN" /> <!-- Allow to see all apps -->
         </intent>
+        <intent>
+            <action android:name="android.intent.action.EDIT" />
+            <data android:mimeType="image/*" />
+        </intent>
     </queries>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <!-- Only used to ask the Play Store whether an icon pack referenced by an imported
-         profile/backup is paid or free (PlayStoreLookup). Nothing else touches the network. -->
+    <!-- Used for exactly two things: asking the Play Store whether an icon pack referenced
+         by an imported profile/backup is paid or free (PlayStoreLookup), and — only after the
+         user opts in via Settings — browsing FOSS SVG icon sets through the Iconify API
+         (api.iconify.design, data/online). Nothing else touches the network. -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
     <uses-permission
@@ -49,6 +56,11 @@
         <!-- Fullscreen pack preview drawn over the real wallpaper (windowShowWallpaper theme). -->
         <activity
             android:name=".WallpaperPreviewActivity"
+            android:exported="false"
+            android:theme="@style/Theme.Renkin.WallpaperPreview" />
+        <!-- Global options: the icon grid previews over the real wallpaper (same theme trick). -->
+        <activity
+            android:name=".GlobalOptionsActivity"
             android:exported="false"
             android:theme="@style/Theme.Renkin.WallpaperPreview" />
         <activity

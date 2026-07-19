@@ -157,7 +157,6 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     SettingsRow(Icons.Filled.BarChart, stringResource(R.string.statsButton)) {
                         showStats = true
                     }
-
                     SettingsSectionHeader(stringResource(R.string.settingsBackup))
                     SettingsRow(Icons.Filled.Save, stringResource(R.string.exportBackup)) {
                         if (!viewModel.backupInProgress) {

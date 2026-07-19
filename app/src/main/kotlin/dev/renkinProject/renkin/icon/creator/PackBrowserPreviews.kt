@@ -7,6 +7,7 @@ import android.graphics.drawable.Drawable
 import androidx.annotation.VisibleForTesting
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
@@ -14,7 +15,7 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.extension.contentBounds
 import dev.renkinProject.renkin.extension.normalizeIconSearchQuery
-import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.PackBrowserDataSource
 import dev.renkinProject.renkin.packages.PackageVersion
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -51,8 +52,8 @@ private fun Bitmap.scaledPreview(max: Int = PREVIEW_PX): Bitmap {
  * it to ApplicationProvider.getIconPackIcons); passing it as a dependency avoids a dependency on the
  * apk layer here and lets tests fake it.
  */
-class PackBrowserPreviews(
-    private val appMan: ApplicationManager,
+internal class PackBrowserPreviews(
+    private val appMan: PackBrowserDataSource,
     private val buildPackIcons: suspend (String, GenerationOptions, List<ResourceDrawable>) -> Map<ResourceDrawable, IconPackDrawable?>
 ) {
     // Generating a pack row's preview bitmaps is expensive. Without a cache each row regenerated
@@ -66,13 +67,16 @@ class PackBrowserPreviews(
             size > PACK_ROW_PREVIEW_CACHE_MAX
     }
 
+    /** Installed pack metadata/resources changed; no previous row preview remains authoritative. */
+    fun clear() = cache.clear()
+
     /**
-     * The collapsed row previews for [packageName] (first [PACK_ROW_LIMIT] matches plus the
+     * The collapsed row previews for [iconPack] (first [PACK_ROW_LIMIT] matches plus the
      * "+N more" count). Returns the cached result instantly when present, otherwise generates
      * and caches it. A malformed pack yields an empty row instead of crashing the browser.
      */
     suspend fun rowPreviews(
-        packageName: String,
+        iconPack: IconPack,
         sortOrder: IconSortOrder,
         query: String,
         options: GenerationOptions,
@@ -81,31 +85,35 @@ class PackBrowserPreviews(
         // designated icon is found even when its drawable name has nothing to do with the app name.
         component: InstalledApplication? = null
     ): PackRowPreviews {
-        val key = cacheKey(packageName, sortOrder, query, options, component)
+        val packageName = iconPack.packageName
+        val key = cacheKey(iconPack, sortOrder, query, options, component)
         cache[key]?.let { return it }
 
-        val result = withContext(Dispatchers.Default) {
-            try {
+        val result = try {
+            withContext(Dispatchers.Default) {
                 val sortedNames = filteredSortedNames(packageName, query, sortOrder, component)
                 val more = (sortedNames.size - PACK_ROW_LIMIT).coerceAtLeast(0)
                 val pairs = loadPackIconPairs(packageName, options, sortedNames.take(PACK_ROW_LIMIT))
                 PackRowPreviews(pairs, more)
-            } catch (_: Exception) {
-                PackRowPreviews(emptyList(), 0)
             }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // Keep the UI alive, but do not poison the cache: a later reload/retry may succeed.
+            return PackRowPreviews(emptyList(), 0)
         }
         cache[key] = result
         return result
     }
 
     /**
-     * Generates the full-pack grid previews (up to [PACK_DETAIL_LIMIT]) for [packageName],
+     * Generates the full-pack grid previews (up to [PACK_DETAIL_LIMIT]) for [iconPack],
      * streaming them to [onChunk] a chunk at a time so the grid fills progressively instead of
      * blocking. [onChunk] is invoked on the calling (main) thread. Not cached — the detail grid
      * stays in composition while open, so it only loads once anyway.
      */
     suspend fun detailPreviews(
-        packageName: String,
+        iconPack: IconPack,
         sortOrder: IconSortOrder,
         query: String,
         options: GenerationOptions,
@@ -113,6 +121,7 @@ class PackBrowserPreviews(
         component: InstalledApplication? = null,
         onChunk: (List<PackIconPreview>) -> Unit
     ) {
+        val packageName = iconPack.packageName
         val sortedNames = withContext(Dispatchers.Default) {
             try {
                 filteredSortedNames(packageName, query, sortOrder, component)
@@ -170,16 +179,23 @@ class PackBrowserPreviews(
         options: GenerationOptions,
         names: List<String>
     ): List<PackIconPreview> {
-        val ids = appMan.getIconPackDrawableIds(packageName, names)
-        // names and ids are parallel lists (same order) — build id→name reverse lookup.
-        val idToName = names.zip(ids).associate { (name, id) -> id to name }
-        val drawables = appMan.getIconPackDrawables(packageName, ids)
+        val entries = appMan.getIconPackDrawableEntries(packageName, names)
+        val idToName = entries.associate { it.resource.resourceId to it.name }
+        val drawables = entries.map { it.resource }
         val exportDrawables = buildPackIcons(packageName, options, drawables)
         return exportDrawables.entries
             .filter { it.value != null }
             .distinctBy { it.key.resourceId }
-            .map {
-                PackIconPreview(it.key, it.value!!, previewBitmap(it.key, it.value!!), idToName[it.key.resourceId] ?: "")
+            .mapNotNull {
+                // Generation already isolates each icon; keep preview rasterisation isolated too.
+                runCatching {
+                    PackIconPreview(
+                        it.key,
+                        it.value!!,
+                        previewBitmap(it.key, it.value!!),
+                        idToName[it.key.resourceId] ?: ""
+                    )
+                }.getOrNull()
             }
     }
 
@@ -251,11 +267,11 @@ class PackBrowserPreviews(
         /** LRU cache key: distinct per pack + sort + query + option set + target component. */
         @VisibleForTesting
         internal fun cacheKey(
-            packageName: String,
+            iconPack: IconPack,
             sortOrder: IconSortOrder,
             query: String,
             options: GenerationOptions,
             component: InstalledApplication?
-        ) = "$packageName|$sortOrder|$query|${options.hashCode()}|${component?.packageName ?: ""}"
+        ) = "${iconPack.packageName}|${iconPack.versionCode}|$sortOrder|$query|${options.hashCode()}|${component?.toComponentInfo() ?: ""}"
     }
 }

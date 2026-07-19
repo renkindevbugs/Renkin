@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
@@ -16,11 +17,18 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.extension.toColor
 import dev.renkinProject.renkin.extension.toHexString
+import dev.renkinProject.renkin.extension.toNullableColor
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlin.enums.enumEntries
+
+// DataStore serializes edits internally, but UI-triggered setter coroutines can still race a
+// snapshot read started by the next tap. This mutex gives writes and action snapshots one order.
+private val preferenceAccessMutex = Mutex()
 
 private const val DARK_MODE_NAME = "NIGHT_THEME"
 private const val INCLUDE_VECTOR_NAME = "INCLUDE_VECTOR"
@@ -49,6 +57,7 @@ private const val BUILT_PRIMARY_ICON_PACK_NAME = "BUILT_PRIMARY_ICON_PACK"
 // Icon-watch periodic check interval, in minutes. 24h by default; the debug build can
 // lower it (min 15, WorkManager's periodic floor) to test the watcher quickly.
 const val WATCH_CHECK_INTERVAL_DEFAULT = 24 * 60
+const val WATCH_CHECK_INTERVAL_MIN = 15
 
 val DARK_MODE_DEFAULT = DarkMode.FOLLOW_SYSTEM
 val SOURCE_DEFAULT = Source.NONE
@@ -88,6 +97,35 @@ val OutlineAddKey = booleanPreferencesKey("OUTLINE_ADD")
 val OutlineWidthKey = intPreferencesKey("OUTLINE_WIDTH")
 val OutlineColorKey = stringPreferencesKey("OUTLINE_COLOR")
 const val OUTLINE_WIDTH_DEFAULT = 6
+const val OUTLINE_WIDTH_MIN = 1
+const val OUTLINE_WIDTH_MAX = 16
+// Global icon modifiers (the Global options screen): shape, icon scale and colorize applied
+// to every icon the refresh generates, alongside the pack-wide outline above. Scales are
+// stored as Int percent (50..150) — the profile snapshot restore only carries Bool/Int/Long/
+// String. Shape is the IconShape ordinal.
+val GlobalShapeKey = intPreferencesKey("GLOBAL_SHAPE")
+val GlobalShapeCropKey = booleanPreferencesKey("GLOBAL_SHAPE_CROP")
+val GlobalShapeScaleKey = intPreferencesKey("GLOBAL_SHAPE_SCALE")
+val GlobalShapeColorKey = stringPreferencesKey("GLOBAL_SHAPE_COLOR")
+val GlobalIconScaleKey = intPreferencesKey("GLOBAL_ICON_SCALE")
+val GlobalColorizeKey = booleanPreferencesKey("GLOBAL_COLORIZE")
+val GlobalColorizeColorKey = stringPreferencesKey("GLOBAL_COLORIZE_COLOR")
+val GlobalColorizeFlatKey = booleanPreferencesKey("GLOBAL_COLORIZE_FLAT")
+val GlobalColorizeMonochromeKey = booleanPreferencesKey("GLOBAL_COLORIZE_MONOCHROME")
+val GlobalColorizeInverseKey = booleanPreferencesKey("GLOBAL_COLORIZE_INVERSE")
+// Which icon categories the global modifiers apply to (the Global options screen's toggle
+// buttons): refresh-generated icons (on by default — also gates the globals during a bulk
+// refresh), hand-picked (custom) icons, and apps that have no icon yet (those get one
+// generated at Save).
+val GlobalApplyGeneratedKey = booleanPreferencesKey("GLOBAL_APPLY_GENERATED")
+val GlobalApplyExistingKey = booleanPreferencesKey("GLOBAL_APPLY_EXISTING")
+val GlobalApplyCustomKey = booleanPreferencesKey("GLOBAL_APPLY_CUSTOM")
+val GlobalIncludeEmptyKey = booleanPreferencesKey("GLOBAL_INCLUDE_EMPTY")
+const val GLOBAL_SCALE_PERCENT_MIN = 50
+const val GLOBAL_SCALE_PERCENT_MAX = 150
+
+fun normalizeGlobalScalePercent(percent: Int): Int =
+    percent.coerceIn(GLOBAL_SCALE_PERCENT_MIN, GLOBAL_SCALE_PERCENT_MAX)
 val AppSortOrderKey = intPreferencesKey(APP_SORT_ORDER_NAME)
 val AppFilterNoIconKey = booleanPreferencesKey(APP_FILTER_NO_ICON_NAME)
 val WatchCheckIntervalKey = intPreferencesKey(WATCH_CHECK_INTERVAL_NAME)
@@ -109,14 +147,65 @@ val HideProfileShareWarningKey = booleanPreferencesKey("HIDE_PROFILE_SHARE_WARNI
  * when switching away and restored when switching back, so profiles don't influence each other.
  * App-level settings (dark mode, watch interval, sort/filter) intentionally stay global.
  */
-val ProfilePrefKeys: List<Preferences.Key<*>> = listOf(
-    PrimarySourceKey, PrimaryImageEditKey, PrimaryTextTypeKey, PrimaryIconPackKey,
-    SecondarySourceKey, SecondaryImageEditKey, SecondaryTextTypeKey, SecondaryIconPackKey,
-    IncludeVectorKey, MonochromeKey, ExportThemedKey, IconColorKey, BackgroundColorKey,
-    CalendarIconsKey, OverrideIconKey, FallbackSourceKey, TextFontKey,
-    OutlineAddKey, OutlineWidthKey, OutlineColorKey,
-    BuiltPrimarySourceKey, BuiltPrimaryIconPackKey
+private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
+    IncludeVectorKey, MonochromeKey, ExportThemedKey, CalendarIconsKey, OverrideIconKey,
+    OutlineAddKey, GlobalShapeCropKey, GlobalColorizeKey, GlobalColorizeFlatKey,
+    GlobalColorizeMonochromeKey, GlobalColorizeInverseKey,
+    GlobalApplyGeneratedKey, GlobalApplyExistingKey, GlobalApplyCustomKey, GlobalIncludeEmptyKey
 )
+
+private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
+    PrimarySourceKey, PrimaryImageEditKey, PrimaryTextTypeKey,
+    SecondarySourceKey, SecondaryImageEditKey, SecondaryTextTypeKey,
+    FallbackSourceKey, OutlineWidthKey, BuiltPrimarySourceKey,
+    GlobalShapeKey, GlobalShapeScaleKey, GlobalIconScaleKey
+)
+
+private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
+    PrimaryIconPackKey, SecondaryIconPackKey, IconColorKey, BackgroundColorKey,
+    TextFontKey, OutlineColorKey, BuiltPrimaryIconPackKey,
+    GlobalShapeColorKey, GlobalColorizeColorKey
+)
+
+val ProfilePrefKeys: List<Preferences.Key<*>> =
+    ProfileBooleanPrefKeys + ProfileIntPrefKeys + ProfileStringPrefKeys
+
+/** Commits only the staged Global options keys from [source], under the shared write mutex. */
+suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preferences) {
+    preferenceAccessMutex.withLock {
+        edit { target ->
+            target[GlobalShapeKey] = source.getIntValue(GlobalShapeKey, 0)
+            target[GlobalShapeCropKey] = source.getBooleanValue(GlobalShapeCropKey, true)
+            target[GlobalShapeScaleKey] = source.getIntValue(GlobalShapeScaleKey, 100)
+            target[GlobalShapeColorKey] = source.getStringValue(GlobalShapeColorKey)
+            target[GlobalIconScaleKey] = source.getIntValue(GlobalIconScaleKey, 100)
+            target[OutlineAddKey] = source.getBooleanValue(OutlineAddKey)
+            target[OutlineWidthKey] = source.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
+            target[OutlineColorKey] = source.getStringValue(OutlineColorKey)
+            target[GlobalColorizeKey] = source.getBooleanValue(GlobalColorizeKey)
+            target[GlobalColorizeColorKey] = source.getStringValue(GlobalColorizeColorKey)
+            target[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
+            target[GlobalColorizeMonochromeKey] = source.getBooleanValue(GlobalColorizeMonochromeKey)
+            target[GlobalColorizeInverseKey] = source.getBooleanValue(GlobalColorizeInverseKey)
+            target[GlobalApplyGeneratedKey] = source.getBooleanValue(GlobalApplyGeneratedKey, true)
+            target[GlobalApplyExistingKey] = source.getBooleanValue(GlobalApplyExistingKey)
+            target[GlobalApplyCustomKey] = source.getBooleanValue(GlobalApplyCustomKey)
+            target[GlobalIncludeEmptyKey] = source.getBooleanValue(GlobalIncludeEmptyKey)
+        }
+    }
+}
+
+/** Records the hero source that a successful build actually used as one atomic profile write. */
+suspend fun DataStore<Preferences>.persistBuiltPrimaryPrefs(source: Preferences) {
+    preferenceAccessMutex.withLock {
+        edit { target ->
+            target[BuiltPrimarySourceKey] = source.getIntValue(
+                PrimarySourceKey, SOURCE_DEFAULT.ordinal
+            )
+            target[BuiltPrimaryIconPackKey] = source.getStringValue(PrimaryIconPackKey)
+        }
+    }
+}
 
 /** Serializes the profile-scoped preferences into a JSON snapshot (see [ProfilePrefKeys]). */
 fun Preferences.snapshotProfilePrefs(): String {
@@ -132,23 +221,32 @@ fun Preferences.snapshotProfilePrefs(): String {
  * ones removed — a fresh profile starts from the defaults.
  */
 suspend fun DataStore<Preferences>.restoreProfilePrefs(snapshot: String) {
-    // A corrupt/unparsable snapshot must not crash the profile switch — the profile then
-    // just starts from the defaults, same as an empty snapshot.
+    preferenceAccessMutex.withLock {
+        edit { it.replaceProfilePrefs(snapshot) }
+    }
+}
+
+/** Replaces every profile key, removing missing, malformed and wrongly typed values. */
+internal fun MutablePreferences.replaceProfilePrefs(snapshot: String) {
+    // A corrupt/unparsable snapshot starts from defaults. Crucially, an invalid value must
+    // remove the previous profile's value instead of leaking it into the target profile.
     val json = runCatching { org.json.JSONObject(snapshot) }.getOrDefault(org.json.JSONObject())
-    edit { prefs ->
-        for (key in ProfilePrefKeys) {
-            if (json.has(key.name)) {
-                @Suppress("UNCHECKED_CAST")
-                when (val value = json.get(key.name)) {
-                    is Boolean -> prefs[key as Preferences.Key<Boolean>] = value
-                    is Int -> prefs[key as Preferences.Key<Int>] = value
-                    is Long -> prefs[key as Preferences.Key<Int>] = value.toInt()
-                    is String -> prefs[key as Preferences.Key<String>] = value
-                }
-            } else {
-                prefs.remove(key)
-            }
+
+    for (key in ProfileBooleanPrefKeys) {
+        val value = json.opt(key.name)
+        if (value is Boolean) this[key] = value else remove(key)
+    }
+    for (key in ProfileIntPrefKeys) {
+        val value = when (val raw = json.opt(key.name)) {
+            is Int -> raw
+            is Long -> raw.takeIf { it in Int.MIN_VALUE..Int.MAX_VALUE }?.toInt()
+            else -> null
         }
+        if (value != null) this[key] = value else remove(key)
+    }
+    for (key in ProfileStringPrefKeys) {
+        val value = json.opt(key.name)
+        if (value is String) this[key] = value else remove(key)
     }
 }
 
@@ -269,11 +367,16 @@ fun Preferences.getLongValue(key: Preferences.Key<Long>, default: Long = 0L): Lo
     return this[key] ?: default
 }
 
+fun normalizeWatchCheckInterval(minutes: Int): Int =
+    minutes.takeIf { it >= WATCH_CHECK_INTERVAL_MIN } ?: WATCH_CHECK_INTERVAL_DEFAULT
+
+fun normalizeOutlineWidth(width: Int): Int = width.coerceIn(OUTLINE_WIDTH_MIN, OUTLINE_WIDTH_MAX)
+
 //Color
 @Composable
 fun DataStore<Preferences>.getColorValue(key: Preferences.Key<String>, default: Color): Color {
     val hex = getPreferenceValue(key, default.toHexString())
-    return hex.toColor()
+    return hex.toNullableColor() ?: default
 }
 
 suspend fun DataStore<Preferences>.setColorValue(key: Preferences.Key<String>, value: Color) {
@@ -282,7 +385,7 @@ suspend fun DataStore<Preferences>.setColorValue(key: Preferences.Key<String>, v
 
 fun Preferences.getColorValue(key: Preferences.Key<String>, default: Color): Color {
     val hex = this[key] ?: default.toHexString()
-    return hex.toColor()
+    return hex.toNullableColor() ?: default
 }
 
 //Enum
@@ -326,10 +429,16 @@ fun <T : Any> DataStore<Preferences>.getPreferenceValue(key: Preferences.Key<T>,
 }
 
 suspend fun <T> DataStore<Preferences>.setPreferenceValue(key: Preferences.Key<T>, value: T) {
-    edit { settings ->
-        settings[key] = value
+    preferenceAccessMutex.withLock {
+        edit { settings ->
+            settings[key] = value
+        }
     }
 }
+
+/** Reads a snapshot only after every preference write that started before it has completed. */
+suspend fun DataStore<Preferences>.getPreferencesAfterPendingWrites(): Preferences =
+    preferenceAccessMutex.withLock { data.first() }
 
 //Labels
 @Composable

@@ -10,6 +10,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.WatchCheckIntervalKey
+import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
 import dev.renkinProject.renkin.data.getPreferenceFlow
 import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.setLongValue
@@ -22,6 +23,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.service.WatchChecker
+import dev.renkinProject.renkin.service.RenkinNotifications
 import dev.renkinProject.renkin.service.WatchWorker
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flatMapLatest
@@ -68,15 +70,16 @@ class WatchViewModel @Inject constructor(
     /** Configured periodic check interval in minutes (24h default; debug can lower it). */
     val checkIntervalMinutes: StateFlow<Int> =
         application.dataStore.getPreferenceFlow(WatchCheckIntervalKey)
-            .map { it ?: WATCH_CHECK_INTERVAL_DEFAULT }
+            .map { normalizeWatchCheckInterval(it ?: WATCH_CHECK_INTERVAL_DEFAULT) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), WATCH_CHECK_INTERVAL_DEFAULT)
 
     /** Debug: change how often the periodic check runs and reschedule it immediately. */
     fun setCheckIntervalMinutes(minutes: Int) {
         viewModelScope.launch {
             val app = getApplication<Application>()
-            app.dataStore.setIntValue(WatchCheckIntervalKey, minutes)
-            WatchWorker.schedulePeriodic(app, minutes, ExistingPeriodicWorkPolicy.UPDATE)
+            val normalized = normalizeWatchCheckInterval(minutes)
+            app.dataStore.setIntValue(WatchCheckIntervalKey, normalized)
+            WatchWorker.schedulePeriodic(app, normalized, ExistingPeriodicWorkPolicy.UPDATE)
         }
     }
 
@@ -84,34 +87,55 @@ class WatchViewModel @Inject constructor(
     var isChecking by mutableStateOf(false)
         private set
 
-    /** Creates or updates a rule, then snapshots its current icons as the baseline. */
+    /** True while a rule and its baseline are being resolved and committed. */
+    var isSavingRule by mutableStateOf(false)
+        private set
+
+    /** Atomically creates or updates a rule together with its current icon baseline. */
     fun saveRule(
         existing: RuleWithDetails?,
         apps: List<AppComponent>,
         watchAll: Boolean,
-        packs: List<String>
+        packs: List<String>,
+        onSaved: () -> Unit = {}
     ) {
+        if (isSavingRule) return
+        isSavingRule = true
+        val profileId = appProvider.activeProfileId
         viewModelScope.launch {
-            val ruleId = if (existing == null) {
-                repo.createRule(apps, watchAll, packs, appProvider.activeProfileId)
-            } else {
-                repo.updateRule(existing.rule.id, apps, watchAll, packs)
-                existing.rule.id
+            val savedId = try {
+                WatchChecker(getApplication()).saveRule(
+                    existingRuleId = existing?.rule?.id,
+                    apps = apps,
+                    watchAllPacks = watchAll,
+                    packPackages = packs,
+                    profileId = profileId
+                )
+            } finally {
+                isSavingRule = false
             }
-            // Snapshot current icons so a later pack update is the trigger, not the
-            // icons that already existed when the rule was made.
-            WatchChecker(getApplication()).baselineRule(ruleId)
+            if (savedId > 0L) onSaved()
         }
     }
 
     fun deleteRule(ruleId: Long) {
-        viewModelScope.launch { repo.deleteRule(ruleId) }
+        viewModelScope.launch { deleteRulesAndNotifications(listOf(ruleId)) }
     }
 
     fun deleteCompleted() {
         viewModelScope.launch {
-            repo.deleteRules(rules.value.filter { it.rule.completed }.map { it.rule.id })
+            deleteRulesAndNotifications(rules.value.filter { it.rule.completed }.map { it.rule.id })
         }
+    }
+
+    private suspend fun deleteRulesAndNotifications(ruleIds: List<Long>) {
+        if (ruleIds.isEmpty()) return
+        val removedSuggestions = repo.deleteRules(ruleIds)
+        RenkinNotifications().cancelIconAvailable(
+            context = getApplication(),
+            suggestionIds = removedSuggestions,
+            cancelSummary = repo.suggestionCount() == 0
+        )
     }
 
     /** Runs a manual check; [onResult] receives the number of new suggestions found. */

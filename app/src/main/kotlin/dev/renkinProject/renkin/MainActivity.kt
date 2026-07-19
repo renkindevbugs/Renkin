@@ -38,6 +38,7 @@ import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.apk.IconPackBuilder
@@ -104,6 +105,7 @@ class MainActivity : ComponentActivity() {
             // user's chosen interval is applied immediately (UPDATE) when they change it.
             val intervalMinutes = applicationContext.dataStore.data.first()
                 .getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)
+                .let(::normalizeWatchCheckInterval)
             WatchWorker.schedulePeriodic(applicationContext, intervalMinutes)
             // Drop crash logs older than the retention window (and migrate any legacy log).
             CrashReporter.prune(applicationContext)
@@ -183,9 +185,8 @@ class MainActivity : ComponentActivity() {
     private fun handleWatchIntent(intent: Intent?) {
         if (intent?.action == ACTION_OPEN_SUGGESTION) {
             val id = intent.getLongExtra(EXTRA_SUGGESTION_ID, -1L)
-            val profileId = intent.getLongExtra(EXTRA_SUGGESTION_PROFILE_ID, -1L)
             // Switches to the owning profile first (auto-saving the current one), then opens.
-            if (id >= 0) viewModel.openSuggestionInProfile(id, profileId)
+            if (id >= 0) viewModel.openSuggestionInProfile(id)
         }
     }
 
@@ -217,6 +218,5 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val ACTION_OPEN_SUGGESTION = "dev.renkinProject.renkin.OPEN_SUGGESTION"
         const val EXTRA_SUGGESTION_ID = "watch_suggestion_id"
-        const val EXTRA_SUGGESTION_PROFILE_ID = "watch_suggestion_profile_id"
     }
 }

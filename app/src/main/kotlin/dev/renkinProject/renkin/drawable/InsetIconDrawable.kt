@@ -6,7 +6,6 @@ import android.graphics.ColorFilter
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.InsetDrawable
 import android.os.Build
@@ -15,7 +14,6 @@ import androidx.annotation.ChecksSdkIntAtLeast
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.toComposeRect
-import androidx.core.graphics.drawable.toBitmap
 import dev.renkinProject.renkin.packages.PackageVersion
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.inset
 import dev.renkinProject.renkin.vector.VectorExporter.Companion.toXmlFile
@@ -69,8 +67,16 @@ class InsetIconDrawable(val drawable: Drawable, val dimensions: Rect, val fracti
     }
 
     override fun toBitmap(): Bitmap {
-        return insetDrawable.toSafeBitmapOrNull()
-            ?: ColorDrawable().toBitmap(108, 108)
+        // Vector-backed inset drawables commonly report no intrinsic dimensions (-1 x -1),
+        // notably Lawnicons. Modifier operations rasterize through this method; asking for the
+        // implicit size therefore returned null and turned a visible vector into a blank icon.
+        insetDrawable.toSafeBitmapOrNull(MODIFIER_RASTER_SIZE, MODIFIER_RASTER_SIZE)?.let { return it }
+
+        // A malformed third-party inset is still better shown without its padding than replaced
+        // by a transparent bitmap. IconPackDrawable implementations own their safe raster path.
+        if (drawable is IconPackDrawable) return drawable.toBitmap()
+        return drawable.toSafeBitmapOrNull(MODIFIER_RASTER_SIZE, MODIFIER_RASTER_SIZE)
+            ?: Bitmap.createBitmap(MODIFIER_RASTER_SIZE, MODIFIER_RASTER_SIZE, Bitmap.Config.ARGB_8888)
     }
 
     override fun toDbString(): String {
@@ -109,6 +115,8 @@ class InsetIconDrawable(val drawable: Drawable, val dimensions: Rect, val fracti
     }
 
     companion object {
+        private const val MODIFIER_RASTER_SIZE = 256
+
         fun from(insetDrawable: InsetDrawable): InsetIconDrawable {
             return from(insetDrawable, insetDrawable.drawable!!)
         }

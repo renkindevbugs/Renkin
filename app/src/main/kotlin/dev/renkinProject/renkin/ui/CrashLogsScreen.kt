@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package dev.renkinProject.renkin.ui
 
 import android.content.Intent
@@ -210,8 +211,7 @@ private fun GithubReportLink() {
         Spacer(Modifier.width(10.dp))
         Text(
             text = stringResource(R.string.crashLogsReport),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleMediumEmphasized,
             color = MaterialTheme.colorScheme.primary
         )
         Spacer(Modifier.width(8.dp))
@@ -255,8 +255,7 @@ private fun CrashLogCard(entry: CrashReporter.CrashEntry, onClick: () -> Unit) {
         Column(Modifier.padding(16.dp)) {
             Text(
                 text = formatTimestamp(entry.timestamp),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleSmallEmphasized,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Spacer(Modifier.height(4.dp))
@@ -291,8 +290,7 @@ private fun CrashLogDetailDialog(
             Column(Modifier.padding(24.dp)) {
                 Text(
                     text = formatTimestamp(entry.timestamp),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMediumEmphasized,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.height(12.dp))

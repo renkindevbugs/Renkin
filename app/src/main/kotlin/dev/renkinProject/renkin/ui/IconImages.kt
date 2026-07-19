@@ -1,5 +1,8 @@
 package dev.renkinProject.renkin.ui
 
+import android.graphics.Bitmap
+import android.graphics.drawable.Drawable
+import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
@@ -28,29 +31,72 @@ import kotlinx.coroutines.withContext
 // (the app list, watch list/editor/apply modal, the about dialog, …). Decoding once here —
 // downscaled to the on-screen size — keeps icon-heavy lists cheap and off the main thread.
 
+internal data class AppBitmapCacheKey(
+    val component: String,
+    val iconId: Int,
+    // Drawable identity changes when application metadata is reloaded or the package updates,
+    // invalidating an otherwise unchanged resource id without retaining entries forever (LRU).
+    val drawable: Drawable,
+    val targetPx: Int
+)
+
+internal class AppBitmapMemoryCache(maxSizeBytes: Int = DEFAULT_APP_BITMAP_CACHE_BYTES) {
+    private val cache = object : LruCache<AppBitmapCacheKey, Bitmap>(maxSizeBytes) {
+        override fun sizeOf(key: AppBitmapCacheKey, value: Bitmap): Int = value.allocationByteCount
+    }
+
+    fun get(key: AppBitmapCacheKey): Bitmap? = cache.get(key)
+
+    fun getOrLoad(key: AppBitmapCacheKey, load: () -> Bitmap?): Bitmap? {
+        cache.get(key)?.let { return it }
+        return load()?.also { cache.put(key, it) }
+    }
+
+    companion object {
+        private const val DEFAULT_APP_BITMAP_CACHE_BYTES = 8 * 1024 * 1024
+    }
+}
+
+private val appBitmapCache = AppBitmapMemoryCache()
+
 /**
  * The app's launcher icon as an [ImageBitmap], decoded to [size] (never upscaled past the
- * icon's own resolution) so lists of icons stay light. Re-decoded when the app's created
- * icon changes ([PackageInfoStruct.internalVersion]).
+ * icon's own resolution) so lists of icons stay light. Re-decoded when the app's launcher
+ * metadata changes. A process-wide, memory-bounded cache survives LazyColumn disposing
+ * off-screen rows, while the first rasterisation runs on a worker thread.
  */
 @Composable
 internal fun rememberAppBitmap(app: PackageInfoStruct, size: Dp = 54.dp): ImageBitmap? {
     val density = LocalDensity.current
-    return remember(app.packageName, app.internalVersion, density, size) {
-        val target = with(density) { size.roundToPx() }
-        val px = app.icon.intrinsicWidth.let { if (it in 1 until target) it else target }
-        app.icon.toSafeBitmapOrNull(px, px)?.asImageBitmap()
+    val target = with(density) { size.roundToPx() }
+    val key = remember(app.key, app.iconID, app.icon, target) {
+        AppBitmapCacheKey(app.key, app.iconID, app.icon, target)
     }
+    var bitmap by remember(key) { mutableStateOf(appBitmapCache.get(key)?.asImageBitmap()) }
+
+    LaunchedEffect(key) {
+        if (bitmap == null) {
+            val loaded = withContext(Dispatchers.Default) {
+                appBitmapCache.getOrLoad(key) {
+                    val px = app.icon.intrinsicWidth.let { if (it in 1 until target) it else target }
+                    // Drawable rasterisation temporarily mutates bounds. The same app can be
+                    // requested at several sizes by home/watch surfaces, so serialize on it.
+                    synchronized(app.icon) { app.icon.toSafeBitmapOrNull(px, px) }
+                }
+            }
+            bitmap = loaded?.asImageBitmap()
+        }
+    }
+
+    return bitmap
 }
 
 @Composable
-internal fun AppIcon(app: PackageInfoStruct?, fallbackPackage: String, size: androidx.compose.ui.unit.Dp) {
-    val bitmap = remember(app?.packageName ?: fallbackPackage, app?.internalVersion) {
-        app?.icon?.toSafeBitmapOrNull()
-    }
+internal fun AppIcon(app: PackageInfoStruct?, size: Dp) {
+    val bitmap = app?.let { rememberAppBitmap(it, size) }
     if (bitmap != null) {
         Image(
-            painter = BitmapPainter(bitmap.asImageBitmap()),
+            painter = BitmapPainter(bitmap),
             contentDescription = null,
             modifier = Modifier
                 .size(size)

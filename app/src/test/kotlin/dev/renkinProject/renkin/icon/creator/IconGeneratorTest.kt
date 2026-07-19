@@ -7,6 +7,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.ColorFilter
 import android.graphics.PixelFormat
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.drawable.Drawable
 import dev.renkinProject.renkin.data.ImageEdit
@@ -22,6 +23,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -44,26 +46,40 @@ class IconGeneratorTest {
     private fun options(
         source: Source = Source.APPLICATION_NAME,
         override: Boolean = true,
-        iconScale: Float = 1f
+        iconScale: Float = 1f,
+        imageEdit: ImageEdit = ImageEdit.NONE,
+        applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT,
+        invertMonochrome: Boolean = false,
+        iconShape: IconShape = IconShape.NONE,
+        colorizeMonochrome: Boolean = false,
+        colorizeInverse: Boolean = false
     ) = GenerationOptions(
         primarySource = source,
-        primaryImageEdit = ImageEdit.NONE,
+        primaryImageEdit = imageEdit,
         primaryTextType = TextType.ONE_LETTER,
         primaryIconPack = "",
         color = Color.BLACK,
         bgColor = Color.WHITE,
         vector = false,
-        monochrome = false,
+        materialYou = false,
         themed = false,
         override = override,
-        iconScale = iconScale
+        iconScale = iconScale,
+        applicationIconVariant = applicationIconVariant,
+        invertMonochrome = invertMonochrome,
+        iconShape = iconShape,
+        colorizeMonochrome = colorizeMonochrome,
+        colorizeInverse = colorizeInverse
     )
 
-    private fun app(createdIcon: IconPackDrawable? = null) = PackageInfoStruct(
+    private fun app(
+        createdIcon: IconPackDrawable? = null,
+        icon: Drawable = ColorDrawable(Color.RED)
+    ) = PackageInfoStruct(
         appName = "Renkin",
         packageName = "dev.test.app",
         activityName = "dev.test.app.Main",
-        icon = ColorDrawable(Color.RED),
+        icon = icon,
         iconID = 0,
         createdIcon = createdIcon
     )
@@ -105,6 +121,179 @@ class IconGeneratorTest {
         val base = bitmapIcon()
         val result = generator(options(iconScale = 1f)).applyModifier(base, ImageEdit.NONE)
         assertSame(base, result)
+    }
+
+    @Test
+    fun monochromeVariantDesaturatesOriginalIconWhileDefaultKeepsItsColor() {
+        val originalColor = Color.argb(180, 210, 70, 25)
+        val sourceBitmap = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(originalColor)
+        }
+        val sourceApp = app(icon = BitmapDrawable(context.resources, sourceBitmap))
+
+        val defaultPixel = generateOnce(
+            options(source = Source.APPLICATION_ICON), sourceApp
+        )!!.toBitmap().getPixel(2, 2)
+        val monochromePixel = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MONOCHROME
+            ),
+            sourceApp
+        )!!.toBitmap().getPixel(2, 2)
+
+        assertEquals(originalColor, defaultPixel)
+        assertEquals(Color.alpha(originalColor), Color.alpha(monochromePixel))
+        assertEquals(Color.red(monochromePixel), Color.green(monochromePixel))
+        assertEquals(Color.green(monochromePixel), Color.blue(monochromePixel))
+        assertTrue(monochromePixel != originalColor)
+    }
+
+    @Test
+    fun materialYouMaskUsesForegroundAndBackgroundColors() {
+        val mask = Bitmap.createBitmap(2, 1, Bitmap.Config.ARGB_8888).apply {
+            setPixel(0, 0, Color.TRANSPARENT)
+            setPixel(1, 0, Color.WHITE)
+        }
+        val result = recolorMaterialYouMask(mask, Color.BLACK, Color.WHITE)
+
+        assertEquals(Color.WHITE, result.getPixel(0, 0))
+        assertEquals(Color.BLACK, result.getPixel(1, 0))
+    }
+
+    @Test
+    fun materialYouVariantGeneratesUnofficialDuotoneWhenLayerIsMissing() {
+        val sourceBitmap = Bitmap.createBitmap(90, 90, Bitmap.Config.ARGB_8888).apply {
+            for (y in 0 until height) for (x in 0 until width) {
+                setPixel(x, y, if (x < width / 2) Color.BLACK else Color.WHITE)
+            }
+        }
+        val sourceApp = app(icon = BitmapDrawable(context.resources, sourceBitmap))
+
+        val generated = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU
+            ),
+            sourceApp
+        )!!
+        val bitmap = generated.toBitmap()
+
+        assertTrue(generated.isAdaptiveIcon())
+        assertEquals(Color.WHITE, bitmap.getPixel(0, 0))
+        assertEquals(Color.WHITE, bitmap.getPixel(30, 45))
+        assertEquals(Color.BLACK, bitmap.getPixel(60, 45))
+    }
+
+    @Test
+    fun materialYouBitmapModifierKeepsAdaptivePreviewPresentation() {
+        val sourceBitmap = Bitmap.createBitmap(90, 90, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.WHITE)
+        }
+
+        val modified = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                imageEdit = ImageEdit.COLORIZE,
+                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU
+            ),
+            app(icon = BitmapDrawable(context.resources, sourceBitmap))
+        ) as BitmapIconDrawable
+
+        assertTrue(modified.isAdaptiveIcon())
+        assertEquals(1.5f, modified.previewScale)
+    }
+
+    @Test
+    fun materialYouShapeBakesPreviewZoomBeforeDroppingAdaptiveMetadata() {
+        val sourceBitmap = Bitmap.createBitmap(90, 90, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.BLACK)
+            for (y in 30 until 60) for (x in 30 until 60) setPixel(x, y, Color.WHITE)
+        }
+        val sourceApp = app(icon = BitmapDrawable(context.resources, sourceBitmap))
+        val plain = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU
+            ),
+            sourceApp
+        ) as BitmapIconDrawable
+        val shaped = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU,
+                iconShape = IconShape.CIRCLE
+            ),
+            sourceApp
+        ) as BitmapIconDrawable
+
+        assertEquals(1.5f, previewScaleToBakeForShape(plain, shaped = true))
+        assertEquals(1f, previewScaleToBakeForShape(plain, shaped = false))
+        assertFalse(shaped.isAdaptiveIcon())
+        assertEquals(1f, shaped.previewScale)
+    }
+
+    @Test
+    fun reverseMonochromeInvertsLuminanceAndPreservesAlpha() {
+        val sourceColor = Color.argb(170, 35, 35, 35)
+        val sourceBitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(sourceColor)
+        }
+        val sourceApp = app(icon = BitmapDrawable(context.resources, sourceBitmap))
+
+        val normal = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MONOCHROME
+            ),
+            sourceApp
+        )!!.toBitmap().getPixel(0, 0)
+        val reversed = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MONOCHROME,
+                invertMonochrome = true
+            ),
+            sourceApp
+        )!!.toBitmap().getPixel(0, 0)
+
+        assertEquals(Color.alpha(normal), Color.alpha(reversed))
+        assertEquals(255, Color.red(normal) + Color.red(reversed))
+        assertEquals(Color.red(reversed), Color.green(reversed))
+        assertEquals(Color.green(reversed), Color.blue(reversed))
+    }
+
+    @Test
+    fun colorizeMonochromeMatchesApplicationIconMonochromeTransform() {
+        val sourceColor = Color.argb(190, 200, 75, 30)
+        val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(sourceColor)
+        }
+        val base = BitmapIconDrawable(bitmap)
+
+        val normal = generator(
+            options(colorizeMonochrome = true)
+        ).applyModifier(base, ImageEdit.COLORIZE).toBitmap()
+        val inverse = generator(
+            options(colorizeMonochrome = true, colorizeInverse = true)
+        ).applyModifier(base, ImageEdit.COLORIZE).toBitmap()
+
+        assertEquals(monochromeBitmap(bitmap, invert = false).getPixel(0, 0), normal.getPixel(0, 0))
+        assertEquals(monochromeBitmap(bitmap, invert = true).getPixel(0, 0), inverse.getPixel(0, 0))
+    }
+
+    @Test
+    fun invertBitmapColorsPreservesAlphaAndDensity() {
+        val sourceColor = Color.argb(123, 10, 20, 30)
+        val bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
+            density = 420
+            eraseColor(sourceColor)
+        }
+
+        val inverted = invertBitmapColors(bitmap)
+
+        assertEquals(Color.argb(123, 245, 235, 225), inverted.getPixel(0, 0))
+        assertEquals(420, inverted.density)
     }
 
     @Test

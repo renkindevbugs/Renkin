@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package dev.renkinProject.renkin.ui
 
 import androidx.compose.animation.Crossfade
@@ -50,12 +51,12 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.WatchViewModel
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.watch.IconSuggestion
 import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
@@ -78,6 +79,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     var selectedPack by remember(suggestionId) { mutableStateOf<String?>(null) }
     var newIcon by remember(suggestionId) { mutableStateOf<IconPackDrawable?>(null) }
     var generating by remember(suggestionId) { mutableStateOf(false) }
+    var candidateChanged by remember(suggestionId) { mutableStateOf(false) }
     var loaded by remember(suggestionId) { mutableStateOf(false) }
 
     LaunchedEffect(suggestionId) {
@@ -105,15 +107,21 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         // App or pack uninstalled since the suggestion fired → nothing to generate
         if (s == null || pack == null || targetApp == null || candidate == null) {
             newIcon = null
+            candidateChanged = false
             generating = false
             return@LaunchedEffect
         }
         generating = true
         newIcon = null
-        newIcon = withContext(Dispatchers.Default) {
-            val options = GenerationOptions.fromPreferences(prefs.data.first(), context, override = true)
-            viewModel.iconFromPack(targetApp, pack, candidate.drawableName, options)
+        candidateChanged = false
+        val validated = withContext(Dispatchers.Default) {
+            val options = GenerationOptions.fromPreferences(
+                prefs.getPreferencesAfterPendingWrites(), context, override = true
+            )
+            viewModel.iconFromPack(targetApp, pack, candidate.drawableName, candidate.iconHash, options)
         }
+        newIcon = validated.icon
+        candidateChanged = validated.sourceChanged
         generating = false
     }
 
@@ -129,14 +137,14 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = app?.appName ?: suggestion!!.packageName,
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(Modifier.height(16.dp))
+                val currentBitmap = app?.let { rememberAppBitmap(it) }
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    ComparePreview(app?.let { rememberAppBitmap(it) }, null, loading = false)
+                    ComparePreview(currentBitmap, null, loading = app != null && currentBitmap == null)
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowForward, null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -167,6 +175,14 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                         )
                     }
                 }
+                if (candidateChanged) {
+                    Text(
+                        text = stringResource(R.string.watchCandidateChanged),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                }
             }
         },
         confirmButton = {
@@ -183,7 +199,9 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                 val applyToast = stringResource(R.string.watchApplyToast)
                 DisabledExplanation(
                     enabled = newIcon != null && app != null,
-                    message = stringResource(R.string.watchApplyDisabledHint)
+                    message = stringResource(
+                        if (candidateChanged) R.string.watchCandidateChanged else R.string.watchApplyDisabledHint
+                    )
                 ) {
                     FilledIconButton(
                         onClick = {

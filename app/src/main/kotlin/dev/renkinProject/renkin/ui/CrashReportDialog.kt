@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package dev.renkinProject.renkin.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -130,8 +131,7 @@ fun CrashReportDialog(onDismiss: () -> Unit) {
 private fun SectionLabel(text: String) {
     Text(
         text = text,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.SemiBold,
+        style = MaterialTheme.typography.titleSmallEmphasized,
         color = MaterialTheme.colorScheme.onSurface
     )
 }

@@ -297,8 +297,8 @@ class IconPackBuilder(
                         val insetDrawable = app.createdIcon
                         when (insetDrawable.drawable) {
                             is ImageVectorDrawable -> {
-                                insetDrawable.drawable.scaleAtCenter(0.666f)
-                                exportVectorIcon(insetXml, insetDrawable.drawable)
+                                val exportCopy = insetDrawable.drawable.deepCopy().scaleAtCenter(0.666f)
+                                exportVectorIcon(insetXml, exportCopy)
                             }
 
                             is BitmapIconDrawable -> {
@@ -382,7 +382,7 @@ class IconPackBuilder(
 
     private fun exportVectorIcon(file: VectorWrapperXml, icon: ImageVectorDrawable, brush: ReferenceBrush) {
         file.startVector()
-        val vector = icon.also { it.root.setReferenceColorPaths(brush) }.toImageVector()
+        val vector = icon.deepCopy().also { it.root.setReferenceColorPaths(brush) }.toImageVector()
         vector.toXmlFile(file)
         file.endVector()
     }

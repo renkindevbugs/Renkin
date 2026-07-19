@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package dev.renkinProject.renkin.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -20,9 +21,14 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.FileUpload
+import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -37,12 +43,14 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.vector.EmptyPath
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.PathParser
@@ -54,6 +62,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.ui.theme.IconShape
+import dev.renkinProject.renkin.OnlineImageImport
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -63,6 +72,7 @@ import dev.renkinProject.renkin.drawable.MutableVectorPath
 import dev.renkinProject.renkin.drawable.toImageVectorDrawable
 import dev.renkinProject.renkin.extension.createEmptyVector
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.vector.ColorDecoder
 import dev.renkinProject.renkin.vector.PathExporter.Companion.toStringPath
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyAndRemoveGroup
@@ -72,21 +82,29 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-internal fun PrepareEditVector(app: PackageInfoStruct, state: VectorEditState, onChange: (icon: IconPackDrawable?) -> Unit) {
-    val editedVector = when (app.createdIcon) {
-        is ImageVectorDrawable -> app.createdIcon.applyAndRemoveGroup().toImageVector()
+internal fun PrepareEditVector(
+    app: PackageInfoStruct,
+    state: VectorEditState,
+    // An online icon the editor can't model as paths, imported as a full-size picture
+    // instead — the dialog routes it into the upload draft.
+    onImportedImage: (OnlineImageImport, sourceUrl: String) -> Unit,
+    onChange: (icon: IconPackDrawable?) -> Unit
+) {
+    val sourceIcon = app.baseIcon ?: app.createdIcon
+    val editedVector = remember(sourceIcon) { when (sourceIcon) {
+        is ImageVectorDrawable -> sourceIcon.deepCopy().applyAndRemoveGroup().toImageVector()
         is InsetIconDrawable -> {
-            if (app.createdIcon.drawable is ImageVectorDrawable)
-                app.createdIcon.drawable.applyAndRemoveGroup().toImageVector()
+            if (sourceIcon.drawable is ImageVectorDrawable)
+                sourceIcon.drawable.deepCopy().applyAndRemoveGroup().toImageVector()
             else
                 ImageVector.createEmptyVector()
         }
         else -> ImageVector.createEmptyVector()
-    }
+    } }
 
-    EditVectorColumn(editedVector, state) {
-        if (app.createdIcon is InsetIconDrawable && it != null) {
-            onChange(InsetIconDrawable(it, app.createdIcon.dimensions, app.createdIcon.fractions))
+    EditVectorColumn(editedVector, state, onImportedImage) {
+        if (sourceIcon is InsetIconDrawable && it != null) {
+            onChange(InsetIconDrawable(it, sourceIcon.dimensions, sourceIcon.fractions))
         } else {
             onChange(it)
         }
@@ -115,6 +133,11 @@ internal class VectorEditState {
     // vector's viewport, so the imported paths keep their proportions (a 24-unit heroicon
     // in a 48-unit viewport would render at half size).
     var viewportOverride: Pair<Float, Float>? by mutableStateOf(null)
+
+    // Attribution reference when the paths came from an online FOSS library (the source
+    // SVG's public URL); null for file imports and hand-drawn paths. Travels with the
+    // confirmed icon into its stored row.
+    var sourceUrl: String? by mutableStateOf(null)
 }
 
 /**
@@ -122,8 +145,11 @@ internal class VectorEditState {
  * solid — [setReferenceColorPaths] keys the fill/stroke choice off a zero stroke
  * width, so [filled] maps straight onto `strokeLineWidth == 0`.
  */
-private fun PathEntry.toMutablePath(thickness: Float): MutableVectorPath {
-    val color = path.stroke ?: path.fill ?: SolidColor(Color.White)
+internal fun PathEntry.toMutablePath(thickness: Float): MutableVectorPath {
+    // XML persistence represents an absent brush as transparent (#00000000), which parses
+    // back as a non-null brush. Select the brush that belongs to this path's actual paint
+    // mode; preferring stroke unconditionally made every reloaded filled SVG transparent.
+    val color = (if (filled) path.fill else path.stroke) ?: SolidColor(Color.White)
     return MutableVectorPath(path).also { mp ->
         if (filled) {
             mp.fill = color
@@ -152,13 +178,15 @@ private fun PathEntry.toPreviewVector(template: ImageVector, thickness: Float, v
 }
 
 @Composable
-internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onChange: (icon: IconPackDrawable?) -> Unit) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+internal fun EditVectorColumn(
+    vector: ImageVector,
+    state: VectorEditState,
+    onImportedImage: (OnlineImageImport, sourceUrl: String) -> Unit,
+    onChange: (icon: IconPackDrawable?) -> Unit
+) {
+    val currentOnChange by rememberUpdatedState(onChange)
+    // Horizontal padding lives in the lazy list's contentPadding below.
+    Column(Modifier.fillMaxSize()) {
         // The imported document's coordinate space wins over the template's (see Import SVG).
         val viewportWidth = state.viewportOverride?.first ?: vector.viewportWidth
         val viewportHeight = state.viewportOverride?.second ?: vector.viewportHeight
@@ -182,19 +210,41 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
             state.initialized = true
         }
 
-        val editedVector = vector.toImageVectorDrawable()
-        state.viewportOverride?.let { (w, h) ->
-            editedVector.viewportWidth = w
-            editedVector.viewportHeight = h
+        val editedVector = remember(
+            vector,
+            state.entries,
+            state.thickness,
+            state.automaticallyCenter,
+            state.viewportOverride
+        ) {
+            vector.toImageVectorDrawable().also { edited ->
+                state.viewportOverride?.let { (w, h) ->
+                    edited.viewportWidth = w
+                    edited.viewportHeight = h
+                }
+                edited.root.children.clear()
+                for (entry in state.entries) {
+                    edited.root.children.add(entry.toMutablePath(state.thickness))
+                }
+                if (state.automaticallyCenter) edited.center()
+            }
         }
-        editedVector.root.children.clear()
-        for (entry in state.entries) {
-            editedVector.root.children.add(entry.toMutablePath(state.thickness))
-        }
-        if (state.automaticallyCenter)
-            editedVector.center()
 
         val painter = rememberVectorPainter(editedVector.toImageVector())
+
+        // One lazy list for the WHOLE tab: with the header (preview, switches, pills)
+        // outside the list only the path rows could scroll — on small screens everything
+        // above "Paths" was simply unreachable.
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            item(key = "editorHeader") {
+                Column(
+                    Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
         Surface(
             shape = CardShape,
             color = MaterialTheme.colorScheme.surfaceContainerHigh
@@ -210,6 +260,52 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
 
         ThicknessSlider(state.thickness) { state.thickness = it }
 
+        // Shared by "Import SVG" and the online-library browser: the document replaces
+        // what's being edited — its own coordinate space, its paths (fill/stroke split
+        // and stroke widths as authored). White like every editor path — the Modifier
+        // tab recolors. [sourceUrl] records the online origin (null for local files).
+        val applyImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit = { imported, sourceUrl ->
+            state.viewportOverride = imported.viewportWidth to imported.viewportHeight
+            val importStroke = (imported.viewportHeight / 48f).takeIf { it > 0f } ?: 1f
+            state.entries = imported.paths.mapNotNull { spec ->
+                runCatching {
+                    val nodes = PathParser().parsePathString(spec.pathData).toNodes()
+                    val builder = ImageVector.Builder(
+                        defaultWidth = vector.defaultWidth,
+                        defaultHeight = vector.defaultHeight,
+                        viewportWidth = imported.viewportWidth,
+                        viewportHeight = imported.viewportHeight
+                    )
+                    // Multicolour sets keep their authored per-path colours; monochrome
+                    // paths stay white and get their colour from the Modifier tab. Both
+                    // brushes carry the colour so toMutablePath picks the active one.
+                    val decoded = spec.color?.let { raw ->
+                        ColorDecoder.decodeSvgCss(raw).takeIf { it.isSpecified }
+                    } ?: Color.White
+                    val painted = decoded.copy(alpha = decoded.alpha * spec.alpha)
+                    builder.addPath(
+                        nodes,
+                        pathFillType = spec.fillType,
+                        fill = SolidColor(painted),
+                        stroke = SolidColor(painted),
+                        strokeLineWidth = spec.strokeWidth ?: importStroke,
+                        strokeLineCap = spec.strokeLineCap,
+                        strokeLineJoin = spec.strokeLineJoin
+                    )
+                    val path = builder.build().root.first() as VectorPath
+                    PathEntry(path, filled = spec.filled, baseStroke = spec.strokeWidth ?: importStroke)
+                }.getOrNull()
+            }
+            state.thickness = 1f
+            state.sourceUrl = sourceUrl
+        }
+        // Create-tab-style pill row: full width instead of buttons squeezed next to the
+        // "Paths" title (which used to wrap the title vertically on narrow screens).
+        ImportSourcePills(
+            onImported = { imported, url -> applyImported(imported, url) },
+            onImportedImage = onImportedImage
+        )
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -218,33 +314,10 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
         ) {
             Text(
                 text = stringResource(R.string.paths),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleSmallEmphasized,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
             )
-            ImportSvgButton { imported ->
-                // The document replaces what's being edited: its own coordinate space, its
-                // paths (fill/stroke split and stroke widths as authored). White like every
-                // editor path — the Modifier tab recolors.
-                state.viewportOverride = imported.viewportWidth to imported.viewportHeight
-                val importStroke = (imported.viewportHeight / 48f).takeIf { it > 0f } ?: 1f
-                state.entries = imported.paths.mapNotNull { spec ->
-                    runCatching {
-                        val nodes = PathParser().parsePathString(spec.pathData).toNodes()
-                        val builder = ImageVector.Builder(
-                            defaultWidth = vector.defaultWidth,
-                            defaultHeight = vector.defaultHeight,
-                            viewportWidth = imported.viewportWidth,
-                            viewportHeight = imported.viewportHeight
-                        )
-                        builder.addPath(nodes, stroke = SolidColor(Color.White), strokeLineWidth = spec.strokeWidth ?: importStroke)
-                        val path = builder.build().root.first() as VectorPath
-                        PathEntry(path, filled = spec.filled, baseStroke = spec.strokeWidth ?: importStroke)
-                    }.getOrNull()
-                }
-                state.thickness = 1f
-            }
             NewPath {
                 if (it.trim() == "") {
                     return@NewPath
@@ -273,12 +346,9 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
                 modifier = Modifier.padding(vertical = 16.dp)
             )
         }
+                }
+            }
 
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            contentPadding = PaddingValues(bottom = 16.dp)
-        ) {
             itemsIndexed(state.entries) { index, entry ->
                 VectorPathItem(
                     previewVector = entry.toPreviewVector(vector, state.thickness, state.viewportOverride),
@@ -310,8 +380,12 @@ internal fun EditVectorColumn(vector: ImageVector, state: VectorEditState, onCha
             }
         }
 
-        // An empty vector is not a real icon — don't expose it (keeps Modifier greyed)
-        onChange(if (state.entries.isEmpty()) null else editedVector)
+        // Publish only when editor inputs change, never as a side effect of composition itself.
+        LaunchedEffect(state.initialized, editedVector, state.entries.isEmpty()) {
+            if (state.initialized) {
+                currentOnChange(if (state.entries.isEmpty()) null else editedVector)
+            }
+        }
     }
 }
 
@@ -423,7 +497,7 @@ fun VectorPathItem(
  * shapes) toast an error and leave the current edit untouched.
  */
 @Composable
-internal fun ImportSvgButton(onImported: (SvgVectorImporter.ImportedSvg) -> Unit) {
+internal fun rememberSvgImportAction(onImported: (SvgVectorImporter.ImportedSvg) -> Unit): () -> Unit {
     val context = getCurrentContext()
     val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
@@ -434,25 +508,60 @@ internal fun ImportSvgButton(onImported: (SvgVectorImporter.ImportedSvg) -> Unit
         scope.launch {
             val imported = withContext(Dispatchers.IO) {
                 runCatching {
-                    context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                    context.contentResolver.openInputStream(uri)?.use { it.readUtf8TextLimited() }
                 }.getOrNull()?.let { SvgVectorImporter.parse(it) }
             }
             if (imported == null) toaster.show(errorMessage) else onImported(imported)
         }
     }
 
-    FilledTonalButton(
-        onClick = { launcher.launch(arrayOf("image/svg+xml", "*/*")) },
-        modifier = Modifier.padding(end = 8.dp)
+    return { launcher.launch(arrayOf("image/svg+xml", "*/*")) }
+}
+
+/**
+ * Create-tab-style segmented pills for the two SVG sources: a local file and the online FOSS
+ * libraries. [onImported] gets the parsed document plus the online source URL (null for local
+ * files); [onImportedImage] the
+ * full-size raster of an online icon the editor can't model as paths (gradients etc.).
+ */
+@Composable
+private fun ImportSourcePills(
+    onImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit,
+    onImportedImage: (OnlineImageImport, String) -> Unit
+) {
+    val importFromFile = rememberSvgImportAction { onImported(it, null) }
+    var browserOpen by remember { mutableStateOf(false) }
+
+    SingleChoiceSegmentedButtonRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp)
     ) {
-        Icon(
-            imageVector = Icons.Filled.FileUpload,
-            contentDescription = null,
-            modifier = Modifier.size(18.dp)
-        )
-        Text(
-            text = stringResource(R.string.importSvg),
-            modifier = Modifier.padding(start = 6.dp)
+        SegmentedButton(
+            selected = false,
+            onClick = importFromFile,
+            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+            icon = { Icon(Icons.Filled.FileDownload, null, Modifier.size(18.dp)) }
+        ) { Text(stringResource(R.string.importSvg)) }
+        SegmentedButton(
+            selected = false,
+            onClick = { browserOpen = true },
+            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+            icon = { Icon(Icons.Filled.TravelExplore, null, Modifier.size(18.dp)) }
+        ) { Text(stringResource(R.string.onlineIconsButton)) }
+    }
+
+    if (browserOpen) {
+        OnlineIconBrowserDialog(
+            onPicked = { imported, url ->
+                browserOpen = false
+                onImported(imported, url)
+            },
+            onPickedImage = { imported, url ->
+                browserOpen = false
+                onImportedImage(imported, url)
+            },
+            onDismiss = { browserOpen = false }
         )
     }
 }

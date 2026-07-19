@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package dev.renkinProject.renkin.ui
 
 import androidx.compose.animation.Crossfade
@@ -74,7 +75,6 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 @Composable
 fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     val viewModel: MainViewModel = hiltViewModel()
-    val preferences = getPreferences().getPreferencesValue()
     val view = LocalView.current
     val context = getCurrentContext()
     val toaster = LocalToaster.current
@@ -85,8 +85,12 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
     // show behind it; RESULT_OK = the user pressed Build there.
     val previewLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
+            val profileId = result.data?.getLongExtra(
+                WallpaperPreviewActivity.EXTRA_PROFILE_ID, -1L
+            ) ?: -1L
+            if (profileId < 0L) return@rememberLauncherForActivityResult
             view.performConfirmHaptic()
-            viewModel.build(preferences)
+            viewModel.build(profileId)
         }
     }
 
@@ -96,11 +100,16 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
                 toaster.show(context.getString(R.string.iconsStillGenerated))
                 return@ExtendedFloatingActionButton
             }
+            if (viewModel.isProfileSwitching) {
+                toaster.show(context.getString(R.string.profileStillLoading))
+                return@ExtendedFloatingActionButton
+            }
 
             // Review the whole pack before committing to a build
             view.performTapHaptic()
             previewLauncher.launch(
                 Intent(context, WallpaperPreviewActivity::class.java)
+                    .putExtra(WallpaperPreviewActivity.EXTRA_PROFILE_ID, viewModel.activeProfileId)
                     .putStringArrayListExtra(WallpaperPreviewActivity.EXTRA_BUILT_KEYS, ArrayList(viewModel.builtKeys))
                     .putStringArrayListExtra(WallpaperPreviewActivity.EXTRA_UPDATED_KEYS, ArrayList(viewModel.updatedKeys))
             )
@@ -222,8 +231,7 @@ fun BuildPackPreviewContent(
                     }
                     Text(
                         text = stringResource(R.string.buildPreviewTitle),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleMediumEmphasized,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier.weight(1f)
                     )

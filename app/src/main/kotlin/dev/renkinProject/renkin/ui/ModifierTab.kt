@@ -22,11 +22,23 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.height
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.BorderStyle
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.LayersClear
+import androidx.compose.material.icons.filled.Palette
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import dev.renkinProject.renkin.ui.theme.FieldShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.DropdownMenu
@@ -46,7 +58,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,6 +94,8 @@ internal class AdjustmentState {
     // Colorize as a flat fill (SRC_IN) instead of the default multiply blend, so the picked
     // colour lands exactly — a green icon tinted blue no longer muddies to a green/blue mix.
     var colorizeFlat by mutableStateOf(false)
+    var colorizeMonochrome by mutableStateOf(false)
+    var colorizeInverse by mutableStateOf(false)
     var iconScale by mutableFloatStateOf(1f)
     var bgRemovalTolerance by mutableFloatStateOf(0.1f)
     // Auto-center is UI state only: switching it on computes the offsets below (the pipeline's
@@ -105,34 +119,93 @@ internal class AdjustmentState {
     var eraseStrokes by mutableStateOf<List<EraseStroke>>(emptyList())
 
     companion object {
-        val Saver = listSaver<AdjustmentState, Any>(
+        // Keep the keyed representation, but accept the positional list emitted by older builds.
+        // mapSaver itself cannot do that because it casts every even list item to String before
+        // calling restore, which would crash on the legacy list's first Float value.
+        val Saver = Saver<AdjustmentState, Any>(
             save = {
-                listOf(it.edgeThreshold, it.edgeSmoothing, it.edgeContrast, it.iconScale,
-                    it.bgRemovalTolerance, it.autoCenter, it.iconOffsetX, it.iconOffsetY,
-                    it.colorizeFlat, it.iconShape.ordinal, it.shapeCrop, it.shapeColor.toArgb(),
-                    it.shapeScale, it.outlineMode.ordinal, it.outlineWidth, it.outlineColor.toArgb())
+                arrayListOf(
+                    "edgeThreshold", it.edgeThreshold,
+                    "edgeSmoothing", it.edgeSmoothing,
+                    "edgeContrast", it.edgeContrast,
+                    "iconScale", it.iconScale,
+                    "bgRemovalTolerance", it.bgRemovalTolerance,
+                    "autoCenter", it.autoCenter,
+                    "iconOffsetX", it.iconOffsetX,
+                    "iconOffsetY", it.iconOffsetY,
+                    "colorizeFlat", it.colorizeFlat,
+                    "colorizeMonochrome", it.colorizeMonochrome,
+                    "colorizeInverse", it.colorizeInverse,
+                    "iconShape", it.iconShape.ordinal,
+                    "shapeCrop", it.shapeCrop,
+                    "shapeColor", it.shapeColor.toArgb(),
+                    "shapeScale", it.shapeScale,
+                    "outlineMode", it.outlineMode.ordinal,
+                    "outlineWidth", it.outlineWidth,
+                    "outlineColor", it.outlineColor.toArgb()
+                )
             },
-            restore = { saved ->
-                AdjustmentState().apply {
-                    edgeThreshold = saved[0] as Float
-                    edgeSmoothing = saved[1] as Float
-                    edgeContrast = saved[2] as Boolean
-                    iconScale = saved[3] as Float
-                    bgRemovalTolerance = saved[4] as Float
-                    autoCenter = saved[5] as Boolean
-                    iconOffsetX = saved[6] as Float
-                    iconOffsetY = saved[7] as Float
-                    colorizeFlat = saved[8] as Boolean
-                    iconShape = IconShape.entries.getOrElse(saved[9] as Int) { IconShape.NONE }
-                    shapeCrop = saved[10] as Boolean
-                    shapeColor = Color(saved[11] as Int)
-                    shapeScale = saved[12] as Float
-                    outlineMode = OutlineMode.entries.getOrElse(saved[13] as Int) { OutlineMode.NONE }
-                    outlineWidth = saved[14] as Float
-                    outlineColor = Color(saved[15] as Int)
-                }
-            }
+            restore = ::restoreAdjustmentState
         )
+
+        private fun restoreAdjustmentState(saved: Any): AdjustmentState? {
+            val values = saved as? List<*> ?: return null
+            return if (values.firstOrNull() is String) {
+                val keyed = buildMap<String, Any?> {
+                    var index = 0
+                    while (index + 1 < values.size) {
+                        val key = values[index] as? String ?: break
+                        put(key, values[index + 1])
+                        index += 2
+                    }
+                }
+                restoreKeyed(keyed)
+            } else {
+                restoreLegacy(values)
+            }
+        }
+
+        private fun restoreKeyed(saved: Map<String, Any?>) = AdjustmentState().apply {
+            edgeThreshold = saved["edgeThreshold"] as? Float ?: edgeThreshold
+            edgeSmoothing = saved["edgeSmoothing"] as? Float ?: edgeSmoothing
+            edgeContrast = saved["edgeContrast"] as? Boolean ?: edgeContrast
+            iconScale = saved["iconScale"] as? Float ?: iconScale
+            bgRemovalTolerance = saved["bgRemovalTolerance"] as? Float ?: bgRemovalTolerance
+            autoCenter = saved["autoCenter"] as? Boolean ?: autoCenter
+            iconOffsetX = saved["iconOffsetX"] as? Float ?: iconOffsetX
+            iconOffsetY = saved["iconOffsetY"] as? Float ?: iconOffsetY
+            colorizeFlat = saved["colorizeFlat"] as? Boolean ?: colorizeFlat
+            colorizeMonochrome = saved["colorizeMonochrome"] as? Boolean ?: colorizeMonochrome
+            colorizeInverse = saved["colorizeInverse"] as? Boolean ?: colorizeInverse
+            iconShape = IconShape.entries.getOrElse(saved["iconShape"] as? Int ?: 0) { IconShape.NONE }
+            shapeCrop = saved["shapeCrop"] as? Boolean ?: shapeCrop
+            (saved["shapeColor"] as? Int)?.let { shapeColor = Color(it) }
+            shapeScale = saved["shapeScale"] as? Float ?: shapeScale
+            outlineMode = OutlineMode.entries.getOrElse(saved["outlineMode"] as? Int ?: 0) { OutlineMode.NONE }
+            outlineWidth = saved["outlineWidth"] as? Float ?: outlineWidth
+            (saved["outlineColor"] as? Int)?.let { outlineColor = Color(it) }
+        }
+
+        private fun restoreLegacy(saved: List<*>) = AdjustmentState().apply {
+            edgeThreshold = saved.getOrNull(0) as? Float ?: edgeThreshold
+            edgeSmoothing = saved.getOrNull(1) as? Float ?: edgeSmoothing
+            edgeContrast = saved.getOrNull(2) as? Boolean ?: edgeContrast
+            iconScale = saved.getOrNull(3) as? Float ?: iconScale
+            bgRemovalTolerance = saved.getOrNull(4) as? Float ?: bgRemovalTolerance
+            autoCenter = saved.getOrNull(5) as? Boolean ?: autoCenter
+            iconOffsetX = saved.getOrNull(6) as? Float ?: iconOffsetX
+            iconOffsetY = saved.getOrNull(7) as? Float ?: iconOffsetY
+            colorizeFlat = saved.getOrNull(8) as? Boolean ?: colorizeFlat
+            iconShape = IconShape.entries.getOrElse(saved.getOrNull(9) as? Int ?: 0) { IconShape.NONE }
+            shapeCrop = saved.getOrNull(10) as? Boolean ?: shapeCrop
+            (saved.getOrNull(11) as? Int)?.let { shapeColor = Color(it) }
+            shapeScale = saved.getOrNull(12) as? Float ?: shapeScale
+            outlineMode = OutlineMode.entries.getOrElse(saved.getOrNull(13) as? Int ?: 0) { OutlineMode.NONE }
+            outlineWidth = saved.getOrNull(14) as? Float ?: outlineWidth
+            (saved.getOrNull(15) as? Int)?.let { outlineColor = Color(it) }
+            colorizeMonochrome = saved.getOrNull(16) as? Boolean ?: colorizeMonochrome
+            colorizeInverse = saved.getOrNull(17) as? Boolean ?: colorizeInverse
+        }
     }
 }
 
@@ -142,7 +215,7 @@ internal fun ModifierTab(
     imageEdit: ImageEdit,
     iconColor: Color,
     useVector: Boolean,
-    useMonochrome: Boolean,
+    useMaterialYou: Boolean,
     adjustments: AdjustmentState,
     // The current preview icon, shown in the position tool to visualise its margins.
     centerPreview: Bitmap?,
@@ -153,7 +226,7 @@ internal fun ModifierTab(
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
-    onMonochromeChange: (Boolean) -> Unit,
+    onMaterialYouChange: (Boolean) -> Unit,
     // Hands the current icon to an external editor; true = ImageToolbox, false = user-picked app.
     onEditExternally: (toolbox: Boolean) -> Unit
 ) {
@@ -175,42 +248,74 @@ internal fun ModifierTab(
     ) {
         Text(
             text = stringResource(R.string.imageEdit),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmallEmphasized,
             color = MaterialTheme.colorScheme.onSurface
         )
 
-        // Selecting an edit expands its settings inside the same envelope surface as its card,
-        // so the controls visually belong to the chosen option instead of floating below the list.
-        editLabels.forEach { (edit, label) ->
-            val selected = imageEdit == edit
-            val envelope by animateColorAsState(
-                if (selected) MaterialTheme.colorScheme.surfaceContainerHigh else Color.Transparent,
-                label = "editEnvelope"
-            )
-            Surface(shape = CardShape, color = envelope, modifier = Modifier.fillMaxWidth()) {
-                Column {
-                    OptionCard(
-                        label = label,
-                        selected = selected,
-                        onClick = { onImageEditChange(edit) },
-                        trailing = if (selected) {
-                            {
-                                Icon(
-                                    imageVector = Icons.Filled.Done,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.size(20.dp)
-                                )
-                            }
-                        } else null
-                    )
-                    androidx.compose.animation.AnimatedVisibility(visible = selected) {
+        // Compact icon tiles instead of five stacked full-width cards: every modifier gets a
+        // glyph and the selection stands out with a primary border — the same visual language
+        // as the Icon shape picker below and the watch editor's tiles.
+        editLabels.entries.toList().chunked(3).forEach { rowEdits ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                rowEdits.forEach { (edit, label) ->
+                    val selected = imageEdit == edit
+                    Surface(
+                        shape = FieldShape,
+                        color = if (selected) MaterialTheme.colorScheme.secondaryContainer
+                            else MaterialTheme.colorScheme.surfaceContainer,
+                        border = if (selected) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(76.dp)
+                            .clip(FieldShape)
+                            .clickable(role = Role.Button) { onImageEditChange(edit) }
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = imageEditIcon(edit),
+                                contentDescription = null,
+                                tint = if (selected) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = if (selected) MaterialTheme.colorScheme.onSecondaryContainer
+                                    else MaterialTheme.colorScheme.onSurface,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                    }
+                }
+                repeat(3 - rowEdits.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+
+        // The chosen modifier's own controls live in one envelope card under the grid.
+        androidx.compose.animation.AnimatedVisibility(visible = imageEdit != ImageEdit.NONE) {
+            Surface(
+                shape = CardShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.fillMaxWidth()
+            ) {
                         Column(
                             modifier = Modifier.padding(6.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            when (edit) {
+                            when (imageEdit) {
                                 ImageEdit.EDGE -> {
                                     OptionGroup {
                                         // Detail: inverse of the Canny threshold — right = more edges kept
@@ -254,7 +359,7 @@ internal fun ModifierTab(
                                         ) {
                                             Column(Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
                                                 VectorSwitch(useVector) { onVectorChange(it) }
-                                                MonochromeSwitch(useMonochrome) { onMonochromeChange(it) }
+                                                MaterialYouSwitch(useMaterialYou) { onMaterialYouChange(it) }
                                             }
                                         }
                                     }
@@ -266,27 +371,29 @@ internal fun ModifierTab(
                                     // Flat fill vs. multiply blend: on a coloured icon the multiply
                                     // default mixes the picked colour with the original, so blue over
                                     // green reads muddy. This makes the picked colour land exactly.
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = stringResource(R.string.colorizeSolid),
-                                                style = MaterialTheme.typography.bodyLarge,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                            Text(
-                                                text = stringResource(R.string.colorizeSolidHint),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                    ColorizeSwitchRow(
+                                        label = stringResource(R.string.colorizeSolid),
+                                        hint = stringResource(R.string.colorizeSolidHint),
+                                        checked = adjustments.colorizeFlat,
+                                        onCheckedChange = {
+                                            adjustments.colorizeFlat = it
+                                            if (it) adjustments.colorizeMonochrome = false
                                         }
-                                        Switch(
-                                            checked = adjustments.colorizeFlat,
-                                            onCheckedChange = { adjustments.colorizeFlat = it }
-                                        )
-                                    }
+                                    )
+                                    ColorizeSwitchRow(
+                                        label = stringResource(R.string.colorizeMonochrome),
+                                        hint = stringResource(R.string.colorizeMonochromeHint),
+                                        checked = adjustments.colorizeMonochrome,
+                                        onCheckedChange = {
+                                            adjustments.colorizeMonochrome = it
+                                            if (it) adjustments.colorizeFlat = false
+                                        }
+                                    )
+                                    ColorizeSwitchRow(
+                                        label = stringResource(R.string.inverseColors),
+                                        checked = adjustments.colorizeInverse,
+                                        onCheckedChange = { adjustments.colorizeInverse = it }
+                                    )
                                 }
 
                                 ImageEdit.REMOVE_BACKGROUND -> OptionGroup {
@@ -308,16 +415,13 @@ internal fun ModifierTab(
                                 ImageEdit.NONE -> {}
                             }
                         }
-                    }
-                }
             }
         }
 
         // Per-icon adjustments, independent of the modifier chosen above
         Text(
             text = stringResource(R.string.adjustments),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmallEmphasized,
             color = MaterialTheme.colorScheme.onSurface
         )
         OptionGroup {
@@ -349,8 +453,7 @@ internal fun ModifierTab(
         // same Material You shape presets launchers use.
         Text(
             text = stringResource(R.string.iconShapeTitle),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmallEmphasized,
             color = MaterialTheme.colorScheme.onSurface
         )
         OptionGroup {
@@ -413,8 +516,7 @@ internal fun ModifierTab(
         // icon already carries (Recolor) — the shape crop above still applies afterwards.
         Text(
             text = stringResource(R.string.outlineTitle),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmallEmphasized,
             color = MaterialTheme.colorScheme.onSurface
         )
         OptionGroup {
@@ -482,12 +584,13 @@ internal fun ModifierTab(
         // Upload tab.
         Text(
             text = stringResource(R.string.externalEditorTitle),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
+            style = MaterialTheme.typography.titleSmallEmphasized,
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.padding(top = 8.dp)
         )
         var editorMenuOpen by remember { mutableStateOf(false) }
+        val expandedDescription = stringResource(R.string.stateExpanded)
+        val collapsedDescription = stringResource(R.string.stateCollapsed)
         Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 4.dp)) {
             SplitButtonLayout(
                 leadingButton = {
@@ -510,30 +613,39 @@ internal fun ModifierTab(
                     }
                 },
                 trailingButton = {
-                    SplitButtonDefaults.TrailingButton(
-                        checked = editorMenuOpen,
-                        onCheckedChange = { editorMenuOpen = it }
-                    ) {
-                        val rotation by animateFloatAsState(if (editorMenuOpen) 180f else 0f, label = "chevron")
-                        Icon(
-                            imageVector = Icons.Filled.KeyboardArrowDown,
-                            contentDescription = stringResource(R.string.editInAnotherApp),
-                            modifier = Modifier
-                                .size(SplitButtonDefaults.TrailingIconSize)
-                                .graphicsLayer { rotationZ = rotation }
-                        )
+                    // The menu anchors on the trailing button itself (not the whole split
+                    // button), so it opens at the chevron — above it when the button sits at
+                    // the bottom of the screen — instead of drifting to the far left edge.
+                    Box {
+                        SplitButtonDefaults.TrailingButton(
+                            checked = editorMenuOpen,
+                            onCheckedChange = { editorMenuOpen = it },
+                            modifier = Modifier.semantics {
+                                stateDescription = if (editorMenuOpen) expandedDescription
+                                    else collapsedDescription
+                            }
+                        ) {
+                            val rotation by animateFloatAsState(if (editorMenuOpen) 180f else 0f, label = "chevron")
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowDown,
+                                contentDescription = stringResource(R.string.editInAnotherApp),
+                                modifier = Modifier
+                                    .size(SplitButtonDefaults.TrailingIconSize)
+                                    .graphicsLayer { rotationZ = rotation }
+                            )
+                        }
+                        DropdownMenu(expanded = editorMenuOpen, onDismissRequest = { editorMenuOpen = false }) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.editInAnotherApp)) },
+                                onClick = {
+                                    editorMenuOpen = false
+                                    onEditExternally(false)
+                                }
+                            )
+                        }
                     }
                 }
             )
-            DropdownMenu(expanded = editorMenuOpen, onDismissRequest = { editorMenuOpen = false }) {
-                DropdownMenuItem(
-                    text = { Text(stringResource(R.string.editInAnotherApp)) },
-                    onClick = {
-                        editorMenuOpen = false
-                        onEditExternally(false)
-                    }
-                )
-            }
         }
     }
 
@@ -588,7 +700,7 @@ internal fun ModifierTab(
  * generator uses, so what's drawn here is exactly what the icon gets.
  */
 @Composable
-private fun ShapeSwatch(shape: IconShape, selected: Boolean, onClick: () -> Unit) {
+internal fun ShapeSwatch(shape: IconShape, selected: Boolean, onClick: () -> Unit) {
     val label = shapeLabel(shape)
     val fill = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     RenkinTooltipBox(label) {
@@ -622,7 +734,7 @@ private fun ShapeSwatch(shape: IconShape, selected: Boolean, onClick: () -> Unit
 }
 
 @Composable
-private fun shapeLabel(shape: IconShape): String = stringResource(
+internal fun shapeLabel(shape: IconShape): String = stringResource(
     when (shape) {
         IconShape.NONE -> R.string.shapeNone
         IconShape.CIRCLE -> R.string.shapeCircle
@@ -648,4 +760,43 @@ private fun IconColorCard(iconColor: Color, onClick: () -> Unit) {
             ) {}
         }
     )
+}
+
+@Composable
+private fun ColorizeSwitchRow(
+    label: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    hint: String? = null,
+    horizontalPadding: androidx.compose.ui.unit.Dp = 4.dp
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (hint != null) {
+                Text(
+                    text = hint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange)
+    }
+}
+
+/** The tile glyph giving each image modifier a visual identity in the selector grid. */
+private fun imageEditIcon(edit: ImageEdit): ImageVector = when (edit) {
+    ImageEdit.NONE -> Icons.Filled.Block
+    ImageEdit.PATH -> Icons.Filled.Gesture
+    ImageEdit.EDGE -> Icons.Filled.BorderStyle
+    ImageEdit.COLORIZE -> Icons.Filled.Palette
+    ImageEdit.REMOVE_BACKGROUND -> Icons.Filled.LayersClear
 }

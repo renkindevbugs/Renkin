@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package dev.renkinProject.renkin.ui
 
 import androidx.compose.foundation.Image
@@ -113,8 +114,7 @@ fun InfoDialog(onDismiss: () -> Unit) {
                 Spacer(Modifier.height(24.dp))
                 Text(
                     text = stringResource(R.string.aboutFeatures),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleSmallEmphasized,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(Modifier.height(4.dp))
@@ -164,8 +164,7 @@ private fun InfoFeatureRow(icon: ImageVector, title: String, description: String
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = title,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold,
+                style = MaterialTheme.typography.titleSmallEmphasized,
                 color = MaterialTheme.colorScheme.onSurface
             )
             Text(

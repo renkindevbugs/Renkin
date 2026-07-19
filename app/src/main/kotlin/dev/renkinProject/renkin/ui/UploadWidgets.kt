@@ -128,7 +128,7 @@ fun ZoomSlider(value: Float, onChange: (newValue: Float) -> Unit) {
             inactiveTrackColor = MaterialTheme.colorScheme.secondaryContainer,
         ),
         steps = 0,
-        valueRange = 0f..2f
+        valueRange = 0.25f..2f
     )
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(text = (sliderPosition * 100).toInt().toString() + "%")

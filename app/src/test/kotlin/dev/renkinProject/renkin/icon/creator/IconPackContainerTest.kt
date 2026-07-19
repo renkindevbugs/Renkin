@@ -13,8 +13,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 /**
- * [IconPackContainer] indexes a pack's drawables by package name for O(1) lookup. These pin the
- * lookup and the "keep the first entry on a duplicate package" rule a bulk build relies on.
+ * [IconPackContainer] indexes a pack's drawables by full component for O(1) lookup. Two launcher
+ * activities in one package may legitimately have different appfilter mappings.
  * Robolectric because [ResourceDrawable] wraps an android Drawable.
  */
 @RunWith(RobolectricTestRunner::class)
@@ -29,12 +29,14 @@ class IconPackContainerTest {
             "pack",
             linkedMapOf(InstalledApplication("com.a", "com.a.Main", 0) to resource(10))
         )
-        assertEquals(10, container.getApplicationIcon("com.a")?.resourceId)
+        assertEquals(
+            10,
+            container.getApplicationIcon(InstalledApplication("com.a", "com.a.Main", 99))?.resourceId
+        )
     }
 
     @Test
-    fun keepsTheFirstEntryOnDuplicatePackageName() {
-        // Two activities of the same app — the first inserted wins (find-first behaviour).
+    fun samePackageActivities_keepTheirOwnComponentMappings() {
         val container = IconPackContainer(
             "pack",
             linkedMapOf(
@@ -42,11 +44,21 @@ class IconPackContainerTest {
                 InstalledApplication("com.a", "com.a.Second", 0) to resource(2)
             )
         )
-        assertEquals(1, container.getApplicationIcon("com.a")?.resourceId)
+        assertEquals(
+            1,
+            container.getApplicationIcon(InstalledApplication("com.a", "com.a.First", 0))?.resourceId
+        )
+        assertEquals(
+            2,
+            container.getApplicationIcon(InstalledApplication("com.a", "com.a.Second", 0))?.resourceId
+        )
     }
 
     @Test
     fun unknownPackageReturnsNull() {
-        assertNull(IconPackContainer("pack", emptyMap()).getApplicationIcon("com.missing"))
+        assertNull(
+            IconPackContainer("pack", emptyMap())
+                .getApplicationIcon(InstalledApplication("com.missing", "com.missing.Main", 0))
+        )
     }
 }

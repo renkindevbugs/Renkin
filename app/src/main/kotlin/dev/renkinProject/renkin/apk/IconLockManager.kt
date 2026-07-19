@@ -55,6 +55,12 @@ class IconLockManager(
         lockedRows.remove(key)
     }
 
+    /** Explicit reset: forget the held row immediately and update every lock indicator. */
+    fun discard(key: String) {
+        lockedRows.remove(key)
+        publish()
+    }
+
     fun holdOrphan(key: String, row: DbApplication) {
         orphanRows[key] = row
     }

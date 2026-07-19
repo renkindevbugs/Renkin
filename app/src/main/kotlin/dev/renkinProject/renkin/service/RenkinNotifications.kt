@@ -41,7 +41,6 @@ class RenkinNotifications {
         suggestionId: Long,
         appPackage: String,
         packPackages: List<String>,
-        profileId: Long,
         profileName: String
     ) {
         createIconAvailableChannel(context)
@@ -66,7 +65,6 @@ class RenkinNotifications {
             action = MainActivity.ACTION_OPEN_SUGGESTION
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
             putExtra(MainActivity.EXTRA_SUGGESTION_ID, suggestionId)
-            putExtra(MainActivity.EXTRA_SUGGESTION_PROFILE_ID, profileId)
         }
         val pendingIntent = PendingIntent.getActivity(
             context, suggestionId.toInt(), intent,
@@ -110,10 +108,27 @@ class RenkinNotifications {
             ) {
                 return
             }
-            notify(iconAvailableBaseId + suggestionId.toInt(), builder.build())
+            notify(iconAvailableId(suggestionId), builder.build())
             notify(iconAvailableSummaryId, summary)
         }
     }
+
+    /**
+     * Cancels notifications consumed outside the notification shade. Cancellation is idempotent,
+     * so callers do not need to inspect Android's active-notification list first.
+     */
+    fun cancelIconAvailable(
+        context: Context,
+        suggestionIds: Collection<Long>,
+        cancelSummary: Boolean
+    ) {
+        with(NotificationManagerCompat.from(context)) {
+            suggestionIds.forEach { cancel(iconAvailableId(it)) }
+            if (cancelSummary) cancel(iconAvailableSummaryId)
+        }
+    }
+
+    private fun iconAvailableId(suggestionId: Long): Int = iconAvailableBaseId + suggestionId.toInt()
 
     private fun createIconAvailableChannel(context: Context) {
         if (PackageVersion.is26OrMore()) {

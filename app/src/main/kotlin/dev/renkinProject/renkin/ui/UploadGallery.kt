@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
@@ -94,10 +95,17 @@ const val MIME_TYPE_IMAGE = "image/*"
 fun UploadColumn(app: PackageInfoStruct,
                  // The edit dialog's snackbar surface — deleting images offers Undo through it.
                  snackbarHostState: SnackbarHostState,
-                 onChange: (icon: IconPackDrawable?) -> Unit) {
+                 // Gallery image to arrive selected (an online "as image" import); a new value
+                 // re-keys the selection so the tab reflects the freshly saved picture.
+                 initialSelectedPath: String? = null,
+                 // The selected file's path travels with the icon so the caller can tell the
+                 // online import apart from a manual gallery pick (attribution bookkeeping).
+                 onChange: (icon: IconPackDrawable?, path: String?) -> Unit) {
     var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
     var zoomLevel by rememberSaveable { mutableFloatStateOf(1f) }
-    var selectedImagePath by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedImagePath by rememberSaveable(initialSelectedPath) {
+        mutableStateOf(initialSelectedPath)
+    }
     var savedImages by remember { mutableStateOf<List<File>>(emptyList()) }
     var uploadedImage by remember { mutableStateOf(null as Bitmap?) }
     var mask by remember { mutableStateOf(null as Bitmap?) }
@@ -122,26 +130,41 @@ fun UploadColumn(app: PackageInfoStruct,
         selectionMode = false
         markedForDelete = emptySet()
         if (toDelete.isEmpty()) return
-        savedImages = savedImages - toDelete.toSet()
-        if (toDelete.any { it.absolutePath == selectedImagePath }) selectedImagePath = null
         snackbarHostState.currentSnackbarData?.dismiss()
         scope.launch {
+            // Move first: if this composable disappears while the Snackbar is visible, deleted
+            // images stay hidden and the next gallery entry safely finalizes the trash.
+            val trashed = withContext(Dispatchers.IO) {
+                UploadedImageStore.moveToTrash(context, toDelete)
+            }
+            if (trashed.isEmpty()) {
+                toaster.show(uploadErrorMessage)
+                return@launch
+            }
+            val movedFiles = trashed.map { it.original }.toSet()
+            savedImages = savedImages - movedFiles
+            if (movedFiles.any { it.absolutePath == selectedImagePath }) selectedImagePath = null
+            if (trashed.size != toDelete.size) toaster.show(uploadErrorMessage)
+
             val result = snackbarHostState.showSnackbar(
-                message = String.format(deletedMessage, toDelete.size),
+                message = String.format(deletedMessage, trashed.size),
                 actionLabel = undoLabel,
                 duration = SnackbarDuration.Long
             )
             if (result == SnackbarResult.ActionPerformed) {
-                // The files never left the disk — reload the gallery and they're back.
+                withContext(Dispatchers.IO) { UploadedImageStore.restore(trashed) }
                 savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
             } else {
-                withContext(Dispatchers.IO) { toDelete.forEach { UploadedImageStore.delete(it) } }
+                withContext(Dispatchers.IO) { UploadedImageStore.permanentlyDelete(trashed) }
             }
         }
     }
 
     LaunchedEffect(Unit) {
-        savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
+        savedImages = withContext(Dispatchers.IO) {
+            UploadedImageStore.cleanupTrash(context)
+            UploadedImageStore.list(context)
+        }
     }
 
     val launcher = rememberLauncherForActivityResult(
@@ -154,12 +177,19 @@ fun UploadColumn(app: PackageInfoStruct,
                 var failed = false
                 val added = withContext(Dispatchers.IO) {
                     uris.mapNotNull { uri ->
-                        val bitmap = getBitmapFromURI(context, uri)?.toDrawable(res)?.shrinkIfBiggerThan(maxSize)
-                        if (bitmap == null) {
+                        try {
+                            val bitmap = getBitmapFromURI(context, uri)
+                                ?.toDrawable(res)
+                                ?.shrinkIfBiggerThan(maxSize)
+                            if (bitmap == null) {
+                                failed = true
+                                null
+                            } else {
+                                UploadedImageStore.save(context, bitmap)
+                            }
+                        } catch (_: Exception) {
                             failed = true
                             null
-                        } else {
-                            UploadedImageStore.save(context, bitmap)
                         }
                     }
                 }
@@ -176,7 +206,7 @@ fun UploadColumn(app: PackageInfoStruct,
         val path = selectedImagePath
         if (path == null) {
             uploadedImage = null
-            onChange(null)
+            onChange(null, null)
             return@LaunchedEffect
         }
         val bitmap = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path) }
@@ -185,6 +215,11 @@ fun UploadColumn(app: PackageInfoStruct,
             uploadedImage = squared
             mask = createMask(squared)
         } else {
+            // Never leave the previously selected bitmap active under a corrupt file's highlight.
+            uploadedImage = null
+            mask = null
+            onChange(null, null)
+            selectedImagePath = null
             toaster.show(uploadErrorMessage)
         }
     }
@@ -247,7 +282,12 @@ fun UploadColumn(app: PackageInfoStruct,
                 val editedImage = uploadedImage
                 if (editedImage != null) {
                     item(key = "editor", span = { GridItemSpan(maxLineSpan) }) {
-                        val zoomedImage = zoomBitmap(editedImage, zoomLevel)
+                        val zoomedImage = remember(editedImage, zoomLevel) {
+                            zoomBitmap(editedImage, zoomLevel)
+                        }
+                        LaunchedEffect(zoomedImage, asAdaptiveIcon) {
+                            onChange(BitmapIconDrawable(zoomedImage, asAdaptiveIcon), selectedImagePath)
+                        }
 
                         // Editor lives in a rounded card for a cleaner, modern look
                         Surface(
@@ -303,7 +343,6 @@ fun UploadColumn(app: PackageInfoStruct,
                                     ZoomSlider(zoomLevel, onChange = { zoomLevel = it })
                                 }
 
-                                onChange(BitmapIconDrawable(zoomedImage, asAdaptiveIcon))
                             }
                         }
                     }
@@ -312,8 +351,7 @@ fun UploadColumn(app: PackageInfoStruct,
                 item(key = "gallery_header", span = { GridItemSpan(maxLineSpan) }) {
                     Text(
                         text = stringResource(R.string.yourImages),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold,
+                        style = MaterialTheme.typography.titleSmallEmphasized,
                         color = MaterialTheme.colorScheme.onSurface,
                         modifier = Modifier
                             .fillMaxWidth()
@@ -379,8 +417,7 @@ fun UploadColumn(app: PackageInfoStruct,
                         }
                         Text(
                             text = "${markedForDelete.size}",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleMediumEmphasized,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.weight(1f)
                         )

@@ -1,6 +1,9 @@
 package dev.renkinProject.renkin.ui
 
+import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -99,6 +102,7 @@ import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.setEnumValue
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.GlobalOptionsActivity
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.WatchViewModel
 import kotlinx.coroutines.flow.map
@@ -236,6 +240,31 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 viewModel.dismissNewIconPack()
             },
             onDismiss = { viewModel.dismissNewIconPack() }
+        )
+    }
+
+    if (viewModel.installFallbackPending) {
+        RenkinAlertDialog(
+            onDismissRequest = { viewModel.dismissInstallFallback() },
+            icon = {
+                Icon(
+                    Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text(stringResource(R.string.installFallbackTitle)) },
+            text = { Text(boldStringResource(R.string.installFallbackText)) },
+            confirmButton = {
+                TextButton(onClick = { viewModel.confirmInstallFallback() }) {
+                    Text(stringResource(R.string.installFallbackAction))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissInstallFallback() }) {
+                    Text(stringResource(R.string.dismiss))
+                }
+            }
         )
     }
 
@@ -472,11 +501,38 @@ fun ApplicationList(
         listState.scrollToItem(0)
     }
 
-    // The app list is loaded off the main thread at startup; show a spinner until
-    // it arrives instead of a blank screen that looks frozen
-    if (!viewModel.applicationsLoaded && applications.isEmpty()) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+    // Global options runs in its own activity (windowShowWallpaper — the icon grid previews
+    // over the real wallpaper). Its result carries the session bookkeeping back: hand-edited
+    // keys and whether a Save persisted the profile.
+    val globalOptionsContext = LocalContext.current
+    val globalOptionsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val edited = result.data
+            ?.getStringArrayListExtra(GlobalOptionsActivity.EXTRA_EDITED_KEYS)
+            ?.toSet() ?: emptySet()
+        val applied = result.data
+            ?.getBooleanExtra(GlobalOptionsActivity.EXTRA_GLOBAL_APPLIED, false) ?: false
+        if (edited.isNotEmpty() || applied) viewModel.onGlobalOptionsClosed(edited, applied)
+    }
+
+    // Startup loads apps, then icon packs, then the profile's saved icons — all off the main
+    // thread. Hold the spinner until ALL of it is done: revealing the list earlier shows rows
+    // whose icons pop in seconds later, because the per-row bitmap decodes queue behind the
+    // pack/DB loading still running on the same worker pool.
+    if (!viewModel.startupComplete) {
+        if (viewModel.startupFailed) {
+            EmptyState(
+                icon = Icons.Filled.Warning,
+                text = stringResource(R.string.startupLoadFailed),
+                modifier = Modifier.fillMaxSize(),
+                actionLabel = stringResource(R.string.reload),
+                onAction = viewModel::retryStartup
+            )
+        } else {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+            }
         }
         return
     }
@@ -489,7 +545,7 @@ fun ApplicationList(
     ) {
         // Missing-pack banner rides above the hero card while anything stays locked.
         if (viewModel.missingPackSummary.isNotEmpty()) {
-            item(key = "missingPacks") {
+            item(key = "missingPacks", contentType = "missingPacks") {
                 MissingPacksBanner(
                     packCount = viewModel.missingPackSummary.size,
                     iconCount = viewModel.missingPackSummary.sumOf { it.iconCount },
@@ -498,15 +554,19 @@ fun ApplicationList(
             }
         }
         // Scrolls away with the list — only the search bar stays pinned
-        item(key = "hero") {
+        item(key = "hero", contentType = "hero") {
             HeroPackCard(iconPacks)
         }
-        item(key = "options") {
-            OptionsCard(iconPacks)
+        item(key = "options", contentType = "options") {
+            AdvancedOptionsCard(iconPacks) {
+                globalOptionsLauncher.launch(
+                    Intent(globalOptionsContext, GlobalOptionsActivity::class.java)
+                )
+            }
         }
         if (displayList.isEmpty()) {
             // A filter/search matched nothing — say so instead of leaving a blank gap.
-            item(key = "empty") {
+            item(key = "empty", contentType = "empty") {
                 // Offer the way out when an icon filter is what emptied the list.
                 val filtered = filterNoIcon || filterFallback || filterLocked
                 EmptyState(
@@ -520,7 +580,7 @@ fun ApplicationList(
                 )
             }
         } else {
-            items(displayList, key = { it.value.key }) { indexedApp ->
+            items(displayList, key = { it.value.key }, contentType = { "application" }) { indexedApp ->
                 ApplicationItem(iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue, Modifier.animateItem())
             }
         }
@@ -595,14 +655,19 @@ fun ApplicationItem(
             // Decoded once at the on-screen size (56.dp) by the shared helper, so scrolling
             // new rows in doesn't decode oversized bitmaps on the main thread (scroll jank).
             val bitmap = rememberAppBitmap(app, 56.dp)
-            if (bitmap != null) {
-                Image(
-                    painter = BitmapPainter(bitmap),
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(56.dp)
-                        .clip(IconShape)
-                )
+            Box(
+                modifier = Modifier
+                    .size(56.dp)
+                    .clip(IconShape)
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                if (bitmap != null) {
+                    Image(
+                        painter = BitmapPainter(bitmap),
+                        contentDescription = null,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
 
             Text(
@@ -742,34 +807,36 @@ fun OpenAppOptions(
 ) {
     val viewModel: MainViewModel = hiltViewModel()
 
-    AppOptions(iconPacks, app, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName ->
-        viewModel.applyIcon(app, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName)
+    OptionsDialog(iconPacks, app, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl ->
+        viewModel.applyIcon(app, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl)
         onDismiss()
     }, {
         onDismiss()
     }) {
         onDismiss()
-        viewModel.applyIcon(app, null)
+        viewModel.resetIcon(app)
     }
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 fun RefreshButton() {
-    val preferences = getPreferences().getPreferencesValue()
     val viewModel: MainViewModel = hiltViewModel()
-    val toaster = LocalToaster.current
-    val syncWarning = stringResource(id = R.string.syncText)
+    val isRefreshing = viewModel.isRefreshing
 
-    IconButton(onClick = {
-        if (!viewModel.refresh(preferences)) {
-            toaster.show(syncWarning)
+    IconButton(enabled = !isRefreshing, onClick = viewModel::refresh) {
+        if (isRefreshing) {
+            LoadingIndicator(
+                modifier = Modifier.size(24.dp),
+                color = MaterialTheme.colorScheme.primary
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.Refresh,
+                contentDescription = stringResource(R.string.refreshIcons),
+                tint = MaterialTheme.colorScheme.primary
+            )
         }
-    }) {
-        Icon(
-            imageVector = Icons.Filled.Refresh,
-            contentDescription = stringResource(R.string.refreshIcons),
-            tint = MaterialTheme.colorScheme.primary
-        )
     }
 }
 
@@ -885,25 +952,25 @@ fun SearchBar(
     }
 
     Surface(color = containerColor, modifier = Modifier.fillMaxWidth()) {
-    Row(modifier = Modifier
-        .fillMaxWidth()
-        .padding(start = 16.dp, end = 8.dp, bottom = 8.dp),
-        verticalAlignment = Alignment.CenterVertically) {
+        // The sort/filter menu lives INSIDE the field as its trailing control — beside the
+        // field it looked like a stray icon with no surface of its own.
         SearchField(
             value = text,
             onValueChange = {
                 text = it
                 onSearch(it)
             },
-            modifier = Modifier.weight(1f)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 16.dp, end = 16.dp, bottom = 8.dp),
+            extraTrailing = {
+                AppSortFilterMenu(
+                    sortOrder, filterNoIcon, filterFallback, onSortChange, onFilterChange, onFallbackFilterChange,
+                    filterLocked = filterLocked,
+                    showLockedFilter = showLockedFilter,
+                    onLockedFilterChange = onLockedFilterChange
+                )
+            }
         )
-        AppSortFilterMenu(
-            sortOrder, filterNoIcon, filterFallback, onSortChange, onFilterChange, onFallbackFilterChange,
-            filterLocked = filterLocked,
-            showLockedFilter = showLockedFilter,
-            onLockedFilterChange = onLockedFilterChange
-        )
-    }
     }
 }
-

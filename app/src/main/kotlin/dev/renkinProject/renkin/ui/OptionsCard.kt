@@ -1,11 +1,7 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package dev.renkinProject.renkin.ui
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,6 +20,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -42,13 +39,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
-import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.BackgroundColorKey
@@ -64,10 +58,6 @@ import dev.renkinProject.renkin.data.getBackgroundColor
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.IncludeVectorKey
 import dev.renkinProject.renkin.data.MonochromeKey
-import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
-import dev.renkinProject.renkin.data.OutlineAddKey
-import dev.renkinProject.renkin.data.OutlineColorKey
-import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.OverrideIconKey
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimaryImageEditKey
@@ -81,11 +71,7 @@ import dev.renkinProject.renkin.data.SecondarySourceKey
 import dev.renkinProject.renkin.data.SecondaryTextTypeKey
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
 import dev.renkinProject.renkin.data.getBooleanValue
-import dev.renkinProject.renkin.data.getColorValue
 import dev.renkinProject.renkin.data.getEnumValue
-import dev.renkinProject.renkin.data.getIntValue
-import dev.renkinProject.renkin.data.setIntValue
-import kotlin.math.roundToInt
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.setBooleanValue
@@ -93,96 +79,50 @@ import dev.renkinProject.renkin.data.setColorValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
-import dev.renkinProject.renkin.packages.PackageInfoStruct
 import kotlinx.coroutines.launch
 
+/**
+ * The home list's Advanced options card, back in its old place: the expandable generation
+ * options plus (for now, while the new screen is being evaluated) a test button that opens
+ * the fullscreen Global options screen — the same content is reachable from both.
+ */
 @Composable
-fun AppOptions(
-    iconPacks: List<IconPack>,
-    app: PackageInfoStruct,
-    themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?) -> Unit,
-    onDismiss: () -> Unit,
-    onIconClear: () -> Unit
-) {
-    OptionsDialog(iconPacks, app, themed, onConfirm, onDismiss, onIconClear)
-}
-
-@Composable
-fun OptionsCard(
-    iconPacks: List<IconPack>
-) {
-    val prefs = getPreferences()
-
+fun AdvancedOptionsCard(iconPacks: List<IconPack>, onOpenGlobal: () -> Unit) {
     var expanded by remember { mutableStateOf(false) }
-
-    var primarySource by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
-    var primaryImageEdit by rememberSaveable { mutableStateOf(IMAGE_EDIT_DEFAULT) }
-    var primaryTextType by rememberSaveable { mutableStateOf(TEXT_TYPE_DEFAULT) }
-    var primaryIconPack by rememberSaveable { mutableStateOf("") }
-    var secondarySource by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
-    var secondaryImageEdit by rememberSaveable { mutableStateOf(IMAGE_EDIT_DEFAULT) }
-    var secondaryTextType by rememberSaveable { mutableStateOf(TEXT_TYPE_DEFAULT) }
-    var secondaryIconPack by rememberSaveable { mutableStateOf("") }
-    var useVector by rememberSaveable { mutableStateOf(false) }
-    var useMonochrome by rememberSaveable { mutableStateOf(false) }
-    var useThemed by rememberSaveable { mutableStateOf(false) }
-    var retrieveCalendarIcons by rememberSaveable { mutableStateOf(false) }
-    var overrideIcon by rememberSaveable { mutableStateOf(false) }
-    var fallbackSource by rememberSaveable { mutableStateOf(FALLBACK_SOURCE_DEFAULT) }
-    var outlineAdd by rememberSaveable { mutableStateOf(false) }
-    var outlineWidth by rememberSaveable { mutableStateOf(OUTLINE_WIDTH_DEFAULT) }
-
-    val currentColor = prefs.getIconColor()
-    val currentBgColor = prefs.getBackgroundColor()
-    val currentOutlineColor = prefs.getColorValue(OutlineColorKey, androidx.compose.ui.graphics.Color.Black)
-
-    primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
-    primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
-    primaryTextType = prefs.getEnumValue(PrimaryTextTypeKey, TEXT_TYPE_DEFAULT)
-    primaryIconPack = prefs.getStringValue(PrimaryIconPackKey)
-    secondarySource = prefs.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT)
-    secondaryImageEdit = prefs.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT)
-    secondaryTextType = prefs.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT)
-    secondaryIconPack = prefs.getStringValue(SecondaryIconPackKey)
-    useVector = prefs.getBooleanValue(IncludeVectorKey)
-    useMonochrome = prefs.getBooleanValue(MonochromeKey)
-    useThemed = prefs.getBooleanValue(ExportThemedKey)
-    retrieveCalendarIcons = prefs.getBooleanValue(CalendarIconsKey)
-    overrideIcon = prefs.getBooleanValue(OverrideIconKey)
-    fallbackSource = prefs.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT)
-    outlineAdd = prefs.getBooleanValue(OutlineAddKey)
-    outlineWidth = prefs.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
-
-    val pathTracing = isPathTracingEnabled(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit)
-    val showIconColor = showIconColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
-    val showBgColor = showBackgroundColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
-
-    val scope = rememberCoroutineScope()
-
     Surface(
-        shape = CardShape,
+        shape = dev.renkinProject.renkin.ui.theme.CardShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp, 8.dp)
     ) {
-        // No inner scroll — the card lives inside the app list and scrolls with it
         Column {
-            Row(modifier = Modifier
-                .fillMaxWidth()
-                .clickable(role = Role.Button, onClick = { expanded = !expanded })
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = stringResource(id = R.string.advancedOptions),
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(
+                        role = androidx.compose.ui.semantics.Role.Button,
+                        onClick = { expanded = !expanded }
+                    )
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Leading glyph so the row reads as an interactive control, not a bare list
+                // entry — the only tappable element on home without one.
+                Icon(
+                    imageVector = Icons.Filled.Tune,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
                 )
-
-                val chevronRotation by animateFloatAsState(
+                Text(
+                    text = stringResource(R.string.advancedOptions),
+                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(start = 12.dp)
+                )
+                val chevronRotation by androidx.compose.animation.core.animateFloatAsState(
                     targetValue = if (expanded) 180f else 0f,
                     label = "optionsChevron"
                 )
@@ -193,14 +133,81 @@ fun OptionsCard(
                     modifier = Modifier.rotate(chevronRotation)
                 )
             }
+            androidx.compose.animation.AnimatedVisibility(visible = expanded) {
+                Column {
+                    // Trial entry point for the fullscreen Global options screen; sits above
+                    // the option controls so testers actually find it.
+                    androidx.compose.material3.OutlinedButton(
+                        onClick = onOpenGlobal,
+                        shape = FieldShape,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 4.dp)
+                    ) {
+                        Text(stringResource(R.string.globalScreenButton))
+                    }
+                    AdvancedOptionsContent(iconPacks)
+                }
+            }
+        }
+    }
+}
 
-            AnimatedVisibility(
-                visible = expanded,
-                enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()
-            ) {
-                Column(Modifier.padding(bottom = 12.dp)) {
+/**
+ * The refresh-wide generation options (sources, fallback, colours, switches), shared by the
+ * home card above and the Global options screen's panel. Every control writes straight to the
+ * profile's DataStore — only the global modifiers on that screen are staged behind Save.
+ * [showHint] shows the "takes effect after a refresh" note — true on the home card, false on
+ * the Global options screen where the live grid already answers that question.
+ */
+@Composable
+fun AdvancedOptionsContent(
+    iconPacks: List<IconPack>,
+    showHint: Boolean = true
+) {
+    val prefs = getPreferences()
+
+    var primarySource by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
+    var primaryImageEdit by rememberSaveable { mutableStateOf(IMAGE_EDIT_DEFAULT) }
+    var primaryTextType by rememberSaveable { mutableStateOf(TEXT_TYPE_DEFAULT) }
+    var primaryIconPack by rememberSaveable { mutableStateOf("") }
+    var secondarySource by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
+    var secondaryImageEdit by rememberSaveable { mutableStateOf(IMAGE_EDIT_DEFAULT) }
+    var secondaryTextType by rememberSaveable { mutableStateOf(TEXT_TYPE_DEFAULT) }
+    var secondaryIconPack by rememberSaveable { mutableStateOf("") }
+    var useVector by rememberSaveable { mutableStateOf(false) }
+    var useMaterialYou by rememberSaveable { mutableStateOf(false) }
+    var useThemed by rememberSaveable { mutableStateOf(false) }
+    var retrieveCalendarIcons by rememberSaveable { mutableStateOf(false) }
+    var overrideIcon by rememberSaveable { mutableStateOf(false) }
+    var fallbackSource by rememberSaveable { mutableStateOf(FALLBACK_SOURCE_DEFAULT) }
+    val currentColor = prefs.getIconColor()
+    val currentBgColor = prefs.getBackgroundColor()
+
+    primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
+    primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
+    primaryTextType = prefs.getEnumValue(PrimaryTextTypeKey, TEXT_TYPE_DEFAULT)
+    primaryIconPack = prefs.getStringValue(PrimaryIconPackKey)
+    secondarySource = prefs.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT)
+    secondaryImageEdit = prefs.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT)
+    secondaryTextType = prefs.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT)
+    secondaryIconPack = prefs.getStringValue(SecondaryIconPackKey)
+    useVector = prefs.getBooleanValue(IncludeVectorKey)
+    useMaterialYou = prefs.getBooleanValue(MonochromeKey)
+    useThemed = prefs.getBooleanValue(ExportThemedKey)
+    retrieveCalendarIcons = prefs.getBooleanValue(CalendarIconsKey)
+    overrideIcon = prefs.getBooleanValue(OverrideIconKey)
+    fallbackSource = prefs.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT)
+
+    val pathTracing = isPathTracingEnabled(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit)
+    val showIconColor = showIconColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
+    val showBgColor = showBackgroundColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
+
+    val scope = rememberCoroutineScope()
+
+    Column(Modifier.padding(bottom = 12.dp)) {
                 // Users otherwise don't know these settings only take effect after a refresh
+                if (showHint) {
                 Surface(
                     shape = FieldShape,
                     color = MaterialTheme.colorScheme.secondaryContainer,
@@ -226,9 +233,16 @@ fun OptionsCard(
                         )
                     }
                 }
+                }
 
                 // The primary source/pack itself is picked in the hero card on the home screen;
                 // only its tweaks (image modifier, text type) live here.
+                val hasSourceControls = needImageEdit(primarySource) || needTextType(primarySource) ||
+                    needTextType(secondarySource) || needSecondarySource(primarySource) ||
+                    isIconPackSelected(primarySource, primaryIconPack)
+                if (hasSourceControls) {
+                    OptionsSectionLabel(R.string.advancedSectionSource)
+                }
                 if (needImageEdit(primarySource)) {
                     ImageEditDropdown(R.string.primaryImageEdit, primaryImageEdit) { scope.launch { prefs.setEnumValue(
                         PrimaryImageEditKey, it) } }
@@ -298,6 +312,9 @@ fun OptionsCard(
                     }
                 }
 
+                if (showIconColor || showBgColor) {
+                    OptionsSectionLabel(R.string.advancedSectionColors)
+                }
                 if (showIconColor) {
                     ColorButton(stringResource(R.string.iconColor), currentColor) { scope.launch { prefs.setColorValue(
                         IconColorKey, it) } }
@@ -307,47 +324,29 @@ fun OptionsCard(
                         BackgroundColorKey, it) } }
                 }
 
+                OptionsSectionLabel(R.string.advancedSectionBehavior)
                 OverrideIconSwitch(overrideIcon) { scope.launch { prefs.setBooleanValue(
                     OverrideIconKey, it) } }
 
                 if (pathTracing) {
                     VectorSwitch(useVector) { scope.launch { prefs.setBooleanValue(IncludeVectorKey, it) } }
-                    MonochromeSwitch(useMonochrome) { scope.launch { prefs.setBooleanValue(
+                    MaterialYouSwitch(useMaterialYou) { scope.launch { prefs.setBooleanValue(
                         MonochromeKey, it) } }
                 }
 
                 ThemedIconsSwitch(useThemed) { scope.launch { prefs.setBooleanValue(ExportThemedKey, it) } }
-
-                // Pack-wide outline (Add only): a contour around every generated icon.
-                // Recolor needs the individual icon's artwork, so it stays per app.
-                OutlineAddSwitch(outlineAdd) { scope.launch { prefs.setBooleanValue(OutlineAddKey, it) } }
-                AnimatedVisibility(visible = outlineAdd) {
-                    Column {
-                        Column(Modifier.padding(horizontal = 16.dp)) {
-                            // Local echo while dragging; DataStore only sees the released value.
-                            var dragWidth by remember { mutableStateOf<Float?>(null) }
-                            val shownWidth = dragWidth ?: outlineWidth.toFloat()
-                            LabeledSlider(
-                                label = stringResource(R.string.outlineThickness),
-                                value = shownWidth,
-                                onValueChange = { dragWidth = it },
-                                valueRange = 1f..16f,
-                                valueLabel = "${shownWidth.roundToInt()} px",
-                                onValueChangeFinished = {
-                                    val released = dragWidth?.roundToInt()
-                                    dragWidth = null
-                                    if (released != null) scope.launch { prefs.setIntValue(OutlineWidthKey, released) }
-                                }
-                            )
-                        }
-                        ColorButton(stringResource(R.string.outlineColor), currentOutlineColor) { scope.launch { prefs.setColorValue(
-                            OutlineColorKey, it) } }
-                    }
-                }
-                }
-            }
-        }
     }
+}
+
+/** Small section label splitting the advanced options into readable groups. */
+@Composable
+private fun OptionsSectionLabel(@androidx.annotation.StringRes id: Int) {
+    Text(
+        text = stringResource(id),
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(start = 20.dp, top = 10.dp, bottom = 2.dp)
+    )
 }
 
 /**

@@ -22,8 +22,7 @@ data class WatchRule(
     val createdAt: Long = System.currentTimeMillis(),
     val completedAt: Long? = null,
     // Which profile owns this rule: the UI lists only the active profile's rules, while the
-    // checker runs every profile's. Baselines (watch_state) stay shared — a pack's icon for
-    // an app is a fact about the pack, not about any profile.
+    // checker runs every profile's.
     @androidx.room.ColumnInfo(defaultValue = "1") val profileId: Long = 1
 )
 
@@ -40,9 +39,10 @@ data class WatchRulePack(
     val iconPackPackage: String
 )
 
-/** Baseline fingerprint per (app, pack) so a check can tell what actually changed. */
-@Entity(tableName = "watch_state", primaryKeys = ["packageName", "activityName", "iconPackPackage"])
+/** Baseline fingerprint per (rule, app, pack) so overlapping rules advance independently. */
+@Entity(tableName = "watch_state", primaryKeys = ["ruleId", "packageName", "activityName", "iconPackPackage"])
 data class WatchState(
+    val ruleId: Long,
     val packageName: String,
     val activityName: String,
     val iconPackPackage: String,

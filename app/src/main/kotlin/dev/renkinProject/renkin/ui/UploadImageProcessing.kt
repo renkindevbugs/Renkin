@@ -5,16 +5,15 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.graphics.Paint
-import android.graphics.RectF
 import android.net.Uri
 import dev.renkinProject.renkin.extension.newArgbBitmap
-import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color.Companion.Red
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.toArgb
-import com.caverock.androidsvg.SVG
-import com.caverock.androidsvg.SVGParseException
+import dev.renkinProject.renkin.vector.SvgRasterizer
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import kotlin.math.max
 
 // Bitmap/SVG helpers shared by UploadColumn (UploadGallery.kt). internal so the upload
@@ -23,6 +22,7 @@ import kotlin.math.max
 // Imported images end up as icons, so anything bigger than this per side is wasted RAM — a 48 MP
 // camera photo would otherwise materialise as a ~190 MB ARGB_8888 bitmap and risk an OOM.
 private const val MAX_IMPORT_SIZE = 1024
+internal const val MAX_TEXT_IMPORT_BYTES = 5 * 1024 * 1024
 
 internal fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
     val contentResolver = context.contentResolver
@@ -45,7 +45,7 @@ internal fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
         // Not a raster image — try SVG. Reading as text is cheap here: this branch is only
         // reached when the raster decode already failed, and real SVGs are small.
         val markup = runCatching {
-            contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+            contentResolver.openInputStream(uri)?.use { it.readUtf8TextLimited() }
         }.getOrNull()
         if (markup != null && markup.contains("<svg", ignoreCase = true)) {
             bitmap = decodeSvgToBitmap(markup)
@@ -55,39 +55,32 @@ internal fun getBitmapFromURI(context: Context, uri: Uri): Bitmap? {
     return bitmap ?: null
 }
 
+/** Reads text imports without allowing a malformed/renamed file to consume unbounded memory. */
+internal fun InputStream.readUtf8TextLimited(
+    maxBytes: Int = MAX_TEXT_IMPORT_BYTES
+): String? {
+    if (maxBytes < 0) return null
+    val output = ByteArrayOutputStream(minOf(maxBytes, 16 * 1024))
+    val buffer = ByteArray(8 * 1024)
+    var total = 0
+    while (true) {
+        val read = read(buffer)
+        if (read < 0) break
+        total += read
+        if (total > maxBytes) return null
+        output.write(buffer, 0, read)
+    }
+    return output.toString(Charsets.UTF_8.name())
+}
+
 /**
- * Renders SVG markup to a bitmap at the full import size. An SVG's document size is a hint,
- * not pixels — so the scale goes BOTH ways: a 24x24 icon document (heroicons etc.) rendered
- * 1:1 and enlarged later is exactly the blur vectors exist to avoid. A render that painted
- * nothing at all reports failure (error toast) instead of leaving a blank tile in the gallery.
+ * Renders SVG markup to a bitmap at the full import size (scaling in SvgRasterizer). A render
+ * that painted nothing at all reports failure (error toast) instead of leaving a blank tile
+ * in the gallery.
  */
 internal fun decodeSvgToBitmap(markup: String): Bitmap? {
-    val svg = decodeSvg(markup) ?: return null
-    val (width, height) = svgRenderSize(svg) ?: return null
-    val bitmap = newArgbBitmap(width, height) {
-        svg.renderToCanvas(it, RectF(0f, 0f, width.toFloat(), height.toFloat()))
-    }
+    val bitmap = SvgRasterizer.rasterize(markup, MAX_IMPORT_SIZE) ?: return null
     return if (bitmap.hasAnyVisiblePixel()) bitmap else null
-}
-
-/** Parses SVG markup, resolving `currentColor` to black up front — icon sets use it
- * throughout, and unresolved it draws nothing (a blank import). */
-internal fun decodeSvg(markup: String): SVG? = try {
-    SVG.getFromString(markup.replace("currentColor", "#000000"))
-} catch (_: SVGParseException) {
-    null
-}
-
-/** Raster size for [svg]: the longest side always lands on MAX_IMPORT_SIZE (up or down);
- * documents without width/height fall back to their viewBox. */
-internal fun svgRenderSize(svg: SVG): Pair<Int, Int>? {
-    val docWidth = if (svg.documentWidth > 0) svg.documentWidth else svg.documentViewBox?.width() ?: 0f
-    val docHeight = if (svg.documentHeight > 0) svg.documentHeight else svg.documentViewBox?.height() ?: 0f
-    if (docWidth <= 0 || docHeight <= 0) return null
-    val scale = MAX_IMPORT_SIZE / max(docWidth, docHeight)
-    val width = (docWidth * scale).toInt().coerceAtLeast(1)
-    val height = (docHeight * scale).toInt().coerceAtLeast(1)
-    return width to height
 }
 
 private fun Bitmap.hasAnyVisiblePixel(): Boolean {
@@ -100,7 +93,6 @@ private fun Bitmap.hasAnyVisiblePixel(): Boolean {
     return false
 }
 
-@Composable
 internal fun zoomBitmap(image: Bitmap, zoomLevel: Float): Bitmap {
     if (zoomLevel == 1f) {
         return image
@@ -113,7 +105,8 @@ internal fun zoomBitmap(image: Bitmap, zoomLevel: Float): Bitmap {
     mtx.postScale(zoomLevel, zoomLevel)
     mtx.postTranslate(x, y)
 
-    return newArgbBitmap(image.width, image.height) { it.drawBitmap(image, mtx, Paint()) }
+    // FILTER_BITMAP: a bare Paint samples nearest-neighbour when scaling on some canvases.
+    return newArgbBitmap(image.width, image.height) { it.drawBitmap(image, mtx, Paint(Paint.FILTER_BITMAP_FLAG)) }
 }
 
 internal fun squareBitmap(image: Bitmap): Bitmap {

@@ -6,6 +6,7 @@ import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
@@ -59,7 +60,27 @@ data class DbApplication(
     // Drawable name inside sourcePackName, written only by profile/backup import for icons
     // shared as references (no image data). A row with an empty [drawable] and a non-empty
     // [sourcePackName] is such a reference: the icon is rebuilt from the installed pack.
-    @ColumnInfo(defaultValue = "") val sourceDrawableName: String = ""
+    @ColumnInfo(defaultValue = "") val sourceDrawableName: String = "",
+    // True when the icon was hand-picked/edited by the user (per-app dialog, upload, vector,
+    // watch-apply) rather than produced by a bulk refresh. Together with the in-memory refresh
+    // marker, splits global options into generated, existing and custom icons.
+    @ColumnInfo(defaultValue = "0") val isCustomIcon: Boolean = false,
+    // Records that the generated-vs-custom origin predates reliable classification.
+    @ColumnInfo(defaultValue = "0") val isLegacyIcon: Boolean = false,
+    // Non-destructive source for re-rendering global modifiers. drawable remains the rendered
+    // compatibility/export payload, so older importers still receive the visible result.
+    @ColumnInfo(defaultValue = "") val baseDrawable: String = "",
+    @ColumnInfo(defaultValue = "0") val baseIsAdaptiveIcon: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val baseIsXml: Boolean = false,
+    // Attribution reference for icons picked from an online FOSS library: the source file's
+    // public URL (GitHub via jsDelivr). Purely informational — the drawable itself is stored;
+    // this only records where it was taken from. Never fed into the pack-verdict/lock logic.
+    @ColumnInfo(defaultValue = "") val sourceUrl: String = "",
+    // True when the bulk refresh could not find this app in the source pack and generated the
+    // icon with the pack's fallback styling. Persisted so the home card's fallback count and
+    // the Fallback list filter survive profile switches and restarts (the flag can't be
+    // re-derived from the stored bitmap).
+    @ColumnInfo(defaultValue = "0") val isFallbackIcon: Boolean = false
 )
 
 /**
@@ -143,6 +164,9 @@ interface ProfileDao {
     @Insert
     fun insert(profile: Profile): Long
 
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    fun insertIfMissing(profile: Profile): Long
+
     @Update
     fun update(profile: Profile)
 
@@ -159,9 +183,16 @@ interface ProfileDao {
 // Version 9 adds Profile.hasUnbuiltChanges (saved-but-not-built marker).
 // Version 10 adds the PackVerdict table (paid-pack locks), DbApplication.sourceDrawableName
 // (imported icon references) and Profile.hideMissingPackWarning.
+// Version 11 adds DbApplication.isCustomIcon (hand-picked vs refresh-generated).
+// Version 12 adds isLegacyIcon plus an immutable base drawable for non-destructive global
+// rendering. Non-custom v11 rows are marked legacy because false may have been guessed during
+// 10→11; true was only ever written by an explicit user edit.
+// Version 13 adds DbApplication.sourceUrl (attribution reference for online-library icons).
+// Version 14 adds DbApplication.isFallbackIcon (fallback-styled refresh output) so the
+// fallback count/filter survive restarts.
 @Database(
     entities = [DbApplication::class, Profile::class, PackVerdict::class],
-    version = 10
+    version = 14
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -172,38 +203,38 @@ abstract class RenkinPackDatabase : RoomDatabase() {
         @Volatile
         private var instance: RenkinPackDatabase? = null
 
-        private val MIGRATION_1_2 = object : Migration(1, 2) {
+        internal val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE DbApplication ADD COLUMN calendarEnabled INTEGER NOT NULL DEFAULT 0")
             }
         }
 
-        private val MIGRATION_2_3 = object : Migration(2, 3) {
+        internal val MIGRATION_2_3 = object : Migration(2, 3) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE DbApplication ADD COLUMN calendarPrefix TEXT NOT NULL DEFAULT ''")
             }
         }
 
-        private val MIGRATION_3_4 = object : Migration(3, 4) {
+        internal val MIGRATION_3_4 = object : Migration(3, 4) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE DbApplication ADD COLUMN calendarPackName TEXT NOT NULL DEFAULT ''")
             }
         }
 
-        private val MIGRATION_4_5 = object : Migration(4, 5) {
+        internal val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE DbApplication ADD COLUMN sourcePackName TEXT NOT NULL DEFAULT ''")
             }
         }
 
         // 5 and 7 are schema-identical (see the @Database note), so this is a version-stamp bump.
-        private val MIGRATION_5_7 = object : Migration(5, 7) {
+        internal val MIGRATION_5_7 = object : Migration(5, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {}
         }
 
         // 6 was a development-only schema with an extra isCustomIcon column; rebuild the table
         // without it (SQLite can't reliably drop columns on older APIs).
-        private val MIGRATION_6_7 = object : Migration(6, 7) {
+        internal val MIGRATION_6_7 = object : Migration(6, 7) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `DbApplication_new` (`packageName` TEXT NOT NULL, " +
@@ -227,7 +258,7 @@ abstract class RenkinPackDatabase : RoomDatabase() {
 
         // Profiles: the Profile table (with the default row) and profileId on DbApplication,
         // which joins the primary key (table rebuild — SQLite can't alter a PK in place).
-        private val MIGRATION_7_8 = object : Migration(7, 8) {
+        internal val MIGRATION_7_8 = object : Migration(7, 8) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL(
                     "CREATE TABLE IF NOT EXISTS `Profile` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
@@ -256,13 +287,13 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
-        private val MIGRATION_8_9 = object : Migration(8, 9) {
+        internal val MIGRATION_8_9 = object : Migration(8, 9) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE Profile ADD COLUMN hasUnbuiltChanges INTEGER NOT NULL DEFAULT 0")
             }
         }
 
-        private val MIGRATION_9_10 = object : Migration(9, 10) {
+        internal val MIGRATION_9_10 = object : Migration(9, 10) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE DbApplication ADD COLUMN sourceDrawableName TEXT NOT NULL DEFAULT ''")
                 db.execSQL("ALTER TABLE Profile ADD COLUMN hideMissingPackWarning INTEGER NOT NULL DEFAULT 0")
@@ -275,24 +306,87 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
-        // The default profile row must exist even on a fresh database (migrations don't run there).
-        private val seedDefaultProfile = object : Callback() {
+        internal val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN isCustomIcon INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        internal val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN isLegacyIcon INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN baseDrawable TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN baseIsAdaptiveIcon INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN baseIsXml INTEGER NOT NULL DEFAULT 0")
+                db.execSQL(
+                    "UPDATE DbApplication SET baseDrawable = drawable, " +
+                        "baseIsAdaptiveIcon = isAdaptiveIcon, baseIsXml = isXml"
+                )
+                db.execSQL("UPDATE DbApplication SET isLegacyIcon = 1 WHERE isCustomIcon = 0")
+            }
+        }
+
+        internal val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN sourceUrl TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
+        internal val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN isFallbackIcon INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        internal val ALL_MIGRATIONS = arrayOf(
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5,
+            MIGRATION_5_7,
+            MIGRATION_6_7,
+            MIGRATION_7_8,
+            MIGRATION_8_9,
+            MIGRATION_9_10,
+            MIGRATION_10_11,
+            MIGRATION_11_12,
+            MIGRATION_12_13,
+            MIGRATION_13_14
+        )
+
+        private fun insertDefaultProfile(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "INSERT OR IGNORE INTO `Profile` (`id`, `name`, `packLabel`) " +
+                    "VALUES (1, 'Renkin', 'Renkin Pack')"
+            )
+        }
+
+        // The default profile is a database invariant. Repair it on open as well as on create:
+        // an interrupted import or a damaged row must not strand the default profile's icons.
+        private val ensureDefaultProfile = object : Callback() {
             override fun onCreate(db: SupportSQLiteDatabase) {
-                db.execSQL("INSERT INTO `Profile` (`id`, `name`, `packLabel`) VALUES (1, 'Renkin', 'Renkin Pack')")
+                insertDefaultProfile(db)
+            }
+
+            override fun onOpen(db: SupportSQLiteDatabase) {
+                insertDefaultProfile(db)
             }
         }
 
         // Fresh physical file name: the app id changed to dev.renkinProject.renkin, so there
         // are no existing installs whose data a rename could strand.
+        internal fun open(context: Context, name: String): RenkinPackDatabase =
+            Room.databaseBuilder(
+                context.applicationContext,
+                RenkinPackDatabase::class.java,
+                name
+            ).addMigrations(*ALL_MIGRATIONS)
+                .addCallback(ensureDefaultProfile)
+                .build()
+
         fun get(context: Context): RenkinPackDatabase {
             return instance ?: synchronized(this) {
-                instance ?: Room.databaseBuilder(
-                    context.applicationContext,
-                    RenkinPackDatabase::class.java,
-                    "renkinPack"
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_7, MIGRATION_6_7, MIGRATION_7_8, MIGRATION_8_9, MIGRATION_9_10)
-                    .addCallback(seedDefaultProfile)
-                    .build().also { instance = it }
+                instance ?: open(context, "renkinPack").also { instance = it }
             }
         }
     }

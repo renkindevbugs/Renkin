@@ -1,0 +1,6 @@
+• Global icon modifiers with live wallpaper previews and separate controls for generated, existing, custom and missing icons.
+• Online icons from the Iconify catalogue, with search, filters, SVG import and image fallback for complex artwork.
+• New Material You, monochrome and inverse-colour icon options.
+• Better layouts for tablets, foldables and landscape screens.
+• Faster startup, smoother icon lists and refreshed Material 3 Expressive UI.
+• Fix bugs.

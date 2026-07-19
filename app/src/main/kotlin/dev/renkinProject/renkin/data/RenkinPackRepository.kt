@@ -93,6 +93,14 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
 
     suspend fun profile(id: Long): Profile? = withContext(Dispatchers.Default) { profileDao.get(id) }
 
+    /** Restores the undeletable default row without touching its icons or an existing profile. */
+    suspend fun ensureDefaultProfile(): Profile = withContext(Dispatchers.Default) {
+        profileDao.insertIfMissing(
+            Profile(id = DEFAULT_PROFILE_ID, name = "Renkin", packLabel = "Renkin Pack")
+        )
+        checkNotNull(profileDao.get(DEFAULT_PROFILE_ID))
+    }
+
     suspend fun createProfile(profile: Profile): Long = withContext(Dispatchers.Default) {
         profileDao.insert(profile)
     }

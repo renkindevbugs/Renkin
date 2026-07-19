@@ -1,3 +1,4 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package dev.renkinProject.renkin.ui
 
 import android.content.Context
@@ -21,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
@@ -49,6 +51,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -179,7 +182,10 @@ fun SearchField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    placeholder: String? = null
+    placeholder: String? = null,
+    // Extra control(s) rendered inside the field after the clear button — e.g. the home
+    // list's sort/filter menu, so it belongs to the field instead of floating beside it.
+    extraTrailing: (@Composable () -> Unit)? = null
 ) {
     val focusManager = LocalFocusManager.current
     OutlinedTextField(
@@ -196,14 +202,17 @@ fun SearchField(
             Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
         },
         trailingIcon = {
-            if (value.isNotEmpty()) {
-                IconButton(onClick = { onValueChange("") }) {
-                    Icon(
-                        Icons.Filled.Close,
-                        stringResource(R.string.clear),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (value.isNotEmpty()) {
+                    IconButton(onClick = { onValueChange("") }) {
+                        Icon(
+                            Icons.Filled.Close,
+                            stringResource(R.string.clear),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
+                extraTrailing?.invoke()
             }
         },
         modifier = modifier
@@ -231,7 +240,10 @@ fun RenkinAlertDialog(
         modifier = modifier,
         dismissButton = dismissButton,
         icon = icon,
-        title = title,
+        // Expressive emphasized titles across every Renkin dialog, in one place.
+        title = title?.let {
+            { ProvideTextStyle(MaterialTheme.typography.headlineSmallEmphasized) { it() } }
+        },
         text = text,
         shape = DialogShape,
         containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,

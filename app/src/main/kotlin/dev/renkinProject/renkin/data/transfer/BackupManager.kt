@@ -22,6 +22,7 @@ import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.snapshotProfilePrefs
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dev.renkinProject.renkin.data.watch.WatchRepository
@@ -29,7 +30,6 @@ import dev.renkinProject.renkin.data.watch.WatchRuleImport
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.packages.ApplicationManager
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.io.File
@@ -90,7 +90,7 @@ class BackupManager(
     suspend fun exportBackup(open: () -> OutputStream) = withContext(Dispatchers.IO) {
         // Fold the live generation prefs into the active profile's snapshot first (the same
         // capture a profile switch does), so the exported profile rows are self-consistent.
-        val prefs = context.dataStore.data.first()
+        val prefs = context.dataStore.getPreferencesAfterPendingWrites()
         val activeId = prefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         packRepo.profile(activeId)?.let {
             packRepo.updateProfile(it.copy(prefsSnapshot = prefs.snapshotProfilePrefs()))
@@ -98,7 +98,11 @@ class BackupManager(
 
         val allIcons = packRepo.getAllProfilesApplications()
         val iconsByProfile = allIcons.groupBy { it.profileId }
-        val rulesByProfile = watchRepo.getAllRules().groupBy { it.rule.profileId }
+        // Completed watch entries depend on transient suggestions that cannot be restored.
+        // Keep them out of new archives; the repository also rejects them from older files.
+        val rulesByProfile = watchRepo.getAllRules()
+            .filterNot { it.rule.completed }
+            .groupBy { it.rule.profileId }
         val data = BackupData(
             profiles = packRepo.profiles().map { profile ->
                 BackupProfile(
@@ -140,7 +144,7 @@ class BackupManager(
      * No uploads or keystore travel with a share.
      */
     suspend fun exportProfile(profileId: Long, open: () -> OutputStream) = withContext(Dispatchers.IO) {
-        val prefs = context.dataStore.data.first()
+        val prefs = context.dataStore.getPreferencesAfterPendingWrites()
         val activeId = prefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         if (profileId == activeId) {
             packRepo.profile(profileId)?.let {
@@ -150,7 +154,7 @@ class BackupManager(
         val profile = packRepo.profile(profileId) ?: throw IOException("Profile $profileId does not exist")
         val icons = packRepo.getAll(profileId)
         val rules = watchRepo.getAllRules()
-            .filter { it.rule.profileId == profileId }
+            .filter { it.rule.profileId == profileId && !it.rule.completed }
             .map { it.toBackupRule() }
 
         val sourcePacks = icons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet()

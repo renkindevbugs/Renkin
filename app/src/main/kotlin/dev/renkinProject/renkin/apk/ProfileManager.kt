@@ -5,11 +5,22 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
+import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
+import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
+import dev.renkinProject.renkin.data.PrimaryIconPackKey
+import dev.renkinProject.renkin.data.PrimarySourceKey
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.SOURCE_DEFAULT
+import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.restoreProfilePrefs
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
+import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.data.persistBuiltPrimaryPrefs
 import dev.renkinProject.renkin.data.snapshotProfilePrefs
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.dataStore
@@ -21,17 +32,21 @@ import kotlinx.coroutines.flow.first
  * per-profile pack package name. Swapping the in-memory icon set on a switch stays in
  * [ApplicationProvider] — it owns the app list; this class flips the persistent state.
  */
-class ProfileManager(
+class ProfileManager internal constructor(
     private val context: Context,
-    private val packRepo: RenkinPackRepository
+    private val packRepo: RenkinPackRepository,
+    private val store: DataStore<Preferences>
 ) {
+    constructor(context: Context, packRepo: RenkinPackRepository) :
+        this(context, packRepo, context.dataStore)
+
     /** The profile whose icons/preferences are active. Set before the saved pack loads. */
     var activeProfileId: Long by mutableStateOf(DEFAULT_PROFILE_ID)
         private set
 
     /** Reads the persisted active id at startup (before the saved pack loads). */
     suspend fun initActiveId() {
-        activeProfileId = context.dataStore.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
+        reloadActiveId()
     }
 
     fun profilesFlow() = packRepo.profilesFlow()
@@ -69,11 +84,35 @@ class ProfileManager(
         WatchRepository(context).deleteRulesForProfile(id)
     }
 
-    /** Records whether the active profile's save is still waiting for a build. */
-    suspend fun markActiveUnbuilt(unbuilt: Boolean) {
-        packRepo.profile(activeProfileId)?.let {
+    /** Records whether [profileId]'s save is still waiting for a build. */
+    suspend fun markUnbuilt(profileId: Long, unbuilt: Boolean) {
+        packRepo.profile(profileId)?.let {
             packRepo.updateProfile(it.copy(hasUnbuiltChanges = unbuilt))
         }
+    }
+
+    /**
+     * Records the source a successful build used in the profile that owned that build. An
+     * inactive profile lives in its Room snapshot; writing the shared DataStore there would
+     * otherwise leak the result into whichever profile the user switched to during install.
+     */
+    suspend fun recordBuiltPrimary(profileId: Long, source: Preferences) {
+        if (profileId == activeProfileId) {
+            store.persistBuiltPrimaryPrefs(source)
+            return
+        }
+        val profile = packRepo.profile(profileId) ?: return
+        val snapshot = runCatching { org.json.JSONObject(profile.prefsSnapshot) }
+            .getOrDefault(org.json.JSONObject())
+        snapshot.put(
+            BuiltPrimarySourceKey.name,
+            source.getIntValue(PrimarySourceKey, SOURCE_DEFAULT.ordinal)
+        )
+        snapshot.put(
+            BuiltPrimaryIconPackKey.name,
+            source.getStringValue(PrimaryIconPackKey)
+        )
+        packRepo.updateProfile(profile.copy(prefsSnapshot = snapshot.toString()))
     }
 
     /** Persists the active profile's "don't show the missing-packs dialog again" choice. */
@@ -92,10 +131,10 @@ class ProfileManager(
     suspend fun switchTo(newProfileId: Long): Boolean {
         if (newProfileId == activeProfileId) return false
         val target = packRepo.profile(newProfileId) ?: return false
-        val store = context.dataStore
-
         packRepo.profile(activeProfileId)?.let { leaving ->
-            packRepo.updateProfile(leaving.copy(prefsSnapshot = store.data.first().snapshotProfilePrefs()))
+            packRepo.updateProfile(
+                leaving.copy(prefsSnapshot = store.getPreferencesAfterPendingWrites().snapshotProfilePrefs())
+            )
         }
         store.restoreProfilePrefs(target.prefsSnapshot)
         store.edit { it[ActiveProfileIdKey] = newProfileId }
@@ -109,10 +148,11 @@ class ProfileManager(
      * default defensively anyway.
      */
     suspend fun reloadActiveId() {
-        val storedId = context.dataStore.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
+        packRepo.ensureDefaultProfile()
+        val storedId = store.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         activeProfileId = if (packRepo.profile(storedId) != null) storedId else DEFAULT_PROFILE_ID
         if (activeProfileId != storedId) {
-            context.dataStore.edit { it[ActiveProfileIdKey] = activeProfileId }
+            store.edit { it[ActiveProfileIdKey] = activeProfileId }
         }
     }
 }

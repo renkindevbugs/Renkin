@@ -39,4 +39,23 @@ class ColorDecoderTest {
     fun unknownNotationFallsBackToDefault() {
         assertEquals(Color.Blue, ColorDecoder.decode(resources, "not-a-colour", Color.Blue))
     }
+
+    @Test
+    fun svgCssRgbUsesByteChannelsAndPercentAlpha() {
+        assertEquals(
+            Color(128f / 255f, 64f / 255f, 0f),
+            ColorDecoder.decodeSvgCss("rgb(128, 64, 0)")
+        )
+        assertEquals(
+            Color(1f, 0f, 0f, 0.5f),
+            ColorDecoder.decodeSvgCss("rgba(100%, 0%, 0%, 50%)")
+        )
+    }
+
+    @Test
+    fun svgCssHexKeepsTrailingAlphaAndNamedColours() {
+        assertEquals(Color(1f, 0f, 0f, 128f / 255f), ColorDecoder.decodeSvgCss("#ff000080"))
+        assertEquals(Color(0f, 1f, 0f, 0x88 / 255f), ColorDecoder.decodeSvgCss("#0f08"))
+        assertEquals(Color.Red, ColorDecoder.decodeSvgCss("red"))
+    }
 }

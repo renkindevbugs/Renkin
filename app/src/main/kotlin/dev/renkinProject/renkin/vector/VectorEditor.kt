@@ -20,6 +20,8 @@ import dev.renkinProject.renkin.vector.brush.SolidColorShader
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.round
+import kotlin.math.sqrt
+import kotlin.math.abs
 
 class VectorEditor internal constructor(private val mutableVector: ImageVectorDrawable) {
     private fun resizeTo(width: Float, height: Float): ImageVectorDrawable {
@@ -221,10 +223,59 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
     }
 
     private fun applyGroup(group: MutableVectorGroup, path: MutableVectorPath) {
-        translatePath(path, group.translationX, group.translationY)
-        rotatePath(path, group.rotation, group.pivotX, group.pivotY)
+        // Vector group geometry scales/rotates around its pivot, then translates on the canvas.
         scalePath(path, group.scaleX, group.scaleY, group.pivotX, group.pivotY)
+        rotatePath(path, group.rotation, group.pivotX, group.pivotY)
+        translatePath(path, group.translationX, group.translationY)
+        path.strokeLineWidth *= strokeScale(group.scaleX, group.scaleY)
     }
+
+    /** Position first, then scale — the same order as the established bitmap modifier path. */
+    private fun applyModifierTransform(scale: Float, offsetX: Float, offsetY: Float): ImageVectorDrawable {
+        applyAndRemoveGroup()
+        translateGroup(
+            mutableVector.root,
+            offsetX * mutableVector.viewportWidth,
+            offsetY * mutableVector.viewportHeight
+        )
+        if (scale != 1f) {
+            scaleGroup(
+                mutableVector.root,
+                scale,
+                scale,
+                mutableVector.viewportWidth / 2f,
+                mutableVector.viewportHeight / 2f
+            )
+            scaleStrokeWidths(mutableVector.root, scale, scale)
+        }
+        return mutableVector
+    }
+
+    /** Applies an inset as x'=left+scale*x, y'=top+scale*y while keeping paths editable. */
+    private fun applyViewportInset(left: Float, top: Float, scaleX: Float, scaleY: Float): ImageVectorDrawable {
+        applyAndRemoveGroup()
+        scaleGroup(mutableVector.root, scaleX, scaleY, 0f, 0f)
+        scaleStrokeWidths(mutableVector.root, scaleX, scaleY)
+        translateGroup(
+            mutableVector.root,
+            left * mutableVector.viewportWidth,
+            top * mutableVector.viewportHeight
+        )
+        return mutableVector
+    }
+
+    private fun scaleStrokeWidths(group: MutableVectorGroup, scaleX: Float, scaleY: Float) {
+        val factor = strokeScale(scaleX, scaleY)
+        for (child in group.children) {
+            when (child) {
+                is MutableVectorGroup -> scaleStrokeWidths(child, scaleX, scaleY)
+                is MutableVectorPath -> child.strokeLineWidth *= factor
+            }
+        }
+    }
+
+    private fun strokeScale(scaleX: Float, scaleY: Float): Float =
+        sqrt(abs(scaleX * scaleY))
 
     private fun center(): ImageVectorDrawable {
         val bounds = getBounds()
@@ -273,8 +324,11 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
     }
 
     private fun inset(rect: Rect) {
-        val scaleX = (rect.left + rect.right) / mutableVector.viewportWidth
-        val scaleY = (rect.top + rect.bottom) / mutableVector.viewportHeight
+        // Insets are margins, so the remaining content is 1 - start - end. The previous
+        // start + end formula made a 16.7% Lawnicons inset render at 33% in Compose while
+        // Android's InsetDrawable raster used 67%, causing a large jump when modifiers ran.
+        val scaleX = (1f - (rect.left + rect.right) / mutableVector.viewportWidth).coerceAtLeast(0f)
+        val scaleY = (1f - (rect.top + rect.bottom) / mutableVector.viewportHeight).coerceAtLeast(0f)
 
         val pivotX = mutableVector.viewportWidth / 2
         val pivotY = mutableVector.viewportHeight / 2
@@ -311,6 +365,25 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
         fun ImageVectorDrawable.applyAndRemoveGroup(): ImageVectorDrawable {
             val editor = VectorEditor(this)
             return editor.applyAndRemoveGroup()
+        }
+
+        fun ImageVectorDrawable.applyModifierTransform(
+            scale: Float,
+            offsetX: Float,
+            offsetY: Float
+        ): ImageVectorDrawable {
+            val editor = VectorEditor(this)
+            return editor.applyModifierTransform(scale, offsetX, offsetY)
+        }
+
+        fun ImageVectorDrawable.applyViewportInset(
+            left: Float,
+            top: Float,
+            scaleX: Float,
+            scaleY: Float
+        ): ImageVectorDrawable {
+            val editor = VectorEditor(this)
+            return editor.applyViewportInset(left, top, scaleX, scaleY)
         }
 
         fun ImageVectorDrawable.getBounds(): Rect {

@@ -26,6 +26,10 @@ object FontCatalog {
     fun typeface(path: String): Typeface? =
         runCatching { Typeface.createFromFile(path) }.getOrNull()
 
+    /** Returns the stored path only while Android can still open it; empty selects the default. */
+    fun usablePathOrDefault(path: String): String =
+        path.takeIf { File(it).isFile && typeface(it) != null }.orEmpty()
+
     /** Display name for a stored [path] without rescanning the directory. */
     fun prettyLabelFor(path: String): String = prettyName(File(path).name)
 

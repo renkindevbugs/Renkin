@@ -11,6 +11,9 @@ import dev.renkinProject.renkin.icon.parser.XmlNodeParser
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.xml.XmlDecoder
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 
 /**
@@ -23,10 +26,15 @@ class RenkinPackStore(private val context: Context) {
 
     data class SavedEntry(
         val icon: IconPackDrawable?,
+        val baseIcon: IconPackDrawable?,
         val calendarEnabled: Boolean,
         val calendarPrefix: String?,
         val calendarPackName: String?,
         val sourcePackName: String?,
+        val isCustom: Boolean,
+        val isLegacy: Boolean,
+        val sourceUrl: String?,
+        val isFallback: Boolean,
         // The raw row, so held-back entries (locked packs, reference icons, absent apps)
         // can be written back verbatim on the next save instead of being dropped.
         val row: DbApplication
@@ -34,8 +42,14 @@ class RenkinPackStore(private val context: Context) {
 
     /** Loads [profileId]'s saved icons + calendar flags, keyed by "package/activity". */
     suspend fun load(profileId: Long, defaultColor: Color): Map<String, SavedEntry> = withContext(Dispatchers.Default) {
-        repo.getAll(profileId).associate { dbApp ->
-            "${dbApp.packageName}/${dbApp.activityName}" to decodeRow(dbApp, defaultColor)
+        // Row decoding (bitmap decompress / vector XML parse) is independent per row —
+        // decode in parallel so a profile full of icons doesn't gate startup serially.
+        coroutineScope {
+            repo.getAll(profileId).map { dbApp ->
+                async {
+                    "${dbApp.packageName}/${dbApp.activityName}" to decodeRow(dbApp, defaultColor)
+                }
+            }.awaitAll().toMap()
         }
     }
 
@@ -43,22 +57,31 @@ class RenkinPackStore(private val context: Context) {
     fun decodeRow(dbApp: DbApplication, defaultColor: Color): SavedEntry {
         // Per-row guard: one corrupt base64/XML record loses that single icon (the row's
         // calendar flags survive) instead of crashing the whole profile load.
-        val icon: IconPackDrawable? = runCatching {
+        fun decode(drawable: String, isXml: Boolean, isAdaptive: Boolean): IconPackDrawable? = runCatching {
             when {
-                dbApp.drawable.isEmpty() -> null
-                dbApp.isXml -> {
-                    val nodes = XmlDecoder.fromBase64(dbApp.drawable)
+                drawable.isEmpty() -> null
+                isXml -> {
+                    val nodes = XmlDecoder.fromBase64(drawable)
                     XmlNodeParser.parse(context.resources, nodes, defaultColor)
                 }
-                else -> BitmapIconDrawable(bitmapFromBase64(dbApp.drawable), dbApp.isAdaptiveIcon)
+                else -> BitmapIconDrawable(bitmapFromBase64(drawable), isAdaptive)
             }
         }.getOrNull()
+        val icon = decode(dbApp.drawable, dbApp.isXml, dbApp.isAdaptiveIcon)
+        val baseIcon = if (dbApp.baseDrawable.isNotEmpty()) {
+            decode(dbApp.baseDrawable, dbApp.baseIsXml, dbApp.baseIsAdaptiveIcon)
+        } else icon
         return SavedEntry(
             icon,
+            baseIcon,
             dbApp.calendarEnabled,
             dbApp.calendarPrefix.ifEmpty { null },
             dbApp.calendarPackName.ifEmpty { null },
             dbApp.sourcePackName.ifEmpty { null },
+            dbApp.isCustomIcon,
+            dbApp.isLegacyIcon,
+            dbApp.sourceUrl.ifEmpty { null },
+            dbApp.isFallbackIcon,
             dbApp
         )
     }
@@ -75,19 +98,27 @@ class RenkinPackStore(private val context: Context) {
         preservedRows: Collection<DbApplication> = emptyList()
     ) = withContext(Dispatchers.Default) {
         val dbApps = apps.mapNotNull { app ->
-            val icon = app.createdIcon
-            if (icon == null && !app.calendarEnabled) return@mapNotNull null
+            val rendered = app.createdIcon
+            val base = app.baseIcon ?: rendered
+            if (rendered == null && !app.calendarEnabled) return@mapNotNull null
             DbApplication(
                 app.packageName,
                 app.activityName,
-                icon?.isAdaptiveIcon() ?: false,
-                icon != null && icon !is BitmapIconDrawable,
-                icon?.toDbString() ?: "",
+                rendered?.isAdaptiveIcon() ?: false,
+                rendered != null && rendered !is BitmapIconDrawable,
+                rendered?.toDbString() ?: "",
                 app.calendarEnabled,
                 app.calendarPrefix ?: "",
                 app.calendarPackName ?: "",
                 app.sourcePackName ?: "",
-                profileId
+                profileId,
+                isCustomIcon = app.isCustom,
+                isLegacyIcon = app.isLegacy,
+                baseDrawable = base?.toDbString() ?: "",
+                baseIsAdaptiveIcon = base?.isAdaptiveIcon() ?: false,
+                baseIsXml = base != null && base !is BitmapIconDrawable,
+                sourceUrl = app.sourceUrl ?: "",
+                isFallbackIcon = app.isFallback
             )
         }
         val liveKeys = dbApps.map { "${it.packageName}/${it.activityName}" }.toSet()
