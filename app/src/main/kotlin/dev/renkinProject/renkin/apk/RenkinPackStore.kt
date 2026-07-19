@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.compose.ui.graphics.Color
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.drawable.ADAPTIVE_ICON_SCALE
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.extension.bitmapFromBase64
@@ -64,7 +65,14 @@ class RenkinPackStore(private val context: Context) {
                     val nodes = XmlDecoder.fromBase64(drawable)
                     XmlNodeParser.parse(context.resources, nodes, defaultColor)
                 }
-                else -> BitmapIconDrawable(bitmapFromBase64(drawable), isAdaptive)
+                // Adaptive Material You bitmaps are stored in their 108dp safe-zone form. Restore
+                // the preview zoom too; otherwise a restart displays and later re-renders the raw
+                // inset bitmap even though the adaptive export flag itself survived.
+                else -> BitmapIconDrawable(
+                    bitmapFromBase64(drawable),
+                    isAdaptive,
+                    if (isAdaptive) ADAPTIVE_ICON_SCALE else 1f
+                )
             }
         }.getOrNull()
         val icon = decode(dbApp.drawable, dbApp.isXml, dbApp.isAdaptiveIcon)
