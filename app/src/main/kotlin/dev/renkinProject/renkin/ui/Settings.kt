@@ -29,7 +29,6 @@ import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Badge
 import androidx.compose.material3.DropdownMenu
@@ -41,7 +40,6 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -74,8 +72,6 @@ import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.DARK_MODE_DEFAULT
 import dev.renkinProject.renkin.data.DarkModeKey
 import dev.renkinProject.renkin.data.OnboardingSeenKey
-import dev.renkinProject.renkin.data.OnlineLibrariesKey
-import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.getDarkModeLabels
 import dev.renkinProject.renkin.data.getEnumValue
@@ -161,42 +157,6 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     SettingsRow(Icons.Filled.BarChart, stringResource(R.string.statsButton)) {
                         showStats = true
                     }
-                    // Opt-in for the Vector tab's online libraries — the only feature besides
-                    // the store lookups that touches the network, hence default OFF.
-                    val onlineEnabled = prefs.getBooleanValue(OnlineLibrariesKey)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.TravelExplore,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Column(
-                            Modifier
-                                .weight(1f)
-                                .padding(start = 16.dp, end = 8.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.onlineIconsSetting),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = stringResource(R.string.onlineIconsSettingDesc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = onlineEnabled,
-                            onCheckedChange = { scope.launch { prefs.setBooleanValue(OnlineLibrariesKey, it) } }
-                        )
-                    }
-
                     SettingsSectionHeader(stringResource(R.string.settingsBackup))
                     SettingsRow(Icons.Filled.Save, stringResource(R.string.exportBackup)) {
                         if (!viewModel.backupInProgress) {
