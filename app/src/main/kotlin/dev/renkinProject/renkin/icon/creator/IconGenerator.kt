@@ -26,6 +26,7 @@ import dev.renkinProject.renkin.constants.SuppressSameParameterValue
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextType
+import dev.renkinProject.renkin.drawable.ADAPTIVE_ICON_SCALE
 import dev.renkinProject.renkin.drawable.BaseTextDrawable
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.ForegroundIconDrawable
@@ -77,7 +78,7 @@ class IconGenerator(
     private val primaryFallback: IconPackFallback = IconPackFallback(),
     private val fallbackPackName: String = ""
 ) {
-    private val adaptiveIconScale = 1.5f // 108dp / 72dp
+    private val adaptiveIconScale = ADAPTIVE_ICON_SCALE
     private val appMan by lazy { ApplicationManager(ctx) }
 
     // Colorize blend for bitmap icons: SRC_IN replaces the icon's colours with the picked one (flat
@@ -390,12 +391,9 @@ class IconGenerator(
         mono.setBounds(0, 0, size, size)
         val mask = newArgbBitmap(size, size) { mono.draw(it) }
 
-        // Export as an adaptive icon so the launcher masks it to its own shape (circle, squircle, …)
-        // like every other icon — a plain bitmap would be shown as a bare square instead. previewScale
-        // zooms only the flat in-app preview to match the launcher's safe-zone zoom (export stays 1:1).
-        return BitmapIconDrawable(
-            ctx.resources, recolorMaterialYouLayer(mask), exportAsAdaptiveIcon = true, previewScale = adaptiveIconScale
-        )
+        // Opaque results stay adaptive so the launcher applies its mask. A translucent background
+        // takes the flat path below because an adaptive export would insert the pack background.
+        return materialYouDrawable(recolorMaterialYouLayer(mask))
     }
 
     /**
@@ -409,40 +407,34 @@ class IconGenerator(
 
     /**
      * Creates an unofficial two-colour Material You approximation from regular icon artwork.
-     * Transparent pixels become the selected background; opaque pixels retain their luminance,
-     * interpolated from background (dark source pixels) to foreground (light source pixels).
+     * Transparent and light pixels become the selected background; dark artwork becomes the
+     * foreground. This keeps the simple approximation used before foreground extraction trials.
      */
     private fun generateMaterialYouFromOriginal(icon: Bitmap): BitmapIconDrawable {
         val pixels = IntArray(icon.width * icon.height)
         icon.getPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
 
+        val fgA = android.graphics.Color.alpha(options.color)
         val fgR = android.graphics.Color.red(options.color)
         val fgG = android.graphics.Color.green(options.color)
         val fgB = android.graphics.Color.blue(options.color)
-        val bgR = android.graphics.Color.red(options.bgColor)
-        val bgG = android.graphics.Color.green(options.bgColor)
-        val bgB = android.graphics.Color.blue(options.bgColor)
 
         for (i in pixels.indices) {
             val source = pixels[i]
-            val alpha = android.graphics.Color.alpha(source) / 255f
+            val sourceAlpha = android.graphics.Color.alpha(source) / 255f
             val luminance = (
                 0.2126f * android.graphics.Color.red(source) +
                     0.7152f * android.graphics.Color.green(source) +
                     0.0722f * android.graphics.Color.blue(source)
                 ) / 255f
-            val mappedR = bgR + (fgR - bgR) * luminance
-            val mappedG = bgG + (fgG - bgG) * luminance
-            val mappedB = bgB + (fgB - bgB) * luminance
-            pixels[i] = android.graphics.Color.rgb(
-                (bgR + (mappedR - bgR) * alpha).toInt().coerceIn(0, 255),
-                (bgG + (mappedG - bgG) * alpha).toInt().coerceIn(0, 255),
-                (bgB + (mappedB - bgB) * alpha).toInt().coerceIn(0, 255)
+            val coverage = sourceAlpha * (1f - luminance)
+            pixels[i] = android.graphics.Color.argb(
+                (fgA * coverage).toInt().coerceIn(0, 255), fgR, fgG, fgB
             )
         }
 
-        val recolored = Bitmap.createBitmap(icon.width, icon.height, Bitmap.Config.ARGB_8888)
-        recolored.setPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
+        val foreground = Bitmap.createBitmap(icon.width, icon.height, Bitmap.Config.ARGB_8888)
+        foreground.setPixels(pixels, 0, icon.width, 0, 0, icon.width, icon.height)
 
         // Adaptive launchers display only the inner 72dp of a 108dp foreground. Inset the complete
         // original icon by that ratio before export; previewScale reverses the inset in the flat
@@ -451,13 +443,23 @@ class IconGenerator(
             canvas.drawColor(options.bgColor)
             val insetScale = 1f / adaptiveIconScale
             canvas.scale(insetScale, insetScale, icon.width / 2f, icon.height / 2f)
-            canvas.drawBitmap(recolored, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
+            canvas.drawBitmap(foreground, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
         }
+        return materialYouDrawable(generated)
+    }
+
+    /**
+     * An adaptive icon always receives the pack's global background during export. A translucent
+     * custom background must therefore be exported as a flat bitmap or that global colour would
+     * show through and replace the transparency selected by the user.
+     */
+    private fun materialYouDrawable(bitmap: Bitmap): BitmapIconDrawable {
+        val adaptive = android.graphics.Color.alpha(options.bgColor) == 255
         return BitmapIconDrawable(
             ctx.resources,
-            generated,
-            exportAsAdaptiveIcon = true,
-            previewScale = adaptiveIconScale
+            if (adaptive) bitmap else bitmap.scaleFromCenter(adaptiveIconScale),
+            exportAsAdaptiveIcon = adaptive,
+            previewScale = if (adaptive) adaptiveIconScale else 1f
         )
     }
 
@@ -1076,21 +1078,29 @@ internal fun monochromeBitmap(icon: Bitmap, invert: Boolean): Bitmap {
 internal fun recolorMaterialYouMask(mask: Bitmap, foreground: Int, background: Int): Bitmap {
     val pixels = IntArray(mask.width * mask.height)
     mask.getPixels(pixels, 0, mask.width, 0, 0, mask.width, mask.height)
-    val fgR = android.graphics.Color.red(foreground)
-    val fgG = android.graphics.Color.green(foreground)
-    val fgB = android.graphics.Color.blue(foreground)
-    val bgR = android.graphics.Color.red(background)
-    val bgG = android.graphics.Color.green(background)
-    val bgB = android.graphics.Color.blue(background)
     for (index in pixels.indices) {
-        val alpha = android.graphics.Color.alpha(pixels[index]) / 255f
-        pixels[index] = android.graphics.Color.rgb(
-            (bgR + (fgR - bgR) * alpha).toInt().coerceIn(0, 255),
-            (bgG + (fgG - bgG) * alpha).toInt().coerceIn(0, 255),
-            (bgB + (fgB - bgB) * alpha).toInt().coerceIn(0, 255)
-        )
+        val coverage = android.graphics.Color.alpha(pixels[index]) / 255f
+        pixels[index] = compositeMaterialYouPixel(foreground, background, coverage)
     }
     return Bitmap.createBitmap(pixels, mask.width, mask.height, Bitmap.Config.ARGB_8888).apply {
         density = mask.density
     }
+}
+
+private fun compositeMaterialYouPixel(foreground: Int, background: Int, coverage: Float): Int {
+    val fgAlpha = android.graphics.Color.alpha(foreground) / 255f * coverage
+    val bgAlpha = android.graphics.Color.alpha(background) / 255f
+    val outAlpha = fgAlpha + bgAlpha * (1f - fgAlpha)
+    if (outAlpha <= 0f) return android.graphics.Color.TRANSPARENT
+
+    fun channel(fg: Int, bg: Int): Int = (
+        (fg * fgAlpha + bg * bgAlpha * (1f - fgAlpha)) / outAlpha
+        ).toInt().coerceIn(0, 255)
+
+    return android.graphics.Color.argb(
+        (outAlpha * 255f).toInt().coerceIn(0, 255),
+        channel(android.graphics.Color.red(foreground), android.graphics.Color.red(background)),
+        channel(android.graphics.Color.green(foreground), android.graphics.Color.green(background)),
+        channel(android.graphics.Color.blue(foreground), android.graphics.Color.blue(background))
+    )
 }

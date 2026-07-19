@@ -14,6 +14,8 @@ import androidx.compose.ui.graphics.painter.Painter
 import dev.renkinProject.renkin.extension.scaleFromCenter
 import dev.renkinProject.renkin.extension.toBase64
 
+internal const val ADAPTIVE_ICON_SCALE = 1.5f // 108dp / 72dp
+
 /**
  * [previewScale] zooms the icon only in the in-app preview ([getPainter]), not in the exported
  * bitmap ([toBitmap]). Adaptive foregrounds (e.g. the monochrome variant) keep their artwork in
