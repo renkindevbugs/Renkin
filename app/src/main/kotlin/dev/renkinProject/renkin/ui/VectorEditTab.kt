@@ -67,8 +67,6 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
-import dev.renkinProject.renkin.data.OnlineLibrariesKey
-import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
 import dev.renkinProject.renkin.drawable.MutableVectorPath
 import dev.renkinProject.renkin.drawable.toImageVectorDrawable
@@ -521,9 +519,9 @@ internal fun rememberSvgImportAction(onImported: (SvgVectorImporter.ImportedSvg)
 }
 
 /**
- * Create-tab-style segmented pills for the two SVG sources: a local file, and — once the
- * user opted in via Settings — the online FOSS libraries. [onImported] gets the parsed
- * document plus the online source URL (null for local files); [onImportedImage] the
+ * Create-tab-style segmented pills for the two SVG sources: a local file and the online FOSS
+ * libraries. [onImported] gets the parsed document plus the online source URL (null for local
+ * files); [onImportedImage] the
  * full-size raster of an online icon the editor can't model as paths (gradients etc.).
  */
 @Composable
@@ -532,7 +530,6 @@ private fun ImportSourcePills(
     onImportedImage: (OnlineImageImport, String) -> Unit
 ) {
     val importFromFile = rememberSvgImportAction { onImported(it, null) }
-    val onlineEnabled = getPreferences().getBooleanValue(OnlineLibrariesKey)
     var browserOpen by remember { mutableStateOf(false) }
 
     SingleChoiceSegmentedButtonRow(
@@ -540,21 +537,18 @@ private fun ImportSourcePills(
             .fillMaxWidth()
             .padding(vertical = 4.dp)
     ) {
-        val count = if (onlineEnabled) 2 else 1
         SegmentedButton(
             selected = false,
             onClick = importFromFile,
-            shape = SegmentedButtonDefaults.itemShape(index = 0, count = count),
+            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
             icon = { Icon(Icons.Filled.FileDownload, null, Modifier.size(18.dp)) }
         ) { Text(stringResource(R.string.importSvg)) }
-        if (onlineEnabled) {
-            SegmentedButton(
-                selected = false,
-                onClick = { browserOpen = true },
-                shape = SegmentedButtonDefaults.itemShape(index = 1, count = count),
-                icon = { Icon(Icons.Filled.TravelExplore, null, Modifier.size(18.dp)) }
-            ) { Text(stringResource(R.string.onlineIconsButton)) }
-        }
+        SegmentedButton(
+            selected = false,
+            onClick = { browserOpen = true },
+            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+            icon = { Icon(Icons.Filled.TravelExplore, null, Modifier.size(18.dp)) }
+        ) { Text(stringResource(R.string.onlineIconsButton)) }
     }
 
     if (browserOpen) {

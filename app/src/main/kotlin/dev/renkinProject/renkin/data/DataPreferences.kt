@@ -138,11 +138,6 @@ val ActiveProfileIdKey = longPreferencesKey("ACTIVE_PROFILE_ID")
 // not a profile, so switching or importing profiles must never bring it back by itself.
 val OnboardingSeenKey = booleanPreferencesKey("ONBOARDING_SEEN")
 
-// Opt-in for the online icon libraries browser (Vector tab). App-level and default OFF on
-// purpose: it is the only feature besides the store lookups that touches the network, and
-// F-Droid users should have to consciously enable that.
-val OnlineLibrariesKey = booleanPreferencesKey("ONLINE_ICON_LIBRARIES")
-
 // "Don't show again" for the pre-share warning (that a shared profile needs the source packs
 // installed on the other device). App-level: it's about the user's understanding, not a profile.
 val HideProfileShareWarningKey = booleanPreferencesKey("HIDE_PROFILE_SHARE_WARNING")
