@@ -1,0 +1,1 @@
+• Fix bugs ([#3](https://github.com/renkindevbugs/Renkin/issues/3)).
