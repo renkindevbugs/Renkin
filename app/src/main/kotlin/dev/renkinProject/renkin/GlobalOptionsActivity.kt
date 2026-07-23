@@ -25,7 +25,6 @@ import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.isDarkModeEnabled
-import dev.renkinProject.renkin.data.persistGlobalModifierPrefs
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
@@ -41,12 +40,10 @@ import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -287,8 +284,8 @@ class GlobalOptionsViewModel @Inject constructor(
 
     /**
      * Re-renders the global layer without mutating persisted bases (see the provider).
-     * [preferences] already contains the screen's staged values. Returns success; the
-     * screen shows the outcome toast.
+     * [preferences] contains the screen's staged values. The provider persists that recipe and
+     * the rendered icons as one profile operation. Returns success for the screen's outcome toast.
      */
     suspend fun applyGlobalModifiers(
         preferences: Preferences,
@@ -300,15 +297,7 @@ class GlobalOptionsViewModel @Inject constructor(
     ): Boolean {
         if (globalApplyProgress != null) return false
         globalApplyProgress = 0 to 0
-        val store = getApplication<Application>().dataStore
-        var previousPreferences: Preferences? = null
-        var preferencesPersisted = false
         return try {
-            previousPreferences = store.data.first()
-            // Commit the recipe first. The provider prepares every render before it swaps the
-            // live list and Room writes the whole profile transactionally.
-            store.persistGlobalModifierPrefs(preferences)
-            preferencesPersisted = true
             appProvider.applyGlobalModifiers(
                 preferences, modifierOptions,
                 applyGenerated, applyExisting, applyCustom, includeEmpty
@@ -316,16 +305,8 @@ class GlobalOptionsViewModel @Inject constructor(
             appliedGlobal = true
             true
         } catch (e: CancellationException) {
-            if (preferencesPersisted) previousPreferences?.let { previous ->
-                withContext(NonCancellable) { store.persistGlobalModifierPrefs(previous) }
-            }
             throw e
         } catch (e: Exception) {
-            if (preferencesPersisted) previousPreferences?.let { previous ->
-                runCatching { store.persistGlobalModifierPrefs(previous) }.onFailure { rollbackError ->
-                    Log.error("GlobalOptionsViewModel", "Rolling back global preferences failed", rollbackError)
-                }
-            }
             Log.error("GlobalOptionsViewModel", "Applying global modifiers failed", e)
             false
         } finally {

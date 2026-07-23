@@ -28,6 +28,7 @@ import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getDefaultBackgroundColor
 import dev.renkinProject.renkin.data.getDefaultIconColor
 import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.data.persistGlobalModifierPrefs
 import dev.renkinProject.renkin.data.online.onlineAttributionLabel
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
@@ -42,6 +43,7 @@ import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -93,6 +95,13 @@ internal fun mergeGlobalRenders(
     renderedByKey: Map<String, PackageInfoStruct>
 ): List<PackageInfoStruct> = original.map { renderedByKey[it.key] ?: it }
 
+/** Serializes every operation that reads or replaces the active profile session. */
+internal class ProfileOperationGate {
+    private val mutex = Mutex()
+
+    suspend fun <T> run(operation: suspend () -> T): T = mutex.withLock { operation() }
+}
+
 /**
  * The domain hub between the UI layer (MainViewModel) and everything icon-related: the live
  * app list, icon generation/refresh, pack building and the saved-pack store. Profile state
@@ -130,7 +139,7 @@ class ApplicationProvider(private val context: Context) {
 
     private val iconGenService = IconGenerationService(context, iconPackRepo)
     private val initialLoadMutex = Mutex()
-    private val profileOperationMutex = Mutex()
+    private val profileOperations = ProfileOperationGate()
 
     /** True while the shared preferences and live icon list are changing profiles. */
     var isProfileSwitching: Boolean by mutableStateOf(false)
@@ -163,13 +172,15 @@ class ApplicationProvider(private val context: Context) {
      * the last build/save. If reloading fails after clearing the list, restore the old session.
      */
     suspend fun reloadPreservingSession(preserveKeys: Set<String>) {
-        val session = applicationList.toList()
-        try {
-            initialize()
-            replaceApplications(mergeApplicationReload(session, applicationList.toList(), preserveKeys))
-        } catch (error: Exception) {
-            replaceApplications(session)
-            throw error
+        profileOperations.run {
+            val session = applicationList.toList()
+            try {
+                initialize()
+                replaceApplications(mergeApplicationReload(session, applicationList.toList(), preserveKeys))
+            } catch (error: Exception) {
+                replaceApplications(session)
+                throw error
+            }
         }
     }
 
@@ -301,54 +312,70 @@ class ApplicationProvider(private val context: Context) {
         includeEmpty: Boolean,
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
     ) = withContext(Dispatchers.Default) {
-        val original = applicationList.toList()
-        val targets = original.filter { app ->
-            app.key !in lockManager.lockedKeys && shouldProcessGlobalLayer(
-                hasIcon = app.createdIcon != null,
-                isCustom = app.isCustom,
-                isRefreshMade = app.isRefreshMade,
-                applyGenerated = applyGenerated,
-                applyExisting = applyExisting,
-                applyCustom = applyCustom,
-                includeEmpty = includeEmpty
-            )
-        }
-        var done = 0
-        val renderedByKey = mutableMapOf<String, PackageInfoStruct>()
-        onProgress(0, targets.size)
-        for (app in targets) {
-            val base = app.baseIcon ?: app.createdIcon
-            if (base != null) {
-                val apply = shouldApplyGlobalLayer(
-                    app.isCustom, app.isRefreshMade,
-                    applyGenerated, applyExisting, applyCustom
-                )
-                val rendered = if (apply && modifierOptions.hasVisibleModifierEffect()) {
-                    iconGenService.applyModifier(base, modifierOptions)
-                } else base
-                renderedByKey[app.key] = app.changeRenderedIcon(rendered)
-            } else {
-                generateEmptyIconResult(app, preferences, modifierOptions)?.let {
-                    renderedByKey[app.key] = it
+        profileOperations.run {
+            val store = context.dataStore
+            val previousPreferences = store.data.first()
+            var preferencesPersisted = false
+            val original = applicationList.toList()
+
+            suspend fun rollbackPreferences(error: Throwable) {
+                if (!preferencesPersisted) return
+                withContext(NonCancellable) {
+                    runCatching { store.persistGlobalModifierPrefs(previousPreferences) }
+                        .onFailure(error::addSuppressed)
                 }
             }
-            done++
-            onProgress(done, targets.size)
-        }
-        val updated = mergeGlobalRenders(original, renderedByKey)
-        replaceApplications(updated)
-        try {
-            // Room stores both the immutable bases and compatibility renders; profile prefs carry
-            // the recipe that lets a new app version re-render without accumulating modifiers.
-            saveActiveProfileIcons()
-        } catch (e: CancellationException) {
-            replaceApplications(original)
-            throw e
-        } catch (e: Exception) {
-            // Rendering is prepared without touching the live list. If the atomic Room save fails,
-            // restore the exact session the user had before pressing Save.
-            replaceApplications(original)
-            throw e
+
+            try {
+                // Preferences and icons belong to the same profile operation. Keeping both under
+                // this lock prevents a switch from pairing one profile's recipe with another's icons.
+                store.persistGlobalModifierPrefs(preferences)
+                preferencesPersisted = true
+                val targets = original.filter { app ->
+                    app.key !in lockManager.lockedKeys && shouldProcessGlobalLayer(
+                        hasIcon = app.createdIcon != null,
+                        isCustom = app.isCustom,
+                        isRefreshMade = app.isRefreshMade,
+                        applyGenerated = applyGenerated,
+                        applyExisting = applyExisting,
+                        applyCustom = applyCustom,
+                        includeEmpty = includeEmpty
+                    )
+                }
+                var done = 0
+                val renderedByKey = mutableMapOf<String, PackageInfoStruct>()
+                onProgress(0, targets.size)
+                for (app in targets) {
+                    val base = app.baseIcon ?: app.createdIcon
+                    if (base != null) {
+                        val apply = shouldApplyGlobalLayer(
+                            app.isCustom, app.isRefreshMade,
+                            applyGenerated, applyExisting, applyCustom
+                        )
+                        val rendered = if (apply && modifierOptions.hasVisibleModifierEffect()) {
+                            iconGenService.applyModifier(base, modifierOptions)
+                        } else base
+                        renderedByKey[app.key] = app.changeRenderedIcon(rendered)
+                    } else {
+                        generateEmptyIconResult(app, preferences, modifierOptions)?.let {
+                            renderedByKey[app.key] = it
+                        }
+                    }
+                    done++
+                    onProgress(done, targets.size)
+                }
+                val updated = mergeGlobalRenders(original, renderedByKey)
+                replaceApplications(updated)
+                persistActiveProfileIcons(unbuiltAfter = true)
+            } catch (e: CancellationException) {
+                replaceApplications(original)
+                rollbackPreferences(e)
+                throw e
+            } catch (e: Exception) {
+                replaceApplications(original)
+                rollbackPreferences(e)
+                throw e
+            }
         }
     }
 
@@ -381,7 +408,7 @@ class ApplicationProvider(private val context: Context) {
         progressMethod: (done: Int, total: Int) -> Unit = { _, _ -> }
     ): BuiltIconPack =
         withContext(Dispatchers.Default) {
-            profileOperationMutex.withLock {
+            profileOperations.run {
                 check(activeProfileId == profileId) { "Profile changed before icon pack build" }
                 val profileApps = applicationList.toList()
                 val preservedRows = lockManager.preservedRows().toList()
@@ -477,7 +504,7 @@ class ApplicationProvider(private val context: Context) {
         val success = result == ApkInstallResult.SUCCESS
         // A successful build IS the pack — the save matches it. A failed/cancelled install
         // leaves the save marked as not yet built.
-        profileOperationMutex.withLock {
+        profileOperations.run {
             persistProfileIcons(
                 profileId = iconPack.profileId,
                 apps = iconPack.profileApps,
@@ -496,7 +523,7 @@ class ApplicationProvider(private val context: Context) {
      * Locks the refresh output like a build does and marks the profile as saved-but-not-built.
      */
     suspend fun saveActiveProfileIcons() = withContext(Dispatchers.Default) {
-        profileOperationMutex.withLock { persistActiveProfileIcons(unbuiltAfter = true) }
+        profileOperations.run { persistActiveProfileIcons(unbuiltAfter = true) }
     }
 
     /**
@@ -781,7 +808,7 @@ class ApplicationProvider(private val context: Context) {
     /** Deletes [id] (never the default) and its icons; switches to the default first if active. */
     suspend fun deleteProfile(id: Long) = withContext(Dispatchers.Default) {
         if (id == DEFAULT_PROFILE_ID) return@withContext
-        profileOperationMutex.withLock {
+        profileOperations.run {
             isProfileSwitching = true
             try {
                 if (id == activeProfileId) switchProfileLocked(DEFAULT_PROFILE_ID)
@@ -804,7 +831,7 @@ class ApplicationProvider(private val context: Context) {
      * leaving profile this behaves like an app restart — unbuilt edits are not persisted.
      */
     suspend fun switchProfile(newProfileId: Long) = withContext(Dispatchers.Default) {
-        profileOperationMutex.withLock {
+        profileOperations.run {
             isProfileSwitching = true
             try {
                 switchProfileLocked(newProfileId)
@@ -814,7 +841,7 @@ class ApplicationProvider(private val context: Context) {
         }
     }
 
-    /** Runs only while [profileOperationMutex] is held. */
+    /** Runs only while [profileOperations] is held. */
     private suspend fun switchProfileLocked(newProfileId: Long) {
         if (!profileManager.switchTo(newProfileId)) return
         // Reset the in-memory icons and load exactly the target selected above.
@@ -828,7 +855,7 @@ class ApplicationProvider(private val context: Context) {
      * snapshot of the leaving state — that state was just overwritten on purpose.
      */
     suspend fun reloadActiveProfile() = withContext(Dispatchers.Default) {
-        profileOperationMutex.withLock {
+        profileOperations.run {
             isProfileSwitching = true
             try {
                 profileManager.reloadActiveId()
