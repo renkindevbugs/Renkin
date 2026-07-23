@@ -207,7 +207,7 @@ internal class PackBrowserPreviews(
      * hands over the generated icon, which the comparison preview renders correctly.
      */
     private fun previewBitmap(resource: ResourceDrawable, generated: IconPackDrawable): ImageBitmap {
-        val rendered = generated.toBitmap()
+        val rendered = generated.toBrowserPreviewBitmap()
         val bitmap = if (rendered.contentBounds() != null) rendered
             else platformPreview(resource.drawable) ?: rendered
         return bitmap.scaledPreview().asImageBitmap()
@@ -272,6 +272,6 @@ internal class PackBrowserPreviews(
             query: String,
             options: GenerationOptions,
             component: InstalledApplication?
-        ) = "${iconPack.packageName}|${iconPack.versionCode}|$sortOrder|$query|${options.hashCode()}|${component?.toComponentInfo() ?: ""}"
+        ) = "${iconPack.packageName}|${iconPack.versionCode}|${iconPack.changesWithMaterialYouColors}|$sortOrder|$query|${options.hashCode()}|${component?.toComponentInfo() ?: ""}"
     }
 }

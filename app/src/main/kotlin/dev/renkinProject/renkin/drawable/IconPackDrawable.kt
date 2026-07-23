@@ -11,6 +11,13 @@ abstract class IconPackDrawable: Drawable() {
 
     abstract fun toBitmap(): Bitmap
 
+    /**
+     * A bitmap rasterised specifically for the icon browser. Thin vector strokes survive
+     * better when they are drawn at the target size than when a large finished raster is
+     * downscaled. Most icons can reuse their regular bitmap.
+     */
+    open fun toBrowserPreviewBitmap(): Bitmap = toBitmap()
+
     abstract fun toDbString(): String
 
     open fun isAdaptiveIcon(): Boolean {

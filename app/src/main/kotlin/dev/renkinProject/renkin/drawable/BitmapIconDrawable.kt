@@ -25,21 +25,33 @@ internal const val ADAPTIVE_ICON_SCALE = 1.5f // 108dp / 72dp
 class BitmapIconDrawable(
     val drawable: BitmapDrawable,
     private val exportAsAdaptiveIcon: Boolean = false,
-    val previewScale: Float = 1f
+    val previewScale: Float = 1f,
+    private val browserPreviewBitmap: Bitmap? = null
 ) :
     IconPackDrawable() {
-    constructor(bitmap: Bitmap, exportAsAdaptiveIcon: Boolean = false, previewScale: Float = 1f) : this(
+    constructor(
+        bitmap: Bitmap,
+        exportAsAdaptiveIcon: Boolean = false,
+        previewScale: Float = 1f,
+        browserPreviewBitmap: Bitmap? = null
+    ) : this(
         BitmapDrawable(
             null,
             bitmap
-        ), exportAsAdaptiveIcon, previewScale
+        ), exportAsAdaptiveIcon, previewScale, browserPreviewBitmap
     )
 
-    constructor(resources: Resources, bitmap: Bitmap, exportAsAdaptiveIcon: Boolean = false, previewScale: Float = 1f) : this(
+    constructor(
+        resources: Resources,
+        bitmap: Bitmap,
+        exportAsAdaptiveIcon: Boolean = false,
+        previewScale: Float = 1f,
+        browserPreviewBitmap: Bitmap? = null
+    ) : this(
         BitmapDrawable(
             resources,
             bitmap
-        ), exportAsAdaptiveIcon, previewScale
+        ), exportAsAdaptiveIcon, previewScale, browserPreviewBitmap
     )
 
     override fun draw(canvas: Canvas) {
@@ -87,6 +99,10 @@ class BitmapIconDrawable(
 
     override fun toBitmap(): Bitmap {
         return drawable.bitmap
+    }
+
+    override fun toBrowserPreviewBitmap(): Bitmap {
+        return browserPreviewBitmap ?: drawable.bitmap
     }
 
     override fun toDbString(): String {

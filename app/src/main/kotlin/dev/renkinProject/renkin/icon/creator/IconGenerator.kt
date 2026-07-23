@@ -80,6 +80,7 @@ class IconGenerator(
 ) {
     private val adaptiveIconScale = ADAPTIVE_ICON_SCALE
     private val appMan by lazy { ApplicationManager(ctx) }
+    private val materialYouPackSupport = mutableMapOf<String, Boolean>()
 
     // Colorize blend for bitmap icons: SRC_IN replaces the icon's colours with the picked one (flat
     // fill), MULTIPLY tints them (mixes with the original). Vectors always recolour flat regardless.
@@ -304,7 +305,11 @@ class IconGenerator(
         return if (options.primaryImageEdit == ImageEdit.COLORIZE)
             colorizeImage(bitmapIcon, parsedIcon, colorizeMode)
         else
-            getDefaultIcon(bitmapIcon, parsedIcon)
+            getDefaultIcon(
+                bitmapIcon,
+                parsedIcon,
+                preserveAdaptiveAppearance = packChangesWithMaterialYouColors(iconPackName)
+            )
     }
 
     private fun generateIcon(
@@ -334,7 +339,13 @@ class IconGenerator(
         val bitmapIcon = getIconBitmap(resIcon.drawable) ?: return null
         val parsedIcon = exportIconPackXML(iconPack.iconPackName, resIcon)
 
-        return generateImage(bitmapIcon, parsedIcon, imageEdit, colorizeMode)
+        return generateImage(
+            bitmapIcon,
+            parsedIcon,
+            imageEdit,
+            colorizeMode,
+            preserveAdaptiveAppearance = packChangesWithMaterialYouColors(iconPack.iconPackName)
+        )
     }
 
     private fun generateImageFromApplication(
@@ -475,7 +486,14 @@ class IconGenerator(
         bitmapIcon: Bitmap,
         parsedIcon: Drawable?,
         imageEdit: ImageEdit,
-        mode: PorterDuff.Mode): IconPackDrawable {
+        mode: PorterDuff.Mode,
+        preserveAdaptiveAppearance: Boolean = false
+    ): IconPackDrawable {
+        if (imageEdit == ImageEdit.NONE && preserveAdaptiveAppearance && !options.themed) {
+            val adaptiveIcon = parsedIcon as? AdaptiveIconDrawable
+            renderAdaptivePackIcon(adaptiveIcon)?.let { return it }
+        }
+
         if (parsedIcon != null && parsedIcon.isAdaptiveIconDrawable()) {
             fixAdaptiveIconSize(parsedIcon as AdaptiveIconDrawable)
         }
@@ -701,10 +719,17 @@ class IconGenerator(
         return newIcon.shrinkIfBiggerThan(maxSize)
     }
 
-    private fun getDefaultIcon(bitmapIcon: Bitmap, parsedIcon: Drawable?): IconPackDrawable {
+    private fun getDefaultIcon(
+        bitmapIcon: Bitmap,
+        parsedIcon: Drawable?,
+        preserveAdaptiveAppearance: Boolean = false
+    ): IconPackDrawable {
         if (parsedIcon != null) {
             if (parsedIcon.isAdaptiveIconDrawable()) {
                 parsedIcon as AdaptiveIconDrawable
+                if (preserveAdaptiveAppearance && !options.themed) {
+                    renderAdaptivePackIcon(parsedIcon)?.let { return it }
+                }
                 return getDefaultIcon(bitmapIcon, parsedIcon.foreground)
             }
         }
@@ -836,6 +861,30 @@ class IconGenerator(
         } catch (_: Exception) {
             null
         }
+    }
+
+    private fun packChangesWithMaterialYouColors(iconPackName: String): Boolean =
+        materialYouPackSupport.getOrPut(iconPackName) {
+            appMan.changesWithMaterialYouColors(iconPackName)
+        }
+
+    private fun renderAdaptivePackIcon(icon: AdaptiveIconDrawable?): BitmapIconDrawable? {
+        icon ?: return null
+        val rendered = icon.toSafeBitmapOrNull(
+            ADAPTIVE_PACK_RENDER_SIZE,
+            ADAPTIVE_PACK_RENDER_SIZE
+        ) ?: return null
+        // Draw the browser asset from the vector/adaptive source at its final size. Scaling
+        // the 500 px raster down later blurred Lawnicons' one-pixel line details.
+        val browserPreview = icon.toSafeBitmapOrNull(
+            ADAPTIVE_PACK_BROWSER_PREVIEW_SIZE,
+            ADAPTIVE_PACK_BROWSER_PREVIEW_SIZE
+        )
+        return BitmapIconDrawable(
+            ctx.resources,
+            rendered,
+            browserPreviewBitmap = browserPreview
+        )
     }
 
     private fun parseIconPackXML(iconPackName: String, iconDrawable: ResourceDrawable): Drawable? {
@@ -1038,6 +1087,11 @@ class IconGenerator(
     private fun fixAdaptiveIconSize(adaptiveIconDrawable: AdaptiveIconDrawable) {
         val vector = adaptiveIconDrawable.foregroundVectorOrNull()
         vector?.resizeAndCenter()?.applyAndRemoveGroup()?.scaleAtCenter(adaptiveIconScale)
+    }
+
+    private companion object {
+        const val ADAPTIVE_PACK_RENDER_SIZE = 500
+        const val ADAPTIVE_PACK_BROWSER_PREVIEW_SIZE = 96
     }
 }
 
