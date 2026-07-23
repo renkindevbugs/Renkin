@@ -17,3 +17,15 @@ CLAUDE.local.md
 # Local AI workflow and tool state — never committed to the public repo
 /CLAUDE.md
 /.claude/
+# Local-only code-graph tooling (graphify / code-review-graph) + everything it generates —
+# analysis helpers for the AI assistant, never part of the public repo
+/.codegraph/
+.graphify/
+.crg/
+graphify-out/
+graph.html
+graph.json
+GRAPH_REPORT.md
+*.graphml
+code_graph.db
+code_graph.sqlite
