@@ -3,12 +3,15 @@ package dev.renkinProject.renkin.icon.creator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.RadialGradient
+import android.graphics.Shader
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
@@ -66,6 +69,10 @@ import dev.renkinProject.renkin.vector.VectorEditor.Companion.setReferenceColorP
 import dev.alembiconsProject.imagetracer.ImageTracer
 import dev.alembiconsProject.tgCannyEdgeCompose.CannyEdgeDetector
 import dev.alembiconsProject.tgCannyEdgeCompose.DetectionOptions
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
 
 internal fun previewScaleToBakeForShape(icon: IconPackDrawable, shaped: Boolean): Float =
     if (shaped) (icon as? BitmapIconDrawable)?.previewScale ?: 1f else 1f
@@ -250,7 +257,10 @@ class IconGenerator(
     private fun applyModifierInner(icon: IconPackDrawable, imageEdit: ImageEdit): IconPackDrawable {
         if (imageEdit == ImageEdit.NONE) return icon
 
-        if (imageEdit == ImageEdit.COLORIZE && !options.colorizeMonochrome) {
+        if (imageEdit == ImageEdit.COLORIZE &&
+            options.colorizerMode == ColorizerMode.SINGLE_COLOR &&
+            !options.colorizeMonochrome
+        ) {
             modifierVector(icon)?.let { vector ->
                 vector.root.setReferenceColorPaths(SolidColor(Color(colorizeColor)))
                 vector.tintColor = Color.Unspecified
@@ -263,7 +273,9 @@ class IconGenerator(
             return when (imageEdit) {
                 ImageEdit.NONE -> icon
                 ImageEdit.COLORIZE -> {
-                    if (options.colorizeMonochrome) {
+                    if (options.colorizerMode == ColorizerMode.GRADIENT) {
+                        colorizeImage(copy.toBitmap(), null, colorizeMode)
+                    } else if (options.colorizeMonochrome) {
                         colorizeImage(copy.toBitmap(), null, colorizeMode)
                     } else {
                         // Recolour while keeping each path's fill-vs-stroke nature (#117),
@@ -849,6 +861,9 @@ class IconGenerator(
     }
 
     private fun colorizeBitmap(icon: Bitmap, mode: PorterDuff.Mode): Bitmap {
+        if (options.colorizerMode == ColorizerMode.GRADIENT) {
+            return colorizeBitmapWithGradient(icon)
+        }
         val coloredIcon = icon.emptyLike()
         val paint = Paint()
 
@@ -859,6 +874,69 @@ class IconGenerator(
 
         val result = addBackground(coloredIcon)
         return if (options.colorizeInverse) invertBitmapColors(result) else result
+    }
+
+    /**
+     * Paints an opaque two-colour gradient through the source alpha mask. Using the original
+     * bitmap only as a DST_IN mask preserves every source alpha value, including antialiased edge
+     * pixels, while deliberately replacing its RGB content.
+     */
+    private fun colorizeBitmapWithGradient(icon: Bitmap): Bitmap {
+        val centerX = icon.width / 2f
+        val centerY = icon.height / 2f
+        val firstColor = options.color or 0xFF000000.toInt()
+        val secondColor = options.colorizerGradientColor or 0xFF000000.toInt()
+        val gradient: Shader = when (options.colorizerGradientType) {
+            GradientType.LINEAR -> {
+                val angleRadians = Math.toRadians(
+                    (normalizeGradientAngle(options.colorizerGradientAngle) % 360f).toDouble()
+                )
+                // Match the dial used by design tools: 0° points up, increasing clockwise.
+                val directionX = sin(angleRadians).toFloat()
+                val directionY = -cos(angleRadians).toFloat()
+                val halfSpan = abs(directionX) * centerX + abs(directionY) * centerY
+                LinearGradient(
+                    centerX - directionX * halfSpan,
+                    centerY - directionY * halfSpan,
+                    centerX + directionX * halfSpan,
+                    centerY + directionY * halfSpan,
+                    firstColor,
+                    secondColor,
+                    Shader.TileMode.CLAMP
+                )
+            }
+            GradientType.RADIAL -> RadialGradient(
+                centerX,
+                centerY,
+                hypot(centerX, centerY),
+                firstColor,
+                secondColor,
+                Shader.TileMode.CLAMP
+            )
+        }
+
+        val coloredIcon = icon.emptyLike()
+        val canvas = Canvas(coloredIcon)
+        canvas.drawRect(
+            0f,
+            0f,
+            icon.width.toFloat(),
+            icon.height.toFloat(),
+            Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = gradient }
+        )
+        val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+            xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+        }
+        if (options.themed) {
+            // Only the alpha-mask draw is scaled. The gradient already covers the full output.
+            canvas.save()
+            canvas.scale(0.5f, 0.5f, centerX, centerY)
+            canvas.drawBitmap(icon, 0f, 0f, maskPaint)
+            canvas.restore()
+        } else {
+            canvas.drawBitmap(icon, 0f, 0f, maskPaint)
+        }
+        return addBackground(coloredIcon)
     }
 
     private fun addBackground(image: Bitmap): Bitmap {
@@ -940,6 +1018,11 @@ class IconGenerator(
     }
 
     private fun colorizeImage(bitmapIcon: Bitmap, parsedIcon: Drawable?, mode: PorterDuff.Mode): IconPackDrawable {
+        if (options.colorizerMode == ColorizerMode.GRADIENT) {
+            // A gradient cannot be represented by the current vector exporter. Bake the same
+            // bitmap used by preview, persistence and APK export so every surface stays identical.
+            return BitmapIconDrawable(ctx.resources, colorizeBitmapWithGradient(bitmapIcon))
+        }
         if (options.colorizeMonochrome) {
             // Reuse the Application icon → Monochrome result exactly. The Colorize colour is
             // intentionally irrelevant in this mode; Solid fill and normal tint remain separate.

@@ -29,6 +29,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Coverage for the icon generator's source skipping and the shared modifier/scale pass on a
@@ -53,6 +54,10 @@ class IconGeneratorTest {
         iconShape: IconShape = IconShape.NONE,
         colorizeMonochrome: Boolean = false,
         colorizeInverse: Boolean = false,
+        colorizerMode: ColorizerMode = ColorizerMode.SINGLE_COLOR,
+        colorizerGradientType: GradientType = GradientType.LINEAR,
+        colorizerGradientColor: Int = Color.BLACK,
+        colorizerGradientAngle: Float = 0f,
         color: Int = Color.BLACK,
         bgColor: Int = Color.WHITE
     ) = GenerationOptions(
@@ -71,7 +76,11 @@ class IconGeneratorTest {
         invertMonochrome = invertMonochrome,
         iconShape = iconShape,
         colorizeMonochrome = colorizeMonochrome,
-        colorizeInverse = colorizeInverse
+        colorizeInverse = colorizeInverse,
+        colorizerMode = colorizerMode,
+        colorizerGradientType = colorizerGradientType,
+        colorizerGradientColor = colorizerGradientColor,
+        colorizerGradientAngle = colorizerGradientAngle
     )
 
     private fun app(
@@ -320,6 +329,59 @@ class IconGeneratorTest {
 
         assertEquals(monochromeBitmap(bitmap, invert = false).getPixel(0, 0), normal.getPixel(0, 0))
         assertEquals(monochromeBitmap(bitmap, invert = true).getPixel(0, 0), inverse.getPixel(0, 0))
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun linearGradientColorizePreservesSourceAlphaWithoutMutatingSource() {
+        val sourceAlphas = intArrayOf(0, 64, 128, 192, 255)
+        val bitmap = Bitmap.createBitmap(sourceAlphas.size, 1, Bitmap.Config.ARGB_8888).apply {
+            sourceAlphas.forEachIndexed { x, alpha ->
+                setPixel(x, 0, Color.argb(alpha, 20, 180, 70))
+            }
+        }
+        val originalPixels = IntArray(sourceAlphas.size) { bitmap.getPixel(it, 0) }
+
+        val result = generator(
+            options(
+                color = Color.RED,
+                colorizerMode = ColorizerMode.GRADIENT,
+                colorizerGradientType = GradientType.LINEAR,
+                colorizerGradientColor = Color.BLUE,
+                colorizerGradientAngle = 90f
+            )
+        ).applyModifier(BitmapIconDrawable(bitmap), ImageEdit.COLORIZE).toBitmap()
+
+        sourceAlphas.forEachIndexed { x, alpha ->
+            assertEquals(alpha, Color.alpha(result.getPixel(x, 0)))
+            assertEquals(originalPixels[x], bitmap.getPixel(x, 0))
+        }
+        assertTrue(Color.red(result.getPixel(1, 0)) > Color.blue(result.getPixel(1, 0)))
+        assertTrue(Color.blue(result.getPixel(4, 0)) > Color.red(result.getPixel(4, 0)))
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun radialGradientColorizeRunsFromFirstColorAtCenterToSecondAtCorners() {
+        val bitmap = Bitmap.createBitmap(101, 101, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.WHITE)
+        }
+
+        val result = generator(
+            options(
+                color = Color.RED,
+                colorizerMode = ColorizerMode.GRADIENT,
+                colorizerGradientType = GradientType.RADIAL,
+                colorizerGradientColor = Color.BLUE
+            )
+        ).applyModifier(BitmapIconDrawable(bitmap), ImageEdit.COLORIZE).toBitmap()
+
+        val center = result.getPixel(50, 50)
+        val corner = result.getPixel(0, 0)
+        assertTrue(Color.red(center) > Color.blue(center))
+        assertTrue(Color.blue(corner) > Color.red(corner))
+        assertEquals(255, Color.alpha(center))
+        assertEquals(255, Color.alpha(corner))
     }
 
     @Test

@@ -39,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
@@ -53,6 +55,10 @@ import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.data.FallbackSourceKey
 import dev.renkinProject.renkin.data.IMAGE_EDIT_DEFAULT
 import dev.renkinProject.renkin.data.IconColorKey
+import dev.renkinProject.renkin.data.ColorizerGradientAngleKey
+import dev.renkinProject.renkin.data.ColorizerGradientColorKey
+import dev.renkinProject.renkin.data.ColorizerGradientTypeKey
+import dev.renkinProject.renkin.data.ColorizerModeKey
 import dev.renkinProject.renkin.data.getIconColor
 import dev.renkinProject.renkin.data.getBackgroundColor
 import dev.renkinProject.renkin.data.IconPack
@@ -71,15 +77,22 @@ import dev.renkinProject.renkin.data.SecondarySourceKey
 import dev.renkinProject.renkin.data.SecondaryTextTypeKey
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
 import dev.renkinProject.renkin.data.getBooleanValue
+import dev.renkinProject.renkin.data.getColorValue
 import dev.renkinProject.renkin.data.getEnumValue
+import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.setColorValue
 import dev.renkinProject.renkin.data.setEnumValue
+import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.icon.creator.ColorizerMode
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.GradientType
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * The home list's Advanced options card, back in its old place: the expandable generation
@@ -183,6 +196,12 @@ fun AdvancedOptionsContent(
     var fallbackSource by rememberSaveable { mutableStateOf(FALLBACK_SOURCE_DEFAULT) }
     val currentColor = prefs.getIconColor()
     val currentBgColor = prefs.getBackgroundColor()
+    val colorizerMode = prefs.getEnumValue(ColorizerModeKey, ColorizerMode.SINGLE_COLOR)
+    val colorizerGradientType =
+        prefs.getEnumValue(ColorizerGradientTypeKey, GradientType.LINEAR)
+    val colorizerGradientColor = prefs.getColorValue(ColorizerGradientColorKey, Color.Black)
+    val colorizerGradientAngle =
+        prefs.getIntValue(ColorizerGradientAngleKey).coerceIn(0, 360).toFloat()
 
     primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
@@ -202,6 +221,9 @@ fun AdvancedOptionsContent(
     val pathTracing = isPathTracingEnabled(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit)
     val showIconColor = showIconColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
     val showBgColor = showBackgroundColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
+    val showColorizer =
+        (needImageEdit(primarySource) && primaryImageEdit == dev.renkinProject.renkin.data.ImageEdit.COLORIZE) ||
+            (needImageEdit(secondarySource) && secondaryImageEdit == dev.renkinProject.renkin.data.ImageEdit.COLORIZE)
 
     val scope = rememberCoroutineScope()
 
@@ -316,8 +338,38 @@ fun AdvancedOptionsContent(
                     OptionsSectionLabel(R.string.advancedSectionColors)
                 }
                 if (showIconColor) {
-                    ColorButton(stringResource(R.string.iconColor), currentColor) { scope.launch { prefs.setColorValue(
-                        IconColorKey, it) } }
+                    if (showColorizer) {
+                        ColorizerStyleEditor(
+                            style = ColorizerStyle(
+                                mode = colorizerMode,
+                                gradientType = colorizerGradientType,
+                                firstColor = currentColor.toArgb(),
+                                secondColor = colorizerGradientColor.toArgb(),
+                                gradientAngle = colorizerGradientAngle
+                            ),
+                            onStyleChange = { style ->
+                                scope.launch {
+                                    prefs.setEnumValue(ColorizerModeKey, style.mode)
+                                    prefs.setEnumValue(
+                                        ColorizerGradientTypeKey, style.gradientType
+                                    )
+                                    prefs.setColorValue(IconColorKey, Color(style.firstColor))
+                                    prefs.setColorValue(
+                                        ColorizerGradientColorKey, Color(style.secondColor)
+                                    )
+                                    prefs.setIntValue(
+                                        ColorizerGradientAngleKey,
+                                        style.gradientAngle.roundToInt()
+                                    )
+                                }
+                            },
+                            showSingleColorEffects = false
+                        )
+                    } else {
+                        ColorButton(stringResource(R.string.iconColor), currentColor) {
+                            scope.launch { prefs.setColorValue(IconColorKey, it) }
+                        }
+                    }
                 }
                 if (showBgColor) {
                     ColorButton(stringResource(R.string.backgroundColor), currentBgColor) { scope.launch { prefs.setColorValue(

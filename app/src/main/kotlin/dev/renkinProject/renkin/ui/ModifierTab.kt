@@ -81,6 +81,9 @@ import dev.renkinProject.renkin.data.getImageEditLabels
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconShapes
+import dev.renkinProject.renkin.icon.creator.ColorizerMode
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.GradientType
 import kotlin.math.roundToInt
 
 /**
@@ -98,6 +101,10 @@ internal class AdjustmentState {
     var colorizeFlat by mutableStateOf(false)
     var colorizeMonochrome by mutableStateOf(false)
     var colorizeInverse by mutableStateOf(false)
+    var colorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
+    var colorizerGradientType by mutableStateOf(GradientType.LINEAR)
+    var colorizerGradientColor by mutableStateOf(Color.Black)
+    var colorizerGradientAngle by mutableFloatStateOf(0f)
     var iconScale by mutableFloatStateOf(1f)
     var bgRemovalTolerance by mutableFloatStateOf(0.1f)
     // Auto-center is UI state only: switching it on computes the offsets below (the pipeline's
@@ -138,6 +145,10 @@ internal class AdjustmentState {
                     "colorizeFlat", it.colorizeFlat,
                     "colorizeMonochrome", it.colorizeMonochrome,
                     "colorizeInverse", it.colorizeInverse,
+                    "colorizerMode", it.colorizerMode.ordinal,
+                    "colorizerGradientType", it.colorizerGradientType.ordinal,
+                    "colorizerGradientColor", it.colorizerGradientColor.toArgb(),
+                    "colorizerGradientAngle", it.colorizerGradientAngle,
                     "iconShape", it.iconShape.ordinal,
                     "shapeCrop", it.shapeCrop,
                     "shapeColor", it.shapeColor.toArgb(),
@@ -179,6 +190,17 @@ internal class AdjustmentState {
             colorizeFlat = saved["colorizeFlat"] as? Boolean ?: colorizeFlat
             colorizeMonochrome = saved["colorizeMonochrome"] as? Boolean ?: colorizeMonochrome
             colorizeInverse = saved["colorizeInverse"] as? Boolean ?: colorizeInverse
+            colorizerMode = ColorizerMode.entries.getOrElse(
+                saved["colorizerMode"] as? Int ?: ColorizerMode.SINGLE_COLOR.ordinal
+            ) { ColorizerMode.SINGLE_COLOR }
+            colorizerGradientType = GradientType.entries.getOrElse(
+                saved["colorizerGradientType"] as? Int ?: GradientType.LINEAR.ordinal
+            ) { GradientType.LINEAR }
+            (saved["colorizerGradientColor"] as? Int)?.let {
+                colorizerGradientColor = Color(it)
+            }
+            colorizerGradientAngle =
+                saved["colorizerGradientAngle"] as? Float ?: colorizerGradientAngle
             iconShape = IconShape.entries.getOrElse(saved["iconShape"] as? Int ?: 0) { IconShape.NONE }
             shapeCrop = saved["shapeCrop"] as? Boolean ?: shapeCrop
             (saved["shapeColor"] as? Int)?.let { shapeColor = Color(it) }
@@ -488,32 +510,30 @@ internal fun ModifierTab(
                                 }
 
                                 ImageEdit.COLORIZE -> {
-                                    IconColorCard(iconColor) { colorPickerOpen = true }
-                                    // Flat fill vs. multiply blend: on a coloured icon the multiply
-                                    // default mixes the picked colour with the original, so blue over
-                                    // green reads muddy. This makes the picked colour land exactly.
-                                    ColorizeSwitchRow(
-                                        label = stringResource(R.string.colorizeSolid),
-                                        hint = stringResource(R.string.colorizeSolidHint),
-                                        checked = adjustments.colorizeFlat,
-                                        onCheckedChange = {
-                                            adjustments.colorizeFlat = it
-                                            if (it) adjustments.colorizeMonochrome = false
-                                        }
-                                    )
-                                    ColorizeSwitchRow(
-                                        label = stringResource(R.string.colorizeMonochrome),
-                                        hint = stringResource(R.string.colorizeMonochromeHint),
-                                        checked = adjustments.colorizeMonochrome,
-                                        onCheckedChange = {
-                                            adjustments.colorizeMonochrome = it
-                                            if (it) adjustments.colorizeFlat = false
-                                        }
-                                    )
-                                    ColorizeSwitchRow(
-                                        label = stringResource(R.string.inverseColors),
-                                        checked = adjustments.colorizeInverse,
-                                        onCheckedChange = { adjustments.colorizeInverse = it }
+                                    ColorizerStyleEditor(
+                                        style = ColorizerStyle(
+                                            mode = adjustments.colorizerMode,
+                                            gradientType = adjustments.colorizerGradientType,
+                                            firstColor = iconColor.toArgb(),
+                                            secondColor = adjustments.colorizerGradientColor.toArgb(),
+                                            gradientAngle = adjustments.colorizerGradientAngle,
+                                            flat = adjustments.colorizeFlat,
+                                            monochrome = adjustments.colorizeMonochrome,
+                                            inverse = adjustments.colorizeInverse
+                                        ),
+                                        onStyleChange = { style ->
+                                            adjustments.colorizerMode = style.mode
+                                            adjustments.colorizerGradientType = style.gradientType
+                                            onColorChange(Color(style.firstColor))
+                                            adjustments.colorizerGradientColor =
+                                                Color(style.secondColor)
+                                            adjustments.colorizerGradientAngle =
+                                                style.gradientAngle
+                                            adjustments.colorizeFlat = style.flat
+                                            adjustments.colorizeMonochrome = style.monochrome
+                                            adjustments.colorizeInverse = style.inverse
+                                        },
+                                        sampleBitmap = sampleBitmap
                                     )
                                 }
 
@@ -881,36 +901,6 @@ private fun IconColorCard(iconColor: Color, onClick: () -> Unit) {
             ) {}
         }
     )
-}
-
-@Composable
-private fun ColorizeSwitchRow(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    hint: String? = null,
-    horizontalPadding: androidx.compose.ui.unit.Dp = 4.dp
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            if (hint != null) {
-                Text(
-                    text = hint,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
 }
 
 /** The tile glyph giving each image modifier a visual identity in the selector grid. */

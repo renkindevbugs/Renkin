@@ -71,6 +71,10 @@ val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
 val ExportThemedKey = booleanPreferencesKey(EXPORT_THEMED_NAME)
 val IconColorKey = stringPreferencesKey(ICON_COLOR_NAME)
 val BackgroundColorKey = stringPreferencesKey(BACKGROUND_COLOR_NAME)
+val ColorizerModeKey = intPreferencesKey("COLORIZER_MODE")
+val ColorizerGradientColorKey = stringPreferencesKey("COLORIZER_GRADIENT_COLOR")
+val ColorizerGradientAngleKey = intPreferencesKey("COLORIZER_GRADIENT_ANGLE")
+val ColorizerGradientTypeKey = intPreferencesKey("COLORIZER_GRADIENT_TYPE")
 val CalendarIconsKey = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS_NAME)
 val OverrideIconKey = booleanPreferencesKey(OVERRIDE_ICON_NAME)
 val PrimarySourceKey = intPreferencesKey(PRIMARY_SOURCE_NAME)
@@ -113,6 +117,10 @@ val GlobalColorizeColorKey = stringPreferencesKey("GLOBAL_COLORIZE_COLOR")
 val GlobalColorizeFlatKey = booleanPreferencesKey("GLOBAL_COLORIZE_FLAT")
 val GlobalColorizeMonochromeKey = booleanPreferencesKey("GLOBAL_COLORIZE_MONOCHROME")
 val GlobalColorizeInverseKey = booleanPreferencesKey("GLOBAL_COLORIZE_INVERSE")
+val GlobalColorizerModeKey = intPreferencesKey("GLOBAL_COLORIZER_MODE")
+val GlobalColorizerGradientColorKey = stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_COLOR")
+val GlobalColorizerGradientAngleKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_ANGLE")
+val GlobalColorizerGradientTypeKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_TYPE")
 // Which icon categories the global modifiers apply to (the Global options screen's toggle
 // buttons): refresh-generated icons (on by default — also gates the globals during a bulk
 // refresh), hand-picked (custom) icons, and apps that have no icon yet (those get one
@@ -158,13 +166,16 @@ private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
     PrimarySourceKey, PrimaryImageEditKey, PrimaryTextTypeKey,
     SecondarySourceKey, SecondaryImageEditKey, SecondaryTextTypeKey,
     FallbackSourceKey, OutlineWidthKey, BuiltPrimarySourceKey,
-    GlobalShapeKey, GlobalShapeScaleKey, GlobalIconScaleKey
+    GlobalShapeKey, GlobalShapeScaleKey, GlobalIconScaleKey,
+    ColorizerModeKey, ColorizerGradientAngleKey, ColorizerGradientTypeKey,
+    GlobalColorizerModeKey, GlobalColorizerGradientAngleKey, GlobalColorizerGradientTypeKey
 )
 
 private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
     PrimaryIconPackKey, SecondaryIconPackKey, IconColorKey, BackgroundColorKey,
     TextFontKey, OutlineColorKey, BuiltPrimaryIconPackKey,
-    GlobalShapeColorKey, GlobalColorizeColorKey
+    GlobalShapeColorKey, GlobalColorizeColorKey, ColorizerGradientColorKey,
+    GlobalColorizerGradientColorKey
 )
 
 val ProfilePrefKeys: List<Preferences.Key<*>> =
@@ -187,6 +198,13 @@ suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preference
             target[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
             target[GlobalColorizeMonochromeKey] = source.getBooleanValue(GlobalColorizeMonochromeKey)
             target[GlobalColorizeInverseKey] = source.getBooleanValue(GlobalColorizeInverseKey)
+            target[GlobalColorizerModeKey] = source.getIntValue(GlobalColorizerModeKey)
+            target[GlobalColorizerGradientColorKey] =
+                source.getStringValue(GlobalColorizerGradientColorKey)
+            target[GlobalColorizerGradientAngleKey] =
+                source.getIntValue(GlobalColorizerGradientAngleKey)
+            target[GlobalColorizerGradientTypeKey] =
+                source.getIntValue(GlobalColorizerGradientTypeKey)
             target[GlobalApplyGeneratedKey] = source.getBooleanValue(GlobalApplyGeneratedKey, true)
             target[GlobalApplyExistingKey] = source.getBooleanValue(GlobalApplyExistingKey)
             target[GlobalApplyCustomKey] = source.getBooleanValue(GlobalApplyCustomKey)

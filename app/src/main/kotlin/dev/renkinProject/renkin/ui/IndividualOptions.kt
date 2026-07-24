@@ -34,6 +34,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -435,6 +436,10 @@ fun OptionsDialog(
         colorizeFlat = adjustments.colorizeFlat,
         colorizeMonochrome = adjustments.colorizeMonochrome,
         colorizeInverse = adjustments.colorizeInverse,
+        colorizerMode = adjustments.colorizerMode,
+        colorizerGradientType = adjustments.colorizerGradientType,
+        colorizerGradientColor = adjustments.colorizerGradientColor.toArgb(),
+        colorizerGradientAngle = adjustments.colorizerGradientAngle,
         iconShape = adjustments.iconShape,
         iconShapeCrop = adjustments.shapeCrop,
         iconShapeScale = adjustments.shapeScale,
