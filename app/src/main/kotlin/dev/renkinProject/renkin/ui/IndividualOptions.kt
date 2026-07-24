@@ -334,6 +334,9 @@ fun OptionsDialog(
     // bulk refresh's own (hero-source) icons only, never to hand-picked ones. Per-app outline
     // stays an explicit choice in the Modifier tab.
     val adjustments = rememberSaveable(saver = AdjustmentState.Saver) { AdjustmentState() }
+    val materialYouPackAdjustments = rememberSaveable(
+        saver = MaterialYouPackAdjustmentState.Saver
+    ) { MaterialYouPackAdjustmentState() }
 
     // Calendar day icons — committed immediately when toggled (independent of icon confirm).
     var calendarEnabled by rememberSaveable { mutableStateOf(app.calendarEnabled) }
@@ -376,6 +379,10 @@ fun OptionsDialog(
     val isMaterialYouVariant = source == Source.APPLICATION_ICON &&
         applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU
     val materialYouSchemes = rememberMaterialYouSchemes()
+    val selectedMaterialYouPackIcon = source == Source.ICON_PACK &&
+        customIconList.firstOrNull()?.drawable?.isAdaptiveIconDrawable() == true &&
+        iconPacks.firstOrNull { it.packageName == iconPack }
+            ?.changesWithMaterialYouColors == true
     val isCustomScheme = materialYouScheme >= materialYouSchemes.size
     val scheme = materialYouSchemes.getOrNull(materialYouScheme)
     // The generated approximation maps the regular artwork's light/dark roles in reverse. Swap
@@ -394,6 +401,21 @@ fun OptionsDialog(
         isMaterialYouVariant -> customBgColor
         adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop -> adjustments.shapeColor
         else -> Color.Transparent
+    }
+    val selectedPackScheme = materialYouSchemes.getOrNull(
+        materialYouPackAdjustments.selectedScheme
+    )
+    val materialYouPackForeground = when {
+        !selectedMaterialYouPackIcon || materialYouPackAdjustments.selectedScheme < 0 -> null
+        materialYouPackAdjustments.selectedScheme >= materialYouSchemes.size ->
+            materialYouPackAdjustments.customForeground.toInt()
+        else -> selectedPackScheme!!.first.toInt()
+    }
+    val materialYouPackBackground = when {
+        !selectedMaterialYouPackIcon || materialYouPackAdjustments.selectedScheme < 0 -> null
+        materialYouPackAdjustments.selectedScheme >= materialYouSchemes.size ->
+            materialYouPackAdjustments.customBackground.toInt()
+        else -> selectedPackScheme!!.second.toInt()
     }
 
     val generatingOptions = GenerationOptions(
@@ -428,7 +450,20 @@ fun OptionsDialog(
         textCase = textCase,
         textFontPath = textFontPath,
         applicationIconVariant = applicationIconVariant,
-        invertMonochrome = invertMonochrome
+        invertMonochrome = invertMonochrome,
+        materialYouPackForeground = materialYouPackForeground,
+        materialYouPackBackground = materialYouPackBackground,
+        materialYouPackStrokeScale = if (selectedMaterialYouPackIcon) {
+            materialYouPackAdjustments.strokeScale
+        } else 1f
+    )
+    // Pack rows describe the source artwork, not the per-icon draft currently being edited.
+    // Keeping these options separate prevents a Material You slider from restyling every
+    // Lawnicons tile while the selected icon alone is regenerated below.
+    val browserOptions = generatingOptions.copy(
+        materialYouPackForeground = null,
+        materialYouPackBackground = null,
+        materialYouPackStrokeScale = 1f
     )
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
@@ -542,7 +577,7 @@ fun OptionsDialog(
                                 source = source,
                                 contentPadding = headerPadding,
                                 iconPacks = iconPacks,
-                                options = generatingOptions,
+                                options = browserOptions,
                                 textType = textType,
                                 listState = iconListState,
                                 gridState = iconGridState,
@@ -559,6 +594,11 @@ fun OptionsDialog(
                                     app.toInstalledApplication()
                                 } else null,
                                 onIconSelect = { res, pack, drawableName ->
+                                    if (customIconList.firstOrNull()?.resourceId != res.resourceId ||
+                                        iconPack != pack.packageName
+                                    ) {
+                                        materialYouPackAdjustments.reset()
+                                    }
                                     customIconList = listOf(res)
                                     iconPack = pack.packageName
                                     draft.origin = IconOrigin.CREATE
@@ -637,6 +677,9 @@ fun OptionsDialog(
                                 centerPreview = remember(draft.iconToConfirm) { draft.iconToConfirm?.toBitmap() },
                                 previewGenerating = draft.generating,
                                 sampleBitmap = heroBitmap,
+                                materialYouPackAdjustments =
+                                    materialYouPackAdjustments.takeIf { selectedMaterialYouPackIcon },
+                                materialYouSchemes = materialYouSchemes,
                                 onImageEditChange = { imageEdit = it },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },

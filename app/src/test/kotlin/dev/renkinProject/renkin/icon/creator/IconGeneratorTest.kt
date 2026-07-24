@@ -92,6 +92,13 @@ class IconGeneratorTest {
         return BitmapIconDrawable(bitmap)
     }
 
+    @Test
+    fun materialYouPackStrokeScale_isRelativeToHalfWidthBrowserBaseline() {
+        assertEquals(0.25f, effectiveMaterialYouPackStrokeScale(0.5f))
+        assertEquals(0.5f, effectiveMaterialYouPackStrokeScale(1f))
+        assertEquals(1f, effectiveMaterialYouPackStrokeScale(2f))
+    }
+
     private fun generator(options: GenerationOptions) =
         IconGenerator(context, options, emptyPack, emptyPack)
 

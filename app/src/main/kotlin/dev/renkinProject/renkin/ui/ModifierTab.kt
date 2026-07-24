@@ -52,10 +52,12 @@ import androidx.compose.material3.SplitButtonLayout
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
@@ -209,6 +211,63 @@ internal class AdjustmentState {
     }
 }
 
+@Stable
+internal class MaterialYouPackAdjustmentState {
+    var selectedScheme by mutableIntStateOf(-1)
+    var customForeground by mutableStateOf(Color.White)
+    var customBackground by mutableStateOf(Color.Black)
+    var strokeScale by mutableFloatStateOf(1f)
+
+    fun reset() {
+        selectedScheme = -1
+        customForeground = Color.White
+        customBackground = Color.Black
+        strokeScale = 1f
+    }
+
+    companion object {
+        val Saver = Saver<MaterialYouPackAdjustmentState, Any>(
+            save = {
+                arrayListOf(
+                    it.selectedScheme,
+                    it.customForeground.toArgb(),
+                    it.customBackground.toArgb(),
+                    it.strokeScale
+                )
+            },
+            restore = { saved ->
+                val values = saved as? List<*>
+                if (values == null) {
+                    MaterialYouPackAdjustmentState()
+                } else {
+                    MaterialYouPackAdjustmentState().apply {
+                        selectedScheme = values.getOrNull(0) as? Int ?: -1
+                        customForeground = Color(
+                            values.getOrNull(1) as? Int ?: Color.White.toArgb()
+                        )
+                        customBackground = Color(
+                            values.getOrNull(2) as? Int ?: Color.Black.toArgb()
+                        )
+                        strokeScale = values.getOrNull(3) as? Float ?: 1f
+                    }
+                }
+            }
+        )
+    }
+}
+
+internal fun lineWeightToCenteredSlider(scale: Float): Float =
+    if (scale <= 1f) ((scale.coerceIn(0.5f, 1f) - 0.5f) * 2f)
+    else scale.coerceIn(1f, 2f)
+
+internal fun centeredSliderToLineWeight(value: Float): Float {
+    val scale = if (value <= 1f) 0.5f + value.coerceIn(0f, 1f) * 0.5f
+    else value.coerceIn(1f, 2f)
+    // The label rounds to whole percent. Make every displayed 100% the exact identity value,
+    // otherwise returning the thumb visually to centre could keep a tiny adjustment active.
+    return if ((scale * 100).roundToInt() == 100) 1f else scale
+}
+
 @Composable
 internal fun ModifierTab(
     source: Source,
@@ -223,6 +282,8 @@ internal fun ModifierTab(
     previewGenerating: Boolean = false,
     // The app's original icon, offered as an eyedropper source in the colour picker.
     sampleBitmap: Bitmap? = null,
+    materialYouPackAdjustments: MaterialYouPackAdjustmentState? = null,
+    materialYouSchemes: List<Pair<Color, Color>> = emptyList(),
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
@@ -246,6 +307,66 @@ internal fun ModifierTab(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        if (materialYouPackAdjustments != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = stringResource(R.string.variantMaterialYou),
+                    style = MaterialTheme.typography.titleSmallEmphasized,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    modifier = Modifier.weight(1f)
+                )
+                if (materialYouPackAdjustments.selectedScheme >= 0 ||
+                    materialYouPackAdjustments.strokeScale != 1f
+                ) {
+                    TextButton(onClick = materialYouPackAdjustments::reset) {
+                        Text(stringResource(R.string.resetToDefault))
+                    }
+                }
+            }
+            Surface(
+                shape = CardShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    MaterialYouColorControls(
+                        schemes = materialYouSchemes,
+                        selectedScheme = materialYouPackAdjustments.selectedScheme,
+                        onSchemeChange = { materialYouPackAdjustments.selectedScheme = it },
+                        customForeground = materialYouPackAdjustments.customForeground,
+                        customBackground = materialYouPackAdjustments.customBackground,
+                        onCustomForegroundChange = {
+                            materialYouPackAdjustments.customForeground = it
+                        },
+                        onCustomBackgroundChange = {
+                            materialYouPackAdjustments.customBackground = it
+                        },
+                        allowOriginal = true,
+                        sampleBitmap = sampleBitmap
+                    )
+                    LabeledSlider(
+                        label = stringResource(R.string.lineThickness),
+                        value = lineWeightToCenteredSlider(
+                            materialYouPackAdjustments.strokeScale
+                        ),
+                        onValueChange = {
+                            materialYouPackAdjustments.strokeScale =
+                                centeredSliderToLineWeight(it)
+                        },
+                        valueRange = 0f..2f,
+                        valueLabel = "${(materialYouPackAdjustments.strokeScale * 100).roundToInt()}%",
+                        centered = true
+                    )
+                }
+            }
+        }
+
         Text(
             text = stringResource(R.string.imageEdit),
             style = MaterialTheme.typography.titleSmallEmphasized,

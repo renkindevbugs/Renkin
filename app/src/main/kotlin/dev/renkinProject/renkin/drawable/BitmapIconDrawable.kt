@@ -89,10 +89,11 @@ class BitmapIconDrawable(
 
     @Composable
     override fun getPainter(): Painter {
+        val previewBitmap = browserPreviewBitmap ?: drawable.bitmap
         val bitmap = if (previewScale != 1f) {
-            remember(drawable.bitmap, previewScale) { drawable.bitmap.scaleFromCenter(previewScale) }
+            remember(previewBitmap, previewScale) { previewBitmap.scaleFromCenter(previewScale) }
         } else {
-            drawable.bitmap
+            previewBitmap
         }
         return BitmapPainter(bitmap.asImageBitmap())
     }

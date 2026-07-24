@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui
 
+import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
@@ -421,8 +423,6 @@ private fun ApplicationIconVariantSelector(
     onCustomForegroundChange: (Color) -> Unit,
     onCustomBackgroundChange: (Color) -> Unit
 ) {
-    var fgPickerOpen by remember { mutableStateOf(false) }
-    var bgPickerOpen by remember { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxSize()
@@ -507,43 +507,89 @@ private fun ApplicationIconVariantSelector(
         }
 
         if (variant == ApplicationIconVariant.MATERIAL_YOU) {
-            Text(
-                text = stringResource(R.string.materialYouColors),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 20.dp, bottom = 10.dp)
+            MaterialYouColorControls(
+                schemes = schemes,
+                selectedScheme = selectedScheme,
+                onSchemeChange = onSchemeChange,
+                customForeground = customForeground,
+                customBackground = customBackground,
+                onCustomForegroundChange = onCustomForegroundChange,
+                onCustomBackgroundChange = onCustomBackgroundChange,
+                modifier = Modifier.padding(top = 20.dp)
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                schemes.forEachIndexed { index, (fg, bg) ->
-                    SchemeSwatch(
-                        foreground = fg,
-                        background = bg,
-                        custom = false,
-                        selected = selectedScheme == index
-                    ) { onSchemeChange(index) }
-                }
-                // Custom: foreground/background chosen with the inline pickers below.
-                SchemeSwatch(
-                    foreground = MaterialTheme.colorScheme.onSurface,
-                    background = MaterialTheme.colorScheme.surfaceVariant,
-                    custom = true,
-                    selected = selectedScheme >= schemes.size
-                ) { onSchemeChange(schemes.size) }
-            }
+        }
+    }
+}
 
-            if (selectedScheme >= schemes.size) {
-                Spacer(Modifier.height(12.dp))
-                ColorRow(stringResource(R.string.iconColor), customForeground) { fgPickerOpen = true }
-                Spacer(Modifier.height(8.dp))
-                ColorRow(stringResource(R.string.backgroundColor), customBackground) { bgPickerOpen = true }
-            } else {
-                Text(
-                    text = stringResource(R.string.materialYouColorsHint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 10.dp)
-                )
+/**
+ * Shared Material You scheme chooser used by the Application Icon source and by compatible
+ * adaptive icon packs in the Modifier tab.
+ */
+@Composable
+internal fun MaterialYouColorControls(
+    schemes: List<Pair<Color, Color>>,
+    selectedScheme: Int,
+    onSchemeChange: (Int) -> Unit,
+    customForeground: Color,
+    customBackground: Color,
+    onCustomForegroundChange: (Color) -> Unit,
+    onCustomBackgroundChange: (Color) -> Unit,
+    modifier: Modifier = Modifier,
+    allowOriginal: Boolean = false,
+    sampleBitmap: Bitmap? = null
+) {
+    var fgPickerOpen by remember { mutableStateOf(false) }
+    var bgPickerOpen by remember { mutableStateOf(false) }
+
+    Column(modifier) {
+        Text(
+            text = stringResource(R.string.materialYouColors),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(bottom = 10.dp)
+        )
+        if (allowOriginal) {
+            FilterChip(
+                selected = selectedScheme < 0,
+                onClick = { onSchemeChange(-1) },
+                label = { Text(stringResource(R.string.originalColors)) }
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            schemes.forEachIndexed { index, (fg, bg) ->
+                SchemeSwatch(
+                    foreground = fg,
+                    background = bg,
+                    custom = false,
+                    selected = selectedScheme == index
+                ) { onSchemeChange(index) }
             }
+            // Custom: foreground/background chosen with the inline pickers below.
+            SchemeSwatch(
+                foreground = MaterialTheme.colorScheme.onSurface,
+                background = MaterialTheme.colorScheme.surfaceVariant,
+                custom = true,
+                selected = selectedScheme >= schemes.size
+            ) { onSchemeChange(schemes.size) }
+        }
+
+        if (selectedScheme >= schemes.size) {
+            Spacer(Modifier.height(12.dp))
+            ColorRow(stringResource(R.string.iconColor), customForeground) { fgPickerOpen = true }
+            Spacer(Modifier.height(8.dp))
+            ColorRow(stringResource(R.string.backgroundColor), customBackground) { bgPickerOpen = true }
+        } else if (selectedScheme >= 0) {
+            Text(
+                text = stringResource(R.string.materialYouColorsHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 10.dp)
+            )
         }
     }
 
@@ -551,14 +597,16 @@ private fun ApplicationIconVariantSelector(
         ColorDialog(
             onDismiss = { fgPickerOpen = false },
             currentlySelected = customForeground,
-            onColorSelected = onCustomForegroundChange
+            onColorSelected = onCustomForegroundChange,
+            sampleBitmap = sampleBitmap
         )
     }
     if (bgPickerOpen) {
         ColorDialog(
             onDismiss = { bgPickerOpen = false },
             currentlySelected = customBackground,
-            onColorSelected = onCustomBackgroundChange
+            onColorSelected = onCustomBackgroundChange,
+            sampleBitmap = sampleBitmap
         )
     }
 }

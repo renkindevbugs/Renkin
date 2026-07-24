@@ -408,6 +408,17 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
             }
         }
 
+        fun MutableVectorGroup.scaleStrokePaths(scale: Float) {
+            for (child in this.children) {
+                when (child) {
+                    is MutableVectorGroup -> child.scaleStrokePaths(scale)
+                    is MutableVectorPath -> {
+                        if (child.strokeLineWidth > 0f) child.strokeLineWidth *= scale
+                    }
+                }
+            }
+        }
+
         fun MutableVectorGroup.editPaths(stroke: Float, fillColor: Brush, strokeColor: Brush) {
             for (child in this.children) {
                 if (child is MutableVectorGroup) {
