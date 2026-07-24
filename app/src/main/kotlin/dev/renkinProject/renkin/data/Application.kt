@@ -5,7 +5,8 @@ data class IconPack(
     val applicationName: String,
     val versionCode: Long,
     val versionName: String,
-    val iconID: Int
+    val iconID: Int,
+    val changesWithMaterialYouColors: Boolean = false
 )
 
 data class InstalledApplication(

@@ -131,7 +131,12 @@ data class GenerationOptions(
         ApplicationIconVariant.DEFAULT
     },
     // Per-app Monochrome option: invert luminance after desaturation (black ↔ white).
-    val invertMonochrome: Boolean = false
+    val invertMonochrome: Boolean = false,
+    // Optional restyling for an adaptive icon selected from a pack that advertises
+    // CHANGES_WITH_MATERIAL_YOU_COLORS. Null colours preserve the pack's originals.
+    val materialYouPackForeground: Int? = null,
+    val materialYouPackBackground: Int? = null,
+    val materialYouPackStrokeScale: Float = 1f
 ) {
     companion object {
         /**
@@ -233,7 +238,9 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
 
 fun GenerationOptions.hasVisibleModifierEffect(): Boolean =
     primaryImageEdit != ImageEdit.NONE || iconScale != 1f ||
-        iconShape != IconShape.NONE || outlineMode != OutlineMode.NONE
+        iconShape != IconShape.NONE || outlineMode != OutlineMode.NONE ||
+        materialYouPackForeground != null || materialYouPackBackground != null ||
+        materialYouPackStrokeScale != 1f
 
 /** Letter-case transform for text icons (per-app option; not persisted globally). */
 enum class TextCase { AS_IS, UPPER, LOWER }

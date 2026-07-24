@@ -46,6 +46,18 @@ internal fun launcherIconIdOrFallback(activityIconId: Int?, applicationIconId: I
 
 internal data class NamedResourceDrawable(val name: String, val resource: ResourceDrawable)
 
+internal const val ICON_PACK_ACTION = "org.adw.launcher.THEMES"
+internal const val CHANGES_WITH_MATERIAL_YOU_COLORS =
+    "org.icontheme.CHANGES_WITH_MATERIAL_YOU_COLORS"
+
+internal fun iconPackQueryIntent(
+    materialYouColorsOnly: Boolean = false,
+    packageName: String? = null
+): Intent = Intent(ICON_PACK_ACTION, null).apply {
+    if (materialYouColorsOnly) addCategory(CHANGES_WITH_MATERIAL_YOU_COLORS)
+    if (packageName != null) setPackage(packageName)
+}
+
 internal interface PackBrowserDataSource {
     fun getIconPackDrawableNames(iconPackName: String): List<String>
     fun getIconPackDrawableEntries(iconPackName: String, drawableNames: List<String>): List<NamedResourceDrawable>
@@ -182,7 +194,24 @@ internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSou
     }
 
     fun getIconPacks(): List<IconPack> {
-        return getIconPacks(Intent("org.adw.launcher.THEMES", null))
+        val materialYouPacks = getResolves(
+            iconPackQueryIntent(materialYouColorsOnly = true)
+        ).mapTo(mutableSetOf()) { it.activityInfo.packageName }
+        return getIconPacks(iconPackQueryIntent(), materialYouPacks)
+    }
+
+    /**
+     * True only when the source pack explicitly advertises that its colours follow
+     * Material You. Package names are deliberately not hard-coded: Lawnicons,
+     * Arcticons You and future compatible packs use the same icon-theme contract.
+     */
+    fun changesWithMaterialYouColors(packageName: String): Boolean {
+        if (packageName.isEmpty()) return false
+        val intent = iconPackQueryIntent(
+            materialYouColorsOnly = true,
+            packageName = packageName
+        )
+        return getResolves(intent).any { it.activityInfo.packageName == packageName }
     }
 
     override fun getAppFilterRawElements(iconPackName: String, applications: List<InstalledApplication>): List<RawElement> {
@@ -334,7 +363,10 @@ internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSou
         return map
     }
 
-    private fun getIconPacks(intent: Intent): List<IconPack> {
+    private fun getIconPacks(
+        intent: Intent,
+        materialYouPacks: Set<String> = emptySet()
+    ): List<IconPack> {
         val resolves = getResolves(intent)
         val iconPacks = mutableListOf<IconPack>()
 
@@ -348,7 +380,16 @@ internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSou
                 if (pack != null) {
                     val versionCode = getVersionCode(pack)
                     val versionName = pack.versionName ?: ""
-                    iconPacks.add(IconPack(packageName, appName, versionCode, versionName, iconID))
+                    iconPacks.add(
+                        IconPack(
+                            packageName,
+                            appName,
+                            versionCode,
+                            versionName,
+                            iconID,
+                            changesWithMaterialYouColors = packageName in materialYouPacks
+                        )
+                    )
                 }
             } catch (error: Exception) {
                 // Broken metadata in one advertised theme must not hide every healthy pack.

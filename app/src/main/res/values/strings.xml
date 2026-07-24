@@ -13,6 +13,7 @@
     <string name="iconCurrent">Current</string>
     <string name="iconNew">New</string>
     <string name="resetToDefault">Reset to default</string>
+    <string name="originalColors">Original colors</string>
     <string name="moreOptions">More options</string>
     <string name="create">Create</string>
     <string name="upload">Upload</string>

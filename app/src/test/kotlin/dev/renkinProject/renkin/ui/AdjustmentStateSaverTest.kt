@@ -40,6 +40,38 @@ class AdjustmentStateSaverTest {
         assertState(restored)
     }
 
+    @Test
+    fun materialYouPackSaver_roundTripsPaletteAndRelativeStrokeScale() {
+        val original = MaterialYouPackAdjustmentState().apply {
+            selectedScheme = 3
+            customForeground = Color.Yellow
+            customBackground = Color.Blue
+            strokeScale = 1.4f
+        }
+
+        val saved = with(MaterialYouPackAdjustmentState.Saver) {
+            saveableScope.save(original)
+        }
+        val restored = MaterialYouPackAdjustmentState.Saver.restore(requireNotNull(saved))
+
+        assertNotNull(restored)
+        restored!!
+        assertEquals(3, restored.selectedScheme)
+        assertEquals(Color.Yellow, restored.customForeground)
+        assertEquals(Color.Blue, restored.customBackground)
+        assertEquals(1.4f, restored.strokeScale)
+    }
+
+    @Test
+    fun centeredLineWeightSlider_placesAndSnapsOneHundredPercentAtCenter() {
+        assertEquals(0f, lineWeightToCenteredSlider(0.5f), 0.001f)
+        assertEquals(1f, lineWeightToCenteredSlider(1f), 0.001f)
+        assertEquals(2f, lineWeightToCenteredSlider(2f), 0.001f)
+        assertEquals(0.5f, centeredSliderToLineWeight(0f), 0.001f)
+        assertEquals(1f, centeredSliderToLineWeight(1.004f), 0.001f)
+        assertEquals(2f, centeredSliderToLineWeight(2f), 0.001f)
+    }
+
     private fun populatedState() = AdjustmentState().apply {
         edgeThreshold = 1.25f
         edgeSmoothing = 3.5f

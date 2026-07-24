@@ -111,6 +111,17 @@ class PackBrowserPreviewsTest {
     }
 
     @Test
+    fun cacheKey_changesWhenMaterialYouCapabilityChanges() {
+        val ordinary = pack()
+        val materialYou = ordinary.copy(changesWithMaterialYouColors = true)
+
+        assertNotEquals(
+            cacheKey(ordinary, IconSortOrder.NAME_ASC, "", options(), null),
+            cacheKey(materialYou, IconSortOrder.NAME_ASC, "", options(), null)
+        )
+    }
+
+    @Test
     fun cacheKey_distinguishesActivitiesInTheSamePackage() {
         val first = cacheKey(
             pack(), IconSortOrder.NAME_ASC, "q", options(),
