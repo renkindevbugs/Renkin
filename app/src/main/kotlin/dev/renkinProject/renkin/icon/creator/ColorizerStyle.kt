@@ -27,3 +27,16 @@ enum class GradientType {
 }
 
 fun normalizeGradientAngle(angle: Float): Float = angle.coerceIn(0f, 360f)
+
+/** Half-width of the magnet zone around each 45° multiple, in degrees. */
+const val GRADIENT_ANGLE_MAGNET = 5f
+
+/**
+ * Dial input stays free at 1° precision, but a fingertip almost never lands exactly on the
+ * cardinal/diagonal angles people actually aim for, so pull those in when close enough.
+ */
+fun snapGradientAngle(angle: Float): Float {
+    val raw = (angle % 360f + 360f) % 360f
+    val nearest = Math.round(raw / 45f) * 45f
+    return if (kotlin.math.abs(raw - nearest) <= GRADIENT_ANGLE_MAGNET) nearest % 360f else raw
+}

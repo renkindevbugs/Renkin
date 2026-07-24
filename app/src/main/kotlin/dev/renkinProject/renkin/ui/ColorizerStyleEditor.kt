@@ -9,19 +9,21 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
@@ -37,30 +39,27 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.normalizeGradientAngle
+import dev.renkinProject.renkin.icon.creator.snapGradientAngle
 import kotlin.math.atan2
 import kotlin.math.cos
 import kotlin.math.roundToInt
@@ -298,35 +297,26 @@ private enum class ColorPickerTarget { FIRST, SECOND }
 
 private fun opaque(color: Int): Int = color or 0xFF000000.toInt()
 
+/** Presets a user actually reaches for; anything else comes from dragging the dial. */
+private val AnglePresets = listOf(0, 45, 90, 135, 180, 270)
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun GradientAngleControl(
     angle: Float,
     onAngleChange: (Float) -> Unit
 ) {
     val angleLabel = stringResource(R.string.gradientAngle)
-    val focusManager = LocalFocusManager.current
-    var angleText by remember(angle) { mutableStateOf(angle.roundToInt().toString()) }
-    var angleFieldFocused by remember { mutableStateOf(false) }
 
-    fun submitText() {
-        val parsed = angleText.toIntOrNull()
-        if (parsed == null) {
-            angleText = angle.roundToInt().toString()
-        } else {
-            val normalized = parsed.coerceIn(0, 360).toFloat()
-            angleText = normalized.roundToInt().toString()
-            onAngleChange(normalized)
-        }
-    }
-
-    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
             text = angleLabel,
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface
         )
         Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AngleDial(
@@ -334,33 +324,19 @@ private fun GradientAngleControl(
                 contentDescription = angleLabel,
                 onAngleChange = onAngleChange
             )
-            OutlinedTextField(
-                value = angleText,
-                onValueChange = { input ->
-                    angleText = input.filter(Char::isDigit).take(3)
-                    angleText.toIntOrNull()?.let {
-                        onAngleChange(it.coerceIn(0, 360).toFloat())
-                    }
-                },
-                modifier = Modifier
-                    .width(96.dp)
-                    .onFocusChanged {
-                        if (angleFieldFocused && !it.isFocused) submitText()
-                        angleFieldFocused = it.isFocused
-                    },
-                singleLine = true,
-                suffix = { Text("°") },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(
-                    onDone = {
-                        submitText()
-                        focusManager.clearFocus()
-                    }
-                )
-            )
+            FlowRow(
+                modifier = Modifier.weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                AnglePresets.forEach { preset ->
+                    FilterChip(
+                        selected = angle.roundToInt() == preset,
+                        onClick = { onAngleChange(preset.toFloat()) },
+                        label = { Text("$preset°") }
+                    )
+                }
+            }
         }
     }
 }
@@ -371,8 +347,11 @@ private fun AngleDial(
     contentDescription: String,
     onAngleChange: (Float) -> Unit
 ) {
-    val outlineColor = MaterialTheme.colorScheme.outline
-    val markerColor = MaterialTheme.colorScheme.primary
+    val containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
+    val trackColor = MaterialTheme.colorScheme.secondaryContainer
+    val activeColor = MaterialTheme.colorScheme.primary
+    val tickColor = MaterialTheme.colorScheme.outlineVariant
+    val thumbBorderColor = MaterialTheme.colorScheme.surface
     val currentOnAngleChange by rememberUpdatedState(onAngleChange)
 
     fun angleFor(position: Offset, center: Offset): Float {
@@ -382,57 +361,93 @@ private fun AngleDial(
                 (center.y - position.y).toDouble()
             )
         ).toFloat()
-        return (degrees + 360f) % 360f
+        return snapGradientAngle(degrees)
     }
 
-    Canvas(
-        modifier = Modifier
-            .size(52.dp)
-            .semantics {
-                this.contentDescription = contentDescription
-                progressBarRangeInfo = ProgressBarRangeInfo(angle, 0f..360f)
-                setProgress {
-                    currentOnAngleChange(normalizeGradientAngle(it))
-                    true
+    Box(contentAlignment = Alignment.Center) {
+        Canvas(
+            modifier = Modifier
+                .size(120.dp)
+                .semantics {
+                    this.contentDescription = contentDescription
+                    progressBarRangeInfo = ProgressBarRangeInfo(angle, 0f..360f)
+                    setProgress {
+                        currentOnAngleChange(normalizeGradientAngle(it))
+                        true
+                    }
                 }
-            }
-            // The callback changes on every live angle recomposition. A stable key keeps this
-            // pointer coroutine alive for the entire gesture instead of restarting mid-drag.
-            .pointerInput(Unit) {
-                awaitEachGesture {
-                    // At the Main pass, descendants receive events before ancestors. Consuming
-                    // here prevents the surrounding verticalScroll from claiming the drag while
-                    // this pointer remains captured, including after it leaves the dial bounds.
-                    val down = awaitFirstDown(
-                        requireUnconsumed = false,
-                        pass = PointerEventPass.Main
-                    )
-                    down.consume()
-                    val center = Offset(size.width / 2f, size.height / 2f)
-                    currentOnAngleChange(angleFor(down.position, center))
-                    do {
-                        val event = awaitPointerEvent(PointerEventPass.Main)
-                        val change = event.changes.first()
-                        if (change.pressed) {
-                            currentOnAngleChange(angleFor(change.position, center))
-                        }
-                        change.consume()
-                    } while (change.pressed)
+                // The callback changes on every live angle recomposition. A stable key keeps this
+                // pointer coroutine alive for the entire gesture instead of restarting mid-drag.
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        // At the Main pass, descendants receive events before ancestors. Consuming
+                        // here prevents the surrounding verticalScroll from claiming the drag while
+                        // this pointer remains captured, including after it leaves the dial bounds.
+                        val down = awaitFirstDown(
+                            requireUnconsumed = false,
+                            pass = PointerEventPass.Main
+                        )
+                        down.consume()
+                        val center = Offset(size.width / 2f, size.height / 2f)
+                        currentOnAngleChange(angleFor(down.position, center))
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            val change = event.changes.first()
+                            if (change.pressed) {
+                                currentOnAngleChange(angleFor(change.position, center))
+                            }
+                            change.consume()
+                        } while (change.pressed)
+                    }
                 }
+        ) {
+            val outerRadius = size.minDimension / 2f
+            val trackWidth = 14.dp.toPx()
+            val trackRadius = outerRadius - trackWidth / 2f - 4.dp.toPx()
+
+            drawCircle(color = containerColor, radius = outerRadius)
+            drawCircle(
+                color = trackColor,
+                radius = trackRadius,
+                style = Stroke(width = trackWidth)
+            )
+            if (angle > 0f) {
+                val arcInset = outerRadius - trackRadius
+                drawArc(
+                    color = activeColor,
+                    // Canvas sweeps from 3 o'clock; the dial reads 0° at 12 o'clock.
+                    startAngle = -90f,
+                    sweepAngle = angle,
+                    useCenter = false,
+                    topLeft = Offset(arcInset, arcInset),
+                    size = Size(trackRadius * 2f, trackRadius * 2f),
+                    style = Stroke(width = trackWidth, cap = StrokeCap.Round)
+                )
             }
-    ) {
-        val radius = size.minDimension / 2f - 2.dp.toPx()
-        drawCircle(
-            color = outlineColor,
-            radius = radius,
-            style = Stroke(width = 2.dp.toPx())
+            for (tick in 0 until 360 step 45) {
+                val radians = Math.toRadians(tick.toDouble())
+                val direction = Offset(sin(radians).toFloat(), -cos(radians).toFloat())
+                val tickOuter = outerRadius - 1.dp.toPx()
+                drawLine(
+                    color = tickColor,
+                    start = center + direction * (tickOuter - 4.dp.toPx()),
+                    end = center + direction * tickOuter,
+                    strokeWidth = 2.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+            }
+            val radians = Math.toRadians(angle.toDouble())
+            val thumbCenter = Offset(
+                x = center.x + sin(radians).toFloat() * trackRadius,
+                y = center.y - cos(radians).toFloat() * trackRadius
+            )
+            drawCircle(color = thumbBorderColor, radius = 13.dp.toPx(), center = thumbCenter)
+            drawCircle(color = activeColor, radius = 10.dp.toPx(), center = thumbCenter)
+        }
+        Text(
+            text = "${angle.roundToInt()}°",
+            style = MaterialTheme.typography.headlineSmall,
+            color = MaterialTheme.colorScheme.onSurface
         )
-        val radians = Math.toRadians(angle.toDouble())
-        val markerRadius = radius * 0.62f
-        val markerCenter = Offset(
-            x = center.x + sin(radians).toFloat() * markerRadius,
-            y = center.y - cos(radians).toFloat() * markerRadius
-        )
-        drawCircle(color = markerColor, radius = 4.dp.toPx(), center = markerCenter)
     }
 }
