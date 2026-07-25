@@ -17,7 +17,17 @@ data class BackupData(
     val prefs: Map<String, BackupPref>,
     // Human-readable names of the packs referenced by any icon, captured on the exporting
     // device — the importer can name a missing pack it has never seen.
-    val packLabels: Map<String, String> = emptyMap()
+    val packLabels: Map<String, String> = emptyMap(),
+    // The saved colour/gradient library. Not tied to any profile, so it rides the full backup
+    // rather than a shared profile — and older archives simply carry none.
+    val colorPresets: List<BackupColorPreset> = emptyList()
+)
+
+/** A saved colour. Ids are not carried: import inserts fresh rows. */
+data class BackupColorPreset(
+    val name: String,
+    val style: String,
+    val createdAt: Long
 )
 
 data class BackupProfile(
@@ -145,6 +155,17 @@ object BackupCodec {
         for ((pack, label) in data.packLabels) packs.put(pack, label)
         root.put("packs", packs)
 
+        val presets = JSONArray()
+        for (preset in data.colorPresets) {
+            presets.put(
+                JSONObject()
+                    .put("name", preset.name)
+                    .put("style", preset.style)
+                    .put("createdAt", preset.createdAt)
+            )
+        }
+        root.put("colorPresets", presets)
+
         return root.toString()
     }
 
@@ -260,6 +281,20 @@ object BackupCodec {
             for (name in packs.keys()) packLabels[name] = packs.getString(name)
         }
 
-        return BackupData(profiles, prefs, packLabels)
+        val colorPresets = mutableListOf<BackupColorPreset>()
+        root.optJSONArray("colorPresets")?.let { presets ->
+            for (i in 0 until presets.length()) {
+                val preset = presets.getJSONObject(i)
+                colorPresets.add(
+                    BackupColorPreset(
+                        name = preset.getString("name"),
+                        style = preset.getString("style"),
+                        createdAt = preset.optLong("createdAt")
+                    )
+                )
+            }
+        }
+
+        return BackupData(profiles, prefs, packLabels, colorPresets)
     }
 }

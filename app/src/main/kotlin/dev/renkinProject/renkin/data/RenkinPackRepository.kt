@@ -64,6 +64,20 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         presetDao.delete(id)
     }
 
+    /** Backup export reads the library in one shot. */
+    suspend fun allColorPresets(): List<ColorPreset> = withContext(Dispatchers.Default) {
+        presetDao.getAll()
+    }
+
+    /**
+     * Backup import: the saved colours belong to the device, not a profile, so a full restore
+     * replaces the whole library the same way it replaces profiles.
+     */
+    suspend fun replaceColorPresets(presets: List<ColorPreset>) = db.withTransaction {
+        presetDao.deleteEverything()
+        presets.forEach { presetDao.insert(it) }
+    }
+
     // ---- Pack verdicts -------------------------------------------------------------
 
     private val verdictDao = db.packVerdictDao()
