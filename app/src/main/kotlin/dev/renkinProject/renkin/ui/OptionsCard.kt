@@ -57,6 +57,9 @@ import dev.renkinProject.renkin.data.IMAGE_EDIT_DEFAULT
 import dev.renkinProject.renkin.data.IconColorKey
 import dev.renkinProject.renkin.data.ColorizerGradientAngleKey
 import dev.renkinProject.renkin.data.ColorizerGradientColorKey
+import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
+import dev.renkinProject.renkin.data.getGradientStops
+import dev.renkinProject.renkin.data.setGradientStops
 import dev.renkinProject.renkin.data.ColorizerGradientTypeKey
 import dev.renkinProject.renkin.data.ColorizerModeKey
 import dev.renkinProject.renkin.data.getIconColor
@@ -180,6 +183,7 @@ fun AdvancedOptionsContent(
 ) {
     val prefs = getPreferences()
 
+    var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
     var primarySource by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
     var primaryImageEdit by rememberSaveable { mutableStateOf(IMAGE_EDIT_DEFAULT) }
     var primaryTextType by rememberSaveable { mutableStateOf(TEXT_TYPE_DEFAULT) }
@@ -199,7 +203,8 @@ fun AdvancedOptionsContent(
     val colorizerMode = prefs.getEnumValue(ColorizerModeKey, ColorizerMode.SINGLE_COLOR)
     val colorizerGradientType =
         prefs.getEnumValue(ColorizerGradientTypeKey, GradientType.LINEAR)
-    val colorizerGradientColor = prefs.getColorValue(ColorizerGradientColorKey, Color.Black)
+    val colorizerGradientColors =
+        prefs.getGradientStops(ColorizerGradientColorsKey, ColorizerGradientColorKey)
     val colorizerGradientAngle =
         prefs.getIntValue(ColorizerGradientAngleKey).coerceIn(0, 360).toFloat()
 
@@ -339,32 +344,44 @@ fun AdvancedOptionsContent(
                 }
                 if (showIconColor) {
                     if (showColorizer) {
-                        ColorizerStyleEditor(
-                            style = ColorizerStyle(
-                                mode = colorizerMode,
-                                gradientType = colorizerGradientType,
-                                firstColor = currentColor.toArgb(),
-                                secondColor = colorizerGradientColor.toArgb(),
-                                gradientAngle = colorizerGradientAngle
-                            ),
-                            onStyleChange = { style ->
-                                scope.launch {
-                                    prefs.setEnumValue(ColorizerModeKey, style.mode)
-                                    prefs.setEnumValue(
-                                        ColorizerGradientTypeKey, style.gradientType
-                                    )
-                                    prefs.setColorValue(IconColorKey, Color(style.firstColor))
-                                    prefs.setColorValue(
-                                        ColorizerGradientColorKey, Color(style.secondColor)
-                                    )
-                                    prefs.setIntValue(
-                                        ColorizerGradientAngleKey,
-                                        style.gradientAngle.roundToInt()
-                                    )
-                                }
-                            },
-                            showSingleColorEffects = false
+                        val colorizerStyle = ColorizerStyle(
+                            mode = colorizerMode,
+                            gradientType = colorizerGradientType,
+                            firstColor = currentColor.toArgb(),
+                            gradientStops = colorizerGradientColors,
+                            gradientAngle = colorizerGradientAngle
                         )
+                        ColorizeLauncherCard(
+                            style = colorizerStyle,
+                            onClick = { colorizeSheetOpen = true }
+                        )
+                        if (colorizeSheetOpen) {
+                            ColorizeSheet(
+                                initialStyle = colorizerStyle,
+                                sampleBitmap = null,
+                                showSingleColorEffects = false,
+                                onDismiss = { colorizeSheetOpen = false },
+                                onApply = { style ->
+                                    colorizeSheetOpen = false
+                                    scope.launch {
+                                        prefs.setEnumValue(ColorizerModeKey, style.mode)
+                                        prefs.setEnumValue(
+                                            ColorizerGradientTypeKey, style.gradientType
+                                        )
+                                        prefs.setColorValue(IconColorKey, Color(style.firstColor))
+                                        prefs.setGradientStops(
+                                            ColorizerGradientColorsKey,
+                                            ColorizerGradientColorKey,
+                                            style.gradientStops
+                                        )
+                                        prefs.setIntValue(
+                                            ColorizerGradientAngleKey,
+                                            style.gradientAngle.roundToInt()
+                                        )
+                                    }
+                                }
+                            )
+                        }
                     } else {
                         ColorButton(stringResource(R.string.iconColor), currentColor) {
                             scope.launch { prefs.setColorValue(IconColorKey, it) }

@@ -9,12 +9,24 @@ data class ColorizerStyle(
     val mode: ColorizerMode = ColorizerMode.SINGLE_COLOR,
     val gradientType: GradientType = GradientType.LINEAR,
     val firstColor: Int,
-    val secondColor: Int = android.graphics.Color.BLACK,
+    /**
+     * Gradient stops after [firstColor]. The first colour doubles as the single-colour value, so
+     * it stays a separate field instead of living in this list.
+     */
+    val gradientStops: List<Int> = listOf(android.graphics.Color.BLACK),
     val gradientAngle: Float = 0f,
     val flat: Boolean = false,
     val monochrome: Boolean = false,
     val inverse: Boolean = false
-)
+) {
+    /** Every stop in paint order, opaque — a translucent gradient would reveal the source RGB. */
+    val allGradientColors: List<Int>
+        get() = (listOf(firstColor) + gradientStops).map { it or 0xFF000000.toInt() }
+}
+
+/** Two stops make a gradient; past four they smear into mud at launcher icon sizes. */
+const val MIN_GRADIENT_STOPS = 2
+const val MAX_GRADIENT_STOPS = 4
 
 enum class ColorizerMode {
     SINGLE_COLOR,

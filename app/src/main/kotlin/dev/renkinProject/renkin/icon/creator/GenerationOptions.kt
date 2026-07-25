@@ -44,10 +44,13 @@ import dev.renkinProject.renkin.data.GlobalColorizeKey
 import dev.renkinProject.renkin.data.GlobalColorizeMonochromeKey
 import dev.renkinProject.renkin.data.ColorizerGradientAngleKey
 import dev.renkinProject.renkin.data.ColorizerGradientColorKey
+import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
+import dev.renkinProject.renkin.data.getGradientStops
 import dev.renkinProject.renkin.data.ColorizerGradientTypeKey
 import dev.renkinProject.renkin.data.ColorizerModeKey
 import dev.renkinProject.renkin.data.GlobalColorizerGradientAngleKey
 import dev.renkinProject.renkin.data.GlobalColorizerGradientColorKey
+import dev.renkinProject.renkin.data.GlobalColorizerGradientColorsKey
 import dev.renkinProject.renkin.data.GlobalColorizerGradientTypeKey
 import dev.renkinProject.renkin.data.GlobalColorizerModeKey
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
@@ -109,7 +112,9 @@ data class GenerationOptions(
     val colorizeInverse: Boolean = false,
     val colorizerMode: ColorizerMode = ColorizerMode.SINGLE_COLOR,
     val colorizerGradientType: GradientType = GradientType.LINEAR,
-    val colorizerGradientColor: Int = android.graphics.Color.BLACK,
+    // Gradient stops after [color]; [color] itself is stop one and doubles as the single-colour
+    // value, so it is not repeated here.
+    val colorizerGradientColors: List<Int> = listOf(android.graphics.Color.BLACK),
     val colorizerGradientAngle: Float = 0f,
     // Icon shape applied as the LAST step: NONE leaves the icon untouched; otherwise the icon
     // is cropped into the shape (the default — most icons are full-bleed) or laid on a
@@ -199,9 +204,9 @@ data class GenerationOptions(
                 colorizerGradientType = preferences.getEnumValue(
                     ColorizerGradientTypeKey, GradientType.LINEAR
                 ),
-                colorizerGradientColor = preferences.getColorValue(
-                    ColorizerGradientColorKey, androidx.compose.ui.graphics.Color.Black
-                ).toArgb(),
+                colorizerGradientColors = preferences.getGradientStops(
+                    ColorizerGradientColorsKey, ColorizerGradientColorKey
+                ),
                 colorizerGradientAngle = normalizeGradientAngle(
                     preferences.getIntValue(ColorizerGradientAngleKey).toFloat()
                 ),
@@ -246,9 +251,9 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         colorizerGradientType = preferences.getEnumValue(
             GlobalColorizerGradientTypeKey, GradientType.LINEAR
         ),
-        colorizerGradientColor = preferences.getColorValue(
-            GlobalColorizerGradientColorKey, androidx.compose.ui.graphics.Color.Black
-        ).toArgb(),
+        colorizerGradientColors = preferences.getGradientStops(
+            GlobalColorizerGradientColorsKey, GlobalColorizerGradientColorKey
+        ),
         colorizerGradientAngle = normalizeGradientAngle(
             preferences.getIntValue(GlobalColorizerGradientAngleKey).toFloat()
         ),

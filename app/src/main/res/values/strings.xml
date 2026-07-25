@@ -107,6 +107,9 @@
     <string name="imageEdit">Image Modifier</string>
     <string name="textType">Text Type</string>
     <string name="colorize">Colorize</string>
+    <string name="colorizeCancel">Cancel</string>
+    <string name="colorizeSheetHint">Preview updates as you edit</string>
+    <string name="colorizeEffectsActive">Solid fill, monochrome and inverse from One color still apply.</string>
     <string name="clearIcons">Clear icons</string>
     <string name="clearIconsTitle">Clear icons?</string>
     <string name="clearIconsText">This removes the generated icons **inside the app**. The icons in your already-built icon pack **stay there** until you build a new one.</string>
@@ -212,11 +215,15 @@
     <string name="colorizerSingleColor">One color</string>
     <string name="colorizerGradient">Gradient</string>
     <string name="gradientFirstColor">First color</string>
-    <string name="gradientSecondColor">Second color</string>
     <string name="gradientLinear">Linear</string>
     <string name="gradientRadial">Radial</string>
     <string name="gradientAngle">Angle</string>
-    <string name="swapGradientColors">Swap colors</string>
+    <string name="gradientAddColor">Add color</string>
+    <string name="gradientRemoveColor">Remove color</string>
+    <string name="gradientReorderColor">Reorder color</string>
+    <string name="gradientMoveUp">Move up</string>
+    <string name="gradientMoveDown">Move down</string>
+    <string name="gradientStopsHint">Drag the handle to reorder. Colors spread evenly.</string>
     <string name="inverseColors">Inverse colors</string>
     <string name="eyedropperHint">Or pick a colour straight from the app\'s icon — tap or drag on it.</string>
     <string name="optionsHint">These options apply to all apps at once. After changing them, tap the refresh button in the top bar to regenerate the icons.</string>

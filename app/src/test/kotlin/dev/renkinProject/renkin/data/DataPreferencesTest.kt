@@ -112,6 +112,7 @@ class DataPreferencesTest {
         val source = preferencesOf(
             ColorizerModeKey to 1,
             ColorizerGradientColorKey to "#FF123456",
+            ColorizerGradientColorsKey to "#FF123456,#FFABCDEF",
             ColorizerGradientAngleKey to 248,
             ColorizerGradientTypeKey to 1,
             GlobalColorizerModeKey to 1,
@@ -125,6 +126,7 @@ class DataPreferencesTest {
 
         assertEquals(1, restored[ColorizerModeKey])
         assertEquals("#FF123456", restored[ColorizerGradientColorKey])
+        assertEquals("#FF123456,#FFABCDEF", restored[ColorizerGradientColorsKey])
         assertEquals(248, restored[ColorizerGradientAngleKey])
         assertEquals(1, restored[ColorizerGradientTypeKey])
         assertEquals(1, restored[GlobalColorizerModeKey])

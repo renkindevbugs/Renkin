@@ -6,6 +6,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -73,6 +74,9 @@ val IconColorKey = stringPreferencesKey(ICON_COLOR_NAME)
 val BackgroundColorKey = stringPreferencesKey(BACKGROUND_COLOR_NAME)
 val ColorizerModeKey = intPreferencesKey("COLORIZER_MODE")
 val ColorizerGradientColorKey = stringPreferencesKey("COLORIZER_GRADIENT_COLOR")
+// Every gradient stop after the first colour, comma separated. Supersedes the single-colour key
+// above, which is still written so an older build (or an older backup) keeps working.
+val ColorizerGradientColorsKey = stringPreferencesKey("COLORIZER_GRADIENT_COLORS")
 val ColorizerGradientAngleKey = intPreferencesKey("COLORIZER_GRADIENT_ANGLE")
 val ColorizerGradientTypeKey = intPreferencesKey("COLORIZER_GRADIENT_TYPE")
 val CalendarIconsKey = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS_NAME)
@@ -119,6 +123,7 @@ val GlobalColorizeMonochromeKey = booleanPreferencesKey("GLOBAL_COLORIZE_MONOCHR
 val GlobalColorizeInverseKey = booleanPreferencesKey("GLOBAL_COLORIZE_INVERSE")
 val GlobalColorizerModeKey = intPreferencesKey("GLOBAL_COLORIZER_MODE")
 val GlobalColorizerGradientColorKey = stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_COLOR")
+val GlobalColorizerGradientColorsKey = stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_COLORS")
 val GlobalColorizerGradientAngleKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_ANGLE")
 val GlobalColorizerGradientTypeKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_TYPE")
 // Which icon categories the global modifiers apply to (the Global options screen's toggle
@@ -175,7 +180,8 @@ private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
     PrimaryIconPackKey, SecondaryIconPackKey, IconColorKey, BackgroundColorKey,
     TextFontKey, OutlineColorKey, BuiltPrimaryIconPackKey,
     GlobalShapeColorKey, GlobalColorizeColorKey, ColorizerGradientColorKey,
-    GlobalColorizerGradientColorKey
+    GlobalColorizerGradientColorKey, ColorizerGradientColorsKey,
+    GlobalColorizerGradientColorsKey
 )
 
 val ProfilePrefKeys: List<Preferences.Key<*>> =
@@ -201,6 +207,8 @@ suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preference
             target[GlobalColorizerModeKey] = source.getIntValue(GlobalColorizerModeKey)
             target[GlobalColorizerGradientColorKey] =
                 source.getStringValue(GlobalColorizerGradientColorKey)
+            target[GlobalColorizerGradientColorsKey] =
+                source.getStringValue(GlobalColorizerGradientColorsKey)
             target[GlobalColorizerGradientAngleKey] =
                 source.getIntValue(GlobalColorizerGradientAngleKey)
             target[GlobalColorizerGradientTypeKey] =
@@ -404,6 +412,42 @@ suspend fun DataStore<Preferences>.setColorValue(key: Preferences.Key<String>, v
 fun Preferences.getColorValue(key: Preferences.Key<String>, default: Color): Color {
     val hex = this[key] ?: default.toHexString()
     return hex.toNullableColor() ?: default
+}
+
+/**
+ * Gradient stops after the first colour, newline-free and comma separated. [legacyKey] holds the
+ * single second colour written before multi-stop gradients existed, so profiles saved back then
+ * still open with their gradient intact.
+ */
+fun Preferences.getGradientStops(
+    key: Preferences.Key<String>,
+    legacyKey: Preferences.Key<String>
+): List<Int> {
+    val stored = this[key].orEmpty()
+        .split(',')
+        .mapNotNull { it.trim().takeIf(String::isNotEmpty)?.toNullableColor()?.toArgb() }
+    return stored.ifEmpty { listOf(getColorValue(legacyKey, Color.Black).toArgb()) }
+}
+
+@Composable
+fun DataStore<Preferences>.getGradientStops(
+    key: Preferences.Key<String>,
+    legacyKey: Preferences.Key<String>
+): List<Int> {
+    val stored = getPreferenceValue(key, "")
+        .split(',')
+        .mapNotNull { it.trim().takeIf(String::isNotEmpty)?.toNullableColor()?.toArgb() }
+    return stored.ifEmpty { listOf(getColorValue(legacyKey, Color.Black).toArgb()) }
+}
+
+suspend fun DataStore<Preferences>.setGradientStops(
+    key: Preferences.Key<String>,
+    legacyKey: Preferences.Key<String>,
+    stops: List<Int>
+) {
+    setStringValue(key, stops.joinToString(",") { Color(it).toHexString() })
+    // Keep the legacy key in sync: a backup restored on an older build must still find stop two.
+    stops.firstOrNull()?.let { setColorValue(legacyKey, Color(it)) }
 }
 
 //Enum

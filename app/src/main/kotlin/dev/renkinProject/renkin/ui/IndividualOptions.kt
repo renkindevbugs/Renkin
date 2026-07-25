@@ -39,6 +39,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.IconPreviewBuilder
+import android.graphics.Bitmap
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.calendarPrefixOrNull
@@ -438,7 +440,7 @@ fun OptionsDialog(
         colorizeInverse = adjustments.colorizeInverse,
         colorizerMode = adjustments.colorizerMode,
         colorizerGradientType = adjustments.colorizerGradientType,
-        colorizerGradientColor = adjustments.colorizerGradientColor.toArgb(),
+        colorizerGradientColors = adjustments.colorizerGradientColors,
         colorizerGradientAngle = adjustments.colorizerGradientAngle,
         iconShape = adjustments.iconShape,
         iconShapeCrop = adjustments.shapeCrop,
@@ -470,6 +472,39 @@ fun OptionsDialog(
         materialYouPackBackground = null,
         materialYouPackStrokeScale = 1f
     )
+
+    // The Colorize sheet previews a draft style that is NOT applied yet, so it runs the real
+    // generation pipeline with the draft substituted in — anything cheaper (colouring the app's
+    // current icon) would show a different icon than the one Apply produces.
+    val renderColorizePreview: suspend (ColorizerStyle) -> Bitmap? = { style ->
+        val previewOptions = generatingOptions.copy(
+            primaryImageEdit = ImageEdit.COLORIZE,
+            color = style.firstColor,
+            colorizeFlat = style.flat,
+            colorizeMonochrome = style.monochrome,
+            colorizeInverse = style.inverse,
+            colorizerMode = style.mode,
+            colorizerGradientType = style.gradientType,
+            colorizerGradientColors = style.gradientStops,
+            colorizerGradientAngle = style.gradientAngle
+        )
+        val rendered = when (draft.origin) {
+            IconOrigin.UPLOAD -> draft.uploadBase?.let { viewModel.applyModifier(it, previewOptions) }
+            IconOrigin.VECTOR -> draft.vectorIcon?.let { viewModel.applyModifier(it, previewOptions) }
+            IconOrigin.CREATE -> {
+                val custom = customIconList.firstOrNull()
+                when {
+                    custom != null -> viewModel.previewIcon(app, previewOptions, custom)
+                    previewOptions.primarySource == Source.ICON_PACK ->
+                        (app.baseIcon ?: app.createdIcon)?.let {
+                            viewModel.applyModifier(it, previewOptions)
+                        }
+                    else -> viewModel.previewIcon(app, previewOptions, null)
+                }
+            }
+        }
+        rendered?.toBitmap()
+    }
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
     // hops to Dispatchers.Default inside the view model; the holder drives the spinner.
@@ -682,6 +717,7 @@ fun OptionsDialog(
                                 centerPreview = remember(draft.iconToConfirm) { draft.iconToConfirm?.toBitmap() },
                                 previewGenerating = draft.generating,
                                 sampleBitmap = heroBitmap,
+                                renderColorizePreview = renderColorizePreview,
                                 materialYouPackAdjustments =
                                     materialYouPackAdjustments.takeIf { selectedMaterialYouPackIcon },
                                 materialYouSchemes = materialYouSchemes,

@@ -60,6 +60,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -103,7 +104,7 @@ internal class AdjustmentState {
     var colorizeInverse by mutableStateOf(false)
     var colorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
     var colorizerGradientType by mutableStateOf(GradientType.LINEAR)
-    var colorizerGradientColor by mutableStateOf(Color.Black)
+    var colorizerGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
     var colorizerGradientAngle by mutableFloatStateOf(0f)
     var iconScale by mutableFloatStateOf(1f)
     var bgRemovalTolerance by mutableFloatStateOf(0.1f)
@@ -147,7 +148,7 @@ internal class AdjustmentState {
                     "colorizeInverse", it.colorizeInverse,
                     "colorizerMode", it.colorizerMode.ordinal,
                     "colorizerGradientType", it.colorizerGradientType.ordinal,
-                    "colorizerGradientColor", it.colorizerGradientColor.toArgb(),
+                    "colorizerGradientColors", it.colorizerGradientColors,
                     "colorizerGradientAngle", it.colorizerGradientAngle,
                     "iconShape", it.iconShape.ordinal,
                     "shapeCrop", it.shapeCrop,
@@ -196,9 +197,14 @@ internal class AdjustmentState {
             colorizerGradientType = GradientType.entries.getOrElse(
                 saved["colorizerGradientType"] as? Int ?: GradientType.LINEAR.ordinal
             ) { GradientType.LINEAR }
-            (saved["colorizerGradientColor"] as? Int)?.let {
-                colorizerGradientColor = Color(it)
-            }
+            // Older saved states carried a single second colour; both shapes restore.
+            (saved["colorizerGradientColors"] as? List<*>)
+                ?.filterIsInstance<Int>()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { colorizerGradientColors = it }
+                ?: (saved["colorizerGradientColor"] as? Int)?.let {
+                    colorizerGradientColors = listOf(it)
+                }
             colorizerGradientAngle =
                 saved["colorizerGradientAngle"] as? Float ?: colorizerGradientAngle
             iconShape = IconShape.entries.getOrElse(saved["iconShape"] as? Int ?: 0) { IconShape.NONE }
@@ -304,6 +310,8 @@ internal fun ModifierTab(
     previewGenerating: Boolean = false,
     // The app's original icon, offered as an eyedropper source in the colour picker.
     sampleBitmap: Bitmap? = null,
+    // Renders the icon exactly as Apply would, for the Colorize sheet's live preview.
+    renderColorizePreview: (suspend (ColorizerStyle) -> Bitmap?)? = null,
     materialYouPackAdjustments: MaterialYouPackAdjustmentState? = null,
     materialYouSchemes: List<Pair<Color, Color>> = emptyList(),
     onImageEditChange: (ImageEdit) -> Unit,
@@ -315,6 +323,7 @@ internal fun ModifierTab(
 ) {
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
+    var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
     var shapeColorPickerOpen by remember { mutableStateOf(false) }
     var outlineColorPickerOpen by remember { mutableStateOf(false) }
     var eraseDialogOpen by remember { mutableStateOf(false) }
@@ -510,31 +519,42 @@ internal fun ModifierTab(
                                 }
 
                                 ImageEdit.COLORIZE -> {
-                                    ColorizerStyleEditor(
-                                        style = ColorizerStyle(
-                                            mode = adjustments.colorizerMode,
-                                            gradientType = adjustments.colorizerGradientType,
-                                            firstColor = iconColor.toArgb(),
-                                            secondColor = adjustments.colorizerGradientColor.toArgb(),
-                                            gradientAngle = adjustments.colorizerGradientAngle,
-                                            flat = adjustments.colorizeFlat,
-                                            monochrome = adjustments.colorizeMonochrome,
-                                            inverse = adjustments.colorizeInverse
-                                        ),
-                                        onStyleChange = { style ->
-                                            adjustments.colorizerMode = style.mode
-                                            adjustments.colorizerGradientType = style.gradientType
-                                            onColorChange(Color(style.firstColor))
-                                            adjustments.colorizerGradientColor =
-                                                Color(style.secondColor)
-                                            adjustments.colorizerGradientAngle =
-                                                style.gradientAngle
-                                            adjustments.colorizeFlat = style.flat
-                                            adjustments.colorizeMonochrome = style.monochrome
-                                            adjustments.colorizeInverse = style.inverse
-                                        },
-                                        sampleBitmap = sampleBitmap
+                                    val colorizerStyle = ColorizerStyle(
+                                        mode = adjustments.colorizerMode,
+                                        gradientType = adjustments.colorizerGradientType,
+                                        firstColor = iconColor.toArgb(),
+                                        gradientStops = adjustments.colorizerGradientColors,
+                                        gradientAngle = adjustments.colorizerGradientAngle,
+                                        flat = adjustments.colorizeFlat,
+                                        monochrome = adjustments.colorizeMonochrome,
+                                        inverse = adjustments.colorizeInverse
                                     )
+                                    ColorizeLauncherCard(
+                                        style = colorizerStyle,
+                                        onClick = { colorizeSheetOpen = true }
+                                    )
+                                    if (colorizeSheetOpen) {
+                                        ColorizeSheet(
+                                            initialStyle = colorizerStyle,
+                                            sampleBitmap = sampleBitmap,
+                                            renderPreview = renderColorizePreview,
+                                            onDismiss = { colorizeSheetOpen = false },
+                                            onApply = { style ->
+                                                adjustments.colorizerMode = style.mode
+                                                adjustments.colorizerGradientType =
+                                                    style.gradientType
+                                                onColorChange(Color(style.firstColor))
+                                                adjustments.colorizerGradientColors =
+                                                    style.gradientStops
+                                                adjustments.colorizerGradientAngle =
+                                                    style.gradientAngle
+                                                adjustments.colorizeFlat = style.flat
+                                                adjustments.colorizeMonochrome = style.monochrome
+                                                adjustments.colorizeInverse = style.inverse
+                                                colorizeSheetOpen = false
+                                            }
+                                        )
+                                    }
                                 }
 
                                 ImageEdit.REMOVE_BACKGROUND -> OptionGroup {

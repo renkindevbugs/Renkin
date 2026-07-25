@@ -3,14 +3,12 @@ package dev.renkinProject.renkin.icon.creator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.PorterDuff
 import android.graphics.PorterDuffColorFilter
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
-import android.graphics.RadialGradient
 import android.graphics.Shader
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
@@ -69,10 +67,6 @@ import dev.renkinProject.renkin.vector.VectorEditor.Companion.setReferenceColorP
 import dev.alembiconsProject.imagetracer.ImageTracer
 import dev.alembiconsProject.tgCannyEdgeCompose.CannyEdgeDetector
 import dev.alembiconsProject.tgCannyEdgeCompose.DetectionOptions
-import kotlin.math.abs
-import kotlin.math.cos
-import kotlin.math.hypot
-import kotlin.math.sin
 
 internal fun previewScaleToBakeForShape(icon: IconPackDrawable, shaped: Boolean): Float =
     if (shaped) (icon as? BitmapIconDrawable)?.previewScale ?: 1f else 1f
@@ -877,66 +871,71 @@ class IconGenerator(
     }
 
     /**
-     * Paints an opaque two-colour gradient through the source alpha mask. Using the original
-     * bitmap only as a DST_IN mask preserves every source alpha value, including antialiased edge
-     * pixels, while deliberately replacing its RGB content.
+     * Paints a multi-stop gradient over the icon, honouring the same Solid fill / Monochrome /
+     * Inverse switches as single-colour mode: solid fill replaces the artwork's RGB through its
+     * alpha mask, otherwise the gradient multiplies with it so the icon's detail survives.
      */
     private fun colorizeBitmapWithGradient(icon: Bitmap): Bitmap {
         val centerX = icon.width / 2f
         val centerY = icon.height / 2f
-        val firstColor = options.color or 0xFF000000.toInt()
-        val secondColor = options.colorizerGradientColor or 0xFF000000.toInt()
-        val gradient: Shader = when (options.colorizerGradientType) {
-            GradientType.LINEAR -> {
-                val angleRadians = Math.toRadians(
-                    (normalizeGradientAngle(options.colorizerGradientAngle) % 360f).toDouble()
-                )
-                // Match the dial used by design tools: 0° points up, increasing clockwise.
-                val directionX = sin(angleRadians).toFloat()
-                val directionY = -cos(angleRadians).toFloat()
-                val halfSpan = abs(directionX) * centerX + abs(directionY) * centerY
-                LinearGradient(
-                    centerX - directionX * halfSpan,
-                    centerY - directionY * halfSpan,
-                    centerX + directionX * halfSpan,
-                    centerY + directionY * halfSpan,
-                    firstColor,
-                    secondColor,
-                    Shader.TileMode.CLAMP
-                )
-            }
-            GradientType.RADIAL -> RadialGradient(
-                centerX,
-                centerY,
-                hypot(centerX, centerY),
-                firstColor,
-                secondColor,
-                Shader.TileMode.CLAMP
-            )
+        val base = if (options.colorizeMonochrome) {
+            monochromeBitmap(icon, options.colorizeInverse)
+        } else {
+            icon
         }
+        val gradient: Shader = buildColorizerShader(
+            listOf(options.color) + options.colorizerGradientColors,
+            options.colorizerGradientType,
+            options.colorizerGradientAngle,
+            icon.width,
+            icon.height
+        )
 
         val coloredIcon = icon.emptyLike()
         val canvas = Canvas(coloredIcon)
-        canvas.drawRect(
-            0f,
-            0f,
-            icon.width.toFloat(),
-            icon.height.toFloat(),
-            Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = gradient }
-        )
-        val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
-            xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+        // Solid fill: gradient first, then the alpha mask. Tint: artwork first, then the gradient
+        // multiplied on top (MULTIPLY also multiplies alpha, so transparent pixels stay clear).
+        val solidFill = options.colorizeFlat && !options.colorizeMonochrome
+        val drawMask = {
+            val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                if (solidFill) xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+            }
+            if (options.themed) {
+                // Only the artwork draw is scaled. The gradient already covers the full output.
+                canvas.save()
+                canvas.scale(0.5f, 0.5f, centerX, centerY)
+                canvas.drawBitmap(base, 0f, 0f, maskPaint)
+                canvas.restore()
+            } else {
+                canvas.drawBitmap(base, 0f, 0f, maskPaint)
+            }
         }
-        if (options.themed) {
-            // Only the alpha-mask draw is scaled. The gradient already covers the full output.
-            canvas.save()
-            canvas.scale(0.5f, 0.5f, centerX, centerY)
-            canvas.drawBitmap(icon, 0f, 0f, maskPaint)
-            canvas.restore()
+        val drawGradient = {
+            canvas.drawRect(
+                0f,
+                0f,
+                icon.width.toFloat(),
+                icon.height.toFloat(),
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    shader = gradient
+                    if (!solidFill) xfermode = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY)
+                }
+            )
+        }
+        if (solidFill) {
+            drawGradient()
+            drawMask()
         } else {
-            canvas.drawBitmap(icon, 0f, 0f, maskPaint)
+            drawMask()
+            drawGradient()
         }
-        return addBackground(coloredIcon)
+        // Monochrome already applied the inversion while flattening to grey.
+        val tinted = if (options.colorizeInverse && !options.colorizeMonochrome) {
+            invertBitmapColors(coloredIcon)
+        } else {
+            coloredIcon
+        }
+        return addBackground(tinted)
     }
 
     private fun addBackground(image: Bitmap): Bitmap {
