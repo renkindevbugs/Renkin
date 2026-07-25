@@ -56,7 +56,19 @@ import dev.renkinProject.renkin.data.FallbackSourceKey
 import dev.renkinProject.renkin.data.IMAGE_EDIT_DEFAULT
 import dev.renkinProject.renkin.data.IconColorKey
 import dev.renkinProject.renkin.data.ColorizerGradientAngleKey
+import androidx.compose.animation.AnimatedVisibility
 import dev.renkinProject.renkin.data.ColorizerGradientColorKey
+import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
+import dev.renkinProject.renkin.data.OUTLINE_WIDTH_MAX
+import dev.renkinProject.renkin.data.OUTLINE_WIDTH_MIN
+import dev.renkinProject.renkin.data.OutlineAddKey
+import dev.renkinProject.renkin.data.OutlineColorKey
+import dev.renkinProject.renkin.data.OutlineColorizerModeKey
+import dev.renkinProject.renkin.data.OutlineGradientAngleKey
+import dev.renkinProject.renkin.data.OutlineGradientColorsKey
+import dev.renkinProject.renkin.data.OutlineGradientTypeKey
+import dev.renkinProject.renkin.data.OutlineWidthKey
+import dev.renkinProject.renkin.data.normalizeOutlineWidth
 import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
 import dev.renkinProject.renkin.data.getGradientStops
 import dev.renkinProject.renkin.data.setGradientStops
@@ -184,6 +196,7 @@ fun AdvancedOptionsContent(
     val prefs = getPreferences()
 
     var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
     var primarySource by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
     var primaryImageEdit by rememberSaveable { mutableStateOf(IMAGE_EDIT_DEFAULT) }
     var primaryTextType by rememberSaveable { mutableStateOf(TEXT_TYPE_DEFAULT) }
@@ -207,6 +220,19 @@ fun AdvancedOptionsContent(
         prefs.getGradientStops(ColorizerGradientColorsKey, ColorizerGradientColorKey)
     val colorizerGradientAngle =
         prefs.getIntValue(ColorizerGradientAngleKey).coerceIn(0, 360).toFloat()
+    // Pack-wide outline: the same keys the Global options screen edits, surfaced here so the
+    // hero card's Advanced options can turn it on without opening that screen.
+    val outlineAdd = prefs.getBooleanValue(OutlineAddKey)
+    val outlineWidth = normalizeOutlineWidth(
+        prefs.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
+    ).toFloat()
+    val outlineColor = prefs.getColorValue(OutlineColorKey, Color.Black)
+    val outlineMode = prefs.getEnumValue(OutlineColorizerModeKey, ColorizerMode.SINGLE_COLOR)
+    val outlineGradientType = prefs.getEnumValue(OutlineGradientTypeKey, GradientType.LINEAR)
+    val outlineGradientColors =
+        prefs.getGradientStops(OutlineGradientColorsKey, OutlineColorKey)
+    val outlineGradientAngle =
+        prefs.getIntValue(OutlineGradientAngleKey).coerceIn(0, 360).toFloat()
 
     primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
@@ -351,12 +377,14 @@ fun AdvancedOptionsContent(
                             gradientStops = colorizerGradientColors,
                             gradientAngle = colorizerGradientAngle
                         )
-                        ColorizeLauncherCard(
+                        ColorStyleCard(
+                            label = stringResource(R.string.colorize),
                             style = colorizerStyle,
                             onClick = { colorizeSheetOpen = true }
                         )
                         if (colorizeSheetOpen) {
-                            ColorizeSheet(
+                            ColorStyleSheet(
+                                title = stringResource(R.string.colorize),
                                 initialStyle = colorizerStyle,
                                 sampleBitmap = null,
                                 showSingleColorEffects = false,
@@ -391,6 +419,68 @@ fun AdvancedOptionsContent(
                 if (showBgColor) {
                     ColorButton(stringResource(R.string.backgroundColor), currentBgColor) { scope.launch { prefs.setColorValue(
                         BackgroundColorKey, it) } }
+                }
+
+                OptionsSectionLabel(R.string.outlineTitle)
+                OutlineSwitch(outlineAdd) {
+                    scope.launch { prefs.setBooleanValue(OutlineAddKey, it) }
+                }
+                AnimatedVisibility(visible = outlineAdd) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LabeledSlider(
+                            label = stringResource(R.string.outlineThickness),
+                            value = outlineWidth,
+                            onValueChange = {
+                                scope.launch {
+                                    prefs.setIntValue(OutlineWidthKey, it.roundToInt())
+                                }
+                            },
+                            valueRange = OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat(),
+                            valueLabel = "${outlineWidth.roundToInt()} px"
+                        )
+                        val outlineStyle = ColorizerStyle(
+                            mode = outlineMode,
+                            gradientType = outlineGradientType,
+                            firstColor = outlineColor.toArgb(),
+                            gradientStops = outlineGradientColors,
+                            gradientAngle = outlineGradientAngle
+                        )
+                        ColorStyleCard(
+                            label = stringResource(R.string.outlineColor),
+                            style = outlineStyle,
+                            onClick = { outlineSheetOpen = true }
+                        )
+                        if (outlineSheetOpen) {
+                            ColorStyleSheet(
+                                title = stringResource(R.string.outlineColor),
+                                initialStyle = outlineStyle,
+                                sampleBitmap = null,
+                                showSingleColorEffects = false,
+                                onDismiss = { outlineSheetOpen = false },
+                                onApply = { style ->
+                                    outlineSheetOpen = false
+                                    scope.launch {
+                                        prefs.setEnumValue(OutlineColorizerModeKey, style.mode)
+                                        prefs.setEnumValue(
+                                            OutlineGradientTypeKey, style.gradientType
+                                        )
+                                        prefs.setColorValue(
+                                            OutlineColorKey, Color(style.firstColor)
+                                        )
+                                        prefs.setGradientStops(
+                                            OutlineGradientColorsKey,
+                                            OutlineColorKey,
+                                            style.gradientStops
+                                        )
+                                        prefs.setIntValue(
+                                            OutlineGradientAngleKey,
+                                            style.gradientAngle.roundToInt()
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
 
                 OptionsSectionLabel(R.string.advancedSectionBehavior)

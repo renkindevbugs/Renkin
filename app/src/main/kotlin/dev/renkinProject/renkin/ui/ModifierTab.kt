@@ -124,6 +124,11 @@ internal class AdjustmentState {
     var outlineMode by mutableStateOf(OutlineMode.NONE)
     var outlineWidth by mutableFloatStateOf(6f)
     var outlineColor by mutableStateOf(Color.Black)
+    // The outline carries its own colour style, so it can be a gradient like Colorize.
+    var outlineColorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
+    var outlineGradientType by mutableStateOf(GradientType.LINEAR)
+    var outlineGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
+    var outlineGradientAngle by mutableFloatStateOf(0f)
     // Eraser strokes masking where the outline must not apply. Deliberately NOT in [Saver]:
     // they're transient per-app geometry, and holding them out keeps the saver list flat.
     var eraseStrokes by mutableStateOf<List<EraseStroke>>(emptyList())
@@ -156,7 +161,11 @@ internal class AdjustmentState {
                     "shapeScale", it.shapeScale,
                     "outlineMode", it.outlineMode.ordinal,
                     "outlineWidth", it.outlineWidth,
-                    "outlineColor", it.outlineColor.toArgb()
+                    "outlineColor", it.outlineColor.toArgb(),
+                    "outlineColorizerMode", it.outlineColorizerMode.ordinal,
+                    "outlineGradientType", it.outlineGradientType.ordinal,
+                    "outlineGradientColors", it.outlineGradientColors,
+                    "outlineGradientAngle", it.outlineGradientAngle
                 )
             },
             restore = ::restoreAdjustmentState
@@ -214,6 +223,18 @@ internal class AdjustmentState {
             outlineMode = OutlineMode.entries.getOrElse(saved["outlineMode"] as? Int ?: 0) { OutlineMode.NONE }
             outlineWidth = saved["outlineWidth"] as? Float ?: outlineWidth
             (saved["outlineColor"] as? Int)?.let { outlineColor = Color(it) }
+            outlineColorizerMode = ColorizerMode.entries.getOrElse(
+                saved["outlineColorizerMode"] as? Int ?: ColorizerMode.SINGLE_COLOR.ordinal
+            ) { ColorizerMode.SINGLE_COLOR }
+            outlineGradientType = GradientType.entries.getOrElse(
+                saved["outlineGradientType"] as? Int ?: GradientType.LINEAR.ordinal
+            ) { GradientType.LINEAR }
+            (saved["outlineGradientColors"] as? List<*>)
+                ?.filterIsInstance<Int>()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { outlineGradientColors = it }
+            outlineGradientAngle =
+                saved["outlineGradientAngle"] as? Float ?: outlineGradientAngle
         }
 
         private fun restoreLegacy(saved: List<*>) = AdjustmentState().apply {
@@ -310,8 +331,9 @@ internal fun ModifierTab(
     previewGenerating: Boolean = false,
     // The app's original icon, offered as an eyedropper source in the colour picker.
     sampleBitmap: Bitmap? = null,
-    // Renders the icon exactly as Apply would, for the Colorize sheet's live preview.
+    // Render the icon exactly as Apply would, for the colour sheets' live previews.
     renderColorizePreview: (suspend (ColorizerStyle) -> Bitmap?)? = null,
+    renderOutlinePreview: (suspend (ColorizerStyle) -> Bitmap?)? = null,
     materialYouPackAdjustments: MaterialYouPackAdjustmentState? = null,
     materialYouSchemes: List<Pair<Color, Color>> = emptyList(),
     onImageEditChange: (ImageEdit) -> Unit,
@@ -324,8 +346,8 @@ internal fun ModifierTab(
     val editLabels = getImageEditLabels()
     var colorPickerOpen by remember { mutableStateOf(false) }
     var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
     var shapeColorPickerOpen by remember { mutableStateOf(false) }
-    var outlineColorPickerOpen by remember { mutableStateOf(false) }
     var eraseDialogOpen by remember { mutableStateOf(false) }
     var centerDialogOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -529,12 +551,14 @@ internal fun ModifierTab(
                                         monochrome = adjustments.colorizeMonochrome,
                                         inverse = adjustments.colorizeInverse
                                     )
-                                    ColorizeLauncherCard(
+                                    ColorStyleCard(
+                                        label = stringResource(R.string.colorize),
                                         style = colorizerStyle,
                                         onClick = { colorizeSheetOpen = true }
                                     )
                                     if (colorizeSheetOpen) {
-                                        ColorizeSheet(
+                                        ColorStyleSheet(
+                                            title = stringResource(R.string.colorize),
                                             initialStyle = colorizerStyle,
                                             sampleBitmap = sampleBitmap,
                                             renderPreview = renderColorizePreview,
@@ -710,18 +734,38 @@ internal fun ModifierTab(
                             valueLabel = "${adjustments.outlineWidth.roundToInt()} px"
                         )
                     }
-                    OptionCard(
-                        label = stringResource(R.string.outlineColor),
-                        onClick = { outlineColorPickerOpen = true },
-                        trailing = {
-                            Surface(
-                                shape = CircleShape,
-                                color = adjustments.outlineColor,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                modifier = Modifier.size(28.dp)
-                            ) {}
-                        }
+                    val outlineStyle = ColorizerStyle(
+                        mode = adjustments.outlineColorizerMode,
+                        gradientType = adjustments.outlineGradientType,
+                        firstColor = adjustments.outlineColor.toArgb(),
+                        gradientStops = adjustments.outlineGradientColors,
+                        gradientAngle = adjustments.outlineGradientAngle
                     )
+                    ColorStyleCard(
+                        label = stringResource(R.string.outlineColor),
+                        style = outlineStyle,
+                        onClick = { outlineSheetOpen = true }
+                    )
+                    if (outlineSheetOpen) {
+                        ColorStyleSheet(
+                            title = stringResource(R.string.outlineColor),
+                            initialStyle = outlineStyle,
+                            sampleBitmap = sampleBitmap,
+                            // Solid fill / monochrome / inverse describe the icon's fill, not a
+                            // contour, so the outline sheet omits them.
+                            showSingleColorEffects = false,
+                            renderPreview = renderOutlinePreview,
+                            onDismiss = { outlineSheetOpen = false },
+                            onApply = { style ->
+                                adjustments.outlineColorizerMode = style.mode
+                                adjustments.outlineGradientType = style.gradientType
+                                adjustments.outlineColor = Color(style.firstColor)
+                                adjustments.outlineGradientColors = style.gradientStops
+                                adjustments.outlineGradientAngle = style.gradientAngle
+                                outlineSheetOpen = false
+                            }
+                        )
+                    }
                     // Eraser: paint the areas the outline must skip (per app, session-only).
                     OptionCard(
                         label = stringResource(R.string.eraseTitle),
@@ -824,15 +868,6 @@ internal fun ModifierTab(
             onDismiss = { shapeColorPickerOpen = false },
             currentlySelected = adjustments.shapeColor,
             onColorSelected = { adjustments.shapeColor = it },
-            sampleBitmap = sampleBitmap
-        )
-    }
-
-    if (outlineColorPickerOpen) {
-        ColorDialog(
-            onDismiss = { outlineColorPickerOpen = false },
-            currentlySelected = adjustments.outlineColor,
-            onColorSelected = { adjustments.outlineColor = it },
             sampleBitmap = sampleBitmap
         )
     }

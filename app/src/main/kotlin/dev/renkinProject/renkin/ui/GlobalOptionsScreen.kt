@@ -116,6 +116,10 @@ import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
 import dev.renkinProject.renkin.data.OutlineAddKey
 import dev.renkinProject.renkin.data.OutlineColorKey
+import dev.renkinProject.renkin.data.OutlineColorizerModeKey
+import dev.renkinProject.renkin.data.OutlineGradientAngleKey
+import dev.renkinProject.renkin.data.OutlineGradientColorsKey
+import dev.renkinProject.renkin.data.OutlineGradientTypeKey
 import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
@@ -164,6 +168,10 @@ internal class GlobalModifierState {
     var outlineAdd by mutableStateOf(false)
     var outlineWidth by mutableFloatStateOf(OUTLINE_WIDTH_DEFAULT.toFloat())
     var outlineColor by mutableStateOf(Color.Black)
+    var outlineColorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
+    var outlineGradientType by mutableStateOf(GradientType.LINEAR)
+    var outlineGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
+    var outlineGradientAngle by mutableFloatStateOf(0f)
     var colorize by mutableStateOf(false)
     var colorizeColor by mutableStateOf(Color.White)
     var colorizeFlat by mutableStateOf(false)
@@ -195,6 +203,17 @@ internal class GlobalModifierState {
         outlineWidth = normalizeOutlineWidth(
             preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)).toFloat()
         outlineColor = preferences.getColorValue(OutlineColorKey, Color.Black)
+        outlineColorizerMode = preferences.getEnumValue(
+            OutlineColorizerModeKey, ColorizerMode.SINGLE_COLOR
+        )
+        outlineGradientType = preferences.getEnumValue(
+            OutlineGradientTypeKey, GradientType.LINEAR
+        )
+        outlineGradientColors = preferences.getGradientStops(
+            OutlineGradientColorsKey, OutlineColorKey
+        )
+        outlineGradientAngle =
+            preferences.getIntValue(OutlineGradientAngleKey).coerceIn(0, 360).toFloat()
         colorize = preferences.getBooleanValue(GlobalColorizeKey)
         colorizeColor = preferences.getColorValue(GlobalColorizeColorKey, Color.White)
         colorizeMonochrome = preferences.getBooleanValue(GlobalColorizeMonochromeKey)
@@ -226,12 +245,14 @@ internal class GlobalModifierState {
         applyGenerated, applyExisting, applyCustom, includeEmpty,
         colorizeMonochrome, colorizeInverse, colorizerMode.ordinal,
         colorizerGradientColors.joinToString(","), colorizerGradientAngle.roundToInt(),
-        colorizerGradientType.ordinal
+        colorizerGradientType.ordinal,
+        outlineColorizerMode.ordinal, outlineGradientType.ordinal,
+        outlineGradientColors.joinToString(","), outlineGradientAngle.roundToInt()
     ).joinToString("|")
 
     private fun restore(snapshot: String) {
         val values = snapshot.split('|')
-        if (values.size != 17 && values.size != 20 && values.size != 21) return
+        if (values.size !in intArrayOf(17, 20, 21, 25)) return
         runCatching {
             shape = IconShape.entries[values[0].toInt()]
             shapeCrop = values[1].toBooleanStrict()
@@ -259,10 +280,22 @@ internal class GlobalModifierState {
                     .ifEmpty { listOf(android.graphics.Color.BLACK) }
                 colorizerGradientAngle = values[19].toInt().coerceIn(0, 360).toFloat()
             }
-            if (values.size == 21) {
+            if (values.size >= 21) {
                 colorizerGradientType = GradientType.entries.getOrElse(values[20].toInt()) {
                     GradientType.LINEAR
                 }
+            }
+            if (values.size >= 25) {
+                outlineColorizerMode = ColorizerMode.entries.getOrElse(values[21].toInt()) {
+                    ColorizerMode.SINGLE_COLOR
+                }
+                outlineGradientType = GradientType.entries.getOrElse(values[22].toInt()) {
+                    GradientType.LINEAR
+                }
+                outlineGradientColors = values[23].split(',')
+                    .mapNotNull { it.toIntOrNull() }
+                    .ifEmpty { listOf(android.graphics.Color.BLACK) }
+                outlineGradientAngle = values[24].toInt().coerceIn(0, 360).toFloat()
             }
             initialized = true
         }
@@ -285,6 +318,11 @@ internal class GlobalModifierState {
         mutable[OutlineAddKey] = outlineAdd
         mutable[OutlineWidthKey] = outlineWidth.roundToInt()
         mutable[OutlineColorKey] = outlineColor.toHexString()
+        mutable[OutlineColorizerModeKey] = outlineColorizerMode.ordinal
+        mutable[OutlineGradientTypeKey] = outlineGradientType.ordinal
+        mutable[OutlineGradientAngleKey] = outlineGradientAngle.roundToInt()
+        mutable[OutlineGradientColorsKey] =
+            outlineGradientColors.joinToString(",") { Color(it).toHexString() }
         mutable[GlobalColorizeKey] = colorize
         mutable[GlobalColorizeColorKey] = colorizeColor.toHexString()
         mutable[GlobalColorizeFlatKey] = colorizeFlat
@@ -341,7 +379,14 @@ internal class GlobalModifierState {
         iconShapeScale = shapeScale,
         outlineMode = if (outlineAdd) OutlineMode.ADD else OutlineMode.NONE,
         outlineWidth = outlineWidth,
-        outlineColor = outlineColor.toArgb()
+        outlineColor = outlineColor.toArgb(),
+        outlineStyle = ColorizerStyle(
+            mode = outlineColorizerMode,
+            gradientType = outlineGradientType,
+            firstColor = outlineColor.toArgb(),
+            gradientStops = outlineGradientColors,
+            gradientAngle = outlineGradientAngle
+        )
     )
 }
 
@@ -736,7 +781,7 @@ private fun AdvancedOptionsPanel(iconPacks: List<IconPack>) {
 private fun GlobalModifierControls(state: GlobalModifierState) {
     var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
     var shapeColorPickerOpen by remember { mutableStateOf(false) }
-    var outlineColorPickerOpen by remember { mutableStateOf(false) }
+    var outlineSheetOpen by remember { mutableStateOf(false) }
 
     Surface(shape = CardShape, color = MaterialTheme.colorScheme.surfaceContainer) {
         Column(
@@ -820,8 +865,34 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
                         valueRange = 1f..16f,
                         valueLabel = "${state.outlineWidth.roundToInt()} px"
                     )
-                    ColorRow(stringResource(R.string.outlineColor), state.outlineColor) {
-                        outlineColorPickerOpen = true
+                    val outlineStyle = ColorizerStyle(
+                        mode = state.outlineColorizerMode,
+                        gradientType = state.outlineGradientType,
+                        firstColor = state.outlineColor.toArgb(),
+                        gradientStops = state.outlineGradientColors,
+                        gradientAngle = state.outlineGradientAngle
+                    )
+                    ColorStyleCard(
+                        label = stringResource(R.string.outlineColor),
+                        style = outlineStyle,
+                        onClick = { outlineSheetOpen = true }
+                    )
+                    if (outlineSheetOpen) {
+                        ColorStyleSheet(
+                            title = stringResource(R.string.outlineColor),
+                            initialStyle = outlineStyle,
+                            sampleBitmap = null,
+                            showSingleColorEffects = false,
+                            onDismiss = { outlineSheetOpen = false },
+                            onApply = { style ->
+                                state.outlineColorizerMode = style.mode
+                                state.outlineGradientType = style.gradientType
+                                state.outlineColor = Color(style.firstColor)
+                                state.outlineGradientColors = style.gradientStops
+                                state.outlineGradientAngle = style.gradientAngle
+                                outlineSheetOpen = false
+                            }
+                        )
                     }
                 }
             }
@@ -842,12 +913,14 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
                     monochrome = state.colorizeMonochrome,
                     inverse = state.colorizeInverse
                 )
-                ColorizeLauncherCard(
+                ColorStyleCard(
+                    label = stringResource(R.string.colorize),
                     style = colorizerStyle,
                     onClick = { colorizeSheetOpen = true }
                 )
                 if (colorizeSheetOpen) {
-                    ColorizeSheet(
+                    ColorStyleSheet(
+                        title = stringResource(R.string.colorize),
                         initialStyle = colorizerStyle,
                         sampleBitmap = null,
                         onDismiss = { colorizeSheetOpen = false },
@@ -873,13 +946,6 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
             onDismiss = { shapeColorPickerOpen = false },
             currentlySelected = state.shapeColor,
             onColorSelected = { state.shapeColor = it }
-        )
-    }
-    if (outlineColorPickerOpen) {
-        ColorDialog(
-            onDismiss = { outlineColorPickerOpen = false },
-            currentlySelected = state.outlineColor,
-            onColorSelected = { state.outlineColor = it }
         )
     }
 }

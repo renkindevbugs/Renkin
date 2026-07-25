@@ -104,6 +104,11 @@ val TextFontKey = stringPreferencesKey("TEXT_FONT")
 val OutlineAddKey = booleanPreferencesKey("OUTLINE_ADD")
 val OutlineWidthKey = intPreferencesKey("OUTLINE_WIDTH")
 val OutlineColorKey = stringPreferencesKey("OUTLINE_COLOR")
+// The outline can carry a gradient of its own, described the same way the colourizer's is.
+val OutlineColorizerModeKey = intPreferencesKey("OUTLINE_COLORIZER_MODE")
+val OutlineGradientTypeKey = intPreferencesKey("OUTLINE_GRADIENT_TYPE")
+val OutlineGradientAngleKey = intPreferencesKey("OUTLINE_GRADIENT_ANGLE")
+val OutlineGradientColorsKey = stringPreferencesKey("OUTLINE_GRADIENT_COLORS")
 const val OUTLINE_WIDTH_DEFAULT = 6
 const val OUTLINE_WIDTH_MIN = 1
 const val OUTLINE_WIDTH_MAX = 16
@@ -173,6 +178,7 @@ private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
     FallbackSourceKey, OutlineWidthKey, BuiltPrimarySourceKey,
     GlobalShapeKey, GlobalShapeScaleKey, GlobalIconScaleKey,
     ColorizerModeKey, ColorizerGradientAngleKey, ColorizerGradientTypeKey,
+    OutlineColorizerModeKey, OutlineGradientTypeKey, OutlineGradientAngleKey,
     GlobalColorizerModeKey, GlobalColorizerGradientAngleKey, GlobalColorizerGradientTypeKey
 )
 
@@ -181,7 +187,7 @@ private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
     TextFontKey, OutlineColorKey, BuiltPrimaryIconPackKey,
     GlobalShapeColorKey, GlobalColorizeColorKey, ColorizerGradientColorKey,
     GlobalColorizerGradientColorKey, ColorizerGradientColorsKey,
-    GlobalColorizerGradientColorsKey
+    GlobalColorizerGradientColorsKey, OutlineGradientColorsKey
 )
 
 val ProfilePrefKeys: List<Preferences.Key<*>> =
@@ -199,6 +205,10 @@ suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preference
             target[OutlineAddKey] = source.getBooleanValue(OutlineAddKey)
             target[OutlineWidthKey] = source.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
             target[OutlineColorKey] = source.getStringValue(OutlineColorKey)
+            target[OutlineColorizerModeKey] = source.getIntValue(OutlineColorizerModeKey)
+            target[OutlineGradientTypeKey] = source.getIntValue(OutlineGradientTypeKey)
+            target[OutlineGradientAngleKey] = source.getIntValue(OutlineGradientAngleKey)
+            target[OutlineGradientColorsKey] = source.getStringValue(OutlineGradientColorsKey)
             target[GlobalColorizeKey] = source.getBooleanValue(GlobalColorizeKey)
             target[GlobalColorizeColorKey] = source.getStringValue(GlobalColorizeColorKey)
             target[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)

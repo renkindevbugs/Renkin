@@ -32,6 +32,47 @@ class IconOutlineTest {
     }
 
     @Test
+    fun add_withGradientSweepsTheContourAcrossTheIcon() {
+        val style = ColorizerStyle(
+            mode = ColorizerMode.GRADIENT,
+            gradientType = GradientType.LINEAR,
+            firstColor = Color.RED,
+            gradientStops = listOf(Color.BLUE),
+            // 90 degrees runs left to right, so the two sides of the ring differ.
+            gradientAngle = 90f
+        )
+
+        val out = IconOutline.apply(
+            disc(),
+            OutlineMode.ADD,
+            widthPx = 6f,
+            color = Color.RED,
+            style = style
+        )
+
+        val left = out.getPixel(32 - 23, 32)
+        val right = out.getPixel(32 + 23, 32)
+        assertEquals(0xFF, Color.alpha(left))
+        assertEquals(0xFF, Color.alpha(right))
+        assertTrue(Color.red(left) > Color.blue(left))
+        assertTrue(Color.blue(right) > Color.red(right))
+    }
+
+    @Test
+    fun add_withSingleColorStyleStillUsesThePlainColor() {
+        val out = IconOutline.apply(
+            disc(),
+            OutlineMode.ADD,
+            widthPx = 6f,
+            color = Color.RED,
+            style = ColorizerStyle(firstColor = Color.GREEN)
+        )
+
+        val outside = out.getPixel(32 + 23, 32)
+        assertEquals(Color.RED, outside)
+    }
+
+    @Test
     fun add_paintsTheBandOutsideTheSilhouette() {
         val out = IconOutline.apply(disc(), OutlineMode.ADD, widthPx = 6f, color = Color.RED)
 

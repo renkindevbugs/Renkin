@@ -68,11 +68,13 @@ import kotlin.math.sin
 private const val PreviewDebounceMs = 80L
 
 /**
- * Colourize editor hosted in a bottom sheet with the icon docked above it. The draft is local, so
+ * Colour/gradient editor hosted in a bottom sheet with a live preview docked above it. Used by
+ * Colorize and by the outline colour, hence the caller-supplied [title]. The draft is local, so
  * the caller's state only changes on Apply and Cancel really cancels.
  */
 @Composable
-internal fun ColorizeSheet(
+internal fun ColorStyleSheet(
+    title: String,
     initialStyle: ColorizerStyle,
     sampleBitmap: Bitmap?,
     onDismiss: () -> Unit,
@@ -91,7 +93,8 @@ internal fun ColorizeSheet(
         dragHandle = null
     ) {
         Column {
-            ColorizeSheetHeader(
+            ColorStyleSheetHeader(
+                title = title,
                 sampleBitmap = sampleBitmap,
                 style = draft,
                 renderPreview = renderPreview
@@ -128,11 +131,14 @@ internal fun ColorizeSheet(
 }
 
 @Composable
-private fun ColorizeSheetHeader(
+private fun ColorStyleSheetHeader(
+    title: String,
     sampleBitmap: Bitmap?,
     style: ColorizerStyle,
     renderPreview: (suspend (ColorizerStyle) -> Bitmap?)?
 ) {
+    // Global options has no single icon to preview; there the swatch alone carries the state.
+    val previewable = renderPreview != null || sampleBitmap != null
     var preview by remember { mutableStateOf<Bitmap?>(null) }
     var enlarged by remember { mutableStateOf(false) }
 
@@ -164,7 +170,7 @@ private fun ColorizeSheetHeader(
         )
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = stringResource(R.string.colorize),
+                text = title,
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface
             )
@@ -175,22 +181,24 @@ private fun ColorizeSheetHeader(
             )
         }
         // Same affordance as the edit dialog's New slot: tap the preview to judge it big.
-        Surface(
-            shape = IconTileShape,
-            color = MaterialTheme.colorScheme.surfaceContainerHighest,
-            border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
-            modifier = Modifier
-                .size(64.dp)
-                .clickable(enabled = preview != null) { enlarged = true }
-        ) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                preview?.let {
-                    Image(
-                        bitmap = it.asImageBitmap(),
-                        contentDescription = stringResource(R.string.iconNew),
-                        contentScale = ContentScale.Fit,
-                        modifier = Modifier.padding(4.dp).fillMaxSize()
-                    )
+        if (previewable) {
+            Surface(
+                shape = IconTileShape,
+                color = MaterialTheme.colorScheme.surfaceContainerHighest,
+                border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+                modifier = Modifier
+                    .size(64.dp)
+                    .clickable(enabled = preview != null) { enlarged = true }
+            ) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    preview?.let {
+                        Image(
+                            bitmap = it.asImageBitmap(),
+                            contentDescription = stringResource(R.string.iconNew),
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.padding(4.dp).fillMaxSize()
+                        )
+                    }
                 }
             }
         }
@@ -262,15 +270,16 @@ internal fun Modifier.colorizerSwatch(style: ColorizerStyle): Modifier {
     }
 }
 
-/** Row that opens [ColorizeSheet], previewing the current colours in its trailing swatch. */
+/** Row that opens [ColorStyleSheet], previewing the current colours in its trailing swatch. */
 @Composable
-internal fun ColorizeLauncherCard(
+internal fun ColorStyleCard(
+    label: String,
     style: ColorizerStyle,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     OptionCard(
-        label = stringResource(R.string.colorize),
+        label = label,
         onClick = onClick,
         modifier = modifier,
         trailing = {

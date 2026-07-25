@@ -1095,7 +1095,8 @@ class IconGenerator(
                 preOutline,
                 options.outlineMode,
                 options.outlineWidth * maxOf(preOutline.width, preOutline.height) / 256f,
-                options.outlineColor
+                options.outlineColor,
+                options.outlineStyle
             )
             // The eraser: inside the painted areas the outline step is undone, the icon stays.
             options.outlineEraseMask?.let { mask ->

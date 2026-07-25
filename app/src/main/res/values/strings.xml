@@ -380,6 +380,7 @@
     <string name="outlineAdd">Add</string>
     <string name="outlineRecolor">Recolor</string>
     <string name="outlineThickness">Thickness</string>
+    <string name="outlineAddSwitch">Draw an outline around every icon</string>
     <string name="outlineColor">Outline colour</string>
     <string name="eraseTitle">Erase areas</string>
     <string name="eraseBrush">Brush size</string>

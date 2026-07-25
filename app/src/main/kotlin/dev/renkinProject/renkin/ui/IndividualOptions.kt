@@ -448,6 +448,13 @@ fun OptionsDialog(
         outlineMode = adjustments.outlineMode,
         outlineWidth = adjustments.outlineWidth,
         outlineColor = adjustments.outlineColor.toInt(),
+        outlineStyle = ColorizerStyle(
+            mode = adjustments.outlineColorizerMode,
+            gradientType = adjustments.outlineGradientType,
+            firstColor = adjustments.outlineColor.toInt(),
+            gradientStops = adjustments.outlineGradientColors,
+            gradientAngle = adjustments.outlineGradientAngle
+        ),
         // Memoised per stroke list: the options object must only change when the strokes do,
         // or every recomposition would look like a new mask and re-trigger generation.
         outlineEraseMask = remember(adjustments.eraseStrokes) {
@@ -476,18 +483,7 @@ fun OptionsDialog(
     // The Colorize sheet previews a draft style that is NOT applied yet, so it runs the real
     // generation pipeline with the draft substituted in — anything cheaper (colouring the app's
     // current icon) would show a different icon than the one Apply produces.
-    val renderColorizePreview: suspend (ColorizerStyle) -> Bitmap? = { style ->
-        val previewOptions = generatingOptions.copy(
-            primaryImageEdit = ImageEdit.COLORIZE,
-            color = style.firstColor,
-            colorizeFlat = style.flat,
-            colorizeMonochrome = style.monochrome,
-            colorizeInverse = style.inverse,
-            colorizerMode = style.mode,
-            colorizerGradientType = style.gradientType,
-            colorizerGradientColors = style.gradientStops,
-            colorizerGradientAngle = style.gradientAngle
-        )
+    val renderPreviewWith: suspend (GenerationOptions) -> Bitmap? = { previewOptions ->
         val rendered = when (draft.origin) {
             IconOrigin.UPLOAD -> draft.uploadBase?.let { viewModel.applyModifier(it, previewOptions) }
             IconOrigin.VECTOR -> draft.vectorIcon?.let { viewModel.applyModifier(it, previewOptions) }
@@ -504,6 +500,32 @@ fun OptionsDialog(
             }
         }
         rendered?.toBitmap()
+    }
+    val renderColorizePreview: suspend (ColorizerStyle) -> Bitmap? = { style ->
+        renderPreviewWith(
+            generatingOptions.copy(
+                primaryImageEdit = ImageEdit.COLORIZE,
+                color = style.firstColor,
+                colorizeFlat = style.flat,
+                colorizeMonochrome = style.monochrome,
+                colorizeInverse = style.inverse,
+                colorizerMode = style.mode,
+                colorizerGradientType = style.gradientType,
+                colorizerGradientColors = style.gradientStops,
+                colorizerGradientAngle = style.gradientAngle
+            )
+        )
+    }
+    val renderOutlinePreview: suspend (ColorizerStyle) -> Bitmap? = { style ->
+        renderPreviewWith(
+            generatingOptions.copy(
+                // The outline is only visible once it is actually being drawn.
+                outlineMode = adjustments.outlineMode.takeIf { it != OutlineMode.NONE }
+                    ?: OutlineMode.ADD,
+                outlineColor = style.firstColor,
+                outlineStyle = style
+            )
+        )
     }
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
@@ -718,6 +740,7 @@ fun OptionsDialog(
                                 previewGenerating = draft.generating,
                                 sampleBitmap = heroBitmap,
                                 renderColorizePreview = renderColorizePreview,
+                                renderOutlinePreview = renderOutlinePreview,
                                 materialYouPackAdjustments =
                                     materialYouPackAdjustments.takeIf { selectedMaterialYouPackIcon },
                                 materialYouSchemes = materialYouSchemes,

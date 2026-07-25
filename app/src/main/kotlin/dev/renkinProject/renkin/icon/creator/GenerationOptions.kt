@@ -14,6 +14,10 @@ import dev.renkinProject.renkin.data.MonochromeKey
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
 import dev.renkinProject.renkin.data.OutlineAddKey
 import dev.renkinProject.renkin.data.OutlineColorKey
+import dev.renkinProject.renkin.data.OutlineColorizerModeKey
+import dev.renkinProject.renkin.data.OutlineGradientAngleKey
+import dev.renkinProject.renkin.data.OutlineGradientColorsKey
+import dev.renkinProject.renkin.data.OutlineGradientTypeKey
 import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.OverrideIconKey
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
@@ -129,6 +133,8 @@ data class GenerationOptions(
     val outlineMode: OutlineMode = OutlineMode.NONE,
     val outlineWidth: Float = 6f,
     val outlineColor: Int = android.graphics.Color.BLACK,
+    // Optional gradient for the outline. Null (or a single-colour style) keeps [outlineColor].
+    val outlineStyle: ColorizerStyle? = null,
     // Painted areas where the outline step must not apply (the eraser tool). Alpha mask in
     // normalised icon space; null = outline everywhere. Session-only — never persisted.
     val outlineEraseMask: android.graphics.Bitmap? = null,
@@ -273,9 +279,21 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         ).toFloat(),
         outlineColor = preferences.getColorValue(
             OutlineColorKey, androidx.compose.ui.graphics.Color.Black
-        ).toArgb()
+        ).toArgb(),
+        outlineStyle = preferences.outlineColorizerStyle()
     )
 }
+
+/** The outline's colour as a style, so a gradient outline reads exactly like a gradient fill. */
+fun Preferences.outlineColorizerStyle(): ColorizerStyle = ColorizerStyle(
+    mode = getEnumValue(OutlineColorizerModeKey, ColorizerMode.SINGLE_COLOR),
+    gradientType = getEnumValue(OutlineGradientTypeKey, GradientType.LINEAR),
+    firstColor = getColorValue(
+        OutlineColorKey, androidx.compose.ui.graphics.Color.Black
+    ).toArgb(),
+    gradientStops = getGradientStops(OutlineGradientColorsKey, OutlineColorKey),
+    gradientAngle = normalizeGradientAngle(getIntValue(OutlineGradientAngleKey).toFloat())
+)
 
 fun GenerationOptions.hasVisibleModifierEffect(): Boolean =
     primaryImageEdit != ImageEdit.NONE || iconScale != 1f ||
