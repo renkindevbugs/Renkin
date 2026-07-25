@@ -147,6 +147,18 @@ class ApplicationProvider(private val context: Context) {
 
     private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
 
+    /** Saved colours/gradients, shared by every profile. Read straight from the database flow. */
+    fun colorPresets(): kotlinx.coroutines.flow.Flow<List<dev.renkinProject.renkin.data.ColorPreset>> =
+        packRepo.colorPresetsFlow()
+
+    suspend fun saveColorPreset(name: String, style: String) {
+        packRepo.saveColorPreset(name, style)
+    }
+
+    suspend fun deleteColorPreset(id: Long) {
+        packRepo.deleteColorPreset(id)
+    }
+
     suspend fun initialize() {
         // Startup phase timings land in logcat (tag "Startup") so a slow cold start can be
         // attributed to a phase instead of guessed at. Debug-level: silent in release logs.

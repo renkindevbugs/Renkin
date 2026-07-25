@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DragIndicator
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -148,7 +149,21 @@ internal fun ColorizerStyleEditor(
                 )
                 if (showSingleColorEffects) {
                     // Gradient mode keeps these values and honours them, it just has no room to
-                    // repeat the three switches under an already tall stop list.
+                    // repeat the three switches under an already tall stop list — hence the
+                    // heading, so nobody thinks they only affect a single colour.
+                    HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                    Text(
+                        text = stringResource(R.string.colorizeEffectsTitle),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    Text(
+                        text = stringResource(R.string.colorizeEffectsSubtitle),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.dp)
+                    )
                     ColorizerSwitchRow(
                         label = stringResource(R.string.colorizeSolid),
                         hint = stringResource(R.string.colorizeSolidHint),

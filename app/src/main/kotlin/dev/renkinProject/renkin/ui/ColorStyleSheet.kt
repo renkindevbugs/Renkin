@@ -20,7 +20,17 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -85,6 +95,8 @@ internal fun ColorStyleSheet(
     renderPreview: (suspend (ColorizerStyle) -> Bitmap?)? = null
 ) {
     var draft by remember { mutableStateOf(initialStyle) }
+    var presetsOpen by remember { mutableStateOf(false) }
+    var saveOpen by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     ModalBottomSheet(
@@ -120,12 +132,60 @@ internal fun ColorStyleSheet(
                     .fillMaxWidth()
                     .navigationBarsPadding()
                     .padding(horizontal = 12.dp, vertical = 10.dp),
-                horizontalArrangement = Arrangement.End,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Saved colours live bottom-left, out of the way of Apply. Icon-only, so a
+                // long press has to explain them.
+                TooltipIconButton(
+                    icon = Icons.Filled.Bookmarks,
+                    label = stringResource(R.string.savedColorsTitle),
+                    onClick = { presetsOpen = true }
+                )
+                TooltipIconButton(
+                    icon = Icons.Filled.BookmarkAdd,
+                    label = stringResource(R.string.savedColorsSaveTitle),
+                    onClick = { saveOpen = true }
+                )
+                Spacer(Modifier.weight(1f))
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.colorizeCancel)) }
                 Button(onClick = { onApply(draft) }) { Text(stringResource(R.string.apply)) }
             }
+        }
+    }
+
+    if (presetsOpen) {
+        ColorPresetDialog(
+            // A saved colour replaces the draft's colours but keeps this sheet's segment pick.
+            onPick = { picked ->
+                draft = picked.copy(
+                    segmentTargets = draft.segmentTargets,
+                    segmentTolerance = draft.segmentTolerance
+                )
+                presetsOpen = false
+            },
+            onDismiss = { presetsOpen = false }
+        )
+    }
+    if (saveOpen) {
+        SaveColorPresetDialog(style = draft, onDismiss = { saveOpen = false })
+    }
+}
+
+/** Icon-only action with the long-press tooltip Material 3 expects of one. */
+@Composable
+private fun TooltipIconButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState()
+    ) {
+        IconButton(onClick = onClick) {
+            Icon(imageVector = icon, contentDescription = label)
         }
     }
 }

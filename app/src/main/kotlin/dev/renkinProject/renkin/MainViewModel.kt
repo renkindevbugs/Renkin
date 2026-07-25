@@ -38,6 +38,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -79,6 +80,22 @@ class MainViewModel @Inject constructor(
 
     /** The loaded apps, each with its current (created) icon. Edited via [applyIcon]. */
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
+
+    /** Saved colours/gradients offered by every colour sheet. */
+    val colorPresets: kotlinx.coroutines.flow.StateFlow<List<dev.renkinProject.renkin.data.ColorPreset>> =
+        appProvider.colorPresets().stateIn(
+            viewModelScope,
+            kotlinx.coroutines.flow.SharingStarted.Eagerly,
+            emptyList()
+        )
+
+    fun saveColorPreset(name: String, style: String) {
+        viewModelScope.launch { appProvider.saveColorPreset(name, style) }
+    }
+
+    fun deleteColorPreset(id: Long) {
+        viewModelScope.launch { appProvider.deleteColorPreset(id) }
+    }
 
     /** The installed icon packs available as icon sources. */
     val iconPacks: List<IconPack> get() = appProvider.iconPacks

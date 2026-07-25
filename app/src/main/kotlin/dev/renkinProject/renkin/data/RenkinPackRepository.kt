@@ -48,6 +48,22 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         dao.insertAll(apps)
     }
 
+    // ---- Saved colours -------------------------------------------------------------
+
+    private val presetDao = db.colorPresetDao()
+
+    /** Saved colours/gradients, oldest first — the order they appear in the picker. */
+    fun colorPresetsFlow(): Flow<List<ColorPreset>> = presetDao.getAllFlow()
+
+    suspend fun saveColorPreset(name: String, style: String): Long =
+        withContext(Dispatchers.Default) {
+            presetDao.insert(ColorPreset(name = name, style = style))
+        }
+
+    suspend fun deleteColorPreset(id: Long) = withContext(Dispatchers.Default) {
+        presetDao.delete(id)
+    }
+
     // ---- Pack verdicts -------------------------------------------------------------
 
     private val verdictDao = db.packVerdictDao()

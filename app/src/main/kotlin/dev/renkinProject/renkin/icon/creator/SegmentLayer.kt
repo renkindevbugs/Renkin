@@ -15,9 +15,12 @@ data class SegmentLayer(
 private const val FIELD = ";"
 private const val LIST = ","
 
-fun SegmentLayer.encode(): String = listOf(
-    targets.joinToString(LIST),
-    tolerance,
+fun SegmentLayer.encode(): String =
+    listOf(targets.joinToString(LIST), tolerance).joinToString(FIELD) +
+        FIELD + encodeColorizerStyle(style)
+
+/** The style's own fields, reused by saved colour presets. */
+fun encodeColorizerStyle(style: ColorizerStyle): String = listOf(
     style.mode.ordinal,
     style.gradientType.ordinal,
     style.firstColor,
@@ -28,24 +31,34 @@ fun SegmentLayer.encode(): String = listOf(
     style.inverse
 ).joinToString(FIELD)
 
+fun decodeColorizerStyle(encoded: String): ColorizerStyle? =
+    decodeStyleFields(encoded.split(FIELD), 0)
+
+private fun decodeStyleFields(parts: List<String>, offset: Int): ColorizerStyle? {
+    if (parts.size < offset + 8) return null
+    return runCatching {
+        ColorizerStyle(
+            mode = ColorizerMode.entries[parts[offset].toInt()],
+            gradientType = GradientType.entries[parts[offset + 1].toInt()],
+            firstColor = parts[offset + 2].toInt(),
+            gradientStops = parts[offset + 3].split(LIST).mapNotNull { it.toIntOrNull() }
+                .ifEmpty { listOf(android.graphics.Color.BLACK) },
+            gradientAngle = parts[offset + 4].toFloat(),
+            flat = parts[offset + 5].toBooleanStrict(),
+            monochrome = parts[offset + 6].toBooleanStrict(),
+            inverse = parts[offset + 7].toBooleanStrict()
+        )
+    }.getOrNull()
+}
+
 fun decodeSegmentLayer(encoded: String): SegmentLayer? {
     val parts = encoded.split(FIELD)
-    if (parts.size < 10) return null
+    val style = decodeStyleFields(parts, 2) ?: return null
     return runCatching {
         SegmentLayer(
             targets = parts[0].split(LIST).mapNotNull { it.toIntOrNull() },
             tolerance = parts[1].toFloat(),
-            style = ColorizerStyle(
-                mode = ColorizerMode.entries[parts[2].toInt()],
-                gradientType = GradientType.entries[parts[3].toInt()],
-                firstColor = parts[4].toInt(),
-                gradientStops = parts[5].split(LIST).mapNotNull { it.toIntOrNull() }
-                    .ifEmpty { listOf(android.graphics.Color.BLACK) },
-                gradientAngle = parts[6].toFloat(),
-                flat = parts[7].toBooleanStrict(),
-                monochrome = parts[8].toBooleanStrict(),
-                inverse = parts[9].toBooleanStrict()
-            )
+            style = style
         )
     }.getOrNull()
 }

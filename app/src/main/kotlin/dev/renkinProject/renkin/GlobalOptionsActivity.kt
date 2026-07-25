@@ -11,6 +11,9 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
+import kotlinx.coroutines.flow.stateIn
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -32,6 +35,7 @@ import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.GlobalOptionsScreen
 import dev.renkinProject.renkin.ui.LocalToaster
+import dev.renkinProject.renkin.ui.ProvideColorPresets
 import dev.renkinProject.renkin.ui.ToastHost
 import dev.renkinProject.renkin.ui.Toaster
 import dev.renkinProject.renkin.ui.theme.RenkinTheme
@@ -87,7 +91,15 @@ class GlobalOptionsActivity : ComponentActivity() {
             val style = SystemBarStyle.auto(Color.Transparent.toArgb(), Color.Transparent.toArgb()) { darkMode }
             enableEdgeToEdge(style, style)
 
+            val viewModel: GlobalOptionsViewModel = hiltViewModel()
+            val colorPresets by viewModel.colorPresets.collectAsState()
+
             CompositionLocalProvider(LocalToaster provides toaster) {
+              ProvideColorPresets(
+                presets = colorPresets,
+                onSave = viewModel::saveColorPreset,
+                onDelete = viewModel::deleteColorPreset
+              ) {
                 RenkinTheme(darkMode) {
                     GlobalOptionsScreen(onClose = { editedKeys, applied ->
                         setResult(
@@ -100,6 +112,7 @@ class GlobalOptionsActivity : ComponentActivity() {
                     })
                     ToastHost(toaster)
                 }
+              }
             }
         }
     }
@@ -143,6 +156,22 @@ class GlobalOptionsViewModel @Inject constructor(
     application: Application,
     private val appProvider: ApplicationProvider
 ) : AndroidViewModel(application), IconPreviewBuilder {
+
+    /** Saved colours/gradients, the same library the main screen's sheets use. */
+    val colorPresets: kotlinx.coroutines.flow.StateFlow<List<dev.renkinProject.renkin.data.ColorPreset>> =
+        appProvider.colorPresets().stateIn(
+            viewModelScope,
+            kotlinx.coroutines.flow.SharingStarted.Eagerly,
+            emptyList()
+        )
+
+    fun saveColorPreset(name: String, style: String) {
+        viewModelScope.launch { appProvider.saveColorPreset(name, style) }
+    }
+
+    fun deleteColorPreset(id: Long) {
+        viewModelScope.launch { appProvider.deleteColorPreset(id) }
+    }
 
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
     val iconPacks: List<IconPack> get() = appProvider.iconPacks

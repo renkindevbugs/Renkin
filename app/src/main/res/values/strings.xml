@@ -110,6 +110,12 @@
     <string name="colorizeSegments">Colorize segments</string>
     <string name="colorizeCancel">Cancel</string>
     <string name="colorizeSheetHint">Preview updates as you edit</string>
+    <string name="savedColorsTitle">Saved colors</string>
+    <string name="savedColorsSaveTitle">Save this color</string>
+    <string name="savedColorsName">Name</string>
+    <string name="savedColorsDefaultName">Color %1$d</string>
+    <string name="savedColorsDelete">Delete saved color</string>
+    <string name="savedColorsEmpty">Nothing saved yet. Pick a color or gradient, then tap the save icon.</string>
     <string name="segmentCount">Detail</string>
     <string name="segmentTolerance">Tolerance</string>
     <string name="segmentPickOnIcon">Pick on the icon</string>
@@ -120,6 +126,8 @@
     <string name="segmentPickTitle">Tap the parts to colorize</string>
     <string name="segmentNoneSelected">Nothing selected yet — the whole icon gets colorized.</string>
     <string name="segmentSelectedCount">%1$d segments selected</string>
+    <string name="colorizeEffectsTitle">Effects</string>
+    <string name="colorizeEffectsSubtitle">These apply to gradients too.</string>
     <string name="colorizeEffectsActive">Solid fill, monochrome and inverse from One color still apply.</string>
     <string name="clearIcons">Clear icons</string>
     <string name="clearIconsTitle">Clear icons?</string>
