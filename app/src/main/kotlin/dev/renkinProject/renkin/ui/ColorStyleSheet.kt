@@ -11,12 +11,15 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -32,6 +35,7 @@ import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.ModalBottomSheet
@@ -55,6 +59,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.Image
@@ -78,6 +84,13 @@ import kotlin.math.sin
 private const val PreviewDebounceMs = 80L
 
 /**
+ * Above this width the sheet has room to put the preview beside the controls instead of a strip
+ * above them. Same breakpoint the watch-rule editor splits at, and it deliberately ignores
+ * orientation so a tablet held upright benefits too.
+ */
+internal const val WIDE_LAYOUT_DP = 600
+
+/**
  * Colour/gradient editor hosted in a bottom sheet with a live preview docked above it. Used by
  * Colorize and by the outline colour, hence the caller-supplied [title]. The draft is local, so
  * the caller's state only changes on Apply and Cancel really cancels.
@@ -99,31 +112,62 @@ internal fun ColorStyleSheet(
     var saveOpen by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
+    val wide = LocalConfiguration.current.screenWidthDp >= WIDE_LAYOUT_DP
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
         dragHandle = null
     ) {
         Column {
-            ColorStyleSheetHeader(
-                title = title,
-                sampleBitmap = sampleBitmap,
-                style = draft,
-                renderPreview = renderPreview
-            )
-            HorizontalDivider()
-            Column(
-                modifier = Modifier
-                    .weight(1f, fill = false)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
+            val controls: @Composable ColumnScope.() -> Unit = {
                 ColorizerStyleEditor(
                     style = draft,
                     onStyleChange = { draft = it },
                     sampleBitmap = sampleBitmap,
                     showSingleColorEffects = showSingleColorEffects
+                )
+            }
+            if (wide) {
+                // Wide screens: the preview sits beside the controls, big enough to judge, and
+                // the controls keep a phone-like column width instead of stretching across.
+                Row(
+                    modifier = Modifier.weight(1f, fill = false),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ColorStyleSheetHeader(
+                        title = title,
+                        sampleBitmap = sampleBitmap,
+                        style = draft,
+                        renderPreview = renderPreview,
+                        vertical = true,
+                        modifier = Modifier.width(WidePreviewPaneWidth)
+                    )
+                    VerticalDivider()
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .verticalScroll(rememberScrollState())
+                            .padding(horizontal = 16.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        content = controls
+                    )
+                }
+            } else {
+                ColorStyleSheetHeader(
+                    title = title,
+                    sampleBitmap = sampleBitmap,
+                    style = draft,
+                    renderPreview = renderPreview
+                )
+                HorizontalDivider()
+                Column(
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    content = controls
                 )
             }
             HorizontalDivider()
@@ -195,7 +239,10 @@ private fun ColorStyleSheetHeader(
     title: String,
     sampleBitmap: Bitmap?,
     style: ColorizerStyle,
-    renderPreview: (suspend (ColorizerStyle) -> Bitmap?)?
+    renderPreview: (suspend (ColorizerStyle) -> Bitmap?)?,
+    // Wide layouts stack the same pieces into a side pane, with a much larger preview.
+    vertical: Boolean = false,
+    modifier: Modifier = Modifier
 ) {
     // Global options has no single icon to preview; there the swatch alone carries the state.
     val previewable = renderPreview != null || sampleBitmap != null
@@ -215,52 +262,72 @@ private fun ColorStyleSheetHeader(
     }
     DisposableEffect(Unit) { onDispose { preview = null } }
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
+    val swatch: @Composable () -> Unit = {
         Box(
             modifier = Modifier
-                .size(40.dp)
+                .size(if (vertical) 56.dp else 40.dp)
                 .clip(InnerShape)
                 .colorizerSwatch(style)
         )
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = stringResource(R.string.colorizeSheetHint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        // Same affordance as the edit dialog's New slot: tap the preview to judge it big.
-        if (previewable) {
-            Surface(
-                shape = IconTileShape,
-                color = MaterialTheme.colorScheme.surfaceContainerHighest,
-                border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
-                modifier = Modifier
-                    .size(64.dp)
-                    .clickable(enabled = preview != null) { enlarged = true }
-            ) {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    preview?.let {
-                        Image(
-                            bitmap = it.asImageBitmap(),
-                            contentDescription = stringResource(R.string.iconNew),
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.padding(4.dp).fillMaxSize()
-                        )
-                    }
+    }
+    val labels: @Composable ColumnScope.() -> Unit = {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+        Text(
+            text = stringResource(R.string.colorizeSheetHint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+    // Same affordance as the edit dialog's New slot: tap the preview to judge it big.
+    val previewTile: @Composable (Dp) -> Unit = { tileSize ->
+        Surface(
+            shape = IconTileShape,
+            color = MaterialTheme.colorScheme.surfaceContainerHighest,
+            border = BorderStroke(2.dp, MaterialTheme.colorScheme.primary),
+            modifier = Modifier
+                .size(tileSize)
+                .clickable(enabled = preview != null) { enlarged = true }
+        ) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                preview?.let {
+                    Image(
+                        bitmap = it.asImageBitmap(),
+                        contentDescription = stringResource(R.string.iconNew),
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.padding(4.dp).fillMaxSize()
+                    )
                 }
             }
+        }
+    }
+
+    if (vertical) {
+        Column(
+            modifier = modifier
+                .fillMaxHeight()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            if (previewable) previewTile(WidePreviewTileSize)
+            swatch()
+            Column(horizontalAlignment = Alignment.CenterHorizontally, content = labels)
+        }
+    } else {
+        Row(
+            modifier = modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(14.dp)
+        ) {
+            swatch()
+            Column(modifier = Modifier.weight(1f), content = labels)
+            if (previewable) previewTile(64.dp)
         }
     }
 
@@ -352,3 +419,8 @@ internal fun ColorStyleCard(
         }
     )
 }
+
+// The side pane on wide screens: wide enough for a comfortable preview, narrow enough that the
+// controls beside it keep their phone-like column width.
+private val WidePreviewPaneWidth = 240.dp
+private val WidePreviewTileSize = 176.dp

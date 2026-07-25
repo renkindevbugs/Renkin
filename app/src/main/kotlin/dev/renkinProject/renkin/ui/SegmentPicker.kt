@@ -17,12 +17,15 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.FilterChip
@@ -51,6 +54,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -112,7 +116,9 @@ internal fun SegmentSelector(
         onTargetsChange(if (targets.contains(color)) targets - color else targets + color)
     }
 
-    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+    val wide = LocalConfiguration.current.screenWidthDp >= WIDE_LAYOUT_DP
+
+    val canvas: @Composable (Modifier) -> Unit = { canvasModifier ->
         SegmentCanvas(
             icon = icon,
             masks = masks,
@@ -120,10 +126,10 @@ internal fun SegmentSelector(
             bounds = bounds,
             segments = segments,
             onToggle = ::toggle,
-            modifier = Modifier
-                .fillMaxWidth(0.55f)
-                .align(Alignment.CenterHorizontally)
+            modifier = canvasModifier
         )
+    }
+    val controls: @Composable ColumnScope.() -> Unit = {
         LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             items(segments.size, key = { segments[it].color }) { index ->
                 val segment = segments[index]
@@ -175,6 +181,28 @@ internal fun SegmentSelector(
         }
     }
 
+    if (wide) {
+        // Wide screens: the icon is the thing being aimed at, so it gets its own column instead
+        // of pushing every control below the fold.
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+            canvas(Modifier.width(WideCanvasSize))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                content = controls
+            )
+        }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            canvas(
+                Modifier
+                    .fillMaxWidth(0.55f)
+                    .align(Alignment.CenterHorizontally)
+            )
+            controls()
+        }
+    }
+
     if (pickerOpen) {
         Dialog(onDismissRequest = { pickerOpen = false }) {
             Surface(shape = DialogShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
@@ -195,7 +223,9 @@ internal fun SegmentSelector(
                         bounds = bounds,
                         segments = segments,
                         onToggle = ::toggle,
-                        modifier = Modifier.fillMaxWidth()
+                        // Capped: on a tablet a full-width dialog would blow the icon up to
+                        // half the screen without making it any easier to aim at.
+                        modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp)
                     )
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -454,3 +484,6 @@ private fun colorDistance(first: Int, second: Int): Int {
     val db = AndroidColor.blue(first) - AndroidColor.blue(second)
     return dr * dr + dg * dg + db * db
 }
+
+/** Canvas width in the side-by-side layout: big enough to tap regions, not the whole pane. */
+private val WideCanvasSize = 260.dp
