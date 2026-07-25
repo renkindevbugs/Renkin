@@ -108,6 +108,34 @@ class DataPreferencesTest {
     }
 
     @Test
+    fun colorizerGradientSettingsRoundTripThroughProfileSnapshot() {
+        val source = preferencesOf(
+            ColorizerModeKey to 1,
+            ColorizerGradientColorKey to "#FF123456",
+            ColorizerGradientColorsKey to "#FF123456,#FFABCDEF",
+            ColorizerGradientAngleKey to 248,
+            ColorizerGradientTypeKey to 1,
+            GlobalColorizerModeKey to 1,
+            GlobalColorizerGradientColorKey to "#FF654321",
+            GlobalColorizerGradientAngleKey to 90,
+            GlobalColorizerGradientTypeKey to 0
+        )
+        val restored = mutablePreferencesOf()
+
+        restored.replaceProfilePrefs(source.snapshotProfilePrefs())
+
+        assertEquals(1, restored[ColorizerModeKey])
+        assertEquals("#FF123456", restored[ColorizerGradientColorKey])
+        assertEquals("#FF123456,#FFABCDEF", restored[ColorizerGradientColorsKey])
+        assertEquals(248, restored[ColorizerGradientAngleKey])
+        assertEquals(1, restored[ColorizerGradientTypeKey])
+        assertEquals(1, restored[GlobalColorizerModeKey])
+        assertEquals("#FF654321", restored[GlobalColorizerGradientColorKey])
+        assertEquals(90, restored[GlobalColorizerGradientAngleKey])
+        assertEquals(0, restored[GlobalColorizerGradientTypeKey])
+    }
+
+    @Test
     fun replaceProfilePrefs_malformedJsonClearsAllProfileValues() {
         val prefs = mutablePreferencesOf(
             IncludeVectorKey to true,
@@ -156,6 +184,10 @@ class DataPreferencesTest {
                 OutlineAddKey to true,
                 GlobalColorizeMonochromeKey to true,
                 GlobalColorizeInverseKey to true,
+                GlobalColorizerModeKey to 1,
+                GlobalColorizerGradientColorKey to "#FF123456",
+                GlobalColorizerGradientAngleKey to 248,
+                GlobalColorizerGradientTypeKey to 1,
                 GlobalApplyGeneratedKey to false,
                 GlobalApplyExistingKey to true,
                 GlobalApplyCustomKey to true
@@ -169,6 +201,10 @@ class DataPreferencesTest {
             assertTrue(saved[OutlineAddKey] == true)
             assertTrue(saved[GlobalColorizeMonochromeKey] == true)
             assertTrue(saved[GlobalColorizeInverseKey] == true)
+            assertEquals(1, saved[GlobalColorizerModeKey])
+            assertEquals("#FF123456", saved[GlobalColorizerGradientColorKey])
+            assertEquals(248, saved[GlobalColorizerGradientAngleKey])
+            assertEquals(1, saved[GlobalColorizerGradientTypeKey])
             assertFalse(saved[GlobalApplyGeneratedKey] == true)
             assertTrue(saved[GlobalApplyExistingKey] == true)
             assertTrue(saved[GlobalApplyCustomKey] == true)

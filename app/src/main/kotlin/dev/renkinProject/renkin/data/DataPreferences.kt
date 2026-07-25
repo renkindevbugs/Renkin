@@ -6,6 +6,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -71,6 +72,13 @@ val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
 val ExportThemedKey = booleanPreferencesKey(EXPORT_THEMED_NAME)
 val IconColorKey = stringPreferencesKey(ICON_COLOR_NAME)
 val BackgroundColorKey = stringPreferencesKey(BACKGROUND_COLOR_NAME)
+val ColorizerModeKey = intPreferencesKey("COLORIZER_MODE")
+val ColorizerGradientColorKey = stringPreferencesKey("COLORIZER_GRADIENT_COLOR")
+// Every gradient stop after the first colour, comma separated. Supersedes the single-colour key
+// above, which is still written so an older build (or an older backup) keeps working.
+val ColorizerGradientColorsKey = stringPreferencesKey("COLORIZER_GRADIENT_COLORS")
+val ColorizerGradientAngleKey = intPreferencesKey("COLORIZER_GRADIENT_ANGLE")
+val ColorizerGradientTypeKey = intPreferencesKey("COLORIZER_GRADIENT_TYPE")
 val CalendarIconsKey = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS_NAME)
 val OverrideIconKey = booleanPreferencesKey(OVERRIDE_ICON_NAME)
 val PrimarySourceKey = intPreferencesKey(PRIMARY_SOURCE_NAME)
@@ -96,6 +104,11 @@ val TextFontKey = stringPreferencesKey("TEXT_FONT")
 val OutlineAddKey = booleanPreferencesKey("OUTLINE_ADD")
 val OutlineWidthKey = intPreferencesKey("OUTLINE_WIDTH")
 val OutlineColorKey = stringPreferencesKey("OUTLINE_COLOR")
+// The outline can carry a gradient of its own, described the same way the colourizer's is.
+val OutlineColorizerModeKey = intPreferencesKey("OUTLINE_COLORIZER_MODE")
+val OutlineGradientTypeKey = intPreferencesKey("OUTLINE_GRADIENT_TYPE")
+val OutlineGradientAngleKey = intPreferencesKey("OUTLINE_GRADIENT_ANGLE")
+val OutlineGradientColorsKey = stringPreferencesKey("OUTLINE_GRADIENT_COLORS")
 const val OUTLINE_WIDTH_DEFAULT = 6
 const val OUTLINE_WIDTH_MIN = 1
 const val OUTLINE_WIDTH_MAX = 16
@@ -113,6 +126,11 @@ val GlobalColorizeColorKey = stringPreferencesKey("GLOBAL_COLORIZE_COLOR")
 val GlobalColorizeFlatKey = booleanPreferencesKey("GLOBAL_COLORIZE_FLAT")
 val GlobalColorizeMonochromeKey = booleanPreferencesKey("GLOBAL_COLORIZE_MONOCHROME")
 val GlobalColorizeInverseKey = booleanPreferencesKey("GLOBAL_COLORIZE_INVERSE")
+val GlobalColorizerModeKey = intPreferencesKey("GLOBAL_COLORIZER_MODE")
+val GlobalColorizerGradientColorKey = stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_COLOR")
+val GlobalColorizerGradientColorsKey = stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_COLORS")
+val GlobalColorizerGradientAngleKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_ANGLE")
+val GlobalColorizerGradientTypeKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_TYPE")
 // Which icon categories the global modifiers apply to (the Global options screen's toggle
 // buttons): refresh-generated icons (on by default — also gates the globals during a bulk
 // refresh), hand-picked (custom) icons, and apps that have no icon yet (those get one
@@ -158,13 +176,18 @@ private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
     PrimarySourceKey, PrimaryImageEditKey, PrimaryTextTypeKey,
     SecondarySourceKey, SecondaryImageEditKey, SecondaryTextTypeKey,
     FallbackSourceKey, OutlineWidthKey, BuiltPrimarySourceKey,
-    GlobalShapeKey, GlobalShapeScaleKey, GlobalIconScaleKey
+    GlobalShapeKey, GlobalShapeScaleKey, GlobalIconScaleKey,
+    ColorizerModeKey, ColorizerGradientAngleKey, ColorizerGradientTypeKey,
+    OutlineColorizerModeKey, OutlineGradientTypeKey, OutlineGradientAngleKey,
+    GlobalColorizerModeKey, GlobalColorizerGradientAngleKey, GlobalColorizerGradientTypeKey
 )
 
 private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
     PrimaryIconPackKey, SecondaryIconPackKey, IconColorKey, BackgroundColorKey,
     TextFontKey, OutlineColorKey, BuiltPrimaryIconPackKey,
-    GlobalShapeColorKey, GlobalColorizeColorKey
+    GlobalShapeColorKey, GlobalColorizeColorKey, ColorizerGradientColorKey,
+    GlobalColorizerGradientColorKey, ColorizerGradientColorsKey,
+    GlobalColorizerGradientColorsKey, OutlineGradientColorsKey
 )
 
 val ProfilePrefKeys: List<Preferences.Key<*>> =
@@ -182,11 +205,24 @@ suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preference
             target[OutlineAddKey] = source.getBooleanValue(OutlineAddKey)
             target[OutlineWidthKey] = source.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
             target[OutlineColorKey] = source.getStringValue(OutlineColorKey)
+            target[OutlineColorizerModeKey] = source.getIntValue(OutlineColorizerModeKey)
+            target[OutlineGradientTypeKey] = source.getIntValue(OutlineGradientTypeKey)
+            target[OutlineGradientAngleKey] = source.getIntValue(OutlineGradientAngleKey)
+            target[OutlineGradientColorsKey] = source.getStringValue(OutlineGradientColorsKey)
             target[GlobalColorizeKey] = source.getBooleanValue(GlobalColorizeKey)
             target[GlobalColorizeColorKey] = source.getStringValue(GlobalColorizeColorKey)
             target[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
             target[GlobalColorizeMonochromeKey] = source.getBooleanValue(GlobalColorizeMonochromeKey)
             target[GlobalColorizeInverseKey] = source.getBooleanValue(GlobalColorizeInverseKey)
+            target[GlobalColorizerModeKey] = source.getIntValue(GlobalColorizerModeKey)
+            target[GlobalColorizerGradientColorKey] =
+                source.getStringValue(GlobalColorizerGradientColorKey)
+            target[GlobalColorizerGradientColorsKey] =
+                source.getStringValue(GlobalColorizerGradientColorsKey)
+            target[GlobalColorizerGradientAngleKey] =
+                source.getIntValue(GlobalColorizerGradientAngleKey)
+            target[GlobalColorizerGradientTypeKey] =
+                source.getIntValue(GlobalColorizerGradientTypeKey)
             target[GlobalApplyGeneratedKey] = source.getBooleanValue(GlobalApplyGeneratedKey, true)
             target[GlobalApplyExistingKey] = source.getBooleanValue(GlobalApplyExistingKey)
             target[GlobalApplyCustomKey] = source.getBooleanValue(GlobalApplyCustomKey)
@@ -388,6 +424,42 @@ fun Preferences.getColorValue(key: Preferences.Key<String>, default: Color): Col
     return hex.toNullableColor() ?: default
 }
 
+/**
+ * Gradient stops after the first colour, newline-free and comma separated. [legacyKey] holds the
+ * single second colour written before multi-stop gradients existed, so profiles saved back then
+ * still open with their gradient intact.
+ */
+fun Preferences.getGradientStops(
+    key: Preferences.Key<String>,
+    legacyKey: Preferences.Key<String>
+): List<Int> {
+    val stored = this[key].orEmpty()
+        .split(',')
+        .mapNotNull { it.trim().takeIf(String::isNotEmpty)?.toNullableColor()?.toArgb() }
+    return stored.ifEmpty { listOf(getColorValue(legacyKey, Color.Black).toArgb()) }
+}
+
+@Composable
+fun DataStore<Preferences>.getGradientStops(
+    key: Preferences.Key<String>,
+    legacyKey: Preferences.Key<String>
+): List<Int> {
+    val stored = getPreferenceValue(key, "")
+        .split(',')
+        .mapNotNull { it.trim().takeIf(String::isNotEmpty)?.toNullableColor()?.toArgb() }
+    return stored.ifEmpty { listOf(getColorValue(legacyKey, Color.Black).toArgb()) }
+}
+
+suspend fun DataStore<Preferences>.setGradientStops(
+    key: Preferences.Key<String>,
+    legacyKey: Preferences.Key<String>,
+    stops: List<Int>
+) {
+    setStringValue(key, stops.joinToString(",") { Color(it).toHexString() })
+    // Keep the legacy key in sync: a backup restored on an older build must still find stop two.
+    stops.firstOrNull()?.let { setColorValue(legacyKey, Color(it)) }
+}
+
 //Enum
 @Composable
 inline fun <reified T: Enum<T>> DataStore<Preferences>.getEnumValue(
@@ -457,12 +529,16 @@ fun getSourceLabels(): Map<Source, String> {
 }
 
 @Composable
-fun getImageEditLabels(): Map<ImageEdit, String> {
-    return mapOf(ImageEdit.NONE to stringResource(id = R.string.none)
+fun getImageEditLabels(includeSegments: Boolean = false): Map<ImageEdit, String> {
+    val base = mapOf(ImageEdit.NONE to stringResource(id = R.string.none)
         , ImageEdit.PATH to stringResource(id = R.string.pathDetection)
         , ImageEdit.EDGE to stringResource(id = R.string.edgeDetection)
         , ImageEdit.COLORIZE to stringResource(id = R.string.colorize)
         , ImageEdit.REMOVE_BACKGROUND to stringResource(id = R.string.removeBackground))
+    // Segments are picked on one icon's own artwork, so only the edit dialog offers them.
+    return if (includeSegments) {
+        base + (ImageEdit.COLORIZE_SEGMENTS to stringResource(id = R.string.colorizeSegments))
+    } else base
 }
 
 @Composable
@@ -509,8 +585,9 @@ enum class FallbackSource {
 }
 
 enum class ImageEdit {
-    // REMOVE_BACKGROUND stays last so existing stored ordinals (persisted by index) keep their value.
-    NONE, PATH, EDGE, COLORIZE, REMOVE_BACKGROUND
+    // New entries go at the END: ordinals are persisted by index. COLORIZE_SEGMENTS is the
+    // per-app "colourize only these regions" modifier, so the pack-wide dropdowns skip it.
+    NONE, PATH, EDGE, COLORIZE, REMOVE_BACKGROUND, COLORIZE_SEGMENTS
 }
 
 enum class TextType {

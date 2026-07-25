@@ -14,6 +14,10 @@ import dev.renkinProject.renkin.data.MonochromeKey
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
 import dev.renkinProject.renkin.data.OutlineAddKey
 import dev.renkinProject.renkin.data.OutlineColorKey
+import dev.renkinProject.renkin.data.OutlineColorizerModeKey
+import dev.renkinProject.renkin.data.OutlineGradientAngleKey
+import dev.renkinProject.renkin.data.OutlineGradientColorsKey
+import dev.renkinProject.renkin.data.OutlineGradientTypeKey
 import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.OverrideIconKey
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
@@ -42,6 +46,17 @@ import dev.renkinProject.renkin.data.GlobalColorizeFlatKey
 import dev.renkinProject.renkin.data.GlobalColorizeInverseKey
 import dev.renkinProject.renkin.data.GlobalColorizeKey
 import dev.renkinProject.renkin.data.GlobalColorizeMonochromeKey
+import dev.renkinProject.renkin.data.ColorizerGradientAngleKey
+import dev.renkinProject.renkin.data.ColorizerGradientColorKey
+import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
+import dev.renkinProject.renkin.data.getGradientStops
+import dev.renkinProject.renkin.data.ColorizerGradientTypeKey
+import dev.renkinProject.renkin.data.ColorizerModeKey
+import dev.renkinProject.renkin.data.GlobalColorizerGradientAngleKey
+import dev.renkinProject.renkin.data.GlobalColorizerGradientColorKey
+import dev.renkinProject.renkin.data.GlobalColorizerGradientColorsKey
+import dev.renkinProject.renkin.data.GlobalColorizerGradientTypeKey
+import dev.renkinProject.renkin.data.GlobalColorizerModeKey
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
 import dev.renkinProject.renkin.data.GlobalShapeColorKey
 import dev.renkinProject.renkin.data.GlobalShapeCropKey
@@ -99,6 +114,16 @@ data class GenerationOptions(
     // Alternative Colorize results: grayscale, plus optional inversion of either grayscale or RGB.
     val colorizeMonochrome: Boolean = false,
     val colorizeInverse: Boolean = false,
+    val colorizerMode: ColorizerMode = ColorizerMode.SINGLE_COLOR,
+    val colorizerGradientType: GradientType = GradientType.LINEAR,
+    // Gradient stops after [color]; [color] itself is stop one and doubles as the single-colour
+    // value, so it is not repeated here.
+    val colorizerGradientColors: List<Int> = listOf(android.graphics.Color.BLACK),
+    val colorizerGradientAngle: Float = 0f,
+    // Per-region colourize steps (the Colorize segments modifier), applied in order. Empty =
+    // the whole icon is colourized with the options above, which is what every other surface asks
+    // for. Only ever set per app; the pack-wide surfaces never populate it.
+    val colorizeLayers: List<SegmentLayer> = emptyList(),
     // Icon shape applied as the LAST step: NONE leaves the icon untouched; otherwise the icon
     // is cropped into the shape (the default — most icons are full-bleed) or laid on a
     // [bgColor]-filled shape plate. [iconShapeScale] sizes the SHAPE itself (the icon stays
@@ -112,6 +137,8 @@ data class GenerationOptions(
     val outlineMode: OutlineMode = OutlineMode.NONE,
     val outlineWidth: Float = 6f,
     val outlineColor: Int = android.graphics.Color.BLACK,
+    // Optional gradient for the outline. Null (or a single-colour style) keeps [outlineColor].
+    val outlineStyle: ColorizerStyle? = null,
     // Painted areas where the outline step must not apply (the eraser tool). Alpha mask in
     // normalised icon space; null = outline everywhere. Session-only — never persisted.
     val outlineEraseMask: android.graphics.Bitmap? = null,
@@ -181,6 +208,18 @@ data class GenerationOptions(
                 override = override,
                 fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
                 textFontPath = FontCatalog.usablePathOrDefault(preferences.getStringValue(TextFontKey)),
+                colorizerMode = preferences.getEnumValue(
+                    ColorizerModeKey, ColorizerMode.SINGLE_COLOR
+                ),
+                colorizerGradientType = preferences.getEnumValue(
+                    ColorizerGradientTypeKey, GradientType.LINEAR
+                ),
+                colorizerGradientColors = preferences.getGradientStops(
+                    ColorizerGradientColorsKey, ColorizerGradientColorKey
+                ),
+                colorizerGradientAngle = normalizeGradientAngle(
+                    preferences.getIntValue(ColorizerGradientAngleKey).toFloat()
+                ),
                 // Only ADD exists pack-wide; RECOLOR stays a per-app Modifier-tab option.
                 outlineMode = OutlineMode.NONE
             )
@@ -216,6 +255,18 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         colorizeFlat = preferences.getBooleanValue(GlobalColorizeFlatKey),
         colorizeMonochrome = preferences.getBooleanValue(GlobalColorizeMonochromeKey),
         colorizeInverse = preferences.getBooleanValue(GlobalColorizeInverseKey),
+        colorizerMode = preferences.getEnumValue(
+            GlobalColorizerModeKey, ColorizerMode.SINGLE_COLOR
+        ),
+        colorizerGradientType = preferences.getEnumValue(
+            GlobalColorizerGradientTypeKey, GradientType.LINEAR
+        ),
+        colorizerGradientColors = preferences.getGradientStops(
+            GlobalColorizerGradientColorsKey, GlobalColorizerGradientColorKey
+        ),
+        colorizerGradientAngle = normalizeGradientAngle(
+            preferences.getIntValue(GlobalColorizerGradientAngleKey).toFloat()
+        ),
         iconScale = normalizeGlobalScalePercent(
             preferences.getIntValue(GlobalIconScaleKey, 100)
         ) / 100f,
@@ -232,9 +283,21 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         ).toFloat(),
         outlineColor = preferences.getColorValue(
             OutlineColorKey, androidx.compose.ui.graphics.Color.Black
-        ).toArgb()
+        ).toArgb(),
+        outlineStyle = preferences.outlineColorizerStyle()
     )
 }
+
+/** The outline's colour as a style, so a gradient outline reads exactly like a gradient fill. */
+fun Preferences.outlineColorizerStyle(): ColorizerStyle = ColorizerStyle(
+    mode = getEnumValue(OutlineColorizerModeKey, ColorizerMode.SINGLE_COLOR),
+    gradientType = getEnumValue(OutlineGradientTypeKey, GradientType.LINEAR),
+    firstColor = getColorValue(
+        OutlineColorKey, androidx.compose.ui.graphics.Color.Black
+    ).toArgb(),
+    gradientStops = getGradientStops(OutlineGradientColorsKey, OutlineColorKey),
+    gradientAngle = normalizeGradientAngle(getIntValue(OutlineGradientAngleKey).toFloat())
+)
 
 fun GenerationOptions.hasVisibleModifierEffect(): Boolean =
     primaryImageEdit != ImageEdit.NONE || iconScale != 1f ||

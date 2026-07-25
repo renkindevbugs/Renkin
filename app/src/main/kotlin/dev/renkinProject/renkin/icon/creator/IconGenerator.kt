@@ -9,6 +9,7 @@ import android.graphics.PorterDuffColorFilter
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Shader
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
@@ -250,7 +251,10 @@ class IconGenerator(
     private fun applyModifierInner(icon: IconPackDrawable, imageEdit: ImageEdit): IconPackDrawable {
         if (imageEdit == ImageEdit.NONE) return icon
 
-        if (imageEdit == ImageEdit.COLORIZE && !options.colorizeMonochrome) {
+        if (imageEdit == ImageEdit.COLORIZE &&
+            options.colorizerMode == ColorizerMode.SINGLE_COLOR &&
+            !options.colorizeMonochrome
+        ) {
             modifierVector(icon)?.let { vector ->
                 vector.root.setReferenceColorPaths(SolidColor(Color(colorizeColor)))
                 vector.tintColor = Color.Unspecified
@@ -262,8 +266,11 @@ class IconGenerator(
             val copy = ImageVectorDrawable(icon.toImageVector())
             return when (imageEdit) {
                 ImageEdit.NONE -> icon
+                ImageEdit.COLORIZE_SEGMENTS -> colorizeImage(copy.toBitmap(), null, colorizeMode)
                 ImageEdit.COLORIZE -> {
-                    if (options.colorizeMonochrome) {
+                    if (options.colorizerMode == ColorizerMode.GRADIENT) {
+                        colorizeImage(copy.toBitmap(), null, colorizeMode)
+                    } else if (options.colorizeMonochrome) {
                         colorizeImage(copy.toBitmap(), null, colorizeMode)
                     } else {
                         // Recolour while keeping each path's fill-vs-stroke nature (#117),
@@ -311,7 +318,9 @@ class IconGenerator(
             if (changesWithMaterialYou) styleMaterialYouPackIcon(it) else it
         }
 
-        return if (options.primaryImageEdit == ImageEdit.COLORIZE)
+        return if (options.primaryImageEdit == ImageEdit.COLORIZE ||
+            options.primaryImageEdit == ImageEdit.COLORIZE_SEGMENTS
+        )
             colorizeImage(bitmapIcon, parsedIcon, colorizeMode)
         else
             getDefaultIcon(
@@ -514,7 +523,8 @@ class IconGenerator(
             ImageEdit.NONE -> getDefaultIcon(bitmapIcon, parsedIcon)
             ImageEdit.PATH -> generatePathTracing(bitmapIcon, parsedIcon)
             ImageEdit.EDGE -> generateCannyEdgeDetection(bitmapIcon, parsedIcon)
-            ImageEdit.COLORIZE -> colorizeImage(bitmapIcon, parsedIcon, mode)
+            ImageEdit.COLORIZE, ImageEdit.COLORIZE_SEGMENTS ->
+                colorizeImage(bitmapIcon, parsedIcon, mode)
             ImageEdit.REMOVE_BACKGROUND -> generateRemoveBackground(bitmapIcon)
         }
     }
@@ -849,6 +859,9 @@ class IconGenerator(
     }
 
     private fun colorizeBitmap(icon: Bitmap, mode: PorterDuff.Mode): Bitmap {
+        if (options.colorizerMode == ColorizerMode.GRADIENT) {
+            return colorizeBitmapWithGradient(icon)
+        }
         val coloredIcon = icon.emptyLike()
         val paint = Paint()
 
@@ -859,6 +872,74 @@ class IconGenerator(
 
         val result = addBackground(coloredIcon)
         return if (options.colorizeInverse) invertBitmapColors(result) else result
+    }
+
+    /**
+     * Paints a multi-stop gradient over the icon, honouring the same Solid fill / Monochrome /
+     * Inverse switches as single-colour mode: solid fill replaces the artwork's RGB through its
+     * alpha mask, otherwise the gradient multiplies with it so the icon's detail survives.
+     */
+    private fun colorizeBitmapWithGradient(icon: Bitmap): Bitmap {
+        val centerX = icon.width / 2f
+        val centerY = icon.height / 2f
+        val base = if (options.colorizeMonochrome) {
+            monochromeBitmap(icon, options.colorizeInverse)
+        } else {
+            icon
+        }
+        val gradient: Shader = buildColorizerShader(
+            listOf(options.color) + options.colorizerGradientColors,
+            options.colorizerGradientType,
+            options.colorizerGradientAngle,
+            icon.width,
+            icon.height
+        )
+
+        val coloredIcon = icon.emptyLike()
+        val canvas = Canvas(coloredIcon)
+        // Solid fill: gradient first, then the alpha mask. Tint: artwork first, then the gradient
+        // multiplied on top (MULTIPLY also multiplies alpha, so transparent pixels stay clear).
+        val solidFill = options.colorizeFlat && !options.colorizeMonochrome
+        val drawMask = {
+            val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                if (solidFill) xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+            }
+            if (options.themed) {
+                // Only the artwork draw is scaled. The gradient already covers the full output.
+                canvas.save()
+                canvas.scale(0.5f, 0.5f, centerX, centerY)
+                canvas.drawBitmap(base, 0f, 0f, maskPaint)
+                canvas.restore()
+            } else {
+                canvas.drawBitmap(base, 0f, 0f, maskPaint)
+            }
+        }
+        val drawGradient = {
+            canvas.drawRect(
+                0f,
+                0f,
+                icon.width.toFloat(),
+                icon.height.toFloat(),
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    shader = gradient
+                    if (!solidFill) xfermode = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY)
+                }
+            )
+        }
+        if (solidFill) {
+            drawGradient()
+            drawMask()
+        } else {
+            drawMask()
+            drawGradient()
+        }
+        // Monochrome already applied the inversion while flattening to grey.
+        val tinted = if (options.colorizeInverse && !options.colorizeMonochrome) {
+            invertBitmapColors(coloredIcon)
+        } else {
+            coloredIcon
+        }
+        return addBackground(tinted)
     }
 
     private fun addBackground(image: Bitmap): Bitmap {
@@ -940,6 +1021,18 @@ class IconGenerator(
     }
 
     private fun colorizeImage(bitmapIcon: Bitmap, parsedIcon: Drawable?, mode: PorterDuff.Mode): IconPackDrawable {
+        // Segment layers are per-pixel, which the vector recolour path cannot express: bake.
+        if (options.colorizeLayers.isNotEmpty()) {
+            return BitmapIconDrawable(
+                ctx.resources,
+                addBackground(applySegmentLayers(bitmapIcon, options.colorizeLayers))
+            )
+        }
+        if (options.colorizerMode == ColorizerMode.GRADIENT) {
+            // A gradient cannot be represented by the current vector exporter. Bake the same
+            // bitmap used by preview, persistence and APK export so every surface stays identical.
+            return BitmapIconDrawable(ctx.resources, colorizeBitmapWithGradient(bitmapIcon))
+        }
         if (options.colorizeMonochrome) {
             // Reuse the Application icon → Monochrome result exactly. The Colorize colour is
             // intentionally irrelevant in this mode; Solid fill and normal tint remain separate.
@@ -1013,7 +1106,8 @@ class IconGenerator(
                 preOutline,
                 options.outlineMode,
                 options.outlineWidth * maxOf(preOutline.width, preOutline.height) / 256f,
-                options.outlineColor
+                options.outlineColor,
+                options.outlineStyle
             )
             // The eraser: inside the painted areas the outline step is undone, the icon stays.
             options.outlineEraseMask?.let { mask ->

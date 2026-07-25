@@ -40,7 +40,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.animation.Crossfade
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalConfiguration
@@ -79,11 +78,13 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.animation.EnterTransition
+import kotlinx.coroutines.delay
 @Composable
 internal fun ComparisonHeader(
     heroBitmap: Bitmap?,
@@ -482,6 +483,16 @@ private fun NewSlot(
     val borderColor = if (previewIcon != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
     // Tapping the preview blows it up, so the result is judgeable before applying.
     var enlarged by remember { mutableStateOf(false) }
+    var showLoading by remember { mutableStateOf(false) }
+    LaunchedEffect(previewLoading) {
+        if (previewLoading) {
+            // Fast modifier previews should update without a distracting one-frame spinner.
+            delay(120)
+            showLoading = true
+        } else {
+            showLoading = false
+        }
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         AnimatedVisibility(visibleState = flyIn, enter = flyInEnter) {
             Surface(
@@ -493,33 +504,29 @@ private fun NewSlot(
                 border = BorderStroke(2.dp, borderColor)
             ) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    // Fade between icons so a regenerated/changed preview eases in
-                    // instead of snapping.
-                    Crossfade(targetState = previewIcon, label = "previewIcon") { icon ->
-                        if (icon != null) {
-                            Image(
-                                painter = icon.getPainter(),
+                    if (previewIcon != null) {
+                        Image(
+                            painter = previewIcon.getPainter(),
+                            contentDescription = null,
+                            // Keep full-viewBox vectors out from under the slot's 2 dp
+                            // border and rounded clip. The enlarged preview has no border,
+                            // so both previews now expose the same complete artwork.
+                            modifier = Modifier
+                                .padding(2.dp)
+                                .fillMaxSize()
+                        )
+                    } else {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = Icons.Filled.Add,
                                 contentDescription = null,
-                                // Keep full-viewBox vectors out from under the slot's 2 dp
-                                // border and rounded clip. The enlarged preview has no border,
-                                // so both previews now expose the same complete artwork.
-                                modifier = Modifier
-                                    .padding(2.dp)
-                                    .fillMaxSize()
+                                tint = MaterialTheme.colorScheme.outlineVariant,
+                                modifier = Modifier.size(size / 2)
                             )
-                        } else {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Filled.Add,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.outlineVariant,
-                                    modifier = Modifier.size(size / 2)
-                                )
-                            }
                         }
                     }
-                    // Spinner over the slot while the new icon is being (re)generated
-                    if (previewLoading) {
+                    // Only sustained work gets an activity indicator; quick updates stay instant.
+                    if (showLoading) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(size / 2),
                             strokeWidth = 2.dp,

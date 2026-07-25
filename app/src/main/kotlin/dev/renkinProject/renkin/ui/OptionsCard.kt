@@ -39,6 +39,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
@@ -53,6 +55,25 @@ import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.data.FallbackSourceKey
 import dev.renkinProject.renkin.data.IMAGE_EDIT_DEFAULT
 import dev.renkinProject.renkin.data.IconColorKey
+import dev.renkinProject.renkin.data.ColorizerGradientAngleKey
+import androidx.compose.animation.AnimatedVisibility
+import dev.renkinProject.renkin.data.ColorizerGradientColorKey
+import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
+import dev.renkinProject.renkin.data.OUTLINE_WIDTH_MAX
+import dev.renkinProject.renkin.data.OUTLINE_WIDTH_MIN
+import dev.renkinProject.renkin.data.OutlineAddKey
+import dev.renkinProject.renkin.data.OutlineColorKey
+import dev.renkinProject.renkin.data.OutlineColorizerModeKey
+import dev.renkinProject.renkin.data.OutlineGradientAngleKey
+import dev.renkinProject.renkin.data.OutlineGradientColorsKey
+import dev.renkinProject.renkin.data.OutlineGradientTypeKey
+import dev.renkinProject.renkin.data.OutlineWidthKey
+import dev.renkinProject.renkin.data.normalizeOutlineWidth
+import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
+import dev.renkinProject.renkin.data.getGradientStops
+import dev.renkinProject.renkin.data.setGradientStops
+import dev.renkinProject.renkin.data.ColorizerGradientTypeKey
+import dev.renkinProject.renkin.data.ColorizerModeKey
 import dev.renkinProject.renkin.data.getIconColor
 import dev.renkinProject.renkin.data.getBackgroundColor
 import dev.renkinProject.renkin.data.IconPack
@@ -71,15 +92,22 @@ import dev.renkinProject.renkin.data.SecondarySourceKey
 import dev.renkinProject.renkin.data.SecondaryTextTypeKey
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
 import dev.renkinProject.renkin.data.getBooleanValue
+import dev.renkinProject.renkin.data.getColorValue
 import dev.renkinProject.renkin.data.getEnumValue
+import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.setColorValue
 import dev.renkinProject.renkin.data.setEnumValue
+import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.icon.creator.ColorizerMode
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.GradientType
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 /**
  * The home list's Advanced options card, back in its old place: the expandable generation
@@ -167,6 +195,8 @@ fun AdvancedOptionsContent(
 ) {
     val prefs = getPreferences()
 
+    var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
     var primarySource by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
     var primaryImageEdit by rememberSaveable { mutableStateOf(IMAGE_EDIT_DEFAULT) }
     var primaryTextType by rememberSaveable { mutableStateOf(TEXT_TYPE_DEFAULT) }
@@ -183,6 +213,26 @@ fun AdvancedOptionsContent(
     var fallbackSource by rememberSaveable { mutableStateOf(FALLBACK_SOURCE_DEFAULT) }
     val currentColor = prefs.getIconColor()
     val currentBgColor = prefs.getBackgroundColor()
+    val colorizerMode = prefs.getEnumValue(ColorizerModeKey, ColorizerMode.SINGLE_COLOR)
+    val colorizerGradientType =
+        prefs.getEnumValue(ColorizerGradientTypeKey, GradientType.LINEAR)
+    val colorizerGradientColors =
+        prefs.getGradientStops(ColorizerGradientColorsKey, ColorizerGradientColorKey)
+    val colorizerGradientAngle =
+        prefs.getIntValue(ColorizerGradientAngleKey).coerceIn(0, 360).toFloat()
+    // Pack-wide outline: the same keys the Global options screen edits, surfaced here so the
+    // hero card's Advanced options can turn it on without opening that screen.
+    val outlineAdd = prefs.getBooleanValue(OutlineAddKey)
+    val outlineWidth = normalizeOutlineWidth(
+        prefs.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
+    ).toFloat()
+    val outlineColor = prefs.getColorValue(OutlineColorKey, Color.Black)
+    val outlineMode = prefs.getEnumValue(OutlineColorizerModeKey, ColorizerMode.SINGLE_COLOR)
+    val outlineGradientType = prefs.getEnumValue(OutlineGradientTypeKey, GradientType.LINEAR)
+    val outlineGradientColors =
+        prefs.getGradientStops(OutlineGradientColorsKey, OutlineColorKey)
+    val outlineGradientAngle =
+        prefs.getIntValue(OutlineGradientAngleKey).coerceIn(0, 360).toFloat()
 
     primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
@@ -202,6 +252,9 @@ fun AdvancedOptionsContent(
     val pathTracing = isPathTracingEnabled(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit)
     val showIconColor = showIconColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
     val showBgColor = showBackgroundColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
+    val showColorizer =
+        (needImageEdit(primarySource) && primaryImageEdit == dev.renkinProject.renkin.data.ImageEdit.COLORIZE) ||
+            (needImageEdit(secondarySource) && secondaryImageEdit == dev.renkinProject.renkin.data.ImageEdit.COLORIZE)
 
     val scope = rememberCoroutineScope()
 
@@ -316,12 +369,118 @@ fun AdvancedOptionsContent(
                     OptionsSectionLabel(R.string.advancedSectionColors)
                 }
                 if (showIconColor) {
-                    ColorButton(stringResource(R.string.iconColor), currentColor) { scope.launch { prefs.setColorValue(
-                        IconColorKey, it) } }
+                    if (showColorizer) {
+                        val colorizerStyle = ColorizerStyle(
+                            mode = colorizerMode,
+                            gradientType = colorizerGradientType,
+                            firstColor = currentColor.toArgb(),
+                            gradientStops = colorizerGradientColors,
+                            gradientAngle = colorizerGradientAngle
+                        )
+                        ColorStyleCard(
+                            label = stringResource(R.string.colorize),
+                            style = colorizerStyle,
+                            onClick = { colorizeSheetOpen = true }
+                        )
+                        if (colorizeSheetOpen) {
+                            ColorStyleSheet(
+                                title = stringResource(R.string.colorize),
+                                initialStyle = colorizerStyle,
+                                sampleBitmap = null,
+                                showSingleColorEffects = false,
+                                onDismiss = { colorizeSheetOpen = false },
+                                onApply = { style ->
+                                    colorizeSheetOpen = false
+                                    scope.launch {
+                                        prefs.setEnumValue(ColorizerModeKey, style.mode)
+                                        prefs.setEnumValue(
+                                            ColorizerGradientTypeKey, style.gradientType
+                                        )
+                                        prefs.setColorValue(IconColorKey, Color(style.firstColor))
+                                        prefs.setGradientStops(
+                                            ColorizerGradientColorsKey,
+                                            ColorizerGradientColorKey,
+                                            style.gradientStops
+                                        )
+                                        prefs.setIntValue(
+                                            ColorizerGradientAngleKey,
+                                            style.gradientAngle.roundToInt()
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    } else {
+                        ColorButton(stringResource(R.string.iconColor), currentColor) {
+                            scope.launch { prefs.setColorValue(IconColorKey, it) }
+                        }
+                    }
                 }
                 if (showBgColor) {
                     ColorButton(stringResource(R.string.backgroundColor), currentBgColor) { scope.launch { prefs.setColorValue(
                         BackgroundColorKey, it) } }
+                }
+
+                OptionsSectionLabel(R.string.outlineTitle)
+                OutlineSwitch(outlineAdd) {
+                    scope.launch { prefs.setBooleanValue(OutlineAddKey, it) }
+                }
+                AnimatedVisibility(visible = outlineAdd) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        LabeledSlider(
+                            label = stringResource(R.string.outlineThickness),
+                            value = outlineWidth,
+                            onValueChange = {
+                                scope.launch {
+                                    prefs.setIntValue(OutlineWidthKey, it.roundToInt())
+                                }
+                            },
+                            valueRange = OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat(),
+                            valueLabel = "${outlineWidth.roundToInt()} px"
+                        )
+                        val outlineStyle = ColorizerStyle(
+                            mode = outlineMode,
+                            gradientType = outlineGradientType,
+                            firstColor = outlineColor.toArgb(),
+                            gradientStops = outlineGradientColors,
+                            gradientAngle = outlineGradientAngle
+                        )
+                        ColorStyleCard(
+                            label = stringResource(R.string.outlineColor),
+                            style = outlineStyle,
+                            onClick = { outlineSheetOpen = true }
+                        )
+                        if (outlineSheetOpen) {
+                            ColorStyleSheet(
+                                title = stringResource(R.string.outlineColor),
+                                initialStyle = outlineStyle,
+                                sampleBitmap = null,
+                                showSingleColorEffects = false,
+                                onDismiss = { outlineSheetOpen = false },
+                                onApply = { style ->
+                                    outlineSheetOpen = false
+                                    scope.launch {
+                                        prefs.setEnumValue(OutlineColorizerModeKey, style.mode)
+                                        prefs.setEnumValue(
+                                            OutlineGradientTypeKey, style.gradientType
+                                        )
+                                        prefs.setColorValue(
+                                            OutlineColorKey, Color(style.firstColor)
+                                        )
+                                        prefs.setGradientStops(
+                                            OutlineGradientColorsKey,
+                                            OutlineColorKey,
+                                            style.gradientStops
+                                        )
+                                        prefs.setIntValue(
+                                            OutlineGradientAngleKey,
+                                            style.gradientAngle.roundToInt()
+                                        )
+                                    }
+                                }
+                            )
+                        }
+                    }
                 }
 
                 OptionsSectionLabel(R.string.advancedSectionBehavior)

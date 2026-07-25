@@ -112,6 +112,37 @@ const val VERDICT_LISTED = "listed"
 // also resolve here, but are locked by package pattern regardless (see PackVerdictManager).
 const val VERDICT_UNLISTED = "unlisted"
 
+/**
+ * A saved colour or gradient the user can reapply anywhere the colour sheet appears. Deliberately
+ * NOT per profile: a palette you built is yours across every icon set.
+ */
+@Entity
+data class ColorPreset(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    // The encoded ColorizerStyle; see encodeColorizerStyle().
+    val style: String,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Dao
+interface ColorPresetDao {
+    @Query("SELECT * FROM ColorPreset ORDER BY createdAt")
+    fun getAllFlow(): kotlinx.coroutines.flow.Flow<List<ColorPreset>>
+
+    @Query("SELECT * FROM ColorPreset ORDER BY createdAt")
+    fun getAll(): List<ColorPreset>
+
+    @Insert
+    fun insert(preset: ColorPreset): Long
+
+    @Query("DELETE FROM ColorPreset WHERE id = :id")
+    fun delete(id: Long)
+
+    @Query("DELETE FROM ColorPreset")
+    fun deleteEverything()
+}
+
 @Dao
 interface PackVerdictDao {
     @Query("SELECT * FROM PackVerdict WHERE packageName IN (:packages)")
@@ -190,14 +221,16 @@ interface ProfileDao {
 // Version 13 adds DbApplication.sourceUrl (attribution reference for online-library icons).
 // Version 14 adds DbApplication.isFallbackIcon (fallback-styled refresh output) so the
 // fallback count/filter survive restarts.
+// Version 15 adds the ColorPreset table (saved colours/gradients, shared by every profile).
 @Database(
-    entities = [DbApplication::class, Profile::class, PackVerdict::class],
-    version = 14
+    entities = [DbApplication::class, Profile::class, PackVerdict::class, ColorPreset::class],
+    version = 15
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
     abstract fun profileDao(): ProfileDao
     abstract fun packVerdictDao(): PackVerdictDao
+    abstract fun colorPresetDao(): ColorPresetDao
 
     companion object {
         @Volatile
@@ -338,6 +371,18 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `ColorPreset` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`style` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL)"
+                )
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -351,7 +396,8 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_10_11,
             MIGRATION_11_12,
             MIGRATION_12_13,
-            MIGRATION_13_14
+            MIGRATION_13_14,
+            MIGRATION_14_15
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {

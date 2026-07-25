@@ -252,6 +252,11 @@ fun OverrideIconSwitch(override: Boolean, onChange: (newValue: Boolean) -> Unit)
 }
 
 @Composable
+fun OutlineSwitch(enabled: Boolean, onChange: (newValue: Boolean) -> Unit) {
+    DefaultSwitchLayout(enabled, R.string.outlineAddSwitch) { onChange(it) }
+}
+
+@Composable
 fun DefaultSwitchLayout(isChecked: Boolean, @StringRes label: Int, onChange: (newValue: Boolean) -> Unit) {
     var checked by rememberSaveable { mutableStateOf(isChecked) }
 

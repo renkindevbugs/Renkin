@@ -34,10 +34,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.IconPreviewBuilder
+import android.graphics.Bitmap
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.SegmentLayer
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.calendarPrefixOrNull
@@ -435,12 +439,27 @@ fun OptionsDialog(
         colorizeFlat = adjustments.colorizeFlat,
         colorizeMonochrome = adjustments.colorizeMonochrome,
         colorizeInverse = adjustments.colorizeInverse,
+        colorizerMode = adjustments.colorizerMode,
+        colorizerGradientType = adjustments.colorizerGradientType,
+        colorizerGradientColors = adjustments.colorizerGradientColors,
+        colorizerGradientAngle = adjustments.colorizerGradientAngle,
+        // Layers only apply to the segment modifier; plain Colorize always paints it all.
+        colorizeLayers = if (imageEdit == ImageEdit.COLORIZE_SEGMENTS) {
+            adjustments.colorizeLayers
+        } else emptyList(),
         iconShape = adjustments.iconShape,
         iconShapeCrop = adjustments.shapeCrop,
         iconShapeScale = adjustments.shapeScale,
         outlineMode = adjustments.outlineMode,
         outlineWidth = adjustments.outlineWidth,
         outlineColor = adjustments.outlineColor.toInt(),
+        outlineStyle = ColorizerStyle(
+            mode = adjustments.outlineColorizerMode,
+            gradientType = adjustments.outlineGradientType,
+            firstColor = adjustments.outlineColor.toInt(),
+            gradientStops = adjustments.outlineGradientColors,
+            gradientAngle = adjustments.outlineGradientAngle
+        ),
         // Memoised per stroke list: the options object must only change when the strokes do,
         // or every recomposition would look like a new mask and re-trigger generation.
         outlineEraseMask = remember(adjustments.eraseStrokes) {
@@ -465,6 +484,77 @@ fun OptionsDialog(
         materialYouPackBackground = null,
         materialYouPackStrokeScale = 1f
     )
+
+    // The Colorize sheet previews a draft style that is NOT applied yet, so it runs the real
+    // generation pipeline with the draft substituted in — anything cheaper (colouring the app's
+    // current icon) would show a different icon than the one Apply produces.
+    val renderPreviewWith: suspend (GenerationOptions) -> Bitmap? = { previewOptions ->
+        val rendered = when (draft.origin) {
+            IconOrigin.UPLOAD -> draft.uploadBase?.let { viewModel.applyModifier(it, previewOptions) }
+            IconOrigin.VECTOR -> draft.vectorIcon?.let { viewModel.applyModifier(it, previewOptions) }
+            IconOrigin.CREATE -> {
+                val custom = customIconList.firstOrNull()
+                when {
+                    custom != null -> viewModel.previewIcon(app, previewOptions, custom)
+                    previewOptions.primarySource == Source.ICON_PACK ->
+                        (app.baseIcon ?: app.createdIcon)?.let {
+                            viewModel.applyModifier(it, previewOptions)
+                        }
+                    else -> viewModel.previewIcon(app, previewOptions, null)
+                }
+            }
+        }
+        rendered?.toBitmap()
+    }
+    val renderColorizePreview: suspend (ColorizerStyle) -> Bitmap? = { style ->
+        renderPreviewWith(
+            generatingOptions.copy(
+                primaryImageEdit = if (style.segmentTargets.isEmpty()) {
+                    ImageEdit.COLORIZE
+                } else ImageEdit.COLORIZE_SEGMENTS,
+                color = style.firstColor,
+                colorizeFlat = style.flat,
+                colorizeMonochrome = style.monochrome,
+                colorizeInverse = style.inverse,
+                colorizerMode = style.mode,
+                colorizerGradientType = style.gradientType,
+                colorizerGradientColors = style.gradientStops,
+                colorizerGradientAngle = style.gradientAngle,
+                colorizeLayers = emptyList()
+            )
+        )
+    }
+    // Previews the whole layer stack of the segment modifier, with [draft] standing in for the
+    // layer being edited so the sheet shows the layer in the context of the others.
+    val renderLayersPreview: suspend (Int, ColorizerStyle) -> Bitmap? = { index, draft ->
+        renderPreviewWith(
+            generatingOptions.copy(
+                primaryImageEdit = ImageEdit.COLORIZE_SEGMENTS,
+                colorizeLayers = adjustments.colorizeLayers.mapIndexed { i, layer ->
+                    if (i == index) layer.copy(style = draft) else layer
+                }
+            )
+        )
+    }
+    // The icon with every modifier EXCEPT colourize, so segment colours match what the
+    // generator will actually see when it colourizes.
+    var colorizeBaseBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(generatingOptions, customIconList) {
+        colorizeBaseBitmap = renderPreviewWith(
+            generatingOptions.copy(primaryImageEdit = ImageEdit.NONE)
+        )
+    }
+    val renderOutlinePreview: suspend (ColorizerStyle) -> Bitmap? = { style ->
+        renderPreviewWith(
+            generatingOptions.copy(
+                // The outline is only visible once it is actually being drawn.
+                outlineMode = adjustments.outlineMode.takeIf { it != OutlineMode.NONE }
+                    ?: OutlineMode.ADD,
+                outlineColor = style.firstColor,
+                outlineStyle = style
+            )
+        )
+    }
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
     // hops to Dispatchers.Default inside the view model; the holder drives the spinner.
@@ -677,6 +767,10 @@ fun OptionsDialog(
                                 centerPreview = remember(draft.iconToConfirm) { draft.iconToConfirm?.toBitmap() },
                                 previewGenerating = draft.generating,
                                 sampleBitmap = heroBitmap,
+                                renderColorizePreview = renderColorizePreview,
+                                renderOutlinePreview = renderOutlinePreview,
+                                renderLayersPreview = renderLayersPreview,
+                                colorizeBaseBitmap = colorizeBaseBitmap,
                                 materialYouPackAdjustments =
                                     materialYouPackAdjustments.takeIf { selectedMaterialYouPackIcon },
                                 materialYouSchemes = materialYouSchemes,

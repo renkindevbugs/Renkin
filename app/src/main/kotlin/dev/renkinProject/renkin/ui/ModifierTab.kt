@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.BorderStyle
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LayersClear
@@ -60,6 +61,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -81,6 +83,12 @@ import dev.renkinProject.renkin.data.getImageEditLabels
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconShapes
+import dev.renkinProject.renkin.icon.creator.ColorizerMode
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.SegmentLayer
+import dev.renkinProject.renkin.icon.creator.decodeSegmentLayer
+import dev.renkinProject.renkin.icon.creator.encode
+import dev.renkinProject.renkin.icon.creator.GradientType
 import kotlin.math.roundToInt
 
 /**
@@ -98,6 +106,12 @@ internal class AdjustmentState {
     var colorizeFlat by mutableStateOf(false)
     var colorizeMonochrome by mutableStateOf(false)
     var colorizeInverse by mutableStateOf(false)
+    var colorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
+    var colorizerGradientType by mutableStateOf(GradientType.LINEAR)
+    var colorizerGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
+    var colorizerGradientAngle by mutableFloatStateOf(0f)
+    // Per-region colourize steps of the Colorize segments modifier, applied in order.
+    var colorizeLayers by mutableStateOf(emptyList<SegmentLayer>())
     var iconScale by mutableFloatStateOf(1f)
     var bgRemovalTolerance by mutableFloatStateOf(0.1f)
     // Auto-center is UI state only: switching it on computes the offsets below (the pipeline's
@@ -116,6 +130,11 @@ internal class AdjustmentState {
     var outlineMode by mutableStateOf(OutlineMode.NONE)
     var outlineWidth by mutableFloatStateOf(6f)
     var outlineColor by mutableStateOf(Color.Black)
+    // The outline carries its own colour style, so it can be a gradient like Colorize.
+    var outlineColorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
+    var outlineGradientType by mutableStateOf(GradientType.LINEAR)
+    var outlineGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
+    var outlineGradientAngle by mutableFloatStateOf(0f)
     // Eraser strokes masking where the outline must not apply. Deliberately NOT in [Saver]:
     // they're transient per-app geometry, and holding them out keeps the saver list flat.
     var eraseStrokes by mutableStateOf<List<EraseStroke>>(emptyList())
@@ -138,13 +157,22 @@ internal class AdjustmentState {
                     "colorizeFlat", it.colorizeFlat,
                     "colorizeMonochrome", it.colorizeMonochrome,
                     "colorizeInverse", it.colorizeInverse,
+                    "colorizerMode", it.colorizerMode.ordinal,
+                    "colorizerGradientType", it.colorizerGradientType.ordinal,
+                    "colorizerGradientColors", it.colorizerGradientColors,
+                    "colorizerGradientAngle", it.colorizerGradientAngle,
+                    "colorizeLayers", it.colorizeLayers.map(SegmentLayer::encode),
                     "iconShape", it.iconShape.ordinal,
                     "shapeCrop", it.shapeCrop,
                     "shapeColor", it.shapeColor.toArgb(),
                     "shapeScale", it.shapeScale,
                     "outlineMode", it.outlineMode.ordinal,
                     "outlineWidth", it.outlineWidth,
-                    "outlineColor", it.outlineColor.toArgb()
+                    "outlineColor", it.outlineColor.toArgb(),
+                    "outlineColorizerMode", it.outlineColorizerMode.ordinal,
+                    "outlineGradientType", it.outlineGradientType.ordinal,
+                    "outlineGradientColors", it.outlineGradientColors,
+                    "outlineGradientAngle", it.outlineGradientAngle
                 )
             },
             restore = ::restoreAdjustmentState
@@ -179,6 +207,26 @@ internal class AdjustmentState {
             colorizeFlat = saved["colorizeFlat"] as? Boolean ?: colorizeFlat
             colorizeMonochrome = saved["colorizeMonochrome"] as? Boolean ?: colorizeMonochrome
             colorizeInverse = saved["colorizeInverse"] as? Boolean ?: colorizeInverse
+            colorizerMode = ColorizerMode.entries.getOrElse(
+                saved["colorizerMode"] as? Int ?: ColorizerMode.SINGLE_COLOR.ordinal
+            ) { ColorizerMode.SINGLE_COLOR }
+            colorizerGradientType = GradientType.entries.getOrElse(
+                saved["colorizerGradientType"] as? Int ?: GradientType.LINEAR.ordinal
+            ) { GradientType.LINEAR }
+            // Older saved states carried a single second colour; both shapes restore.
+            (saved["colorizerGradientColors"] as? List<*>)
+                ?.filterIsInstance<Int>()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { colorizerGradientColors = it }
+                ?: (saved["colorizerGradientColor"] as? Int)?.let {
+                    colorizerGradientColors = listOf(it)
+                }
+            colorizerGradientAngle =
+                saved["colorizerGradientAngle"] as? Float ?: colorizerGradientAngle
+            (saved["colorizeLayers"] as? List<*>)?.let { encoded ->
+                colorizeLayers = encoded.filterIsInstance<String>()
+                    .mapNotNull(::decodeSegmentLayer)
+            }
             iconShape = IconShape.entries.getOrElse(saved["iconShape"] as? Int ?: 0) { IconShape.NONE }
             shapeCrop = saved["shapeCrop"] as? Boolean ?: shapeCrop
             (saved["shapeColor"] as? Int)?.let { shapeColor = Color(it) }
@@ -186,6 +234,18 @@ internal class AdjustmentState {
             outlineMode = OutlineMode.entries.getOrElse(saved["outlineMode"] as? Int ?: 0) { OutlineMode.NONE }
             outlineWidth = saved["outlineWidth"] as? Float ?: outlineWidth
             (saved["outlineColor"] as? Int)?.let { outlineColor = Color(it) }
+            outlineColorizerMode = ColorizerMode.entries.getOrElse(
+                saved["outlineColorizerMode"] as? Int ?: ColorizerMode.SINGLE_COLOR.ordinal
+            ) { ColorizerMode.SINGLE_COLOR }
+            outlineGradientType = GradientType.entries.getOrElse(
+                saved["outlineGradientType"] as? Int ?: GradientType.LINEAR.ordinal
+            ) { GradientType.LINEAR }
+            (saved["outlineGradientColors"] as? List<*>)
+                ?.filterIsInstance<Int>()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { outlineGradientColors = it }
+            outlineGradientAngle =
+                saved["outlineGradientAngle"] as? Float ?: outlineGradientAngle
         }
 
         private fun restoreLegacy(saved: List<*>) = AdjustmentState().apply {
@@ -282,6 +342,12 @@ internal fun ModifierTab(
     previewGenerating: Boolean = false,
     // The app's original icon, offered as an eyedropper source in the colour picker.
     sampleBitmap: Bitmap? = null,
+    // Render the icon exactly as Apply would, for the colour sheets' live previews.
+    renderColorizePreview: (suspend (ColorizerStyle) -> Bitmap?)? = null,
+    renderOutlinePreview: (suspend (ColorizerStyle) -> Bitmap?)? = null,
+    // The icon before colourizing — what the segment picker clusters.
+    colorizeBaseBitmap: Bitmap? = null,
+    renderLayersPreview: (suspend (Int, ColorizerStyle) -> Bitmap?)? = null,
     materialYouPackAdjustments: MaterialYouPackAdjustmentState? = null,
     materialYouSchemes: List<Pair<Color, Color>> = emptyList(),
     onImageEditChange: (ImageEdit) -> Unit,
@@ -291,10 +357,11 @@ internal fun ModifierTab(
     // Hands the current icon to an external editor; true = ImageToolbox, false = user-picked app.
     onEditExternally: (toolbox: Boolean) -> Unit
 ) {
-    val editLabels = getImageEditLabels()
+    val editLabels = getImageEditLabels(includeSegments = colorizeBaseBitmap != null)
     var colorPickerOpen by remember { mutableStateOf(false) }
+    var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
     var shapeColorPickerOpen by remember { mutableStateOf(false) }
-    var outlineColorPickerOpen by remember { mutableStateOf(false) }
     var eraseDialogOpen by remember { mutableStateOf(false) }
     var centerDialogOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
@@ -488,33 +555,56 @@ internal fun ModifierTab(
                                 }
 
                                 ImageEdit.COLORIZE -> {
-                                    IconColorCard(iconColor) { colorPickerOpen = true }
-                                    // Flat fill vs. multiply blend: on a coloured icon the multiply
-                                    // default mixes the picked colour with the original, so blue over
-                                    // green reads muddy. This makes the picked colour land exactly.
-                                    ColorizeSwitchRow(
-                                        label = stringResource(R.string.colorizeSolid),
-                                        hint = stringResource(R.string.colorizeSolidHint),
-                                        checked = adjustments.colorizeFlat,
-                                        onCheckedChange = {
-                                            adjustments.colorizeFlat = it
-                                            if (it) adjustments.colorizeMonochrome = false
-                                        }
+                                    val colorizerStyle = ColorizerStyle(
+                                        mode = adjustments.colorizerMode,
+                                        gradientType = adjustments.colorizerGradientType,
+                                        firstColor = iconColor.toArgb(),
+                                        gradientStops = adjustments.colorizerGradientColors,
+                                        gradientAngle = adjustments.colorizerGradientAngle,
+                                        flat = adjustments.colorizeFlat,
+                                        monochrome = adjustments.colorizeMonochrome,
+                                        inverse = adjustments.colorizeInverse
                                     )
-                                    ColorizeSwitchRow(
-                                        label = stringResource(R.string.colorizeMonochrome),
-                                        hint = stringResource(R.string.colorizeMonochromeHint),
-                                        checked = adjustments.colorizeMonochrome,
-                                        onCheckedChange = {
-                                            adjustments.colorizeMonochrome = it
-                                            if (it) adjustments.colorizeFlat = false
-                                        }
+                                    ColorStyleCard(
+                                        label = stringResource(R.string.colorize),
+                                        style = colorizerStyle,
+                                        onClick = { colorizeSheetOpen = true }
                                     )
-                                    ColorizeSwitchRow(
-                                        label = stringResource(R.string.inverseColors),
-                                        checked = adjustments.colorizeInverse,
-                                        onCheckedChange = { adjustments.colorizeInverse = it }
-                                    )
+                                    if (colorizeSheetOpen) {
+                                        ColorStyleSheet(
+                                            title = stringResource(R.string.colorize),
+                                            initialStyle = colorizerStyle,
+                                            sampleBitmap = sampleBitmap,
+                                            renderPreview = renderColorizePreview,
+                                            onDismiss = { colorizeSheetOpen = false },
+                                            onApply = { style ->
+                                                adjustments.colorizerMode = style.mode
+                                                adjustments.colorizerGradientType =
+                                                    style.gradientType
+                                                onColorChange(Color(style.firstColor))
+                                                adjustments.colorizerGradientColors =
+                                                    style.gradientStops
+                                                adjustments.colorizerGradientAngle =
+                                                    style.gradientAngle
+                                                adjustments.colorizeFlat = style.flat
+                                                adjustments.colorizeMonochrome = style.monochrome
+                                                adjustments.colorizeInverse = style.inverse
+                                                colorizeSheetOpen = false
+                                            }
+                                        )
+                                    }
+                                }
+
+                                ImageEdit.COLORIZE_SEGMENTS -> {
+                                    colorizeBaseBitmap?.let { base ->
+                                        SegmentLayerEditor(
+                                            source = base,
+                                            sampleBitmap = sampleBitmap,
+                                            layers = adjustments.colorizeLayers,
+                                            onLayersChange = { adjustments.colorizeLayers = it },
+                                            renderLayersPreview = renderLayersPreview
+                                        )
+                                    }
                                 }
 
                                 ImageEdit.REMOVE_BACKGROUND -> OptionGroup {
@@ -670,18 +760,38 @@ internal fun ModifierTab(
                             valueLabel = "${adjustments.outlineWidth.roundToInt()} px"
                         )
                     }
-                    OptionCard(
-                        label = stringResource(R.string.outlineColor),
-                        onClick = { outlineColorPickerOpen = true },
-                        trailing = {
-                            Surface(
-                                shape = CircleShape,
-                                color = adjustments.outlineColor,
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                modifier = Modifier.size(28.dp)
-                            ) {}
-                        }
+                    val outlineStyle = ColorizerStyle(
+                        mode = adjustments.outlineColorizerMode,
+                        gradientType = adjustments.outlineGradientType,
+                        firstColor = adjustments.outlineColor.toArgb(),
+                        gradientStops = adjustments.outlineGradientColors,
+                        gradientAngle = adjustments.outlineGradientAngle
                     )
+                    ColorStyleCard(
+                        label = stringResource(R.string.outlineColor),
+                        style = outlineStyle,
+                        onClick = { outlineSheetOpen = true }
+                    )
+                    if (outlineSheetOpen) {
+                        ColorStyleSheet(
+                            title = stringResource(R.string.outlineColor),
+                            initialStyle = outlineStyle,
+                            sampleBitmap = sampleBitmap,
+                            // Solid fill / monochrome / inverse describe the icon's fill, not a
+                            // contour, so the outline sheet omits them.
+                            showSingleColorEffects = false,
+                            renderPreview = renderOutlinePreview,
+                            onDismiss = { outlineSheetOpen = false },
+                            onApply = { style ->
+                                adjustments.outlineColorizerMode = style.mode
+                                adjustments.outlineGradientType = style.gradientType
+                                adjustments.outlineColor = Color(style.firstColor)
+                                adjustments.outlineGradientColors = style.gradientStops
+                                adjustments.outlineGradientAngle = style.gradientAngle
+                                outlineSheetOpen = false
+                            }
+                        )
+                    }
                     // Eraser: paint the areas the outline must skip (per app, session-only).
                     OptionCard(
                         label = stringResource(R.string.eraseTitle),
@@ -788,15 +898,6 @@ internal fun ModifierTab(
         )
     }
 
-    if (outlineColorPickerOpen) {
-        ColorDialog(
-            onDismiss = { outlineColorPickerOpen = false },
-            currentlySelected = adjustments.outlineColor,
-            onColorSelected = { adjustments.outlineColor = it },
-            sampleBitmap = sampleBitmap
-        )
-    }
-
     if (centerDialogOpen) {
         CenterDialog(
             iconBitmap = centerPreview,
@@ -883,41 +984,12 @@ private fun IconColorCard(iconColor: Color, onClick: () -> Unit) {
     )
 }
 
-@Composable
-private fun ColorizeSwitchRow(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    hint: String? = null,
-    horizontalPadding: androidx.compose.ui.unit.Dp = 4.dp
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = horizontalPadding),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            if (hint != null) {
-                Text(
-                    text = hint,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
 /** The tile glyph giving each image modifier a visual identity in the selector grid. */
 private fun imageEditIcon(edit: ImageEdit): ImageVector = when (edit) {
     ImageEdit.NONE -> Icons.Filled.Block
     ImageEdit.PATH -> Icons.Filled.Gesture
     ImageEdit.EDGE -> Icons.Filled.BorderStyle
     ImageEdit.COLORIZE -> Icons.Filled.Palette
+    ImageEdit.COLORIZE_SEGMENTS -> Icons.Filled.FormatColorFill
     ImageEdit.REMOVE_BACKGROUND -> Icons.Filled.LayersClear
 }
