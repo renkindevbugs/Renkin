@@ -15,16 +15,16 @@ data class ColorizerStyle(
      */
     val gradientStops: List<Int> = listOf(android.graphics.Color.BLACK),
     val gradientAngle: Float = 0f,
-    // Segment picks: colourize only pixels matching these colours (empty = the whole icon).
-    val segmentTargets: List<Int> = emptyList(),
-    val segmentTolerance: Float = SEGMENT_TOLERANCE_DEFAULT,
     val flat: Boolean = false,
     val monochrome: Boolean = false,
     val inverse: Boolean = false
 ) {
-    /** Every stop in paint order, opaque — a translucent gradient would reveal the source RGB. */
+    /**
+     * Every stop in paint order. Alpha is kept: a translucent stop lets the artwork show through,
+     * which is the point of tinting with a gradient.
+     */
     val allGradientColors: List<Int>
-        get() = (listOf(firstColor) + gradientStops).map { it or 0xFF000000.toInt() }
+        get() = listOf(firstColor) + gradientStops
 }
 
 /** Two stops make a gradient; past four they smear into mud at launcher icon sizes. */

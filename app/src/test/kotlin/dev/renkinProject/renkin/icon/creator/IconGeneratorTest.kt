@@ -438,6 +438,29 @@ class IconGeneratorTest {
 
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun gradientColorizeKeepsTranslucentStopsTranslucent() {
+        val bitmap = Bitmap.createBitmap(2, 1, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.WHITE)
+        }
+
+        val result = generator(
+            options(
+                color = Color.argb(0, 255, 0, 0),
+                colorizeFlat = true,
+                colorizerMode = ColorizerMode.GRADIENT,
+                colorizerGradientType = GradientType.LINEAR,
+                colorizerGradientColors = listOf(Color.argb(0, 0, 0, 255)),
+                colorizerGradientAngle = 90f
+            )
+        ).applyModifier(BitmapIconDrawable(bitmap), ImageEdit.COLORIZE).toBitmap()
+
+        // A fully transparent gradient erases the icon instead of silently going opaque.
+        assertEquals(0, Color.alpha(result.getPixel(0, 0)))
+        assertEquals(0, Color.alpha(result.getPixel(1, 0)))
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
     fun radialGradientColorizeRunsFromFirstColorAtCenterToSecondAtCorners() {
         val bitmap = Bitmap.createBitmap(101, 101, Bitmap.Config.ARGB_8888).apply {
             eraseColor(Color.WHITE)

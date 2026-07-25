@@ -509,9 +509,7 @@ fun OptionsDialog(
     val renderColorizePreview: suspend (ColorizerStyle) -> Bitmap? = { style ->
         renderPreviewWith(
             generatingOptions.copy(
-                primaryImageEdit = if (style.segmentTargets.isEmpty()) {
-                    ImageEdit.COLORIZE
-                } else ImageEdit.COLORIZE_SEGMENTS,
+                primaryImageEdit = ImageEdit.COLORIZE,
                 color = style.firstColor,
                 colorizeFlat = style.flat,
                 colorizeMonochrome = style.monochrome,

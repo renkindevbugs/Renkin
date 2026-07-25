@@ -450,6 +450,65 @@ fun DataStore<Preferences>.getGradientStops(
     return stored.ifEmpty { listOf(getColorValue(legacyKey, Color.Black).toArgb()) }
 }
 
+/**
+ * The preference keys one colour style lives in. Grouping them lets the whole style be written
+ * in a single edit — five separate setters could be split by a profile switch, leaving a gradient
+ * with colours from one profile and an angle from another.
+ */
+data class ColorStyleKeys(
+    val mode: Preferences.Key<Int>,
+    val gradientType: Preferences.Key<Int>,
+    val gradientAngle: Preferences.Key<Int>,
+    val firstColor: Preferences.Key<String>,
+    val gradientColors: Preferences.Key<String>,
+    // Pre-multi-stop key holding the single second colour, kept in sync for older builds.
+    val legacyGradientColor: Preferences.Key<String>? = null
+)
+
+val ColorizerStyleKeys = ColorStyleKeys(
+    mode = ColorizerModeKey,
+    gradientType = ColorizerGradientTypeKey,
+    gradientAngle = ColorizerGradientAngleKey,
+    firstColor = IconColorKey,
+    gradientColors = ColorizerGradientColorsKey,
+    legacyGradientColor = ColorizerGradientColorKey
+)
+
+// The outline's first colour IS its legacy key, so there is no separate legacy stop to write —
+// syncing one would overwrite the first colour with the second (that bug shipped once).
+val OutlineStyleKeys = ColorStyleKeys(
+    mode = OutlineColorizerModeKey,
+    gradientType = OutlineGradientTypeKey,
+    gradientAngle = OutlineGradientAngleKey,
+    firstColor = OutlineColorKey,
+    gradientColors = OutlineGradientColorsKey
+)
+
+suspend fun DataStore<Preferences>.setColorStyle(
+    keys: ColorStyleKeys,
+    mode: Int,
+    gradientType: Int,
+    gradientAngle: Int,
+    firstColor: Color,
+    gradientStops: List<Int>
+) {
+    preferenceAccessMutex.withLock {
+        edit { target ->
+            target[keys.mode] = mode
+            target[keys.gradientType] = gradientType
+            target[keys.gradientAngle] = gradientAngle
+            target[keys.firstColor] = firstColor.toHexString()
+            target[keys.gradientColors] =
+                gradientStops.joinToString(",") { Color(it).toHexString() }
+            keys.legacyGradientColor
+                ?.takeIf { it != keys.firstColor }
+                ?.let { legacy ->
+                    gradientStops.firstOrNull()?.let { target[legacy] = Color(it).toHexString() }
+                }
+        }
+    }
+}
+
 suspend fun DataStore<Preferences>.setGradientStops(
     key: Preferences.Key<String>,
     legacyKey: Preferences.Key<String>,

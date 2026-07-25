@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.data
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.mutablePreferencesOf
@@ -133,6 +134,77 @@ class DataPreferencesTest {
         assertEquals("#FF654321", restored[GlobalColorizerGradientColorKey])
         assertEquals(90, restored[GlobalColorizerGradientAngleKey])
         assertEquals(0, restored[GlobalColorizerGradientTypeKey])
+    }
+
+    /** A throwaway DataStore in the test's temp folder, torn down with its scope. */
+    private suspend fun withStore(
+        fileName: String = "style.preferences_pb",
+        block: suspend (androidx.datastore.core.DataStore<androidx.datastore.preferences.core.Preferences>) -> Unit
+    ) {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val store = PreferenceDataStoreFactory.create(scope = scope) {
+            temporaryFolder.root.resolve(fileName)
+        }
+        try {
+            block(store)
+        } finally {
+            scope.cancel()
+        }
+    }
+
+    @Test
+    fun setColorStyle_writesTheWholeStyleAtOnce() = runBlocking {
+        withStore { store ->
+            store.setColorStyle(
+                ColorizerStyleKeys,
+                mode = 1,
+                gradientType = 1,
+                gradientAngle = 137,
+                firstColor = Color.Red,
+                gradientStops = listOf(android.graphics.Color.BLUE)
+            )
+            val saved = store.getPreferencesAfterPendingWrites()
+
+            assertEquals(1, saved[ColorizerModeKey])
+            assertEquals(1, saved[ColorizerGradientTypeKey])
+            assertEquals(137, saved[ColorizerGradientAngleKey])
+            assertEquals(Color.Red.toArgb(), saved.getColorValue(IconColorKey, Color.White).toArgb())
+            assertEquals(
+                listOf(android.graphics.Color.BLUE),
+                saved.getGradientStops(ColorizerGradientColorsKey, ColorizerGradientColorKey)
+            )
+            // The legacy single-stop key stays in sync for older builds.
+            assertEquals(
+                android.graphics.Color.BLUE,
+                saved.getColorValue(ColorizerGradientColorKey, Color.White).toArgb()
+            )
+        }
+    }
+
+    @Test
+    fun setColorStyle_keepsTheOutlinesFirstColour() = runBlocking {
+        withStore { store ->
+            // The outline's legacy stop key IS its first-colour key: syncing it would overwrite
+            // the first colour with the second.
+            store.setColorStyle(
+                OutlineStyleKeys,
+                mode = 1,
+                gradientType = 0,
+                gradientAngle = 0,
+                firstColor = Color.Red,
+                gradientStops = listOf(android.graphics.Color.BLUE)
+            )
+            val saved = store.getPreferencesAfterPendingWrites()
+
+            assertEquals(
+                Color.Red.toArgb(),
+                saved.getColorValue(OutlineColorKey, Color.White).toArgb()
+            )
+            assertEquals(
+                listOf(android.graphics.Color.BLUE),
+                saved.getGradientStops(OutlineGradientColorsKey, OutlineColorKey)
+            )
+        }
     }
 
     @Test

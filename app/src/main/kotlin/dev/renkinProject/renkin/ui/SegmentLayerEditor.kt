@@ -35,7 +35,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
-import dev.renkinProject.renkin.icon.creator.SEGMENT_TOLERANCE_DEFAULT
 import dev.renkinProject.renkin.icon.creator.SegmentLayer
 import dev.renkinProject.renkin.ui.theme.FieldShape
 
@@ -162,7 +161,4 @@ internal fun SegmentLayerEditor(
     }
 }
 
-private fun defaultLayerStyle() = ColorizerStyle(
-    firstColor = android.graphics.Color.WHITE,
-    segmentTolerance = SEGMENT_TOLERANCE_DEFAULT
-)
+private fun defaultLayerStyle() = ColorizerStyle(firstColor = android.graphics.Color.WHITE)

@@ -200,12 +200,10 @@ internal fun ColorStyleSheet(
 
     if (presetsOpen) {
         ColorPresetDialog(
-            // A saved colour replaces the draft's colours but keeps this sheet's segment pick.
+            // Segment picks live on the layer, not the style, so a saved colour simply
+            // replaces the colours being edited.
             onPick = { picked ->
-                draft = picked.copy(
-                    segmentTargets = draft.segmentTargets,
-                    segmentTolerance = draft.segmentTolerance
-                )
+                draft = picked
                 presetsOpen = false
             },
             onDismiss = { presetsOpen = false }

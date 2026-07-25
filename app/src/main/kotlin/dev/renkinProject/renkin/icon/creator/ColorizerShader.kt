@@ -29,7 +29,7 @@ fun buildColorizerShader(
     val centerY = height / 2f
     // A single stop is not a gradient; duplicate it so the shader still paints that flat colour.
     val stops = if (colors.size >= MIN_GRADIENT_STOPS) colors else colors + colors
-    val palette = stops.map { it or 0xFF000000.toInt() }.toIntArray()
+    val palette = stops.toIntArray()
     return when (type) {
         GradientType.LINEAR -> {
             val angleRadians = Math.toRadians(
