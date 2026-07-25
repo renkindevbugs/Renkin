@@ -66,7 +66,31 @@ fun buildColorizerShader(
  * alpha mask, monochrome, solid fill or tint — and returns a new bitmap for the editor preview.
  * Everything after colourizing (shape, scale, outline, background) is deliberately left out.
  */
-fun colorizeSampleBitmap(source: Bitmap, style: ColorizerStyle): Bitmap {
+fun colorizeSampleBitmap(
+    source: Bitmap,
+    style: ColorizerStyle,
+    // Area the gradient spans; null uses the whole bitmap. A segment gradient must sweep across
+    // the segment, not the icon, or a small region only ever shows a sliver of it.
+    gradientBounds: android.graphics.Rect? = null
+): Bitmap {
+    val gradientWidth = gradientBounds?.width() ?: source.width
+    val gradientHeight = gradientBounds?.height() ?: source.height
+    fun gradientShader() = buildColorizerShader(
+        style.allGradientColors,
+        style.gradientType,
+        style.gradientAngle,
+        gradientWidth,
+        gradientHeight
+    ).apply {
+        gradientBounds?.let { bounds ->
+            setLocalMatrix(
+                android.graphics.Matrix().apply {
+                    setTranslate(bounds.left.toFloat(), bounds.top.toFloat())
+                }
+            )
+        }
+    }
+
     if (style.mode == ColorizerMode.GRADIENT) {
         val base = if (style.monochrome) monochromeBitmap(source, style.inverse) else source
         val result = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
@@ -79,13 +103,7 @@ fun colorizeSampleBitmap(source: Bitmap, style: ColorizerStyle): Bitmap {
                 source.width.toFloat(),
                 source.height.toFloat(),
                 Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    shader = buildColorizerShader(
-                        style.allGradientColors,
-                        style.gradientType,
-                        style.gradientAngle,
-                        source.width,
-                        source.height
-                    )
+                    shader = gradientShader()
                     if (!solidFill) xfermode = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY)
                 }
             )
@@ -128,4 +146,20 @@ fun colorizeSampleBitmap(source: Bitmap, style: ColorizerStyle): Bitmap {
         }
     )
     return if (style.inverse) invertBitmapColors(result) else result
+}
+
+/**
+ * Applies [layers] in order: every layer colourizes the whole icon with its own style, then only
+ * the pixels its regions select are kept. Matching runs against [source] throughout, so a later
+ * layer still finds the colours the user picked them by.
+ */
+fun applySegmentLayers(source: Bitmap, layers: List<SegmentLayer>): Bitmap {
+    var current = source
+    for (layer in layers) {
+        if (layer.targets.isEmpty()) continue
+        val bounds = segmentBounds(source, layer.targets, layer.tolerance)
+        val colorized = colorizeSampleBitmap(current, layer.style, bounds)
+        current = mergeSegmentLayer(source, current, colorized, layer.targets, layer.tolerance)
+    }
+    return current
 }

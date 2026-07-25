@@ -15,6 +15,9 @@ data class ColorizerStyle(
      */
     val gradientStops: List<Int> = listOf(android.graphics.Color.BLACK),
     val gradientAngle: Float = 0f,
+    // Segment picks: colourize only pixels matching these colours (empty = the whole icon).
+    val segmentTargets: List<Int> = emptyList(),
+    val segmentTolerance: Float = SEGMENT_TOLERANCE_DEFAULT,
     val flat: Boolean = false,
     val monochrome: Boolean = false,
     val inverse: Boolean = false

@@ -266,6 +266,7 @@ class IconGenerator(
             val copy = ImageVectorDrawable(icon.toImageVector())
             return when (imageEdit) {
                 ImageEdit.NONE -> icon
+                ImageEdit.COLORIZE_SEGMENTS -> colorizeImage(copy.toBitmap(), null, colorizeMode)
                 ImageEdit.COLORIZE -> {
                     if (options.colorizerMode == ColorizerMode.GRADIENT) {
                         colorizeImage(copy.toBitmap(), null, colorizeMode)
@@ -317,7 +318,9 @@ class IconGenerator(
             if (changesWithMaterialYou) styleMaterialYouPackIcon(it) else it
         }
 
-        return if (options.primaryImageEdit == ImageEdit.COLORIZE)
+        return if (options.primaryImageEdit == ImageEdit.COLORIZE ||
+            options.primaryImageEdit == ImageEdit.COLORIZE_SEGMENTS
+        )
             colorizeImage(bitmapIcon, parsedIcon, colorizeMode)
         else
             getDefaultIcon(
@@ -520,7 +523,8 @@ class IconGenerator(
             ImageEdit.NONE -> getDefaultIcon(bitmapIcon, parsedIcon)
             ImageEdit.PATH -> generatePathTracing(bitmapIcon, parsedIcon)
             ImageEdit.EDGE -> generateCannyEdgeDetection(bitmapIcon, parsedIcon)
-            ImageEdit.COLORIZE -> colorizeImage(bitmapIcon, parsedIcon, mode)
+            ImageEdit.COLORIZE, ImageEdit.COLORIZE_SEGMENTS ->
+                colorizeImage(bitmapIcon, parsedIcon, mode)
             ImageEdit.REMOVE_BACKGROUND -> generateRemoveBackground(bitmapIcon)
         }
     }
@@ -1017,6 +1021,13 @@ class IconGenerator(
     }
 
     private fun colorizeImage(bitmapIcon: Bitmap, parsedIcon: Drawable?, mode: PorterDuff.Mode): IconPackDrawable {
+        // Segment layers are per-pixel, which the vector recolour path cannot express: bake.
+        if (options.colorizeLayers.isNotEmpty()) {
+            return BitmapIconDrawable(
+                ctx.resources,
+                addBackground(applySegmentLayers(bitmapIcon, options.colorizeLayers))
+            )
+        }
         if (options.colorizerMode == ColorizerMode.GRADIENT) {
             // A gradient cannot be represented by the current vector exporter. Bake the same
             // bitmap used by preview, persistence and APK export so every surface stays identical.

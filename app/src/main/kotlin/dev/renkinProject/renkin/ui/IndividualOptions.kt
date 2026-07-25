@@ -41,6 +41,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.IconPreviewBuilder
 import android.graphics.Bitmap
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.SegmentLayer
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.calendarPrefixOrNull
@@ -442,6 +443,10 @@ fun OptionsDialog(
         colorizerGradientType = adjustments.colorizerGradientType,
         colorizerGradientColors = adjustments.colorizerGradientColors,
         colorizerGradientAngle = adjustments.colorizerGradientAngle,
+        // Layers only apply to the segment modifier; plain Colorize always paints it all.
+        colorizeLayers = if (imageEdit == ImageEdit.COLORIZE_SEGMENTS) {
+            adjustments.colorizeLayers
+        } else emptyList(),
         iconShape = adjustments.iconShape,
         iconShapeCrop = adjustments.shapeCrop,
         iconShapeScale = adjustments.shapeScale,
@@ -504,7 +509,9 @@ fun OptionsDialog(
     val renderColorizePreview: suspend (ColorizerStyle) -> Bitmap? = { style ->
         renderPreviewWith(
             generatingOptions.copy(
-                primaryImageEdit = ImageEdit.COLORIZE,
+                primaryImageEdit = if (style.segmentTargets.isEmpty()) {
+                    ImageEdit.COLORIZE
+                } else ImageEdit.COLORIZE_SEGMENTS,
                 color = style.firstColor,
                 colorizeFlat = style.flat,
                 colorizeMonochrome = style.monochrome,
@@ -512,8 +519,29 @@ fun OptionsDialog(
                 colorizerMode = style.mode,
                 colorizerGradientType = style.gradientType,
                 colorizerGradientColors = style.gradientStops,
-                colorizerGradientAngle = style.gradientAngle
+                colorizerGradientAngle = style.gradientAngle,
+                colorizeLayers = emptyList()
             )
+        )
+    }
+    // Previews the whole layer stack of the segment modifier, with [draft] standing in for the
+    // layer being edited so the sheet shows the layer in the context of the others.
+    val renderLayersPreview: suspend (Int, ColorizerStyle) -> Bitmap? = { index, draft ->
+        renderPreviewWith(
+            generatingOptions.copy(
+                primaryImageEdit = ImageEdit.COLORIZE_SEGMENTS,
+                colorizeLayers = adjustments.colorizeLayers.mapIndexed { i, layer ->
+                    if (i == index) layer.copy(style = draft) else layer
+                }
+            )
+        )
+    }
+    // The icon with every modifier EXCEPT colourize, so segment colours match what the
+    // generator will actually see when it colourizes.
+    var colorizeBaseBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    LaunchedEffect(generatingOptions, customIconList) {
+        colorizeBaseBitmap = renderPreviewWith(
+            generatingOptions.copy(primaryImageEdit = ImageEdit.NONE)
         )
     }
     val renderOutlinePreview: suspend (ColorizerStyle) -> Bitmap? = { style ->
@@ -741,6 +769,8 @@ fun OptionsDialog(
                                 sampleBitmap = heroBitmap,
                                 renderColorizePreview = renderColorizePreview,
                                 renderOutlinePreview = renderOutlinePreview,
+                                renderLayersPreview = renderLayersPreview,
+                                colorizeBaseBitmap = colorizeBaseBitmap,
                                 materialYouPackAdjustments =
                                     materialYouPackAdjustments.takeIf { selectedMaterialYouPackIcon },
                                 materialYouSchemes = materialYouSchemes,

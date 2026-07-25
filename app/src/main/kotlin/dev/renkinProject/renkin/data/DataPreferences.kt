@@ -529,12 +529,16 @@ fun getSourceLabels(): Map<Source, String> {
 }
 
 @Composable
-fun getImageEditLabels(): Map<ImageEdit, String> {
-    return mapOf(ImageEdit.NONE to stringResource(id = R.string.none)
+fun getImageEditLabels(includeSegments: Boolean = false): Map<ImageEdit, String> {
+    val base = mapOf(ImageEdit.NONE to stringResource(id = R.string.none)
         , ImageEdit.PATH to stringResource(id = R.string.pathDetection)
         , ImageEdit.EDGE to stringResource(id = R.string.edgeDetection)
         , ImageEdit.COLORIZE to stringResource(id = R.string.colorize)
         , ImageEdit.REMOVE_BACKGROUND to stringResource(id = R.string.removeBackground))
+    // Segments are picked on one icon's own artwork, so only the edit dialog offers them.
+    return if (includeSegments) {
+        base + (ImageEdit.COLORIZE_SEGMENTS to stringResource(id = R.string.colorizeSegments))
+    } else base
 }
 
 @Composable
@@ -581,8 +585,9 @@ enum class FallbackSource {
 }
 
 enum class ImageEdit {
-    // REMOVE_BACKGROUND stays last so existing stored ordinals (persisted by index) keep their value.
-    NONE, PATH, EDGE, COLORIZE, REMOVE_BACKGROUND
+    // New entries go at the END: ordinals are persisted by index. COLORIZE_SEGMENTS is the
+    // per-app "colourize only these regions" modifier, so the pack-wide dropdowns skip it.
+    NONE, PATH, EDGE, COLORIZE, REMOVE_BACKGROUND, COLORIZE_SEGMENTS
 }
 
 enum class TextType {

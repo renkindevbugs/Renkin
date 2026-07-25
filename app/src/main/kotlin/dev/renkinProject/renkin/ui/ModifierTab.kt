@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.BorderStyle
 import androidx.compose.material.icons.filled.Done
+import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.LayersClear
@@ -84,6 +85,9 @@ import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconShapes
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.SegmentLayer
+import dev.renkinProject.renkin.icon.creator.decodeSegmentLayer
+import dev.renkinProject.renkin.icon.creator.encode
 import dev.renkinProject.renkin.icon.creator.GradientType
 import kotlin.math.roundToInt
 
@@ -106,6 +110,8 @@ internal class AdjustmentState {
     var colorizerGradientType by mutableStateOf(GradientType.LINEAR)
     var colorizerGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
     var colorizerGradientAngle by mutableFloatStateOf(0f)
+    // Per-region colourize steps of the Colorize segments modifier, applied in order.
+    var colorizeLayers by mutableStateOf(emptyList<SegmentLayer>())
     var iconScale by mutableFloatStateOf(1f)
     var bgRemovalTolerance by mutableFloatStateOf(0.1f)
     // Auto-center is UI state only: switching it on computes the offsets below (the pipeline's
@@ -155,6 +161,7 @@ internal class AdjustmentState {
                     "colorizerGradientType", it.colorizerGradientType.ordinal,
                     "colorizerGradientColors", it.colorizerGradientColors,
                     "colorizerGradientAngle", it.colorizerGradientAngle,
+                    "colorizeLayers", it.colorizeLayers.map(SegmentLayer::encode),
                     "iconShape", it.iconShape.ordinal,
                     "shapeCrop", it.shapeCrop,
                     "shapeColor", it.shapeColor.toArgb(),
@@ -216,6 +223,10 @@ internal class AdjustmentState {
                 }
             colorizerGradientAngle =
                 saved["colorizerGradientAngle"] as? Float ?: colorizerGradientAngle
+            (saved["colorizeLayers"] as? List<*>)?.let { encoded ->
+                colorizeLayers = encoded.filterIsInstance<String>()
+                    .mapNotNull(::decodeSegmentLayer)
+            }
             iconShape = IconShape.entries.getOrElse(saved["iconShape"] as? Int ?: 0) { IconShape.NONE }
             shapeCrop = saved["shapeCrop"] as? Boolean ?: shapeCrop
             (saved["shapeColor"] as? Int)?.let { shapeColor = Color(it) }
@@ -334,6 +345,9 @@ internal fun ModifierTab(
     // Render the icon exactly as Apply would, for the colour sheets' live previews.
     renderColorizePreview: (suspend (ColorizerStyle) -> Bitmap?)? = null,
     renderOutlinePreview: (suspend (ColorizerStyle) -> Bitmap?)? = null,
+    // The icon before colourizing — what the segment picker clusters.
+    colorizeBaseBitmap: Bitmap? = null,
+    renderLayersPreview: (suspend (Int, ColorizerStyle) -> Bitmap?)? = null,
     materialYouPackAdjustments: MaterialYouPackAdjustmentState? = null,
     materialYouSchemes: List<Pair<Color, Color>> = emptyList(),
     onImageEditChange: (ImageEdit) -> Unit,
@@ -343,7 +357,7 @@ internal fun ModifierTab(
     // Hands the current icon to an external editor; true = ImageToolbox, false = user-picked app.
     onEditExternally: (toolbox: Boolean) -> Unit
 ) {
-    val editLabels = getImageEditLabels()
+    val editLabels = getImageEditLabels(includeSegments = colorizeBaseBitmap != null)
     var colorPickerOpen by remember { mutableStateOf(false) }
     var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
     var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
@@ -577,6 +591,18 @@ internal fun ModifierTab(
                                                 adjustments.colorizeInverse = style.inverse
                                                 colorizeSheetOpen = false
                                             }
+                                        )
+                                    }
+                                }
+
+                                ImageEdit.COLORIZE_SEGMENTS -> {
+                                    colorizeBaseBitmap?.let { base ->
+                                        SegmentLayerEditor(
+                                            source = base,
+                                            sampleBitmap = sampleBitmap,
+                                            layers = adjustments.colorizeLayers,
+                                            onLayersChange = { adjustments.colorizeLayers = it },
+                                            renderLayersPreview = renderLayersPreview
                                         )
                                     }
                                 }
@@ -964,5 +990,6 @@ private fun imageEditIcon(edit: ImageEdit): ImageVector = when (edit) {
     ImageEdit.PATH -> Icons.Filled.Gesture
     ImageEdit.EDGE -> Icons.Filled.BorderStyle
     ImageEdit.COLORIZE -> Icons.Filled.Palette
+    ImageEdit.COLORIZE_SEGMENTS -> Icons.Filled.FormatColorFill
     ImageEdit.REMOVE_BACKGROUND -> Icons.Filled.LayersClear
 }

@@ -120,6 +120,10 @@ data class GenerationOptions(
     // value, so it is not repeated here.
     val colorizerGradientColors: List<Int> = listOf(android.graphics.Color.BLACK),
     val colorizerGradientAngle: Float = 0f,
+    // Per-region colourize steps (the Colorize segments modifier), applied in order. Empty =
+    // the whole icon is colourized with the options above, which is what every other surface asks
+    // for. Only ever set per app; the pack-wide surfaces never populate it.
+    val colorizeLayers: List<SegmentLayer> = emptyList(),
     // Icon shape applied as the LAST step: NONE leaves the icon untouched; otherwise the icon
     // is cropped into the shape (the default — most icons are full-bleed) or laid on a
     // [bgColor]-filled shape plate. [iconShapeScale] sizes the SHAPE itself (the icon stays
