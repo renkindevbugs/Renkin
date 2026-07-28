@@ -107,6 +107,8 @@ data class GenerationOptions(
     val iconOffsetY: Float = 0f,
     // Colour-distance tolerance (0..1) for the Remove background modifier — how far a pixel's colour
     // can be from the border background colour and still be erased.
+    // Colours the Remove background modifier drops. Empty = the automatic border flood.
+    val bgRemovalTargets: List<Int> = emptyList(),
     val bgRemovalTolerance: Float = 0.1f,
     // Colorize as a flat fill (SRC_IN) rather than the default multiply blend, so the picked colour
     // replaces the icon's own colours instead of mixing with them. Per-icon Modifier-tab option.

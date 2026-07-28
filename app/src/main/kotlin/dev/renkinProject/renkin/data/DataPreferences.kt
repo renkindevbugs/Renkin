@@ -509,15 +509,6 @@ suspend fun DataStore<Preferences>.setColorStyle(
     }
 }
 
-suspend fun DataStore<Preferences>.setGradientStops(
-    key: Preferences.Key<String>,
-    legacyKey: Preferences.Key<String>,
-    stops: List<Int>
-) {
-    setStringValue(key, stops.joinToString(",") { Color(it).toHexString() })
-    // Keep the legacy key in sync: a backup restored on an older build must still find stop two.
-    stops.firstOrNull()?.let { setColorValue(legacyKey, Color(it)) }
-}
 
 //Enum
 @Composable

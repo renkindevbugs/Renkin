@@ -433,6 +433,7 @@ fun OptionsDialog(
         edgeGaussianRadius = adjustments.edgeSmoothing,
         edgeContrastNormalized = adjustments.edgeContrast,
         iconScale = adjustments.iconScale,
+        bgRemovalTargets = adjustments.bgRemovalTargets,
         bgRemovalTolerance = adjustments.bgRemovalTolerance,
         iconOffsetX = adjustments.iconOffsetX,
         iconOffsetY = adjustments.iconOffsetY,
@@ -539,7 +540,18 @@ fun OptionsDialog(
     var colorizeBaseBitmap by remember { mutableStateOf<Bitmap?>(null) }
     LaunchedEffect(generatingOptions, customIconList) {
         colorizeBaseBitmap = renderPreviewWith(
-            generatingOptions.copy(primaryImageEdit = ImageEdit.NONE)
+            generatingOptions.copy(
+                primaryImageEdit = ImageEdit.NONE,
+                // Colourize runs BEFORE scale/offset/shape/outline, so the picker must cluster
+                // the artwork without them — an outline or shape plate would otherwise offer a
+                // colour that does not exist yet when the pick is applied.
+                iconScale = 1f,
+                iconOffsetX = 0f,
+                iconOffsetY = 0f,
+                iconShape = IconShape.NONE,
+                outlineMode = OutlineMode.NONE,
+                outlineEraseMask = null
+            )
         )
     }
     val renderOutlinePreview: suspend (ColorizerStyle) -> Bitmap? = { style ->

@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -53,11 +54,16 @@ internal fun SegmentLayerEditor(
     var selected by remember { mutableIntStateOf(0) }
     var sheetOpen by remember { mutableStateOf(false) }
 
-    // An empty stack still needs something to edit, so the first layer is created up front.
-    if (layers.isEmpty()) {
-        onLayersChange(listOf(SegmentLayer(targets = emptyList(), style = defaultLayerStyle())))
-        return
+    // An empty stack still needs something to edit. Seeding it is a side effect, so it happens
+    // in an effect — writing state straight from composition invites a recomposition loop.
+    LaunchedEffect(layers.isEmpty()) {
+        if (layers.isEmpty()) {
+            onLayersChange(
+                listOf(SegmentLayer(targets = emptyList(), style = defaultLayerStyle()))
+            )
+        }
     }
+    if (layers.isEmpty()) return
     val index = selected.coerceIn(0, layers.lastIndex)
     val layer = layers[index]
 

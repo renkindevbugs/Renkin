@@ -209,3 +209,24 @@ private fun nearestCentroid(pixel: Int, centroids: FloatArray, clusters: Int): I
 
 private fun luminanceOf(pixel: Int): Float =
     0.213f * Color.red(pixel) + 0.715f * Color.green(pixel) + 0.072f * Color.blue(pixel)
+
+/**
+ * Clears every pixel matching [targets] within [tolerance]. The manual counterpart to the
+ * border flood in Bitmap.removeBackground: when the automatic guess grabs the wrong thing, the
+ * user picks the colour to drop instead. An empty pick returns the icon untouched.
+ */
+fun removeSegmentColors(icon: Bitmap, targets: List<Int>, tolerance: Float): Bitmap {
+    if (targets.isEmpty()) return icon
+    val width = icon.width
+    val height = icon.height
+    val pixels = IntArray(width * height)
+    icon.getPixels(pixels, 0, width, 0, 0, width, height)
+    for (i in pixels.indices) {
+        val pixel = pixels[i]
+        if (Color.alpha(pixel) == 0) continue
+        if (matchesSegment(pixel, targets, tolerance)) pixels[i] = Color.TRANSPARENT
+    }
+    return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888).apply {
+        density = icon.density
+    }
+}

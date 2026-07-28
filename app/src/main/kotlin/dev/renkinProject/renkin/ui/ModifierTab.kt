@@ -113,6 +113,8 @@ internal class AdjustmentState {
     // Per-region colourize steps of the Colorize segments modifier, applied in order.
     var colorizeLayers by mutableStateOf(emptyList<SegmentLayer>())
     var iconScale by mutableFloatStateOf(1f)
+    // Colours the user picked to drop; empty leaves the automatic border flood in charge.
+    var bgRemovalTargets by mutableStateOf(emptyList<Int>())
     var bgRemovalTolerance by mutableFloatStateOf(0.1f)
     // Auto-center is UI state only: switching it on computes the offsets below (the pipeline's
     // single source of truth for position); dragging a position slider switches it back off.
@@ -151,6 +153,7 @@ internal class AdjustmentState {
                     "edgeContrast", it.edgeContrast,
                     "iconScale", it.iconScale,
                     "bgRemovalTolerance", it.bgRemovalTolerance,
+                    "bgRemovalTargets", it.bgRemovalTargets,
                     "autoCenter", it.autoCenter,
                     "iconOffsetX", it.iconOffsetX,
                     "iconOffsetY", it.iconOffsetY,
@@ -201,6 +204,9 @@ internal class AdjustmentState {
             edgeContrast = saved["edgeContrast"] as? Boolean ?: edgeContrast
             iconScale = saved["iconScale"] as? Float ?: iconScale
             bgRemovalTolerance = saved["bgRemovalTolerance"] as? Float ?: bgRemovalTolerance
+            (saved["bgRemovalTargets"] as? List<*>)?.filterIsInstance<Int>()?.let {
+                bgRemovalTargets = it
+            }
             autoCenter = saved["autoCenter"] as? Boolean ?: autoCenter
             iconOffsetX = saved["iconOffsetX"] as? Float ?: iconOffsetX
             iconOffsetY = saved["iconOffsetY"] as? Float ?: iconOffsetY
@@ -608,14 +614,34 @@ internal fun ModifierTab(
                                 }
 
                                 ImageEdit.REMOVE_BACKGROUND -> OptionGroup {
-                                    // Remove background keeps the original pixels, so no colour control.
-                                    LabeledSlider(
-                                        label = stringResource(R.string.removeBackgroundTolerance),
-                                        value = adjustments.bgRemovalTolerance,
-                                        onValueChange = { adjustments.bgRemovalTolerance = it },
-                                        valueRange = 0f..0.5f,
-                                        valueLabel = "${(adjustments.bgRemovalTolerance * 100).roundToInt()}%"
-                                    )
+                                    // Remove background keeps the original pixels, so no colour
+                                    // control — but the user can say WHICH colour is background
+                                    // when the automatic guess picks the wrong one.
+                                    val base = colorizeBaseBitmap
+                                    if (base != null) {
+                                        SegmentSelector(
+                                            source = base,
+                                            targets = adjustments.bgRemovalTargets,
+                                            tolerance = adjustments.bgRemovalTolerance,
+                                            onTargetsChange = {
+                                                adjustments.bgRemovalTargets = it
+                                            },
+                                            onToleranceChange = {
+                                                adjustments.bgRemovalTolerance = it
+                                            },
+                                            emptyHint = stringResource(
+                                                R.string.removeBackgroundAutoHint
+                                            )
+                                        )
+                                    } else {
+                                        LabeledSlider(
+                                            label = stringResource(R.string.removeBackgroundTolerance),
+                                            value = adjustments.bgRemovalTolerance,
+                                            onValueChange = { adjustments.bgRemovalTolerance = it },
+                                            valueRange = 0f..0.5f,
+                                            valueLabel = "${(adjustments.bgRemovalTolerance * 100).roundToInt()}%"
+                                        )
+                                    }
                                     Text(
                                         text = stringResource(R.string.removeBackgroundHint),
                                         style = MaterialTheme.typography.bodySmall,

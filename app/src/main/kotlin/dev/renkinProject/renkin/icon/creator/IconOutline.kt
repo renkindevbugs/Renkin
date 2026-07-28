@@ -203,12 +203,20 @@ object IconOutline {
         Color.colorToHSV(color, target)
         // A gradient gives every repainted pixel its own hue/saturation from the same sweep.
         val gradientAt = gradient?.let { gradientPixels(it, w, h) }
+        val baseAlpha = Color.alpha(color)
         for (i in pixels.indices) {
             if (depth[i] < 0) continue
-            gradientAt?.let { Color.colorToHSV(it[i], target) }
+            var alphaScale = baseAlpha
+            gradientAt?.let {
+                Color.colorToHSV(it[i], target)
+                alphaScale = Color.alpha(it[i])
+            }
             Color.colorToHSV(pixels[i], hsv)
             val out = floatArrayOf(target[0], target[1], (target[2] * hsv[2] / refValue).coerceIn(0f, 1f))
-            pixels[i] = (pixels[i] and 0xFF000000.toInt()) or (Color.HSVToColor(out) and 0x00FFFFFF)
+            // The repaint colour's own alpha scales the outline's: a translucent stop must not
+            // come out opaque just because the pixel underneath was.
+            val alpha = Color.alpha(pixels[i]) * alphaScale / 255
+            pixels[i] = (alpha shl 24) or (Color.HSVToColor(out) and 0x00FFFFFF)
         }
 
         val outBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)

@@ -1403,6 +1403,13 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         outlineMode = adjustments.outlineMode,
         outlineWidth = adjustments.outlineWidth,
         outlineColor = adjustments.outlineColor.toArgb(),
+        outlineStyle = ColorizerStyle(
+            mode = adjustments.outlineColorizerMode,
+            gradientType = adjustments.outlineGradientType,
+            firstColor = adjustments.outlineColor.toArgb(),
+            gradientStops = adjustments.outlineGradientColors,
+            gradientAngle = adjustments.outlineGradientAngle
+        ),
         outlineEraseMask = remember(adjustments.eraseStrokes) {
             if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
         }
