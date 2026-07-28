@@ -254,10 +254,9 @@ internal fun ColorizerStyleEditor(
             onDismiss = { pickerIndex = null },
             currentlySelected = Color(
                 gradientColors.getOrElse(index) { style.firstColor }
-                    .let { if (gradient) opaque(it) else it }
             ),
             onColorSelected = { selected ->
-                val selectedArgb = selected.toArgb().let { if (gradient) opaque(it) else it }
+                val selectedArgb = selected.toArgb()
                 onStyleChange(
                     if (gradient) {
                         withColors(gradientColors.toMutableList().also { it[index] = selectedArgb })
@@ -381,7 +380,7 @@ private fun GradientStopList(
                 label = "stopShift"
             )
             GradientStopRow(
-                color = Color(opaque(color)),
+                color = Color(color),
                 dragged = index == dragIndex,
                 canRemove = colors.size > MIN_GRADIENT_STOPS,
                 canMoveUp = index > 0,
@@ -582,7 +581,6 @@ private fun ColorizerSwitchRow(
     }
 }
 
-private fun opaque(color: Int): Int = color or 0xFF000000.toInt()
 
 /** Presets a user actually reaches for; anything else comes from dragging the dial. */
 private val AnglePresets = listOf(0, 45, 90, 135, 180, 270)

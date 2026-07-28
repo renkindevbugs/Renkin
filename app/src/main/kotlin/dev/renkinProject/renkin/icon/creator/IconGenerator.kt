@@ -529,9 +529,17 @@ class IconGenerator(
         }
     }
 
-    /** Strips the flat background colour around the icon, keeping the cleaned glyph. */
+    /**
+     * Strips the background: the picked colours when the user chose some, otherwise the automatic
+     * border flood.
+     */
     private fun generateRemoveBackground(bitmapIcon: Bitmap): IconPackDrawable {
-        return getDefaultBitmapIcon(bitmapIcon.removeBackground(options.bgRemovalTolerance))
+        val cleaned = if (options.bgRemovalTargets.isNotEmpty()) {
+            removeSegmentColors(bitmapIcon, options.bgRemovalTargets, options.bgRemovalTolerance)
+        } else {
+            bitmapIcon.removeBackground(options.bgRemovalTolerance)
+        }
+        return getDefaultBitmapIcon(cleaned)
     }
 
     private fun generateText(applicationName: String, textType: TextType): IconPackDrawable {
@@ -722,19 +730,26 @@ class IconGenerator(
         return vector
     }
 
+    /**
+     * The usable artwork of one adaptive layer. The framework often hands the layer back wrapped
+     * in an InsetDrawable; without unwrapping it the caller falls back to rasterising the WHOLE
+     * adaptive icon, which drags the background layer in with it (Renkin's own icon did exactly
+     * that in Create → Application icon → Default).
+     */
+    private fun adaptiveLayer(layer: Drawable?): Drawable? {
+        val unwrapped = if (layer is InsetDrawable) layer.drawable else layer
+        return unwrapped?.takeIf { it is BitmapDrawable || it is VectorDrawable }
+    }
+
     private fun getAppIconBitmap(app: PackageInfoStruct, maxSize: Int = 500): Bitmap? {
         var newIcon = app.icon
 
         if (newIcon.isAdaptiveIconDrawable()) {
             val adaptiveIcon = newIcon as AdaptiveIconDrawable
-            if (adaptiveIcon.foreground is BitmapDrawable || adaptiveIcon.foreground is VectorDrawable) {
-                newIcon = ForegroundIconDrawable(adaptiveIcon.foreground)
-            }
+            adaptiveLayer(adaptiveIcon.foreground)?.let { newIcon = ForegroundIconDrawable(it) }
 
             if (PackageVersion.is33OrMore() && adaptiveIcon.monochrome != null && options.materialYou) {
-                if (adaptiveIcon.monochrome is BitmapDrawable || adaptiveIcon.monochrome is VectorDrawable) {
-                    newIcon = ForegroundIconDrawable(adaptiveIcon.monochrome!!)
-                }
+                adaptiveLayer(adaptiveIcon.monochrome)?.let { newIcon = ForegroundIconDrawable(it) }
             }
         }
 

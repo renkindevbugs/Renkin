@@ -91,7 +91,10 @@ internal fun SegmentSelector(
     targets: List<Int>,
     tolerance: Float,
     onTargetsChange: (List<Int>) -> Unit,
-    onToleranceChange: (Float) -> Unit
+    onToleranceChange: (Float) -> Unit,
+    // What an empty pick means differs per caller: colourize paints everything, background
+    // removal falls back to its automatic guess.
+    emptyHint: String = ""
 ) {
     var segmentCount by remember { mutableStateOf(SEGMENT_COUNT_DEFAULT) }
     var segments by remember { mutableStateOf<List<ColorSegment>>(emptyList()) }
@@ -167,7 +170,7 @@ internal fun SegmentSelector(
         ) {
             Text(
                 text = if (targets.isEmpty()) {
-                    stringResource(R.string.segmentNoneSelected)
+                    emptyHint.ifEmpty { stringResource(R.string.segmentNoneSelected) }
                 } else {
                     stringResource(R.string.segmentSelectedCount, targets.size)
                 },
@@ -284,27 +287,33 @@ private fun SegmentCanvas(
             .aspectRatio(1f)
             .clip(IconTileShape)
             .background(MaterialTheme.colorScheme.surfaceContainerHighest)
-            .pointerInput(source, bounds, segments) {
-                detectTapGestures { offset ->
-                    val left = bounds?.left ?: 0
-                    val top = bounds?.top ?: 0
-                    val width = bounds?.width() ?: source.width
-                    val height = bounds?.height() ?: source.height
-                    val x = left + (offset.x / size.width * width).toInt()
-                    val y = top + (offset.y / size.height * height).toInt()
-                    if (x !in 0 until source.width || y !in 0 until source.height) {
-                        return@detectTapGestures
-                    }
-                    val pixel = source.getPixel(x, y)
-                    if (AndroidColor.alpha(pixel) == 0) return@detectTapGestures
-                    // Snap to the segment the pixel belongs to, so a tap on an antialiased edge
-                    // still selects a real region.
-                    segments.minByOrNull { colorDistance(pixel, it.color) }
-                        ?.let { onToggle(it.color) }
-                }
-            }
     ) {
-        Canvas(modifier = Modifier.fillMaxSize().padding(6.dp)) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(CanvasInset)
+                // On the Canvas, not the tile: the pointer coordinates must be measured against
+                // the drawn image, or every tap lands [CanvasInset] off.
+                .pointerInput(source, bounds, segments) {
+                    detectTapGestures { offset ->
+                        val left = bounds?.left ?: 0
+                        val top = bounds?.top ?: 0
+                        val width = bounds?.width() ?: source.width
+                        val height = bounds?.height() ?: source.height
+                        val x = left + (offset.x / size.width * width).toInt()
+                        val y = top + (offset.y / size.height * height).toInt()
+                        if (x !in 0 until source.width || y !in 0 until source.height) {
+                            return@detectTapGestures
+                        }
+                        val pixel = source.getPixel(x, y)
+                        if (AndroidColor.alpha(pixel) == 0) return@detectTapGestures
+                        // Snap to the segment the pixel belongs to, so a tap on an antialiased
+                        // edge still selects a real region.
+                        segments.minByOrNull { colorDistance(pixel, it.color) }
+                            ?.let { onToggle(it.color) }
+                    }
+                }
+        ) {
             val target = IntSize(size.width.roundToInt(), size.height.roundToInt())
             drawImage(
                 image = icon,
@@ -487,3 +496,6 @@ private fun colorDistance(first: Int, second: Int): Int {
 
 /** Canvas width in the side-by-side layout: big enough to tap regions, not the whole pane. */
 private val WideCanvasSize = 260.dp
+
+/** Breathing room between the tile's rounded edge and the icon. */
+private val CanvasInset = 6.dp

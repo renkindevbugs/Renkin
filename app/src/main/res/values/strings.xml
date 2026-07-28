@@ -118,6 +118,7 @@
     <string name="savedColorsEmpty">Nothing saved yet. Pick a color or gradient, then tap the save icon.</string>
     <string name="segmentCount">Detail</string>
     <string name="segmentTolerance">Tolerance</string>
+    <string name="removeBackgroundAutoHint">Nothing picked — the background is detected automatically.</string>
     <string name="segmentPickOnIcon">Pick on the icon</string>
     <string name="segmentLayerName">Color %1$d</string>
     <string name="segmentLayerAdd">Add another color</string>

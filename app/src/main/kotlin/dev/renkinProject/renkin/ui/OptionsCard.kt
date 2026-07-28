@@ -71,7 +71,9 @@ import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
 import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
 import dev.renkinProject.renkin.data.getGradientStops
-import dev.renkinProject.renkin.data.setGradientStops
+import dev.renkinProject.renkin.data.ColorizerStyleKeys
+import dev.renkinProject.renkin.data.OutlineStyleKeys
+import dev.renkinProject.renkin.data.setColorStyle
 import dev.renkinProject.renkin.data.ColorizerGradientTypeKey
 import dev.renkinProject.renkin.data.ColorizerModeKey
 import dev.renkinProject.renkin.data.getIconColor
@@ -392,19 +394,13 @@ fun AdvancedOptionsContent(
                                 onApply = { style ->
                                     colorizeSheetOpen = false
                                     scope.launch {
-                                        prefs.setEnumValue(ColorizerModeKey, style.mode)
-                                        prefs.setEnumValue(
-                                            ColorizerGradientTypeKey, style.gradientType
-                                        )
-                                        prefs.setColorValue(IconColorKey, Color(style.firstColor))
-                                        prefs.setGradientStops(
-                                            ColorizerGradientColorsKey,
-                                            ColorizerGradientColorKey,
-                                            style.gradientStops
-                                        )
-                                        prefs.setIntValue(
-                                            ColorizerGradientAngleKey,
-                                            style.gradientAngle.roundToInt()
+                                        prefs.setColorStyle(
+                                            ColorizerStyleKeys,
+                                            mode = style.mode.ordinal,
+                                            gradientType = style.gradientType.ordinal,
+                                            gradientAngle = style.gradientAngle.roundToInt(),
+                                            firstColor = Color(style.firstColor),
+                                            gradientStops = style.gradientStops
                                         )
                                     }
                                 }
@@ -460,21 +456,13 @@ fun AdvancedOptionsContent(
                                 onApply = { style ->
                                     outlineSheetOpen = false
                                     scope.launch {
-                                        prefs.setEnumValue(OutlineColorizerModeKey, style.mode)
-                                        prefs.setEnumValue(
-                                            OutlineGradientTypeKey, style.gradientType
-                                        )
-                                        prefs.setColorValue(
-                                            OutlineColorKey, Color(style.firstColor)
-                                        )
-                                        prefs.setGradientStops(
-                                            OutlineGradientColorsKey,
-                                            OutlineColorKey,
-                                            style.gradientStops
-                                        )
-                                        prefs.setIntValue(
-                                            OutlineGradientAngleKey,
-                                            style.gradientAngle.roundToInt()
+                                        prefs.setColorStyle(
+                                            OutlineStyleKeys,
+                                            mode = style.mode.ordinal,
+                                            gradientType = style.gradientType.ordinal,
+                                            gradientAngle = style.gradientAngle.roundToInt(),
+                                            firstColor = Color(style.firstColor),
+                                            gradientStops = style.gradientStops
                                         )
                                     }
                                 }
