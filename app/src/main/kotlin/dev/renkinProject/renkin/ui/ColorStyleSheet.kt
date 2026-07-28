@@ -30,10 +30,6 @@ import androidx.compose.material.icons.filled.Bookmarks
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.PlainTooltip
-import androidx.compose.material3.TooltipBox
-import androidx.compose.material3.TooltipDefaults
-import androidx.compose.material3.rememberTooltipState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.MaterialTheme
@@ -214,18 +210,14 @@ internal fun ColorStyleSheet(
     }
 }
 
-/** Icon-only action with the long-press tooltip Material 3 expects of one. */
+/** Icon-only action with the app's clamped long-press tooltip. */
 @Composable
 private fun TooltipIconButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     onClick: () -> Unit
 ) {
-    TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
-        tooltip = { PlainTooltip { Text(label) } },
-        state = rememberTooltipState()
-    ) {
+    RenkinTooltipBox(text = label) {
         IconButton(onClick = onClick) {
             Icon(imageVector = icon, contentDescription = label)
         }

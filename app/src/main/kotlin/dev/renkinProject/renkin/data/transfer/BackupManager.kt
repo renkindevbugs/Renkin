@@ -18,6 +18,7 @@ import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
+import dev.renkinProject.renkin.data.ColorPreset
 import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
@@ -116,7 +117,10 @@ class BackupManager(
                 if (key.name == LastWatchCheckAtKey.name) return@mapNotNull null
                 BackupPref.of(value)?.let { key.name to it }
             }.toMap(),
-            packLabels = packLabelsFor(allIcons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet())
+            packLabels = packLabelsFor(allIcons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet()),
+            colorPresets = packRepo.allColorPresets().map {
+                BackupColorPreset(it.name, it.style, it.createdAt)
+            }
         )
 
         ZipOutputStream(open().buffered()).use { zip ->
@@ -256,6 +260,11 @@ class BackupManager(
         watchRepo.replaceAllRules(data.profiles.flatMap { bp ->
             bp.watchRules.map { it.toImport(bp.profile.id) }
         })
+        // Replace-all, like everything else in a full restore. Archives written before saved
+        // colours existed carry none, which correctly clears a library the user is replacing.
+        packRepo.replaceColorPresets(
+            data.colorPresets.map { ColorPreset(name = it.name, style = it.style, createdAt = it.createdAt) }
+        )
         restorePrefs(data.prefs)
         // The verdict cache is per-device truth (which packs are owned/priced HERE), not part of
         // the backup — re-derive it from what's actually installed so a restored profile locks
