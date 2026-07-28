@@ -91,7 +91,7 @@ Switcher = the top-bar title dropdown.
 - **DataStore Preferences** (`data/DataPreferences.kt`) — all settings. Typed accessors:
   Composable `DataStore.getXValue()` for reading in composition; `Preferences.getXValue()`
   for reading a captured snapshot off the main thread.
-- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v13) — profiles + rendered and base icons
+- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v15) — profiles + rendered and base icons
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
   rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the
   Global options UI, only unsaved refresh output is Generated; saved/built non-custom rows are
@@ -102,6 +102,10 @@ Switcher = the top-bar title dropdown.
   the verdict/lock logic). Loaded into the app list.
   **Never lower the version once any build was installed** — schema-identical bump +
   migration instead (see the v5/v6/v7 history in `DbApplication.kt`).
+- **`ColorPreset` table** (same database, added in v15) — the saved colour/gradient library.
+  Deliberately NOT per profile: a palette belongs to the device, so it is shared by every
+  profile, rides the full backup (`BackupData.colorPresets`) and is never part of a shared
+  profile file. The row stores the style as one encoded string (`encodeColorizerStyle`).
 - **Room — `WatchDatabase`** (v3) — icon-watch rules, suggestions and per-rule baselines, owned per
   profile via `WatchRule.profileId`.
 
@@ -130,6 +134,33 @@ Switcher = the top-bar title dropdown.
   go once material3 ships the fix.
 - No pull-to-refresh on the home list **on purpose**: its nested-scroll handler fought the
   collapsing large top bar (glitches, ghost taps). The app list reloads from Settings.
+
+## Colourizing
+
+The colour pipeline is shared by three entry points — the per-icon Colorize modifier, the
+pack-wide colourize in Global/Advanced options, and the outline colour — so they behave
+identically and none of them re-implements the maths.
+
+- **`ColorizerStyle`** (`icon/creator/`) is the whole description: single colour or gradient,
+  gradient type/angle, 2–4 stops (`MIN_GRADIENT_STOPS`/`MAX_GRADIENT_STOPS`), plus the Solid
+  fill / Monochrome / Inverse flags. Those flags apply to gradients too: solid fill replaces the
+  artwork's RGB through its alpha, otherwise the gradient multiplies with it.
+- **`ColorizerShader.kt`** builds the actual `Shader` and is called by BOTH `IconGenerator` and
+  the editor preview — a second implementation in the UI would drift from the built output.
+- **`ui/ColorStyleSheet.kt`** is the one editor UI: a bottom sheet with a docked live preview
+  (rendered through the caller's real generation pipeline, debounced), the mode pill, the stop
+  list and the angle dial. `ColorStyleCard` is the row that opens it.
+- **Segments** (`icon/creator/ColorSegments.kt`) cluster an icon into colour regions (k-means over
+  RGB). A pick is stored as COLOURS plus a tolerance, never a pixel mask, so it survives
+  regeneration and rescaling. `ImageEdit.COLORIZE_SEGMENTS` stacks `SegmentLayer`s — each layer
+  colourizes its own regions, and matching always runs against the ORIGINAL artwork so a later
+  layer still finds the colours it was picked by.
+- **Wide screens**: `WIDE_LAYOUT_DP` (600) switches the sheet and the segment picker to
+  side-by-side panes. Same breakpoint idea as `WatchRuleEditor`, but orientation-independent so
+  a tablet held upright benefits too.
+- Preferences carry gradients as comma-separated ARGB (`COLORIZER_GRADIENT_COLORS`, and the
+  outline's own `OUTLINE_GRADIENT_*` keys); the pre-gradient single-colour keys are still written
+  so older builds and older backups keep working.
 
 ## The build "change bar"
 
