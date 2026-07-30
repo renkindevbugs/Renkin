@@ -17,11 +17,9 @@ import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.getIntValue
-import dev.renkinProject.renkin.data.restoreProfilePrefs
-import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.persistBuiltPrimaryPrefs
-import dev.renkinProject.renkin.data.snapshotProfilePrefs
+import dev.renkinProject.renkin.data.switchProfilePrefs
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.dataStore
 import kotlinx.coroutines.flow.first
@@ -131,13 +129,12 @@ class ProfileManager internal constructor(
     suspend fun switchTo(newProfileId: Long): Boolean {
         if (newProfileId == activeProfileId) return false
         val target = packRepo.profile(newProfileId) ?: return false
-        packRepo.profile(activeProfileId)?.let { leaving ->
-            packRepo.updateProfile(
-                leaving.copy(prefsSnapshot = store.getPreferencesAfterPendingWrites().snapshotProfilePrefs())
-            )
+        val leaving = packRepo.profile(activeProfileId)
+        store.switchProfilePrefs(target.prefsSnapshot, newProfileId) { leavingSnapshot ->
+            leaving?.let {
+                packRepo.updateProfile(it.copy(prefsSnapshot = leavingSnapshot))
+            }
         }
-        store.restoreProfilePrefs(target.prefsSnapshot)
-        store.edit { it[ActiveProfileIdKey] = newProfileId }
         activeProfileId = newProfileId
         return true
     }

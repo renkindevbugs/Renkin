@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
@@ -27,21 +28,12 @@ import androidx.lifecycle.lifecycleScope
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
-import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
-import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
-import dev.renkinProject.renkin.data.PrimaryIconPackKey
-import dev.renkinProject.renkin.data.PrimarySourceKey
-import dev.renkinProject.renkin.data.SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.isDarkModeEnabled
 import dev.renkinProject.renkin.data.WatchCheckIntervalKey
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
-import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getIntValue
-import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
-import dev.renkinProject.renkin.data.setEnumValue
-import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.service.WatchWorker
@@ -93,19 +85,6 @@ class MainActivity : ComponentActivity() {
         // Icon-watch: schedule the periodic safety-net check (version-gated, so it's near-free
         // when nothing changed). This is the only watch trigger — see WatchWorker.
         lifecycleScope.launch(Dispatchers.Default) {
-            // A hero-card pack pick only sticks once it's built: restore the last-built primary
-            // source/pack over any unbuilt pick from the previous session. Missing built keys =
-            // legacy or fresh install — leave the current selection alone.
-            val startupPrefs = applicationContext.dataStore.data.first()
-            if (startupPrefs.contains(BuiltPrimarySourceKey)) {
-                applicationContext.dataStore.setEnumValue(
-                    PrimarySourceKey, startupPrefs.getEnumValue(BuiltPrimarySourceKey, SOURCE_DEFAULT)
-                )
-                applicationContext.dataStore.setStringValue(
-                    PrimaryIconPackKey, startupPrefs.getStringValue(BuiltPrimaryIconPackKey)
-                )
-            }
-
             // KEEP so an already-running interval timer isn't reset on every launch; the
             // user's chosen interval is applied immediately (UPDATE) when they change it.
             val intervalMinutes = applicationContext.dataStore.data.first()
@@ -121,7 +100,7 @@ class MainActivity : ComponentActivity() {
             edgeToEdge(darkMode)
             // Pack resources must resolve values-night the way the UI displays, not the way
             // the system is set — mode-dependent pack colours are invisible otherwise.
-            ApplicationManager.displayedNightMode = darkMode
+            SideEffect { ApplicationManager.displayedNightMode = darkMode }
 
             // Detected once per launch: if the previous session crashed, offer the log for
             // manual reporting (copy / email / GitHub) — nothing is sent automatically.

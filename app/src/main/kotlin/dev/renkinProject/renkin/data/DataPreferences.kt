@@ -262,6 +262,25 @@ suspend fun DataStore<Preferences>.restoreProfilePrefs(snapshot: String) {
     }
 }
 
+/**
+ * Snapshots the leaving profile, persists that snapshot, restores the target and records its id
+ * while ordinary preference setters are blocked. Without one lock around the whole sequence, a
+ * UI write can land after the leaving snapshot but before the target restore and be silently lost.
+ */
+suspend fun DataStore<Preferences>.switchProfilePrefs(
+    targetSnapshot: String,
+    newProfileId: Long,
+    persistLeavingSnapshot: suspend (String) -> Unit
+) {
+    preferenceAccessMutex.withLock {
+        persistLeavingSnapshot(data.first().snapshotProfilePrefs())
+        edit { target ->
+            target.replaceProfilePrefs(targetSnapshot)
+            target[ActiveProfileIdKey] = newProfileId
+        }
+    }
+}
+
 /** Replaces every profile key, removing missing, malformed and wrongly typed values. */
 internal fun MutablePreferences.replaceProfilePrefs(snapshot: String) {
     // A corrupt/unparsable snapshot starts from defaults. Crucially, an invalid value must
@@ -448,6 +467,32 @@ fun DataStore<Preferences>.getGradientStops(
         .split(',')
         .mapNotNull { it.trim().takeIf(String::isNotEmpty)?.toNullableColor()?.toArgb() }
     return stored.ifEmpty { listOf(getColorValue(legacyKey, Color.Black).toArgb()) }
+}
+
+/**
+ * Writes the hero card's icon source and its pack together. Two separate setters could be split
+ * by a profile switch (which snapshots and restores the whole key set), leaving one profile with
+ * the source and another with the pack.
+ */
+suspend fun DataStore<Preferences>.setPrimarySource(source: Source, packageName: String?) {
+    preferenceAccessMutex.withLock {
+        edit { target ->
+            target[PrimarySourceKey] = source.ordinal
+            packageName?.let { target[PrimaryIconPackKey] = it }
+        }
+    }
+}
+
+/** Startup restore of the last BUILT source/pack — same atomicity requirement. */
+suspend fun DataStore<Preferences>.restoreBuiltPrimarySource(snapshot: Preferences) {
+    preferenceAccessMutex.withLock {
+        edit { target ->
+            target[PrimarySourceKey] = snapshot.getIntValue(
+                BuiltPrimarySourceKey, SOURCE_DEFAULT.ordinal
+            )
+            target[PrimaryIconPackKey] = snapshot.getStringValue(BuiltPrimaryIconPackKey)
+        }
+    }
 }
 
 /**

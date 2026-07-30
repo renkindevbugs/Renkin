@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.CalendarIconsKey
+import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.ExportThemedKey
@@ -29,6 +30,7 @@ import dev.renkinProject.renkin.data.getDefaultBackgroundColor
 import dev.renkinProject.renkin.data.getDefaultIconColor
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.persistGlobalModifierPrefs
+import dev.renkinProject.renkin.data.restoreBuiltPrimarySource
 import dev.renkinProject.renkin.data.online.onlineAttributionLabel
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
@@ -173,9 +175,23 @@ class ApplicationProvider(private val context: Context) {
         Log.debug("Startup", "$name loaded in ${android.os.SystemClock.elapsedRealtime() - startMs} ms")
     }
 
-    /** Cold recreation can open a secondary activity before MainViewModel exists. */
+    /**
+     * Cold recreation can open a secondary activity before MainViewModel exists. The first load
+     * also restores the last-built primary selection while profile operations are blocked, so an
+     * early profile-switch tap cannot move those preferences into a different profile.
+     */
     suspend fun ensureInitialized() = initialLoadMutex.withLock {
-        if (!startupComplete) initialize()
+        if (!startupComplete) {
+            profileOperations.run {
+                if (!startupComplete) {
+                    val startupPrefs = context.dataStore.data.first()
+                    if (startupPrefs.contains(BuiltPrimarySourceKey)) {
+                        context.dataStore.restoreBuiltPrimarySource(startupPrefs)
+                    }
+                    initialize()
+                }
+            }
+        }
     }
 
     /**
@@ -594,11 +610,15 @@ class ApplicationProvider(private val context: Context) {
         // load normally once the app appears.
         val appKeys = applicationList.map { it.key }.toSet()
         for ((key, entry) in saved) {
-            if (key !in appKeys) lockManager.holdOrphan(key, entry.row)
+            // Rows for apps not installed here, and rows whose artwork will not decode: both are
+            // invisible to the list, and both are written back verbatim by the next save.
+            if (key !in appKeys || entry.decodeFailed) lockManager.holdOrphan(key, entry.row)
         }
 
         for (app in applicationList.toList()) {
             val entry = saved[app.key] ?: continue
+            // Undecodable artwork: keep the row (held above), show the app as having no icon.
+            if (entry.decodeFailed) continue
             if (entry.sourcePackName != null && entry.sourcePackName in lockedPacks) {
                 // Held back: invisible to the list and the build, preserved by saves,
                 // loaded normally once the pack is installed (or verified free).
@@ -820,6 +840,7 @@ class ApplicationProvider(private val context: Context) {
     /** Deletes [id] (never the default) and its icons; switches to the default first if active. */
     suspend fun deleteProfile(id: Long) = withContext(Dispatchers.Default) {
         if (id == DEFAULT_PROFILE_ID) return@withContext
+        ensureInitialized()
         profileOperations.run {
             isProfileSwitching = true
             try {
@@ -843,6 +864,7 @@ class ApplicationProvider(private val context: Context) {
      * leaving profile this behaves like an app restart — unbuilt edits are not persisted.
      */
     suspend fun switchProfile(newProfileId: Long) = withContext(Dispatchers.Default) {
+        ensureInitialized()
         profileOperations.run {
             isProfileSwitching = true
             try {

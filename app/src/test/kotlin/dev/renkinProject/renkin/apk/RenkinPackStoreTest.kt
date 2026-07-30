@@ -70,5 +70,30 @@ class RenkinPackStoreTest {
         assertEquals(true, entry.isCustom)
         assertEquals(true, entry.isLegacy)
         assertSame(row, entry.row)
+        assertTrue(entry.decodeFailed)
+    }
+
+    @Test
+    fun validBaseRecoversACorruptRenderedDrawable() {
+        val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(AndroidColor.GREEN)
+        }
+        val row = DbApplication(
+            packageName = "com.example",
+            activityName = "com.example.Main",
+            isAdaptiveIcon = false,
+            isXml = false,
+            drawable = "%%%",
+            baseDrawable = bitmap.toBase64(Bitmap.CompressFormat.PNG, 100),
+            baseIsAdaptiveIcon = false,
+            baseIsXml = false
+        )
+
+        val entry = RenkinPackStore(RuntimeEnvironment.getApplication())
+            .decodeRow(row, Color.Black)
+
+        assertNull(entry.icon)
+        assertTrue(entry.baseIcon is BitmapIconDrawable)
+        assertEquals(false, entry.decodeFailed)
     }
 }

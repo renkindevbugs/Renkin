@@ -7,8 +7,10 @@ import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.preferencesOf
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -149,6 +151,65 @@ class DataPreferencesTest {
             block(store)
         } finally {
             scope.cancel()
+        }
+    }
+
+    @Test
+    fun setPrimarySource_writesTheSourceAndItsPackTogether() = runBlocking {
+        withStore("primary-source.preferences_pb") { store ->
+            store.setPrimarySource(Source.ICON_PACK, "com.example.pack")
+            val saved = store.getPreferencesAfterPendingWrites()
+
+            assertEquals(Source.ICON_PACK.ordinal, saved[PrimarySourceKey])
+            assertEquals("com.example.pack", saved[PrimaryIconPackKey])
+        }
+    }
+
+    @Test
+    fun setPrimarySource_withoutAPackKeepsTheStoredOne() = runBlocking {
+        withStore("primary-source-keep.preferences_pb") { store ->
+            store.setPrimarySource(Source.ICON_PACK, "com.example.pack")
+            // Sources other than a pack pass null; the previous pack must not be cleared, so a
+            // switch back to Icon pack still remembers it.
+            store.setPrimarySource(Source.APPLICATION_ICON, null)
+            val saved = store.getPreferencesAfterPendingWrites()
+
+            assertEquals(Source.APPLICATION_ICON.ordinal, saved[PrimarySourceKey])
+            assertEquals("com.example.pack", saved[PrimaryIconPackKey])
+        }
+    }
+
+    @Test
+    fun switchProfilePrefs_blocksUiWritesUntilTheTargetIsRestored() = runBlocking {
+        withStore("profile-switch-lock.preferences_pb") { store ->
+            store.setPrimarySource(Source.ICON_PACK, "leaving.pack")
+            val snapshotPersistStarted = CompletableDeferred<Unit>()
+            val allowSnapshotPersist = CompletableDeferred<Unit>()
+
+            val switch = async {
+                store.switchProfilePrefs(
+                    """{"PRIMARY_SOURCE":1,"PRIMARY_ICON_PACK":"target.pack"}""",
+                    newProfileId = 2L
+                ) {
+                    snapshotPersistStarted.complete(Unit)
+                    allowSnapshotPersist.await()
+                }
+            }
+            snapshotPersistStarted.await()
+
+            val uiWrite = async {
+                store.setPrimarySource(Source.ICON_PACK, "new.target.pack")
+            }
+            assertFalse(uiWrite.isCompleted)
+
+            allowSnapshotPersist.complete(Unit)
+            switch.await()
+            uiWrite.await()
+
+            val saved = store.getPreferencesAfterPendingWrites()
+            assertEquals(2L, saved[ActiveProfileIdKey])
+            assertEquals(Source.ICON_PACK.ordinal, saved[PrimarySourceKey])
+            assertEquals("new.target.pack", saved[PrimaryIconPackKey])
         }
     }
 
