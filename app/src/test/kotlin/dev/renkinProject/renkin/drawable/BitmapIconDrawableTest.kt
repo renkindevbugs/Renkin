@@ -24,6 +24,7 @@ class BitmapIconDrawableTest {
         )
 
         assertSame(exported, icon.toBitmap())
+        assertSame(exported, icon.inAppPreviewBitmap())
         assertSame(browserPreview, icon.toBrowserPreviewBitmap())
     }
 

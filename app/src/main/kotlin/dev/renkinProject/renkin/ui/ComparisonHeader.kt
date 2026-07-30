@@ -551,7 +551,7 @@ private fun NewSlot(
 
 /** Blown-up look at the new icon — the 56dp slot hides detail the launcher will show. */
 @Composable
-private fun EnlargedIconDialog(icon: IconPackDrawable, onDismiss: () -> Unit) {
+internal fun EnlargedIconDialog(icon: IconPackDrawable, onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             shape = DialogShape,

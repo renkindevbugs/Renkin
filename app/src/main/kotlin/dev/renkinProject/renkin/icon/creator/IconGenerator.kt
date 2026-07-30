@@ -72,7 +72,10 @@ internal fun previewScaleToBakeForShape(icon: IconPackDrawable, shaped: Boolean)
     if (shaped) (icon as? BitmapIconDrawable)?.previewScale ?: 1f else 1f
 
 internal fun effectiveMaterialYouPackStrokeScale(modifierScale: Float): Float =
-    0.5f * modifierScale.coerceIn(0.5f, 2f)
+    modifierScale.coerceIn(0.5f, 2f)
+
+internal fun shouldNormalizeAdaptiveForeground(preserveAdaptiveAppearance: Boolean): Boolean =
+    !preserveAdaptiveAppearance
 
 class IconGenerator(
     private val ctx: Context,
@@ -390,6 +393,8 @@ class IconGenerator(
             return if (imageEdit == ImageEdit.NONE) generated
             else applyModifierInner(generated, imageEdit)
         }
+        // App icons are shown as their foreground everywhere (the launcher's own background
+        // layer is not part of what Renkin exports), so every modifier starts from it too.
         val bitmapIcon = getAppIconBitmap(application) ?: return null
         if (options.applicationIconVariant == ApplicationIconVariant.MONOCHROME) {
             // This is deliberately based on the regular launcher artwork, not the optional
@@ -515,18 +520,53 @@ class IconGenerator(
             renderAdaptivePackIcon(adaptiveIcon)?.let { return it }
         }
 
-        if (parsedIcon != null && parsedIcon.isAdaptiveIconDrawable()) {
+        // Legacy adaptive sources are flattened to their foreground below, so compensate for
+        // Android's 72/108 safe zone before doing that. Material You icon packs deliberately keep
+        // the complete adaptive drawable: scaling its foreground here would make only the glyph
+        // jump 1.5x as soon as any modifier is selected while the background stays unchanged.
+        if (shouldNormalizeAdaptiveForeground(preserveAdaptiveAppearance) &&
+            parsedIcon != null &&
+            parsedIcon.isAdaptiveIconDrawable()
+        ) {
             fixAdaptiveIconSize(parsedIcon as AdaptiveIconDrawable)
         }
 
+        if (imageEdit == ImageEdit.NONE) return getDefaultIcon(bitmapIcon, parsedIcon)
+
+        // Generic modifiers run on ONE canonical frame — the pixels ImageEdit.NONE would show —
+        // and never see [parsedIcon] again. Handing them the parsed structure as well is what let
+        // each of them compose the icon differently: colourize painted the enlarged foreground
+        // bitmap, path tracing followed the parsed vector, and edge detection wrapped its result
+        // back into the parsed inset (insetting an already-inset icon a second time).
+        val canonical = canonicalArtwork(bitmapIcon, parsedIcon)
         return when (imageEdit) {
             ImageEdit.NONE -> getDefaultIcon(bitmapIcon, parsedIcon)
-            ImageEdit.PATH -> generatePathTracing(bitmapIcon, parsedIcon)
-            ImageEdit.EDGE -> generateCannyEdgeDetection(bitmapIcon, parsedIcon)
+            ImageEdit.PATH -> generatePathTracing(canonical, null)
+            ImageEdit.EDGE -> generateCannyEdgeDetection(canonical, null)
             ImageEdit.COLORIZE, ImageEdit.COLORIZE_SEGMENTS ->
-                colorizeImage(bitmapIcon, parsedIcon, mode)
-            ImageEdit.REMOVE_BACKGROUND -> generateRemoveBackground(bitmapIcon)
+                colorizeImage(canonical, null, mode)
+            ImageEdit.REMOVE_BACKGROUND -> generateRemoveBackground(canonical)
         }
+    }
+
+    /**
+     * The single frame every generic modifier starts from: whatever ImageEdit.NONE renders,
+     * rasterised through draw() at the working size. draw() and not toBitmap(), because a
+     * vector's toBitmap() re-fits its artwork to the canvas (resizeTo + center) and so drops the
+     * icon's own margins — the reason a modifier used to shrink or enlarge the icon.
+     *
+     * The Material You variants are the deliberate exception: they style the icon's own layers
+     * (foreground/monochrome plus the pack's stroke scale) before this phase and keep the bitmap
+     * they were handed. Themed export likewise inserts its own inset later.
+     */
+    private fun canonicalArtwork(bitmapIcon: Bitmap, parsedIcon: Drawable?): Bitmap {
+        if (options.materialYou || options.themed) return bitmapIcon
+        // Without a parsed drawable the bitmap already IS the canonical frame.
+        val parsed = parsedIcon ?: return bitmapIcon
+        return runCatching {
+            getDefaultIcon(bitmapIcon, parsed, preserveAdaptiveAppearance = true)
+                .toSafeBitmapOrNull(ADAPTIVE_PACK_RENDER_SIZE, ADAPTIVE_PACK_RENDER_SIZE)
+        }.getOrNull() ?: bitmapIcon
     }
 
     /**
@@ -982,16 +1022,9 @@ class IconGenerator(
             ADAPTIVE_PACK_RENDER_SIZE,
             ADAPTIVE_PACK_RENDER_SIZE
         ) ?: return null
-        // Draw the browser asset from the vector/adaptive source at its final size. Scaling
-        // the 500 px raster down later blurred Lawnicons' one-pixel line details.
-        val browserPreview = icon.toSafeBitmapOrNull(
-            ADAPTIVE_PACK_BROWSER_PREVIEW_SIZE,
-            ADAPTIVE_PACK_BROWSER_PREVIEW_SIZE
-        )
         return BitmapIconDrawable(
             ctx.resources,
-            rendered,
-            browserPreviewBitmap = browserPreview
+            rendered
         )
     }
 
@@ -1001,9 +1034,10 @@ class IconGenerator(
 
         val modifierStrokeScale = options.materialYouPackStrokeScale.coerceIn(0.5f, 2f)
         // Lawnicons ships real strokes (for example _10.svg is 12 units in a 192-unit
-        // viewport) inside a 32% adaptive foreground inset. Preserve that source geometry and
-        // use half of its source width as Renkin's calmer browser baseline. The Modifier slider
-        // remains relative to that baseline, so its centred 100% matches the untouched list.
+        // viewport) inside a 32% adaptive foreground inset. Preserve that source geometry:
+        // centred 100% means the pack's real stroke width. The same 500 px render is used by
+        // browser tiles, the comparison header, modifiers, persistence and APK export so changing
+        // a modifier cannot silently switch to a thinner preview raster.
         vector.root.scaleStrokePaths(effectiveMaterialYouPackStrokeScale(modifierStrokeScale))
         options.materialYouPackForeground?.let { foreground ->
             vector.root.setReferenceColorPaths(SolidColor(Color(foreground)))
@@ -1236,7 +1270,6 @@ class IconGenerator(
 
     private companion object {
         const val ADAPTIVE_PACK_RENDER_SIZE = 500
-        const val ADAPTIVE_PACK_BROWSER_PREVIEW_SIZE = 96
     }
 }
 

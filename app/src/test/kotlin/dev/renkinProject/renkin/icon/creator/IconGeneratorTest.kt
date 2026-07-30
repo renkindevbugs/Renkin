@@ -17,6 +17,7 @@ import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
+import dev.renkinProject.renkin.extension.contentBounds
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -103,11 +104,129 @@ class IconGeneratorTest {
         return BitmapIconDrawable(bitmap)
     }
 
+    /**
+     * A Lawnicons-shaped pack icon: thin light strokes inset inside a dark plate, wrapped as an
+     * adaptive icon. Exactly the structure that used to compose differently in every modifier.
+     */
+    private fun lawniconsStyleDrawable(size: Int = 108): Drawable {
+        val strokes = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val paint = android.graphics.Paint().apply {
+            color = Color.WHITE
+            strokeWidth = size / 27f
+            style = android.graphics.Paint.Style.STROKE
+        }
+        Canvas(strokes).apply {
+            drawCircle(size / 2f, size / 2f, size / 4f, paint)
+            drawLine(size / 2f, size / 4f, size / 2f, size * 3 / 4f, paint)
+        }
+        return android.graphics.drawable.AdaptiveIconDrawable(
+            ColorDrawable(Color.rgb(20, 20, 30)),
+            android.graphics.drawable.InsetDrawable(BitmapDrawable(null, strokes), 0.25f)
+        )
+    }
+
+    private fun packWith(drawable: Drawable, application: PackageInfoStruct) = IconPackContainer(
+        "",
+        mapOf(
+            InstalledApplication(application.packageName, application.activityName, 0)
+                to ResourceDrawable(0, drawable)
+        )
+    )
+
+    private fun generatedIcon(
+        application: PackageInfoStruct,
+        pack: IconPackContainer,
+        imageEdit: ImageEdit,
+        options: GenerationOptions = options(source = Source.ICON_PACK, imageEdit = imageEdit)
+    ): Bitmap? {
+        var produced: IconPackDrawable? = null
+        IconGenerator(context, options, pack, emptyPack)
+            .generateIcons(listOf(application)) { _, icon, _, _ -> produced = icon }
+        return produced?.toBitmap()
+    }
+
     @Test
-    fun materialYouPackStrokeScale_isRelativeToHalfWidthBrowserBaseline() {
-        assertEquals(0.25f, effectiveMaterialYouPackStrokeScale(0.5f))
-        assertEquals(0.5f, effectiveMaterialYouPackStrokeScale(1f))
-        assertEquals(1f, effectiveMaterialYouPackStrokeScale(2f))
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun everyGenericModifierStartsFromTheSameCanonicalFrame() {
+        val application = app()
+        val pack = packWith(lawniconsStyleDrawable(), application)
+        val plain = generatedIcon(application, pack, ImageEdit.NONE)
+        assertNotNull(plain)
+        val expected = plain!!.contentBounds()
+
+        // Path tracing and edge detection rasterise through native libraries, so they are checked
+        // on-device; these three run entirely on the JVM.
+        for (edit in listOf(
+            ImageEdit.COLORIZE,
+            ImageEdit.COLORIZE_SEGMENTS,
+            ImageEdit.REMOVE_BACKGROUND
+        )) {
+            val modified = generatedIcon(application, pack, edit)
+            assertNotNull("$edit produced no icon", modified)
+            assertEquals(
+                "$edit changed the icon's frame",
+                plain.width to plain.height,
+                modified!!.width to modified.height
+            )
+            assertEquals("$edit moved or resized the artwork", expected, modified.contentBounds())
+        }
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun reopeningAStoredIconKeepsTheSameBounds() {
+        val application = app()
+        val pack = packWith(lawniconsStyleDrawable(), application)
+        val stored = generatedIcon(application, pack, ImageEdit.NONE)!!
+
+        // Second visit: the icon is a stored bitmap now, and the modifiers must not shift it.
+        val reopened = generator(options(imageEdit = ImageEdit.COLORIZE))
+            .applyModifier(BitmapIconDrawable(stored), ImageEdit.COLORIZE)
+            .toBitmap()
+
+        assertEquals(stored.contentBounds(), reopened.contentBounds())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun automaticBackgroundRemovalKeepsLineArtOnTransparency() {
+        val application = app()
+        // Foreground only: strokes on transparency, the shape a Lawnicons foreground has once the
+        // plate is gone. There is no background left to strip.
+        val strokes = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+        val paint = android.graphics.Paint().apply {
+            color = Color.WHITE
+            strokeWidth = 3f
+            style = android.graphics.Paint.Style.STROKE
+        }
+        Canvas(strokes).drawCircle(32f, 32f, 20f, paint)
+        val opaqueBefore = strokes.opaquePixels()
+
+        val cleaned = generator(options(imageEdit = ImageEdit.REMOVE_BACKGROUND))
+            .applyModifier(BitmapIconDrawable(strokes), ImageEdit.REMOVE_BACKGROUND)
+            .toBitmap()
+
+        assertEquals(opaqueBefore, cleaned.opaquePixels())
+        assertNotNull(application)
+    }
+
+    private fun Bitmap.opaquePixels(): Int {
+        val pixels = IntArray(width * height)
+        getPixels(pixels, 0, width, 0, 0, width, height)
+        return pixels.count { Color.alpha(it) > 16 }
+    }
+
+    @Test
+    fun materialYouPackStrokeScale_isRelativeToTheSourceWidth() {
+        assertEquals(0.5f, effectiveMaterialYouPackStrokeScale(0.5f))
+        assertEquals(1f, effectiveMaterialYouPackStrokeScale(1f))
+        assertEquals(2f, effectiveMaterialYouPackStrokeScale(2f))
+    }
+
+    @Test
+    fun materialYouAdaptiveAppearanceDoesNotReceiveLegacyForegroundZoom() {
+        assertFalse(shouldNormalizeAdaptiveForeground(preserveAdaptiveAppearance = true))
+        assertTrue(shouldNormalizeAdaptiveForeground(preserveAdaptiveAppearance = false))
     }
 
     private fun generator(options: GenerationOptions) =

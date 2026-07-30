@@ -348,12 +348,9 @@ internal fun ModifierTab(
     previewGenerating: Boolean = false,
     // The app's original icon, offered as an eyedropper source in the colour picker.
     sampleBitmap: Bitmap? = null,
-    // Render the icon exactly as Apply would, for the colour sheets' live previews.
-    renderColorizePreview: (suspend (ColorizerStyle) -> Bitmap?)? = null,
-    renderOutlinePreview: (suspend (ColorizerStyle) -> Bitmap?)? = null,
-    // The icon before colourizing — what the segment picker clusters.
-    colorizeBaseBitmap: Bitmap? = null,
-    renderLayersPreview: (suspend (Int, ColorizerStyle) -> Bitmap?)? = null,
+    // Live previews rendered through the host's own generation pipeline, plus the artwork the
+    // segment pickers cluster. Null = a host that cannot generate (no previews, no segments).
+    previews: ModifierPreviews? = null,
     materialYouPackAdjustments: MaterialYouPackAdjustmentState? = null,
     materialYouSchemes: List<Pair<Color, Color>> = emptyList(),
     onImageEditChange: (ImageEdit) -> Unit,
@@ -363,6 +360,7 @@ internal fun ModifierTab(
     // Hands the current icon to an external editor; true = ImageToolbox, false = user-picked app.
     onEditExternally: (toolbox: Boolean) -> Unit
 ) {
+    val colorizeBaseBitmap = previews?.colorizeBase
     val editLabels = getImageEditLabels(includeSegments = colorizeBaseBitmap != null)
     var colorPickerOpen by remember { mutableStateOf(false) }
     var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
@@ -581,7 +579,7 @@ internal fun ModifierTab(
                                             title = stringResource(R.string.colorize),
                                             initialStyle = colorizerStyle,
                                             sampleBitmap = sampleBitmap,
-                                            renderPreview = renderColorizePreview,
+                                            renderPreview = previews?.colorize,
                                             onDismiss = { colorizeSheetOpen = false },
                                             onApply = { style ->
                                                 adjustments.colorizerMode = style.mode
@@ -608,7 +606,7 @@ internal fun ModifierTab(
                                             sampleBitmap = sampleBitmap,
                                             layers = adjustments.colorizeLayers,
                                             onLayersChange = { adjustments.colorizeLayers = it },
-                                            renderLayersPreview = renderLayersPreview
+                                            renderLayersPreview = previews?.layers
                                         )
                                     }
                                 }
@@ -806,7 +804,7 @@ internal fun ModifierTab(
                             // Solid fill / monochrome / inverse describe the icon's fill, not a
                             // contour, so the outline sheet omits them.
                             showSingleColorEffects = false,
-                            renderPreview = renderOutlinePreview,
+                            renderPreview = previews?.outline,
                             onDismiss = { outlineSheetOpen = false },
                             onApply = { style ->
                                 adjustments.outlineColorizerMode = style.mode
