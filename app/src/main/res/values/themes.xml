@@ -6,7 +6,12 @@
          windows, not on dialogs. -->
     <style name="Theme.Renkin.WallpaperPreview" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:windowShowWallpaper">true</item>
-        <item name="android:windowIsTranslucent">true</item>
+        <!-- A translucent Activity keeps the previous app window behind it on older Samsung
+             WindowManager versions. Keep the Activity opaque in the task stack; only its window
+             pixels are transparent, so FLAG_SHOW_WALLPAPER supplies the actual background. -->
+        <item name="android:windowIsTranslucent">false</item>
         <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:colorBackgroundCacheHint">@null</item>
+        <item name="android:backgroundDimEnabled">false</item>
     </style>
 </resources>

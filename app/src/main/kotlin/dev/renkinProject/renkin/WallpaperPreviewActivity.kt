@@ -49,6 +49,7 @@ class WallpaperPreviewActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.showWallpaperBehindContent()
 
         // Same rule as MainActivity: landscape only on large screens.
         requestedOrientation = if (resources.getBoolean(R.bool.allowLandscape)) {
