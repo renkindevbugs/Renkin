@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.ui
 
 import android.app.Application
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -142,6 +143,34 @@ class DialogsComposeTest {
 
         compose.onNodeWithText(string(R.string.dismiss)).performClick()
         assertEquals(0, shareCalls)
+        assertTrue(dismissed)
+    }
+
+    // ---- CenterDialog ---------------------------------------------------------------
+
+    @Test
+    @Config(qualifiers = "w700dp-h500dp")
+    fun centerDialog_wideDoneSitsRightOfAutoCenterAndDismisses() {
+        var dismissed = false
+        compose.setContent {
+            CenterDialog(
+                iconBitmap = null,
+                adjustments = AdjustmentState(),
+                onDismiss = { dismissed = true }
+            )
+        }
+
+        val autoCenterBounds =
+            compose.onNodeWithText(string(R.string.centerIcon)).getUnclippedBoundsInRoot()
+        val verticalLabelBounds =
+            compose.onNodeWithText(string(R.string.positionVertical)).getUnclippedBoundsInRoot()
+        val done = compose.onNodeWithText(string(R.string.done))
+        val doneBounds = done.getUnclippedBoundsInRoot()
+
+        assertTrue(doneBounds.left >= autoCenterBounds.right)
+        assertTrue(doneBounds.top > verticalLabelBounds.bottom)
+
+        done.performClick()
         assertTrue(dismissed)
     }
 

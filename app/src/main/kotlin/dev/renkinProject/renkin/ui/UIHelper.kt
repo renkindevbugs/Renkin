@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -229,6 +230,7 @@ fun RenkinAlertDialog(
     onDismissRequest: () -> Unit,
     confirmButton: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
+    properties: DialogProperties = DialogProperties(),
     dismissButton: (@Composable () -> Unit)? = null,
     icon: (@Composable () -> Unit)? = null,
     title: (@Composable () -> Unit)? = null,
@@ -238,6 +240,7 @@ fun RenkinAlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = confirmButton,
         modifier = modifier,
+        properties = properties,
         dismissButton = dismissButton,
         icon = icon,
         // Expressive emphasized titles across every Renkin dialog, in one place.

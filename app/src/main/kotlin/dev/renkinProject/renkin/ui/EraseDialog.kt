@@ -4,17 +4,14 @@ import android.graphics.Bitmap
 import android.graphics.Paint
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.DeleteSweep
@@ -33,7 +30,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -41,10 +37,11 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.ui.theme.CardShape
 
 /**
  * One eraser stroke in NORMALISED canvas coordinates (0..1), so it maps onto any bitmap
@@ -111,12 +108,19 @@ internal fun EraseDialog(
     val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
     val frameColor = MaterialTheme.colorScheme.outline
     val markerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.4f)
+    val wide = LocalConfiguration.current.screenWidthDp >= WIDE_LAYOUT_DP
 
     RenkinAlertDialog(
         onDismissRequest = {
             onStrokesChange(openingStrokes)
             onDismiss()
         },
+        modifier = if (wide) {
+            Modifier.widthIn(max = ERASE_BLUEPRINT_DIALOG_MAX_WIDTH)
+        } else {
+            Modifier
+        },
+        properties = DialogProperties(usePlatformDefaultWidth = !wide),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.eraseTitle), modifier = Modifier.weight(1f))
@@ -135,19 +139,18 @@ internal fun EraseDialog(
             }
         },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            val canvas: @Composable (Modifier) -> Unit = { modifier ->
                 Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .clip(CardShape)
-                        .background(MaterialTheme.colorScheme.surfaceVariant)
+                    modifier.blueprintFrame(
+                        background = MaterialTheme.colorScheme.surfaceVariant,
+                        frame = frameColor
+                    )
                 ) {
                     if (iconBitmap != null) {
                         Image(
                             bitmap = iconBitmap.asImageBitmap(),
                             contentDescription = null,
-                            modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                     if (generating) {
@@ -161,26 +164,35 @@ internal fun EraseDialog(
                     }
                     Canvas(
                         Modifier
-                            .fillMaxWidth()
-                            .aspectRatio(1f)
+                            .fillMaxSize()
                             .pointerInput(brush) {
                                 detectDragGestures(
                                     onDragStart = { position ->
                                         currentStroke = EraseStroke(
                                             brush,
-                                            listOf(Offset(position.x / size.width, position.y / size.height))
+                                            listOf(
+                                                Offset(
+                                                    position.x / size.width,
+                                                    position.y / size.height
+                                                )
+                                            )
                                         )
                                     },
                                     onDrag = { change, _ ->
-                                        val stroke = currentStroke ?: return@detectDragGestures
+                                        change.consume()
+                                        val stroke =
+                                            currentStroke ?: return@detectDragGestures
                                         val point = Offset(
                                             (change.position.x / size.width).coerceIn(0f, 1f),
                                             (change.position.y / size.height).coerceIn(0f, 1f)
                                         )
-                                        currentStroke = stroke.copy(points = stroke.points + point)
+                                        currentStroke =
+                                            stroke.copy(points = stroke.points + point)
                                     },
                                     onDragEnd = {
-                                        currentStroke?.let { onStrokesChange(liveStrokes + it) }
+                                        currentStroke?.let {
+                                            onStrokesChange(liveStrokes + it)
+                                        }
                                         currentStroke = null
                                     },
                                     onDragCancel = { currentStroke = null }
@@ -191,26 +203,28 @@ internal fun EraseDialog(
                                     onStrokesChange(
                                         liveStrokes + EraseStroke(
                                             brush,
-                                            listOf(Offset(position.x / size.width, position.y / size.height))
+                                            listOf(
+                                                Offset(
+                                                    position.x / size.width,
+                                                    position.y / size.height
+                                                )
+                                            )
                                         )
                                     )
                                 }
                             }
                     ) {
-                        // The Position tool's technical grid + frame, so the tools feel related.
-                        val thin = 1.dp.toPx()
-                        for (i in 1 until 8) {
-                            val p = size.width * i / 8f
-                            drawLine(gridColor, Offset(p, 0f), Offset(p, size.height), thin)
-                            drawLine(gridColor, Offset(0f, p), Offset(size.width, p), thin)
-                        }
-                        drawRect(frameColor, style = Stroke(1.5.dp.toPx()))
+                        drawBlueprintGrid(gridColor)
 
                         currentStroke?.let { stroke ->
                             val width = stroke.brush * size.width
                             if (stroke.points.size < 2) {
                                 val p = stroke.points.firstOrNull() ?: return@let
-                                drawCircle(markerColor, width / 2f, Offset(p.x * size.width, p.y * size.height))
+                                drawCircle(
+                                    markerColor,
+                                    width / 2f,
+                                    Offset(p.x * size.width, p.y * size.height)
+                                )
                             } else {
                                 val path = Path()
                                 stroke.points.forEachIndexed { index, point ->
@@ -221,19 +235,39 @@ internal fun EraseDialog(
                                 drawPath(
                                     path,
                                     markerColor,
-                                    style = Stroke(width, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                                    style = Stroke(
+                                        width,
+                                        cap = StrokeCap.Round,
+                                        join = StrokeJoin.Round
+                                    )
                                 )
                             }
                         }
                     }
                 }
-
-                LabeledSlider(
-                    label = stringResource(R.string.eraseBrush),
-                    value = brush,
-                    onValueChange = { brush = it },
-                    valueRange = 0.03f..0.25f
+            }
+            if (wide) {
+                BlueprintSideControlLayout(
+                    canvas = canvas,
+                    sideControl = { modifier ->
+                        VerticalLabeledSlider(
+                            label = stringResource(R.string.eraseBrush),
+                            value = brush,
+                            onValueChange = { brush = it },
+                            valueRange = 0.03f..0.25f,
+                            modifier = modifier
+                        )
+                    }
                 )
+            } else {
+                BlueprintStackedLayout(canvas = canvas) {
+                    LabeledSlider(
+                        label = stringResource(R.string.eraseBrush),
+                        value = brush,
+                        onValueChange = { brush = it },
+                        valueRange = 0.03f..0.25f
+                    )
+                }
             }
         },
         confirmButton = {
