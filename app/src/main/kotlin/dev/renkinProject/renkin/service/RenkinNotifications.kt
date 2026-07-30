@@ -1,20 +1,18 @@
 package dev.renkinProject.renkin.service
 
-import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Context.NOTIFICATION_SERVICE
 import android.content.Intent
-import android.content.pm.PackageManager
-import androidx.core.app.ActivityCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import dev.renkinProject.renkin.MainActivity
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.packages.PackageVersion
+import dev.renkinProject.renkin.packages.canPostNotifications
 
 /**
  * Builds and posts the app's notifications. Named to avoid shadowing the framework
@@ -101,13 +99,7 @@ class RenkinNotifications {
             .build()
 
         with(NotificationManagerCompat.from(context)) {
-            if (ActivityCompat.checkSelfPermission(
-                    context,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) != PackageManager.PERMISSION_GRANTED
-            ) {
-                return
-            }
+            if (!canPostNotifications(context)) return
             notify(iconAvailableId(suggestionId), builder.build())
             notify(iconAvailableSummaryId, summary)
         }

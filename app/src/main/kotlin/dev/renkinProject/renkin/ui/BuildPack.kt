@@ -91,6 +91,10 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true) {
             if (profileId < 0L) return@rememberLauncherForActivityResult
             view.performConfirmHaptic()
             viewModel.build(profileId)
+        } else if (result.data?.getBooleanExtra(WallpaperPreviewActivity.EXTRA_SESSION_LOST, false) == true) {
+            // The process was killed while the preview was in front: it closed itself rather
+            // than review a state the user never saw. Say so instead of looking like a no-op.
+            toaster.show(context.getString(R.string.buildPreviewSessionLost))
         }
     }
 
