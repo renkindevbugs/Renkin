@@ -24,6 +24,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -159,10 +160,12 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
     // Raw uploaded icon (zoom/adaptive applied) before the shared modifier; the modifier is
     // applied here so it previews live even from the Modifier tab.
     var uploadBase by mutableStateOf<IconPackDrawable?>(null)
+        private set
     private var uploadIcon by mutableStateOf<IconPackDrawable?>(null)
 
     // Hand-edited vector and the same vector with the shared modifier applied.
     var vectorIcon by mutableStateOf<IconPackDrawable?>(null)
+        private set
     private var modifiedVector by mutableStateOf<IconPackDrawable?>(null)
 
     /** Which source produced the icon currently being previewed/confirmed. */
@@ -185,9 +188,53 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
      * tab, so visiting the Modifier tab never silently drops an upload/vector.
      */
     val iconToConfirm: IconPackDrawable? get() = when (origin) {
-        IconOrigin.UPLOAD -> uploadIcon ?: createIcon
+        IconOrigin.UPLOAD -> uploadIcon
         IconOrigin.VECTOR -> modifiedVector
         IconOrigin.CREATE -> createIcon
+    }
+
+    /**
+     * Activates the Create pipeline and drops drafts owned by the other source tabs.
+     * The caller is responsible for clearing their UI-only selection state.
+     */
+    fun selectCreate() {
+        uploadBase = null
+        uploadIcon = null
+        vectorIcon = null
+        modifiedVector = null
+        origin = IconOrigin.CREATE
+    }
+
+    /** Activates an uploaded image and forgets the previous Create/vector drafts. */
+    fun selectUpload(icon: IconPackDrawable) {
+        createIcon = null
+        vectorIcon = null
+        modifiedVector = null
+        uploadBase = icon
+        uploadIcon = null
+        origin = IconOrigin.UPLOAD
+    }
+
+    /** Clears a removed/corrupt gallery selection without changing the active source. */
+    fun clearUpload() {
+        uploadBase = null
+        uploadIcon = null
+    }
+
+    /** Activates a vector and forgets the previous Create/upload drafts. */
+    fun selectVector(icon: IconPackDrawable) {
+        createIcon = null
+        uploadBase = null
+        uploadIcon = null
+        vectorIcon = icon
+        modifiedVector = null
+        origin = IconOrigin.VECTOR
+    }
+
+    /** Clears an empty vector editor without changing the active source. */
+    fun clearVector() {
+        vectorIcon = null
+        modifiedVector = null
     }
 
     /** Keeps the shared loading state correct across overlapping and cancelled effects. */
@@ -312,6 +359,7 @@ fun OptionsDialog(
     // dropped as soon as the gallery selects any other picture.
     var onlineImageUrl by remember { mutableStateOf<String?>(null) }
     var onlineImagePath by remember { mutableStateOf<String?>(null) }
+    var uploadSelectionVersion by rememberSaveable { mutableIntStateOf(0) }
     var showConfirmClear by remember { mutableStateOf(false) }
     // Enter-always app bar: the header (close / name / overflow) collapses pixel-by-pixel as the
     // icon list scrolls down and slides back in on scroll up.
@@ -352,6 +400,44 @@ fun OptionsDialog(
     var calendarPackName by remember { mutableStateOf(app.calendarPackName) }
     val calendarPackLabel = iconPacks.find { it.packageName == (calendarPackName ?: iconPack) }?.applicationName ?: ""
 
+    /** A real selection in another source invalidates all UI state owned by Create. */
+    val clearCreateSelection: () -> Unit = {
+        customIconList = emptyList()
+        materialYouPackAdjustments.reset()
+        calendarEnabled = false
+        calendarPrefix = null
+        calendarPackName = null
+    }
+
+    /** Switches to Create only after the user changes a Create option or picks a Create icon. */
+    val activateCreate: () -> Unit = {
+        if (draft.origin != IconOrigin.CREATE) {
+            draft.selectCreate()
+            vectorEditState.reset()
+            onlineImageUrl = null
+            onlineImagePath = null
+            uploadSelectionVersion++
+        }
+    }
+
+    val activateUpload: (IconPackDrawable) -> Unit = { icon ->
+        if (draft.origin != IconOrigin.UPLOAD) {
+            clearCreateSelection()
+            vectorEditState.reset()
+        }
+        draft.selectUpload(icon)
+    }
+
+    val activateVector: (IconPackDrawable) -> Unit = { icon ->
+        if (draft.origin != IconOrigin.VECTOR) {
+            clearCreateSelection()
+            onlineImageUrl = null
+            onlineImagePath = null
+            uploadSelectionVersion++
+        }
+        draft.selectVector(icon)
+    }
+
     // Slide the editor in from the right; closing plays the reverse animation
     // before the dialog window is actually dismissed
     val dialogTransition = remember { MutableTransitionState(false).apply { targetState = true } }
@@ -383,7 +469,8 @@ fun OptionsDialog(
     val isMaterialYouVariant = source == Source.APPLICATION_ICON &&
         applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU
     val materialYouSchemes = rememberMaterialYouSchemes()
-    val selectedMaterialYouPackIcon = source == Source.ICON_PACK &&
+    val selectedMaterialYouPackIcon = draft.origin == IconOrigin.CREATE &&
+        source == Source.ICON_PACK &&
         customIconList.firstOrNull()?.drawable?.isAdaptiveIconDrawable() == true &&
         iconPacks.firstOrNull { it.packageName == iconPack }
             ?.changesWithMaterialYouColors == true
@@ -422,50 +509,17 @@ fun OptionsDialog(
         else -> selectedPackScheme!!.second.toInt()
     }
 
+    // Memoised per stroke list: the options object must only change when the strokes do,
+    // or every recomposition would look like a new mask and re-trigger generation.
+    val outlineEraseMask = remember(adjustments.eraseStrokes) {
+        if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
+    }
     val generatingOptions = GenerationOptions(
         source, imageEdit, textType, iconPack,
         effectiveColor.toInt(), effectiveBgColor.toInt(), useVector,
         materialYou = applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
         themed = themed,
         override = true,
-        edgeLowThreshold = adjustments.edgeThreshold,
-        edgeHighThreshold = adjustments.edgeThreshold * 3f,
-        edgeGaussianRadius = adjustments.edgeSmoothing,
-        edgeContrastNormalized = adjustments.edgeContrast,
-        iconScale = adjustments.iconScale,
-        bgRemovalTargets = adjustments.bgRemovalTargets,
-        bgRemovalTolerance = adjustments.bgRemovalTolerance,
-        iconOffsetX = adjustments.iconOffsetX,
-        iconOffsetY = adjustments.iconOffsetY,
-        colorizeFlat = adjustments.colorizeFlat,
-        colorizeMonochrome = adjustments.colorizeMonochrome,
-        colorizeInverse = adjustments.colorizeInverse,
-        colorizerMode = adjustments.colorizerMode,
-        colorizerGradientType = adjustments.colorizerGradientType,
-        colorizerGradientColors = adjustments.colorizerGradientColors,
-        colorizerGradientAngle = adjustments.colorizerGradientAngle,
-        // Layers only apply to the segment modifier; plain Colorize always paints it all.
-        colorizeLayers = if (imageEdit == ImageEdit.COLORIZE_SEGMENTS) {
-            adjustments.colorizeLayers
-        } else emptyList(),
-        iconShape = adjustments.iconShape,
-        iconShapeCrop = adjustments.shapeCrop,
-        iconShapeScale = adjustments.shapeScale,
-        outlineMode = adjustments.outlineMode,
-        outlineWidth = adjustments.outlineWidth,
-        outlineColor = adjustments.outlineColor.toInt(),
-        outlineStyle = ColorizerStyle(
-            mode = adjustments.outlineColorizerMode,
-            gradientType = adjustments.outlineGradientType,
-            firstColor = adjustments.outlineColor.toInt(),
-            gradientStops = adjustments.outlineGradientColors,
-            gradientAngle = adjustments.outlineGradientAngle
-        ),
-        // Memoised per stroke list: the options object must only change when the strokes do,
-        // or every recomposition would look like a new mask and re-trigger generation.
-        outlineEraseMask = remember(adjustments.eraseStrokes) {
-            if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
-        },
         textCustom = customText,
         textCase = textCase,
         textFontPath = textFontPath,
@@ -476,7 +530,7 @@ fun OptionsDialog(
         materialYouPackStrokeScale = if (selectedMaterialYouPackIcon) {
             materialYouPackAdjustments.strokeScale
         } else 1f
-    )
+    ).withModifierAdjustments(adjustments, imageEdit, outlineEraseMask)
     // Pack rows describe the source artwork, not the per-icon draft currently being edited.
     // Keeping these options separate prevents a Material You slider from restyling every
     // Lawnicons tile while the selected icon alone is regenerated below.
@@ -510,6 +564,13 @@ fun OptionsDialog(
     val modifierPreviews = rememberModifierPreviews(
         options = generatingOptions,
         adjustments = adjustments,
+        sourceKey = when (draft.origin) {
+            IconOrigin.UPLOAD -> draft.uploadBase
+            IconOrigin.VECTOR -> draft.vectorIcon
+            IconOrigin.CREATE -> customIconList.firstOrNull()?.let {
+                iconPack to it.resourceId
+            } ?: (app.baseIcon ?: app.createdIcon ?: app.icon)
+        },
         render = renderPreviewWith
     )
 
@@ -648,7 +709,7 @@ fun OptionsDialog(
                                     }
                                     customIconList = listOf(res)
                                     iconPack = pack.packageName
-                                    draft.origin = IconOrigin.CREATE
+                                    activateCreate()
                                     // Derive calendar prefix from the picked icon's name.
                                     // Any icon ending in _N is a valid calendar candidate.
                                     val newPrefix = drawableName.calendarPrefixOrNull()
@@ -660,13 +721,13 @@ fun OptionsDialog(
                                         calendarEnabled = false
                                     }
                                 },
-                                onTextTypeChange = { textType = it; draft.origin = IconOrigin.CREATE },
+                                onTextTypeChange = { textType = it; activateCreate() },
                                 customText = customText,
-                                onCustomTextChange = { customText = it; draft.origin = IconOrigin.CREATE },
+                                onCustomTextChange = { customText = it; activateCreate() },
                                 textCase = textCase,
-                                onTextCaseChange = { textCase = it; draft.origin = IconOrigin.CREATE },
+                                onTextCaseChange = { textCase = it; activateCreate() },
                                 fontPath = textFontPath,
-                                onFontPathChange = { textFontPath = it; draft.origin = IconOrigin.CREATE },
+                                onFontPathChange = { textFontPath = it; activateCreate() },
                                 contentReady = createTabReady,
                                 selectedResourceId = customIconList.firstOrNull()?.resourceId,
                                 // Frame the rotation siblings only once the user has opted in.
@@ -675,43 +736,48 @@ fun OptionsDialog(
                                 applicationIconVariant = applicationIconVariant,
                                 onApplicationIconVariantChange = {
                                     applicationIconVariant = it
-                                    draft.origin = IconOrigin.CREATE
+                                    activateCreate()
                                 },
                                 invertMonochrome = invertMonochrome,
                                 onInvertMonochromeChange = {
                                     invertMonochrome = it
-                                    draft.origin = IconOrigin.CREATE
+                                    activateCreate()
                                 },
                                 materialYouSchemes = materialYouSchemes,
                                 selectedScheme = materialYouScheme,
                                 onSchemeChange = {
                                     materialYouScheme = it
-                                    draft.origin = IconOrigin.CREATE
+                                    activateCreate()
                                 },
                                 customForeground = iconColor,
                                 customBackground = customBgColor,
                                 onCustomForegroundChange = {
                                     iconColor = it
-                                    draft.origin = IconOrigin.CREATE
+                                    activateCreate()
                                 },
                                 onCustomBackgroundChange = {
                                     customBgColor = it
-                                    draft.origin = IconOrigin.CREATE
+                                    activateCreate()
                                 }
                             )
                             // The static tabs don't scroll under the header — plain top padding.
                             1 -> Box(Modifier.fillMaxSize().padding(headerPadding)) {
-                                UploadColumn(
-                                    app = app,
-                                    snackbarHostState = snackbarHostState,
-                                    initialSelectedPath = onlineImagePath
-                                ) { icon, path ->
-                                    draft.uploadBase = icon
-                                    // A manual gallery pick replaces an online "as image"
-                                    // import, so its attribution must not outlive the
-                                    // picture; re-selecting the online file keeps it.
-                                    if (path != onlineImagePath) onlineImageUrl = null
-                                    if (icon != null) draft.origin = IconOrigin.UPLOAD
+                                key(uploadSelectionVersion) {
+                                    UploadColumn(
+                                        app = app,
+                                        snackbarHostState = snackbarHostState,
+                                        initialSelectedPath = onlineImagePath
+                                    ) { icon, path ->
+                                        if (icon == null) {
+                                            draft.clearUpload()
+                                        } else {
+                                            // A manual gallery pick replaces an online "as image"
+                                            // import, so its attribution must not outlive the
+                                            // picture; re-selecting the online file keeps it.
+                                            if (path != onlineImagePath) onlineImageUrl = null
+                                            activateUpload(icon)
+                                        }
+                                    }
                                 }
                             }
                             2 -> Box(Modifier.fillMaxSize().padding(headerPadding)) { ModifierTab(
@@ -761,14 +827,12 @@ fun OptionsDialog(
                                         // full-size raster through the upload pipeline so the
                                         // shared modifier applies like any uploaded picture;
                                         // the gallery copy arrives preselected in Upload.
-                                        draft.uploadBase = BitmapIconDrawable(imported.bitmap, false)
-                                        draft.origin = IconOrigin.UPLOAD
+                                        activateUpload(BitmapIconDrawable(imported.bitmap, false))
                                         onlineImageUrl = url
                                         onlineImagePath = imported.galleryPath
                                     }
                                 ) {
-                                    draft.vectorIcon = it
-                                    if (it != null) draft.origin = IconOrigin.VECTOR
+                                    if (it == null) draft.clearVector() else activateVector(it)
                                 }
                             }
                         }
@@ -781,7 +845,7 @@ fun OptionsDialog(
                         SourcePills(source = source) { newSource ->
                             source = newSource
                             customIconList = listOf()
-                            draft.origin = IconOrigin.CREATE
+                            activateCreate()
                         }
                     }
                     HorizontalDivider()

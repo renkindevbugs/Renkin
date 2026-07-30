@@ -1370,6 +1370,9 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         app.baseIcon ?: app.createdIcon ?: heroBitmap?.let { BitmapIconDrawable(it, false) }
     }
 
+    val outlineEraseMask = remember(adjustments.eraseStrokes) {
+        if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
+    }
     val options = GenerationOptions(
         primarySource = Source.APPLICATION_ICON,
         primaryImageEdit = imageEdit,
@@ -1382,44 +1385,8 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         vector = useVector,
         materialYou = false,
         themed = false,
-        override = true,
-        edgeLowThreshold = adjustments.edgeThreshold,
-        edgeHighThreshold = adjustments.edgeThreshold * 3f,
-        edgeGaussianRadius = adjustments.edgeSmoothing,
-        edgeContrastNormalized = adjustments.edgeContrast,
-        iconScale = adjustments.iconScale,
-        bgRemovalTargets = adjustments.bgRemovalTargets,
-        bgRemovalTolerance = adjustments.bgRemovalTolerance,
-        iconOffsetX = adjustments.iconOffsetX,
-        iconOffsetY = adjustments.iconOffsetY,
-        colorizeFlat = adjustments.colorizeFlat,
-        colorizeMonochrome = adjustments.colorizeMonochrome,
-        colorizeInverse = adjustments.colorizeInverse,
-        colorizerMode = adjustments.colorizerMode,
-        colorizerGradientType = adjustments.colorizerGradientType,
-        colorizerGradientColors = adjustments.colorizerGradientColors,
-        colorizerGradientAngle = adjustments.colorizerGradientAngle,
-        // Layers only apply to the segment modifier; plain Colorize always paints it all.
-        colorizeLayers = if (imageEdit == ImageEdit.COLORIZE_SEGMENTS) {
-            adjustments.colorizeLayers
-        } else emptyList(),
-        iconShape = adjustments.iconShape,
-        iconShapeCrop = adjustments.shapeCrop,
-        iconShapeScale = adjustments.shapeScale,
-        outlineMode = adjustments.outlineMode,
-        outlineWidth = adjustments.outlineWidth,
-        outlineColor = adjustments.outlineColor.toArgb(),
-        outlineStyle = ColorizerStyle(
-            mode = adjustments.outlineColorizerMode,
-            gradientType = adjustments.outlineGradientType,
-            firstColor = adjustments.outlineColor.toArgb(),
-            gradientStops = adjustments.outlineGradientColors,
-            gradientAngle = adjustments.outlineGradientAngle
-        ),
-        outlineEraseMask = remember(adjustments.eraseStrokes) {
-            if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
-        }
-    )
+        override = true
+    ).withModifierAdjustments(adjustments, imageEdit, outlineEraseMask)
 
     // The same pipeline the tile preview uses, so the colour sheets and segment pickers here
     // behave exactly like the edit dialog's.
@@ -1433,6 +1400,7 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
     val modifierPreviews = rememberModifierPreviews(
         options = options,
         adjustments = adjustments,
+        sourceKey = base,
         render = renderWith
     )
 
