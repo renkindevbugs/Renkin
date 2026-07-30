@@ -11,6 +11,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.flow.stateIn
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.collectAsState
@@ -94,6 +95,21 @@ class GlobalOptionsActivity : ComponentActivity() {
 
             val viewModel: GlobalOptionsViewModel = hiltViewModel()
             val colorPresets by viewModel.colorPresets.collectAsState()
+
+            // The screen is bound to the profile it opened with (see GlobalOptionsViewModel):
+            // if that changes underneath, close and hand back what was already applied rather
+            // than let a Save write one profile's staged recipe into another.
+            LaunchedEffect(viewModel.profileChanged) {
+                if (viewModel.profileChanged) {
+                    setResult(
+                        RESULT_OK,
+                        Intent()
+                            .putStringArrayListExtra(EXTRA_EDITED_KEYS, ArrayList(viewModel.editedKeys))
+                            .putExtra(EXTRA_GLOBAL_APPLIED, viewModel.appliedGlobal)
+                    )
+                    finish()
+                }
+            }
 
             CompositionLocalProvider(LocalToaster provides toaster) {
               ProvideColorPresets(
@@ -188,6 +204,25 @@ class GlobalOptionsViewModel @Inject constructor(
     var initialLoadRunning by mutableStateOf(!appProvider.startupComplete)
         private set
 
+    /**
+     * The profile this screen belongs to — null until the provider is ready, because a cold
+     * recreation starts on the default id before the real one is loaded.
+     */
+    var screenProfileId by mutableStateOf(if (appProvider.startupComplete) appProvider.activeProfileId else null)
+        private set
+
+    /**
+     * True when the active profile moved out from under this screen. Reaching it takes an
+     * external intent starting a second MainActivity on top (a share, say), switching there and
+     * coming back — rare, but the staged settings on screen belong to the profile it opened
+     * with, and saving them into a different one silently rewrites that profile's recipe.
+     */
+    val profileChanged: Boolean
+        get() {
+            val opened = screenProfileId ?: return false
+            return !appProvider.isProfileSwitching && appProvider.activeProfileId != opened
+        }
+
     init {
         if (initialLoadRunning) {
             viewModelScope.launch {
@@ -199,6 +234,7 @@ class GlobalOptionsViewModel @Inject constructor(
                     Log.error("GlobalOptionsViewModel", "Cold initialization failed", e)
                 } finally {
                     initialLoadRunning = false
+                    screenProfileId = appProvider.activeProfileId
                 }
             }
         }
@@ -325,7 +361,9 @@ class GlobalOptionsViewModel @Inject constructor(
         applyCustom: Boolean,
         includeEmpty: Boolean
     ): Boolean {
-        if (globalApplyProgress != null) return false
+        // Staged values belong to the profile this screen opened with; the activity closes on a
+        // change, but a Save already in flight when it happens must not land in the new profile.
+        if (globalApplyProgress != null || profileChanged) return false
         globalApplyProgress = 0 to 0
         return try {
             appProvider.applyGlobalModifiers(

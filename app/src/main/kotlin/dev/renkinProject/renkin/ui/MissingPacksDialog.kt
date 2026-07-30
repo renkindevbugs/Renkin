@@ -27,7 +27,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -44,7 +43,7 @@ import dev.renkinProject.renkin.ui.theme.CardShape
  */
 @Composable
 fun MissingPacksDialog(packs: List<MissingPack>, onDismiss: (dontShowAgain: Boolean) -> Unit) {
-    val uriHandler = LocalUriHandler.current
+    val openLink = rememberLinkOpener()
     var dontShowAgain by rememberSaveable { mutableStateOf(false) }
 
     RenkinAlertDialog(
@@ -93,7 +92,7 @@ fun MissingPacksDialog(packs: List<MissingPack>, onDismiss: (dontShowAgain: Bool
                             )
                         }
                         TextButton(onClick = {
-                            uriHandler.openUri("https://play.google.com/store/apps/details?id=${pack.packageName}")
+                            openLink("https://play.google.com/store/apps/details?id=${pack.packageName}")
                         }) {
                             Text(stringResource(R.string.missingPackOpenStore))
                         }

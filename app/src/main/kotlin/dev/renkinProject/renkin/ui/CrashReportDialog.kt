@@ -1,6 +1,8 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -23,7 +25,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -44,7 +45,7 @@ import dev.renkinProject.renkin.util.CrashReporter
 fun CrashReportDialog(onDismiss: () -> Unit) {
     val context = getCurrentContext()
     val clipboard = LocalClipboardManager.current
-    val uriHandler = LocalUriHandler.current
+    val openLink = rememberLinkOpener()
     val toaster = LocalToaster.current
 
     val githubUrl = stringResource(R.string.crashGithubUrl)
@@ -56,7 +57,13 @@ fun CrashReportDialog(onDismiss: () -> Unit) {
             color = MaterialTheme.colorScheme.surfaceContainerHigh,
             tonalElevation = 6.dp
         ) {
-            Column(Modifier.padding(24.dp)) {
+            // Scrolls: with a large system font (or in split screen) the fixed content would
+            // otherwise push its own buttons off the bottom of the dialog.
+            Column(
+                Modifier
+                    .verticalScroll(rememberScrollState())
+                    .padding(24.dp)
+            ) {
                 Text(
                     text = stringResource(R.string.crashTitle),
                     style = MaterialTheme.typography.headlineSmall,
@@ -74,7 +81,7 @@ fun CrashReportDialog(onDismiss: () -> Unit) {
                 SectionLabel(stringResource(R.string.crashGithubLabel))
                 Spacer(Modifier.height(8.dp))
                 Surface(
-                    onClick = { uriHandler.openUri(githubUrl) },
+                    onClick = { openLink(githubUrl) },
                     shape = InnerShape,
                     color = MaterialTheme.colorScheme.surfaceContainerHighest
                 ) {

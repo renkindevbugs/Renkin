@@ -1,6 +1,8 @@
 package dev.renkinProject.renkin.ui
 
 import android.app.Application
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.isToggleable
@@ -37,6 +39,16 @@ class DialogsComposeTest {
 
     private fun string(id: Int, vararg args: Any): String =
         RuntimeEnvironment.getApplication().getString(id, *args)
+
+    /**
+     * Dialogs that can open a link read [LocalToaster] to report a device with no browser —
+     * MainActivity always provides it, so the tests must too.
+     */
+    private fun setContentWithToaster(content: @Composable () -> Unit) {
+        compose.setContent {
+            CompositionLocalProvider(LocalToaster provides Toaster()) { content() }
+        }
+    }
 
     // ---- ConfirmDialog ---------------------------------------------------------------
 
@@ -86,7 +98,7 @@ class DialogsComposeTest {
 
     @Test
     fun missingPacksDialog_listsEveryPackWithItsLockedCount() {
-        compose.setContent {
+        setContentWithToaster {
             MissingPacksDialog(listOf(paidPack, pendingPack)) {}
         }
 
@@ -99,7 +111,7 @@ class DialogsComposeTest {
     @Test
     fun missingPacksDialog_okReportsDontShowAgainUnchangedByDefault() {
         var dontShowAgain: Boolean? = null
-        compose.setContent {
+        setContentWithToaster {
             MissingPacksDialog(listOf(paidPack)) { dontShowAgain = it }
         }
 
@@ -110,7 +122,7 @@ class DialogsComposeTest {
     @Test
     fun missingPacksDialog_okReportsTickedDontShowAgain() {
         var dontShowAgain: Boolean? = null
-        compose.setContent {
+        setContentWithToaster {
             MissingPacksDialog(listOf(paidPack)) { dontShowAgain = it }
         }
 
