@@ -45,6 +45,9 @@ class WallpaperPreviewActivity : ComponentActivity() {
         const val EXTRA_BUILT_KEYS = "builtKeys"
         const val EXTRA_UPDATED_KEYS = "updatedKeys"
         const val EXTRA_PROFILE_ID = "profileId"
+
+        /** Set on a CANCELED result when the process died under the preview (see onCreate). */
+        const val EXTRA_SESSION_LOST = "sessionLost"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -56,6 +59,17 @@ class WallpaperPreviewActivity : ComponentActivity() {
             ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
         } else {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
+
+        // Android can recreate this activity alone on top of a killed process (savedInstanceState
+        // present, provider empty). The reviewed session is gone then — initializing the provider
+        // here would quietly show the last SAVED state instead, which is not what the user was
+        // reviewing. Decide before composing so no empty grid flashes and no calendar-warning
+        // load starts; MainActivity comes back and cold-loads normally.
+        if (savedInstanceState != null && !appProvider.startupComplete) {
+            setResult(RESULT_CANCELED, Intent().putExtra(EXTRA_SESSION_LOST, true))
+            finish()
+            return
         }
 
         val builtKeys = intent.getStringArrayListExtra(EXTRA_BUILT_KEYS)?.toSet() ?: emptySet()

@@ -63,7 +63,11 @@ Activity operations (`finish()`, starting services, permission requests).
   never become the wallpaper target. It reads shared state from the `ApplicationProvider`
   singleton directly — deliberately **not** through a new `MainViewModel`, whose init would
   re-run provider initialization and drop unsaved icons. RESULT_OK = "user pressed Build";
-  the launching side (BuildPackFab) runs the build.
+  the launching side (BuildPackFab) runs the build. If Android recreates it alone over a killed
+  process (`savedInstanceState != null` while `startupComplete == false`), the reviewed session
+  no longer exists — `onCreate` closes it with `RESULT_CANCELED` + `EXTRA_SESSION_LOST` *before*
+  `setContent`, rather than initializing the provider and silently reviewing the last *saved*
+  state instead.
 
 ## Profiles
 

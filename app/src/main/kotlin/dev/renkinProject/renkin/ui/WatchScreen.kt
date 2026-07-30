@@ -95,6 +95,7 @@ import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.PermissionManager
+import dev.renkinProject.renkin.packages.notificationSettingsIntent
 import kotlinx.coroutines.flow.first
 
 @Composable
@@ -113,9 +114,35 @@ fun WatchScreen(onDismiss: () -> Unit) {
     // Icon-watch is the only feature that posts notifications now, so ask for the permission
     // here (it used to be requested by the removed package-added setting).
     val activity = getCurrentMainActivity()
+    // Below API 33 there is no runtime prompt, so a user who turned notifications off would get
+    // a silent no-op — point them at the system screen instead.
+    var showNotificationSettings by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         val permissions = PermissionManager(activity)
-        if (!permissions.isPostNotificationEnabled()) permissions.askForPostNotification()
+        if (permissions.isPostNotificationEnabled()) return@LaunchedEffect
+        if (permissions.canAskForPostNotification()) permissions.askForPostNotification()
+        else showNotificationSettings = true
+    }
+
+    if (showNotificationSettings) {
+        RenkinAlertDialog(
+            onDismissRequest = { showNotificationSettings = false },
+            icon = { Icon(Icons.Filled.Warning, contentDescription = null) },
+            title = { Text(stringResource(R.string.notificationsDisabledTitle)) },
+            text = { Text(stringResource(R.string.notificationsDisabledText)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    showNotificationSettings = false
+                    // The settings app may be missing/locked down on odd ROMs.
+                    runCatching { activity.startActivity(notificationSettingsIntent(activity)) }
+                }) { Text(stringResource(R.string.settings)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNotificationSettings = false }) {
+                    Text(stringResource(R.string.dismiss))
+                }
+            }
+        )
     }
 
     // null = list; otherwise the editor is open (editing this rule, or a new rule when blank)
