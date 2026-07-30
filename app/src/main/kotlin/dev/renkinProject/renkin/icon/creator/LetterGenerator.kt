@@ -7,6 +7,30 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.drawable.MultiLineTextDrawable
 import dev.renkinProject.renkin.drawable.TextDrawable
 
+// Unicode separators matter too: Android labels can contain non-breaking and full-width spaces.
+private val WORD_SEPARATOR = Regex("""[\s\p{Z}]+""")
+
+/** Takes whole Unicode code points so an emoji is never split into an invalid surrogate. */
+private fun String.takeCodePoints(count: Int): String {
+    if (count <= 0 || isEmpty()) return ""
+    val actualCount = codePointCount(0, length).coerceAtMost(count)
+    return substring(0, offsetByCodePoints(0, actualCount))
+}
+
+/**
+ * The two characters a "Two letters" icon shows: the initials of the first two words, or the
+ * first two characters of a single word. Splitting on a whitespace RUN matters — "Foo  Bar" used
+ * to yield an empty second token and crash on its first character.
+ */
+internal fun twoLetterInitials(appName: String): String {
+    val words = appName.split(WORD_SEPARATOR).filter { it.isNotEmpty() }
+    return when {
+        words.size >= 2 -> words[0].takeCodePoints(1) + words[1].takeCodePoints(1)
+        words.isEmpty() -> ""
+        else -> words[0].takeCodePoints(2)
+    }
+}
+
 class LetterGenerator(ctx: Context, fontPath: String = "") {
     // The bundled Arcticons Sans by default; a picked system font replaces it. A stale path
     // (font removed by an OS update) falls back instead of crashing generation.
@@ -23,17 +47,8 @@ class LetterGenerator(ctx: Context, fontPath: String = "") {
         return TextDrawable(text, font, 200F, color, strokeWidth, maxSize, maxSize)
     }
 
-    fun generateTwoLetters(appName: String, color: Int, strokeWidth: Float, maxSize: Int): Drawable {
-        var text = appName.trim()
-        text = if (text.contains(" ")) {
-            val words = text.split(" ")
-            words[0][0].toString() + words[1][0]
-        } else {
-            if (text.length > 2) text.substring(0, 2) else text
-        }
-
-        return TextDrawable(text, font, 150F, color, strokeWidth, maxSize, maxSize)
-    }
+    fun generateTwoLetters(appName: String, color: Int, strokeWidth: Float, maxSize: Int): Drawable =
+        TextDrawable(twoLetterInitials(appName), font, 150F, color, strokeWidth, maxSize, maxSize)
 
     fun generateAppName(appName: String, color: Int, maxSize: Int): Drawable {
         return MultiLineTextDrawable(appName, font, 50F, 30F, color, maxSize, 3, maxSize)

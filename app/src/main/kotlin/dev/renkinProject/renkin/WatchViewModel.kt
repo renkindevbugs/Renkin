@@ -23,8 +23,10 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.service.WatchChecker
+import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.service.RenkinNotifications
 import dev.renkinProject.renkin.service.WatchWorker
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.StateFlow
@@ -103,6 +105,8 @@ class WatchViewModel @Inject constructor(
         isSavingRule = true
         val profileId = appProvider.activeProfileId
         viewModelScope.launch {
+            // Saving reads every selected pack; a broken one must surface as "not saved",
+            // never as a crash out of viewModelScope.
             val savedId = try {
                 WatchChecker(getApplication()).saveRule(
                     existingRuleId = existing?.rule?.id,
@@ -111,6 +115,11 @@ class WatchViewModel @Inject constructor(
                     packPackages = packs,
                     profileId = profileId
                 )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (e: Exception) {
+                Log.error("WatchViewModel", "Could not save the watch rule", e)
+                0L
             } finally {
                 isSavingRule = false
             }
