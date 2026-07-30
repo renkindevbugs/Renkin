@@ -43,7 +43,7 @@ class RenkinPackMigrationTest {
 
     @Test
     fun everyReleasedSchemaMigratesToCurrent() {
-        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13).forEach { version ->
+        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14).forEach { version ->
             RenkinPackDatabase.open(context, historical(version, "from-$version")).useDatabase { database ->
                 database.openHelper.writableDatabase
             }

@@ -69,6 +69,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.data.setPrimarySource
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
@@ -241,8 +242,7 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
             onPick = { newSource, newPackage ->
                 sheetOpen = false
                 scope.launch {
-                    prefs.setEnumValue(PrimarySourceKey, newSource)
-                    if (newPackage != null) prefs.setStringValue(PrimaryIconPackKey, newPackage)
+                    prefs.setPrimarySource(newSource, newPackage)
                     if (newSource == Source.NONE) {
                         // No source: the unsaved refresh output goes away; locked icons stay.
                         viewModel.clearRefreshedIcons()

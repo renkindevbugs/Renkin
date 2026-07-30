@@ -15,6 +15,9 @@ import java.util.Locale
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.os.UserManager
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.core.content.pm.PackageInfoCompat
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
@@ -91,8 +94,7 @@ internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSou
          * configuration). Null until the first composition; pack resources then resolve
          * with the system configuration, same as before.
          */
-        @Volatile
-        var displayedNightMode: Boolean? = null
+        var displayedNightMode: Boolean? by mutableStateOf(null)
     }
     private val pm = ctx.packageManager
 
