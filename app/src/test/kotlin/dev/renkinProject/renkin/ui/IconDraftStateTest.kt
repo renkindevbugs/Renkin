@@ -190,10 +190,7 @@ class IconDraftStateTest {
     @Test
     fun regenerateVector_noEditAndDefaultScale_skipsTheBuilder() = runBlocking {
         val vector = FakeIcon()
-        val draft = IconDraftState(null).apply {
-            vectorIcon = vector
-            origin = IconOrigin.VECTOR
-        }
+        val draft = IconDraftState(null).apply { selectVector(vector) }
         val builder = FakeBuilder(modifierResult = FakeIcon())
 
         draft.regenerateVector(builder, options(imageEdit = ImageEdit.NONE, iconScale = 1f))
@@ -207,10 +204,7 @@ class IconDraftStateTest {
     fun regenerateVector_withScaleChange_runsTheModifier() = runBlocking {
         val vector = FakeIcon()
         val modified = FakeIcon()
-        val draft = IconDraftState(null).apply {
-            vectorIcon = vector
-            origin = IconOrigin.VECTOR
-        }
+        val draft = IconDraftState(null).apply { selectVector(vector) }
         val builder = FakeBuilder(modifierResult = modified)
 
         draft.regenerateVector(builder, options(imageEdit = ImageEdit.NONE, iconScale = 0.8f))
@@ -224,10 +218,7 @@ class IconDraftStateTest {
     fun regenerateUpload_appliesModifierAndIsWhatUploadOriginConfirms() = runBlocking {
         val uploaded = FakeIcon()
         val modified = FakeIcon()
-        val draft = IconDraftState(null).apply {
-            uploadBase = uploaded
-            origin = IconOrigin.UPLOAD
-        }
+        val draft = IconDraftState(null).apply { selectUpload(uploaded) }
         val builder = FakeBuilder(modifierResult = modified)
 
         draft.regenerateUpload(builder, options())
@@ -240,26 +231,54 @@ class IconDraftStateTest {
     fun hasIcon_isTrueWhenAnyDraftSourceIsPresent() {
         assertFalse(IconDraftState(null).hasIcon)
         assertTrue(IconDraftState(FakeIcon()).hasIcon)
-        assertTrue(IconDraftState(null).apply { uploadBase = FakeIcon() }.hasIcon)
-        assertTrue(IconDraftState(null).apply { vectorIcon = FakeIcon() }.hasIcon)
+        assertTrue(IconDraftState(null).apply { selectUpload(FakeIcon()) }.hasIcon)
+        assertTrue(IconDraftState(null).apply { selectVector(FakeIcon()) }.hasIcon)
     }
 
     @Test
-    fun iconToConfirm_uploadOrigin_fallsBackToCreateIconWhenNoUpload() {
+    fun selectUpload_forgetsThePreviousCreateDraft() {
         val create = FakeIcon()
-        val draft = IconDraftState(create).apply { origin = IconOrigin.UPLOAD }
-        // No upload generated yet → confirm keeps the create-tab icon rather than null.
-        assertSame(create, draft.iconToConfirm)
+        val upload = FakeIcon()
+        val draft = IconDraftState(create)
+
+        draft.selectUpload(upload)
+
+        assertEquals(IconOrigin.UPLOAD, draft.origin)
+        assertSame(upload, draft.uploadBase)
+        assertNull(draft.createIcon)
+    }
+
+    @Test
+    fun selectVector_forgetsThePreviousUploadDraft() {
+        val upload = FakeIcon()
+        val vector = FakeIcon()
+        val draft = IconDraftState(null).apply { selectUpload(upload) }
+
+        draft.selectVector(vector)
+
+        assertEquals(IconOrigin.VECTOR, draft.origin)
+        assertSame(vector, draft.vectorIcon)
+        assertNull(draft.uploadBase)
+    }
+
+    @Test
+    fun selectCreate_forgetsUploadAndVectorDrafts() {
+        val draft = IconDraftState(null).apply { selectUpload(FakeIcon()) }
+        draft.selectVector(FakeIcon())
+
+        draft.selectCreate()
+
+        assertEquals(IconOrigin.CREATE, draft.origin)
+        assertNull(draft.uploadBase)
+        assertNull(draft.vectorIcon)
+        assertNull(draft.iconToConfirm)
     }
 
     @Test
     fun cancelledUploadGeneration_clearsLoadingState() = runBlocking {
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
-        val draft = IconDraftState(null).apply {
-            uploadBase = FakeIcon()
-            origin = IconOrigin.UPLOAD
-        }
+        val draft = IconDraftState(null).apply { selectUpload(FakeIcon()) }
         val builder = FakeBuilder(modifierStarted = started, modifierRelease = release)
 
         val job = launch { draft.regenerateUpload(builder, options()) }

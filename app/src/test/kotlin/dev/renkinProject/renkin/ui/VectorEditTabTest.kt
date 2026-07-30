@@ -7,7 +7,9 @@ import androidx.compose.ui.graphics.vector.PathData
 import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.unit.dp
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class VectorEditTabTest {
@@ -56,5 +58,25 @@ class VectorEditTabTest {
         assertNull(rebuilt.fill)
         assertEquals(Color.White, (rebuilt.stroke as SolidColor).value)
         assertEquals(2f, rebuilt.strokeLineWidth, 0.001f)
+    }
+
+    @Test
+    fun reset_dropsThePreviousVectorSession() {
+        val state = VectorEditState().apply {
+            thickness = 2f
+            automaticallyCenter = false
+            initialized = true
+            viewportOverride = 24f to 48f
+            sourceUrl = "https://example.test/icon.svg"
+        }
+
+        state.reset()
+
+        assertTrue(state.entries.isEmpty())
+        assertEquals(1f, state.thickness, 0.001f)
+        assertTrue(state.automaticallyCenter)
+        assertFalse(state.initialized)
+        assertNull(state.viewportOverride)
+        assertNull(state.sourceUrl)
     }
 }

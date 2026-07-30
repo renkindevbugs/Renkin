@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.toArgb
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
@@ -35,13 +36,16 @@ internal data class ModifierPreviews(
 internal fun rememberModifierPreviews(
     options: GenerationOptions,
     adjustments: AdjustmentState,
+    // Options do not identify an explicitly picked drawable. Keep the source separate so choosing
+    // another icon in the same pack refreshes the segment/background picker base as well.
+    sourceKey: Any?,
     render: suspend (GenerationOptions) -> Bitmap?
 ): ModifierPreviews {
     val currentRender by rememberUpdatedState(render)
     val currentOptions by rememberUpdatedState(options)
     var colorizeBase by remember { mutableStateOf<Bitmap?>(null) }
 
-    LaunchedEffect(options) {
+    LaunchedEffect(options, sourceKey) {
         colorizeBase = currentRender(
             options.copy(
                 // Colourize runs BEFORE scale/offset/shape/outline, so the picker must cluster
@@ -90,6 +94,55 @@ internal fun rememberModifierPreviews(
         )
     }
 }
+
+/**
+ * Applies the Modifier tab's shared state to source-specific [GenerationOptions]. Keeping this
+ * mapping in one place prevents the regular and Global per-icon editors from silently supporting
+ * different controls when a new adjustment is added.
+ */
+internal fun GenerationOptions.withModifierAdjustments(
+    adjustments: AdjustmentState,
+    imageEdit: ImageEdit,
+    outlineEraseMask: Bitmap?
+): GenerationOptions = copy(
+    primaryImageEdit = imageEdit,
+    edgeLowThreshold = adjustments.edgeThreshold,
+    edgeHighThreshold = adjustments.edgeThreshold * 3f,
+    edgeGaussianRadius = adjustments.edgeSmoothing,
+    edgeContrastNormalized = adjustments.edgeContrast,
+    iconScale = adjustments.iconScale,
+    bgRemovalTargets = adjustments.bgRemovalTargets,
+    bgRemovalTolerance = adjustments.bgRemovalTolerance,
+    iconOffsetX = adjustments.iconOffsetX,
+    iconOffsetY = adjustments.iconOffsetY,
+    colorizeFlat = adjustments.colorizeFlat,
+    colorizeMonochrome = adjustments.colorizeMonochrome,
+    colorizeInverse = adjustments.colorizeInverse,
+    colorizerMode = adjustments.colorizerMode,
+    colorizerGradientType = adjustments.colorizerGradientType,
+    colorizerGradientColors = adjustments.colorizerGradientColors,
+    colorizerGradientAngle = adjustments.colorizerGradientAngle,
+    // Layers only apply to the segment modifier; plain Colorize always paints the whole icon.
+    colorizeLayers = if (imageEdit == ImageEdit.COLORIZE_SEGMENTS) {
+        adjustments.colorizeLayers
+    } else {
+        emptyList()
+    },
+    iconShape = adjustments.iconShape,
+    iconShapeCrop = adjustments.shapeCrop,
+    iconShapeScale = adjustments.shapeScale,
+    outlineMode = adjustments.outlineMode,
+    outlineWidth = adjustments.outlineWidth,
+    outlineColor = adjustments.outlineColor.toArgb(),
+    outlineStyle = ColorizerStyle(
+        mode = adjustments.outlineColorizerMode,
+        gradientType = adjustments.outlineGradientType,
+        firstColor = adjustments.outlineColor.toArgb(),
+        gradientStops = adjustments.outlineGradientColors,
+        gradientAngle = adjustments.outlineGradientAngle
+    ),
+    outlineEraseMask = outlineEraseMask
+)
 
 /** The options with [style] substituted for the colourize settings. */
 internal fun GenerationOptions.withColorizerStyle(style: ColorizerStyle): GenerationOptions = copy(
