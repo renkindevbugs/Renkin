@@ -21,6 +21,9 @@ internal const val ADAPTIVE_ICON_SCALE = 1.5f // 108dp / 72dp
  * bitmap ([toBitmap]). Adaptive foregrounds (e.g. the monochrome variant) keep their artwork in
  * the inner safe zone, which the launcher zooms into — the flat preview doesn't, so it would look
  * too small; this scales the preview to match without affecting what the launcher receives.
+ *
+ * [browserPreviewBitmap] belongs exclusively to icon-pack browser tiles. General UI previews must
+ * paint [drawable] so the comparison header shows the same pixels that Apply persists and exports.
  */
 class BitmapIconDrawable(
     val drawable: BitmapDrawable,
@@ -89,7 +92,7 @@ class BitmapIconDrawable(
 
     @Composable
     override fun getPainter(): Painter {
-        val previewBitmap = browserPreviewBitmap ?: drawable.bitmap
+        val previewBitmap = inAppPreviewBitmap()
         val bitmap = if (previewScale != 1f) {
             remember(previewBitmap, previewScale) { previewBitmap.scaleFromCenter(previewScale) }
         } else {
@@ -97,6 +100,8 @@ class BitmapIconDrawable(
         }
         return BitmapPainter(bitmap.asImageBitmap())
     }
+
+    internal fun inAppPreviewBitmap(): Bitmap = drawable.bitmap
 
     override fun toBitmap(): Bitmap {
         return drawable.bitmap

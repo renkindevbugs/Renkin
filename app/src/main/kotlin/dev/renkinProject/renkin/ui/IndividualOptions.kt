@@ -507,64 +507,11 @@ fun OptionsDialog(
         }
         rendered?.toBitmap()
     }
-    val renderColorizePreview: suspend (ColorizerStyle) -> Bitmap? = { style ->
-        renderPreviewWith(
-            generatingOptions.copy(
-                primaryImageEdit = ImageEdit.COLORIZE,
-                color = style.firstColor,
-                colorizeFlat = style.flat,
-                colorizeMonochrome = style.monochrome,
-                colorizeInverse = style.inverse,
-                colorizerMode = style.mode,
-                colorizerGradientType = style.gradientType,
-                colorizerGradientColors = style.gradientStops,
-                colorizerGradientAngle = style.gradientAngle,
-                colorizeLayers = emptyList()
-            )
-        )
-    }
-    // Previews the whole layer stack of the segment modifier, with [draft] standing in for the
-    // layer being edited so the sheet shows the layer in the context of the others.
-    val renderLayersPreview: suspend (Int, ColorizerStyle) -> Bitmap? = { index, draft ->
-        renderPreviewWith(
-            generatingOptions.copy(
-                primaryImageEdit = ImageEdit.COLORIZE_SEGMENTS,
-                colorizeLayers = adjustments.colorizeLayers.mapIndexed { i, layer ->
-                    if (i == index) layer.copy(style = draft) else layer
-                }
-            )
-        )
-    }
-    // The icon with every modifier EXCEPT colourize, so segment colours match what the
-    // generator will actually see when it colourizes.
-    var colorizeBaseBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    LaunchedEffect(generatingOptions, customIconList) {
-        colorizeBaseBitmap = renderPreviewWith(
-            generatingOptions.copy(
-                primaryImageEdit = ImageEdit.NONE,
-                // Colourize runs BEFORE scale/offset/shape/outline, so the picker must cluster
-                // the artwork without them — an outline or shape plate would otherwise offer a
-                // colour that does not exist yet when the pick is applied.
-                iconScale = 1f,
-                iconOffsetX = 0f,
-                iconOffsetY = 0f,
-                iconShape = IconShape.NONE,
-                outlineMode = OutlineMode.NONE,
-                outlineEraseMask = null
-            )
-        )
-    }
-    val renderOutlinePreview: suspend (ColorizerStyle) -> Bitmap? = { style ->
-        renderPreviewWith(
-            generatingOptions.copy(
-                // The outline is only visible once it is actually being drawn.
-                outlineMode = adjustments.outlineMode.takeIf { it != OutlineMode.NONE }
-                    ?: OutlineMode.ADD,
-                outlineColor = style.firstColor,
-                outlineStyle = style
-            )
-        )
-    }
+    val modifierPreviews = rememberModifierPreviews(
+        options = generatingOptions,
+        adjustments = adjustments,
+        render = renderPreviewWith
+    )
 
     // Regenerate the preview when the options (or the explicit pick) change. The heavy work
     // hops to Dispatchers.Default inside the view model; the holder drives the spinner.
@@ -777,10 +724,7 @@ fun OptionsDialog(
                                 centerPreview = remember(draft.iconToConfirm) { draft.iconToConfirm?.toBitmap() },
                                 previewGenerating = draft.generating,
                                 sampleBitmap = heroBitmap,
-                                renderColorizePreview = renderColorizePreview,
-                                renderOutlinePreview = renderOutlinePreview,
-                                renderLayersPreview = renderLayersPreview,
-                                colorizeBaseBitmap = colorizeBaseBitmap,
+                                previews = modifierPreviews,
                                 materialYouPackAdjustments =
                                     materialYouPackAdjustments.takeIf { selectedMaterialYouPackIcon },
                                 materialYouSchemes = materialYouSchemes,

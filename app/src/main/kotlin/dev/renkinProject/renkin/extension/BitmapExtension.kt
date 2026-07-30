@@ -33,6 +33,16 @@ inline fun newArgbBitmap(width: Int, height: Int, draw: (Canvas) -> Unit): Bitma
  * colour jump) stops the fill, so the inner artwork survives. [tolerance] is 0..1, a fraction of the
  * max RGB distance. Returns the original when there's no opaque content reachable from the border.
  */
+// How densely the inferred background colour must fill its own bounding box to count as a
+// background rather than artwork. A plate or frame is near-solid; Lawnicons-style strokes cover a
+// small fraction of the box they span.
+private const val MIN_BACKGROUND_DENSITY = 0.5f
+
+// A result keeping less than this share of the original artwork means the flood found no
+// background at all and ate the icon instead (line art such as Lawnicons, or a bare adaptive
+// foreground). Such a result is discarded — a plate still leaves its glyph well above this.
+private const val MIN_SURVIVING_SHARE = 0.02f
+
 fun Bitmap.removeBackground(tolerance: Float): Bitmap {
     val w = width
     val h = height
@@ -76,6 +86,30 @@ fun Bitmap.removeBackground(tolerance: Float): Bitmap {
     if (shoreline.isEmpty()) return this
 
     val ref = shoreline.maxByOrNull { it.value }!!.key
+    // A background fills an area; line art does not. Measure how densely the inferred background
+    // colour fills its own bounding box — a plate or frame packs it, strokes leave it mostly
+    // empty — and strip nothing when the icon simply has no background to begin with.
+    run {
+        val refR0 = (ref shr 16) and 0xFF
+        val refG0 = (ref shr 8) and 0xFF
+        val refB0 = ref and 0xFF
+        var left = w; var top = h; var right = -1; var bottom = -1; var matching = 0
+        for (y in 0 until h) {
+            for (x in 0 until w) {
+                val c = pixels[y * w + x]
+                if (isTransparent(c) || distSq(c, refR0, refG0, refB0) > thresholdSq) continue
+                matching++
+                if (x < left) left = x
+                if (x > right) right = x
+                if (y < top) top = y
+                if (y > bottom) bottom = y
+            }
+        }
+        if (right >= left && bottom >= top) {
+            val area = (right - left + 1) * (bottom - top + 1)
+            if (matching.toFloat() / area < MIN_BACKGROUND_DENSITY) return this
+        }
+    }
     val refR = (ref shr 16) and 0xFF
     val refG = (ref shr 8) and 0xFF
     val refB = ref and 0xFF
@@ -111,6 +145,18 @@ fun Bitmap.removeBackground(tolerance: Float): Bitmap {
         if (x < w - 1) consider(i + 1, rr, rg, rb)
         if (i >= w) consider(i - w, rr, rg, rb)
         if (i < (h - 1) * w) consider(i + w, rr, rg, rb)
+    }
+
+    // Sanity check: line art on transparency has no background, so the flood starts ON the
+    // artwork and wipes it. Keep the icon rather than hand back an empty tile.
+    var originalOpaque = 0
+    var survivingOpaque = 0
+    for (i in pixels.indices) {
+        if (!isTransparent(pixels[i])) originalOpaque++
+        if (!isTransparent(out[i])) survivingOpaque++
+    }
+    if (originalOpaque > 0 && survivingOpaque.toFloat() / originalOpaque < MIN_SURVIVING_SHARE) {
+        return this
     }
 
     return Bitmap.createBitmap(out, w, h, Bitmap.Config.ARGB_8888)

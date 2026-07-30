@@ -57,6 +57,26 @@ class BitmapExtensionTest {
     }
 
     @Test
+    fun removeBackground_lineArtWithoutABackgroundIsKept() {
+        // Lawnicons-style artwork: strokes on transparency. There is no background to strip, so
+        // the flood would otherwise start on the glyph itself and return an empty tile.
+        val t = 0
+        val w = 5; val h = 5
+        val px = intArrayOf(
+            t, t, blue, t, t,
+            t, t, blue, t, t,
+            blue, blue, blue, blue, blue,
+            t, t, blue, t, t,
+            t, t, blue, t, t,
+        )
+
+        val out = bitmapOf(w, h, px).removeBackground(0.1f).pixels()
+
+        assertEquals(blue, out[2 * w + 2])
+        assertEquals(blue, out[0 * w + 2])
+    }
+
+    @Test
     fun removeBackground_glyphTouchingEdgeSurvives() {
         // A red stripe that reaches the top/bottom edge must not be erased — only the blue is.
         val w = 3; val h = 3

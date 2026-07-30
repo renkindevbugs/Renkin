@@ -136,6 +136,7 @@ import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
+import android.graphics.Bitmap
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.IconShape
@@ -1387,6 +1388,7 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         edgeGaussianRadius = adjustments.edgeSmoothing,
         edgeContrastNormalized = adjustments.edgeContrast,
         iconScale = adjustments.iconScale,
+        bgRemovalTargets = adjustments.bgRemovalTargets,
         bgRemovalTolerance = adjustments.bgRemovalTolerance,
         iconOffsetX = adjustments.iconOffsetX,
         iconOffsetY = adjustments.iconOffsetY,
@@ -1397,6 +1399,10 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         colorizerGradientType = adjustments.colorizerGradientType,
         colorizerGradientColors = adjustments.colorizerGradientColors,
         colorizerGradientAngle = adjustments.colorizerGradientAngle,
+        // Layers only apply to the segment modifier; plain Colorize always paints it all.
+        colorizeLayers = if (imageEdit == ImageEdit.COLORIZE_SEGMENTS) {
+            adjustments.colorizeLayers
+        } else emptyList(),
         iconShape = adjustments.iconShape,
         iconShapeCrop = adjustments.shapeCrop,
         iconShapeScale = adjustments.shapeScale,
@@ -1415,7 +1421,23 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         }
     )
 
+    // The same pipeline the tile preview uses, so the colour sheets and segment pickers here
+    // behave exactly like the edit dialog's.
+    val renderWith: suspend (GenerationOptions) -> Bitmap? = { previewOptions ->
+        base?.let {
+            withContext(Dispatchers.Default) {
+                runCatching { viewModel.applyModifier(it, previewOptions).toBitmap() }.getOrNull()
+            }
+        }
+    }
+    val modifierPreviews = rememberModifierPreviews(
+        options = options,
+        adjustments = adjustments,
+        render = renderWith
+    )
+
     var preview by remember { mutableStateOf(base) }
+    var enlarged by remember { mutableStateOf(false) }
     var generating by remember { mutableStateOf(false) }
     // Skip the very first pass: an untouched run through applyModifier would needlessly
     // rasterise a stored vector icon, and Apply must stay disabled until an actual edit.
@@ -1516,11 +1538,18 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp)
                     )
-                    Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+                    // Same affordance as the edit dialog's New slot: tap to judge the result
+                    // at a size that actually shows the detail a launcher will.
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clickable(enabled = preview != null) { enlarged = true },
+                        contentAlignment = Alignment.Center
+                    ) {
                         preview?.let {
                             Image(
                                 painter = it.getPainter(),
-                                contentDescription = null,
+                                contentDescription = stringResource(R.string.iconNew),
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(IconTileShape)
@@ -1531,6 +1560,7 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                         }
                     }
                 }
+                preview?.takeIf { enlarged }?.let { EnlargedIconDialog(it) { enlarged = false } }
                 HorizontalDivider()
 
                 ModifierTab(
@@ -1543,6 +1573,7 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                     centerPreview = remember(preview) { preview?.toBitmap() },
                     previewGenerating = generating,
                     sampleBitmap = heroBitmap,
+                    previews = modifierPreviews,
                     onImageEditChange = { imageEdit = it },
                     onColorChange = { iconColor = it },
                     onVectorChange = { useVector = it },
