@@ -40,6 +40,8 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -63,12 +65,33 @@ interface IconPreviewBuilder {
     suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable
 }
 
+/**
+ * Outcome of a hand-picked icon assignment. Callers that act on the result afterwards (the
+ * icon-watch modal deletes the rule) must be able to tell "applied" from "nothing happened".
+ */
+enum class IconApplyResult {
+    APPLIED,
+    /** The pick's true origin is a pack this device doesn't own — withheld. */
+    LOCKED,
+    /** The target row was gone by the time the icon finished rendering. */
+    TARGET_GONE,
+    /** Another watch deep-link switched profiles while this suggestion was being applied. */
+    PROFILE_CHANGED,
+    /** Rendering or source resolution failed; the watch rule must stay available to retry. */
+    FAILED
+}
+
 @HiltViewModel
 class MainViewModel @Inject constructor(
     application: Application,
     private val appProvider: ApplicationProvider,
     private val watchRepo: WatchRepository
 ) : AndroidViewModel(application), IconPreviewBuilder {
+    /**
+     * Keeps profile-session bookkeeping on the same side of a profile switch as the provider
+     * operation that changed the icon. The provider separately protects its live icon list.
+     */
+    private val profileSessionOperations = Mutex()
 
     // One shared manager for the pack-preview lookups, instead of a fresh instance per call.
     private val appMan by lazy { ApplicationManager(getApplication()) }
@@ -163,7 +186,7 @@ class MainViewModel @Inject constructor(
                 return@launch
             }
             if (profileId != appProvider.activeProfileId) {
-                performSwitch(profileId, saveFirst = hasUnsavedChanges())
+                performSwitch(profileId, saveFirst = false, saveIfChanged = true)
             }
             pendingWatchSuggestionId = suggestionId
         }
@@ -250,6 +273,7 @@ class MainViewModel @Inject constructor(
         isRefreshing = true
         viewModelScope.launch {
             try {
+                val profileId = appProvider.activeProfileId
                 val preferences = getApplication<Application>().dataStore
                     .getPreferencesAfterPendingWrites()
                 val iconPackageName = preferences.getStringValue(PrimaryIconPackKey)
@@ -259,7 +283,10 @@ class MainViewModel @Inject constructor(
                 }
                 // Icons whose real origin (via an own pack used as source) isn't owned on
                 // this device are withheld — say so instead of leaving silent empty slots.
-                if (appProvider.refreshIcons(preferences) > 0) {
+                val withheld = appProvider.refreshIcons(profileId)
+                if (withheld == null) {
+                    _toastEvents.trySend(R.string.profileStillLoading)
+                } else if (withheld > 0) {
                     _toastEvents.trySend(R.string.refreshLockedSkipped)
                 }
             } finally {
@@ -436,6 +463,44 @@ class MainViewModel @Inject constructor(
             // Hand-picked icons are locked immediately: a refresh never replaces them.
             live.changeExport(rendered, sourcePackName = origin, isRefreshMade = false, isCustom = true, isLegacy = false, baseIcon = icon)
         }
+
+    /**
+     * Same assignment as [applyIcon], but awaited and reporting its outcome. The icon-watch
+     * apply modal deletes the rule (which cascades the suggestion) once the icon is applied —
+     * fire-and-forget would drop the rule even when the target row was gone and nothing landed.
+     */
+    suspend fun applyWatchIcon(
+        expectedProfileId: Long,
+        app: PackageInfoStruct,
+        icon: IconPackDrawable,
+        sourcePackName: String?
+    ): IconApplyResult {
+        return try {
+            profileSessionOperations.withLock {
+                when (
+                    appProvider.applyWatchIcon(
+                        expectedProfileId,
+                        app,
+                        icon,
+                        sourcePackName
+                    )
+                ) {
+                    ApplicationProvider.WatchIconApplyResult.APPLIED -> {
+                        markUpdated(app, icon)
+                        IconApplyResult.APPLIED
+                    }
+                    ApplicationProvider.WatchIconApplyResult.LOCKED -> IconApplyResult.LOCKED
+                    ApplicationProvider.WatchIconApplyResult.TARGET_GONE -> IconApplyResult.TARGET_GONE
+                    ApplicationProvider.WatchIconApplyResult.PROFILE_CHANGED -> IconApplyResult.PROFILE_CHANGED
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.error("MainViewModel", "Could not apply watched icon", error)
+            IconApplyResult.FAILED
+        }
+    }
 
     /**
      * Restores one app to its launcher default. Unlike assigning a null icon generically, this
@@ -672,10 +737,21 @@ class MainViewModel @Inject constructor(
     }
 
     /** Saves the active profile if asked, switches to [id], and refreshes the baselines. */
-    private suspend fun performSwitch(id: Long, saveFirst: Boolean) {
-        if (saveFirst) appProvider.saveActiveProfileIcons()
-        appProvider.switchProfile(id)
-        resetChangeBaselines()
+    private suspend fun performSwitch(
+        id: Long,
+        saveFirst: Boolean,
+        saveIfChanged: Boolean = false
+    ) {
+        profileSessionOperations.withLock {
+            // Notification-driven switches automatically preserve unsaved work. Evaluate this
+            // only after waiting for an in-flight watch apply, otherwise a freshly applied icon
+            // could land after the earlier check and then be discarded by this switch.
+            if (saveFirst || (saveIfChanged && hasUnsavedChanges())) {
+                appProvider.saveActiveProfileIcons()
+            }
+            appProvider.switchProfile(id)
+            resetChangeBaselines()
+        }
         refreshMissingPacks()
     }
 
@@ -861,8 +937,17 @@ class MainViewModel @Inject constructor(
         // app start and by the periodic watch worker when offline now). Free verdicts
         // unlock icons, so reload when something got decided.
         if (runCatching { appProvider.verifyPendingVerdicts() }.getOrDefault(false)) {
-            appProvider.reloadActiveProfile()
-            resetChangeBaselines()
+            when (result.kind) {
+                // The backup already replaced everything, so there is no session to keep.
+                BackupManager.ImportKind.BACKUP -> {
+                    appProvider.reloadActiveProfile()
+                    resetChangeBaselines()
+                }
+                // A shared profile lands beside the active one. Its verdicts matter when that
+                // profile is entered; reloading the current session here would risk discarding
+                // or cross-merging unrelated unsaved work.
+                BackupManager.ImportKind.PROFILE -> Unit
+            }
             refreshMissingPacks(prompt = false)
         }
     }
