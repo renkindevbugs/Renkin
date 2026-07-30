@@ -70,6 +70,9 @@ fun ProfileSwitcherTitle() {
     val activeId = viewModel.activeProfileId
     val active = profiles.find { it.id == activeId }
 
+    val toaster = LocalToaster.current
+    val refreshInProgress = stringResource(R.string.iconsStillGenerated)
+
     var menuOpen by remember { mutableStateOf(false) }
     var createOpen by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Profile?>(null) }
@@ -200,6 +203,12 @@ fun ProfileSwitcherTitle() {
                     onClick = {
                         menuOpen = false
                         if (profile.id != activeId) {
+                            // A running refresh holds the profile gate, so the switch would sit
+                            // there without any sign of it — say what's happening instead.
+                            if (viewModel.isRefreshing) {
+                                toaster.show(refreshInProgress)
+                                return@DropdownMenuItem
+                            }
                             // Unsaved work on the current profile? Offer to save it first.
                             if (viewModel.hasUnsavedChanges()) pendingSwitch = profile.id
                             else viewModel.switchProfile(profile.id)

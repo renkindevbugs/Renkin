@@ -28,6 +28,7 @@ import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getDefaultBackgroundColor
 import dev.renkinProject.renkin.data.getDefaultIconColor
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.persistGlobalModifierPrefs
 import dev.renkinProject.renkin.data.restoreBuiltPrimarySource
@@ -261,37 +262,87 @@ class ApplicationProvider(private val context: Context) {
 
     /** Regenerates all icons. Returns how many were withheld because their real origin
      * (recorded by an own pack used as source) is a pack this device doesn't own. */
-    suspend fun refreshIcons(preferences: Preferences): Int = withContext(Dispatchers.Default) {
-        var opt = GenerationOptions.fromPreferences(preferences, context)
-        // Themed icons on Android 12+ are recoloured with the system dynamic palette
-        if (opt.themed && supportDynamicColors()) {
-            opt = opt.copy(
-                color = context.resources.getColor(R.color.icon_color, null),
-                bgColor = context.resources.getColor(R.color.icon_background_color, null)
-            )
-        }
-
-        // Iterate a snapshot copy: the callback edits the live list in place, and iterating
-        // the SnapshotStateList itself while mutating it would throw.
-        // Apps whose icon is locked behind a missing pack look empty but must not be
-        // silently refilled — the original would be lost on save. The explicit "Refresh
-        // replaces existing icons" switch bypasses this like every other lock.
-        val targets = if (preferences.getBooleanValue(OverrideIconKey)) applicationList.toList()
-            else applicationList.toList().filter { it.key !in lockManager.lockedKeys }
-        val lockedOrigins = lockManager.lockedOriginsFor(opt)
-        val modifierOptions = modifierFor(preferences, apply = preferences.getBooleanValue(GlobalApplyGeneratedKey, true))
-        var withheld = 0
-        iconGenService.refreshIcons(targets, opt, modifierOptions) { application, base, rendered, isFallback, sourcePack ->
-            val origin = lockManager.resolveOrigin(application.key, sourcePack) ?: sourcePack
-            if (rendered != null && origin in lockedOrigins) {
-                // An own pack used as source handed out an icon whose real origin isn't
-                // owned on this device — withhold it (the slot stays empty).
-                withheld++
-            } else {
-                editApplication(application, application.changeExport(rendered, isFallback, origin, isRefreshMade = true, isCustom = false, isLegacy = false, baseIcon = base))
+    suspend fun refreshIcons(expectedProfileId: Long): Int? = withContext(Dispatchers.Default) {
+        // The preferences recipe and applicationList must belong to the same profile: a switch
+        // landing between them would pair A's settings with B's list, and its wholesale list
+        // swap would fight the per-app edits below. Read both under the switchProfile gate.
+        profileOperations.run {
+            if (activeProfileId != expectedProfileId) return@run null
+            val preferences = context.dataStore.getPreferencesAfterPendingWrites()
+            var opt = GenerationOptions.fromPreferences(preferences, context)
+            // Themed icons on Android 12+ are recoloured with the system dynamic palette
+            if (opt.themed && supportDynamicColors()) {
+                opt = opt.copy(
+                    color = context.resources.getColor(R.color.icon_color, null),
+                    bgColor = context.resources.getColor(R.color.icon_background_color, null)
+                )
             }
+
+            // Iterate a snapshot copy: the callback edits the live list in place, and iterating
+            // the SnapshotStateList itself while mutating it would throw.
+            // Apps whose icon is locked behind a missing pack look empty but must not be
+            // silently refilled — the original would be lost on save. The explicit "Refresh
+            // replaces existing icons" switch bypasses this like every other lock.
+            val targets = if (preferences.getBooleanValue(OverrideIconKey)) applicationList.toList()
+                else applicationList.toList().filter { it.key !in lockManager.lockedKeys }
+            val lockedOrigins = lockManager.lockedOriginsFor(opt)
+            val modifierOptions = modifierFor(preferences, apply = preferences.getBooleanValue(GlobalApplyGeneratedKey, true))
+            var withheld = 0
+            iconGenService.refreshIcons(targets, opt, modifierOptions) { application, base, rendered, isFallback, sourcePack ->
+                val origin = lockManager.resolveOrigin(application.key, sourcePack) ?: sourcePack
+                if (rendered != null && origin in lockedOrigins) {
+                    // An own pack used as source handed out an icon whose real origin isn't
+                    // owned on this device — withhold it (the slot stays empty).
+                    withheld++
+                } else {
+                    editApplication(application, application.changeExport(rendered, isFallback, origin, isRefreshMade = true, isCustom = false, isLegacy = false, baseIcon = base))
+                }
+            }
+            withheld
         }
-        withheld
+    }
+
+    enum class WatchIconApplyResult {
+        APPLIED,
+        LOCKED,
+        TARGET_GONE,
+        PROFILE_CHANGED
+    }
+
+    /**
+     * Applies a watched icon only to the profile that opened its suggestion. Resolving the true
+     * source, rendering and editing the live row stay under one profile operation so a second
+     * notification cannot switch sessions between those steps.
+     */
+    suspend fun applyWatchIcon(
+        expectedProfileId: Long,
+        application: PackageInfoStruct,
+        icon: IconPackDrawable,
+        sourcePackName: String?
+    ): WatchIconApplyResult = withContext(Dispatchers.Default) {
+        profileOperations.run {
+            if (activeProfileId != expectedProfileId) return@run WatchIconApplyResult.PROFILE_CHANGED
+            val preferences = context.dataStore.getPreferencesAfterPendingWrites()
+            val (origin, locked) = lockManager.resolvePickedSource(application.key, sourcePackName)
+            if (locked) return@run WatchIconApplyResult.LOCKED
+            val rendered = renderCustomIcon(icon, preferences)
+            val index = applicationList.indexOfFirst { it.key == application.key }
+            if (index < 0) return@run WatchIconApplyResult.TARGET_GONE
+            applicationList[index].let { live ->
+                editApplication(
+                    index,
+                    live.changeExport(
+                        rendered,
+                        sourcePackName = origin,
+                        isRefreshMade = false,
+                        isCustom = true,
+                        isLegacy = false,
+                        baseIcon = icon
+                    )
+                )
+            }
+            WatchIconApplyResult.APPLIED
+        }
     }
 
     suspend fun getIcon(application: PackageInfoStruct, options: GenerationOptions, customIcon: ResourceDrawable? = null): IconPackDrawable? =
