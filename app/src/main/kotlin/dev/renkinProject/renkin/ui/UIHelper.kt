@@ -279,13 +279,30 @@ fun boldStringResource(@StringRes id: Int, vararg formatArgs: Any): AnnotatedStr
  */
 @Composable
 fun LinkText(text: String, url: String, modifier: Modifier = Modifier) {
-    val uriHandler = LocalUriHandler.current
+    val openLink = rememberLinkOpener()
     Text(
         text = text,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.primary,
-        modifier = modifier.clickable(role = Role.Button) { uriHandler.openUri(url) }
+        modifier = modifier.clickable(role = Role.Button) { openLink(url) }
     )
+}
+
+/**
+ * Opens a web link, reporting failure as a toast instead of crashing. A browser is the norm but
+ * not a guarantee — stripped ROMs and locked-down work profiles can have no handler, and
+ * `openUri` throws when nothing resolves.
+ */
+@Composable
+fun rememberLinkOpener(): (String) -> Unit {
+    val uriHandler = LocalUriHandler.current
+    val toaster = LocalToaster.current
+    val failed = stringResource(R.string.linkOpenFailed)
+    return remember(uriHandler, toaster, failed) {
+        { url: String ->
+            if (runCatching { uriHandler.openUri(url) }.isFailure) toaster.show(failed)
+        }
+    }
 }
 
 /**

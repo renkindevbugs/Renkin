@@ -280,6 +280,7 @@ private fun CrashLogDetailDialog(
     val clipboard = LocalClipboardManager.current
     val toaster = LocalToaster.current
     val copiedMessage = stringResource(R.string.crashLogCopied)
+    val shareFailedMessage = stringResource(R.string.shareFailed)
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -324,7 +325,9 @@ private fun CrashLogDetailDialog(
                     }) {
                         Icon(Icons.Filled.ContentCopy, stringResource(R.string.crashCopyLog))
                     }
-                    IconButton(onClick = { shareCrash(context, entry.text) }) {
+                    IconButton(onClick = {
+                        if (!shareCrash(context, entry.text)) toaster.show(shareFailedMessage)
+                    }) {
                         Icon(Icons.Filled.Share, stringResource(R.string.crashLogShare))
                     }
                     IconButton(onClick = onDelete) {
@@ -344,14 +347,18 @@ private fun CrashLogDetailDialog(
     }
 }
 
-/** Opens the system share sheet with the crash text. */
-private fun shareCrash(context: android.content.Context, text: String) {
+/**
+ * Opens the system share sheet with the crash text. Returns false when nothing handled it —
+ * the chooser is a normal activity, so a stripped ROM or a restricted profile can leave it
+ * unresolvable, and an unhandled ActivityNotFoundException would take the app down.
+ */
+private fun shareCrash(context: android.content.Context, text: String): Boolean {
     val send = Intent(Intent.ACTION_SEND).apply {
         type = "text/plain"
         putExtra(Intent.EXTRA_SUBJECT, "Renkin crash log")
         putExtra(Intent.EXTRA_TEXT, text)
     }
-    context.startActivity(Intent.createChooser(send, null))
+    return runCatching { context.startActivity(Intent.createChooser(send, null)) }.isSuccess
 }
 
 private fun formatTimestamp(timestamp: Long): String =

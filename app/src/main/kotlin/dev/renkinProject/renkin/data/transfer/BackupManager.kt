@@ -452,6 +452,27 @@ private fun ZipOutputStream.putFileEntry(name: String, file: File) {
 /** Reads the CURRENT zip entry (ZipInputStream ends the stream at each entry boundary). */
 private fun ZipInputStream.readEntryText(): String = readBytes().toString(Charsets.UTF_8)
 
+/**
+ * Writes the current zip entry to [target] via a temporary file, so a failure part-way (a full
+ * disk, an I/O error) leaves the previous file intact instead of a truncated one. This matters
+ * most for the keystore: a half-written `renkinpack.keystore` cannot sign the packs the user
+ * already installed, and no earlier copy exists to fall back on.
+ *
+ * Note this makes each individual file safe, NOT the restore as a whole — the databases,
+ * preferences and the uploads gallery are still replaced in stages and a failure mid-restore
+ * leaves a partially restored app.
+ */
 private fun writeEntryTo(zip: ZipInputStream, target: File) {
-    target.outputStream().use { zip.copyTo(it) }
+    val temp = File(target.parentFile, "${target.name}.tmp")
+    try {
+        temp.outputStream().use { zip.copyTo(it) }
+        if (!temp.renameTo(target)) {
+            // Rename can fail if the target is held open; fall back to replacing in place.
+            temp.inputStream().use { source ->
+                target.outputStream().use { source.copyTo(it) }
+            }
+        }
+    } finally {
+        temp.delete()
+    }
 }
