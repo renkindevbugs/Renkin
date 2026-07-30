@@ -48,6 +48,8 @@ import dev.renkinProject.renkin.service.WatchWorker
 import dev.renkinProject.renkin.util.CrashReporter
 import dev.renkinProject.renkin.ui.*
 import dev.renkinProject.renkin.ui.theme.RenkinTheme
+import dev.renkinProject.renkin.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
@@ -59,6 +61,7 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "se
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     private val viewModel: MainViewModel by viewModels()
+    private var consumedSharedImageUri: String? = null
 
     // Activity-scoped (not remember-ed in composition) so non-compose code — e.g. the share
     // receiver in handleSharedImage — can queue toasts through the same single ToastHost.
@@ -66,6 +69,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        consumedSharedImageUri = savedInstanceState?.getString(STATE_CONSUMED_SHARED_IMAGE_URI)
 
         // Instantiate the view model now, on the main thread, before setContent. This forces
         // its ApplicationProvider — and the Compose snapshot state that provider holds
@@ -157,9 +161,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onSaveInstanceState(outState: Bundle) {
+        consumedSharedImageUri?.let { outState.putString(STATE_CONSUMED_SHARED_IMAGE_URI, it) }
+        super.onSaveInstanceState(outState)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        // A newly delivered SEND is a new user action even when it points to the same URI.
+        consumedSharedImageUri = null
         handleWatchIntent(intent)
         handleSharedImage(intent)
     }
@@ -207,11 +218,32 @@ class MainActivity : ComponentActivity() {
         if (intent?.action != Intent.ACTION_SEND) return
         if (intent.type?.startsWith("image/") != true) return
         val uri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java) ?: return
+        // Activity state survives both configuration changes and process restoration; mutating an
+        // incoming Intent extra does not reliably survive the latter.
+        val uriKey = uri.toString()
+        if (consumedSharedImageUri == uriKey) return
+        consumedSharedImageUri = uriKey
 
         lifecycleScope.launch(Dispatchers.IO) {
-            val bitmap = getBitmapFromURI(applicationContext, uri) ?: return@launch
-            UploadedImageStore.save(applicationContext, bitmap)
-            toaster.show(getString(R.string.sharedImageAdded))
+            // A shared URI can be revoked, one-shot or served by a broken provider — the same
+            // failures the gallery import already tolerates. None of them may take the app down.
+            val added = try {
+                val bitmap = getBitmapFromURI(applicationContext, uri)
+                if (bitmap == null) {
+                    false
+                } else {
+                    UploadedImageStore.save(applicationContext, bitmap)
+                    true
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.error("MainActivity", "Cannot import the shared image", error)
+                false
+            }
+            toaster.show(
+                getString(if (added) R.string.sharedImageAdded else R.string.uploadImageError)
+            )
         }
     }
 
@@ -229,3 +261,5 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_SUGGESTION_ID = "watch_suggestion_id"
     }
 }
+
+private const val STATE_CONSUMED_SHARED_IMAGE_URI = "consumedSharedImageUri"
