@@ -2,6 +2,11 @@ package dev.renkinProject.renkin.ui
 
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 
+private data class AppNameSortEntry<T>(
+    val value: T,
+    val sortName: String
+)
+
 /**
  * The shared app search + filter + sort pipeline used by both the home app list and the watch
  * rule editor. Kept generic over the element type ([T]) via [selector] because the home list
@@ -37,7 +42,10 @@ fun <T> List<T>.sortedFilteredApps(
         else -> seq
     }
     return when (sortOrder) {
-        AppSortOrder.NAME -> seq.sortedBy { selector(it).appName.lowercase() }
+        AppSortOrder.NAME -> seq
+            .map { item -> AppNameSortEntry(item, selector(item).appName.lowercase()) }
+            .sortedBy { it.sortName }
+            .map { it.value }
         AppSortOrder.INSTALL_DATE -> seq.sortedByDescending { installTimes[selector(it).packageName] ?: 0L }
     }.toList()
 }

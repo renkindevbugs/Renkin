@@ -39,6 +39,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -81,6 +82,7 @@ import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setStringValue
+import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.GoldBase
 import dev.renkinProject.renkin.ui.theme.GoldShimmer
@@ -88,6 +90,43 @@ import dev.renkinProject.renkin.ui.theme.CardShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+internal data class HeroPackStats(
+    val builtCount: Int,
+    val addedCount: Int,
+    val removedCount: Int,
+    val themedCount: Int,
+    val totalCount: Int,
+    val fallbackCount: Int
+)
+
+internal fun calculateHeroPackStats(
+    apps: List<PackageInfoStruct>,
+    builtKeys: Set<String>
+): HeroPackStats {
+    var builtCount = 0
+    var addedCount = 0
+    var removedCount = 0
+    var fallbackCount = 0
+
+    apps.forEach { app ->
+        if (app.createdIcon != null) {
+            if (app.key in builtKeys) builtCount++ else addedCount++
+            if (app.isFallback) fallbackCount++
+        } else if (app.key in builtKeys) {
+            removedCount++
+        }
+    }
+
+    return HeroPackStats(
+        builtCount = builtCount,
+        addedCount = addedCount,
+        removedCount = removedCount,
+        themedCount = builtCount + addedCount,
+        totalCount = apps.size,
+        fallbackCount = fallbackCount
+    )
+}
 
 /**
  * The home screen's hero card: the primary icon source, front and centre, so a first-time user
@@ -110,14 +149,17 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
 
     // Completion progress (moved here from the options card): blue = already built, green =
     // added since (pending build), red = removed since.
-    val apps = viewModel.applicationList
-    val builtKeys = viewModel.builtKeys
-    val builtCount = apps.count { it.createdIcon != null && it.key in builtKeys }
-    val addedCount = apps.count { it.createdIcon != null && it.key !in builtKeys }
-    val removedCount = apps.count { it.createdIcon == null && it.key in builtKeys }
-    val themedCount = builtCount + addedCount
-    val totalCount = apps.size
-    val fallbackCount = apps.count { it.createdIcon != null && it.isFallback }
+    val stats by remember(viewModel) {
+        derivedStateOf {
+            calculateHeroPackStats(viewModel.applicationList, viewModel.builtKeys)
+        }
+    }
+    val builtCount = stats.builtCount
+    val addedCount = stats.addedCount
+    val removedCount = stats.removedCount
+    val themedCount = stats.themedCount
+    val totalCount = stats.totalCount
+    val fallbackCount = stats.fallbackCount
 
     var sheetOpen by remember { mutableStateOf(false) }
 

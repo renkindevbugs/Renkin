@@ -40,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,6 +71,47 @@ import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.ChangedOrange
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+
+internal data class BuildPreviewApps(
+    val applications: List<PackageInfoStruct>,
+    val newCount: Int
+)
+
+private data class BuildPreviewSortEntry(
+    val application: PackageInfoStruct,
+    val isNew: Boolean,
+    val isUpdated: Boolean,
+    val sortName: String
+)
+
+internal fun buildPreviewApps(
+    applications: List<PackageInfoStruct>,
+    builtKeys: Set<String>,
+    updatedKeys: Set<String>
+): BuildPreviewApps {
+    var newCount = 0
+    val sortedApps = applications.asSequence()
+        .filter { it.createdIcon != null }
+        .map { application ->
+            val isNew = application.key !in builtKeys
+            if (isNew) newCount++
+            BuildPreviewSortEntry(
+                application = application,
+                isNew = isNew,
+                isUpdated = application.key in updatedKeys,
+                sortName = application.appName.lowercase()
+            )
+        }
+        .sortedWith(
+            compareByDescending<BuildPreviewSortEntry> { it.isNew }
+                .thenByDescending { it.isUpdated }
+                .thenBy { it.sortName }
+        )
+        .map { it.application }
+        .toList()
+
+    return BuildPreviewApps(sortedApps, newCount)
+}
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -192,14 +234,13 @@ fun BuildPackPreviewContent(
     onBuild: () -> Unit
 ) {
     // Sort: new (never built) first → changed (edited this session) second → rest alphabetical.
-    val themedApps = applications
-        .filter { it.createdIcon != null }
-        .sortedWith(
-            compareByDescending<PackageInfoStruct> { it.key !in builtKeys }
-                .thenByDescending { it.key in updatedKeys }
-                .thenBy { it.appName.lowercase() }
-        )
-    val newCount = themedApps.count { it.key !in builtKeys }
+    val previewApps by remember(applications, builtKeys, updatedKeys) {
+        derivedStateOf {
+            buildPreviewApps(applications, builtKeys, updatedKeys)
+        }
+    }
+    val themedApps = previewApps.applications
+    val newCount = previewApps.newCount
 
     // Warn (before building) about calendar apps whose source pack lacks some 1..31 day
     // drawables — those days fall back to a repeated icon instead of rotating.
