@@ -222,10 +222,12 @@ class DataPreferencesTest {
                 gradientType = 1,
                 gradientAngle = 137,
                 firstColor = Color.Red,
-                gradientStops = listOf(android.graphics.Color.BLUE)
+                gradientStops = listOf(android.graphics.Color.BLUE),
+                gradientPositions = listOf(0f, 0.75f)
             )
             val saved = store.getPreferencesAfterPendingWrites()
 
+            assertEquals(listOf(0f, 0.75f), saved.getGradientPositions(ColorizerGradientPositionsKey))
             assertEquals(1, saved[ColorizerModeKey])
             assertEquals(1, saved[ColorizerGradientTypeKey])
             assertEquals(137, saved[ColorizerGradientAngleKey])

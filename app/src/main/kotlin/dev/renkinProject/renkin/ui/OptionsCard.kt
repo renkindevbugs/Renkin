@@ -71,6 +71,9 @@ import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
 import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
 import dev.renkinProject.renkin.data.getGradientStops
+import dev.renkinProject.renkin.data.getGradientPositions
+import dev.renkinProject.renkin.data.ColorizerGradientPositionsKey
+import dev.renkinProject.renkin.data.OutlineGradientPositionsKey
 import dev.renkinProject.renkin.data.ColorizerStyleKeys
 import dev.renkinProject.renkin.data.OutlineStyleKeys
 import dev.renkinProject.renkin.data.setColorStyle
@@ -220,6 +223,7 @@ fun AdvancedOptionsContent(
         prefs.getEnumValue(ColorizerGradientTypeKey, GradientType.LINEAR)
     val colorizerGradientColors =
         prefs.getGradientStops(ColorizerGradientColorsKey, ColorizerGradientColorKey)
+    val colorizerGradientPositions = prefs.getGradientPositions(ColorizerGradientPositionsKey)
     val colorizerGradientAngle =
         prefs.getIntValue(ColorizerGradientAngleKey).coerceIn(0, 360).toFloat()
     // Pack-wide outline: the same keys the Global options screen edits, surfaced here so the
@@ -233,6 +237,7 @@ fun AdvancedOptionsContent(
     val outlineGradientType = prefs.getEnumValue(OutlineGradientTypeKey, GradientType.LINEAR)
     val outlineGradientColors =
         prefs.getGradientStops(OutlineGradientColorsKey, OutlineColorKey)
+    val outlineGradientPositions = prefs.getGradientPositions(OutlineGradientPositionsKey)
     val outlineGradientAngle =
         prefs.getIntValue(OutlineGradientAngleKey).coerceIn(0, 360).toFloat()
 
@@ -377,6 +382,7 @@ fun AdvancedOptionsContent(
                             gradientType = colorizerGradientType,
                             firstColor = currentColor.toArgb(),
                             gradientStops = colorizerGradientColors,
+                            gradientPositions = colorizerGradientPositions,
                             gradientAngle = colorizerGradientAngle
                         )
                         ColorStyleCard(
@@ -400,7 +406,8 @@ fun AdvancedOptionsContent(
                                             gradientType = style.gradientType.ordinal,
                                             gradientAngle = style.gradientAngle.roundToInt(),
                                             firstColor = Color(style.firstColor),
-                                            gradientStops = style.gradientStops
+                                            gradientStops = style.gradientStops,
+                                            gradientPositions = style.gradientPositions
                                         )
                                     }
                                 }
@@ -439,6 +446,7 @@ fun AdvancedOptionsContent(
                             gradientType = outlineGradientType,
                             firstColor = outlineColor.toArgb(),
                             gradientStops = outlineGradientColors,
+                            gradientPositions = outlineGradientPositions,
                             gradientAngle = outlineGradientAngle
                         )
                         ColorStyleCard(
@@ -462,7 +470,8 @@ fun AdvancedOptionsContent(
                                             gradientType = style.gradientType.ordinal,
                                             gradientAngle = style.gradientAngle.roundToInt(),
                                             firstColor = Color(style.firstColor),
-                                            gradientStops = style.gradientStops
+                                            gradientStops = style.gradientStops,
+                                            gradientPositions = style.gradientPositions
                                         )
                                     }
                                 }

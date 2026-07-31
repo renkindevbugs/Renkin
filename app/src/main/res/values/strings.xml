@@ -249,10 +249,12 @@
     <string name="gradientAngle">Angle</string>
     <string name="gradientAddColor">Add color</string>
     <string name="gradientRemoveColor">Remove color</string>
-    <string name="gradientReorderColor">Reorder color</string>
-    <string name="gradientMoveUp">Move up</string>
-    <string name="gradientMoveDown">Move down</string>
-    <string name="gradientStopsHint">Drag the handle to reorder. Colors spread evenly.</string>
+    <string name="gradientStopsHint">Drag a handle to move a color. Tap the bar to add one, tap a circle to change it.</string>
+    <string name="gradientStopsFullHint">Four colors is the maximum. Remove one to add another.</string>
+    <string name="gradientStopHandle">Color %1$d position</string>
+    <string name="gradientStopMoveStart">Move towards the start</string>
+    <string name="gradientStopMoveEnd">Move towards the end</string>
+    <string name="gradientEditColor">Change color</string>
     <string name="inverseColors">Inverse colors</string>
     <string name="eyedropperHint">Or pick a colour straight from the app\'s icon — tap or drag on it.</string>
     <string name="optionsHint">These options apply to all apps at once. After changing them, tap the refresh button in the top bar to regenerate the icons.</string>

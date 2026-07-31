@@ -121,6 +121,7 @@ internal fun GenerationOptions.withModifierAdjustments(
     colorizerMode = adjustments.colorizerMode,
     colorizerGradientType = adjustments.colorizerGradientType,
     colorizerGradientColors = adjustments.colorizerGradientColors,
+    colorizerGradientPositions = adjustments.colorizerGradientPositions,
     colorizerGradientAngle = adjustments.colorizerGradientAngle,
     // Layers only apply to the segment modifier; plain Colorize always paints the whole icon.
     colorizeLayers = if (imageEdit == ImageEdit.COLORIZE_SEGMENTS) {
@@ -139,6 +140,7 @@ internal fun GenerationOptions.withModifierAdjustments(
         gradientType = adjustments.outlineGradientType,
         firstColor = adjustments.outlineColor.toArgb(),
         gradientStops = adjustments.outlineGradientColors,
+        gradientPositions = adjustments.outlineGradientPositions,
         gradientAngle = adjustments.outlineGradientAngle
     ),
     outlineEraseMask = outlineEraseMask
@@ -154,6 +156,7 @@ internal fun GenerationOptions.withColorizerStyle(style: ColorizerStyle): Genera
     colorizerMode = style.mode,
     colorizerGradientType = style.gradientType,
     colorizerGradientColors = style.gradientStops,
+    colorizerGradientPositions = style.gradientPositions,
     colorizerGradientAngle = style.gradientAngle,
     colorizeLayers = emptyList()
 )

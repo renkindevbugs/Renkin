@@ -960,7 +960,8 @@ class IconGenerator(
             options.colorizerGradientType,
             options.colorizerGradientAngle,
             icon.width,
-            icon.height
+            icon.height,
+            options.colorizerGradientPositions
         )
 
         val coloredIcon = icon.emptyLike()

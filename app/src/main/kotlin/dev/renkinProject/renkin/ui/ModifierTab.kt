@@ -109,6 +109,7 @@ internal class AdjustmentState {
     var colorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
     var colorizerGradientType by mutableStateOf(GradientType.LINEAR)
     var colorizerGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
+    var colorizerGradientPositions by mutableStateOf(emptyList<Float>())
     var colorizerGradientAngle by mutableFloatStateOf(0f)
     // Per-region colourize steps of the Colorize segments modifier, applied in order.
     var colorizeLayers by mutableStateOf(emptyList<SegmentLayer>())
@@ -136,6 +137,7 @@ internal class AdjustmentState {
     var outlineColorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
     var outlineGradientType by mutableStateOf(GradientType.LINEAR)
     var outlineGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
+    var outlineGradientPositions by mutableStateOf(emptyList<Float>())
     var outlineGradientAngle by mutableFloatStateOf(0f)
     // Eraser strokes masking where the outline must not apply. Deliberately NOT in [Saver]:
     // they're transient per-app geometry, and holding them out keeps the saver list flat.
@@ -163,6 +165,7 @@ internal class AdjustmentState {
                     "colorizerMode", it.colorizerMode.ordinal,
                     "colorizerGradientType", it.colorizerGradientType.ordinal,
                     "colorizerGradientColors", it.colorizerGradientColors,
+                    "colorizerGradientPositions", it.colorizerGradientPositions,
                     "colorizerGradientAngle", it.colorizerGradientAngle,
                     "colorizeLayers", it.colorizeLayers.map(SegmentLayer::encode),
                     "iconShape", it.iconShape.ordinal,
@@ -175,6 +178,7 @@ internal class AdjustmentState {
                     "outlineColorizerMode", it.outlineColorizerMode.ordinal,
                     "outlineGradientType", it.outlineGradientType.ordinal,
                     "outlineGradientColors", it.outlineGradientColors,
+                    "outlineGradientPositions", it.outlineGradientPositions,
                     "outlineGradientAngle", it.outlineGradientAngle
                 )
             },
@@ -227,6 +231,9 @@ internal class AdjustmentState {
                 ?: (saved["colorizerGradientColor"] as? Int)?.let {
                     colorizerGradientColors = listOf(it)
                 }
+            (saved["colorizerGradientPositions"] as? List<*>)
+                ?.filterIsInstance<Float>()
+                ?.let { colorizerGradientPositions = it }
             colorizerGradientAngle =
                 saved["colorizerGradientAngle"] as? Float ?: colorizerGradientAngle
             (saved["colorizeLayers"] as? List<*>)?.let { encoded ->
@@ -250,6 +257,9 @@ internal class AdjustmentState {
                 ?.filterIsInstance<Int>()
                 ?.takeIf { it.isNotEmpty() }
                 ?.let { outlineGradientColors = it }
+            (saved["outlineGradientPositions"] as? List<*>)
+                ?.filterIsInstance<Float>()
+                ?.let { outlineGradientPositions = it }
             outlineGradientAngle =
                 saved["outlineGradientAngle"] as? Float ?: outlineGradientAngle
         }
@@ -564,6 +574,8 @@ internal fun ModifierTab(
                                         gradientType = adjustments.colorizerGradientType,
                                         firstColor = iconColor.toArgb(),
                                         gradientStops = adjustments.colorizerGradientColors,
+                                        gradientPositions =
+                                            adjustments.colorizerGradientPositions,
                                         gradientAngle = adjustments.colorizerGradientAngle,
                                         flat = adjustments.colorizeFlat,
                                         monochrome = adjustments.colorizeMonochrome,
@@ -588,6 +600,8 @@ internal fun ModifierTab(
                                                 onColorChange(Color(style.firstColor))
                                                 adjustments.colorizerGradientColors =
                                                     style.gradientStops
+                                                adjustments.colorizerGradientPositions =
+                                                    style.gradientPositions
                                                 adjustments.colorizerGradientAngle =
                                                     style.gradientAngle
                                                 adjustments.colorizeFlat = style.flat
@@ -789,6 +803,7 @@ internal fun ModifierTab(
                         gradientType = adjustments.outlineGradientType,
                         firstColor = adjustments.outlineColor.toArgb(),
                         gradientStops = adjustments.outlineGradientColors,
+                        gradientPositions = adjustments.outlineGradientPositions,
                         gradientAngle = adjustments.outlineGradientAngle
                     )
                     ColorStyleCard(
@@ -811,6 +826,7 @@ internal fun ModifierTab(
                                 adjustments.outlineGradientType = style.gradientType
                                 adjustments.outlineColor = Color(style.firstColor)
                                 adjustments.outlineGradientColors = style.gradientStops
+                                adjustments.outlineGradientPositions = style.gradientPositions
                                 adjustments.outlineGradientAngle = style.gradientAngle
                                 outlineSheetOpen = false
                             }

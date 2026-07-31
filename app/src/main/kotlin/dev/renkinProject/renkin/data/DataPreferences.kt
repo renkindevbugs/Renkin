@@ -77,6 +77,9 @@ val ColorizerGradientColorKey = stringPreferencesKey("COLORIZER_GRADIENT_COLOR")
 // Every gradient stop after the first colour, comma separated. Supersedes the single-colour key
 // above, which is still written so an older build (or an older backup) keeps working.
 val ColorizerGradientColorsKey = stringPreferencesKey("COLORIZER_GRADIENT_COLORS")
+// Where each stop sits, 0..1, comma separated, covering the first colour too — so it holds one
+// more value than the colours key. Absent (older installs, older backups) = spread evenly.
+val ColorizerGradientPositionsKey = stringPreferencesKey("COLORIZER_GRADIENT_POSITIONS")
 val ColorizerGradientAngleKey = intPreferencesKey("COLORIZER_GRADIENT_ANGLE")
 val ColorizerGradientTypeKey = intPreferencesKey("COLORIZER_GRADIENT_TYPE")
 val CalendarIconsKey = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS_NAME)
@@ -109,6 +112,7 @@ val OutlineColorizerModeKey = intPreferencesKey("OUTLINE_COLORIZER_MODE")
 val OutlineGradientTypeKey = intPreferencesKey("OUTLINE_GRADIENT_TYPE")
 val OutlineGradientAngleKey = intPreferencesKey("OUTLINE_GRADIENT_ANGLE")
 val OutlineGradientColorsKey = stringPreferencesKey("OUTLINE_GRADIENT_COLORS")
+val OutlineGradientPositionsKey = stringPreferencesKey("OUTLINE_GRADIENT_POSITIONS")
 const val OUTLINE_WIDTH_DEFAULT = 6
 const val OUTLINE_WIDTH_MIN = 1
 const val OUTLINE_WIDTH_MAX = 16
@@ -129,6 +133,8 @@ val GlobalColorizeInverseKey = booleanPreferencesKey("GLOBAL_COLORIZE_INVERSE")
 val GlobalColorizerModeKey = intPreferencesKey("GLOBAL_COLORIZER_MODE")
 val GlobalColorizerGradientColorKey = stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_COLOR")
 val GlobalColorizerGradientColorsKey = stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_COLORS")
+val GlobalColorizerGradientPositionsKey =
+    stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_POSITIONS")
 val GlobalColorizerGradientAngleKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_ANGLE")
 val GlobalColorizerGradientTypeKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_TYPE")
 // Which icon categories the global modifiers apply to (the Global options screen's toggle
@@ -187,7 +193,9 @@ private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
     TextFontKey, OutlineColorKey, BuiltPrimaryIconPackKey,
     GlobalShapeColorKey, GlobalColorizeColorKey, ColorizerGradientColorKey,
     GlobalColorizerGradientColorKey, ColorizerGradientColorsKey,
-    GlobalColorizerGradientColorsKey, OutlineGradientColorsKey
+    GlobalColorizerGradientColorsKey, OutlineGradientColorsKey,
+    ColorizerGradientPositionsKey, GlobalColorizerGradientPositionsKey,
+    OutlineGradientPositionsKey
 )
 
 val ProfilePrefKeys: List<Preferences.Key<*>> =
@@ -209,6 +217,8 @@ suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preference
             target[OutlineGradientTypeKey] = source.getIntValue(OutlineGradientTypeKey)
             target[OutlineGradientAngleKey] = source.getIntValue(OutlineGradientAngleKey)
             target[OutlineGradientColorsKey] = source.getStringValue(OutlineGradientColorsKey)
+            target[OutlineGradientPositionsKey] =
+                source.getStringValue(OutlineGradientPositionsKey)
             target[GlobalColorizeKey] = source.getBooleanValue(GlobalColorizeKey)
             target[GlobalColorizeColorKey] = source.getStringValue(GlobalColorizeColorKey)
             target[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
@@ -219,6 +229,8 @@ suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preference
                 source.getStringValue(GlobalColorizerGradientColorKey)
             target[GlobalColorizerGradientColorsKey] =
                 source.getStringValue(GlobalColorizerGradientColorsKey)
+            target[GlobalColorizerGradientPositionsKey] =
+                source.getStringValue(GlobalColorizerGradientPositionsKey)
             target[GlobalColorizerGradientAngleKey] =
                 source.getIntValue(GlobalColorizerGradientAngleKey)
             target[GlobalColorizerGradientTypeKey] =
@@ -458,6 +470,18 @@ fun Preferences.getGradientStops(
     return stored.ifEmpty { listOf(getColorValue(legacyKey, Color.Black).toArgb()) }
 }
 
+/** Stop positions as stored; an empty or malformed list means the shader spreads them evenly. */
+fun Preferences.getGradientPositions(key: Preferences.Key<String>): List<Float> =
+    this[key].orEmpty()
+        .split(',')
+        .mapNotNull { it.trim().takeIf(String::isNotEmpty)?.toFloatOrNull() }
+
+@Composable
+fun DataStore<Preferences>.getGradientPositions(key: Preferences.Key<String>): List<Float> =
+    getPreferenceValue(key, "")
+        .split(',')
+        .mapNotNull { it.trim().takeIf(String::isNotEmpty)?.toFloatOrNull() }
+
 @Composable
 fun DataStore<Preferences>.getGradientStops(
     key: Preferences.Key<String>,
@@ -506,6 +530,7 @@ data class ColorStyleKeys(
     val gradientAngle: Preferences.Key<Int>,
     val firstColor: Preferences.Key<String>,
     val gradientColors: Preferences.Key<String>,
+    val gradientPositions: Preferences.Key<String>,
     // Pre-multi-stop key holding the single second colour, kept in sync for older builds.
     val legacyGradientColor: Preferences.Key<String>? = null
 )
@@ -516,6 +541,7 @@ val ColorizerStyleKeys = ColorStyleKeys(
     gradientAngle = ColorizerGradientAngleKey,
     firstColor = IconColorKey,
     gradientColors = ColorizerGradientColorsKey,
+    gradientPositions = ColorizerGradientPositionsKey,
     legacyGradientColor = ColorizerGradientColorKey
 )
 
@@ -526,7 +552,8 @@ val OutlineStyleKeys = ColorStyleKeys(
     gradientType = OutlineGradientTypeKey,
     gradientAngle = OutlineGradientAngleKey,
     firstColor = OutlineColorKey,
-    gradientColors = OutlineGradientColorsKey
+    gradientColors = OutlineGradientColorsKey,
+    gradientPositions = OutlineGradientPositionsKey
 )
 
 suspend fun DataStore<Preferences>.setColorStyle(
@@ -535,7 +562,9 @@ suspend fun DataStore<Preferences>.setColorStyle(
     gradientType: Int,
     gradientAngle: Int,
     firstColor: Color,
-    gradientStops: List<Int>
+    gradientStops: List<Int>,
+    // Covers the first colour too, so it is one longer than [gradientStops]; empty = even spread.
+    gradientPositions: List<Float> = emptyList()
 ) {
     preferenceAccessMutex.withLock {
         edit { target ->
@@ -545,6 +574,7 @@ suspend fun DataStore<Preferences>.setColorStyle(
             target[keys.firstColor] = firstColor.toHexString()
             target[keys.gradientColors] =
                 gradientStops.joinToString(",") { Color(it).toHexString() }
+            target[keys.gradientPositions] = gradientPositions.joinToString(",")
             keys.legacyGradientColor
                 ?.takeIf { it != keys.firstColor }
                 ?.let { legacy ->

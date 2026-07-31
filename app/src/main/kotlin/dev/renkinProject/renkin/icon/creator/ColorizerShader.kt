@@ -23,13 +23,16 @@ fun buildColorizerShader(
     type: GradientType,
     angle: Float,
     width: Int,
-    height: Int
+    height: Int,
+    // Empty spreads the stops evenly, the only behaviour that existed before stop positions.
+    positions: List<Float> = emptyList()
 ): Shader {
     val centerX = width / 2f
     val centerY = height / 2f
     // A single stop is not a gradient; duplicate it so the shader still paints that flat colour.
     val stops = if (colors.size >= MIN_GRADIENT_STOPS) colors else colors + colors
     val palette = stops.toIntArray()
+    val offsets = shaderGradientPositions(stops, positions)
     return when (type) {
         GradientType.LINEAR -> {
             val angleRadians = Math.toRadians(
@@ -45,8 +48,7 @@ fun buildColorizerShader(
                 centerX + directionX * halfSpan,
                 centerY + directionY * halfSpan,
                 palette,
-                // Null positions spread the stops evenly, which is what the editor promises.
-                null,
+                offsets,
                 Shader.TileMode.CLAMP
             )
         }
@@ -55,7 +57,7 @@ fun buildColorizerShader(
             centerY,
             hypot(centerX, centerY),
             palette,
-            null,
+            offsets,
             Shader.TileMode.CLAMP
         )
     }
@@ -80,7 +82,8 @@ fun colorizeSampleBitmap(
         style.gradientType,
         style.gradientAngle,
         gradientWidth,
-        gradientHeight
+        gradientHeight,
+        style.gradientPositions
     ).apply {
         gradientBounds?.let { bounds ->
             setLocalMatrix(

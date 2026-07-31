@@ -64,6 +64,7 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.GradientType
+import dev.renkinProject.renkin.icon.creator.clampedGradientPositions
 import dev.renkinProject.renkin.icon.creator.colorizeSampleBitmap
 import dev.renkinProject.renkin.ui.theme.IconShape as IconTileShape
 import dev.renkinProject.renkin.ui.theme.DialogShape
@@ -355,33 +356,50 @@ internal fun Modifier.colorizerSwatch(style: ColorizerStyle): Modifier {
     }
     // Animating each stop keeps the One color / Gradient switch from popping.
     val animated = colors.map { animateColorAsState(Color(it), label = "colorizerStop").value }
+    // Positions only describe the gradient's own stops; single colour keeps its duplicated pair.
+    // Clamping matches the generator: a stop dragged past its neighbour paints a hard edge.
+    val offsets = style.gradientPositions
+        .takeIf { gradient && it.size == colors.size }
+        ?.let(::clampedGradientPositions)
+    val colorStops = offsets?.mapIndexed { index, offset -> offset to animated[index] }
+        ?.toTypedArray()
     // The angle only reads correctly once the draw size is known, hence drawBehind over background.
     val angle by animateFloatAsState(style.gradientAngle, label = "colorizerAngle")
     val radial = gradient && style.gradientType == GradientType.RADIAL
     return drawBehind {
         val brush = if (radial) {
-            Brush.radialGradient(
-                colors = animated,
-                center = center,
-                radius = hypot(size.width / 2f, size.height / 2f)
-            )
+            if (colorStops != null) {
+                Brush.radialGradient(
+                    colorStops = colorStops,
+                    center = center,
+                    radius = hypot(size.width / 2f, size.height / 2f)
+                )
+            } else {
+                Brush.radialGradient(
+                    colors = animated,
+                    center = center,
+                    radius = hypot(size.width / 2f, size.height / 2f)
+                )
+            }
         } else {
             // Same convention as the dial and the generator: 0° points up, clockwise.
             val radians = Math.toRadians(angle.toDouble())
             val directionX = sin(radians).toFloat()
             val directionY = -cos(radians).toFloat()
             val halfSpan = abs(directionX) * size.width / 2f + abs(directionY) * size.height / 2f
-            Brush.linearGradient(
-                colors = animated,
-                start = Offset(
-                    center.x - directionX * halfSpan,
-                    center.y - directionY * halfSpan
-                ),
-                end = Offset(
-                    center.x + directionX * halfSpan,
-                    center.y + directionY * halfSpan
-                )
+            val start = Offset(
+                center.x - directionX * halfSpan,
+                center.y - directionY * halfSpan
             )
+            val end = Offset(
+                center.x + directionX * halfSpan,
+                center.y + directionY * halfSpan
+            )
+            if (colorStops != null) {
+                Brush.linearGradient(colorStops = colorStops, start = start, end = end)
+            } else {
+                Brush.linearGradient(colors = animated, start = start, end = end)
+            }
         }
         drawRect(brush)
     }
