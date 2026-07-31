@@ -17,6 +17,7 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.InsetDrawable
 import android.graphics.drawable.VectorDrawable
 import android.os.Build
+import android.util.LruCache
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -91,6 +92,11 @@ class IconGenerator(
     private val adaptiveIconScale = ADAPTIVE_ICON_SCALE
     private val appMan by lazy { ApplicationManager(ctx) }
     private val materialYouPackSupport = mutableMapOf<String, Boolean>()
+    private val fallbackBitmapCache by lazy {
+        object : LruCache<String, Bitmap>(FALLBACK_BITMAP_CACHE_BYTES) {
+            override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount
+        }
+    }
 
     // Colorize blend for bitmap icons: SRC_IN replaces the icon's colours with the picked one (flat
     // fill), MULTIPLY tints them (mixes with the original). Vectors always recolour flat regardless.
@@ -206,7 +212,14 @@ class IconGenerator(
         val packName = fallbackPackName
         if (packName.isEmpty()) return null
 
-        fun load(name: String?): Bitmap? = name?.let { appMan.getDrawableByName(packName, it)?.toSafeBitmapOrNull() }
+        fun load(name: String?): Bitmap? {
+            name ?: return null
+            fallbackBitmapCache.get(name)?.let { return it }
+            val bitmap = appMan.getDrawableByName(packName, name)?.toSafeBitmapOrNull()
+                ?: return null
+            fallbackBitmapCache.put(name, bitmap)
+            return bitmap
+        }
 
         // Pick a back deterministically per app so the choice is stable across rebuilds.
         val back = primaryFallback.backs
@@ -1270,6 +1283,7 @@ class IconGenerator(
 
     private companion object {
         const val ADAPTIVE_PACK_RENDER_SIZE = 500
+        const val FALLBACK_BITMAP_CACHE_BYTES = 8 * 1024 * 1024
     }
 }
 

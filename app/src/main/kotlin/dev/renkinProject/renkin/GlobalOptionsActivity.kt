@@ -51,6 +51,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 /**
@@ -150,6 +152,11 @@ internal data class GlobalPreviewCacheKey(
     val targetPx: Int
 )
 
+private const val MAX_PARALLEL_PREVIEWS = 4
+
+internal fun previewParallelism(availableProcessors: Int): Int =
+    availableProcessors.coerceIn(1, MAX_PARALLEL_PREVIEWS)
+
 internal class GlobalPreviewBitmapCache(maxSizeBytes: Int = DEFAULT_PREVIEW_CACHE_BYTES) {
     private val cache = object : LruCache<GlobalPreviewCacheKey, Bitmap>(maxSizeBytes) {
         override fun sizeOf(key: GlobalPreviewCacheKey, value: Bitmap): Int = value.allocationByteCount
@@ -196,6 +203,7 @@ class GlobalOptionsViewModel @Inject constructor(
 
     private val previewCache = GlobalPreviewBitmapCache()
     private val previewLock = Any()
+    private val previewPermits = Semaphore(previewParallelism(Runtime.getRuntime().availableProcessors()))
     private val inFlightPreviews = mutableMapOf<GlobalPreviewCacheKey, Deferred<Bitmap?>>()
     private var previewConfiguration: Pair<GenerationOptions?, GenerationOptions?>? = null
     private val _previewJobs = MutableStateFlow(0)
@@ -329,7 +337,9 @@ class GlobalOptionsViewModel @Inject constructor(
             inFlightPreviews[key] ?: viewModelScope.async(Dispatchers.Default) {
                 var bitmap: Bitmap? = null
                 try {
-                    bitmap = load()?.toSafeBitmapOrNull(key.targetPx, key.targetPx)
+                    bitmap = previewPermits.withPermit {
+                        load()?.toSafeBitmapOrNull(key.targetPx, key.targetPx)
+                    }
                     bitmap?.let { previewCache.put(key, it) }
                     bitmap
                 } catch (e: CancellationException) {

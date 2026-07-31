@@ -313,9 +313,13 @@ internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSou
         val component = application.toComponentInfo()
         // Match the full-map path's duplicate handling: the last declaration wins.
         val item = lastAppFilterItem(elements, component) ?: return null
+        return getResourceDrawableByName(iconPackName, item.drawableLink)
+    }
+
+    fun getResourceDrawableByName(iconPackName: String, drawableName: String): ResourceDrawable? {
         val res = getResources(iconPackName) ?: return null
         val resourceId = runCatching {
-            res.getIdentifierByName(item.drawableLink, "drawable", iconPackName)
+            res.getIdentifierByName(drawableName, "drawable", iconPackName)
         }.getOrNull() ?: return null
         if (resourceId <= 0) return null
         val drawable = runCatching { getResIcon(res, resourceId) }.getOrNull() ?: return null
