@@ -56,6 +56,33 @@ class ColorPresetTest {
     }
 
     @Test
+    fun stopPositionsSurviveEncoding() {
+        val style = ColorizerStyle(
+            mode = ColorizerMode.GRADIENT,
+            firstColor = Color.MAGENTA,
+            gradientStops = listOf(Color.CYAN),
+            gradientPositions = listOf(0.25f, 0.8f)
+        )
+
+        assertEquals(style, decodeColorizerStyle(encodeColorizerStyle(style)))
+    }
+
+    @Test
+    fun presetsSavedBeforeStopPositionsStillDecode() {
+        // Eight fields is what every build before stop positions wrote; positions were appended
+        // last precisely so those presets keep working.
+        val legacy = listOf(1, 0, Color.MAGENTA, Color.CYAN, 90f, false, false, false)
+            .joinToString(";")
+
+        val decoded = decodeColorizerStyle(legacy)
+
+        assertEquals(Color.MAGENTA, decoded?.firstColor)
+        assertEquals(listOf(Color.CYAN), decoded?.gradientStops)
+        // No positions means the even spread those gradients already painted.
+        assertEquals(emptyList<Float>(), decoded?.gradientPositions)
+    }
+
+    @Test
     fun savedPresetsComeBackOldestFirst() = runBlocking {
         repo.saveColorPreset("Color 1", encodeColorizerStyle(ColorizerStyle(firstColor = Color.RED)))
         repo.saveColorPreset("Teal", encodeColorizerStyle(ColorizerStyle(firstColor = Color.CYAN)))

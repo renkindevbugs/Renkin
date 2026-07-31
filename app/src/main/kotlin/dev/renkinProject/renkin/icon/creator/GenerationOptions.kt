@@ -50,6 +50,10 @@ import dev.renkinProject.renkin.data.ColorizerGradientAngleKey
 import dev.renkinProject.renkin.data.ColorizerGradientColorKey
 import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
 import dev.renkinProject.renkin.data.getGradientStops
+import dev.renkinProject.renkin.data.getGradientPositions
+import dev.renkinProject.renkin.data.ColorizerGradientPositionsKey
+import dev.renkinProject.renkin.data.GlobalColorizerGradientPositionsKey
+import dev.renkinProject.renkin.data.OutlineGradientPositionsKey
 import dev.renkinProject.renkin.data.ColorizerGradientTypeKey
 import dev.renkinProject.renkin.data.ColorizerModeKey
 import dev.renkinProject.renkin.data.GlobalColorizerGradientAngleKey
@@ -121,6 +125,8 @@ data class GenerationOptions(
     // Gradient stops after [color]; [color] itself is stop one and doubles as the single-colour
     // value, so it is not repeated here.
     val colorizerGradientColors: List<Int> = listOf(android.graphics.Color.BLACK),
+    // Positions of every stop including [color], 0..1; empty spreads them evenly.
+    val colorizerGradientPositions: List<Float> = emptyList(),
     val colorizerGradientAngle: Float = 0f,
     // Per-region colourize steps (the Colorize segments modifier), applied in order. Empty =
     // the whole icon is colourized with the options above, which is what every other surface asks
@@ -219,6 +225,9 @@ data class GenerationOptions(
                 colorizerGradientColors = preferences.getGradientStops(
                     ColorizerGradientColorsKey, ColorizerGradientColorKey
                 ),
+                colorizerGradientPositions = preferences.getGradientPositions(
+                    ColorizerGradientPositionsKey
+                ),
                 colorizerGradientAngle = normalizeGradientAngle(
                     preferences.getIntValue(ColorizerGradientAngleKey).toFloat()
                 ),
@@ -266,6 +275,9 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         colorizerGradientColors = preferences.getGradientStops(
             GlobalColorizerGradientColorsKey, GlobalColorizerGradientColorKey
         ),
+        colorizerGradientPositions = preferences.getGradientPositions(
+            GlobalColorizerGradientPositionsKey
+        ),
         colorizerGradientAngle = normalizeGradientAngle(
             preferences.getIntValue(GlobalColorizerGradientAngleKey).toFloat()
         ),
@@ -298,6 +310,7 @@ fun Preferences.outlineColorizerStyle(): ColorizerStyle = ColorizerStyle(
         OutlineColorKey, androidx.compose.ui.graphics.Color.Black
     ).toArgb(),
     gradientStops = getGradientStops(OutlineGradientColorsKey, OutlineColorKey),
+    gradientPositions = getGradientPositions(OutlineGradientPositionsKey),
     gradientAngle = normalizeGradientAngle(getIntValue(OutlineGradientAngleKey).toFloat())
 )
 

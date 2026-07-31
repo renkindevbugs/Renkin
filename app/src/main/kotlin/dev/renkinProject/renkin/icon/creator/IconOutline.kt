@@ -47,7 +47,8 @@ object IconOutline {
                     style.gradientType,
                     style.gradientAngle,
                     width,
-                    height
+                    height,
+                    style.gradientPositions
                 )
             }
         )
@@ -85,7 +86,8 @@ object IconOutline {
                 gradient.gradientType,
                 gradient.gradientAngle,
                 src.width,
-                src.height
+                src.height,
+                gradient.gradientPositions
             )
         }
 

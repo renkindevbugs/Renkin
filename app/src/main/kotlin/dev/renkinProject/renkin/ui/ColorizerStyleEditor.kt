@@ -4,7 +4,6 @@ package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -17,17 +16,15 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,16 +38,11 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DragIndicator
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -91,6 +83,9 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.GradientType
+import dev.renkinProject.renkin.icon.creator.clampedGradientPositions
+import dev.renkinProject.renkin.icon.creator.evenGradientPositions
+import dev.renkinProject.renkin.icon.creator.gradientColorAt
 import dev.renkinProject.renkin.icon.creator.MAX_GRADIENT_STOPS
 import dev.renkinProject.renkin.icon.creator.MIN_GRADIENT_STOPS
 import dev.renkinProject.renkin.icon.creator.normalizeGradientAngle
@@ -115,11 +110,35 @@ internal fun ColorizerStyleEditor(
     showSingleColorEffects: Boolean = true
 ) {
     var pickerIndex by remember { mutableStateOf<Int?>(null) }
+    // Which stop the bar highlights and the picker edits. Kept here so tapping a row, a handle
+    // or a swatch all mean the same selection.
+    var selectedStop by remember { mutableIntStateOf(0) }
     var displayedAngle by remember(style.gradientAngle) {
         mutableFloatStateOf(normalizeGradientAngle(style.gradientAngle))
     }
     val gradientColors = remember(style.firstColor, style.gradientStops) {
         listOf(style.firstColor) + style.gradientStops
+    }
+    // Gradients made before stop positions existed carry none; the even spread they already
+    // paint becomes the starting point the handles drag from.
+    val gradientPositions = remember(gradientColors, style.gradientPositions) {
+        style.gradientPositions.takeIf { it.size == gradientColors.size }
+            ?: evenGradientPositions(gradientColors.size)
+    }
+
+    /**
+     * Commits [colors] at [positions] as given. The list order is never rearranged: a stop
+     * dragged past its neighbour is clamped when painted, so handles stay under the finger that
+     * moved them and rows keep their place.
+     */
+    fun applyStops(colors: List<Int>, positions: List<Float>) {
+        onStyleChange(
+            style.copy(
+                firstColor = colors.first(),
+                gradientStops = colors.drop(1),
+                gradientPositions = positions
+            )
+        )
     }
 
     fun withColors(colors: List<Int>): ColorizerStyle =
@@ -200,33 +219,19 @@ internal fun ColorizerStyleEditor(
         } else {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 GradientStopList(
-                    style = style,
                     colors = gradientColors,
-                    onColorsChange = { onStyleChange(withColors(it)) },
-                    onEditColor = { pickerIndex = it }
-                )
-                SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                    GradientType.entries.forEachIndexed { index, type ->
-                        SegmentedButton(
-                            selected = style.gradientType == type,
-                            onClick = { onStyleChange(style.copy(gradientType = type)) },
-                            shape = SegmentedButtonDefaults.itemShape(
-                                index = index,
-                                count = GradientType.entries.size
-                            )
-                        ) {
-                            Text(
-                                stringResource(
-                                    if (type == GradientType.LINEAR) {
-                                        R.string.gradientLinear
-                                    } else {
-                                        R.string.gradientRadial
-                                    }
-                                )
-                            )
-                        }
+                    positions = gradientPositions,
+                    selectedStop = selectedStop.coerceIn(0, gradientColors.lastIndex),
+                    onSelect = { selectedStop = it },
+                    onStopsChange = { colors, positions, select ->
+                        applyStops(colors, positions)
+                        selectedStop = select.coerceIn(0, colors.lastIndex)
+                    },
+                    onEditColor = {
+                        selectedStop = it
+                        pickerIndex = it
                     }
-                }
+                )
                 if (showSingleColorEffects && (style.flat || style.monochrome || style.inverse)) {
                     Text(
                         text = stringResource(R.string.colorizeEffectsActive),
@@ -235,15 +240,15 @@ internal fun ColorizerStyleEditor(
                         modifier = Modifier.padding(horizontal = 4.dp)
                     )
                 }
-                AnimatedVisibility(visible = style.gradientType == GradientType.LINEAR) {
-                    GradientAngleControl(
-                        angle = displayedAngle,
-                        onAngleChange = {
-                            displayedAngle = it
-                            onStyleChange(style.copy(gradientAngle = it))
-                        }
-                    )
-                }
+                GradientShapeControl(
+                    type = style.gradientType,
+                    angle = displayedAngle,
+                    onTypeChange = { onStyleChange(style.copy(gradientType = it)) },
+                    onAngleChange = {
+                        displayedAngle = it
+                        onStyleChange(style.copy(gradientAngle = it))
+                    }
+                )
             }
         }
     }
@@ -339,83 +344,82 @@ private fun ColorizerModeToggle(
 }
 
 /**
- * Reorderable gradient stops. Dragging is bound to the grip handle only — a whole-row drag would
- * fight the scrolling container the editor lives in.
+ * The stop bar plus one row per stop. The bar always paints left-to-right: rotating it with the
+ * angle would make the handles chase the colours they set, and no gradient tool does that — the
+ * angle belongs to the preview.
  */
 @Composable
 private fun GradientStopList(
-    style: ColorizerStyle,
     colors: List<Int>,
-    onColorsChange: (List<Int>) -> Unit,
+    positions: List<Float>,
+    selectedStop: Int,
+    onSelect: (Int) -> Unit,
+    onStopsChange: (List<Int>, List<Float>, Int) -> Unit,
     onEditColor: (Int) -> Unit
 ) {
-    val rowStridePx = with(LocalDensity.current) { (StopRowHeight + 8.dp).toPx() }
-    var dragIndex by remember { mutableIntStateOf(-1) }
-    var dragOffset by remember { mutableFloatStateOf(0f) }
-    val targetIndex = if (dragIndex < 0) {
-        -1
-    } else {
-        (dragIndex + (dragOffset / rowStridePx).roundToInt()).coerceIn(0, colors.lastIndex)
-    }
+    val full = colors.size >= MAX_GRADIENT_STOPS
 
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(44.dp)
-                .clip(InnerShape)
-                .colorizerSwatch(style)
+        GradientStopTrack(
+            colors = colors,
+            positions = positions,
+            selectedStop = selectedStop,
+            onSelect = onSelect,
+            onMove = { index, position ->
+                onStopsChange(colors, positions.toMutableList().also { it[index] = position }, index)
+            },
+            onAdd = { position ->
+                if (!full) {
+                    // The new stop takes the colour the gradient already paints there — halfway
+                    // between black and white it is grey — so dropping a handle leaves the
+                    // gradient looking identical until its colour is picked. It is inserted where
+                    // it belongs: appending it would only clamp it against a later neighbour.
+                    val at = positions.indexOfFirst { it > position }
+                        .takeIf { it >= 0 } ?: colors.size
+                    onStopsChange(
+                        colors.toMutableList().apply {
+                            add(at, gradientColorAt(colors, positions, position))
+                        },
+                        positions.toMutableList().apply { add(at, position) },
+                        at
+                    )
+                }
+            }
         )
 
         colors.forEachIndexed { index, color ->
-            // Neighbours slide out of the way so the drop position is visible before releasing.
-            val shift = when {
-                dragIndex < 0 -> 0f
-                dragIndex < targetIndex && index in (dragIndex + 1)..targetIndex -> -rowStridePx
-                dragIndex > targetIndex && index in targetIndex until dragIndex -> rowStridePx
-                else -> 0f
-            }
-            val animatedShift by animateFloatAsState(
-                targetValue = shift,
-                label = "stopShift"
-            )
             GradientStopRow(
                 color = Color(color),
-                dragged = index == dragIndex,
+                position = positions.getOrElse(index) { 0f },
+                selected = index == selectedStop,
                 canRemove = colors.size > MIN_GRADIENT_STOPS,
-                canMoveUp = index > 0,
-                canMoveDown = index < colors.lastIndex,
-                onClick = { onEditColor(index) },
-                onRemove = { onColorsChange(colors.filterIndexed { i, _ -> i != index }) },
-                onMove = { step ->
-                    val to = (index + step).coerceIn(0, colors.lastIndex)
-                    onColorsChange(colors.toMutableList().apply { add(to, removeAt(index)) })
+                onClick = { onSelect(index) },
+                onEditColor = { onEditColor(index) },
+                onRemove = {
+                    onStopsChange(
+                        colors.filterIndexed { i, _ -> i != index },
+                        positions.filterIndexed { i, _ -> i != index },
+                        0
+                    )
                 },
-                onDragStart = {
-                    dragIndex = index
-                    dragOffset = 0f
-                },
-                onDrag = { dragOffset += it },
-                onDragStop = {
-                    if (dragIndex >= 0 && targetIndex != dragIndex) {
-                        onColorsChange(
-                            colors.toMutableList().apply { add(targetIndex, removeAt(dragIndex)) }
-                        )
-                    }
-                    dragIndex = -1
-                    dragOffset = 0f
-                },
-                modifier = Modifier
-                    .zIndex(if (index == dragIndex) 1f else 0f)
-                    .graphicsLayer {
-                        translationY = if (index == dragIndex) dragOffset else animatedShift
-                    }
+                onNudge = { step ->
+                    val moved = (positions[index] + step).coerceIn(0f, 1f)
+                    onStopsChange(
+                        colors,
+                        positions.toMutableList().also { it[index] = moved },
+                        index
+                    )
+                }
             )
         }
 
-        if (colors.size < MAX_GRADIENT_STOPS) {
+        if (!full) {
             OutlinedButton(
-                onClick = { onColorsChange(colors + colors.last()) },
+                onClick = {
+                    // Appending at the end is the predictable spot for a button press; the bar
+                    // is there for choosing where.
+                    onStopsChange(colors + colors.last(), positions + 1f, colors.size)
+                },
                 shape = FieldShape,
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -425,7 +429,9 @@ private fun GradientStopList(
             }
         }
         Text(
-            text = stringResource(R.string.gradientStopsHint),
+            text = stringResource(
+                if (full) R.string.gradientStopsFullHint else R.string.gradientStopsHint
+            ),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp)
@@ -433,86 +439,216 @@ private fun GradientStopList(
     }
 }
 
+/**
+ * Draggable stop handles over the gradient they describe. One pointer handler owns the whole bar
+ * instead of one per handle: it decides on the down event whether the touch grabs the nearest
+ * handle or drops a new stop, which is what makes handles a fingertip apart still separable.
+ */
+@Composable
+private fun GradientStopTrack(
+    colors: List<Int>,
+    positions: List<Float>,
+    selectedStop: Int,
+    onSelect: (Int) -> Unit,
+    onMove: (Int, Float) -> Unit,
+    onAdd: (Float) -> Unit
+) {
+    val handleLabel = stringResource(R.string.gradientStopHandle)
+    val currentOnMove by rememberUpdatedState(onMove)
+    val currentOnAdd by rememberUpdatedState(onAdd)
+    val currentOnSelect by rememberUpdatedState(onSelect)
+    val currentStops by rememberUpdatedState(positions)
+    val grabRadiusPx = with(LocalDensity.current) { StopGrabRadius.toPx() }
+    val handleWidth = StopHandleWidth
+
+    // The bar is inset by half a handle so a stop at 0 % or 100 % still sits fully inside it, and
+    // by the ring so the handle travel matches the colours underneath it exactly.
+    val edgeInset = handleWidth / 2 + TrackRing + TrackRingGap
+    val painted = remember(colors, positions) {
+        val clamped = clampedGradientPositions(positions)
+        colors.mapIndexed { index, color ->
+            clamped.getOrElse(index) { 0f } to Color(color)
+        }.toTypedArray()
+    }
+
+    BoxWithConstraints(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(HandleHeight + HandleHalo * 2)
+    ) {
+        val travel = maxWidth - edgeInset * 2
+        Box(
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .height(TrackHeight)
+                .padding(horizontal = handleWidth / 2)
+                // Ring and gap in one chain: the outline reads against any colour, and the gap
+                // keeps it from touching the gradient it is describing.
+                .border(TrackRing, MaterialTheme.colorScheme.onSurface, InnerShape)
+                .padding(TrackRing + TrackRingGap)
+                .clip(InnerShape)
+                .background(Brush.horizontalGradient(colorStops = painted))
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                // Same capture trick as the angle dial: consuming at the Main pass keeps the
+                // surrounding vertical scroll from stealing a drag that starts on a handle.
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(
+                            requireUnconsumed = false,
+                            pass = PointerEventPass.Main
+                        )
+                        down.consume()
+                        val insetPx = edgeInset.toPx()
+                        val usable = (size.width - insetPx * 2f).coerceAtLeast(1f)
+                        fun centerOf(index: Int) = currentStops[index] * usable + insetPx
+                        fun fractionAt(x: Float) = ((x - insetPx) / usable).coerceIn(0f, 1f)
+
+                        // Nearest wins, so two handles a fingertip apart are still separable and
+                        // the top one is not permanently unreachable.
+                        val touched = currentStops.indices.minByOrNull {
+                            kotlin.math.abs(centerOf(it) - down.position.x)
+                        }
+                        val onHandle = touched != null &&
+                            kotlin.math.abs(centerOf(touched) - down.position.x) <= grabRadiusPx
+                        if (!onHandle || touched == null) {
+                            currentOnAdd(fractionAt(down.position.x))
+                            return@awaitEachGesture
+                        }
+                        currentOnSelect(touched)
+                        do {
+                            val event = awaitPointerEvent(PointerEventPass.Main)
+                            val change = event.changes.first()
+                            if (change.pressed) {
+                                currentOnMove(touched, fractionAt(change.position.x))
+                            }
+                            change.consume()
+                        } while (change.pressed)
+                    }
+                }
+        ) {
+            colors.forEachIndexed { index, color ->
+                val selected = index == selectedStop
+                val position = positions.getOrElse(index) { 0f }
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        // Half a handle taller than the bar, so the grabbable part is obvious and
+                        // a stop never disappears into the colours it sets.
+                        .offset(x = edgeInset - handleWidth / 2 - HandleHalo + travel * position)
+                        .size(
+                            width = handleWidth + HandleHalo * 2,
+                            height = HandleHeight + HandleHalo * 2
+                        )
+                        .zIndex(if (selected) 1f else 0f)
+                        .semantics {
+                            contentDescription = handleLabel.format(index + 1)
+                            progressBarRangeInfo = ProgressBarRangeInfo(position, 0f..1f)
+                            setProgress { value ->
+                                currentOnMove(index, value.coerceIn(0f, 1f))
+                                true
+                            }
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(
+                                width = handleWidth + if (selected) HandleHalo * 2 else 0.dp,
+                                height = HandleHeight + if (selected) HandleHalo * 2 else 0.dp
+                            )
+                            .then(
+                                if (selected) {
+                                    Modifier.border(
+                                        width = HandleHalo,
+                                        // A translucent halo, not a colour swap: the selected
+                                        // handle still has to show its own colour honestly.
+                                        color = MaterialTheme.colorScheme.onSurface.copy(
+                                            alpha = 0.25f
+                                        ),
+                                        shape = CircleShape
+                                    )
+                                } else Modifier
+                            )
+                            .padding(if (selected) HandleHalo else 0.dp)
+                            .border(HandleBorder, MaterialTheme.colorScheme.onSurface, CircleShape)
+                            .padding(HandleBorder)
+                            .border(HandleBorder, MaterialTheme.colorScheme.surface, CircleShape)
+                            .padding(HandleBorder)
+                            .clip(CircleShape)
+                            .background(Color(color))
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun GradientStopRow(
     color: Color,
-    dragged: Boolean,
+    position: Float,
+    selected: Boolean,
     canRemove: Boolean,
-    canMoveUp: Boolean,
-    canMoveDown: Boolean,
     onClick: () -> Unit,
+    onEditColor: () -> Unit,
     onRemove: () -> Unit,
-    onMove: (Int) -> Unit,
-    onDragStart: () -> Unit,
-    onDrag: (Float) -> Unit,
-    onDragStop: () -> Unit,
+    onNudge: (Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val moveUpLabel = stringResource(R.string.gradientMoveUp)
-    val moveDownLabel = stringResource(R.string.gradientMoveDown)
-    val reorderLabel = stringResource(R.string.gradientReorderColor)
-    val currentOnDrag by rememberUpdatedState(onDrag)
-    val currentOnDragStart by rememberUpdatedState(onDragStart)
-    val currentOnDragStop by rememberUpdatedState(onDragStop)
+    val moveStartLabel = stringResource(R.string.gradientStopMoveStart)
+    val moveEndLabel = stringResource(R.string.gradientStopMoveEnd)
+    val editColorLabel = stringResource(R.string.gradientEditColor)
 
     Surface(
         shape = InnerShape,
-        color = if (dragged) {
-            MaterialTheme.colorScheme.surfaceContainerHighest
+        color = if (selected) {
+            MaterialTheme.colorScheme.secondaryContainer
         } else {
             MaterialTheme.colorScheme.surfaceContainer
         },
-        tonalElevation = if (dragged) 6.dp else 0.dp,
         onClick = onClick,
         modifier = modifier
             .fillMaxWidth()
             .height(StopRowHeight)
+            .semantics {
+                // Dragging a handle is unreachable with a screen reader, so the same move is
+                // offered in steps.
+                customActions = listOf(
+                    CustomAccessibilityAction(moveStartLabel) { onNudge(-StopNudge); true },
+                    CustomAccessibilityAction(moveEndLabel) { onNudge(StopNudge); true }
+                )
+            }
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 8.dp),
+            modifier = Modifier.padding(horizontal = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                imageVector = Icons.Filled.DragIndicator,
-                contentDescription = reorderLabel,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier
-                    .semantics {
-                        // Dragging is unreachable with a screen reader, so the same reordering
-                        // is exposed as explicit actions.
-                        customActions = buildList {
-                            if (canMoveUp) {
-                                add(CustomAccessibilityAction(moveUpLabel) { onMove(-1); true })
-                            }
-                            if (canMoveDown) {
-                                add(CustomAccessibilityAction(moveDownLabel) { onMove(1); true })
-                            }
-                        }
-                    }
-                    .pointerInput(Unit) {
-                        detectDragGestures(
-                            onDragStart = { currentOnDragStart() },
-                            onDragEnd = { currentOnDragStop() },
-                            onDragCancel = { currentOnDragStop() },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-                                currentOnDrag(dragAmount.y)
-                            }
-                        )
-                    }
-            )
+            // Only the swatch opens the picker: tapping the row is how a stop is selected on the
+            // bar, and one gesture cannot mean both.
             Surface(
                 shape = CircleShape,
                 color = color,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier.size(30.dp)
+                onClick = onEditColor,
+                modifier = Modifier
+                    .size(32.dp)
+                    .semantics { contentDescription = editColorLabel }
             ) {}
             Text(
                 text = color.toHexString().uppercase(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = "${(position * 100).roundToInt()}%",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (canRemove) {
                 IconButton(onClick = onRemove) {
@@ -529,6 +665,22 @@ private fun GradientStopRow(
 private val StopRowHeight = 56.dp
 private val TogglePillHeight = 44.dp
 private val TogglePillPadding = 5.dp
+// Bar, ring and handle proportions follow the web gradient editors: a short bar with a clear
+// outline, and handles tall enough to grab without covering the colours they set.
+private val TrackHeight = 30.dp
+private val TrackRing = 2.dp
+private val TrackRingGap = 2.dp
+private val StopHandleWidth = 20.dp
+private val HandleHeight = 46.dp
+private val HandleBorder = 2.dp
+// The soft ring that marks the selected handle, and the slack the row keeps for it.
+private val HandleHalo = 4.dp
+// How close a touch has to land to count as grabbing a handle rather than dropping a new stop.
+private val StopGrabRadius = 22.dp
+/** Screen-reader step for moving a stop, in track fractions. */
+private const val StopNudge = 0.05f
+// Smaller than the old standalone dial: it now shares its row with the gradient type choice.
+private val DialSize = 108.dp
 
 @Composable
 private fun ColorizerColorRow(
@@ -582,47 +734,77 @@ private fun ColorizerSwitchRow(
 }
 
 
-/** Presets a user actually reaches for; anything else comes from dragging the dial. */
-private val AnglePresets = listOf(0, 45, 90, 135, 180, 270)
-
-@OptIn(ExperimentalLayoutApi::class)
+/**
+ * Gradient shape and direction on one line: the type choice takes the space the angle presets
+ * used to, and the dial does the rest — it already magnets onto the 45° steps those chips offered.
+ */
 @Composable
-private fun GradientAngleControl(
+private fun GradientShapeControl(
+    type: GradientType,
     angle: Float,
+    onTypeChange: (GradientType) -> Unit,
     onAngleChange: (Float) -> Unit
 ) {
     val angleLabel = stringResource(R.string.gradientAngle)
 
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = angleLabel,
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurface
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalAlignment = Alignment.CenterVertically
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .selectableGroup(),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            AngleDial(
-                angle = angle,
-                contentDescription = angleLabel,
-                onAngleChange = onAngleChange
-            )
-            FlowRow(
-                modifier = Modifier.weight(1f),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                AnglePresets.forEach { preset ->
-                    FilterChip(
-                        selected = angle.roundToInt() == preset,
-                        onClick = { onAngleChange(preset.toFloat()) },
-                        label = { Text("$preset°") }
+            GradientType.entries.forEach { entry ->
+                val selected = type == entry
+                Surface(
+                    shape = FieldShape,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.surfaceContainer
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = selected,
+                            role = Role.RadioButton,
+                            onClick = { onTypeChange(entry) }
+                        )
+                ) {
+                    Text(
+                        text = stringResource(
+                            if (entry == GradientType.LINEAR) {
+                                R.string.gradientLinear
+                            } else {
+                                R.string.gradientRadial
+                            }
+                        ),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.onSecondaryContainer
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
                     )
                 }
             }
         }
+        // A radial gradient has no direction, but hiding the dial would collapse the row and
+        // make every switch jump; it fades out and stops taking input instead.
+        val enabled = type == GradientType.LINEAR
+        val dialAlpha by animateFloatAsState(if (enabled) 1f else 0.38f, label = "dialAlpha")
+        AngleDial(
+            angle = angle,
+            contentDescription = angleLabel,
+            enabled = enabled,
+            onAngleChange = onAngleChange,
+            modifier = Modifier.graphicsLayer { alpha = dialAlpha }
+        )
     }
 }
 
@@ -630,7 +812,9 @@ private fun GradientAngleControl(
 private fun AngleDial(
     angle: Float,
     contentDescription: String,
-    onAngleChange: (Float) -> Unit
+    onAngleChange: (Float) -> Unit,
+    enabled: Boolean = true,
+    modifier: Modifier = Modifier
 ) {
     val containerColor = MaterialTheme.colorScheme.surfaceContainerHighest
     val trackColor = MaterialTheme.colorScheme.secondaryContainer
@@ -649,10 +833,10 @@ private fun AngleDial(
         return snapGradientAngle(degrees)
     }
 
-    Box(contentAlignment = Alignment.Center) {
+    Box(modifier = modifier, contentAlignment = Alignment.Center) {
         Canvas(
             modifier = Modifier
-                .size(120.dp)
+                .size(DialSize)
                 .semantics {
                     this.contentDescription = contentDescription
                     progressBarRangeInfo = ProgressBarRangeInfo(angle, 0f..360f)
@@ -663,7 +847,8 @@ private fun AngleDial(
                 }
                 // The callback changes on every live angle recomposition. A stable key keeps this
                 // pointer coroutine alive for the entire gesture instead of restarting mid-drag.
-                .pointerInput(Unit) {
+                .pointerInput(enabled) {
+                    if (!enabled) return@pointerInput
                     awaitEachGesture {
                         // At the Main pass, descendants receive events before ancestors. Consuming
                         // here prevents the surrounding verticalScroll from claiming the drag while
