@@ -59,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
@@ -466,6 +467,9 @@ private fun GradientStopTrack(
     // The bar is inset by half a handle so a stop at 0 % or 100 % still sits fully inside it, and
     // by the ring so the handle travel matches the colours underneath it exactly.
     val edgeInset = handleWidth / 2 + TrackRing + TrackRingGap
+    val translucent = colors.any { (it ushr 24) != 0xFF }
+    val checkerLight = MaterialTheme.colorScheme.surfaceBright
+    val checkerDark = MaterialTheme.colorScheme.surfaceDim
     val painted = remember(colors, positions) {
         val clamped = clampedGradientPositions(positions)
         colors.mapIndexed { index, color ->
@@ -490,6 +494,11 @@ private fun GradientStopTrack(
                 .border(TrackRing, MaterialTheme.colorScheme.onSurface, InnerShape)
                 .padding(TrackRing + TrackRingGap)
                 .clip(InnerShape)
+                // Translucent stops need something behind them, or "transparent" reads as
+                // whatever the sheet's surface happens to be.
+                .drawBehind {
+                    if (translucent) drawAlphaCheckerboard(checkerLight, checkerDark)
+                }
                 .background(Brush.horizontalGradient(colorStops = painted))
         )
         Box(
@@ -581,6 +590,11 @@ private fun GradientStopTrack(
                             .border(HandleBorder, MaterialTheme.colorScheme.surface, CircleShape)
                             .padding(HandleBorder)
                             .clip(CircleShape)
+                            .drawBehind {
+                                if ((color ushr 24) != 0xFF) {
+                                    drawAlphaCheckerboard(checkerLight, checkerDark)
+                                }
+                            }
                             .background(Color(color))
                     )
                 }
@@ -632,15 +646,26 @@ private fun GradientStopRow(
         ) {
             // Only the swatch opens the picker: tapping the row is how a stop is selected on the
             // bar, and one gesture cannot mean both.
+            val checkerLight = MaterialTheme.colorScheme.surfaceBright
+            val checkerDark = MaterialTheme.colorScheme.surfaceDim
             Surface(
                 shape = CircleShape,
-                color = color,
+                color = Color.Transparent,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 onClick = onEditColor,
                 modifier = Modifier
                     .size(32.dp)
                     .semantics { contentDescription = editColorLabel }
-            ) {}
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .drawBehind {
+                            if (color.alpha < 1f) drawAlphaCheckerboard(checkerLight, checkerDark)
+                            drawRect(color)
+                        }
+                )
+            }
             Text(
                 text = color.toHexString().uppercase(),
                 style = MaterialTheme.typography.bodyMedium,
@@ -691,6 +716,9 @@ private fun ColorizerColorRow(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val checkerLight = MaterialTheme.colorScheme.surfaceBright
+    val checkerDark = MaterialTheme.colorScheme.surfaceDim
+
     OptionCard(
         label = label,
         onClick = onClick,
@@ -698,10 +726,19 @@ private fun ColorizerColorRow(
         trailing = {
             Surface(
                 shape = CircleShape,
-                color = color,
+                color = Color.Transparent,
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
                 modifier = Modifier.size(28.dp)
-            ) {}
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .drawBehind {
+                            if (color.alpha < 1f) drawAlphaCheckerboard(checkerLight, checkerDark)
+                            drawRect(color)
+                        }
+                )
+            }
         }
     )
 }

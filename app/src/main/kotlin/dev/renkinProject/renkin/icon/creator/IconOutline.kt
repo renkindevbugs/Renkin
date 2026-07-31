@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
@@ -75,12 +77,35 @@ object IconOutline {
         val canvas = Canvas(out)
 
         val mask = src.extractAlpha()
+        // Two rings of stamped masks approximate a filled dilation disc; the inner area is
+        // covered by the icon drawn on top anyway. The stamps build an opaque silhouette FIRST
+        // and the colour is painted through it once: stamping a translucent colour 32 times
+        // would stack its alpha until a 20%-transparent outline came out solid.
+        val dilated = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        val stamp = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+            this.color = -0x1
+        }
+        Canvas(dilated).apply {
+            for (radius in floatArrayOf(width, width / 2f)) {
+                val steps = 16
+                for (i in 0 until steps) {
+                    val angle = i * (2 * Math.PI / steps)
+                    drawBitmap(
+                        mask,
+                        (radius * cos(angle)).toFloat(),
+                        (radius * sin(angle)).toFloat(),
+                        stamp
+                    )
+                }
+            }
+        }
+        mask.recycle()
+
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
         if (gradient == null) {
             paint.color = color
         } else {
-            // The shader spans the whole icon, so every stamped mask samples the same gradient
-            // and the ring reads as one continuous sweep rather than 32 separate fills.
+            // The shader spans the whole icon, so the ring reads as one continuous sweep.
             paint.shader = buildColorizerShader(
                 gradient.allGradientColors,
                 gradient.gradientType,
@@ -90,22 +115,16 @@ object IconOutline {
                 gradient.gradientPositions
             )
         }
-
-        // Two rings of stamped masks approximate a filled dilation disc; the inner area is
-        // covered by the icon drawn on top anyway.
-        for (radius in floatArrayOf(width, width / 2f)) {
-            val steps = 16
-            for (i in 0 until steps) {
-                val angle = i * (2 * Math.PI / steps)
-                canvas.drawBitmap(
-                    mask,
-                    (radius * cos(angle)).toFloat(),
-                    (radius * sin(angle)).toFloat(),
-                    paint
-                )
-            }
-        }
-        mask.recycle()
+        canvas.drawBitmap(dilated, 0f, 0f, null)
+        canvas.drawRect(
+            0f,
+            0f,
+            src.width.toFloat(),
+            src.height.toFloat(),
+            paint.apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN) }
+        )
+        paint.xfermode = null
+        dilated.recycle()
 
         canvas.drawBitmap(src, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
         return out
