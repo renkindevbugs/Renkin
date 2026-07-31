@@ -474,7 +474,11 @@ fun ApplicationList(
     // a reinstall or list refresh that swapped apps without changing the count. Looked up off
     // the main thread via the view model — until they arrive, INSTALL_DATE sort just shows the
     // default order.
-    val packageNames = applications.map { it.packageName }
+    val packageNames by remember(applications) {
+        derivedStateOf {
+            applications.mapTo(linkedSetOf()) { it.packageName }.toList()
+        }
+    }
     val installTimes by produceState(emptyMap<String, Long>(), packageNames) {
         value = viewModel.installTimes(packageNames)
     }

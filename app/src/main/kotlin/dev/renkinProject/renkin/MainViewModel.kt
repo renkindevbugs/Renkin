@@ -315,7 +315,7 @@ class MainViewModel @Inject constructor(
     suspend fun installTimes(packageNames: List<String>): Map<String, Long> =
         withContext(Dispatchers.IO) {
             val pm = getApplication<Application>().packageManager
-            packageNames.associateWith { pkg ->
+            packageNames.distinct().associateWith { pkg ->
                 runCatching { pm.getPackageInfo(pkg, 0).firstInstallTime }.getOrDefault(0L)
             }
         }

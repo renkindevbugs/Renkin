@@ -107,7 +107,8 @@ internal fun WatchRuleEditor(
     // Looked up off the main thread via the view model (this was what made the editor take ~1s
     // to open). Until they arrive, INSTALL_DATE sort just shows the default order.
     val installTimes by produceState(emptyMap<String, Long>(), apps) {
-        value = viewModel.installTimes(apps.map { it.packageName })
+        val packageNames = apps.mapTo(linkedSetOf()) { it.packageName }.toList()
+        value = viewModel.installTimes(packageNames)
     }
 
     val sortedPacks = remember(packs) { packs.sortedBy { it.applicationName.lowercase() } }
