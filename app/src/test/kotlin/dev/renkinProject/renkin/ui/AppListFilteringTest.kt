@@ -40,8 +40,12 @@ class AppListFilteringTest {
         filterNoIcon: Boolean = false,
         filterFallback: Boolean = false,
         sortOrder: AppSortOrder = AppSortOrder.NAME,
-        installTimes: Map<String, Long> = emptyMap()
-    ) = sortedFilteredApps(query, filterNoIcon, filterFallback, sortOrder, installTimes) { it }
+        installTimes: Map<String, Long> = emptyMap(),
+        filterLocked: Boolean = false,
+        lockedKeys: Set<String> = emptySet()
+    ) = sortedFilteredApps(
+        query, filterNoIcon, filterFallback, sortOrder, installTimes, filterLocked, lockedKeys
+    ) { it }
         .map { it.appName }
 
     @Test
@@ -87,9 +91,45 @@ class AppListFilteringTest {
     }
 
     @Test
-    fun fallbackFilterTakesPrecedenceOverNoIcon() {
-        // Both flags on: fallback wins (matches the AppSortFilterMenu's mutually exclusive choice).
-        val apps = listOf(app("NoIcon", hasIcon = false), app("Fallback", fallback = true))
-        assertEquals(listOf("Fallback"), apps.run(filterNoIcon = true, filterFallback = true))
+    fun combinedFiltersShowTheUnionOfTheirGroups() {
+        // Both on: the hero card's toggle group is multi-select, so the list adds the groups
+        // instead of one winning — its counts are only honest if this is a union.
+        val apps = listOf(app("NoIcon", hasIcon = false), app("Fallback", fallback = true), app("Plain"))
+        assertEquals(
+            listOf("Fallback", "NoIcon"),
+            apps.run(filterNoIcon = true, filterFallback = true)
+        )
+    }
+
+    @Test
+    fun noIconFilterExcludesLockedApps() {
+        // A locked app has no icon to show but isn't fixable here — it belongs to the locked
+        // group only, so the two groups stay disjoint and their counts add up.
+        val locked = app("Locked", hasIcon = false)
+        val apps = listOf(app("Missing", hasIcon = false), locked)
+        assertEquals(
+            listOf("Missing"),
+            apps.run(filterNoIcon = true, lockedKeys = setOf(locked.key))
+        )
+    }
+
+    @Test
+    fun lockedFilterKeepsOnlyLockedApps() {
+        val locked = app("Locked", hasIcon = false)
+        val apps = listOf(app("Missing", hasIcon = false), locked, app("Plain"))
+        assertEquals(
+            listOf("Locked"),
+            apps.run(filterLocked = true, lockedKeys = setOf(locked.key))
+        )
+    }
+
+    @Test
+    fun missingAndLockedTogetherCoverBothGroups() {
+        val locked = app("Locked", hasIcon = false)
+        val apps = listOf(app("Missing", hasIcon = false), locked, app("Plain"))
+        assertEquals(
+            listOf("Locked", "Missing"),
+            apps.run(filterNoIcon = true, filterLocked = true, lockedKeys = setOf(locked.key))
+        )
     }
 }

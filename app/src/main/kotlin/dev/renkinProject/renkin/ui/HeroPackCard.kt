@@ -15,7 +15,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,10 +28,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.HideImage
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -37,6 +46,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -97,24 +108,34 @@ internal data class HeroPackStats(
     val removedCount: Int,
     val themedCount: Int,
     val totalCount: Int,
-    val fallbackCount: Int
+    val fallbackCount: Int,
+    // Apps with no icon at all, excluding the locked ones — same split the list filters use, so
+    // the card's chips and the filtered list always agree on the number.
+    val missingCount: Int,
+    val lockedCount: Int
 )
 
 internal fun calculateHeroPackStats(
     apps: List<PackageInfoStruct>,
-    builtKeys: Set<String>
+    builtKeys: Set<String>,
+    lockedKeys: Set<String> = emptySet()
 ): HeroPackStats {
     var builtCount = 0
     var addedCount = 0
     var removedCount = 0
     var fallbackCount = 0
+    var missingCount = 0
+    var lockedCount = 0
 
     apps.forEach { app ->
+        val locked = app.key in lockedKeys
+        if (locked) lockedCount++
         if (app.createdIcon != null) {
             if (app.key in builtKeys) builtCount++ else addedCount++
             if (app.isFallback) fallbackCount++
-        } else if (app.key in builtKeys) {
-            removedCount++
+        } else {
+            if (app.key in builtKeys) removedCount++
+            if (!locked) missingCount++
         }
     }
 
@@ -124,7 +145,9 @@ internal fun calculateHeroPackStats(
         removedCount = removedCount,
         themedCount = builtCount + addedCount,
         totalCount = apps.size,
-        fallbackCount = fallbackCount
+        fallbackCount = fallbackCount,
+        missingCount = missingCount,
+        lockedCount = lockedCount
     )
 }
 
@@ -137,7 +160,13 @@ internal fun calculateHeroPackStats(
  * hand-picked and already-built icons survive that refresh (see PackageInfoStruct.isRefreshMade).
  */
 @Composable
-fun HeroPackCard(iconPacks: List<IconPack>) {
+fun HeroPackCard(
+    iconPacks: List<IconPack>,
+    // The home list's active filters, so the card's toggles can drive them. A null callback
+    // hides them — previews reuse this card without a list to filter.
+    activeFilters: Set<AppProblemFilter> = emptySet(),
+    onFilterToggle: ((AppProblemFilter) -> Unit)? = null
+) {
     val viewModel: MainViewModel = hiltViewModel()
     val prefs = getPreferences()
     val preferences = prefs.getPreferencesValue()
@@ -151,7 +180,9 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
     // added since (pending build), red = removed since.
     val stats by remember(viewModel) {
         derivedStateOf {
-            calculateHeroPackStats(viewModel.applicationList, viewModel.builtKeys)
+            calculateHeroPackStats(
+                viewModel.applicationList, viewModel.builtKeys, viewModel.lockedIconKeys
+            )
         }
     }
     val builtCount = stats.builtCount
@@ -253,9 +284,19 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
                 }
                 Spacer(Modifier.height(6.dp))
                 ChangeBar(totalCount, builtCount, addedCount, removedCount)
-                // Fallback icons look themed but weren't a real pack match — call out the
-                // count so a full bar isn't mistaken for "every app was found".
-                if (fallbackCount > 0) {
+                if (onFilterToggle != null) {
+                    // The problems, one tap from being worked on: each button adds or removes
+                    // exactly the group it counts (see sortedFilteredApps).
+                    ProblemFilterButtons(
+                        missingCount = stats.missingCount,
+                        fallbackCount = fallbackCount,
+                        lockedCount = stats.lockedCount,
+                        active = activeFilters,
+                        onToggle = onFilterToggle
+                    )
+                } else if (fallbackCount > 0) {
+                    // Fallback icons look themed but weren't a real pack match — call out the
+                    // count so a full bar isn't mistaken for "every app was found".
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = stringResource(R.string.fallbackCount, fallbackCount),
@@ -310,7 +351,12 @@ private fun PackPickerSheet(
     onPick: (source: Source, packPackage: String?) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
-    val usage = remember { viewModel.packUsageCounts() }
+    val usage = remember(iconPacks) { viewModel.packUsageCounts() }
+    // Coverage answers the question the picker used to leave open: which pack actually knows
+    // this device's apps. Re-read only if the installed pack list changes while the sheet is up;
+    // no appfilter parsing or drawable decoding happens here.
+    val matched = remember(iconPacks) { viewModel.packMatchedAppCounts() }
+    val installedAppCount = viewModel.applicationList.size
 
     // Two anchors only (open / dismissed), like Mihon's AdaptiveSheet: with the default
     // partially-expanded middle state, the list's nested scroll hands off to a sheet drag at
@@ -347,10 +393,15 @@ private fun PackPickerSheet(
             }
             items(iconPacks, key = { it.packageName }) { pack ->
                 val selected = selectedSource == Source.ICON_PACK && pack.packageName == selectedPackage
+                val used = usage[pack.packageName] ?: 0
+                val coverage = matched[pack.packageName] ?: 0
                 PickerRow(
                     title = pack.applicationName,
-                    subtitle = (usage[pack.packageName] ?: 0).let { count ->
-                        if (count > 0) stringResource(R.string.packUsedCount, count) else null
+                    subtitle = when {
+                        used > 0 -> stringResource(
+                            R.string.packCoverageUsed, coverage, installedAppCount, used
+                        )
+                        else -> stringResource(R.string.packCoverage, coverage, installedAppCount)
                     },
                     icon = rememberPackIcon(pack.packageName),
                     selected = selected
@@ -403,7 +454,7 @@ private fun PickerRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 10.dp),
+            .padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) {
@@ -411,15 +462,18 @@ private fun PickerRow(
                 bitmap = icon,
                 contentDescription = null,
                 modifier = Modifier
-                    .padding(end = 12.dp)
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(9.dp))
+                    .padding(end = 14.dp)
+                    .size(40.dp)
+                    .clip(InnerShape)
             )
         }
         Column(Modifier.weight(1f)) {
+            // The pack name carries the row; the coverage line under it is detail. At the same
+            // weight the two blurred together at a glance.
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             if (subtitle != null) {
@@ -549,5 +603,70 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
             radius = 2.dp.toPx(),
             center = Offset(size.width - radius, size.height / 2f)
         )
+    }
+}
+
+
+/**
+ * The hero card's connected shortcuts for missing / fallback / locked apps. Every button toggles
+ * independently and the app list shows the union of all selected groups. Only non-empty groups
+ * get a button, so a finished pack shows none at all.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ProblemFilterButtons(
+    missingCount: Int,
+    fallbackCount: Int,
+    lockedCount: Int,
+    active: Set<AppProblemFilter>,
+    onToggle: (AppProblemFilter) -> Unit
+) {
+    // Build the tiny list first so empty groups don't leave inert controls or gaps in the row.
+    val entries = buildList {
+        if (missingCount > 0) {
+            add(Triple(AppProblemFilter.MISSING, stringResource(R.string.filterChipMissing, missingCount), Icons.Outlined.HideImage to Icons.Filled.HideImage))
+        }
+        if (fallbackCount > 0) {
+            add(Triple(AppProblemFilter.FALLBACK, stringResource(R.string.filterChipFallback, fallbackCount), Icons.Outlined.AutoFixHigh to Icons.Filled.AutoFixHigh))
+        }
+        if (lockedCount > 0) {
+            add(Triple(AppProblemFilter.LOCKED, stringResource(R.string.filterChipLocked, lockedCount), Icons.Outlined.Lock to Icons.Filled.Lock))
+        }
+    }
+    if (entries.isEmpty()) return
+
+    Spacer(Modifier.height(10.dp))
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        entries.forEachIndexed { index, (filter, label, icons) ->
+            val selected = filter in active
+            ToggleButton(
+                checked = selected,
+                onCheckedChange = { onToggle(filter) },
+                shapes = when {
+                    entries.size == 1 -> ToggleButtonDefaults.shapes()
+                    index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                    index == entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                },
+                colors = ToggleButtonDefaults.toggleButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    checkedContainerColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    checkedContentColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                contentPadding = ToggleButtonDefaults.ContentPadding
+            ) {
+                Icon(
+                    imageVector = if (selected) icons.second else icons.first,
+                    contentDescription = null,
+                    modifier = Modifier.size(ToggleButtonDefaults.IconSize)
+                )
+                Spacer(Modifier.size(ToggleButtonDefaults.IconSpacing))
+                Text(label, style = MaterialTheme.typography.labelLarge)
+            }
+        }
     }
 }

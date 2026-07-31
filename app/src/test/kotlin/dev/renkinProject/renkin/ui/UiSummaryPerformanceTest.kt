@@ -53,10 +53,31 @@ class UiSummaryPerformanceTest {
                 removedCount = 1,
                 themedCount = 2,
                 totalCount = 4,
-                fallbackCount = 1
+                fallbackCount = 1,
+                missingCount = 2,
+                lockedCount = 0
             ),
             result
         )
+    }
+
+    @Test
+    fun heroStats_countsLockedAppsSeparatelyFromMissingOnes() {
+        // The hero card's toggle group labels these two groups separately, and the list filters
+        // split them the same way — a locked app must not also be counted as missing.
+        val locked = app("Locked", hasIcon = false)
+        val missing = app("Missing", hasIcon = false)
+        val themed = app("Themed", hasIcon = true)
+
+        val result = calculateHeroPackStats(
+            apps = listOf(locked, missing, themed),
+            builtKeys = emptySet(),
+            lockedKeys = setOf(locked.key)
+        )
+
+        assertEquals(1, result.missingCount)
+        assertEquals(1, result.lockedCount)
+        assertEquals(1, result.themedCount)
     }
 
     @Test

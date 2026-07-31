@@ -125,6 +125,17 @@ class IconPackRepository(private val context: Context) {
         }
     }
 
+    /**
+     * How many of the user's installed apps each pack declares an icon for, keyed by pack.
+     *
+     * Read off the index built at load time — `<item>` entries only, already narrowed to
+     * installed components and deduplicated per component, so asking does no parsing or drawable
+     * decoding. It counts declared mappings, not decodable artwork: a malformed pack can point at
+     * a resource that isn't there, and verifying every drawable would mean decoding the whole pack.
+     */
+    fun matchedAppCounts(): Map<String, Int> =
+        appDrawableNamesByPackage.mapValues { (_, drawables) -> drawables.size }
+
     /** Drawables every installed app has in [iconPack], keyed by app. */
     fun getAppDrawables(iconPack: String): Map<InstalledApplication, ResourceDrawable> {
         if (iconPack == "") return emptyMap()
