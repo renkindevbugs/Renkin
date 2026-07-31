@@ -33,9 +33,12 @@ data class ColorizerStyle(
         get() = listOf(firstColor) + gradientStops
 }
 
-/** Two stops make a gradient; past four they smear into mud at launcher icon sizes. */
+/**
+ * Two stops make a gradient. The upper bound is a UI limit, not a rendering one: past ten the
+ * handles have no room left on the bar, and the library's richest gradients still fit.
+ */
 const val MIN_GRADIENT_STOPS = 2
-const val MAX_GRADIENT_STOPS = 4
+const val MAX_GRADIENT_STOPS = 10
 
 enum class ColorizerMode {
     SINGLE_COLOR,

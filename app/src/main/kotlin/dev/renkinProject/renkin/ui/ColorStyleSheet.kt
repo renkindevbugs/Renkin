@@ -25,8 +25,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Bookmarks
+import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -107,6 +109,7 @@ internal fun ColorStyleSheet(
     var draft by remember { mutableStateOf(initialStyle) }
     var presetsOpen by remember { mutableStateOf(false) }
     var saveOpen by remember { mutableStateOf(false) }
+    var galleryOpen by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     val wide = LocalConfiguration.current.screenWidthDp >= WIDE_LAYOUT_DP
@@ -176,18 +179,41 @@ internal fun ColorStyleSheet(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Saved colours live bottom-left, out of the way of Apply. Icon-only, so a
-                // long press has to explain them.
+                // Saved colours and the gradient library live bottom-left, out of the way of
+                // Apply. Icon-only, so a long press has to explain them.
+                TooltipIconButton(
+                    icon = Icons.Filled.Palette,
+                    label = stringResource(R.string.gradientGalleryTitle),
+                    onClick = { galleryOpen = true }
+                )
                 TooltipIconButton(
                     icon = Icons.Filled.Bookmarks,
                     label = stringResource(R.string.savedColorsTitle),
                     onClick = { presetsOpen = true }
                 )
-                TooltipIconButton(
-                    icon = Icons.Filled.BookmarkAdd,
-                    label = stringResource(R.string.savedColorsSaveTitle),
-                    onClick = { saveOpen = true }
-                )
+                // Already saved: the same button takes it back out, so the icon is never a lie
+                // about what a tap will do.
+                val savedDraft = savedPresetMatching(LocalColorPresets.current.presets, draft)
+                if (savedDraft == null) {
+                    TooltipIconButton(
+                        icon = Icons.Filled.BookmarkAdd,
+                        label = stringResource(R.string.savedColorsSaveTitle),
+                        onClick = { saveOpen = true }
+                    )
+                } else {
+                    val store = LocalColorPresets.current
+                    RenkinTooltipBox(text = stringResource(R.string.savedColorsRemoveTitle)) {
+                        IconButton(onClick = { store.delete(savedDraft.id) }) {
+                            Icon(
+                                imageVector = Icons.Filled.Bookmark,
+                                contentDescription = stringResource(
+                                    R.string.savedColorsRemoveTitle
+                                ),
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
+                }
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.colorizeCancel)) }
                 Button(onClick = { onApply(draft) }) { Text(stringResource(R.string.apply)) }
@@ -208,6 +234,23 @@ internal fun ColorStyleSheet(
     }
     if (saveOpen) {
         SaveColorPresetDialog(style = draft, onDismiss = { saveOpen = false })
+    }
+    if (galleryOpen) {
+        GradientGalleryDialog(
+            // A preset replaces the colours, the stop positions and the angle, but leaves the
+            // solid/monochrome/inverse switches the user already set alone.
+            onUse = { picked ->
+                draft = draft.copy(
+                    mode = picked.mode,
+                    gradientType = picked.gradientType,
+                    firstColor = picked.firstColor,
+                    gradientStops = picked.gradientStops,
+                    gradientPositions = picked.gradientPositions,
+                    gradientAngle = picked.gradientAngle
+                )
+            },
+            onDismiss = { galleryOpen = false }
+        )
     }
 }
 

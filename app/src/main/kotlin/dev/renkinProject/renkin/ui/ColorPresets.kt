@@ -14,7 +14,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Sort
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -28,6 +34,7 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +48,7 @@ import dev.renkinProject.renkin.data.ColorPreset
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
+import dev.renkinProject.renkin.icon.creator.evenGradientPositions
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import dev.renkinProject.renkin.ui.theme.InnerShape
 
@@ -81,6 +89,51 @@ fun ProvideColorPresets(
     CompositionLocalProvider(LocalColorPresets provides store, content = content)
 }
 
+/**
+ * The saved colour holding the same colours as [style], if there is one. Only the colours and
+ * their positions are compared: turning a saved gradient radial or spinning its angle is a view
+ * of the same colours, while repainting or dragging a stop makes it a different one.
+ */
+fun savedPresetMatching(presets: List<ColorPreset>, style: ColorizerStyle): ColorPreset? =
+    presets.firstOrNull { preset ->
+        decodeColorizerStyle(preset.style)?.let { saved ->
+            saved.mode == style.mode &&
+                saved.allGradientColors == style.allGradientColors &&
+                comparablePositions(saved) == comparablePositions(style)
+        } == true
+    }
+
+/** No positions and an even spread are the same gradient, so they must compare equal. */
+private fun comparablePositions(style: ColorizerStyle): List<Float> =
+    style.gradientPositions.takeIf { it.size == style.allGradientColors.size }
+        ?: evenGradientPositions(style.allGradientColors.size)
+
+/** How the saved-colour list is ordered. Newest first is the default: it is what was just saved. */
+enum class ColorPresetSort {
+    NEWEST,
+    OLDEST,
+    NAME
+}
+
+/** The rows the saved-colour dialog shows: name search first, then the chosen order. */
+fun sortedColorPresets(
+    presets: List<ColorPreset>,
+    query: String,
+    sort: ColorPresetSort
+): List<ColorPreset> {
+    val trimmed = query.trim()
+    val matching = if (trimmed.isEmpty()) {
+        presets
+    } else {
+        presets.filter { it.name.contains(trimmed, ignoreCase = true) }
+    }
+    return when (sort) {
+        ColorPresetSort.NEWEST -> matching.sortedByDescending { it.createdAt }
+        ColorPresetSort.OLDEST -> matching.sortedBy { it.createdAt }
+        ColorPresetSort.NAME -> matching.sortedBy { it.name.lowercase() }
+    }
+}
+
 /** Picker over the saved colours: tap one to apply it to the sheet's draft, × to delete it. */
 @Composable
 internal fun ColorPresetDialog(
@@ -88,6 +141,11 @@ internal fun ColorPresetDialog(
     onDismiss: () -> Unit
 ) {
     val store = LocalColorPresets.current
+    var query by rememberSaveable { mutableStateOf("") }
+    var sort by rememberSaveable { mutableStateOf(ColorPresetSort.NEWEST) }
+    val shown = remember(store.presets, query, sort) {
+        sortedColorPresets(store.presets, query, sort)
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(shape = DialogShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
@@ -107,11 +165,31 @@ internal fun ColorPresetDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
+                    // Searching a handful of colours would be noise; the controls appear once the
+                    // library is big enough to actually need them.
+                    if (store.presets.size >= SEARCHABLE_PRESET_COUNT) {
+                        SearchField(
+                            value = query,
+                            onValueChange = { query = it },
+                            placeholder = stringResource(R.string.savedColorsSearch),
+                            modifier = Modifier.fillMaxWidth(),
+                            extraTrailing = {
+                                ColorPresetSortMenu(sort = sort, onSortChange = { sort = it })
+                            }
+                        )
+                    }
+                    if (shown.isEmpty()) {
+                        Text(
+                            text = stringResource(R.string.savedColorsNoMatch),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                     LazyColumn(
                         modifier = Modifier.heightIn(max = 320.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(store.presets, key = { it.id }) { preset ->
+                        items(shown, key = { it.id }) { preset ->
                             val style = remember(preset.style) {
                                 decodeColorizerStyle(preset.style)
                             }
@@ -171,6 +249,82 @@ internal fun ColorPresetDialog(
         }
     }
 }
+
+/**
+ * Bookmark that lights up while [style]'s colours are in the library and removes them again when
+ * tapped. The state is derived from the library, not remembered locally, so repainting a stop or
+ * dragging it puts the icon out on its own — while switching to radial or spinning the angle,
+ * which describe the same colours, leaves it lit.
+ */
+@Composable
+internal fun SavedColorToggle(
+    name: String,
+    style: ColorizerStyle,
+    modifier: Modifier = Modifier
+) {
+    val store = LocalColorPresets.current
+    val saved = remember(store.presets, style) { savedPresetMatching(store.presets, style) }
+
+    IconButton(
+        onClick = { saved?.let { store.delete(it.id) } ?: store.save(name, style) },
+        modifier = modifier
+    ) {
+        Icon(
+            imageVector = if (saved != null) Icons.Filled.Bookmark else Icons.Filled.BookmarkAdd,
+            contentDescription = stringResource(
+                if (saved != null) R.string.savedColorsRemoveTitle else R.string.savedColorsSaveTitle
+            ),
+            tint = if (saved != null) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        )
+    }
+}
+
+/** Sort choice for the saved-colour list, living inside the search field like the home list's. */
+@Composable
+private fun ColorPresetSortMenu(
+    sort: ColorPresetSort,
+    onSortChange: (ColorPresetSort) -> Unit
+) {
+    var open by remember { mutableStateOf(false) }
+
+    Box {
+        IconButton(onClick = { open = true }) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.Sort,
+                contentDescription = stringResource(R.string.savedColorsSort)
+            )
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            ColorPresetSort.entries.forEach { entry ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(entry.labelRes())) },
+                    onClick = {
+                        onSortChange(entry)
+                        open = false
+                    },
+                    leadingIcon = {
+                        if (entry == sort) {
+                            Icon(imageVector = Icons.Filled.Check, contentDescription = null)
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun ColorPresetSort.labelRes(): Int = when (this) {
+    ColorPresetSort.NEWEST -> R.string.savedColorsSortNewest
+    ColorPresetSort.OLDEST -> R.string.savedColorsSortOldest
+    ColorPresetSort.NAME -> R.string.savedColorsSortName
+}
+
+// Below this many saved colours the search field and sort menu are more clutter than help.
+private const val SEARCHABLE_PRESET_COUNT = 6
 
 /** Name prompt for saving the current colour; prefilled with the next free "Color N". */
 @Composable

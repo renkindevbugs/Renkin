@@ -49,6 +49,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
@@ -111,6 +112,10 @@ class GlobalOptionsActivity : ComponentActivity() {
                     )
                     finish()
                 }
+            }
+
+            LaunchedEffect(Unit) {
+                viewModel.toastEvents.collect { resId -> toaster.show(getString(resId)) }
             }
 
             CompositionLocalProvider(LocalToaster provides toaster) {
@@ -189,12 +194,25 @@ class GlobalOptionsViewModel @Inject constructor(
             emptyList()
         )
 
+    // One-shot toast events (string resource ids), collected by the activity. Same contract as
+    // MainViewModel's: the message fires after the write, never optimistically from the UI.
+    private val _toastEvents = kotlinx.coroutines.channels.Channel<Int>(
+        kotlinx.coroutines.channels.Channel.BUFFERED
+    )
+    val toastEvents = _toastEvents.receiveAsFlow()
+
     fun saveColorPreset(name: String, style: String) {
-        viewModelScope.launch { appProvider.saveColorPreset(name, style) }
+        viewModelScope.launch {
+            appProvider.saveColorPreset(name, style)
+            _toastEvents.trySend(R.string.savedColorsAdded)
+        }
     }
 
     fun deleteColorPreset(id: Long) {
-        viewModelScope.launch { appProvider.deleteColorPreset(id) }
+        viewModelScope.launch {
+            appProvider.deleteColorPreset(id)
+            _toastEvents.trySend(R.string.savedColorsRemoved)
+        }
     }
 
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
