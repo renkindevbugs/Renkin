@@ -539,7 +539,7 @@ internal fun ModifierTab(
                                             )
                                         }
                                     }
-                                    IconColorCard(iconColor) { colorPickerOpen = true }
+                                    ColorRow(stringResource(R.string.iconColor), iconColor) { colorPickerOpen = true }
                                 }
 
                                 ImageEdit.PATH -> {
@@ -555,7 +555,7 @@ internal fun ModifierTab(
                                             }
                                         }
                                     }
-                                    IconColorCard(iconColor) { colorPickerOpen = true }
+                                    ColorRow(stringResource(R.string.iconColor), iconColor) { colorPickerOpen = true }
                                 }
 
                                 ImageEdit.COLORIZE -> {
@@ -990,23 +990,6 @@ internal fun shapeLabel(shape: IconShape): String = stringResource(
         IconShape.SUNNY -> R.string.shapeSunny
     }
 )
-
-/** The recolouring edits' colour row: opens the picker, shows the current colour as a swatch. */
-@Composable
-private fun IconColorCard(iconColor: Color, onClick: () -> Unit) {
-    OptionCard(
-        label = stringResource(R.string.iconColor),
-        onClick = onClick,
-        trailing = {
-            Surface(
-                shape = CircleShape,
-                color = iconColor,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier.size(28.dp)
-            ) {}
-        }
-    )
-}
 
 /** The tile glyph giving each image modifier a visual identity in the selector grid. */
 private fun imageEditIcon(edit: ImageEdit): ImageVector = when (edit) {

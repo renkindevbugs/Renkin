@@ -996,23 +996,6 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
     }
 }
 
-/** A colour-picking row: label plus the current colour as a tappable swatch. */
-@Composable
-private fun ColorRow(label: String, color: Color, onClick: () -> Unit) {
-    OptionCard(
-        label = label,
-        onClick = onClick,
-        trailing = {
-            Surface(
-                shape = CircleShape,
-                color = color,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier.size(28.dp)
-            ) {}
-        }
-    )
-}
-
 /** A switch row bound directly to caller state (unlike DefaultSwitchLayout's remembered copy). */
 @Composable
 private fun ControlledSwitchRow(
