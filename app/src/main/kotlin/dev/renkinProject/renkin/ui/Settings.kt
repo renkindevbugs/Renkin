@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 
 package dev.renkinProject.renkin.ui
 
@@ -37,6 +37,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -92,9 +93,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     val viewModel: MainViewModel = hiltViewModel()
     val view = LocalView.current
     val context = getCurrentContext()
-    val toaster = LocalToaster.current
     val scope = rememberCoroutineScope()
-    val iconsClearedMessage = stringResource(R.string.iconsCleared)
 
     var showStats by rememberSaveable { mutableStateOf(false) }
     var showCrashLogs by rememberSaveable { mutableStateOf(false) }
@@ -148,29 +147,45 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     ThemeRow(prefs)
 
                     SettingsSectionHeader(stringResource(R.string.settingsIconPacks))
-                    SettingsRow(Icons.Filled.Sync, stringResource(R.string.syncPacks)) {
+                    SettingsRow(
+                        Icons.Filled.Sync,
+                        stringResource(R.string.syncPacks),
+                        busy = viewModel.syncing
+                    ) {
                         viewModel.sync()
                     }
-                    SettingsRow(Icons.Filled.Apps, stringResource(R.string.refreshApplicationList)) {
+                    SettingsRow(
+                        Icons.Filled.Apps,
+                        stringResource(R.string.refreshApplicationList),
+                        busy = viewModel.appsRefreshing
+                    ) {
                         viewModel.refreshApps()
                     }
                     SettingsRow(Icons.Filled.BarChart, stringResource(R.string.statsButton)) {
                         showStats = true
                     }
                     SettingsSectionHeader(stringResource(R.string.settingsBackup))
-                    SettingsRow(Icons.Filled.Save, stringResource(R.string.exportBackup)) {
-                        if (!viewModel.backupInProgress) {
-                            exportBackupLauncher.launch(BackupManager.defaultFileName())
-                        }
+                    SettingsRow(
+                        Icons.Filled.Save,
+                        stringResource(R.string.exportBackup),
+                        busy = viewModel.backupInProgress
+                    ) {
+                        exportBackupLauncher.launch(BackupManager.defaultFileName())
                     }
-                    SettingsRow(Icons.Filled.Restore, stringResource(R.string.importBackup)) {
-                        if (!viewModel.backupInProgress) {
-                            importBackupLauncher.launch(arrayOf("*/*"))
-                        }
+                    SettingsRow(
+                        Icons.Filled.Restore,
+                        stringResource(R.string.importBackup),
+                        busy = viewModel.backupInProgress
+                    ) {
+                        importBackupLauncher.launch(arrayOf("*/*"))
                     }
 
                     SettingsSectionHeader(stringResource(R.string.settingsData), color = MaterialTheme.colorScheme.error)
-                    SettingsRow(Icons.Filled.DeleteSweep, stringResource(R.string.clearIcons)) {
+                    SettingsRow(
+                        Icons.Filled.DeleteSweep,
+                        stringResource(R.string.clearIcons),
+                        busy = viewModel.clearingIcons
+                    ) {
                         confirmClearIcons = true
                     }
                     SettingsRow(
@@ -247,11 +262,11 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
             title = stringResource(R.string.clearIconsTitle),
             text = stringResource(R.string.clearIconsText),
             icon = Icons.Filled.DeleteSweep,
+            // The acknowledgement toast comes from the view model once the clear really
+            // finished — the list change alone is easy to miss from Settings.
             onConfirm = {
                 confirmClearIcons = false
                 viewModel.clearIcons()
-                // Visible acknowledgement — the list change alone is easy to miss from Settings.
-                toaster.show(iconsClearedMessage)
             },
             onDismiss = { confirmClearIcons = false }
         )
@@ -270,31 +285,53 @@ private fun SettingsSectionHeader(text: String, color: Color = MaterialTheme.col
     )
 }
 
-/** One tappable settings row: leading icon, label, optional trailing content (e.g. a badge). */
+/**
+ * One tappable settings row: leading icon, label, optional trailing content (e.g. a badge).
+ *
+ * [busy] is for the rows whose work takes a noticeable moment (syncing packs, reloading the app
+ * list, backup import/export). They used to swallow the tap silently while running, so a slow
+ * operation looked like a dead row — now the row dims and shows a spinner instead.
+ */
+// internal, not private: the busy behaviour has its own compose test.
 @Composable
-private fun SettingsRow(
+internal fun SettingsRow(
     icon: ImageVector,
     label: String,
     tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    busy: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
     onClick: () -> Unit
 ) {
+    val contentAlpha = if (busy) 0.5f else 1f
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = !busy, onClick = onClick)
             .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = tint.copy(alpha = contentAlpha),
+            modifier = Modifier.size(22.dp)
+        )
         Spacer(Modifier.width(16.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = if (tint == MaterialTheme.colorScheme.error) tint else MaterialTheme.colorScheme.onSurface,
+            color = (if (tint == MaterialTheme.colorScheme.error) tint else MaterialTheme.colorScheme.onSurface)
+                .copy(alpha = contentAlpha),
             modifier = Modifier.weight(1f)
         )
-        trailing?.invoke()
+        if (busy) {
+            LoadingIndicator(
+                modifier = Modifier.size(22.dp),
+                color = MaterialTheme.colorScheme.primary
+            )
+        } else {
+            trailing?.invoke()
+        }
     }
 }
 

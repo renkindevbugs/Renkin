@@ -618,13 +618,30 @@ class MainViewModel @Inject constructor(
     }
 
     /** Re-reads the installed icon packs (and unlocks icons whose pack just arrived). */
+    /** True while [sync] runs — the Settings row shows it and blocks re-entry. */
+    var syncing by mutableStateOf(false)
+        private set
+
     fun sync() {
+        if (syncing) return
+        syncing = true
         viewModelScope.launch {
-            appProvider.forceSync()
-            packBrowserPreviews.clear()
-            // The sync may have unlocked held-back icons — the badge/banner must follow.
-            refreshMissingPacks(prompt = false)
-            _toastEvents.trySend(R.string.packsSynced)
+            try {
+                appProvider.forceSync()
+                packBrowserPreviews.clear()
+                // The sync may have unlocked held-back icons — the badge/banner must follow.
+                refreshMissingPacks(prompt = false)
+                _toastEvents.trySend(R.string.packsSynced)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Re-parsing every installed pack can fail on a malformed one — say so instead
+                // of leaving the row spinning with no outcome.
+                Log.error("MainViewModel", "Icon pack sync failed", e)
+                _toastEvents.trySend(R.string.packsSyncFailed)
+            } finally {
+                syncing = false
+            }
         }
     }
 
@@ -787,12 +804,32 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Clears every created icon (and persists the empty state). */
+    /** True while [clearIcons] runs — the Settings row shows it and blocks re-entry. */
+    var clearingIcons by mutableStateOf(false)
+        private set
+
+    /**
+     * Clears every created icon (and persists the empty state). The toast is emitted here, once
+     * the work is really done: Settings used to show it the moment the call was made, so a slow
+     * or failing clear reported success that hadn't happened.
+     */
     fun clearIcons() {
+        if (clearingIcons) return
+        clearingIcons = true
         viewModelScope.launch {
-            appProvider.clearIcons()
-            // Saved pack is now empty → reset both change baselines.
-            resetChangeBaselines()
+            try {
+                appProvider.clearIcons()
+                // Saved pack is now empty → reset both change baselines.
+                resetChangeBaselines()
+                _toastEvents.trySend(R.string.iconsCleared)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.error("MainViewModel", "Clearing icons failed", e)
+                _toastEvents.trySend(R.string.iconsClearFailed)
+            } finally {
+                clearingIcons = false
+            }
         }
     }
 
