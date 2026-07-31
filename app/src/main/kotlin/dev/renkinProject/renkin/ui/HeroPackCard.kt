@@ -14,6 +14,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -44,11 +45,13 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.ShapeDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -56,6 +59,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -341,6 +345,47 @@ fun HeroPackCard(
     }
 }
 
+/**
+ * The picker's pack rows: best coverage first — that is the question the picker exists to
+ * answer — with ties by name so the order is stable between openings, then narrowed by the
+ * search query. Pulled out of the composable so the ordering has a test; it was silently lost
+ * once in a refactor and nothing failed.
+ */
+internal fun pickerPacks(
+    iconPacks: List<IconPack>,
+    matchedCounts: Map<String, Int>,
+    query: String
+): List<IconPack> {
+    val sorted = iconPacks.sortedWith(
+        compareByDescending<IconPack> { matchedCounts[it.packageName] ?: 0 }
+            .thenBy { it.applicationName.lowercase() }
+    )
+    val trimmed = query.trim()
+    return if (trimmed.isEmpty()) sorted
+    else sorted.filter { it.applicationName.contains(trimmed, ignoreCase = true) }
+}
+
+/**
+ * Which row the picker opens on: the current choice, so it isn't hidden below the fold of a
+ * coverage-sorted list. Null means "don't scroll" — while searching, the top of the results is
+ * the right place to be. The non-pack sources follow the packs and one divider, in list order.
+ */
+internal fun pickerScrollIndex(
+    shownPacks: List<IconPack>,
+    selectedSource: Source,
+    selectedPackage: String,
+    query: String
+): Int? {
+    if (query.trim().isNotEmpty()) return null
+    return when (selectedSource) {
+        Source.ICON_PACK ->
+            shownPacks.indexOfFirst { it.packageName == selectedPackage }.takeIf { it >= 0 }
+        Source.NONE -> shownPacks.size + 1
+        Source.APPLICATION_ICON -> shownPacks.size + 2
+        Source.APPLICATION_NAME -> shownPacks.size + 3
+    }
+}
+
 /** The pack picker: installed icon packs (with usage counts), plus the non-pack sources. */
 @Composable
 private fun PackPickerSheet(
@@ -357,6 +402,12 @@ private fun PackPickerSheet(
     // no appfilter parsing or drawable decoding happens here.
     val matched = remember(iconPacks) { viewModel.packMatchedAppCounts() }
     val installedAppCount = viewModel.applicationList.size
+
+    var query by rememberSaveable { mutableStateOf("") }
+    val trimmedQuery = query.trim()
+    val shownPacks = remember(iconPacks, matched, trimmedQuery) {
+        pickerPacks(iconPacks, matched, trimmedQuery)
+    }
 
     // Two anchors only (open / dismissed), like Mihon's AdaptiveSheet: with the default
     // partially-expanded middle state, the list's nested scroll hands off to a sheet drag at
@@ -376,22 +427,54 @@ private fun PackPickerSheet(
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available
         }
     }
+    // Opening the sheet lands on the current choice instead of the top of a coverage-sorted
+    // list, where the selected pack can sit well below the fold. Only for the unfiltered list:
+    // once the user types, the top of the results is the right place to be.
+    val listState = rememberLazyListState()
+    val selectedIndex = remember(shownPacks, selectedSource, selectedPackage, trimmedQuery) {
+        pickerScrollIndex(shownPacks, selectedSource, selectedPackage, trimmedQuery)
+    }
+    LaunchedEffect(Unit) {
+        if (selectedIndex != null) listState.scrollToItem(selectedIndex)
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Text(
+            text = stringResource(R.string.choosePackTitle),
+            style = MaterialTheme.typography.titleMediumEmphasized,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+        // Outside the list so it stays reachable while scrolling — with a couple of dozen packs
+        // installed, scrolling back up to search would defeat the point.
+        SearchField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = stringResource(R.string.searchPacks),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 4.dp)
+        )
         // LazyColumn (not Column+verticalScroll): with many packs the list is taller than the
         // sheet, and the lazy list's nested-scroll handoff to the sheet is smooth at the edges.
         LazyColumn(
-            modifier = Modifier.nestedScroll(swallowFlingLeftovers),
-            contentPadding = PaddingValues(bottom = 16.dp)
+            state = listState,
+            modifier = Modifier
+                .nestedScroll(swallowFlingLeftovers)
+                .drawVerticalScrollbar(listState),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp)
         ) {
-            item {
-                Text(
-                    text = stringResource(R.string.choosePackTitle),
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-                )
+            if (shownPacks.isEmpty() && trimmedQuery.isNotEmpty()) {
+                item {
+                    Text(
+                        text = stringResource(R.string.searchPacksEmpty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                    )
+                }
             }
-            items(iconPacks, key = { it.packageName }) { pack ->
+            items(shownPacks, key = { it.packageName }) { pack ->
                 val selected = selectedSource == Source.ICON_PACK && pack.packageName == selectedPackage
                 val used = usage[pack.packageName] ?: 0
                 val coverage = matched[pack.packageName] ?: 0
@@ -646,7 +729,13 @@ private fun ProblemFilterButtons(
                 checked = selected,
                 onCheckedChange = { onToggle(filter) },
                 shapes = when {
-                    entries.size == 1 -> ToggleButtonDefaults.shapes()
+                    // A lone button must follow the connected rule, not the standalone one:
+                    // ToggleButtonDefaults.shapes() is round when unchecked and SQUARE when
+                    // checked — the inverse of a button group, where checked goes fully round.
+                    entries.size == 1 -> ToggleButtonDefaults.shapes(
+                        shape = ShapeDefaults.Small,
+                        checkedShape = ButtonGroupDefaults.connectedButtonCheckedShape
+                    )
                     index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
                     index == entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
                     else -> ButtonGroupDefaults.connectedMiddleButtonShapes()

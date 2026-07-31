@@ -390,10 +390,13 @@ private fun ThemeRow(prefs: DataStore<Preferences>) {
 @Composable
 private fun PackUsageDialog(onDismiss: () -> Unit) {
     val viewModel: MainViewModel = hiltViewModel()
-    val entries by produceState(emptyList<ApplicationProvider.PackUsage>()) {
+    // Null while the read runs. An empty list would be indistinguishable from "no packs", so
+    // opening the dialog used to flash "No icon packs installed" before the rows arrived.
+    val entries by produceState<List<ApplicationProvider.PackUsage>?>(null) {
         value = viewModel.packUsageEntries()
     }
-    val max = (entries.maxOfOrNull { it.count } ?: 0).coerceAtLeast(1)
+    val rows = entries.orEmpty()
+    val max = (rows.maxOfOrNull { it.count } ?: 0).coerceAtLeast(1)
 
     RenkinAlertDialog(
         onDismissRequest = onDismiss,
@@ -401,14 +404,20 @@ private fun PackUsageDialog(onDismiss: () -> Unit) {
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                if (entries.isEmpty()) {
-                    Text(
+                when {
+                    entries == null -> Box(
+                        Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                    rows.isEmpty() -> Text(
                         text = stringResource(R.string.packUsageEmpty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                entries.forEach { entry ->
+                rows.forEach { entry ->
                     Row(
                         Modifier
                             .fillMaxWidth()
