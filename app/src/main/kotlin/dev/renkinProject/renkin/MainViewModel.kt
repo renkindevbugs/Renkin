@@ -113,11 +113,17 @@ class MainViewModel @Inject constructor(
         )
 
     fun saveColorPreset(name: String, style: String) {
-        viewModelScope.launch { appProvider.saveColorPreset(name, style) }
+        viewModelScope.launch {
+            appProvider.saveColorPreset(name, style)
+            _toastEvents.trySend(R.string.savedColorsAdded)
+        }
     }
 
     fun deleteColorPreset(id: Long) {
-        viewModelScope.launch { appProvider.deleteColorPreset(id) }
+        viewModelScope.launch {
+            appProvider.deleteColorPreset(id)
+            _toastEvents.trySend(R.string.savedColorsRemoved)
+        }
     }
 
     /** The installed icon packs available as icon sources. */

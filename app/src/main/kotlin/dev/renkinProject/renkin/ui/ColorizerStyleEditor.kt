@@ -429,9 +429,11 @@ private fun GradientStopList(
             }
         }
         Text(
-            text = stringResource(
-                if (full) R.string.gradientStopsFullHint else R.string.gradientStopsHint
-            ),
+            text = if (full) {
+                stringResource(R.string.gradientStopsFullHint, MAX_GRADIENT_STOPS)
+            } else {
+                stringResource(R.string.gradientStopsHint)
+            },
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(horizontal = 4.dp)
@@ -808,8 +810,9 @@ private fun GradientShapeControl(
     }
 }
 
+/** Shared with the gradient gallery, where the same dial previews a preset's direction. */
 @Composable
-private fun AngleDial(
+internal fun AngleDial(
     angle: Float,
     contentDescription: String,
     onAngleChange: (Float) -> Unit,
