@@ -80,8 +80,12 @@ fun parseHexColor(value: String): Int? = runCatching {
     Color.parseColor(value.trim().takeIf { it.startsWith("#") } ?: return null)
 }.getOrNull()
 
-/** The stop counts offered as filters; the last one means "that many or more". */
-val GRADIENT_STOP_FILTERS = listOf(2, 3, 4)
+/**
+ * The stop counts worth offering as chips: exactly the ones the library actually has, so no chip
+ * ever leads to an empty grid.
+ */
+fun gradientStopCounts(presets: List<GradientPreset>): List<Int> =
+    presets.map { it.colors.size }.distinct().sorted()
 
 /**
  * Name search, one optional family and one optional stop count. All are applied to the same list
@@ -94,13 +98,9 @@ fun filterGradientPresets(
     stops: Int? = null
 ): List<GradientPreset> {
     val trimmed = query.trim()
-    val last = GRADIENT_STOP_FILTERS.last()
     return presets.filter { preset ->
         (family == null || preset.family == family) &&
-            // The highest bucket is open-ended: the library's six-stop gradients would otherwise
-            // be reachable only by scrolling the unfiltered list.
-            (stops == null || if (stops >= last) preset.colors.size >= last
-            else preset.colors.size == stops) &&
+            (stops == null || preset.colors.size == stops) &&
             (trimmed.isEmpty() || preset.name.contains(trimmed, ignoreCase = true))
     }
 }

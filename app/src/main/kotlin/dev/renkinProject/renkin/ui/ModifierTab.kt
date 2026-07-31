@@ -87,6 +87,8 @@ import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.SegmentLayer
 import dev.renkinProject.renkin.icon.creator.decodeSegmentLayer
+import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
+import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.encode
 import dev.renkinProject.renkin.icon.creator.GradientType
 import kotlin.math.roundToInt
@@ -129,6 +131,12 @@ internal class AdjustmentState {
     var shapeCrop by mutableStateOf(true)
     var shapeScale by mutableFloatStateOf(1f)
     var shapeColor by mutableStateOf(Color.White)
+    // The plate carries its own colour style, so it can be a gradient like Colorize.
+    var shapeColorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
+    var shapeGradientType by mutableStateOf(GradientType.LINEAR)
+    var shapeGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
+    var shapeGradientPositions by mutableStateOf(emptyList<Float>())
+    var shapeGradientAngle by mutableFloatStateOf(0f)
     // Outline: add a contour around the silhouette, or recolor the icon's existing one.
     var outlineMode by mutableStateOf(OutlineMode.NONE)
     var outlineWidth by mutableFloatStateOf(6f)
@@ -171,6 +179,11 @@ internal class AdjustmentState {
                     "iconShape", it.iconShape.ordinal,
                     "shapeCrop", it.shapeCrop,
                     "shapeColor", it.shapeColor.toArgb(),
+                    "shapeColorizerMode", it.shapeColorizerMode.ordinal,
+                    "shapeGradientType", it.shapeGradientType.ordinal,
+                    "shapeGradientColors", it.shapeGradientColors,
+                    "shapeGradientPositions", it.shapeGradientPositions,
+                    "shapeGradientAngle", it.shapeGradientAngle,
                     "shapeScale", it.shapeScale,
                     "outlineMode", it.outlineMode.ordinal,
                     "outlineWidth", it.outlineWidth,
@@ -243,6 +256,20 @@ internal class AdjustmentState {
             iconShape = IconShape.entries.getOrElse(saved["iconShape"] as? Int ?: 0) { IconShape.NONE }
             shapeCrop = saved["shapeCrop"] as? Boolean ?: shapeCrop
             (saved["shapeColor"] as? Int)?.let { shapeColor = Color(it) }
+            shapeColorizerMode = ColorizerMode.entries.getOrElse(
+                saved["shapeColorizerMode"] as? Int ?: ColorizerMode.SINGLE_COLOR.ordinal
+            ) { ColorizerMode.SINGLE_COLOR }
+            shapeGradientType = GradientType.entries.getOrElse(
+                saved["shapeGradientType"] as? Int ?: GradientType.LINEAR.ordinal
+            ) { GradientType.LINEAR }
+            (saved["shapeGradientColors"] as? List<*>)
+                ?.filterIsInstance<Int>()
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { shapeGradientColors = it }
+            (saved["shapeGradientPositions"] as? List<*>)
+                ?.filterIsInstance<Float>()
+                ?.let { shapeGradientPositions = it }
+            shapeGradientAngle = saved["shapeGradientAngle"] as? Float ?: shapeGradientAngle
             shapeScale = saved["shapeScale"] as? Float ?: shapeScale
             outlineMode = OutlineMode.entries.getOrElse(saved["outlineMode"] as? Int ?: 0) { OutlineMode.NONE }
             outlineWidth = saved["outlineWidth"] as? Float ?: outlineWidth
@@ -287,17 +314,30 @@ internal class AdjustmentState {
     }
 }
 
+/** Saved-state value read back as a style, tolerating the plain ARGB int older builds wrote. */
+private fun Any?.toColorizerStyle(fallback: Int): ColorizerStyle = when (this) {
+    is String -> decodeColorizerStyle(this)
+    is Int -> ColorizerStyle(firstColor = this)
+    else -> null
+} ?: ColorizerStyle(firstColor = fallback)
+
 @Stable
 internal class MaterialYouPackAdjustmentState {
     var selectedScheme by mutableIntStateOf(-1)
-    var customForeground by mutableStateOf(Color.White)
-    var customBackground by mutableStateOf(Color.Black)
+    // Full styles, not plain colours: a pack's Material You icon keeps only the first stop (its
+    // layers are paths), but the generated variant can carry the whole gradient.
+    var customForeground by mutableStateOf(
+        ColorizerStyle(firstColor = android.graphics.Color.WHITE)
+    )
+    var customBackground by mutableStateOf(
+        ColorizerStyle(firstColor = android.graphics.Color.BLACK)
+    )
     var strokeScale by mutableFloatStateOf(1f)
 
     fun reset() {
         selectedScheme = -1
-        customForeground = Color.White
-        customBackground = Color.Black
+        customForeground = ColorizerStyle(firstColor = android.graphics.Color.WHITE)
+        customBackground = ColorizerStyle(firstColor = android.graphics.Color.BLACK)
         strokeScale = 1f
     }
 
@@ -306,8 +346,8 @@ internal class MaterialYouPackAdjustmentState {
             save = {
                 arrayListOf(
                     it.selectedScheme,
-                    it.customForeground.toArgb(),
-                    it.customBackground.toArgb(),
+                    encodeColorizerStyle(it.customForeground),
+                    encodeColorizerStyle(it.customBackground),
                     it.strokeScale
                 )
             },
@@ -318,11 +358,12 @@ internal class MaterialYouPackAdjustmentState {
                 } else {
                     MaterialYouPackAdjustmentState().apply {
                         selectedScheme = values.getOrNull(0) as? Int ?: -1
-                        customForeground = Color(
-                            values.getOrNull(1) as? Int ?: Color.White.toArgb()
+                        // Older saved states stored plain ARGB ints; both shapes restore.
+                        customForeground = values.getOrNull(1).toColorizerStyle(
+                            android.graphics.Color.WHITE
                         )
-                        customBackground = Color(
-                            values.getOrNull(2) as? Int ?: Color.Black.toArgb()
+                        customBackground = values.getOrNull(2).toColorizerStyle(
+                            android.graphics.Color.BLACK
                         )
                         strokeScale = values.getOrNull(3) as? Float ?: 1f
                     }
@@ -428,6 +469,8 @@ internal fun ModifierTab(
                         onCustomBackgroundChange = {
                             materialYouPackAdjustments.customBackground = it
                         },
+                        renderForeground = previews?.materialYouPackForeground,
+                        renderBackground = previews?.materialYouPackBackground,
                         allowOriginal = true,
                         sampleBitmap = sampleBitmap
                     )
@@ -744,18 +787,39 @@ internal fun ModifierTab(
                         centered = true
                     )
                     if (!adjustments.shapeCrop) {
-                        OptionCard(
-                            label = stringResource(R.string.shapeColor),
-                            onClick = { shapeColorPickerOpen = true },
-                            trailing = {
-                                Surface(
-                                    shape = CircleShape,
-                                    color = adjustments.shapeColor,
-                                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                                    modifier = Modifier.size(28.dp)
-                                ) {}
-                            }
+                        val shapeStyle = ColorizerStyle(
+                            mode = adjustments.shapeColorizerMode,
+                            gradientType = adjustments.shapeGradientType,
+                            firstColor = adjustments.shapeColor.toArgb(),
+                            gradientStops = adjustments.shapeGradientColors,
+                            gradientPositions = adjustments.shapeGradientPositions,
+                            gradientAngle = adjustments.shapeGradientAngle
                         )
+                        ColorStyleCard(
+                            label = stringResource(R.string.shapeColor),
+                            style = shapeStyle,
+                            onClick = { shapeColorPickerOpen = true }
+                        )
+                        if (shapeColorPickerOpen) {
+                            ColorStyleSheet(
+                                title = stringResource(R.string.shapeColor),
+                                initialStyle = shapeStyle,
+                                sampleBitmap = sampleBitmap,
+                                // The plate is a fill behind the icon, so the artwork switches
+                                // have nothing to act on here.
+                                showSingleColorEffects = false,
+                                onDismiss = { shapeColorPickerOpen = false },
+                                onApply = { style ->
+                                    adjustments.shapeColorizerMode = style.mode
+                                    adjustments.shapeGradientType = style.gradientType
+                                    adjustments.shapeColor = Color(style.firstColor)
+                                    adjustments.shapeGradientColors = style.gradientStops
+                                    adjustments.shapeGradientPositions = style.gradientPositions
+                                    adjustments.shapeGradientAngle = style.gradientAngle
+                                    shapeColorPickerOpen = false
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -929,14 +993,6 @@ internal fun ModifierTab(
         )
     }
 
-    if (shapeColorPickerOpen) {
-        ColorDialog(
-            onDismiss = { shapeColorPickerOpen = false },
-            currentlySelected = adjustments.shapeColor,
-            onColorSelected = { adjustments.shapeColor = it },
-            sampleBitmap = sampleBitmap
-        )
-    }
 
     if (centerDialogOpen) {
         CenterDialog(

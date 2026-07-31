@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,10 +31,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -57,9 +61,12 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -67,6 +74,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.icon.creator.ColorizerMode
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
 import kotlin.math.min
 import kotlin.math.roundToInt
 import com.github.skydoves.colorpicker.compose.AlphaSlider
@@ -236,6 +246,14 @@ fun ColorDialog(
                     }
                 }
 
+                SavedColorStrip(
+                    current = currentlySelected,
+                    onPick = { picked ->
+                        controller.selectByColor(picked, true)
+                        onColorSelected(picked)
+                    }
+                )
+
                 RGBFields(
                     modifier = Modifier.padding(10.dp, 10.dp, 10.dp, 0.dp)
                     , controller = controller
@@ -284,6 +302,104 @@ fun ColorDialog(
             }
         }
     )
+}
+
+/**
+ * The saved-colour library inside the plain picker. Gradients are left out on purpose: this
+ * dialog produces one colour, and offering a gradient that silently collapses to its first stop
+ * would not be the colour the swatch promises.
+ */
+@Composable
+private fun SavedColorStrip(
+    current: Color,
+    onPick: (Color) -> Unit
+) {
+    val store = LocalColorPresets.current
+    var saveOpen by remember { mutableStateOf(false) }
+    val singles = remember(store.presets) {
+        store.presets.mapNotNull { preset ->
+            decodeColorizerStyle(preset.style)
+                ?.takeIf { it.mode == ColorizerMode.SINGLE_COLOR }
+                ?.let { preset to Color(it.firstColor) }
+        }
+    }
+    val saved = remember(store.presets, current) {
+        savedPresetMatching(
+            store.presets,
+            ColorizerStyle(mode = ColorizerMode.SINGLE_COLOR, firstColor = current.toArgb())
+        )
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 10.dp, end = 4.dp, top = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = stringResource(R.string.savedColorsTitle),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.weight(1f)
+        )
+        IconButton(
+            onClick = { saved?.let { store.delete(it.id) } ?: run { saveOpen = true } }
+        ) {
+            Icon(
+                imageVector = if (saved != null) Icons.Filled.Bookmark else Icons.Filled.BookmarkAdd,
+                contentDescription = stringResource(
+                    if (saved != null) {
+                        R.string.savedColorsRemoveTitle
+                    } else {
+                        R.string.savedColorsSaveTitle
+                    }
+                ),
+                tint = if (saved != null) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            )
+        }
+    }
+    if (singles.isEmpty()) {
+        Text(
+            text = stringResource(R.string.savedColorsEmptySingle),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 10.dp)
+        )
+    } else {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            singles.forEach { (preset, color) ->
+                Box(
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clip(SwatchShape)
+                        .background(color)
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, SwatchShape)
+                        .clickable { onPick(color) }
+                        .semantics { contentDescription = preset.name }
+                )
+            }
+        }
+    }
+
+    if (saveOpen) {
+        SaveColorPresetDialog(
+            style = ColorizerStyle(
+                mode = ColorizerMode.SINGLE_COLOR,
+                firstColor = current.toArgb()
+            ),
+            onDismiss = { saveOpen = false }
+        )
+    }
 }
 
 /**

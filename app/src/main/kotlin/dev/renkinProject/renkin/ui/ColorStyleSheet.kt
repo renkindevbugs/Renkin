@@ -46,6 +46,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -68,6 +69,8 @@ import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.clampedGradientPositions
 import dev.renkinProject.renkin.icon.creator.colorizeSampleBitmap
+import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
+import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import dev.renkinProject.renkin.ui.theme.IconShape as IconTileShape
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import dev.renkinProject.renkin.ui.theme.InnerShape
@@ -447,6 +450,15 @@ internal fun Modifier.colorizerSwatch(style: ColorizerStyle): Modifier {
         drawRect(brush)
     }
 }
+
+/**
+ * Saver for a style held in composable state. The encoded form is the one presets already use,
+ * so a process death restores exactly what a saved colour would.
+ */
+internal fun colorizerStyleSaver(): Saver<ColorizerStyle, String> = Saver(
+    save = { encodeColorizerStyle(it) },
+    restore = { decodeColorizerStyle(it) }
+)
 
 /** Row that opens [ColorStyleSheet], previewing the current colours in its trailing swatch. */
 @Composable

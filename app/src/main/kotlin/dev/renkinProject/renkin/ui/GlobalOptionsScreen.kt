@@ -112,6 +112,11 @@ import dev.renkinProject.renkin.data.GlobalColorizerModeKey
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
 import dev.renkinProject.renkin.data.GlobalIncludeEmptyKey
 import dev.renkinProject.renkin.data.GlobalShapeColorKey
+import dev.renkinProject.renkin.data.GlobalShapeColorizerModeKey
+import dev.renkinProject.renkin.data.GlobalShapeGradientTypeKey
+import dev.renkinProject.renkin.data.GlobalShapeGradientAngleKey
+import dev.renkinProject.renkin.data.GlobalShapeGradientColorsKey
+import dev.renkinProject.renkin.data.GlobalShapeGradientPositionsKey
 import dev.renkinProject.renkin.data.GlobalShapeCropKey
 import dev.renkinProject.renkin.data.GlobalShapeKey
 import dev.renkinProject.renkin.data.GlobalShapeScaleKey
@@ -169,6 +174,12 @@ internal class GlobalModifierState {
     var shapeCrop by mutableStateOf(true)
     var shapeScale by mutableFloatStateOf(1f)
     var shapeColor by mutableStateOf(Color.White)
+    // The plate behind the icon can be a gradient like every other fill in the app.
+    var shapeColorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
+    var shapeGradientType by mutableStateOf(GradientType.LINEAR)
+    var shapeGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
+    var shapeGradientPositions by mutableStateOf(emptyList<Float>())
+    var shapeGradientAngle by mutableFloatStateOf(0f)
     var iconScale by mutableFloatStateOf(1f)
     var outlineAdd by mutableStateOf(false)
     var outlineWidth by mutableFloatStateOf(OUTLINE_WIDTH_DEFAULT.toFloat())
@@ -205,6 +216,19 @@ internal class GlobalModifierState {
         shapeCrop = preferences.getBooleanValue(GlobalShapeCropKey, true)
         shapeScale = normalizeGlobalScalePercent(preferences.getIntValue(GlobalShapeScaleKey, 100)) / 100f
         shapeColor = preferences.getColorValue(GlobalShapeColorKey, Color.White)
+        shapeColorizerMode = preferences.getEnumValue(
+            GlobalShapeColorizerModeKey, ColorizerMode.SINGLE_COLOR
+        )
+        shapeGradientType = preferences.getEnumValue(
+            GlobalShapeGradientTypeKey, GradientType.LINEAR
+        )
+        shapeGradientColors = preferences.getGradientStops(
+            GlobalShapeGradientColorsKey, GlobalShapeColorKey
+        )
+        shapeGradientPositions =
+            preferences.getGradientPositions(GlobalShapeGradientPositionsKey)
+        shapeGradientAngle =
+            preferences.getIntValue(GlobalShapeGradientAngleKey).coerceIn(0, 360).toFloat()
         iconScale = normalizeGlobalScalePercent(preferences.getIntValue(GlobalIconScaleKey, 100)) / 100f
         outlineAdd = preferences.getBooleanValue(OutlineAddKey)
         outlineWidth = normalizeOutlineWidth(
@@ -259,12 +283,15 @@ internal class GlobalModifierState {
         outlineColorizerMode.ordinal, outlineGradientType.ordinal,
         outlineGradientColors.joinToString(","), outlineGradientAngle.roundToInt(),
         colorizerGradientPositions.joinToString(","),
-        outlineGradientPositions.joinToString(",")
+        outlineGradientPositions.joinToString(","),
+        shapeColorizerMode.ordinal, shapeGradientType.ordinal,
+        shapeGradientColors.joinToString(","), shapeGradientPositions.joinToString(","),
+        shapeGradientAngle.roundToInt()
     ).joinToString("|")
 
     private fun restore(snapshot: String) {
         val values = snapshot.split('|')
-        if (values.size !in intArrayOf(17, 20, 21, 25, 27)) return
+        if (values.size !in intArrayOf(17, 20, 21, 25, 27, 32)) return
         runCatching {
             shape = IconShape.entries[values[0].toInt()]
             shapeCrop = values[1].toBooleanStrict()
@@ -315,6 +342,20 @@ internal class GlobalModifierState {
                 outlineGradientPositions = values[26].split(',')
                     .mapNotNull { it.toFloatOrNull() }
             }
+            if (values.size >= 32) {
+                shapeColorizerMode = ColorizerMode.entries.getOrElse(values[27].toInt()) {
+                    ColorizerMode.SINGLE_COLOR
+                }
+                shapeGradientType = GradientType.entries.getOrElse(values[28].toInt()) {
+                    GradientType.LINEAR
+                }
+                shapeGradientColors = values[29].split(',')
+                    .mapNotNull { it.toIntOrNull() }
+                    .ifEmpty { listOf(android.graphics.Color.BLACK) }
+                shapeGradientPositions = values[30].split(',')
+                    .mapNotNull { it.toFloatOrNull() }
+                shapeGradientAngle = values[31].toInt().coerceIn(0, 360).toFloat()
+            }
             initialized = true
         }
     }
@@ -332,6 +373,12 @@ internal class GlobalModifierState {
         mutable[GlobalShapeCropKey] = shapeCrop
         mutable[GlobalShapeScaleKey] = (shapeScale * 100).roundToInt()
         mutable[GlobalShapeColorKey] = shapeColor.toHexString()
+        mutable[GlobalShapeColorizerModeKey] = shapeColorizerMode.ordinal
+        mutable[GlobalShapeGradientTypeKey] = shapeGradientType.ordinal
+        mutable[GlobalShapeGradientAngleKey] = shapeGradientAngle.roundToInt()
+        mutable[GlobalShapeGradientColorsKey] =
+            shapeGradientColors.joinToString(",") { Color(it).toHexString() }
+        mutable[GlobalShapeGradientPositionsKey] = shapeGradientPositions.joinToString(",")
         mutable[GlobalIconScaleKey] = (iconScale * 100).roundToInt()
         mutable[OutlineAddKey] = outlineAdd
         mutable[OutlineWidthKey] = outlineWidth.roundToInt()
@@ -394,6 +441,17 @@ internal class GlobalModifierState {
         colorizerGradientColors = colorizerGradientColors,
         colorizerGradientPositions = colorizerGradientPositions,
         colorizerGradientAngle = colorizerGradientAngle,
+        // Only the plate shows the shape colour, so the style rides along with it.
+        backgroundStyle = if (shape != IconShape.NONE && !shapeCrop) {
+            ColorizerStyle(
+                mode = shapeColorizerMode,
+                gradientType = shapeGradientType,
+                firstColor = shapeColor.toArgb(),
+                gradientStops = shapeGradientColors,
+                gradientPositions = shapeGradientPositions,
+                gradientAngle = shapeGradientAngle
+            )
+        } else null,
         iconScale = iconScale,
         iconShape = shape,
         iconShapeCrop = shapeCrop,
@@ -901,8 +959,38 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
                         centered = true
                     )
                     if (!state.shapeCrop) {
-                        ColorRow(stringResource(R.string.shapeColor), state.shapeColor) {
-                            shapeColorPickerOpen = true
+                        val shapeStyle = ColorizerStyle(
+                            mode = state.shapeColorizerMode,
+                            gradientType = state.shapeGradientType,
+                            firstColor = state.shapeColor.toArgb(),
+                            gradientStops = state.shapeGradientColors,
+                            gradientPositions = state.shapeGradientPositions,
+                            gradientAngle = state.shapeGradientAngle
+                        )
+                        ColorStyleCard(
+                            label = stringResource(R.string.shapeColor),
+                            style = shapeStyle,
+                            onClick = { shapeColorPickerOpen = true }
+                        )
+                        if (shapeColorPickerOpen) {
+                            ColorStyleSheet(
+                                title = stringResource(R.string.shapeColor),
+                                initialStyle = shapeStyle,
+                                sampleBitmap = null,
+                                // The plate is a fill, not artwork: there is nothing for solid /
+                                // monochrome / inverse to act on.
+                                showSingleColorEffects = false,
+                                onDismiss = { shapeColorPickerOpen = false },
+                                onApply = { style ->
+                                    state.shapeColorizerMode = style.mode
+                                    state.shapeGradientType = style.gradientType
+                                    state.shapeColor = Color(style.firstColor)
+                                    state.shapeGradientColors = style.gradientStops
+                                    state.shapeGradientPositions = style.gradientPositions
+                                    state.shapeGradientAngle = style.gradientAngle
+                                    shapeColorPickerOpen = false
+                                }
+                            )
                         }
                     }
                 }
@@ -1011,13 +1099,6 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
         }
     }
 
-    if (shapeColorPickerOpen) {
-        ColorDialog(
-            onDismiss = { shapeColorPickerOpen = false },
-            currentlySelected = state.shapeColor,
-            onColorSelected = { state.shapeColor = it }
-        )
-    }
 }
 
 /** A switch row bound directly to caller state (unlike DefaultSwitchLayout's remembered copy). */

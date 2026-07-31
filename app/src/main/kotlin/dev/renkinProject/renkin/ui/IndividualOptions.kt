@@ -330,6 +330,14 @@ fun OptionsDialog(
     var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
     // Background for the Material You variant's Custom scheme (the system schemes carry their own).
     var customBgColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.Black) }
+    // The Custom scheme's full styles. The flat colours above stay their first stop, because the
+    // pack's own Material You layers and the vector export can only take one colour.
+    var materialYouForegroundStyle by rememberSaveable(stateSaver = colorizerStyleSaver()) {
+        mutableStateOf(ColorizerStyle(firstColor = iconColor.toArgb()))
+    }
+    var materialYouBackgroundStyle by rememberSaveable(stateSaver = colorizerStyleSaver()) {
+        mutableStateOf(ColorizerStyle(firstColor = customBgColor.toArgb()))
+    }
     var iconPack by rememberSaveable { mutableStateOf(iconPacks.firstOrNull()?.packageName ?: "") }
     // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
     // Parcelable, so saving the list on stop crashes.
@@ -493,19 +501,34 @@ fun OptionsDialog(
         adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop -> adjustments.shapeColor
         else -> Color.Transparent
     }
+    // Styles only exist for the Custom scheme: a wallpaper scheme is two flat colours by
+    // definition, and the shape plate has its own style further down.
+    val effectiveForegroundStyle = when {
+        !isMaterialYouVariant || !isCustomScheme -> null
+        swapGeneratedCustomColors -> materialYouBackgroundStyle
+        else -> materialYouForegroundStyle
+    }
+    val effectiveBackgroundStyle = when {
+        isMaterialYouVariant && isCustomScheme && swapGeneratedCustomColors ->
+            materialYouForegroundStyle
+        isMaterialYouVariant && isCustomScheme -> materialYouBackgroundStyle
+        // The shape plate's own style is applied by withModifierAdjustments; adding it here too
+        // would just be a second place to keep in sync.
+        else -> null
+    }
     val selectedPackScheme = materialYouSchemes.getOrNull(
         materialYouPackAdjustments.selectedScheme
     )
     val materialYouPackForeground = when {
         !selectedMaterialYouPackIcon || materialYouPackAdjustments.selectedScheme < 0 -> null
         materialYouPackAdjustments.selectedScheme >= materialYouSchemes.size ->
-            materialYouPackAdjustments.customForeground.toInt()
+            materialYouPackAdjustments.customForeground.firstColor
         else -> selectedPackScheme!!.first.toInt()
     }
     val materialYouPackBackground = when {
         !selectedMaterialYouPackIcon || materialYouPackAdjustments.selectedScheme < 0 -> null
         materialYouPackAdjustments.selectedScheme >= materialYouSchemes.size ->
-            materialYouPackAdjustments.customBackground.toInt()
+            materialYouPackAdjustments.customBackground.firstColor
         else -> selectedPackScheme!!.second.toInt()
     }
 
@@ -527,6 +550,8 @@ fun OptionsDialog(
         invertMonochrome = invertMonochrome,
         materialYouPackForeground = materialYouPackForeground,
         materialYouPackBackground = materialYouPackBackground,
+        foregroundStyle = effectiveForegroundStyle,
+        backgroundStyle = effectiveBackgroundStyle,
         materialYouPackStrokeScale = if (selectedMaterialYouPackIcon) {
             materialYouPackAdjustments.strokeScale
         } else 1f
@@ -749,15 +774,49 @@ fun OptionsDialog(
                                     materialYouScheme = it
                                     activateCreate()
                                 },
-                                customForeground = iconColor,
-                                customBackground = customBgColor,
+                                customForeground = materialYouForegroundStyle,
+                                customBackground = materialYouBackgroundStyle,
                                 onCustomForegroundChange = {
-                                    iconColor = it
+                                    materialYouForegroundStyle = it
+                                    iconColor = Color(it.firstColor)
                                     activateCreate()
                                 },
                                 onCustomBackgroundChange = {
-                                    customBgColor = it
+                                    materialYouBackgroundStyle = it
+                                    customBgColor = Color(it.firstColor)
                                     activateCreate()
+                                },
+                                // The generated variant swaps the Custom inputs, so each control
+                                // previews through whichever field it actually feeds.
+                                renderMaterialYouForeground = { style ->
+                                    renderPreviewWith(
+                                        if (swapGeneratedCustomColors) {
+                                            generatingOptions.copy(
+                                                bgColor = style.firstColor,
+                                                backgroundStyle = style
+                                            )
+                                        } else {
+                                            generatingOptions.copy(
+                                                color = style.firstColor,
+                                                foregroundStyle = style
+                                            )
+                                        }
+                                    )
+                                },
+                                renderMaterialYouBackground = { style ->
+                                    renderPreviewWith(
+                                        if (swapGeneratedCustomColors) {
+                                            generatingOptions.copy(
+                                                color = style.firstColor,
+                                                foregroundStyle = style
+                                            )
+                                        } else {
+                                            generatingOptions.copy(
+                                                bgColor = style.firstColor,
+                                                backgroundStyle = style
+                                            )
+                                        }
+                                    )
                                 }
                             )
                             // The static tabs don't scroll under the header — plain top padding.
