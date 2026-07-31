@@ -42,6 +42,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
@@ -97,6 +99,10 @@ import dev.renkinProject.renkin.data.PrimarySourceKey
 import dev.renkinProject.renkin.data.PrimaryTextTypeKey
 import dev.renkinProject.renkin.data.TextFontKey
 import dev.renkinProject.renkin.data.SOURCE_DEFAULT
+import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.ImageEdit
+import dev.renkinProject.renkin.data.TextType
+import dev.renkinProject.renkin.data.ColorStyleKeys
 import dev.renkinProject.renkin.data.SecondaryIconPackKey
 import dev.renkinProject.renkin.data.SecondaryImageEditKey
 import dev.renkinProject.renkin.data.SecondarySourceKey
@@ -204,346 +210,393 @@ fun AdvancedOptionsContent(
     iconPacks: List<IconPack>,
     showHint: Boolean = true
 ) {
-    val prefs = getPreferences()
-
-    var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
-    var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
-    var backgroundSheetOpen by rememberSaveable { mutableStateOf(false) }
-    var primarySource by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
-    var primaryImageEdit by rememberSaveable { mutableStateOf(IMAGE_EDIT_DEFAULT) }
-    var primaryTextType by rememberSaveable { mutableStateOf(TEXT_TYPE_DEFAULT) }
-    var primaryIconPack by rememberSaveable { mutableStateOf("") }
-    var secondarySource by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
-    var secondaryImageEdit by rememberSaveable { mutableStateOf(IMAGE_EDIT_DEFAULT) }
-    var secondaryTextType by rememberSaveable { mutableStateOf(TEXT_TYPE_DEFAULT) }
-    var secondaryIconPack by rememberSaveable { mutableStateOf("") }
-    var useVector by rememberSaveable { mutableStateOf(false) }
-    var useMaterialYou by rememberSaveable { mutableStateOf(false) }
-    var useThemed by rememberSaveable { mutableStateOf(false) }
-    var retrieveCalendarIcons by rememberSaveable { mutableStateOf(false) }
-    var overrideIcon by rememberSaveable { mutableStateOf(false) }
-    var fallbackSource by rememberSaveable { mutableStateOf(FALLBACK_SOURCE_DEFAULT) }
-    val currentColor = prefs.getIconColor()
-    val currentBgColor = prefs.getBackgroundColor()
-    val colorizerMode = prefs.getEnumValue(ColorizerModeKey, ColorizerMode.SINGLE_COLOR)
-    val colorizerGradientType =
-        prefs.getEnumValue(ColorizerGradientTypeKey, GradientType.LINEAR)
-    val colorizerGradientColors =
-        prefs.getGradientStops(ColorizerGradientColorsKey, ColorizerGradientColorKey)
-    val colorizerGradientPositions = prefs.getGradientPositions(ColorizerGradientPositionsKey)
-    val backgroundColorizerMode =
-        prefs.getEnumValue(BackgroundColorizerModeKey, ColorizerMode.SINGLE_COLOR)
-    val backgroundGradientType = prefs.getEnumValue(BackgroundGradientTypeKey, GradientType.LINEAR)
-    val backgroundGradientColors =
-        prefs.getGradientStops(BackgroundGradientColorsKey, BackgroundColorKey)
-    val backgroundGradientPositions = prefs.getGradientPositions(BackgroundGradientPositionsKey)
-    val backgroundGradientAngle =
-        prefs.getIntValue(BackgroundGradientAngleKey).coerceIn(0, 360).toFloat()
-    val colorizerGradientAngle =
-        prefs.getIntValue(ColorizerGradientAngleKey).coerceIn(0, 360).toFloat()
-    // Pack-wide outline: the same keys the Global options screen edits, surfaced here so the
-    // hero card's Advanced options can turn it on without opening that screen.
-    val outlineAdd = prefs.getBooleanValue(OutlineAddKey)
-    val outlineWidth = normalizeOutlineWidth(
-        prefs.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
-    ).toFloat()
-    val outlineColor = prefs.getColorValue(OutlineColorKey, Color.Black)
-    val outlineMode = prefs.getEnumValue(OutlineColorizerModeKey, ColorizerMode.SINGLE_COLOR)
-    val outlineGradientType = prefs.getEnumValue(OutlineGradientTypeKey, GradientType.LINEAR)
-    val outlineGradientColors =
-        prefs.getGradientStops(OutlineGradientColorsKey, OutlineColorKey)
-    val outlineGradientPositions = prefs.getGradientPositions(OutlineGradientPositionsKey)
-    val outlineGradientAngle =
-        prefs.getIntValue(OutlineGradientAngleKey).coerceIn(0, 360).toFloat()
-
-    primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
-    primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT)
-    primaryTextType = prefs.getEnumValue(PrimaryTextTypeKey, TEXT_TYPE_DEFAULT)
-    primaryIconPack = prefs.getStringValue(PrimaryIconPackKey)
-    secondarySource = prefs.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT)
-    secondaryImageEdit = prefs.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT)
-    secondaryTextType = prefs.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT)
-    secondaryIconPack = prefs.getStringValue(SecondaryIconPackKey)
-    useVector = prefs.getBooleanValue(IncludeVectorKey)
-    useMaterialYou = prefs.getBooleanValue(MonochromeKey)
-    useThemed = prefs.getBooleanValue(ExportThemedKey)
-    retrieveCalendarIcons = prefs.getBooleanValue(CalendarIconsKey)
-    overrideIcon = prefs.getBooleanValue(OverrideIconKey)
-    fallbackSource = prefs.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT)
-
-    val pathTracing = isPathTracingEnabled(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit)
-    val showIconColor = showIconColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
-    val showBgColor = showBackgroundColor(primarySource, primaryImageEdit, secondarySource, secondaryImageEdit, useThemed)
-    val showColorizer =
-        (needImageEdit(primarySource) && primaryImageEdit == dev.renkinProject.renkin.data.ImageEdit.COLORIZE) ||
-            (needImageEdit(secondarySource) && secondaryImageEdit == dev.renkinProject.renkin.data.ImageEdit.COLORIZE)
-
-    val scope = rememberCoroutineScope()
+    val state = advancedOptionsState()
 
     Column(Modifier.padding(bottom = 12.dp)) {
-                // Users otherwise don't know these settings only take effect after a refresh
-                if (showHint) {
-                Surface(
-                    shape = FieldShape,
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Filled.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = stringResource(R.string.optionsHint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(start = 8.dp)
-                        )
-                    }
-                }
-                }
-
-                // The primary source/pack itself is picked in the hero card on the home screen;
-                // only its tweaks (image modifier, text type) live here.
-                val hasSourceControls = needImageEdit(primarySource) || needTextType(primarySource) ||
-                    needTextType(secondarySource) || needSecondarySource(primarySource) ||
-                    isIconPackSelected(primarySource, primaryIconPack)
-                if (hasSourceControls) {
-                    OptionsSectionLabel(R.string.advancedSectionSource)
-                }
-                if (needImageEdit(primarySource)) {
-                    ImageEditDropdown(R.string.primaryImageEdit, primaryImageEdit) { scope.launch { prefs.setEnumValue(
-                        PrimaryImageEditKey, it) } }
-                }
-
-                if (needTextType(primarySource)) {
-                    TextTypeDropdown(R.string.primaryTextType, primaryTextType) { scope.launch { prefs.setEnumValue(
-                        PrimaryTextTypeKey, it) } }
-                }
-
-                // One shared font for every text icon the refresh generates (per-app override
-                // lives in the edit dialog). Shown when any source produces text icons.
-                if (needTextType(primarySource) || needTextType(secondarySource)) {
-                    val textFont = prefs.getStringValue(TextFontKey)
-                    Box(Modifier.padding(horizontal = 12.dp)) {
-                        FontPickerRow(selectedPath = textFont) { scope.launch { prefs.setStringValue(TextFontKey, it) } }
-                    }
-                }
-
-                if (needSecondarySource(primarySource)) {
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant
-                    )
-
-                    SourceDropdown(R.string.secondarySource, secondarySource) { scope.launch { prefs.setEnumValue(
-                        SecondarySourceKey, it) } }
-
-                    if (needIconPack(secondarySource)) {
-                        IconPackDropdown(R.string.secondaryIconPack, iconPacks, secondaryIconPack, null) { scope.launch { prefs.setStringValue(
-                            SecondaryIconPackKey, it.packageName) } }
-                    }
-
-                    if (needImageEdit(secondarySource)) {
-                        ImageEditDropdown(R.string.secondaryImageEdit, secondaryImageEdit) { scope.launch { prefs.setEnumValue(
-                            SecondaryImageEditKey, it) } }
-                    }
-
-                    if (needTextType(secondarySource)) {
-                        TextTypeDropdown(R.string.secondaryTextType, secondaryTextType) { scope.launch { prefs.setEnumValue(
-                            SecondaryTextTypeKey, it) } }
-                    }
-                }
-
-                if (isIconPackSelected(primarySource, primaryIconPack)) {
-                    RetrieveCalendarIconsSwitch(retrieveCalendarIcons) { scope.launch { prefs.setBooleanValue(
-                        CalendarIconsKey, it) } }
-                }
-
-                // Fallback styling for apps neither pack themes — only when a pack source exists.
-                val primaryIsPack = isIconPackSelected(primarySource, primaryIconPack)
-                val secondaryIsPack = isIconPackSelected(secondarySource, secondaryIconPack)
-                if (primaryIsPack || secondaryIsPack) {
-                    FallbackSourceSelector(
-                        selected = fallbackSource,
-                        primaryEnabled = primaryIsPack,
-                        secondaryEnabled = secondaryIsPack
-                    ) { scope.launch { prefs.setEnumValue(FallbackSourceKey, it) } }
-
-                    val fallbackPack = when (fallbackSource) {
-                        FallbackSource.PRIMARY -> primaryIconPack
-                        FallbackSource.SECONDARY -> secondaryIconPack
-                        FallbackSource.NONE -> ""
-                    }
-                    if (fallbackSource != FallbackSource.NONE && fallbackPack.isNotEmpty()) {
-                        FallbackPreview(fallbackSource, fallbackPack)
-                    }
-                }
-
-                if (showIconColor || showBgColor) {
-                    OptionsSectionLabel(R.string.advancedSectionColors)
-                }
-                if (showIconColor) {
-                    if (showColorizer) {
-                        val colorizerStyle = ColorizerStyle(
-                            mode = colorizerMode,
-                            gradientType = colorizerGradientType,
-                            firstColor = currentColor.toArgb(),
-                            gradientStops = colorizerGradientColors,
-                            gradientPositions = colorizerGradientPositions,
-                            gradientAngle = colorizerGradientAngle
-                        )
-                        ColorStyleCard(
-                            label = stringResource(R.string.colorize),
-                            style = colorizerStyle,
-                            onClick = { colorizeSheetOpen = true }
-                        )
-                        if (colorizeSheetOpen) {
-                            ColorStyleSheet(
-                                title = stringResource(R.string.colorize),
-                                initialStyle = colorizerStyle,
-                                sampleBitmap = null,
-                                showSingleColorEffects = false,
-                                onDismiss = { colorizeSheetOpen = false },
-                                onApply = { style ->
-                                    colorizeSheetOpen = false
-                                    scope.launch {
-                                        prefs.setColorStyle(
-                                            ColorizerStyleKeys,
-                                            mode = style.mode.ordinal,
-                                            gradientType = style.gradientType.ordinal,
-                                            gradientAngle = style.gradientAngle.roundToInt(),
-                                            firstColor = Color(style.firstColor),
-                                            gradientStops = style.gradientStops,
-                                            gradientPositions = style.gradientPositions
-                                        )
-                                    }
-                                }
-                            )
-                        }
-                    } else {
-                        ColorButton(stringResource(R.string.iconColor), currentColor) {
-                            scope.launch { prefs.setColorValue(IconColorKey, it) }
-                        }
-                    }
-                }
-                if (showBgColor) {
-                    val backgroundStyle = ColorizerStyle(
-                        mode = backgroundColorizerMode,
-                        gradientType = backgroundGradientType,
-                        firstColor = currentBgColor.toArgb(),
-                        gradientStops = backgroundGradientColors,
-                        gradientPositions = backgroundGradientPositions,
-                        gradientAngle = backgroundGradientAngle
-                    )
-                    ColorStyleCard(
-                        label = stringResource(R.string.backgroundColor),
-                        style = backgroundStyle,
-                        onClick = { backgroundSheetOpen = true }
-                    )
-                    if (backgroundSheetOpen) {
-                        ColorStyleSheet(
-                            title = stringResource(R.string.backgroundColor),
-                            initialStyle = backgroundStyle,
-                            sampleBitmap = null,
-                            // Solid fill / monochrome / inverse describe artwork, and a background
-                            // has none — it is the fill itself.
-                            showSingleColorEffects = false,
-                            onDismiss = { backgroundSheetOpen = false },
-                            onApply = { style ->
-                                backgroundSheetOpen = false
-                                scope.launch {
-                                    prefs.setColorStyle(
-                                        BackgroundStyleKeys,
-                                        mode = style.mode.ordinal,
-                                        gradientType = style.gradientType.ordinal,
-                                        gradientAngle = style.gradientAngle.roundToInt(),
-                                        firstColor = Color(style.firstColor),
-                                        gradientStops = style.gradientStops,
-                                        gradientPositions = style.gradientPositions
-                                    )
-                                }
-                            }
-                        )
-                    }
-                }
-
-                OptionsSectionLabel(R.string.outlineTitle)
-                OutlineSwitch(outlineAdd) {
-                    scope.launch { prefs.setBooleanValue(OutlineAddKey, it) }
-                }
-                AnimatedVisibility(visible = outlineAdd) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        LabeledSlider(
-                            label = stringResource(R.string.outlineThickness),
-                            value = outlineWidth,
-                            onValueChange = {
-                                scope.launch {
-                                    prefs.setIntValue(OutlineWidthKey, it.roundToInt())
-                                }
-                            },
-                            valueRange = OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat(),
-                            valueLabel = "${outlineWidth.roundToInt()} px"
-                        )
-                        val outlineStyle = ColorizerStyle(
-                            mode = outlineMode,
-                            gradientType = outlineGradientType,
-                            firstColor = outlineColor.toArgb(),
-                            gradientStops = outlineGradientColors,
-                            gradientPositions = outlineGradientPositions,
-                            gradientAngle = outlineGradientAngle
-                        )
-                        ColorStyleCard(
-                            label = stringResource(R.string.outlineColor),
-                            style = outlineStyle,
-                            onClick = { outlineSheetOpen = true }
-                        )
-                        if (outlineSheetOpen) {
-                            ColorStyleSheet(
-                                title = stringResource(R.string.outlineColor),
-                                initialStyle = outlineStyle,
-                                sampleBitmap = null,
-                                showSingleColorEffects = false,
-                                onDismiss = { outlineSheetOpen = false },
-                                onApply = { style ->
-                                    outlineSheetOpen = false
-                                    scope.launch {
-                                        prefs.setColorStyle(
-                                            OutlineStyleKeys,
-                                            mode = style.mode.ordinal,
-                                            gradientType = style.gradientType.ordinal,
-                                            gradientAngle = style.gradientAngle.roundToInt(),
-                                            firstColor = Color(style.firstColor),
-                                            gradientStops = style.gradientStops,
-                                            gradientPositions = style.gradientPositions
-                                        )
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-
-                OptionsSectionLabel(R.string.advancedSectionBehavior)
-                OverrideIconSwitch(overrideIcon) { scope.launch { prefs.setBooleanValue(
-                    OverrideIconKey, it) } }
-
-                if (pathTracing) {
-                    VectorSwitch(useVector) { scope.launch { prefs.setBooleanValue(IncludeVectorKey, it) } }
-                    MaterialYouSwitch(useMaterialYou) { scope.launch { prefs.setBooleanValue(
-                        MonochromeKey, it) } }
-                }
-
-                ThemedIconsSwitch(useThemed) { scope.launch { prefs.setBooleanValue(ExportThemedKey, it) } }
+        // Users otherwise don't know these settings only take effect after a refresh
+        if (showHint) RefreshHintCard()
+        AdvancedSourceSection(state, iconPacks)
+        AdvancedColorSection(state)
+        AdvancedOutlineSection(state)
+        AdvancedBehaviorSection(state)
     }
 }
+
+/**
+ * Every preference the advanced options read, resolved once per composition. Sections take this
+ * instead of a dozen loose values, which is what let the content split into readable pieces.
+ */
+private data class AdvancedOptionsState(
+    val primarySource: Source,
+    val primaryImageEdit: ImageEdit,
+    val primaryTextType: TextType,
+    val primaryIconPack: String,
+    val secondarySource: Source,
+    val secondaryImageEdit: ImageEdit,
+    val secondaryTextType: TextType,
+    val secondaryIconPack: String,
+    val useVector: Boolean,
+    val useMaterialYou: Boolean,
+    val useThemed: Boolean,
+    val retrieveCalendarIcons: Boolean,
+    val overrideIcon: Boolean,
+    val fallbackSource: FallbackSource,
+    val iconColor: Color,
+    val colorizerStyle: ColorizerStyle,
+    val backgroundStyle: ColorizerStyle,
+    val outlineStyle: ColorizerStyle,
+    val outlineAdd: Boolean,
+    val outlineWidth: Float
+) {
+    val pathTracing: Boolean
+        get() = isPathTracingEnabled(
+            primarySource, primaryImageEdit, secondarySource, secondaryImageEdit
+        )
+
+    /** Colorize replaces the plain icon-colour picker with the full colour style. */
+    val showColorizer: Boolean
+        get() = (needImageEdit(primarySource) &&
+            primaryImageEdit == ImageEdit.COLORIZE) ||
+            (needImageEdit(secondarySource) &&
+                secondaryImageEdit == ImageEdit.COLORIZE)
+
+    val primaryIsPack: Boolean get() = isIconPackSelected(primarySource, primaryIconPack)
+    val secondaryIsPack: Boolean get() = isIconPackSelected(secondarySource, secondaryIconPack)
+}
+
+@Composable
+private fun advancedOptionsState(): AdvancedOptionsState {
+    val prefs = getPreferences()
+    val iconColor = prefs.getIconColor()
+    return AdvancedOptionsState(
+        primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT),
+        primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT),
+        primaryTextType = prefs.getEnumValue(PrimaryTextTypeKey, TEXT_TYPE_DEFAULT),
+        primaryIconPack = prefs.getStringValue(PrimaryIconPackKey),
+        secondarySource = prefs.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT),
+        secondaryImageEdit = prefs.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT),
+        secondaryTextType = prefs.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT),
+        secondaryIconPack = prefs.getStringValue(SecondaryIconPackKey),
+        useVector = prefs.getBooleanValue(IncludeVectorKey),
+        useMaterialYou = prefs.getBooleanValue(MonochromeKey),
+        useThemed = prefs.getBooleanValue(ExportThemedKey),
+        retrieveCalendarIcons = prefs.getBooleanValue(CalendarIconsKey),
+        overrideIcon = prefs.getBooleanValue(OverrideIconKey),
+        fallbackSource = prefs.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
+        iconColor = iconColor,
+        colorizerStyle = ColorizerStyle(
+            mode = prefs.getEnumValue(ColorizerModeKey, ColorizerMode.SINGLE_COLOR),
+            gradientType = prefs.getEnumValue(ColorizerGradientTypeKey, GradientType.LINEAR),
+            firstColor = iconColor.toArgb(),
+            gradientStops = prefs.getGradientStops(
+                ColorizerGradientColorsKey, ColorizerGradientColorKey
+            ),
+            gradientPositions = prefs.getGradientPositions(ColorizerGradientPositionsKey),
+            gradientAngle = prefs.getIntValue(ColorizerGradientAngleKey)
+                .coerceIn(0, 360).toFloat()
+        ),
+        backgroundStyle = ColorizerStyle(
+            mode = prefs.getEnumValue(BackgroundColorizerModeKey, ColorizerMode.SINGLE_COLOR),
+            gradientType = prefs.getEnumValue(BackgroundGradientTypeKey, GradientType.LINEAR),
+            firstColor = prefs.getBackgroundColor().toArgb(),
+            gradientStops = prefs.getGradientStops(BackgroundGradientColorsKey, BackgroundColorKey),
+            gradientPositions = prefs.getGradientPositions(BackgroundGradientPositionsKey),
+            gradientAngle = prefs.getIntValue(BackgroundGradientAngleKey)
+                .coerceIn(0, 360).toFloat()
+        ),
+        // Pack-wide outline: the same keys the Global options screen edits, surfaced here so the
+        // hero card's Advanced options can turn it on without opening that screen.
+        outlineStyle = ColorizerStyle(
+            mode = prefs.getEnumValue(OutlineColorizerModeKey, ColorizerMode.SINGLE_COLOR),
+            gradientType = prefs.getEnumValue(OutlineGradientTypeKey, GradientType.LINEAR),
+            firstColor = prefs.getColorValue(OutlineColorKey, Color.Black).toArgb(),
+            gradientStops = prefs.getGradientStops(OutlineGradientColorsKey, OutlineColorKey),
+            gradientPositions = prefs.getGradientPositions(OutlineGradientPositionsKey),
+            gradientAngle = prefs.getIntValue(OutlineGradientAngleKey).coerceIn(0, 360).toFloat()
+        ),
+        outlineAdd = prefs.getBooleanValue(OutlineAddKey),
+        outlineWidth = normalizeOutlineWidth(
+            prefs.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
+        ).toFloat()
+    )
+}
+
+@Composable
+private fun RefreshHintCard() {
+    Surface(
+        shape = FieldShape,
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.size(18.dp)
+            )
+            Text(
+                text = stringResource(R.string.optionsHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSecondaryContainer,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+    }
+}
+
+/**
+ * The primary source/pack itself is picked in the hero card on the home screen; only its tweaks
+ * (image modifier, text type, the secondary source and the fallback) live here.
+ */
+@Composable
+private fun AdvancedSourceSection(
+    state: AdvancedOptionsState,
+    iconPacks: List<IconPack>
+) {
+    val prefs = getPreferences()
+    val scope = rememberCoroutineScope()
+    val hasSourceControls = needImageEdit(state.primarySource) ||
+        needTextType(state.primarySource) || needTextType(state.secondarySource) ||
+        needSecondarySource(state.primarySource) || state.primaryIsPack
+
+    if (hasSourceControls) {
+        OptionsSectionLabel(R.string.advancedSectionSource)
+    }
+    if (needImageEdit(state.primarySource)) {
+        ImageEditDropdown(R.string.primaryImageEdit, state.primaryImageEdit) {
+            scope.launch { prefs.setEnumValue(PrimaryImageEditKey, it) }
+        }
+    }
+
+    if (needTextType(state.primarySource)) {
+        TextTypeDropdown(R.string.primaryTextType, state.primaryTextType) {
+            scope.launch { prefs.setEnumValue(PrimaryTextTypeKey, it) }
+        }
+    }
+
+    // One shared font for every text icon the refresh generates (per-app override lives in the
+    // edit dialog). Shown when any source produces text icons.
+    if (needTextType(state.primarySource) || needTextType(state.secondarySource)) {
+        val textFont = prefs.getStringValue(TextFontKey)
+        Box(Modifier.padding(horizontal = 12.dp)) {
+            FontPickerRow(selectedPath = textFont) {
+                scope.launch { prefs.setStringValue(TextFontKey, it) }
+            }
+        }
+    }
+
+    if (needSecondarySource(state.primarySource)) {
+        HorizontalDivider(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
+
+        SourceDropdown(R.string.secondarySource, state.secondarySource) {
+            scope.launch { prefs.setEnumValue(SecondarySourceKey, it) }
+        }
+
+        if (needIconPack(state.secondarySource)) {
+            IconPackDropdown(
+                R.string.secondaryIconPack, iconPacks, state.secondaryIconPack, null
+            ) { scope.launch { prefs.setStringValue(SecondaryIconPackKey, it.packageName) } }
+        }
+
+        if (needImageEdit(state.secondarySource)) {
+            ImageEditDropdown(R.string.secondaryImageEdit, state.secondaryImageEdit) {
+                scope.launch { prefs.setEnumValue(SecondaryImageEditKey, it) }
+            }
+        }
+
+        if (needTextType(state.secondarySource)) {
+            TextTypeDropdown(R.string.secondaryTextType, state.secondaryTextType) {
+                scope.launch { prefs.setEnumValue(SecondaryTextTypeKey, it) }
+            }
+        }
+    }
+
+    if (state.primaryIsPack) {
+        RetrieveCalendarIconsSwitch(state.retrieveCalendarIcons) {
+            scope.launch { prefs.setBooleanValue(CalendarIconsKey, it) }
+        }
+    }
+
+    // Fallback styling for apps neither pack themes — only when a pack source exists.
+    if (state.primaryIsPack || state.secondaryIsPack) {
+        FallbackSourceSelector(
+            selected = state.fallbackSource,
+            primaryEnabled = state.primaryIsPack,
+            secondaryEnabled = state.secondaryIsPack
+        ) { scope.launch { prefs.setEnumValue(FallbackSourceKey, it) } }
+
+        val fallbackPack = when (state.fallbackSource) {
+            FallbackSource.PRIMARY -> state.primaryIconPack
+            FallbackSource.SECONDARY -> state.secondaryIconPack
+            FallbackSource.NONE -> ""
+        }
+        if (state.fallbackSource != FallbackSource.NONE && fallbackPack.isNotEmpty()) {
+            FallbackPreview(state.fallbackSource, fallbackPack)
+        }
+    }
+}
+
+/** Icon colour (a full style while Colorize is on) and the pack-wide background. */
+@Composable
+private fun AdvancedColorSection(state: AdvancedOptionsState) {
+    val prefs = getPreferences()
+    val scope = rememberCoroutineScope()
+    var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var backgroundSheetOpen by rememberSaveable { mutableStateOf(false) }
+    val showIconColor = showIconColor(
+        state.primarySource, state.primaryImageEdit,
+        state.secondarySource, state.secondaryImageEdit, state.useThemed
+    )
+    val showBgColor = showBackgroundColor(
+        state.primarySource, state.primaryImageEdit,
+        state.secondarySource, state.secondaryImageEdit, state.useThemed
+    )
+
+    if (showIconColor || showBgColor) {
+        OptionsSectionLabel(R.string.advancedSectionColors)
+    }
+    if (showIconColor) {
+        if (state.showColorizer) {
+            ColorStyleCard(
+                label = stringResource(R.string.colorize),
+                style = state.colorizerStyle,
+                onClick = { colorizeSheetOpen = true }
+            )
+            if (colorizeSheetOpen) {
+                ColorStyleSheet(
+                    title = stringResource(R.string.colorize),
+                    initialStyle = state.colorizerStyle,
+                    sampleBitmap = null,
+                    showSingleColorEffects = false,
+                    onDismiss = { colorizeSheetOpen = false },
+                    onApply = { style ->
+                        colorizeSheetOpen = false
+                        scope.launch { prefs.persistColorStyle(ColorizerStyleKeys, style) }
+                    }
+                )
+            }
+        } else {
+            ColorButton(stringResource(R.string.iconColor), state.iconColor) {
+                scope.launch { prefs.setColorValue(IconColorKey, it) }
+            }
+        }
+    }
+    if (showBgColor) {
+        ColorStyleCard(
+            label = stringResource(R.string.backgroundColor),
+            style = state.backgroundStyle,
+            onClick = { backgroundSheetOpen = true }
+        )
+        if (backgroundSheetOpen) {
+            ColorStyleSheet(
+                title = stringResource(R.string.backgroundColor),
+                initialStyle = state.backgroundStyle,
+                sampleBitmap = null,
+                // Solid fill / monochrome / inverse describe artwork, and a background has
+                // none — it is the fill itself.
+                showSingleColorEffects = false,
+                onDismiss = { backgroundSheetOpen = false },
+                onApply = { style ->
+                    backgroundSheetOpen = false
+                    scope.launch { prefs.persistColorStyle(BackgroundStyleKeys, style) }
+                }
+            )
+        }
+    }
+}
+
+/** The contour drawn around every generated icon, and the colour style it is drawn with. */
+@Composable
+private fun AdvancedOutlineSection(state: AdvancedOptionsState) {
+    val prefs = getPreferences()
+    val scope = rememberCoroutineScope()
+    var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
+
+    OptionsSectionLabel(R.string.outlineTitle)
+    OutlineSwitch(state.outlineAdd) {
+        scope.launch { prefs.setBooleanValue(OutlineAddKey, it) }
+    }
+    AnimatedVisibility(visible = state.outlineAdd) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LabeledSlider(
+                label = stringResource(R.string.outlineThickness),
+                value = state.outlineWidth,
+                onValueChange = {
+                    scope.launch { prefs.setIntValue(OutlineWidthKey, it.roundToInt()) }
+                },
+                valueRange = OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat(),
+                valueLabel = "${state.outlineWidth.roundToInt()} px"
+            )
+            ColorStyleCard(
+                label = stringResource(R.string.outlineColor),
+                style = state.outlineStyle,
+                onClick = { outlineSheetOpen = true }
+            )
+            if (outlineSheetOpen) {
+                ColorStyleSheet(
+                    title = stringResource(R.string.outlineColor),
+                    initialStyle = state.outlineStyle,
+                    sampleBitmap = null,
+                    showSingleColorEffects = false,
+                    onDismiss = { outlineSheetOpen = false },
+                    onApply = { style ->
+                        outlineSheetOpen = false
+                        scope.launch { prefs.persistColorStyle(OutlineStyleKeys, style) }
+                    }
+                )
+            }
+        }
+    }
+}
+
+/** What a refresh is allowed to touch, and how the icons are exported. */
+@Composable
+private fun AdvancedBehaviorSection(state: AdvancedOptionsState) {
+    val prefs = getPreferences()
+    val scope = rememberCoroutineScope()
+
+    OptionsSectionLabel(R.string.advancedSectionBehavior)
+    OverrideIconSwitch(state.overrideIcon) {
+        scope.launch { prefs.setBooleanValue(OverrideIconKey, it) }
+    }
+
+    if (state.pathTracing) {
+        VectorSwitch(state.useVector) {
+            scope.launch { prefs.setBooleanValue(IncludeVectorKey, it) }
+        }
+        MaterialYouSwitch(state.useMaterialYou) {
+            scope.launch { prefs.setBooleanValue(MonochromeKey, it) }
+        }
+    }
+
+    ThemedIconsSwitch(state.useThemed) {
+        scope.launch { prefs.setBooleanValue(ExportThemedKey, it) }
+    }
+}
+
+/** The three colour sheets all commit the same way; the ordinals belong in one place. */
+private suspend fun DataStore<Preferences>.persistColorStyle(
+    keys: ColorStyleKeys,
+    style: ColorizerStyle
+) =
+    setColorStyle(
+        keys,
+        mode = style.mode.ordinal,
+        gradientType = style.gradientType.ordinal,
+        gradientAngle = style.gradientAngle.roundToInt(),
+        firstColor = Color(style.firstColor),
+        gradientStops = style.gradientStops,
+        gradientPositions = style.gradientPositions
+    )
 
 /** Small section label splitting the advanced options into readable groups. */
 @Composable
