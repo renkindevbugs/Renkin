@@ -47,11 +47,11 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.data.GRADIENT_STOP_FILTERS
 import dev.renkinProject.renkin.data.GradientFamily
 import dev.renkinProject.renkin.data.GradientPreset
 import dev.renkinProject.renkin.data.GradientPresets
 import dev.renkinProject.renkin.data.filterGradientPresets
+import dev.renkinProject.renkin.data.gradientStopCounts
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.GradientType
@@ -138,7 +138,8 @@ internal fun GradientGalleryDialog(
                     family = family,
                     onFamilyChange = { family = it },
                     stops = stops,
-                    onStopsChange = { stops = it }
+                    onStopsChange = { stops = it },
+                    availableStops = remember(presets) { gradientStopCounts(presets) }
                 )
                 if (shown.isEmpty()) {
                     Text(
@@ -189,10 +190,9 @@ private fun GradientFilterChips(
     family: GradientFamily?,
     onFamilyChange: (GradientFamily?) -> Unit,
     stops: Int?,
-    onStopsChange: (Int?) -> Unit
+    onStopsChange: (Int?) -> Unit,
+    availableStops: List<Int>
 ) {
-    val last = GRADIENT_STOP_FILTERS.last()
-
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Row(
             modifier = Modifier
@@ -232,19 +232,11 @@ private fun GradientFilterChips(
                 onClick = { onStopsChange(null) },
                 label = { Text(stringResource(R.string.gradientFamilyAll)) }
             )
-            GRADIENT_STOP_FILTERS.forEach { count ->
+            availableStops.forEach { count ->
                 FilterChip(
                     selected = stops == count,
                     onClick = { onStopsChange(if (stops == count) null else count) },
-                    label = {
-                        Text(
-                            if (count >= last) {
-                                stringResource(R.string.gradientStopFilterMore, count)
-                            } else {
-                                count.toString()
-                            }
-                        )
-                    }
+                    label = { Text(count.toString()) }
                 )
             }
         }
@@ -308,7 +300,7 @@ private fun GradientPresetDetailDialog(
     onUse: (ColorizerStyle) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var angle by rememberSaveable { mutableStateOf(0f) }
+    var angle by rememberSaveable { mutableStateOf(GALLERY_ANGLE) }
     val style = preset.asStyle(angle)
 
     RenkinAlertDialog(
@@ -368,7 +360,7 @@ private fun GradientPresetDetailDialog(
  * Presets are plain colour lists: they spread evenly, and they are linear because that is what a
  * two-dimensional swatch in a library means. Both stay editable the moment they land in the sheet.
  */
-private fun GradientPreset.asStyle(angle: Float = 0f) = ColorizerStyle(
+private fun GradientPreset.asStyle(angle: Float = GALLERY_ANGLE) = ColorizerStyle(
     mode = ColorizerMode.GRADIENT,
     gradientType = GradientType.LINEAR,
     firstColor = colors.first(),
@@ -376,6 +368,10 @@ private fun GradientPreset.asStyle(angle: Float = 0f) = ColorizerStyle(
     gradientPositions = evenGradientPositions(colors.size),
     gradientAngle = angle
 )
+
+// Left to right, like every gradient library on the web: the tiles are wider than they are tall,
+// and a top-down sweep leaves almost none of the middle colours visible.
+private const val GALLERY_ANGLE = 90f
 
 private val GalleryCardWidth = 150.dp
 private val GalleryCardPreviewHeight = 72.dp

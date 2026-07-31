@@ -165,19 +165,15 @@ internal fun ColorPresetDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else {
-                    // Searching a handful of colours would be noise; the controls appear once the
-                    // library is big enough to actually need them.
-                    if (store.presets.size >= SEARCHABLE_PRESET_COUNT) {
-                        SearchField(
-                            value = query,
-                            onValueChange = { query = it },
-                            placeholder = stringResource(R.string.savedColorsSearch),
-                            modifier = Modifier.fillMaxWidth(),
-                            extraTrailing = {
-                                ColorPresetSortMenu(sort = sort, onSortChange = { sort = it })
-                            }
-                        )
-                    }
+                    SearchField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = stringResource(R.string.savedColorsSearch),
+                        modifier = Modifier.fillMaxWidth(),
+                        extraTrailing = {
+                            ColorPresetSortMenu(sort = sort, onSortChange = { sort = it })
+                        }
+                    )
                     if (shown.isEmpty()) {
                         Text(
                             text = stringResource(R.string.savedColorsNoMatch),
@@ -322,9 +318,6 @@ private fun ColorPresetSort.labelRes(): Int = when (this) {
     ColorPresetSort.OLDEST -> R.string.savedColorsSortOldest
     ColorPresetSort.NAME -> R.string.savedColorsSortName
 }
-
-// Below this many saved colours the search field and sort menu are more clutter than help.
-private const val SEARCHABLE_PRESET_COUNT = 6
 
 /** Name prompt for saving the current colour; prefilled with the next free "Color N". */
 @Composable

@@ -25,7 +25,10 @@ internal data class ModifierPreviews(
     val colorizeBase: Bitmap?,
     val colorize: suspend (ColorizerStyle) -> Bitmap?,
     val outline: suspend (ColorizerStyle) -> Bitmap?,
-    val layers: suspend (index: Int, draft: ColorizerStyle) -> Bitmap?
+    val layers: suspend (index: Int, draft: ColorizerStyle) -> Bitmap?,
+    /** A pack's own Material You icon under a draft colour — its layers take the first stop. */
+    val materialYouPackForeground: suspend (ColorizerStyle) -> Bitmap?,
+    val materialYouPackBackground: suspend (ColorizerStyle) -> Bitmap?
 )
 
 /**
@@ -78,6 +81,12 @@ internal fun rememberModifierPreviews(
                         outlineStyle = style
                     )
                 )
+            },
+            materialYouPackForeground = { style ->
+                currentRender(currentOptions.copy(materialYouPackForeground = style.firstColor))
+            },
+            materialYouPackBackground = { style ->
+                currentRender(currentOptions.copy(materialYouPackBackground = style.firstColor))
             },
             layers = { index, draft ->
                 currentRender(
@@ -132,6 +141,21 @@ internal fun GenerationOptions.withModifierAdjustments(
     iconShape = adjustments.iconShape,
     iconShapeCrop = adjustments.shapeCrop,
     iconShapeScale = adjustments.shapeScale,
+    // Only the plate: bgColor also carries the Material You variant's background, which is a
+    // two-tone scheme colour and must not inherit the shape's gradient.
+    backgroundStyle = if (adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop) {
+        ColorizerStyle(
+            mode = adjustments.shapeColorizerMode,
+            gradientType = adjustments.shapeGradientType,
+            firstColor = adjustments.shapeColor.toArgb(),
+            gradientStops = adjustments.shapeGradientColors,
+            gradientPositions = adjustments.shapeGradientPositions,
+            gradientAngle = adjustments.shapeGradientAngle
+        )
+    } else {
+        // No plate: whatever the caller set (the Material You variant's own fill) stands.
+        backgroundStyle
+    },
     outlineMode = adjustments.outlineMode,
     outlineWidth = adjustments.outlineWidth,
     outlineColor = adjustments.outlineColor.toArgb(),

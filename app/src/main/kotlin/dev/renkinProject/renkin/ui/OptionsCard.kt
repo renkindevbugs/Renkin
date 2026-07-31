@@ -73,6 +73,12 @@ import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
 import dev.renkinProject.renkin.data.getGradientStops
 import dev.renkinProject.renkin.data.getGradientPositions
 import dev.renkinProject.renkin.data.ColorizerGradientPositionsKey
+import dev.renkinProject.renkin.data.BackgroundColorizerModeKey
+import dev.renkinProject.renkin.data.BackgroundGradientTypeKey
+import dev.renkinProject.renkin.data.BackgroundGradientAngleKey
+import dev.renkinProject.renkin.data.BackgroundGradientColorsKey
+import dev.renkinProject.renkin.data.BackgroundGradientPositionsKey
+import dev.renkinProject.renkin.data.BackgroundStyleKeys
 import dev.renkinProject.renkin.data.OutlineGradientPositionsKey
 import dev.renkinProject.renkin.data.ColorizerStyleKeys
 import dev.renkinProject.renkin.data.OutlineStyleKeys
@@ -202,6 +208,7 @@ fun AdvancedOptionsContent(
 
     var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
     var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
+    var backgroundSheetOpen by rememberSaveable { mutableStateOf(false) }
     var primarySource by rememberSaveable { mutableStateOf(SOURCE_DEFAULT) }
     var primaryImageEdit by rememberSaveable { mutableStateOf(IMAGE_EDIT_DEFAULT) }
     var primaryTextType by rememberSaveable { mutableStateOf(TEXT_TYPE_DEFAULT) }
@@ -224,6 +231,14 @@ fun AdvancedOptionsContent(
     val colorizerGradientColors =
         prefs.getGradientStops(ColorizerGradientColorsKey, ColorizerGradientColorKey)
     val colorizerGradientPositions = prefs.getGradientPositions(ColorizerGradientPositionsKey)
+    val backgroundColorizerMode =
+        prefs.getEnumValue(BackgroundColorizerModeKey, ColorizerMode.SINGLE_COLOR)
+    val backgroundGradientType = prefs.getEnumValue(BackgroundGradientTypeKey, GradientType.LINEAR)
+    val backgroundGradientColors =
+        prefs.getGradientStops(BackgroundGradientColorsKey, BackgroundColorKey)
+    val backgroundGradientPositions = prefs.getGradientPositions(BackgroundGradientPositionsKey)
+    val backgroundGradientAngle =
+        prefs.getIntValue(BackgroundGradientAngleKey).coerceIn(0, 360).toFloat()
     val colorizerGradientAngle =
         prefs.getIntValue(ColorizerGradientAngleKey).coerceIn(0, 360).toFloat()
     // Pack-wide outline: the same keys the Global options screen edits, surfaced here so the
@@ -420,8 +435,44 @@ fun AdvancedOptionsContent(
                     }
                 }
                 if (showBgColor) {
-                    ColorButton(stringResource(R.string.backgroundColor), currentBgColor) { scope.launch { prefs.setColorValue(
-                        BackgroundColorKey, it) } }
+                    val backgroundStyle = ColorizerStyle(
+                        mode = backgroundColorizerMode,
+                        gradientType = backgroundGradientType,
+                        firstColor = currentBgColor.toArgb(),
+                        gradientStops = backgroundGradientColors,
+                        gradientPositions = backgroundGradientPositions,
+                        gradientAngle = backgroundGradientAngle
+                    )
+                    ColorStyleCard(
+                        label = stringResource(R.string.backgroundColor),
+                        style = backgroundStyle,
+                        onClick = { backgroundSheetOpen = true }
+                    )
+                    if (backgroundSheetOpen) {
+                        ColorStyleSheet(
+                            title = stringResource(R.string.backgroundColor),
+                            initialStyle = backgroundStyle,
+                            sampleBitmap = null,
+                            // Solid fill / monochrome / inverse describe artwork, and a background
+                            // has none — it is the fill itself.
+                            showSingleColorEffects = false,
+                            onDismiss = { backgroundSheetOpen = false },
+                            onApply = { style ->
+                                backgroundSheetOpen = false
+                                scope.launch {
+                                    prefs.setColorStyle(
+                                        BackgroundStyleKeys,
+                                        mode = style.mode.ordinal,
+                                        gradientType = style.gradientType.ordinal,
+                                        gradientAngle = style.gradientAngle.roundToInt(),
+                                        firstColor = Color(style.firstColor),
+                                        gradientStops = style.gradientStops,
+                                        gradientPositions = style.gradientPositions
+                                    )
+                                }
+                            }
+                        )
+                    }
                 }
 
                 OptionsSectionLabel(R.string.outlineTitle)

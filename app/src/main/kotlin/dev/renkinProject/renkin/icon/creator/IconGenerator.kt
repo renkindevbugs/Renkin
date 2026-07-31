@@ -452,7 +452,13 @@ class IconGenerator(
      * always applied — unlike [colorizeBitmap] — because the mask itself is transparent.
      */
     private fun recolorMaterialYouLayer(mask: Bitmap): Bitmap {
-        return recolorMaterialYouMask(mask, options.color, options.bgColor)
+        return recolorMaterialYouMask(
+            mask,
+            options.color,
+            options.bgColor,
+            options.foregroundStyle,
+            options.backgroundStyle
+        )
     }
 
     /**
@@ -490,7 +496,18 @@ class IconGenerator(
         // original icon by that ratio before export; previewScale reverses the inset in the flat
         // comparison header. Applying both once keeps Current and New at the same optical size.
         val generated = newArgbBitmap(icon.width, icon.height) { canvas ->
-            canvas.drawColor(options.bgColor)
+            val backgroundShader = options.backgroundShader(icon.width, icon.height)
+            if (backgroundShader == null) {
+                canvas.drawColor(options.bgColor)
+            } else {
+                canvas.drawRect(
+                    0f,
+                    0f,
+                    icon.width.toFloat(),
+                    icon.height.toFloat(),
+                    Paint(Paint.ANTI_ALIAS_FLAG).apply { shader = backgroundShader }
+                )
+            }
             val insetScale = 1f / adaptiveIconScale
             canvas.scale(insetScale, insetScale, icon.width / 2f, icon.height / 2f)
             canvas.drawBitmap(foreground, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
@@ -1012,7 +1029,22 @@ class IconGenerator(
     }
 
     private fun addBackground(image: Bitmap): Bitmap {
-        return if (options.themed) image.changeBackgroundColor(options.bgColor) else image
+        if (!options.themed) return image
+        val shader = options.backgroundShader(image.width, image.height)
+            ?: return image.changeBackgroundColor(options.bgColor)
+        val result = image.emptyLike()
+        Canvas(result).apply {
+            drawRect(
+                0f,
+                0f,
+                image.width.toFloat(),
+                image.height.toFloat(),
+                Paint(Paint.ANTI_ALIAS_FLAG).apply { this.shader = shader }
+            )
+            drawBitmap(image, 0f, 0f, null)
+        }
+        image.recycle()
+        return result
     }
 
     private fun exportIconPackXML(iconPackName: String, iconDrawable: ResourceDrawable): Drawable? {
@@ -1237,8 +1269,12 @@ class IconGenerator(
 
         val content = newArgbBitmap(size, size) { canvas ->
             if (!options.iconShapeCrop) {
+                // The plate is the one place the background colour is visible on its own, so a
+                // gradient plate is painted with the same shader the rest of the app previews.
+                paint.shader = options.backgroundShader(size, size)
                 paint.color = options.bgColor
                 canvas.drawPath(path, paint)
+                paint.shader = null
                 paint.color = -0x1
             }
             canvas.drawBitmap(src, null, RectF(0f, 0f, sizeF, sizeF), paint)
@@ -1322,12 +1358,25 @@ internal fun monochromeBitmap(icon: Bitmap, invert: Boolean): Bitmap {
     }
 }
 
-internal fun recolorMaterialYouMask(mask: Bitmap, foreground: Int, background: Int): Bitmap {
+internal fun recolorMaterialYouMask(
+    mask: Bitmap,
+    foreground: Int,
+    background: Int,
+    // Gradients arrive pre-rasterised, so the per-pixel composite stays a lookup.
+    foregroundStyle: ColorizerStyle? = null,
+    backgroundStyle: ColorizerStyle? = null
+): Bitmap {
     val pixels = IntArray(mask.width * mask.height)
     mask.getPixels(pixels, 0, mask.width, 0, 0, mask.width, mask.height)
+    val foregroundPixels = gradientPixels(foregroundStyle, mask.width, mask.height)
+    val backgroundPixels = gradientPixels(backgroundStyle, mask.width, mask.height)
     for (index in pixels.indices) {
         val coverage = android.graphics.Color.alpha(pixels[index]) / 255f
-        pixels[index] = compositeMaterialYouPixel(foreground, background, coverage)
+        pixels[index] = compositeMaterialYouPixel(
+            foregroundPixels?.get(index) ?: foreground,
+            backgroundPixels?.get(index) ?: background,
+            coverage
+        )
     }
     return Bitmap.createBitmap(pixels, mask.width, mask.height, Bitmap.Config.ARGB_8888).apply {
         density = mask.density

@@ -93,15 +93,15 @@ class GradientPresetsTest {
     }
 
     @Test
-    fun theHighestStopFilterIsOpenEnded() {
+    fun stopCountChipsOnlyOfferCountsTheLibraryHas() {
         val four = GradientPreset("Four", List(4) { Color.RED })
         val six = GradientPreset("Six", List(6) { Color.BLUE })
         val pair = GradientPreset("Pair", List(2) { Color.GREEN })
+        val presets = listOf(four, six, pair)
 
-        // Without an open-ended bucket the six-stop gradients would be unreachable by filter.
-        val shown = filterGradientPresets(listOf(four, six, pair), "", null, GRADIENT_STOP_FILTERS.last())
-
-        assertEquals(listOf(four, six), shown)
-        assertTrue(GRADIENT_STOP_FILTERS.isNotEmpty())
+        // No chip may lead to an empty grid, so five is absent and every offered count matches.
+        assertEquals(listOf(2, 4, 6), gradientStopCounts(presets))
+        assertEquals(listOf(six), filterGradientPresets(presets, "", null, 6))
+        assertTrue(filterGradientPresets(presets, "", null, 5).isEmpty())
     }
 }

@@ -120,6 +120,7 @@
     <string name="savedColorsDelete">Delete saved color</string>
     <string name="savedColorsEmpty">Nothing saved yet. Pick a color or gradient, then tap the save icon.</string>
     <string name="savedColorsRemoveTitle">Remove from saved colors</string>
+    <string name="savedColorsEmptySingle">No single colors saved yet. Tap the save icon to keep this one.</string>
     <string name="savedColorsAdded">Added to saved colors</string>
     <string name="savedColorsRemoved">Removed from saved colors</string>
     <string name="savedColorsSearch">Search saved colors</string>
@@ -278,7 +279,6 @@
     <string name="gradientFamilyDark">Dark</string>
     <string name="gradientFamilyMono">Muted</string>
     <string name="gradientStopFilterLabel">Colors</string>
-    <string name="gradientStopFilterMore">%1$d+</string>
     <string name="inverseColors">Inverse colors</string>
     <string name="eyedropperHint">Or pick a colour straight from the app\'s icon — tap or drag on it.</string>
     <string name="optionsHint">These options apply to all apps at once. After changing them, tap the refresh button in the top bar to regenerate the icons.</string>
@@ -372,6 +372,7 @@
     <string name="reverseMonochrome">Reverse colors</string>
     <string name="materialYouColors">Color</string>
     <string name="materialYouColorsHint">Wallpaper colors that match Android\'s themed icons. Pick Custom to choose your own in the Modifier tab.</string>
+    <string name="materialYouGradientHint">Gradients work on the generated Material You icon. A pack\'s own Material You icon and vector export keep the first color only.</string>
     <string name="custom">Custom</string>
     <string name="refreshIcons">Refresh icons</string>
     <string name="info">Info</string>

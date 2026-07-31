@@ -72,6 +72,13 @@ val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
 val ExportThemedKey = booleanPreferencesKey(EXPORT_THEMED_NAME)
 val IconColorKey = stringPreferencesKey(ICON_COLOR_NAME)
 val BackgroundColorKey = stringPreferencesKey(BACKGROUND_COLOR_NAME)
+// The pack-wide background can carry a gradient of its own, described like the colourizer's.
+// [BackgroundColorKey] stays its first colour, so an older build still paints something sane.
+val BackgroundColorizerModeKey = intPreferencesKey("BACKGROUND_COLORIZER_MODE")
+val BackgroundGradientTypeKey = intPreferencesKey("BACKGROUND_GRADIENT_TYPE")
+val BackgroundGradientAngleKey = intPreferencesKey("BACKGROUND_GRADIENT_ANGLE")
+val BackgroundGradientColorsKey = stringPreferencesKey("BACKGROUND_GRADIENT_COLORS")
+val BackgroundGradientPositionsKey = stringPreferencesKey("BACKGROUND_GRADIENT_POSITIONS")
 val ColorizerModeKey = intPreferencesKey("COLORIZER_MODE")
 val ColorizerGradientColorKey = stringPreferencesKey("COLORIZER_GRADIENT_COLOR")
 // Every gradient stop after the first colour, comma separated. Supersedes the single-colour key
@@ -124,6 +131,13 @@ val GlobalShapeKey = intPreferencesKey("GLOBAL_SHAPE")
 val GlobalShapeCropKey = booleanPreferencesKey("GLOBAL_SHAPE_CROP")
 val GlobalShapeScaleKey = intPreferencesKey("GLOBAL_SHAPE_SCALE")
 val GlobalShapeColorKey = stringPreferencesKey("GLOBAL_SHAPE_COLOR")
+// The shape's plate is the one surface a background gradient is fully visible on, so it carries
+// its own style; GlobalShapeColorKey remains its first colour.
+val GlobalShapeColorizerModeKey = intPreferencesKey("GLOBAL_SHAPE_COLORIZER_MODE")
+val GlobalShapeGradientTypeKey = intPreferencesKey("GLOBAL_SHAPE_GRADIENT_TYPE")
+val GlobalShapeGradientAngleKey = intPreferencesKey("GLOBAL_SHAPE_GRADIENT_ANGLE")
+val GlobalShapeGradientColorsKey = stringPreferencesKey("GLOBAL_SHAPE_GRADIENT_COLORS")
+val GlobalShapeGradientPositionsKey = stringPreferencesKey("GLOBAL_SHAPE_GRADIENT_POSITIONS")
 val GlobalIconScaleKey = intPreferencesKey("GLOBAL_ICON_SCALE")
 val GlobalColorizeKey = booleanPreferencesKey("GLOBAL_COLORIZE")
 val GlobalColorizeColorKey = stringPreferencesKey("GLOBAL_COLORIZE_COLOR")
@@ -184,6 +198,8 @@ private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
     FallbackSourceKey, OutlineWidthKey, BuiltPrimarySourceKey,
     GlobalShapeKey, GlobalShapeScaleKey, GlobalIconScaleKey,
     ColorizerModeKey, ColorizerGradientAngleKey, ColorizerGradientTypeKey,
+    BackgroundColorizerModeKey, BackgroundGradientTypeKey, BackgroundGradientAngleKey,
+    GlobalShapeColorizerModeKey, GlobalShapeGradientTypeKey, GlobalShapeGradientAngleKey,
     OutlineColorizerModeKey, OutlineGradientTypeKey, OutlineGradientAngleKey,
     GlobalColorizerModeKey, GlobalColorizerGradientAngleKey, GlobalColorizerGradientTypeKey
 )
@@ -195,7 +211,9 @@ private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
     GlobalColorizerGradientColorKey, ColorizerGradientColorsKey,
     GlobalColorizerGradientColorsKey, OutlineGradientColorsKey,
     ColorizerGradientPositionsKey, GlobalColorizerGradientPositionsKey,
-    OutlineGradientPositionsKey
+    OutlineGradientPositionsKey,
+    BackgroundGradientColorsKey, BackgroundGradientPositionsKey,
+    GlobalShapeGradientColorsKey, GlobalShapeGradientPositionsKey
 )
 
 val ProfilePrefKeys: List<Preferences.Key<*>> =
@@ -543,6 +561,24 @@ val ColorizerStyleKeys = ColorStyleKeys(
     gradientColors = ColorizerGradientColorsKey,
     gradientPositions = ColorizerGradientPositionsKey,
     legacyGradientColor = ColorizerGradientColorKey
+)
+
+val BackgroundStyleKeys = ColorStyleKeys(
+    mode = BackgroundColorizerModeKey,
+    gradientType = BackgroundGradientTypeKey,
+    gradientAngle = BackgroundGradientAngleKey,
+    firstColor = BackgroundColorKey,
+    gradientColors = BackgroundGradientColorsKey,
+    gradientPositions = BackgroundGradientPositionsKey
+)
+
+val GlobalShapeStyleKeys = ColorStyleKeys(
+    mode = GlobalShapeColorizerModeKey,
+    gradientType = GlobalShapeGradientTypeKey,
+    gradientAngle = GlobalShapeGradientAngleKey,
+    firstColor = GlobalShapeColorKey,
+    gradientColors = GlobalShapeGradientColorsKey,
+    gradientPositions = GlobalShapeGradientPositionsKey
 )
 
 // The outline's first colour IS its legacy key, so there is no separate legacy stop to write —

@@ -64,6 +64,36 @@ fun buildColorizerShader(
 }
 
 /**
+ * [style] rasterised once so per-pixel code can look up the colour at each position. Null when
+ * the style is a single colour and the caller's flat int is all it needs.
+ */
+fun gradientPixels(style: ColorizerStyle?, width: Int, height: Int): IntArray? {
+    val gradient = style?.takeIf { it.mode == ColorizerMode.GRADIENT } ?: return null
+    if (width <= 0 || height <= 0) return null
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    Canvas(bitmap).drawRect(
+        0f,
+        0f,
+        width.toFloat(),
+        height.toFloat(),
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = buildColorizerShader(
+                gradient.allGradientColors,
+                gradient.gradientType,
+                gradient.gradientAngle,
+                width,
+                height,
+                gradient.gradientPositions
+            )
+        }
+    )
+    val pixels = IntArray(width * height)
+    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+    bitmap.recycle()
+    return pixels
+}
+
+/**
  * Applies [style] to [source] the way the generator's colourize step does — gradient through the
  * alpha mask, monochrome, solid fill or tint — and returns a new bitmap for the editor preview.
  * Everything after colourizing (shape, scale, outline, background) is deliberately left out.

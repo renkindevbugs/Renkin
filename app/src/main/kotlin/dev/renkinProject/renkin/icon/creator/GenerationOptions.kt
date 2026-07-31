@@ -14,6 +14,9 @@ import dev.renkinProject.renkin.data.MonochromeKey
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
 import dev.renkinProject.renkin.data.OutlineAddKey
 import dev.renkinProject.renkin.data.OutlineColorKey
+import dev.renkinProject.renkin.data.ColorStyleKeys
+import dev.renkinProject.renkin.data.BackgroundStyleKeys
+import dev.renkinProject.renkin.data.GlobalShapeStyleKeys
 import dev.renkinProject.renkin.data.OutlineColorizerModeKey
 import dev.renkinProject.renkin.data.OutlineGradientAngleKey
 import dev.renkinProject.renkin.data.OutlineGradientColorsKey
@@ -127,6 +130,13 @@ data class GenerationOptions(
     val colorizerGradientColors: List<Int> = listOf(android.graphics.Color.BLACK),
     // Positions of every stop including [color], 0..1; empty spreads them evenly.
     val colorizerGradientPositions: List<Float> = emptyList(),
+    // What fills [bgColor]'s area — the themed background, the icon shape's plate and the
+    // Material You variant's background. Null (or a single-colour style) means the flat [bgColor]
+    // every build before gradients painted.
+    val backgroundStyle: ColorizerStyle? = null,
+    // The Material You variant's foreground fill. Only that raster path honours it: a pack's own
+    // Material You icon and the vector export are paths, and a path takes one colour.
+    val foregroundStyle: ColorizerStyle? = null,
     val colorizerGradientAngle: Float = 0f,
     // Per-region colourize steps (the Colorize segments modifier), applied in order. Empty =
     // the whole icon is colourized with the options above, which is what every other surface asks
@@ -208,6 +218,7 @@ data class GenerationOptions(
                 secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey),
                 color = iconColor.toArgb(),
                 bgColor = bgColor.toArgb(),
+                backgroundStyle = preferences.colorStyle(BackgroundStyleKeys, bgColor),
                 // Keep the stored choices for when PATH is selected again, but hidden controls
                 // must not silently affect a different source/modifier combination.
                 vector = pathOptionsRelevant && preferences.getBooleanValue(IncludeVectorKey),
@@ -259,6 +270,12 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
                 GlobalShapeColorKey, androidx.compose.ui.graphics.Color.White
             ).toArgb()
         } else android.graphics.Color.TRANSPARENT,
+        // Only the plate shows a background at all, so the style follows the same condition.
+        backgroundStyle = if (shape != IconShape.NONE && !shapeCrop) {
+            preferences.colorStyle(
+                GlobalShapeStyleKeys, androidx.compose.ui.graphics.Color.White
+            )
+        } else null,
         vector = false,
         materialYou = false,
         themed = false,
@@ -302,6 +319,22 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
     )
 }
 
+/**
+ * Any [ColorStyleKeys] group read back as a style. Used for the surfaces whose colour is only a
+ * fill — the background and the shape's plate — so they behave like every other colour in the app.
+ */
+fun Preferences.colorStyle(
+    keys: ColorStyleKeys,
+    defaultColor: androidx.compose.ui.graphics.Color
+): ColorizerStyle = ColorizerStyle(
+    mode = getEnumValue(keys.mode, ColorizerMode.SINGLE_COLOR),
+    gradientType = getEnumValue(keys.gradientType, GradientType.LINEAR),
+    firstColor = getColorValue(keys.firstColor, defaultColor).toArgb(),
+    gradientStops = getGradientStops(keys.gradientColors, keys.firstColor),
+    gradientPositions = getGradientPositions(keys.gradientPositions),
+    gradientAngle = normalizeGradientAngle(getIntValue(keys.gradientAngle).toFloat())
+)
+
 /** The outline's colour as a style, so a gradient outline reads exactly like a gradient fill. */
 fun Preferences.outlineColorizerStyle(): ColorizerStyle = ColorizerStyle(
     mode = getEnumValue(OutlineColorizerModeKey, ColorizerMode.SINGLE_COLOR),
@@ -313,6 +346,22 @@ fun Preferences.outlineColorizerStyle(): ColorizerStyle = ColorizerStyle(
     gradientPositions = getGradientPositions(OutlineGradientPositionsKey),
     gradientAngle = normalizeGradientAngle(getIntValue(OutlineGradientAngleKey).toFloat())
 )
+
+/**
+ * The shader [backgroundStyle] asks for, or null when the flat [bgColor] is what to paint. Kept
+ * here so every background surface — themed fill, shape plate, previews — asks the same question.
+ */
+fun GenerationOptions.backgroundShader(width: Int, height: Int): android.graphics.Shader? {
+    val style = backgroundStyle?.takeIf { it.mode == ColorizerMode.GRADIENT } ?: return null
+    return buildColorizerShader(
+        style.allGradientColors,
+        style.gradientType,
+        style.gradientAngle,
+        width,
+        height,
+        style.gradientPositions
+    )
+}
 
 fun GenerationOptions.hasVisibleModifierEffect(): Boolean =
     primaryImageEdit != ImageEdit.NONE || iconScale != 1f ||
