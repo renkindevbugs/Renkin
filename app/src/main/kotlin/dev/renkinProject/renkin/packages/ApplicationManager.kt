@@ -44,6 +44,25 @@ import org.xmlpull.v1.XmlPullParserFactory
 internal fun launcherIconOrFallback(activityIcon: Drawable?, applicationIcon: () -> Drawable): Drawable =
     activityIcon ?: applicationIcon()
 
+internal fun matchDrawablesToApplications(
+    applications: List<InstalledApplication>,
+    drawablesByComponent: Map<String, ResourceDrawable>
+): Map<InstalledApplication, ResourceDrawable> {
+    val applicationsByComponent = applications.associateBy { it.toComponentInfo() }
+    return buildMap {
+        for ((component, drawable) in drawablesByComponent) {
+            applicationsByComponent[component]?.let { app -> put(app, drawable) }
+        }
+    }
+}
+
+internal fun lastAppFilterItem(
+    elements: List<RawElement>,
+    component: String
+): RawItem? =
+    elements.asReversed()
+        .firstOrNull { it is RawItem && it.component == component } as? RawItem
+
 internal fun launcherIconIdOrFallback(activityIconId: Int?, applicationIconId: Int): Int =
     activityIconId?.takeIf { it != 0 } ?: applicationIconId
 
@@ -278,19 +297,29 @@ internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSou
     }
 
     fun getDrawableFromAppFilterElements(iconPackName: String, applications: List<InstalledApplication>, elements: List<RawElement>): Map<InstalledApplication, ResourceDrawable> {
-        val map = mutableMapOf<InstalledApplication, ResourceDrawable>()
-
         val drawables = getDrawableFromAppFilterElements(iconPackName, elements)
+        return matchDrawablesToApplications(applications, drawables)
+    }
 
-        for (drawable in drawables) {
-            for (app in applications) {
-                if (drawable.key == app.toComponentInfo()) {
-                    map[app] = drawable.value
-                }
-            }
-        }
-
-        return map
+    /**
+     * Resolves only [application]'s drawable instead of decoding every matching entry in a pack.
+     * Used by the per-app picker, which asks the same question once for every installed pack.
+     */
+    fun getDrawableFromAppFilterElements(
+        iconPackName: String,
+        application: InstalledApplication,
+        elements: List<RawElement>
+    ): ResourceDrawable? {
+        val component = application.toComponentInfo()
+        // Match the full-map path's duplicate handling: the last declaration wins.
+        val item = lastAppFilterItem(elements, component) ?: return null
+        val res = getResources(iconPackName) ?: return null
+        val resourceId = runCatching {
+            res.getIdentifierByName(item.drawableLink, "drawable", iconPackName)
+        }.getOrNull() ?: return null
+        if (resourceId <= 0) return null
+        val drawable = runCatching { getResIcon(res, resourceId) }.getOrNull() ?: return null
+        return ResourceDrawable(resourceId, drawable)
     }
 
     private fun getDrawableFromAppFilterElements(iconPackName: String, elements: List<RawElement>): Map<String, ResourceDrawable> {
@@ -406,6 +435,7 @@ internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSou
 
     private fun getAppFilterRawElements(xmlParser: XmlPullParser, components: List<String>): List<RawElement> {
         val list = mutableListOf<RawElement>()
+        val componentSet = components.toHashSet()
 
         var type = xmlParser.eventType
 
@@ -415,11 +445,8 @@ internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSou
                     val xmlDrawable = xmlParser.getAttributeValue(null, "drawable")
                     val xmlComponent = xmlParser.getAttributeValue(null, "component")
 
-                    for (app in components) {
-                        if (xmlComponent == app && xmlDrawable != null) {
-                            list.add(RawItem(xmlComponent, xmlDrawable))
-                            break
-                        }
+                    if (xmlComponent in componentSet && xmlDrawable != null) {
+                        list.add(RawItem(xmlComponent, xmlDrawable))
                     }
                 }
 
@@ -427,11 +454,8 @@ internal class ApplicationManager(private val ctx: Context) : PackBrowserDataSou
                     val xmlPrefix = xmlParser.getAttributeValue(null, "prefix")
                     val xmlComponent = xmlParser.getAttributeValue(null, "component")
 
-                    for (app in components) {
-                        if (xmlComponent == app && xmlPrefix != null) {
-                            list.add(RawCalendar(xmlComponent, xmlPrefix))
-                            break
-                        }
+                    if (xmlComponent in componentSet && xmlPrefix != null) {
+                        list.add(RawCalendar(xmlComponent, xmlPrefix))
                     }
                 }
 

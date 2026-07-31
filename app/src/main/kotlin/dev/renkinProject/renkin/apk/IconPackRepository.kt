@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.data.IconPackFallback
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawCalendar
 import dev.renkinProject.renkin.data.RawElement
@@ -59,7 +60,9 @@ class IconPackRepository(private val context: Context) {
         private set
 
     private var appFilterElements: Map<IconPack, List<RawElement>> = emptyMap()
+    private var appFilterElementsByPackage: Map<String, List<RawElement>> = emptyMap()
     private var installedApplications: List<InstalledApplication> = listOf()
+    private val fallbackCache = mutableMapOf<String, IconPackFallback>()
 
     private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
 
@@ -69,6 +72,7 @@ class IconPackRepository(private val context: Context) {
      */
     suspend fun load(installedApps: List<InstalledApplication>) = withContext(Dispatchers.Default) {
         iconPackLoaded = false
+        synchronized(fallbackCache) { fallbackCache.clear() }
         // Drop our own generated pack — it only ever holds icons we just built, so offering
         // it as an icon source (or a watch target) is pointless and just clutters the lists.
         // startsWith: profile packs share the base package with a ".p<id>" suffix.
@@ -87,49 +91,52 @@ class IconPackRepository(private val context: Context) {
                 Log.error("IconPackRepository", "Skipping malformed appfilter: ${pack.packageName}", error)
             }
         )
+        appFilterElementsByPackage = appFilterElements.entries.associate { (pack, elements) ->
+            pack.packageName to elements
+        }
         iconPackLoaded = true
     }
 
     /** The pack's classic fallback styling (iconback/mask/upon/scale) for unthemed apps. */
-    fun getIconPackFallback(iconPack: String): dev.renkinProject.renkin.data.IconPackFallback {
-        if (iconPack == "") return dev.renkinProject.renkin.data.IconPackFallback()
-        return try {
-            appManager.getIconPackFallback(iconPack)
-        } catch (error: Exception) {
-            Log.error("IconPackRepository", "Ignoring malformed fallback: $iconPack", error)
-            dev.renkinProject.renkin.data.IconPackFallback()
+    fun getIconPackFallback(iconPack: String): IconPackFallback {
+        if (iconPack == "") return IconPackFallback()
+        return synchronized(fallbackCache) {
+            fallbackCache[iconPack] ?: run {
+                val fallback = try {
+                    appManager.getIconPackFallback(iconPack)
+                } catch (error: Exception) {
+                    Log.error("IconPackRepository", "Ignoring malformed fallback: $iconPack", error)
+                    IconPackFallback()
+                }
+                fallbackCache[iconPack] = fallback
+                fallback
+            }
         }
     }
 
     /** Drawables every installed app has in [iconPack], keyed by app. */
     fun getAppDrawables(iconPack: String): Map<InstalledApplication, ResourceDrawable> {
         if (iconPack == "") return emptyMap()
-        val entry = appFilterElements.entries.find { it.key.packageName == iconPack } ?: return emptyMap()
+        val elements = appFilterElementsByPackage[iconPack] ?: return emptyMap()
 
         return appManager.getDrawableFromAppFilterElements(
             iconPack,
             installedApplications,
-            entry.value
+            elements
         )
     }
 
-    private fun getAppDrawable(app: InstalledApplication, iconPack: String): Map<InstalledApplication, ResourceDrawable> {
-        if (iconPack == "") return emptyMap()
-        val entry = appFilterElements.entries.find { it.key.packageName == iconPack } ?: return emptyMap()
-
-        return appManager.getDrawableFromAppFilterElements(
-            iconPack,
-            listOf(app),
-            entry.value
-        )
+    private fun getAppDrawable(app: InstalledApplication, iconPack: String): ResourceDrawable? {
+        if (iconPack == "") return null
+        val elements = appFilterElementsByPackage[iconPack] ?: return null
+        return appManager.getDrawableFromAppFilterElements(iconPack, app, elements)
     }
 
     /** Calendar mappings declared by the currently installed version of [iconPackageName]. */
     internal fun declaredCalendarSelections(iconPackageName: String): List<CalendarSelection> {
         if (iconPackageName.isEmpty()) return emptyList()
-        val entry = appFilterElements.entries.find { it.key.packageName == iconPackageName }
-            ?: return emptyList()
-        return appManager.getCalendarApplications(installedApplications, entry.value).map { (app, prefix) ->
+        val elements = appFilterElementsByPackage[iconPackageName] ?: return emptyList()
+        return appManager.getCalendarApplications(installedApplications, elements).map { (app, prefix) ->
             CalendarSelection(app, iconPackageName, prefix)
         }
     }
@@ -141,8 +148,8 @@ class IconPackRepository(private val context: Context) {
      * the already-parsed [appFilterElements] — no I/O.
      */
     fun calendarPrefixes(iconPackageName: String): Set<String> {
-        val entry = appFilterElements.entries.find { it.key.packageName == iconPackageName } ?: return emptySet()
-        return entry.value.filterIsInstance<RawCalendar>().map { it.prefix }.toSet()
+        val elements = appFilterElementsByPackage[iconPackageName] ?: return emptySet()
+        return elements.filterIsInstance<RawCalendar>().map { it.prefix }.toSet()
     }
 
     /**
@@ -166,9 +173,9 @@ class IconPackRepository(private val context: Context) {
      * Reads from the already-loaded [appFilterElements] — no I/O.
      */
     fun calendarPrefixFor(app: InstalledApplication, iconPackageName: String): String? {
-        val entry = appFilterElements.entries.find { it.key.packageName == iconPackageName } ?: return null
+        val elements = appFilterElementsByPackage[iconPackageName] ?: return null
         val component = app.toComponentInfo()
-        return entry.value.filterIsInstance<RawCalendar>().find { it.component == component }?.prefix
+        return elements.filterIsInstance<RawCalendar>().find { it.component == component }?.prefix
     }
 
     /** Builds one collision-free export from both global and per-app calendar selections. */
@@ -205,12 +212,12 @@ class IconPackRepository(private val context: Context) {
                         map[pack.packageName] = ResourceDrawable(pack.iconID, icon)
                     }
                 } else {
-                    val icons = runCatching {
+                    val icon = runCatching {
                         getAppDrawable(application, pack.packageName)
-                    }.getOrDefault(emptyMap())
+                    }.getOrNull()
 
-                    if (icons.isNotEmpty()) {
-                        map[pack.packageName] = icons[application]!!
+                    if (icon != null) {
+                        map[pack.packageName] = icon
                     }
                 }
             }
