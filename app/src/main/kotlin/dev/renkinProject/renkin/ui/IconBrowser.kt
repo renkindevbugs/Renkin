@@ -580,9 +580,9 @@ internal fun MaterialYouColorControls(
 
         if (selectedScheme >= schemes.size) {
             Spacer(Modifier.height(12.dp))
-            ColorRow(stringResource(R.string.iconColor), customForeground) { fgPickerOpen = true }
+            ColorRow(stringResource(R.string.iconColor), customForeground, shape = InnerShape) { fgPickerOpen = true }
             Spacer(Modifier.height(8.dp))
-            ColorRow(stringResource(R.string.backgroundColor), customBackground) { bgPickerOpen = true }
+            ColorRow(stringResource(R.string.backgroundColor), customBackground, shape = InnerShape) { bgPickerOpen = true }
         } else if (selectedScheme >= 0) {
             Text(
                 text = stringResource(R.string.materialYouColorsHint),
@@ -611,37 +611,6 @@ internal fun MaterialYouColorControls(
     }
 }
 
-/** A tappable colour row: label on the left, a circular swatch of [color] on the right. */
-@Composable
-private fun ColorRow(label: String, color: Color, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = InnerShape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(color)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-            )
-        }
-    }
-}
 
 /** A colour-scheme chip: the background tile with a foreground dot, or a palette glyph for Custom. */
 @Composable
