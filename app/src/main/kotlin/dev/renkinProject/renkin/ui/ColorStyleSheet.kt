@@ -53,6 +53,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
@@ -412,7 +414,13 @@ internal fun Modifier.colorizerSwatch(style: ColorizerStyle): Modifier {
     // The angle only reads correctly once the draw size is known, hence drawBehind over background.
     val angle by animateFloatAsState(style.gradientAngle, label = "colorizerAngle")
     val radial = gradient && style.gradientType == GradientType.RADIAL
+    // Without a checkerboard a transparent stop is indistinguishable from the surface behind the
+    // swatch, which reads as "the colour turned black" on a dark theme.
+    val translucent = colors.any { (it ushr 24) != 0xFF }
+    val checkerLight = MaterialTheme.colorScheme.surfaceBright
+    val checkerDark = MaterialTheme.colorScheme.surfaceDim
     return drawBehind {
+        if (translucent) drawAlphaCheckerboard(checkerLight, checkerDark)
         val brush = if (radial) {
             if (colorStops != null) {
                 Brush.radialGradient(
@@ -459,6 +467,35 @@ internal fun colorizerStyleSaver(): Saver<ColorizerStyle, String> = Saver(
     save = { encodeColorizerStyle(it) },
     restore = { decodeColorizerStyle(it) }
 )
+
+/**
+ * The transparency checkerboard every colour tool draws behind translucent colours. Deliberately
+ * theme-toned rather than the web's white/grey, so it reads as part of the app.
+ */
+internal fun DrawScope.drawAlphaCheckerboard(light: Color, dark: Color) {
+    val square = CheckerSquare.toPx()
+    drawRect(light)
+    var y = 0f
+    var row = 0
+    while (y < size.height) {
+        var x = if (row % 2 == 0) 0f else square
+        while (x < size.width) {
+            drawRect(
+                color = dark,
+                topLeft = Offset(x, y),
+                size = Size(
+                    width = minOf(square, size.width - x),
+                    height = minOf(square, size.height - y)
+                )
+            )
+            x += square * 2
+        }
+        y += square
+        row++
+    }
+}
+
+private val CheckerSquare = 6.dp
 
 /** Row that opens [ColorStyleSheet], previewing the current colours in its trailing swatch. */
 @Composable
