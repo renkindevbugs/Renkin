@@ -41,6 +41,7 @@
     <string name="aboutFeedback">Got an idea or a suggestion? Feel free to share it on GitHub — open it with the “View on GitHub” link under the app name above (suggestions and bug reports go in the “Issues” tab).</string>
     <string name="close">Close</string>
     <string name="packsSynced">Icon packs synced</string>
+    <string name="packsSyncFailed">Couldn\'t sync the icon packs</string>
     <string name="appListRefreshed">Application list refreshed</string>
     <string name="iconPackNotInstalled">Icon pack isn\'t installed</string>
     <string name="featureRefresh">Refresh icons</string>
@@ -134,6 +135,7 @@
     <string name="clearIconsTitle">Clear icons?</string>
     <string name="clearIconsText">This removes the generated icons **inside the app**. The icons in your already-built icon pack **stay there** until you build a new one.</string>
     <string name="iconsCleared">Icons cleared</string>
+    <string name="iconsClearFailed">Couldn\'t clear the icons</string>
     <string name="searchIcons">Search icons…</string>
     <string name="noIconsFound">No icons found</string>
     <string name="sourceAppIcon">App Icon</string>
