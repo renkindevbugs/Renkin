@@ -1026,6 +1026,9 @@ class ApplicationProvider(private val context: Context) {
             .groupingBy { it }
             .eachCount()
 
+    /** How many installed apps each pack declares an icon for (see IconPackRepository). */
+    fun packMatchedAppCounts(): Map<String, Int> = iconPackRepo.matchedAppCounts()
+
     /**
      * A few sample icons styled with [fallbackSource]'s fallback, for the Options preview so the
      * user sees the look before building. Empty when NONE or the source pack declares no fallback.

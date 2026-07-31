@@ -171,7 +171,11 @@
     <string name="choosePackTitle">Choose an icon pack</string>
     <string name="sourceOwnIcons">Use each app\'s own icon</string>
     <string name="sourceTextIcons">Text icons</string>
-    <string name="packUsedCount">%1$d used</string>
+    <string name="packCoverage">%1$d of %2$d apps matched</string>
+    <string name="packCoverageUsed">%1$d of %2$d apps matched · %3$d used</string>
+    <string name="filterChipMissing">%d missing</string>
+    <string name="filterChipFallback">%d fallback</string>
+    <string name="filterChipLocked">%d locked</string>
     <string name="profilesTitle">Profiles</string>
     <string name="createProfile">Create new profile</string>
     <string name="createProfileTitle">New profile</string>

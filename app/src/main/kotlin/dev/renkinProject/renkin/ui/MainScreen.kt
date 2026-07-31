@@ -111,6 +111,12 @@ import kotlinx.coroutines.launch
 enum class AppSortOrder { NAME, INSTALL_DATE }
 
 /**
+ * The three problem groups the app list can be narrowed to. Multiple groups may be selected;
+ * the list then shows their union. A locked app is never also "missing" (see sortedFilteredApps).
+ */
+enum class AppProblemFilter { MISSING, FALLBACK, LOCKED }
+
+/**
  * Shared app sort/filter overflow: a sort icon button opening a menu with the two sort orders
  * (name / recently installed) and the all-vs-without-icon filter. Used by the home app list and
  * the watch-rule app picker so both look and behave identically.
@@ -154,16 +160,16 @@ fun AppSortFilterMenu(
             CheckableDropdownItem(
                 text = stringResource(R.string.filterWithoutIcon),
                 checked = filterNoIcon
-            ) { onFilterChange(true); onLockedFilterChange(false); showSortMenu = false }
+            ) { onFilterChange(!filterNoIcon); showSortMenu = false }
             CheckableDropdownItem(
                 text = stringResource(R.string.filterFallback),
                 checked = filterFallback
-            ) { onFallbackFilterChange(true); onLockedFilterChange(false); showSortMenu = false }
+            ) { onFallbackFilterChange(!filterFallback); showSortMenu = false }
             if (showLockedFilter) {
                 CheckableDropdownItem(
                     text = stringResource(R.string.filterMissingPack),
                     checked = filterLocked
-                ) { onLockedFilterChange(true); showSortMenu = false }
+                ) { onLockedFilterChange(!filterLocked); showSortMenu = false }
             }
         }
     }
@@ -208,11 +214,41 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val prefs = getPreferences()
     val scope = rememberCoroutineScope()
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
-    val filterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
+    val storedFilterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
+    // Mirror the persisted filter locally so switching the hero buttons updates the list in
+    // the same frame instead of briefly showing every app while the DataStore write completes.
+    var filterNoIcon by rememberSaveable { mutableStateOf(storedFilterNoIcon) }
+    LaunchedEffect(storedFilterNoIcon) { filterNoIcon = storedFilterNoIcon }
     // Transient (not a pref): fallback flags only exist after a refresh, so the filter resets too.
     var filterFallback by remember { mutableStateOf(false) }
     // Transient too: locked icons are a temporary condition (install the pack and it's gone).
     var filterLocked by remember { mutableStateOf(false) }
+
+    val activeProblemFilters = buildSet {
+        if (filterNoIcon) add(AppProblemFilter.MISSING)
+        if (filterFallback) add(AppProblemFilter.FALLBACK)
+        if (filterLocked) add(AppProblemFilter.LOCKED)
+    }
+    // One transition is shared by the overflow menu and hero button group. Each problem filter
+    // remains independent; only the Missing choice is persisted because the others are transient.
+    val setProblemFilter: (AppProblemFilter, Boolean) -> Unit = { filter, enabled ->
+        when (filter) {
+            AppProblemFilter.MISSING -> {
+                filterNoIcon = enabled
+                scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, enabled) }
+            }
+            AppProblemFilter.FALLBACK -> filterFallback = enabled
+            AppProblemFilter.LOCKED -> filterLocked = enabled
+        }
+    }
+    val toggleProblemFilter: (AppProblemFilter) -> Unit = { filter ->
+        setProblemFilter(filter, filter !in activeProblemFilters)
+    }
+    val clearProblemFilters: () -> Unit = {
+        setProblemFilter(AppProblemFilter.MISSING, false)
+        setProblemFilter(AppProblemFilter.FALLBACK, false)
+        setProblemFilter(AppProblemFilter.LOCKED, false)
+    }
 
     // Require a second back press to leave. Registered here (before the search bar),
     // so the search bar's clear-on-back handler takes priority while it has text.
@@ -341,34 +377,16 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 filterLocked = filterLocked,
                 showLockedFilter = viewModel.lockedIconKeys.isNotEmpty() || filterLocked,
                 onSortChange = { scope.launch { prefs.setEnumValue(AppSortOrderKey, it) } },
-                onFilterChange = {
-                    filterFallback = false
-                    filterLocked = false
-                    scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, it) }
-                },
-                onFallbackFilterChange = {
-                    filterFallback = it
-                    if (it) {
-                        filterLocked = false
-                        scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
-                    }
-                },
-                onLockedFilterChange = {
-                    filterLocked = it
-                    if (it) {
-                        filterFallback = false
-                        scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
-                    }
-                },
+                onFilterChange = { setProblemFilter(AppProblemFilter.MISSING, it) },
+                onFallbackFilterChange = { setProblemFilter(AppProblemFilter.FALLBACK, it) },
+                onLockedFilterChange = { setProblemFilter(AppProblemFilter.LOCKED, it) },
                 onSearch = { packageFilter = it }
             )
             ApplicationList(
                 iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, filterLocked, listState,
-                onShowAllApps = {
-                    filterFallback = false
-                    filterLocked = false
-                    scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
-                }
+                onShowAllApps = clearProblemFilters,
+                activeProblemFilters = activeProblemFilters,
+                onProblemFilterToggle = toggleProblemFilter
             )
         }
     }
@@ -459,7 +477,10 @@ fun ApplicationList(
     listState: LazyListState = rememberLazyListState(),
     // Clears the active icon filters; offered on the empty state so a filtered-out list has an
     // obvious way back. Null hides the button (e.g. when no filter could be the cause).
-    onShowAllApps: (() -> Unit)? = null
+    onShowAllApps: (() -> Unit)? = null,
+    // Passed straight through to the hero card's problem toggles; a null callback hides them.
+    activeProblemFilters: Set<AppProblemFilter> = emptySet(),
+    onProblemFilterToggle: ((AppProblemFilter) -> Unit)? = null
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val applications = viewModel.applicationList
@@ -559,7 +580,7 @@ fun ApplicationList(
         }
         // Scrolls away with the list — only the search bar stays pinned
         item(key = "hero", contentType = "hero") {
-            HeroPackCard(iconPacks)
+            HeroPackCard(iconPacks, activeProblemFilters, onProblemFilterToggle)
         }
         item(key = "options", contentType = "options") {
             AdvancedOptionsCard(iconPacks) {
