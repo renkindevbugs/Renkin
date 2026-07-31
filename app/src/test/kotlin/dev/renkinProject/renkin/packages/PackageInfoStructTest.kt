@@ -9,6 +9,7 @@ import android.graphics.drawable.ColorDrawable
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -59,5 +60,14 @@ class PackageInfoStructTest {
 
         assertSame(replacement, changed.createdIcon)
         assertNull(changed.sourcePackName)
+    }
+
+    @Test
+    fun key_isStableAndComputedOnce() {
+        val application = app(FakeIcon())
+        val firstRead = application.key
+
+        assertEquals("com.example.app/com.example.app.Main", firstRead)
+        assertSame(firstRead, application.key)
     }
 }

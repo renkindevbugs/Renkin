@@ -134,7 +134,7 @@ class PackageInfoStruct(
      * (builtKeys, updatedKeys) and as a LazyList item key. RenkinPackStore builds the same string
      * from its DbApplication rows, so the two match.
      */
-    val key: String get() = "$packageName/$activityName"
+    val key: String = "$packageName/$activityName"
 
     fun getFileName(): String {
         return packageName.replace('.', '_')

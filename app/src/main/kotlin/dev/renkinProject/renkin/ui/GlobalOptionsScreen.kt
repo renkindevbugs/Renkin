@@ -58,6 +58,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -391,6 +392,37 @@ internal class GlobalModifierState {
     )
 }
 
+internal data class GlobalIconCategories(
+    val generated: List<PackageInfoStruct>,
+    val custom: List<PackageInfoStruct>,
+    val existing: List<PackageInfoStruct>,
+    val iconless: List<PackageInfoStruct>
+)
+
+internal fun categorizeGlobalIcons(
+    applications: List<PackageInfoStruct>,
+    lockedKeys: Set<String>
+): GlobalIconCategories {
+    val generated = ArrayList<PackageInfoStruct>()
+    val custom = ArrayList<PackageInfoStruct>()
+    val existing = ArrayList<PackageInfoStruct>()
+    val iconless = ArrayList<PackageInfoStruct>()
+
+    for (app in applications) {
+        if (app.createdIcon == null) {
+            if (app.key !in lockedKeys) iconless += app
+        } else if (app.isCustom) {
+            custom += app
+        } else if (app.isRefreshMade) {
+            generated += app
+        } else {
+            existing += app
+        }
+    }
+
+    return GlobalIconCategories(generated, custom, existing, iconless)
+}
+
 /**
  * Fullscreen Global options, hosted by [dev.renkinProject.renkin.GlobalOptionsActivity] whose
  * windowShowWallpaper theme puts the REAL wallpaper behind the transparent icon grid: the
@@ -425,7 +457,9 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
 
     val applying = viewModel.globalApplyProgress != null
     val previewJobs by viewModel.previewJobs.collectAsState()
-    val dirty = baseline != null && baseline != state.snapshot()
+    val dirty by remember(state) {
+        derivedStateOf { baseline != null && baseline != state.snapshot() }
+    }
     var showExperimentalNotice by rememberSaveable { mutableStateOf(true) }
     var confirmDiscard by remember { mutableStateOf(false) }
     val close: () -> Unit = {
@@ -437,22 +471,33 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
 
     // Staged modifiers → the preview options. null = nothing to apply (tiles show the icon
     // as-is without spinning up a generation per tile).
-    val tileOptions = if (state.hasAnyEffect) state.toModifierOptions() else null
+    val tileOptions by remember(state) {
+        derivedStateOf {
+            if (state.hasAnyEffect) state.toModifierOptions() else null
+        }
+    }
     // Empty slots preview a full generation with the staged globals overlaid, so what's shown
     // matches what Save (and a later refresh) actually produces.
-    val emptySourceOptions = if (state.includeEmpty) {
-        GenerationOptions.fromPreferences(state.overlay(prefsValue), context, override = true)
-    } else null
+    val emptySourceOptions by remember(state, prefsValue, context) {
+        derivedStateOf {
+            if (state.includeEmpty) {
+                GenerationOptions.fromPreferences(state.overlay(prefsValue), context, override = true)
+            } else null
+        }
+    }
     LaunchedEffect(emptySourceOptions, tileOptions) {
         viewModel.updatePreviewConfiguration(emptySourceOptions, tileOptions)
     }
 
-    val apps = viewModel.applicationList
-    val locked = viewModel.lockedIconKeys
-    val generated = apps.filter { it.createdIcon != null && !it.isCustom && it.isRefreshMade }
-    val custom = apps.filter { it.createdIcon != null && it.isCustom }
-    val existing = apps.filter { it.createdIcon != null && !it.isCustom && !it.isRefreshMade }
-    val iconless = apps.filter { it.createdIcon == null && it.key !in locked }
+    val categories by remember(viewModel) {
+        derivedStateOf {
+            categorizeGlobalIcons(viewModel.applicationList, viewModel.lockedIconKeys)
+        }
+    }
+    val generated = categories.generated
+    val custom = categories.custom
+    val existing = categories.existing
+    val iconless = categories.iconless
 
     var editApp by remember { mutableStateOf<PackageInfoStruct?>(null) }
 
