@@ -15,7 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -78,6 +78,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -525,8 +526,9 @@ private fun PackPickerSheet(
     }
 }
 
+// internal, not private: the selection semantics have their own compose test.
 @Composable
-private fun PickerRow(
+internal fun PickerRow(
     title: String,
     subtitle: String?,
     icon: ImageBitmap?,
@@ -536,7 +538,10 @@ private fun PickerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            // selectable, not clickable: the row is one option out of a list, so TalkBack should
+            // announce it as a radio button and say which one is picked. The check icon is
+            // decoration on top of that semantic, hence its null contentDescription.
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
             .padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
