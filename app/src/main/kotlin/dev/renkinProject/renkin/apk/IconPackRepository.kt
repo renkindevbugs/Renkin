@@ -10,6 +10,7 @@ import dev.renkinProject.renkin.data.IconPackFallback
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawCalendar
 import dev.renkinProject.renkin.data.RawElement
+import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.packages.ApplicationManager
@@ -44,6 +45,12 @@ internal suspend fun loadIsolatedAppFilters(
     buildMap { parsed.filterNotNull().forEach { (pack, elements) -> put(pack, elements) } }
 }
 
+internal fun indexAppDrawableNames(elements: List<RawElement>): Map<String, String> = buildMap {
+    for (element in elements) {
+        if (element is RawItem) put(element.component, element.drawableLink)
+    }
+}
+
 /**
  * Owns everything about installed icon packs: the pack list, their app-filter elements,
  * the per-app drawables resolved from them, and the calendar icons derived from them.
@@ -61,6 +68,7 @@ class IconPackRepository(private val context: Context) {
 
     private var appFilterElements: Map<IconPack, List<RawElement>> = emptyMap()
     private var appFilterElementsByPackage: Map<String, List<RawElement>> = emptyMap()
+    private var appDrawableNamesByPackage: Map<String, Map<String, String>> = emptyMap()
     private var installedApplications: List<InstalledApplication> = listOf()
     private val fallbackCache = mutableMapOf<String, IconPackFallback>()
 
@@ -94,6 +102,9 @@ class IconPackRepository(private val context: Context) {
         appFilterElementsByPackage = appFilterElements.entries.associate { (pack, elements) ->
             pack.packageName to elements
         }
+        appDrawableNamesByPackage = appFilterElementsByPackage.mapValues { (_, elements) ->
+            indexAppDrawableNames(elements)
+        }
         iconPackLoaded = true
     }
 
@@ -126,10 +137,16 @@ class IconPackRepository(private val context: Context) {
         )
     }
 
-    private fun getAppDrawable(app: InstalledApplication, iconPack: String): ResourceDrawable? {
+    /**
+     * Resolves one component without scanning or decoding the rest of the pack. The index is
+     * rebuilt with the appfilter, and duplicate component declarations keep the last value just
+     * like the full-map path.
+     */
+    fun getAppDrawable(app: InstalledApplication, iconPack: String): ResourceDrawable? {
         if (iconPack == "") return null
-        val elements = appFilterElementsByPackage[iconPack] ?: return null
-        return appManager.getDrawableFromAppFilterElements(iconPack, app, elements)
+        val drawableName = appDrawableNamesByPackage[iconPack]?.get(app.toComponentInfo())
+            ?: return null
+        return appManager.getResourceDrawableByName(iconPack, drawableName)
     }
 
     /** Calendar mappings declared by the currently installed version of [iconPackageName]. */

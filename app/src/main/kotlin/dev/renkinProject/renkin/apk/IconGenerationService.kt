@@ -38,7 +38,14 @@ class IconGenerationService(
     ): IconPackDrawable? = withContext(Dispatchers.Default) {
         var icon: IconPackDrawable? = null
 
-        val pack1 = IconPackContainer(options.primaryIconPack, iconPackRepo.getAppDrawables(options.primaryIconPack))
+        val installedApplication = application.toInstalledApplication()
+        val appDrawable = if (options.primarySource == Source.ICON_PACK && customIcon == null) {
+            iconPackRepo.getAppDrawable(installedApplication, options.primaryIconPack)
+        } else null
+        val pack1 = IconPackContainer(
+            options.primaryIconPack,
+            appDrawable?.let { mapOf(installedApplication to it) } ?: emptyMap()
+        )
         val pack2 = IconPackContainer("", emptyMap())
 
         val builder = IconGenerator(context, options, pack1, pack2)

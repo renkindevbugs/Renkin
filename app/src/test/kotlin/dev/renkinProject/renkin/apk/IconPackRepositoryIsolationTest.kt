@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.apk
 
 import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.data.RawCalendar
 import dev.renkinProject.renkin.data.RawItem
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -28,5 +29,27 @@ class IconPackRepositoryIsolationTest {
         assertTrue(healthy in loaded)
         assertFalse(broken in loaded)
         assertEquals(listOf(broken), failures)
+    }
+
+    @Test
+    fun drawableIndex_keepsLastComponentDeclarationAndIgnoresOtherElements() {
+        val component = "ComponentInfo{com.app/.Main}"
+
+        val indexed = indexAppDrawableNames(
+            listOf(
+                RawItem(component, "old_icon"),
+                RawCalendar(component, "calendar_"),
+                RawItem("ComponentInfo{com.other/.Main}", "other_icon"),
+                RawItem(component, "new_icon")
+            )
+        )
+
+        assertEquals(
+            mapOf(
+                component to "new_icon",
+                "ComponentInfo{com.other/.Main}" to "other_icon"
+            ),
+            indexed
+        )
     }
 }

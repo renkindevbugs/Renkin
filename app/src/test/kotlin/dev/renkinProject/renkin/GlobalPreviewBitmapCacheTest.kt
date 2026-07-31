@@ -2,6 +2,7 @@ package dev.renkinProject.renkin
 
 import android.app.Application
 import android.graphics.Bitmap
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -58,5 +59,12 @@ class GlobalPreviewBitmapCacheTest {
         cache.clear()
 
         assertNull(cache.get(cacheKey))
+    }
+
+    @Test
+    fun previewParallelism_isBoundedByCpuAndMaximum() {
+        assertEquals(1, previewParallelism(1))
+        assertEquals(3, previewParallelism(3))
+        assertEquals(4, previewParallelism(8))
     }
 }
