@@ -246,19 +246,64 @@ class ApplicationProvider(private val context: Context) {
         startupComplete = true
     }
 
-    suspend fun refreshIcon(application: PackageInfoStruct, preferences: Preferences) = withContext(Dispatchers.Default) {
-        // A newly installed app always gets its icon (re)generated
-        val sourceOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
-        val modifierOptions = modifierFor(preferences, apply = preferences.getBooleanValue(GlobalApplyGeneratedKey, true))
-        val lockedOrigins = lockManager.lockedOriginsFor(sourceOptions)
-        iconGenService.refreshIcon(application, sourceOptions, modifierOptions) { app, base, rendered, sourcePack ->
-            val origin = lockManager.resolveOrigin(app.key, sourcePack)
-            // An own pack handing out an icon whose real origin isn't owned here → withhold.
-            if (rendered == null || origin == null || origin !in lockedOrigins) {
-                editApplication(app, app.changeExport(rendered, sourcePackName = origin, isRefreshMade = true, isCustom = false, isLegacy = false, baseIcon = base))
+    /**
+     * Regenerates one app's icon. Held under the same gate as [refreshIcons] — the recipe, the
+     * live row and the undo capture must belong to one profile, or a switch landing mid-refresh
+     * writes into the next profile's list. Returns true only when an existing icon was replaced,
+     * which is the one case worth offering Undo for (filling an empty slot is what refresh is
+     * for, and a withheld locked origin changes nothing at all).
+     */
+    suspend fun refreshIcon(expectedProfileId: Long, application: PackageInfoStruct): Boolean =
+        withContext(Dispatchers.Default) {
+            profileOperations.run {
+                if (activeProfileId != expectedProfileId) return@run false
+                val preferences = context.dataStore.getPreferencesAfterPendingWrites()
+                // The row the user long-pressed may be a stale copy; regenerate over the live one.
+                val target = applicationList.firstOrNull { it.key == application.key } ?: return@run false
+                // A newly installed app always gets its icon (re)generated
+                val sourceOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
+                val modifierOptions = modifierFor(preferences, apply = preferences.getBooleanValue(GlobalApplyGeneratedKey, true))
+                val lockedOrigins = lockManager.lockedOriginsFor(sourceOptions)
+                var replaced = false
+                iconGenService.refreshIcon(target, sourceOptions, modifierOptions) { app, base, rendered, sourcePack ->
+                    val origin = lockManager.resolveOrigin(app.key, sourcePack)
+                    // An own pack handing out an icon whose real origin isn't owned here → withhold.
+                    if (rendered == null || origin == null || origin !in lockedOrigins) {
+                        val live = applicationList.firstOrNull { it.key == app.key }
+                        if (live?.createdIcon != null) {
+                            captureUndoRows(listOf(live), persisted = false)
+                            replaced = true
+                        }
+                        editApplication(app, app.changeExport(rendered, sourcePackName = origin, isRefreshMade = true, isCustom = false, isLegacy = false, baseIcon = base))
+                    }
+                }
+                replaced
             }
         }
-    }
+
+    /**
+     * Restores one app to its launcher default: drops an imported row held behind a missing pack
+     * and clears calendar rotation. Under the gate for the same reason as [refreshIcon] — the
+     * index lookup and the edit must see one list. Returns true when something was actually
+     * cleared, so the caller only offers Undo then.
+     */
+    suspend fun resetIcon(expectedProfileId: Long, application: PackageInfoStruct): Boolean =
+        withContext(Dispatchers.Default) {
+            profileOperations.run {
+                if (activeProfileId != expectedProfileId) return@run false
+                val index = applicationList.indexOfFirst { it.key == application.key }
+                if (index < 0) return@run false
+                val live = applicationList[index]
+                val hadSomething = live.createdIcon != null ||
+                    live.calendarEnabled ||
+                    application.key in lockManager.lockedKeys
+                if (!hadSomething) return@run false
+                captureUndoRows(listOf(live), persisted = true)
+                lockManager.discard(application.key)
+                editApplication(index, live.changeExport(null).changeCalendar(false, null, null))
+                true
+            }
+        }
 
     /** Regenerates all icons. Returns how many were withheld because their real origin
      * (recorded by an own pack used as source) is a pack this device doesn't own. */
@@ -852,13 +897,7 @@ class ApplicationProvider(private val context: Context) {
     /** How many icons the pending undo would put back; 0 when there is nothing to offer. */
     val undoableIconCount: Int get() = undoTracker.size
 
-    /** Records the rows [keys] currently hold, so the change about to overwrite them can go back. */
-    fun captureUndo(keys: Collection<String>, persisted: Boolean) {
-        val wanted = keys.toSet()
-        captureUndoRows(applicationList.filter { it.key in wanted }, persisted)
-    }
-
-    /** Same, for callers that already hold the rows they are about to overwrite. */
+    /** Records the rows a change is about to overwrite, so it can go back. */
     fun captureUndoRows(rows: List<PackageInfoStruct>, persisted: Boolean) {
         undoTracker.capture(rows, activeProfileId, persisted)
     }
@@ -1042,9 +1081,6 @@ class ApplicationProvider(private val context: Context) {
      */
     suspend fun resolvePickedSource(app: PackageInfoStruct, sourcePackName: String?): Pair<String?, Boolean> =
         lockManager.resolvePickedSource(app.key, sourcePackName)
-
-    /** Removes a held-back imported icon after an explicit per-app reset. */
-    fun discardLockedIcon(key: String) = lockManager.discard(key)
 
     /** One row of the "pack usage" stats: how many stored icons really came from [packageName]. */
     data class PackUsage(val packageName: String, val label: String, val count: Int, val installed: Boolean)

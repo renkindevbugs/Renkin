@@ -4,6 +4,7 @@ import android.app.Application
 import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.datastore.preferences.core.Preferences
@@ -13,6 +14,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.PackChange
+import dev.renkinProject.renkin.apk.packChanges
 import dev.renkinProject.renkin.apk.unsavedApplicationKeys
 import dev.renkinProject.renkin.apk.IconGenerationService
 import dev.renkinProject.renkin.apk.IconLockManager
@@ -179,6 +182,18 @@ class MainViewModel @Inject constructor(
     // Reset after every successful build.
     var updatedKeys by mutableStateOf<Set<String>>(emptySet())
         private set
+
+    /**
+     * What a build would add, change or remove. Derived here rather than in each screen so the
+     * hero card's badge and the changes sheet read one computation instead of running the same
+     * diff over the whole app list twice.
+     *
+     * derivedStateOf, not a plain getter: [applicationList] is one long-lived snapshot list whose
+     * identity never changes, so only tracking its contents keeps the result from going stale.
+     */
+    val pendingPackChanges: List<PackChange> by derivedStateOf {
+        packChanges(applicationList, builtIconHashes, savedIconHashes, updatedKeys)
+    }
 
     // Set when opened from an icon-watch notification; the home screen shows the apply
     // modal for this suggestion.
@@ -521,11 +536,11 @@ class MainViewModel @Inject constructor(
      */
     fun refreshSingleIcon(app: PackageInfoStruct) {
         viewModelScope.launch {
-            val preferences = getApplication<Application>().dataStore
-                .getPreferencesAfterPendingWrites()
-            appProvider.captureUndo(listOf(app.key), persisted = false)
-            appProvider.refreshIcon(app, preferences)
-            _undoEvents.trySend(UndoPrompt(R.string.undoIconRefreshed, 1))
+            // Undo is offered only when an existing icon was actually replaced — the provider
+            // knows that, the caller doesn't (a locked origin is withheld and changes nothing).
+            if (appProvider.refreshIcon(activeProfileId, app)) {
+                _undoEvents.trySend(UndoPrompt(R.string.undoIconRefreshed, 1))
+            }
         }
     }
 
@@ -585,15 +600,7 @@ class MainViewModel @Inject constructor(
      */
     fun resetIcon(app: PackageInfoStruct) {
         viewModelScope.launch {
-            val index = appProvider.applicationList.indexOfFirst { it.key == app.key }
-            if (index < 0) return@launch
-            appProvider.captureUndo(listOf(app.key), persisted = true)
-            appProvider.discardLockedIcon(app.key)
-            val live = appProvider.applicationList[index]
-            appProvider.editApplication(
-                index,
-                live.changeExport(null).changeCalendar(false, null, null)
-            )
+            if (!appProvider.resetIcon(activeProfileId, app)) return@launch
             refreshMissingPacks(prompt = false)
             _undoEvents.trySend(UndoPrompt(R.string.undoIconReset, 1))
         }

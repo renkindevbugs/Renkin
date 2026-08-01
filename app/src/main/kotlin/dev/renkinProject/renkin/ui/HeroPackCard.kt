@@ -90,7 +90,6 @@ import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.data.setPrimarySource
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.apk.packChanges
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.IconPack
@@ -319,18 +318,7 @@ fun HeroPackCard(
                 }
                 // Pending changes, now answerable: the badge says how many and opens the list of
                 // exactly which apps a build would add, change or drop.
-                // derivedStateOf, not remember(list): applicationList is one long-lived snapshot
-                // list, so its identity never changes and a refresh would leave the chip stale.
-                val changes by remember {
-                    derivedStateOf {
-                        packChanges(
-                            viewModel.applicationList,
-                            viewModel.builtIconHashes,
-                            viewModel.savedIconHashes,
-                            viewModel.updatedKeys
-                        )
-                    }
-                }
+                val changes = viewModel.pendingPackChanges
                 if (changes.isNotEmpty() || activeProfile?.hasUnbuiltChanges == true) {
                     Spacer(Modifier.height(6.dp))
                     Surface(

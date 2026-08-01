@@ -30,7 +30,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,7 +48,6 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.PackChange
 import dev.renkinProject.renkin.apk.PackChangeKind
 import dev.renkinProject.renkin.apk.PackChangeReason
-import dev.renkinProject.renkin.apk.packChanges
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.ui.theme.InnerShape
@@ -67,18 +65,7 @@ internal fun PackChangesSheet(
     onDismiss: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
-    // Same reasoning as the hero card: the app list is a long-lived snapshot list, so the
-    // recomputation has to follow its contents rather than its identity.
-    val changes by remember {
-        derivedStateOf {
-            packChanges(
-                viewModel.applicationList,
-                viewModel.builtIconHashes,
-                viewModel.savedIconHashes,
-                viewModel.updatedKeys
-            )
-        }
-    }
+    val changes = viewModel.pendingPackChanges
     var filter by rememberSaveable { mutableStateOf<PackChangeKind?>(null) }
     val shown = remember(changes, filter) { changes.filter { filter == null || it.kind == filter } }
     val listState = rememberLazyListState()

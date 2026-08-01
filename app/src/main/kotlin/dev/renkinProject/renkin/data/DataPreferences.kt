@@ -581,6 +581,16 @@ val GlobalShapeStyleKeys = ColorStyleKeys(
     gradientPositions = GlobalShapeGradientPositionsKey
 )
 
+val GlobalColorizerStyleKeys = ColorStyleKeys(
+    mode = GlobalColorizerModeKey,
+    gradientType = GlobalColorizerGradientTypeKey,
+    gradientAngle = GlobalColorizerGradientAngleKey,
+    firstColor = GlobalColorizeColorKey,
+    gradientColors = GlobalColorizerGradientColorsKey,
+    gradientPositions = GlobalColorizerGradientPositionsKey,
+    legacyGradientColor = GlobalColorizerGradientColorKey
+)
+
 // The outline's first colour IS its legacy key, so there is no separate legacy stop to write —
 // syncing one would overwrite the first colour with the second (that bug shipped once).
 val OutlineStyleKeys = ColorStyleKeys(
@@ -604,20 +614,35 @@ suspend fun DataStore<Preferences>.setColorStyle(
 ) {
     preferenceAccessMutex.withLock {
         edit { target ->
-            target[keys.mode] = mode
-            target[keys.gradientType] = gradientType
-            target[keys.gradientAngle] = gradientAngle
-            target[keys.firstColor] = firstColor.toHexString()
-            target[keys.gradientColors] =
-                gradientStops.joinToString(",") { Color(it).toHexString() }
-            target[keys.gradientPositions] = gradientPositions.joinToString(",")
-            keys.legacyGradientColor
-                ?.takeIf { it != keys.firstColor }
-                ?.let { legacy ->
-                    gradientStops.firstOrNull()?.let { target[legacy] = Color(it).toHexString() }
-                }
+            target.setColorStyle(
+                keys, mode, gradientType, gradientAngle,
+                firstColor, gradientStops, gradientPositions
+            )
         }
     }
+}
+
+/** Writes one complete colour style into an existing atomic preferences edit or staged copy. */
+fun MutablePreferences.setColorStyle(
+    keys: ColorStyleKeys,
+    mode: Int,
+    gradientType: Int,
+    gradientAngle: Int,
+    firstColor: Color,
+    gradientStops: List<Int>,
+    gradientPositions: List<Float> = emptyList()
+) {
+    this[keys.mode] = mode
+    this[keys.gradientType] = gradientType
+    this[keys.gradientAngle] = gradientAngle
+    this[keys.firstColor] = firstColor.toHexString()
+    this[keys.gradientColors] = gradientStops.joinToString(",") { Color(it).toHexString() }
+    this[keys.gradientPositions] = gradientPositions.joinToString(",")
+    keys.legacyGradientColor
+        ?.takeIf { it != keys.firstColor }
+        ?.let { legacy ->
+            gradientStops.firstOrNull()?.let { this[legacy] = Color(it).toHexString() }
+        }
 }
 
 

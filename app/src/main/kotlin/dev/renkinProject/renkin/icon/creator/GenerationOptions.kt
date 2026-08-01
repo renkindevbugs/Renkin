@@ -13,14 +13,11 @@ import dev.renkinProject.renkin.data.IncludeVectorKey
 import dev.renkinProject.renkin.data.MonochromeKey
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
 import dev.renkinProject.renkin.data.OutlineAddKey
-import dev.renkinProject.renkin.data.OutlineColorKey
 import dev.renkinProject.renkin.data.ColorStyleKeys
 import dev.renkinProject.renkin.data.BackgroundStyleKeys
 import dev.renkinProject.renkin.data.GlobalShapeStyleKeys
-import dev.renkinProject.renkin.data.OutlineColorizerModeKey
-import dev.renkinProject.renkin.data.OutlineGradientAngleKey
-import dev.renkinProject.renkin.data.OutlineGradientColorsKey
-import dev.renkinProject.renkin.data.OutlineGradientTypeKey
+import dev.renkinProject.renkin.data.GlobalColorizerStyleKeys
+import dev.renkinProject.renkin.data.OutlineStyleKeys
 import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.OverrideIconKey
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
@@ -44,7 +41,6 @@ import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
-import dev.renkinProject.renkin.data.GlobalColorizeColorKey
 import dev.renkinProject.renkin.data.GlobalColorizeFlatKey
 import dev.renkinProject.renkin.data.GlobalColorizeInverseKey
 import dev.renkinProject.renkin.data.GlobalColorizeKey
@@ -55,17 +51,9 @@ import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
 import dev.renkinProject.renkin.data.getGradientStops
 import dev.renkinProject.renkin.data.getGradientPositions
 import dev.renkinProject.renkin.data.ColorizerGradientPositionsKey
-import dev.renkinProject.renkin.data.GlobalColorizerGradientPositionsKey
-import dev.renkinProject.renkin.data.OutlineGradientPositionsKey
 import dev.renkinProject.renkin.data.ColorizerGradientTypeKey
 import dev.renkinProject.renkin.data.ColorizerModeKey
-import dev.renkinProject.renkin.data.GlobalColorizerGradientAngleKey
-import dev.renkinProject.renkin.data.GlobalColorizerGradientColorKey
-import dev.renkinProject.renkin.data.GlobalColorizerGradientColorsKey
-import dev.renkinProject.renkin.data.GlobalColorizerGradientTypeKey
-import dev.renkinProject.renkin.data.GlobalColorizerModeKey
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
-import dev.renkinProject.renkin.data.GlobalShapeColorKey
 import dev.renkinProject.renkin.data.GlobalShapeCropKey
 import dev.renkinProject.renkin.data.GlobalShapeKey
 import dev.renkinProject.renkin.data.GlobalShapeScaleKey
@@ -255,6 +243,19 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         preferences.getIntValue(GlobalShapeKey, IconShape.NONE.ordinal)
     ) ?: IconShape.NONE
     val shapeCrop = preferences.getBooleanValue(GlobalShapeCropKey, true)
+    val colorizerStyle = preferences.colorStyle(
+        GlobalColorizerStyleKeys, androidx.compose.ui.graphics.Color.White
+    ).copy(
+        flat = preferences.getBooleanValue(GlobalColorizeFlatKey),
+        monochrome = preferences.getBooleanValue(GlobalColorizeMonochromeKey),
+        inverse = preferences.getBooleanValue(GlobalColorizeInverseKey)
+    )
+    val shapeStyle = if (shape != IconShape.NONE && !shapeCrop) {
+        preferences.colorStyle(GlobalShapeStyleKeys, androidx.compose.ui.graphics.Color.White)
+    } else null
+    val outlineStyle = preferences.colorStyle(
+        OutlineStyleKeys, androidx.compose.ui.graphics.Color.Black
+    )
     return GenerationOptions(
         primarySource = Source.NONE,
         primaryImageEdit = if (preferences.getBooleanValue(GlobalColorizeKey)) {
@@ -262,42 +263,22 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         } else ImageEdit.NONE,
         primaryTextType = TEXT_TYPE_DEFAULT,
         primaryIconPack = "",
-        color = preferences.getColorValue(
-            GlobalColorizeColorKey, androidx.compose.ui.graphics.Color.White
-        ).toArgb(),
-        bgColor = if (shape != IconShape.NONE && !shapeCrop) {
-            preferences.getColorValue(
-                GlobalShapeColorKey, androidx.compose.ui.graphics.Color.White
-            ).toArgb()
-        } else android.graphics.Color.TRANSPARENT,
+        color = colorizerStyle.firstColor,
+        bgColor = shapeStyle?.firstColor ?: android.graphics.Color.TRANSPARENT,
         // Only the plate shows a background at all, so the style follows the same condition.
-        backgroundStyle = if (shape != IconShape.NONE && !shapeCrop) {
-            preferences.colorStyle(
-                GlobalShapeStyleKeys, androidx.compose.ui.graphics.Color.White
-            )
-        } else null,
+        backgroundStyle = shapeStyle,
         vector = false,
         materialYou = false,
         themed = false,
         override = true,
-        colorizeFlat = preferences.getBooleanValue(GlobalColorizeFlatKey),
-        colorizeMonochrome = preferences.getBooleanValue(GlobalColorizeMonochromeKey),
-        colorizeInverse = preferences.getBooleanValue(GlobalColorizeInverseKey),
-        colorizerMode = preferences.getEnumValue(
-            GlobalColorizerModeKey, ColorizerMode.SINGLE_COLOR
-        ),
-        colorizerGradientType = preferences.getEnumValue(
-            GlobalColorizerGradientTypeKey, GradientType.LINEAR
-        ),
-        colorizerGradientColors = preferences.getGradientStops(
-            GlobalColorizerGradientColorsKey, GlobalColorizerGradientColorKey
-        ),
-        colorizerGradientPositions = preferences.getGradientPositions(
-            GlobalColorizerGradientPositionsKey
-        ),
-        colorizerGradientAngle = normalizeGradientAngle(
-            preferences.getIntValue(GlobalColorizerGradientAngleKey).toFloat()
-        ),
+        colorizeFlat = colorizerStyle.flat,
+        colorizeMonochrome = colorizerStyle.monochrome,
+        colorizeInverse = colorizerStyle.inverse,
+        colorizerMode = colorizerStyle.mode,
+        colorizerGradientType = colorizerStyle.gradientType,
+        colorizerGradientColors = colorizerStyle.gradientStops,
+        colorizerGradientPositions = colorizerStyle.gradientPositions,
+        colorizerGradientAngle = colorizerStyle.gradientAngle,
         iconScale = normalizeGlobalScalePercent(
             preferences.getIntValue(GlobalIconScaleKey, 100)
         ) / 100f,
@@ -312,10 +293,8 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         outlineWidth = normalizeOutlineWidth(
             preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
         ).toFloat(),
-        outlineColor = preferences.getColorValue(
-            OutlineColorKey, androidx.compose.ui.graphics.Color.Black
-        ).toArgb(),
-        outlineStyle = preferences.outlineColorizerStyle()
+        outlineColor = outlineStyle.firstColor,
+        outlineStyle = outlineStyle
     )
 }
 
@@ -330,21 +309,11 @@ fun Preferences.colorStyle(
     mode = getEnumValue(keys.mode, ColorizerMode.SINGLE_COLOR),
     gradientType = getEnumValue(keys.gradientType, GradientType.LINEAR),
     firstColor = getColorValue(keys.firstColor, defaultColor).toArgb(),
-    gradientStops = getGradientStops(keys.gradientColors, keys.firstColor),
+    gradientStops = getGradientStops(
+        keys.gradientColors, keys.legacyGradientColor ?: keys.firstColor
+    ),
     gradientPositions = getGradientPositions(keys.gradientPositions),
     gradientAngle = normalizeGradientAngle(getIntValue(keys.gradientAngle).toFloat())
-)
-
-/** The outline's colour as a style, so a gradient outline reads exactly like a gradient fill. */
-fun Preferences.outlineColorizerStyle(): ColorizerStyle = ColorizerStyle(
-    mode = getEnumValue(OutlineColorizerModeKey, ColorizerMode.SINGLE_COLOR),
-    gradientType = getEnumValue(OutlineGradientTypeKey, GradientType.LINEAR),
-    firstColor = getColorValue(
-        OutlineColorKey, androidx.compose.ui.graphics.Color.Black
-    ).toArgb(),
-    gradientStops = getGradientStops(OutlineGradientColorsKey, OutlineColorKey),
-    gradientPositions = getGradientPositions(OutlineGradientPositionsKey),
-    gradientAngle = normalizeGradientAngle(getIntValue(OutlineGradientAngleKey).toFloat())
 )
 
 /**
