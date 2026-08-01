@@ -202,16 +202,21 @@ fun colorizeSampleBitmap(
 
 /**
  * Applies [layers] in order: every layer colourizes the whole icon with its own style, then only
- * the pixels its regions select are kept. Matching runs against [source] throughout, so a later
- * layer still finds the colours the user picked them by.
+ * the pixels its regions select are kept.
+ *
+ * Each layer matches against what the layers before it produced, not against the original
+ * artwork — the region picker shows a later layer that same accumulated icon, so a pick lands on
+ * the colour the user actually sees. Matching the original instead let a second layer silently
+ * repaint the first one's work, because the palette still offered the colours the first layer had
+ * already covered.
  */
 fun applySegmentLayers(source: Bitmap, layers: List<SegmentLayer>): Bitmap {
     var current = source
     for (layer in layers) {
         if (layer.targets.isEmpty()) continue
-        val bounds = segmentBounds(source, layer.targets, layer.tolerance)
+        val bounds = segmentBounds(current, layer.targets, layer.tolerance)
         val colorized = colorizeSampleBitmap(current, layer.style, bounds)
-        current = mergeSegmentLayer(source, current, colorized, layer.targets, layer.tolerance)
+        current = mergeSegmentLayer(current, current, colorized, layer.targets, layer.tolerance)
     }
     return current
 }

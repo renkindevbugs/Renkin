@@ -3,7 +3,6 @@
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -19,6 +18,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -37,7 +38,10 @@ import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.SegmentLayer
+import dev.renkinProject.renkin.icon.creator.applySegmentLayers
 import dev.renkinProject.renkin.ui.theme.FieldShape
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /**
  * The Colorize segments modifier: a stack of "these regions, this colour" layers. Each layer owns
@@ -93,27 +97,45 @@ internal fun SegmentLayerEditor(
                                 .colorizerSwatch(entry.style)
                         )
                     },
-                    label = { Text(stringResource(R.string.segmentLayerName, i + 1)) },
-                    trailingIcon = if (i == index && layers.size > 1) {
-                        {
-                            Icon(
-                                imageVector = Icons.Filled.Close,
-                                contentDescription = stringResource(R.string.segmentLayerRemove),
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .clickable {
-                                        onLayersChange(layers.filterIndexed { at, _ -> at != i })
-                                        selected = 0
-                                    }
-                            )
-                        }
-                    } else null
+                    label = { Text(stringResource(R.string.segmentLayerName, i + 1)) }
                 )
+            }
+            if (layers.size > 1) {
+                // Keep removal outside the selectable chip. A nested clickable icon receives a
+                // minimum touch target that can overlap the chip and remove a layer on selection.
+                IconButton(
+                    onClick = {
+                        val nextSelected = if (index == layers.lastIndex) index - 1 else index
+                        onLayersChange(layers.filterIndexed { i, _ -> i != index })
+                        selected = nextSelected.coerceAtLeast(0)
+                    }
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.segmentLayerRemove)
+                    )
+                }
+            }
+        }
+
+        // Regions are picked on what the earlier layers already painted, exactly as
+        // applySegmentLayers matches them. Showing the untouched artwork here offered colours
+        // that are no longer visible, and picking one repainted over the earlier layer.
+        // Keyed on the earlier layers alone: editing THIS layer's own pick must not rebuild the
+        // bitmap the picker is working on, or every tap would recompute the palette under it.
+        val earlier = remember(layers, index) {
+            layers.take(index).filter { it.targets.isNotEmpty() }
+        }
+        val pickSource by produceState(source, source, earlier) {
+            value = if (earlier.isEmpty()) {
+                source
+            } else {
+                withContext(Dispatchers.Default) { applySegmentLayers(source, earlier) }
             }
         }
 
         SegmentSelector(
-            source = source,
+            source = pickSource,
             targets = layer.targets,
             tolerance = layer.tolerance,
             onTargetsChange = { targets -> updateLayer { it.copy(targets = targets) } },

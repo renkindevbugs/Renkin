@@ -38,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -116,7 +117,7 @@ internal fun SegmentSelector(
     }
 
     fun toggle(color: Int) {
-        onTargetsChange(if (targets.contains(color)) targets - color else targets + color)
+        onTargetsChange(toggleSegmentTarget(targets, color))
     }
 
     val wide = LocalConfiguration.current.screenWidthDp >= WIDE_LAYOUT_DP
@@ -128,7 +129,8 @@ internal fun SegmentSelector(
             source = source,
             bounds = bounds,
             segments = segments,
-            onToggle = ::toggle,
+            targets = targets,
+            onTargetsChange = onTargetsChange,
             modifier = canvasModifier
         )
     }
@@ -225,7 +227,8 @@ internal fun SegmentSelector(
                         source = source,
                         bounds = bounds,
                         segments = segments,
-                        onToggle = ::toggle,
+                        targets = targets,
+                        onTargetsChange = onTargetsChange,
                         // Capped: on a tablet a full-width dialog would blow the icon up to
                         // half the screen without making it any easier to aim at.
                         modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp)
@@ -256,9 +259,14 @@ private fun SegmentCanvas(
     source: Bitmap,
     bounds: Rect?,
     segments: List<ColorSegment>,
-    onToggle: (Int) -> Unit,
+    targets: List<Int>,
+    onTargetsChange: (List<Int>) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // The gesture coroutine survives both recompositions and layer switches. Read selection state
+    // through updated references so a tap cannot rebuild the list from an older set of targets.
+    val currentTargets by rememberUpdatedState(targets)
+    val currentOnTargetsChange by rememberUpdatedState(onTargetsChange)
     // Same accent as the Position box, which is the app's existing "this is your selection" mark.
     val accent = MaterialTheme.colorScheme.primary
     val alternative = MaterialTheme.colorScheme.inversePrimary
@@ -310,7 +318,10 @@ private fun SegmentCanvas(
                         // Snap to the segment the pixel belongs to, so a tap on an antialiased
                         // edge still selects a real region.
                         segments.minByOrNull { colorDistance(pixel, it.color) }
-                            ?.let { onToggle(it.color) }
+                            ?.let { segment ->
+                                val selected = currentTargets
+                                currentOnTargetsChange(toggleSegmentTarget(selected, segment.color))
+                            }
                     }
                 }
         ) {
@@ -335,6 +346,10 @@ private fun SegmentCanvas(
         }
     }
 }
+
+/** Toggles one region without discarding selections made by an earlier interaction. */
+internal fun toggleSegmentTarget(targets: List<Int>, color: Int): List<Int> =
+    if (targets.contains(color)) targets - color else targets + color
 
 /** Diagonal stripes drawn into a layer, then cut down to the selection with DstIn. */
 private fun DrawScope.drawMarchingHatch(

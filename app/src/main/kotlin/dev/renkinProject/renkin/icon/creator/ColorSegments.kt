@@ -131,8 +131,8 @@ fun mergeSegmentColorize(
 
 /**
  * Takes [colorized] where [matchSource] matches [targets] and [current] everywhere else.
- * Matching always happens against the ORIGINAL artwork: an earlier layer may already have
- * repainted those pixels, and a later layer's colours were picked before that happened.
+ * [matchSource] is whatever the caller picked its regions on — for a segment layer that is the
+ * icon the layers before it produced, so a pick matches the colour that was on screen.
  */
 fun mergeSegmentLayer(
     matchSource: Bitmap,

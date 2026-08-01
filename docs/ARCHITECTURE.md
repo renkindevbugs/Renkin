@@ -156,9 +156,9 @@ identically and none of them re-implements the maths.
   list and the angle dial. `ColorStyleCard` is the row that opens it.
 - **Segments** (`icon/creator/ColorSegments.kt`) cluster an icon into colour regions (k-means over
   RGB). A pick is stored as COLOURS plus a tolerance, never a pixel mask, so it survives
-  regeneration and rescaling. `ImageEdit.COLORIZE_SEGMENTS` stacks `SegmentLayer`s — each layer
-  colourizes its own regions, and matching always runs against the ORIGINAL artwork so a later
-  layer still finds the colours it was picked by.
+  regeneration and rescaling. `ImageEdit.COLORIZE_SEGMENTS` stacks `SegmentLayer`s — each layer's
+  picker shows the output of the layers before it, and generation matches against that same
+  accumulated image so the stored colours describe exactly what the user selected.
 - **Wide screens**: `WIDE_LAYOUT_DP` (600) switches the sheet and the segment picker to
   side-by-side panes. Same breakpoint idea as `WatchRuleEditor`, but orientation-independent so
   a tablet held upright benefits too.
