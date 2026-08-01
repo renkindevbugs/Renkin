@@ -3,17 +3,12 @@ package dev.renkinProject.renkin.packages
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
-import android.content.pm.LauncherApps
 import android.content.pm.PackageInfo
 import android.content.pm.PackageManager
 import android.content.pm.PackageManager.ResolveInfoFlags
 import android.content.pm.ResolveInfo
-import android.content.res.Configuration
 import android.content.res.Resources
-import java.util.Locale
-import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
-import android.os.UserManager
 import androidx.core.content.pm.PackageInfoCompat
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
@@ -24,18 +19,9 @@ import dev.renkinProject.renkin.data.IconPackFallback
 import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.ResourceDrawable
-import dev.renkinProject.renkin.drawable.hasValidDimensions
 import dev.renkinProject.renkin.extension.getIdentifierByName
-import dev.renkinProject.renkin.extension.toDrawable
 import dev.renkinProject.renkin.util.Log
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import org.xmlpull.v1.XmlPullParser
-
-internal fun launcherIconOrFallback(activityIcon: Drawable?, applicationIcon: () -> Drawable): Drawable =
-    activityIcon ?: applicationIcon()
 
 internal fun matchDrawablesToApplications(
     applications: List<InstalledApplication>,
@@ -55,9 +41,6 @@ internal fun lastAppFilterItem(
 ): RawItem? =
     elements.asReversed()
         .firstOrNull { it is RawItem && it.component == component } as? RawItem
-
-internal fun launcherIconIdOrFallback(activityIconId: Int?, applicationIconId: Int): Int =
-    activityIconId?.takeIf { it != 0 } ?: applicationIconId
 
 internal data class NamedResourceDrawable(val name: String, val resource: ResourceDrawable)
 
@@ -116,103 +99,6 @@ internal class ApplicationManager(
             }
     }
     private val pm = ctx.packageManager
-
-    /**
-     * Lightweight component references (package/activity/icon id) for every launcher entry.
-     * Deliberately loads NO labels or drawables — callers that only need identity (appfilter
-     * matching, the watch checker) must not pay for the full [getAllInstalledApps] scan.
-     */
-    fun getAllInstalledApplications(): List<InstalledApplication> {
-        val userManager = ctx.getSystemService(Context.USER_SERVICE) as UserManager
-        val apps = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
-
-        val packs = linkedSetOf<InstalledApplication>()
-        for (user in userManager.userProfiles) {
-            for (app in apps.getActivityList(null, user)) {
-                @Suppress("DEPRECATION")
-                val iconID = launcherIconIdOrFallback(
-                    runCatching { pm.getActivityInfo(app.componentName, 0).iconResource }.getOrNull(),
-                    app.applicationInfo.icon
-                )
-                packs.add(
-                    InstalledApplication(app.componentName.packageName, app.componentName.className, iconID)
-                )
-            }
-        }
-        return packs.toList()
-    }
-
-    suspend fun getAllInstalledApps(): Array<PackageInfoStruct> = coroutineScope {
-        val userManager = ctx.getSystemService(Context.USER_SERVICE) as UserManager
-        val apps = ctx.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
-
-        // The per-app work — labels, an English-locale resource lookup and the icon drawable —
-        // is a few binder/resource round-trips each. Sequentially that dominates cold start on
-        // large app lists, so the apps resolve in parallel; order is restored by awaitAll.
-        val structs = userManager.userProfiles
-            .flatMap { user -> apps.getActivityList(null, user) }
-            .map { app ->
-                async(Dispatchers.Default) {
-                    val appName = app.applicationInfo.loadLabel(pm).toString()
-                    val originalName = loadEnglishLabel(app.applicationInfo, appName)
-                    val packageName = app.componentName.packageName
-                    val activityName = app.componentName.className
-                    // Launcher activities may override the application-level icon. Use the
-                    // activity-specific artwork and resource id so Current/Application Icon
-                    // previews match the exact component being edited.
-                    val icon = launcherIconOrFallback(
-                        runCatching { app.getIcon(ctx.resources.displayMetrics.densityDpi) }.getOrNull()
-                    ) { app.applicationInfo.loadIcon(pm) }
-                    @Suppress("DEPRECATION")
-                    val iconID = launcherIconIdOrFallback(
-                        runCatching { pm.getActivityInfo(app.componentName, 0).iconResource }.getOrNull(),
-                        app.applicationInfo.icon
-                    )
-
-                    val icon2 = if (!icon.hasValidDimensions()) {
-                        Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).toDrawable(ctx.resources)
-                    } else
-                        icon
-
-                    PackageInfoStruct(
-                        appName,
-                        packageName,
-                        activityName,
-                        icon2,
-                        iconID,
-                        originalName = originalName
-                    )
-                }
-            }
-            .awaitAll()
-
-        // Set-based dedupe: the old List.contains check compared every pair (O(n²)).
-        val deduped = linkedSetOf<PackageInfoStruct>()
-        deduped.addAll(structs)
-        deduped.toTypedArray()
-    }
-
-    /**
-     * The app's English label. [ApplicationInfo.loadLabel] resolves the label against the
-     * package's own resources using the *device* locale, so a context with an English
-     * override doesn't change it. We instead read the label resource directly from a copy of
-     * the package's resources whose configuration is forced to English. Apps with a
-     * non-localized label (labelRes == 0) have no per-locale variant, so we fall back to
-     * [fallback] (the already-loaded localized label).
-     */
-    private fun loadEnglishLabel(appInfo: ApplicationInfo, fallback: String): String {
-        val labelRes = appInfo.labelRes
-        if (labelRes == 0) return fallback
-        return try {
-            val res = pm.getResourcesForApplication(appInfo)
-            val config = Configuration(res.configuration).also { it.setLocale(Locale.ENGLISH) }
-            @Suppress("DEPRECATION")
-            val englishRes = Resources(res.assets, res.displayMetrics, config)
-            englishRes.getString(labelRes)
-        } catch (e: Exception) {
-            fallback
-        }
-    }
 
     fun getIconPacks(): List<IconPack> {
         val materialYouPacks = getResolves(

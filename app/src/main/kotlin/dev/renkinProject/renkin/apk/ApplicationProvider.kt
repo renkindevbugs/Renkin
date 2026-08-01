@@ -39,6 +39,7 @@ import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.globalModifierOptions
 import dev.renkinProject.renkin.icon.creator.hasVisibleModifierEffect
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.InstalledAppCatalog
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.packages.supportDynamicColors
@@ -149,6 +150,7 @@ class ApplicationProvider(private val context: Context) {
         private set
 
     private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
+    private val installedAppCatalog: InstalledAppCatalog by lazy { InstalledAppCatalog(context) }
 
     /** Saved colours/gradients, shared by every profile. Read straight from the database flow. */
     fun colorPresets(): kotlinx.coroutines.flow.Flow<List<dev.renkinProject.renkin.data.ColorPreset>> =
@@ -214,7 +216,7 @@ class ApplicationProvider(private val context: Context) {
     }
 
     suspend fun initializeApplications() = withContext(Dispatchers.Default) {
-        val apps = appManager.getAllInstalledApps()
+        val apps = installedAppCatalog.getAllInstalledApps()
         apps.sort()
 
         replaceApplications(apps.asList())

@@ -14,6 +14,7 @@ import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.contentHash
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.InstalledAppCatalog
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -59,6 +60,7 @@ internal inline fun <T> readWatchPackOrNull(
  */
 class WatchChecker(context: Context) {
     private val appMan = ApplicationManager(context)
+    private val installedAppCatalog = InstalledAppCatalog(context)
     private val repo = WatchRepository(context)
 
     data class FiredSuggestion(
@@ -77,7 +79,8 @@ class WatchChecker(context: Context) {
     private suspend fun runCheckLocked(): List<FiredSuggestion> {
         val fired = mutableListOf<FiredSuggestion>()
         val installedPacks = watchablePacks()
-        val installedAppsByPackage = appMan.getAllInstalledApplications().groupBy { it.packageName }
+        val installedAppsByPackage = installedAppCatalog.getAllInstalledApplications()
+            .groupBy { it.packageName }
 
         for (rule in repo.getActiveRules()) {
             val packPackages = if (rule.rule.watchAllPacks) {

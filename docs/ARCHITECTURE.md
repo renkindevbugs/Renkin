@@ -37,6 +37,7 @@ MainViewModel / WatchViewModel            ← @HiltViewModel; own session/UI sta
         ▼
 ApplicationProvider (apk/)                ← orchestrator: owns the app list, profiles, refresh,
         │                                    build/install, writes generated icons back
+        ├── InstalledAppCatalog            ← launcher activities, labels and application icons
         ├── IconPackRepository             ← installed packs, app-filter elements, per-app
         │                                    drawables, calendar icons (Compose-state backed)
         ├── IconGenerationService          ← runs IconGenerator to produce icons
