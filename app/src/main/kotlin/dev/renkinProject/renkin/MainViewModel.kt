@@ -1092,7 +1092,4 @@ class MainViewModel @Inject constructor(
     suspend fun dynamicClockDrawables(packPackageName: String): Set<String> =
         appProvider.dynamicClockDrawables(packPackageName)
 
-    /** Sample icons showing the fallback styling for [fallbackSource], for the Options preview. */
-    suspend fun fallbackPreview(preferences: Preferences, fallbackSource: dev.renkinProject.renkin.data.FallbackSource) =
-        appProvider.fallbackPreview(preferences, fallbackSource)
 }

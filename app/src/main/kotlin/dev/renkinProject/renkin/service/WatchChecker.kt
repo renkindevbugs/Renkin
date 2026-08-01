@@ -144,7 +144,7 @@ class WatchChecker(context: Context) {
                         )
                     )
 
-                    if (isNew && drawableName != null && hash != null) {
+                    if (isNew && drawableName != null) {
                         candidates.add(CandidateInput(packPackage, drawableName, hash))
                     }
                 }

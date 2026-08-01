@@ -386,11 +386,6 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
             return editor.applyViewportInset(left, top, scaleX, scaleY)
         }
 
-        fun ImageVectorDrawable.getBounds(): Rect {
-            val editor = VectorEditor(this)
-            return editor.getBounds()
-        }
-
         fun ImageVectorDrawable.center(): ImageVectorDrawable {
             val editor = VectorEditor(this)
             return editor.center()

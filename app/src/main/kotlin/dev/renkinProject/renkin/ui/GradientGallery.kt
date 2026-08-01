@@ -19,8 +19,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -32,25 +30,25 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.OptionsViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.GradientFamily
 import dev.renkinProject.renkin.data.GradientPreset
-import dev.renkinProject.renkin.data.GradientPresets
 import dev.renkinProject.renkin.data.filterGradientPresets
 import dev.renkinProject.renkin.data.gradientStopCounts
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
@@ -59,8 +57,6 @@ import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.evenGradientPositions
 import dev.renkinProject.renkin.icon.creator.normalizeGradientAngle
 import dev.renkinProject.renkin.ui.theme.InnerShape
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * The bundled gradient library. It hands back a whole [ColorizerStyle] rather than a colour list
@@ -71,12 +67,9 @@ internal fun GradientGalleryDialog(
     onUse: (ColorizerStyle) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val context = LocalContext.current
-    val presets by produceState(emptyList<GradientPreset>()) {
-        // Reading and parsing the asset is I/O; the dialog opens empty for one frame instead of
-        // blocking the animation.
-        value = withContext(Dispatchers.IO) { GradientPresets.load(context) }
-    }
+    val viewModel: OptionsViewModel = hiltViewModel()
+    val presets by viewModel.gradientPresets.collectAsState()
+    LaunchedEffect(viewModel) { viewModel.loadGradientPresets() }
     var query by rememberSaveable { mutableStateOf("") }
     var family by rememberSaveable { mutableStateOf<GradientFamily?>(null) }
     var stops by rememberSaveable { mutableStateOf<Int?>(null) }

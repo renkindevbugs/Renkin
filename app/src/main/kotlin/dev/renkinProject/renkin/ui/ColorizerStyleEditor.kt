@@ -523,9 +523,9 @@ private fun GradientStopTrack(
                         val touched = currentStops.indices.minByOrNull {
                             kotlin.math.abs(centerOf(it) - down.position.x)
                         }
-                        val onHandle = touched != null &&
-                            kotlin.math.abs(centerOf(touched) - down.position.x) <= grabRadiusPx
-                        if (!onHandle || touched == null) {
+                        if (touched == null ||
+                            kotlin.math.abs(centerOf(touched) - down.position.x) > grabRadiusPx
+                        ) {
                             currentOnAdd(fractionAt(down.position.x))
                             return@awaitEachGesture
                         }
