@@ -184,8 +184,12 @@ fun LabeledSlider(
     centered: Boolean = false,
     // For callers persisting the value somewhere expensive (DataStore): fires once on release
     // instead of on every drag tick.
-    onValueChangeFinished: (() -> Unit)? = null
+    onValueChangeFinished: (() -> Unit)? = null,
+    // Applied to the label + track as one block, so a caller whose surroundings are inset can
+    // inset the slider too — the track otherwise runs to the container's own edge.
+    modifier: Modifier = Modifier
 ) {
+  Column(modifier) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
@@ -221,6 +225,7 @@ fun LabeledSlider(
             onValueChangeFinished = onValueChangeFinished
         )
     }
+  }
 }
 
 /**

@@ -148,6 +148,29 @@ class MainViewModel @Inject constructor(
     // An app with an icon whose key is NOT here is "added" (pending build); a key here
     // whose app no longer has an icon is "removed". Reloaded after each successful build,
     // so the change state is a diff against what was actually built (survives refresh).
+    /**
+     * Fingerprints of what the last build shipped and of what is stored right now. Together with
+     * the session's [updatedKeys] they answer "what would a build change?" — and unlike the key
+     * sets alone they survive saving and restarting.
+     */
+    var builtIconHashes by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
+    var savedIconHashes by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
+
+    /**
+     * Re-reads the baselines for [profileId] after a build. Called however the install ended:
+     * producing the APK is what counts as built, so a dismissed installer must not leave the
+     * change list claiming the icons are still pending.
+     */
+    private suspend fun syncBuildBaselines(profileId: Long) {
+        if (appProvider.activeProfileId != profileId) return
+        builtKeys = appProvider.getSavedPackKeys(profileId)
+        builtIconHashes = appProvider.getBuiltIconHashes(profileId)
+        savedIconHashes = appProvider.getSavedIconHashes(profileId)
+        updatedKeys = emptySet()
+    }
+
     var builtKeys by mutableStateOf<Set<String>>(emptySet())
         private set
 
@@ -254,6 +277,8 @@ class MainViewModel @Inject constructor(
             try {
                 appProvider.ensureInitialized()
                 builtKeys = appProvider.getSavedPackKeys()
+                builtIconHashes = appProvider.getBuiltIconHashes()
+                savedIconHashes = appProvider.getSavedIconHashes()
                 refreshMissingPacks()
                 // Classify any source packs that still lack a paid/free verdict (quiet best
                 // effort; imported-offline icons stay locked until a lookup succeeds). A verdict
@@ -446,7 +471,11 @@ class MainViewModel @Inject constructor(
                         installFallbackPending = true
                     }
                     ApkInstallResult.ABORTED,
-                    ApkInstallResult.FAILED -> _toastEvents.trySend(R.string.iconPackInstallFailed)
+                    ApkInstallResult.FAILED -> {
+                        // The pack was built and saved; only its installation didn't happen.
+                        syncBuildBaselines(pack.profileId)
+                        _toastEvents.trySend(R.string.iconPackInstallFailed)
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -474,10 +503,7 @@ class MainViewModel @Inject constructor(
         )
         // A watch deep link can switch profiles while the system installer is in front. Never
         // replace that profile's UI baseline with the pack that finished in the background.
-        if (appProvider.activeProfileId == pending.pack.profileId) {
-            builtKeys = appProvider.getSavedPackKeys(pending.pack.profileId)
-            updatedKeys = emptySet()
-        }
+        syncBuildBaselines(pending.pack.profileId)
         // The save dropped locked originals the user replaced by hand — the
         // missing-pack warning must not keep counting them after a build.
         refreshMissingPacks(prompt = false)
@@ -806,6 +832,8 @@ class MainViewModel @Inject constructor(
      */
     private suspend fun resetChangeBaselines() {
         builtKeys = appProvider.getSavedPackKeys()
+        builtIconHashes = appProvider.getBuiltIconHashes()
+        savedIconHashes = appProvider.getSavedIconHashes()
         updatedKeys = emptySet()
     }
 

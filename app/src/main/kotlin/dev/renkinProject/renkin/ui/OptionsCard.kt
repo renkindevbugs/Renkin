@@ -534,7 +534,10 @@ private fun AdvancedOutlineSection(state: AdvancedOptionsState) {
                     scope.launch { prefs.setIntValue(OutlineWidthKey, it.roundToInt()) }
                 },
                 valueRange = OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat(),
-                valueLabel = "${state.outlineWidth.roundToInt()} px"
+                valueLabel = "${state.outlineWidth.roundToInt()} px",
+                // The card's other rows are inset by the same amount; without it the track ran
+                // past the card's rounded edge.
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
             ColorStyleCard(
                 label = stringResource(R.string.outlineColor),

@@ -588,15 +588,17 @@ class ApplicationProvider(private val context: Context) {
 
     private suspend fun finishInstallAttempt(iconPack: BuiltIconPack, result: ApkInstallResult) {
         val success = result == ApkInstallResult.SUCCESS
-        // A successful build IS the pack — the save matches it. A failed/cancelled install
-        // leaves the save marked as not yet built.
+        // Building the APK is the commitment, not installing it: someone who only wants their
+        // icons stored can go through Build and dismiss the installer. Either way the save
+        // matches the pack that was produced, so it counts as built.
         profileOperations.run {
             persistProfileIcons(
                 profileId = iconPack.profileId,
                 apps = iconPack.profileApps,
                 preservedRows = iconPack.preservedRows,
-                unbuiltAfter = !success
+                unbuiltAfter = false
             )
+            renkinPackStore.recordBuilt(iconPack.profileId)
             if (success) profileManager.recordBuiltPrimary(iconPack.profileId, iconPack.preferences)
         }
 
@@ -919,6 +921,25 @@ class ApplicationProvider(private val context: Context) {
     /** Keys ("package/activity") of the apps stored in the last built/saved pack. */
     suspend fun getSavedPackKeys(profileId: Long = activeProfileId): Set<String> =
         renkinPackStore.savedKeys(profileId)
+
+    /** Fingerprints of the stored icons — the "saved" half of the changes-since-build compare. */
+    suspend fun getSavedIconHashes(profileId: Long = activeProfileId): Map<String, String> =
+        renkinPackStore.savedHashes(profileId)
+
+    /**
+     * Fingerprints of what the last build shipped; empty when this profile never built. A profile
+     * that built before this record existed adopts its stored icons instead, so upgrading the app
+     * never reports an already-built pack as entirely new.
+     */
+    suspend fun getBuiltIconHashes(profileId: Long = activeProfileId): Map<String, String> {
+        if (profileManager.profile(profileId)?.hasUnbuiltChanges == false) {
+            renkinPackStore.adoptBuiltIfMissing(profileId)
+        }
+        return renkinPackStore.builtHashes(profileId)
+    }
+
+    /** Records the just-built pack's contents, so later saves can be told apart from it. */
+    suspend fun recordBuiltIcons(profileId: Long) = renkinPackStore.recordBuilt(profileId)
 
     // ---- Profiles (delegated to ProfileManager) -------------------------------------
 
