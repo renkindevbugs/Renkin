@@ -1,18 +1,15 @@
 package dev.renkinProject.renkin.apk
 
 import android.content.Context
-import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.data.CalendarIconsKey
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
-import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
@@ -26,7 +23,6 @@ import dev.renkinProject.renkin.data.GlobalApplyCustomKey
 import dev.renkinProject.renkin.data.GlobalApplyExistingKey
 import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
 import dev.renkinProject.renkin.data.getBooleanValue
-import dev.renkinProject.renkin.data.getDefaultBackgroundColor
 import dev.renkinProject.renkin.data.getDefaultIconColor
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.getStringValue
@@ -41,7 +37,6 @@ import dev.renkinProject.renkin.icon.creator.hasVisibleModifierEffect
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.InstalledAppCatalog
 import dev.renkinProject.renkin.packages.PackageInfoStruct
-import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.util.Log
@@ -52,18 +47,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-
-internal suspend fun installOrReportConflict(
-    canUpdateInPlace: Boolean,
-    install: suspend () -> ApkInstallResult
-): ApkInstallResult =
-    if (canUpdateInPlace) install() else ApkInstallResult.CONFLICT
-
-internal suspend fun replaceAfterConflict(
-    uninstall: suspend () -> Boolean,
-    install: suspend () -> ApkInstallResult
-): ApkInstallResult =
-    if (uninstall()) install() else ApkInstallResult.ABORTED
 
 internal fun shouldApplyGlobalLayer(
     isCustom: Boolean,
@@ -108,7 +91,7 @@ internal class ProfileOperationGate {
 
 /**
  * The domain hub between the UI layer (MainViewModel) and everything icon-related: the live
- * app list, icon generation/refresh, pack building and the saved-pack store. Profile state
+ * app list, icon generation/refresh, pack-build coordination and the saved-pack store. Profile state
  * lives in [ProfileManager], held-back rows and verdict policy in [IconLockManager] — this
  * class orchestrates them around the one thing only it owns: [applicationList].
  */
@@ -119,7 +102,8 @@ class ApplicationProvider internal constructor(
     private val iconPackRepo: IconPackRepository,
     private val lockManager: IconLockManager,
     private val profileManager: ProfileManager,
-    private val iconGenService: IconGenerationService
+    private val iconGenService: IconGenerationService,
+    private val iconPackBuildService: IconPackBuildService
 ) {
     // A SnapshotStateList (not mutableStateOf(List)) so editing one app's icon is an O(1)
     // in-place set instead of copying the whole list — refreshIcons edits every app, so the
@@ -540,98 +524,29 @@ class ApplicationProvider internal constructor(
         preferences: Preferences,
         textMethod: (text: String) -> Unit,
         progressMethod: (done: Int, total: Int) -> Unit = { _, _ -> }
-    ): BuiltIconPack =
-        withContext(Dispatchers.Default) {
-            profileOperations.run {
-                check(activeProfileId == profileId) { "Profile changed before icon pack build" }
-                val profileApps = applicationList.toList()
-                val preservedRows = lockManager.preservedRows().toList()
-                val themed = preferences.getBooleanValue(ExportThemedKey)
-                val iconColor = preferences.getDefaultIconColor(context)
-                val bgColor = preferences.getDefaultBackgroundColor(context)
-                val primaryPackName = preferences.getStringValue(PrimaryIconPackKey)
+    ): BuiltIconPack = profileOperations.run {
+        check(activeProfileId == profileId) { "Profile changed before icon pack build" }
+        iconPackBuildService.build(
+            profileId = profileId,
+            preferences = preferences,
+            profileApps = applicationList.toList(),
+            preservedRows = lockManager.preservedRows().toList(),
+            textMethod = textMethod,
+            progressMethod = progressMethod
+        )
+    }
 
-                // Resolve calendar data at build time from the current preferences and installed
-                // packs. There is deliberately no mutable cache: building immediately after startup,
-                // changing the primary pack, or disabling global calendars must all use current data.
-                val globalSelections = if (
-                    preferences.getBooleanValue(CalendarIconsKey) && primaryPackName.isNotEmpty()
-                ) iconPackRepo.declaredCalendarSelections(primaryPackName) else emptyList()
-                val perAppSelections = profileApps
-                    .filter { it.hasCalendarIcon }
-                    .mapNotNull { app ->
-                        val packName = app.calendarSourcePack(primaryPackName)
-                        packName.takeIf { it.isNotEmpty() }?.let {
-                            CalendarSelection(app.toInstalledApplication(), it, app.calendarPrefix!!)
-                        }
-                    }
-                // buildCalendarData applies later selections last, so an explicit per-app choice
-                // replaces only the same launcher component's global declaration.
-                val calendarData = iconPackRepo.calendarBuildData(globalSelections + perAppSelections)
-
-                // Final gate: icons whose (already translated) source pack is locked on this
-                // device must not ship in the APK — belt-and-braces for anything that slipped
-                // into the session between load-time lock evaluations.
-                val lockedSources = lockManager.lockedPacksAmong(
-                    profileApps.mapNotNull {
-                        it.sourcePackName?.takeIf { source -> source.isNotEmpty() }
-                    }.toSet()
-                )
-                val buildApps = if (lockedSources.isEmpty()) profileApps
-                    else profileApps.map { app ->
-                        if (app.sourcePackName in lockedSources) app.changeExport(null) else app
-                    }
-
-                // Each profile builds its own pack: a per-profile package name (side-by-side
-                // installs) and the user's chosen launcher label.
-                val profile = packRepo.profile(profileId)
-                val packLabel = profile?.packLabel?.ifEmpty { profile.name } ?: "Renkin Pack"
-                val iconPackGenerator = IconPackBuilder(
-                    context,
-                    buildApps,
-                    calendarData.mappings,
-                    calendarData.drawables,
-                    packPackageName = profileManager.packPackageNameFor(profileId),
-                    packLabel = packLabel
-                )
-                val canBeInstalled = iconPackGenerator.canBeInstalled() // must be called before build and sign
-                val apk = iconPackGenerator.buildAndSign(
-                    themed,
-                    iconColor.toHexString(),
-                    bgColor.toHexString(),
-                    textMethod,
-                    progressMethod
-                )
-
-                BuiltIconPack(
-                    uri = apk,
-                    packageName = iconPackGenerator.getIconPackName(),
-                    canBeInstalled = canBeInstalled,
-                    profileId = profileId,
-                    packLabel = packLabel,
-                    preferences = preferences,
-                    profileApps = profileApps,
-                    preservedRows = preservedRows
-                )
-            }
-        }
-
-    suspend fun installIconPack(iconPack: BuiltIconPack): ApkInstallResult = withContext(Dispatchers.Default) {
-        val result = installOrReportConflict(iconPack.canBeInstalled) {
-            ApkInstaller(context).install(iconPack.uri)
-        }
+    suspend fun installIconPack(iconPack: BuiltIconPack): ApkInstallResult {
+        val result = iconPackBuildService.install(iconPack)
         finishInstallAttempt(iconPack, result)
-        result
+        return result
     }
 
     /** Explicitly approved fallback after an update conflict: uninstall, then install the APK. */
-    suspend fun replaceIconPack(iconPack: BuiltIconPack): ApkInstallResult = withContext(Dispatchers.Default) {
-        val result = replaceAfterConflict(
-            uninstall = { ApkUninstaller(context).uninstall(iconPack.packageName) },
-            install = { ApkInstaller(context).install(iconPack.uri) }
-        )
+    suspend fun replaceIconPack(iconPack: BuiltIconPack): ApkInstallResult {
+        val result = iconPackBuildService.replace(iconPack)
         finishInstallAttempt(iconPack, result)
-        result
+        return result
     }
 
     private suspend fun finishInstallAttempt(iconPack: BuiltIconPack, result: ApkInstallResult) {
@@ -1190,14 +1105,4 @@ class ApplicationProvider internal constructor(
             }
     }
 
-    data class BuiltIconPack(
-        val uri: Uri,
-        val packageName: String,
-        val canBeInstalled: Boolean,
-        val profileId: Long,
-        val packLabel: String,
-        val preferences: Preferences,
-        val profileApps: List<PackageInfoStruct>,
-        val preservedRows: List<DbApplication>
-    )
 }

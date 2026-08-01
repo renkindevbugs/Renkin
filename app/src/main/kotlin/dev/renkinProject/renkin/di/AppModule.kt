@@ -7,6 +7,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import dev.renkinProject.renkin.apk.IconGenerationService
+import dev.renkinProject.renkin.apk.IconPackBuildService
 import dev.renkinProject.renkin.apk.IconLockManager
 import dev.renkinProject.renkin.apk.IconPackRepository
 import dev.renkinProject.renkin.apk.ApplicationProvider
@@ -72,6 +73,22 @@ object AppModule {
 
     @Provides
     @Singleton
+    fun provideIconPackBuildService(
+        @ApplicationContext context: Context,
+        iconPackRepository: IconPackRepository,
+        renkinPackRepository: RenkinPackRepository,
+        iconLockManager: IconLockManager,
+        profileManager: ProfileManager
+    ): IconPackBuildService = IconPackBuildService(
+        context = context,
+        iconPackRepository = iconPackRepository,
+        packRepository = renkinPackRepository,
+        lockManager = iconLockManager,
+        profileManager = profileManager
+    )
+
+    @Provides
+    @Singleton
     fun provideApplicationProvider(
         @ApplicationContext context: Context,
         renkinPackStore: RenkinPackStore,
@@ -79,7 +96,8 @@ object AppModule {
         iconPackRepository: IconPackRepository,
         iconLockManager: IconLockManager,
         profileManager: ProfileManager,
-        iconGenerationService: IconGenerationService
+        iconGenerationService: IconGenerationService,
+        iconPackBuildService: IconPackBuildService
     ): ApplicationProvider = ApplicationProvider(
         context = context,
         renkinPackStore = renkinPackStore,
@@ -87,6 +105,7 @@ object AppModule {
         iconPackRepo = iconPackRepository,
         lockManager = iconLockManager,
         profileManager = profileManager,
-        iconGenService = iconGenerationService
+        iconGenService = iconGenerationService,
+        iconPackBuildService = iconPackBuildService
     )
 }

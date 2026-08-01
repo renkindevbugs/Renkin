@@ -15,6 +15,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.PackChange
 import dev.renkinProject.renkin.apk.packChanges
 import dev.renkinProject.renkin.apk.unsavedApplicationKeys
@@ -488,7 +489,7 @@ class MainViewModel @Inject constructor(
     fun dismissBuildOutcome() { buildOutcome = null }
 
     private data class PendingInstallFallback(
-        val pack: ApplicationProvider.BuiltIconPack,
+        val pack: BuiltIconPack,
         val wasUpdate: Boolean,
         val packLabel: String
     )

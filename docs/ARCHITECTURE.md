@@ -36,11 +36,12 @@ MainViewModel / WatchViewModel            ← @HiltViewModel; own session/UI sta
         │                                    operations on viewModelScope
         ▼
 ApplicationProvider (apk/)                ← orchestrator: owns the app list, profiles, refresh,
-        │                                    build/install, writes generated icons back
+        │                                    build snapshots and persisted results
         ├── InstalledAppCatalog            ← launcher activities, labels and application icons
         ├── IconPackRepository             ← installed packs, app-filter elements, per-app
         │                                    drawables, calendar icons (Compose-state backed)
         ├── IconGenerationService          ← runs IconGenerator to produce icons
+        ├── IconPackBuildService           ← assembles/signs APKs and runs install/replace
         └── RenkinPackStore                ← persistence: DbApplication ↔ drawable serialization
                 └── RenkinPackRepository    ← raw Room I/O on RenkinPackDatabase
 
@@ -52,7 +53,7 @@ Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only f
 Activity operations (`finish()`, starting services, permission requests).
 
 `ApplicationProvider` is the orchestration boundary, not the composition root. Hilt supplies
-its repositories, stores, profile/lock managers and icon-generation service as application
+its repositories, stores, profile/lock managers, generation and pack-build services as application
 singletons, so those collaborators can be tested or reused without constructing the whole
 provider and all persistence state is shared deliberately.
 
@@ -181,6 +182,11 @@ it stays correct even when icons are added via the Refresh button. `builtKeys` r
 each successful build and after "Clear icons". `updatedKeys` tracks this session's hand edits.
 
 ## Icon pack build
+
+`IconPackBuildService` receives an immutable active-profile snapshot from `ApplicationProvider`,
+then resolves calendar/lock data and delegates assembly to `IconPackBuilder`. The provider holds
+the profile-operation gate throughout the build and persists that same snapshot after the install
+attempt, so switching profiles cannot mix build inputs or results.
 
 `IconPackBuilder` assembles the APK with reandroid (no external build tools). The generated
 pack's dex classes come from prebuilt smali assets (`app/src/main/assets/{R,RLayout,
