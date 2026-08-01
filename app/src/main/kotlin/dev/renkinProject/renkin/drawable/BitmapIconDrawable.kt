@@ -103,6 +103,14 @@ class BitmapIconDrawable(
 
     internal fun inAppPreviewBitmap(): Bitmap = drawable.bitmap
 
+    // Mirrors getPainter: a translucent custom background is exported flat, and the preview
+    // scale that compensates for it must show up in lists too.
+    override fun previewBitmap(): Bitmap = if (previewScale != 1f) {
+        inAppPreviewBitmap().scaleFromCenter(previewScale)
+    } else {
+        inAppPreviewBitmap()
+    }
+
     override fun toBitmap(): Bitmap {
         return drawable.bitmap
     }

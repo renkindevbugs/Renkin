@@ -99,7 +99,12 @@ import dev.renkinProject.renkin.packages.notificationSettingsIntent
 import kotlinx.coroutines.flow.first
 
 @Composable
-fun WatchScreen(onDismiss: () -> Unit) {
+fun WatchScreen(
+    // Opened from an app's quick actions: that app's rule starts selected and scrolled to, so
+    // "already watched" lands on the rule it means instead of the top of the list.
+    highlightRuleId: Long? = null,
+    onDismiss: () -> Unit
+) {
     val context = getCurrentContext()
     val viewModel: MainViewModel = hiltViewModel()
     val watchViewModel: WatchViewModel = hiltViewModel()
@@ -211,6 +216,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
                 } else {
                     WatchRuleList(
                         rules = rules,
+                        highlightRuleId = highlightRuleId,
                         apps = apps,
                         packs = packs,
                         isRefreshing = watchViewModel.isChecking,
@@ -276,6 +282,7 @@ fun WatchScreen(onDismiss: () -> Unit) {
 @Composable
 private fun WatchRuleList(
     rules: List<RuleWithDetails>,
+    highlightRuleId: Long? = null,
     apps: List<PackageInfoStruct>,
     packs: List<IconPack>,
     isRefreshing: Boolean,
@@ -294,7 +301,7 @@ private fun WatchRuleList(
     // Single-selected active rule. Its Edit/Delete actions live in the bottom floating toolbar
     // instead of on every card; tapping an active card selects/deselects it. Completed rules are
     // never selectable (they keep their own apply/delete behaviour).
-    var selectedId by remember { mutableStateOf<Long?>(null) }
+    var selectedId by remember { mutableStateOf(highlightRuleId) }
     val selectedRule = active.find { it.rule.id == selectedId }
     // Drop a stale selection if the rule was deleted or completed since it was picked.
     LaunchedEffect(active) {
@@ -352,6 +359,17 @@ private fun WatchRuleList(
                 // the FAB, so the last rule's Edit/Delete aren't hidden behind it.
                 val navBarInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 val rulesListState = rememberLazyListState()
+                // Arriving from "already watched": bring that rule into view once the list has
+                // rendered. Active rules sit below the completed section, so it is rarely on
+                // screen already.
+                LaunchedEffect(highlightRuleId, active) {
+                    val target = highlightRuleId ?: return@LaunchedEffect
+                    val position = active.indexOfFirst { it.rule.id == target }
+                    if (position < 0) return@LaunchedEffect
+                    // + the completed section's own header and cards, + the active header.
+                    val before = if (completed.isEmpty()) 0 else completed.size + 1
+                    rulesListState.animateScrollToItem(before + 1 + position)
+                }
                 LazyColumn(
                     state = rulesListState,
                     modifier = Modifier

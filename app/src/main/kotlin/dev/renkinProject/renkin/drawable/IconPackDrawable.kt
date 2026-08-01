@@ -12,6 +12,13 @@ abstract class IconPackDrawable: Drawable() {
     abstract fun toBitmap(): Bitmap
 
     /**
+     * What [getPainter] would draw, as a bitmap. Lists use this instead of the painter: a vector
+     * painter sizes itself from its own layer, so a freshly assigned icon visibly grew into place
+     * on the first frames. Rasterising to the row's size makes it appear already correct.
+     */
+    open fun previewBitmap(): Bitmap = toBitmap()
+
+    /**
      * A bitmap rasterised specifically for the icon browser. Thin vector strokes survive
      * better when they are drawn at the target size than when a large finished raster is
      * downscaled. Most icons can reuse their regular bitmap.

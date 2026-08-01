@@ -230,7 +230,9 @@ class MainViewModel @Inject constructor(
      */
     data class UndoPrompt(@androidx.annotation.StringRes val messageRes: Int, val count: Int)
 
-    private val _undoEvents = Channel<UndoPrompt>(Channel.BUFFERED)
+    // CONFLATED, unlike the toast channel: only one change is undoable at a time, so a queue of
+    // older prompts would offer to undo something the tracker has already forgotten.
+    private val _undoEvents = Channel<UndoPrompt>(Channel.CONFLATED)
     val undoEvents = _undoEvents.receiveAsFlow()
 
     /** Puts the last icon change back. Silent when the change no longer applies. */
@@ -485,6 +487,20 @@ class MainViewModel @Inject constructor(
     // Clearing an icon (icon == null) is a removal, not a change, so it isn't recorded.
     private fun markUpdated(app: PackageInfoStruct, icon: IconPackDrawable?) {
         if (icon != null) updatedKeys = updatedKeys + app.key
+    }
+
+    /**
+     * Regenerates one app's icon with the current recipe — the quick action for "this one came
+     * out wrong" without refreshing the whole list.
+     */
+    fun refreshSingleIcon(app: PackageInfoStruct) {
+        viewModelScope.launch {
+            val preferences = getApplication<Application>().dataStore
+                .getPreferencesAfterPendingWrites()
+            appProvider.captureUndo(listOf(app.key), persisted = false)
+            appProvider.refreshIcon(app, preferences)
+            _undoEvents.trySend(UndoPrompt(R.string.undoIconRefreshed, 1))
+        }
     }
 
     /**
