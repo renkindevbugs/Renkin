@@ -50,6 +50,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -265,6 +269,24 @@ fun MainColumn(iconPacks: List<IconPack>) {
         viewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
     }
 
+    // Undoable changes get a snackbar instead of a toast: a toast cannot be acted on, and the
+    // whole point is the action. Only the newest offer is on screen, matching the single step
+    // the provider keeps.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val undoLabel = stringResource(R.string.undoAction)
+    LaunchedEffect(Unit) {
+        viewModel.undoEvents.collect { prompt ->
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result = snackbarHostState.showSnackbar(
+                message = context.getString(prompt.messageRes, prompt.count),
+                actionLabel = undoLabel,
+                withDismissAction = true,
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) viewModel.undoLastIconChange()
+        }
+    }
+
     // An external icon pack was installed while the app was open → offer to reload so it
     // shows up among the available icon-pack sources.
     val newIconPack = viewModel.newIconPackInstalled
@@ -366,6 +388,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = { TitleBar(scrollBehavior) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = { BuildPackFab(isInRefresh, expanded = listState.isScrollingUp()) }
     ) { innerPadding ->
         Column(Modifier.padding(innerPadding)) {
