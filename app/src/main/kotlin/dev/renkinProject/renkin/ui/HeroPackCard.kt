@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -104,7 +105,19 @@ import dev.renkinProject.renkin.ui.theme.GoldBase
 import dev.renkinProject.renkin.ui.theme.GoldShimmer
 import dev.renkinProject.renkin.ui.theme.CardShape
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+
+private const val CHANGE_BAR_ANIMATION_MS = 900
+
+internal fun shouldShowPendingChanges(
+    profileSummaryReady: Boolean,
+    progressAnimationSettled: Boolean,
+    changeCount: Int,
+    hasUnbuiltChanges: Boolean
+): Boolean = profileSummaryReady &&
+    progressAnimationSettled &&
+    (changeCount > 0 || hasUnbuiltChanges)
 
 internal data class HeroPackStats(
     val builtCount: Int,
@@ -201,6 +214,21 @@ fun HeroPackCard(
     // Saved-but-not-built marker for the active profile (set by the save-before-switch flow).
     val profiles by viewModel.profiles.collectAsState(initial = emptyList())
     val activeProfile = profiles.find { it.id == viewModel.activeProfileId }
+    var progressAnimationSettled by remember { mutableStateOf(false) }
+    LaunchedEffect(
+        viewModel.activeProfileId,
+        viewModel.profileSummaryReady,
+        totalCount,
+        builtCount,
+        addedCount,
+        removedCount
+    ) {
+        progressAnimationSettled = false
+        if (viewModel.profileSummaryReady && totalCount > 0) {
+            delay(CHANGE_BAR_ANIMATION_MS.toLong())
+            progressAnimationSettled = true
+        }
+    }
 
     Surface(
         onClick = { sheetOpen = true },
@@ -313,7 +341,13 @@ fun HeroPackCard(
                 // Pending changes, now answerable: the badge says how many and opens the list of
                 // exactly which apps a build would add, change or drop.
                 val changes = viewModel.pendingPackChanges
-                if (changes.isNotEmpty() || activeProfile?.hasUnbuiltChanges == true) {
+                if (shouldShowPendingChanges(
+                        profileSummaryReady = viewModel.profileSummaryReady,
+                        progressAnimationSettled = progressAnimationSettled,
+                        changeCount = changes.size,
+                        hasUnbuiltChanges = activeProfile?.hasUnbuiltChanges == true
+                    )
+                ) {
                     Spacer(Modifier.height(6.dp))
                     Surface(
                         shape = CircleShape,
@@ -632,9 +666,27 @@ private fun rememberPackIcon(packageName: String?): ImageBitmap? {
  */
 @Composable
 internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
-    val builtF by animateFloatAsState(if (total > 0) built / total.toFloat() else 0f, label = "builtFrac")
-    val addedF by animateFloatAsState(if (total > 0) added / total.toFloat() else 0f, label = "addedFrac")
-    val removedF by animateFloatAsState(if (total > 0) removed / total.toFloat() else 0f, label = "removedFrac")
+    val progressAnimation = remember {
+        tween<Float>(
+            durationMillis = CHANGE_BAR_ANIMATION_MS,
+            easing = FastOutSlowInEasing
+        )
+    }
+    val builtF by animateFloatAsState(
+        if (total > 0) built / total.toFloat() else 0f,
+        animationSpec = progressAnimation,
+        label = "builtFrac"
+    )
+    val addedF by animateFloatAsState(
+        if (total > 0) added / total.toFloat() else 0f,
+        animationSpec = progressAnimation,
+        label = "addedFrac"
+    )
+    val removedF by animateFloatAsState(
+        if (total > 0) removed / total.toFloat() else 0f,
+        animationSpec = progressAnimation,
+        label = "removedFrac"
+    )
     val primary = MaterialTheme.colorScheme.primary
     val errorColor = MaterialTheme.colorScheme.error
     val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest

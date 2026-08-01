@@ -7,6 +7,8 @@ import android.graphics.drawable.ColorDrawable
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -98,6 +100,34 @@ class UiSummaryPerformanceTest {
         assertEquals(
             listOf("Alpha", "Delta", "Zulu", "Beta"),
             result.applications.map { it.appName }
+        )
+    }
+
+    @Test
+    fun pendingChangesChip_waitsForProfileSummaryAndFinalProgressAnimation() {
+        assertFalse(
+            shouldShowPendingChanges(
+                profileSummaryReady = false,
+                progressAnimationSettled = true,
+                changeCount = 1,
+                hasUnbuiltChanges = false
+            )
+        )
+        assertFalse(
+            shouldShowPendingChanges(
+                profileSummaryReady = true,
+                progressAnimationSettled = false,
+                changeCount = 1,
+                hasUnbuiltChanges = false
+            )
+        )
+        assertTrue(
+            shouldShowPendingChanges(
+                profileSummaryReady = true,
+                progressAnimationSettled = true,
+                changeCount = 1,
+                hasUnbuiltChanges = false
+            )
         )
     }
 }

@@ -60,6 +60,15 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
+internal fun isProfileSummaryReady(
+    startupComplete: Boolean,
+    isProfileSwitching: Boolean,
+    baselineProfileId: Long?,
+    activeProfileId: Long
+): Boolean = startupComplete &&
+    !isProfileSwitching &&
+    baselineProfileId == activeProfileId
+
 /**
  * Owns the [ApplicationProvider] for the app's lifetime. The provider is injected (a Hilt
  * @Singleton), so the loaded app list / icon packs survive configuration changes such as
@@ -174,16 +183,33 @@ class MainViewModel @Inject constructor(
         private set
 
     /**
+     * Profile whose build/saved baselines are currently represented by the fields above.
+     * During a switch the provider swaps [applicationList] before these database reads finish;
+     * keeping the owner explicit prevents the UI from comparing the new list with the old profile.
+     */
+    private var changeBaselinesProfileId by mutableStateOf<Long?>(null)
+
+    /** True only when the hero progress and build diff describe the active profile. */
+    val profileSummaryReady: Boolean
+        get() = isProfileSummaryReady(
+            startupComplete = startupComplete,
+            isProfileSwitching = isProfileSwitching,
+            baselineProfileId = changeBaselinesProfileId,
+            activeProfileId = activeProfileId
+        )
+
+    private fun invalidateChangeBaselines() {
+        changeBaselinesProfileId = null
+    }
+
+    /**
      * Re-reads the baselines for [profileId] after a build. Called however the install ended:
      * producing the APK is what counts as built, so a dismissed installer must not leave the
      * change list claiming the icons are still pending.
      */
     private suspend fun syncBuildBaselines(profileId: Long) {
         if (appProvider.activeProfileId != profileId) return
-        builtKeys = appProvider.getSavedPackKeys(profileId)
-        builtIconHashes = appProvider.getBuiltIconHashes(profileId)
-        savedIconHashes = appProvider.getSavedIconHashes(profileId)
-        updatedKeys = emptySet()
+        loadChangeBaselines(profileId)
     }
 
     var builtKeys by mutableStateOf<Set<String>>(emptySet())
@@ -204,7 +230,11 @@ class MainViewModel @Inject constructor(
      * identity never changes, so only tracking its contents keeps the result from going stale.
      */
     val pendingPackChanges: List<PackChange> by derivedStateOf {
-        packChanges(applicationList, builtIconHashes, savedIconHashes, updatedKeys)
+        if (profileSummaryReady) {
+            packChanges(applicationList, builtIconHashes, savedIconHashes, updatedKeys)
+        } else {
+            emptyList()
+        }
     }
 
     // Set when opened from an icon-watch notification; the home screen shows the apply
@@ -297,20 +327,19 @@ class MainViewModel @Inject constructor(
     }
 
     private fun loadStartup() {
-        if (startupLoading || appProvider.startupComplete) return
+        if (startupLoading || profileSummaryReady) return
         startupLoading = true
         startupFailed = false
         viewModelScope.launch {
             try {
                 appProvider.ensureInitialized()
-                builtKeys = appProvider.getSavedPackKeys()
-                builtIconHashes = appProvider.getBuiltIconHashes()
-                savedIconHashes = appProvider.getSavedIconHashes()
+                resetChangeBaselines()
                 refreshMissingPacks()
                 // Classify any source packs that still lack a paid/free verdict (quiet best
                 // effort; imported-offline icons stay locked until a lookup succeeds). A verdict
                 // becoming decisive can unlock icons — reload so that shows without a restart.
                 if (runCatching { appProvider.verifyPendingVerdicts() }.getOrDefault(false)) {
+                    invalidateChangeBaselines()
                     appProvider.reloadActiveProfile()
                     resetChangeBaselines()
                     refreshMissingPacks(prompt = false)
@@ -880,12 +909,22 @@ class MainViewModel @Inject constructor(
      * Re-reads the change baselines from the (just switched or just saved) profile's stored
      * pack — every operation that changes which saved set is current ends with this.
      */
-    private suspend fun resetChangeBaselines() {
-        builtKeys = appProvider.getSavedPackKeys()
-        builtIconHashes = appProvider.getBuiltIconHashes()
-        savedIconHashes = appProvider.getSavedIconHashes()
+    private suspend fun loadChangeBaselines(profileId: Long) {
+        invalidateChangeBaselines()
+        val newBuiltKeys = appProvider.getSavedPackKeys(profileId)
+        val newBuiltIconHashes = appProvider.getBuiltIconHashes(profileId)
+        val newSavedIconHashes = appProvider.getSavedIconHashes(profileId)
+        // A notification or another queued operation may have switched again while Room read.
+        if (appProvider.activeProfileId != profileId) return
+        builtKeys = newBuiltKeys
+        builtIconHashes = newBuiltIconHashes
+        savedIconHashes = newSavedIconHashes
         updatedKeys = emptySet()
+        changeBaselinesProfileId = profileId
     }
+
+    private suspend fun resetChangeBaselines() =
+        loadChangeBaselines(appProvider.activeProfileId)
 
     /** Saves the active profile if asked, switches to [id], and refreshes the baselines. */
     private suspend fun performSwitch(
@@ -900,6 +939,7 @@ class MainViewModel @Inject constructor(
             if (saveFirst || (saveIfChanged && hasUnsavedChanges())) {
                 appProvider.saveActiveProfileIcons()
             }
+            invalidateChangeBaselines()
             appProvider.switchProfile(id)
             resetChangeBaselines()
         }
