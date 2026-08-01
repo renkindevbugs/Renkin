@@ -52,6 +52,7 @@ import dev.renkinProject.renkin.extension.removeBackground
 import dev.renkinProject.renkin.extension.scaleFromCenter
 import dev.renkinProject.renkin.icon.parser.IconParser
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.PackageResourceResolver
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.drawable.toImageVectorDrawable
 import dev.renkinProject.renkin.util.Log
@@ -90,7 +91,8 @@ class IconGenerator(
     private val fallbackPackName: String = ""
 ) {
     private val adaptiveIconScale = ADAPTIVE_ICON_SCALE
-    private val appMan by lazy { ApplicationManager(ctx) }
+    private val resourceResolver by lazy { PackageResourceResolver(ctx) }
+    private val appMan by lazy { ApplicationManager(ctx, resourceResolver) }
     private val materialYouPackSupport = mutableMapOf<String, Boolean>()
     private val fallbackBitmapCache by lazy {
         object : LruCache<String, Bitmap>(FALLBACK_BITMAP_CACHE_BYTES) {
@@ -215,7 +217,7 @@ class IconGenerator(
         fun load(name: String?): Bitmap? {
             name ?: return null
             fallbackBitmapCache.get(name)?.let { return it }
-            val bitmap = appMan.getDrawableByName(packName, name)?.toSafeBitmapOrNull()
+            val bitmap = resourceResolver.getDrawableByName(packName, name)?.toSafeBitmapOrNull()
                 ?: return null
             fallbackBitmapCache.put(name, bitmap)
             return bitmap
@@ -661,7 +663,7 @@ class IconGenerator(
 
     private fun parseApplicationIcon(application: PackageInfoStruct): Drawable? {
         if (isVectorDrawable(application.icon) && options.vector) {
-            val res = appMan.getResources(application.packageName) ?: return null
+            val res = resourceResolver.getResources(application.packageName) ?: return null
             return IconParser.parseDrawable(res, application.icon, application.iconID)
         }
 
@@ -1098,7 +1100,7 @@ class IconGenerator(
     private fun parseIconPackXML(iconPackName: String, iconDrawable: ResourceDrawable): Drawable? {
         if (!isVectorDrawable(iconDrawable.drawable)) return null
 
-        val res = appMan.getResources(iconPackName) ?: return null
+        val res = resourceResolver.getResources(iconPackName) ?: return null
         val icon = IconParser.parseDrawable(res, iconDrawable.drawable, iconDrawable.resourceId)
 
         if (!icon.isAdaptiveIconDrawable()) return null
