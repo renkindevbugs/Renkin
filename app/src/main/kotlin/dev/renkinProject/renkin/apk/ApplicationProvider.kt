@@ -112,7 +112,15 @@ internal class ProfileOperationGate {
  * lives in [ProfileManager], held-back rows and verdict policy in [IconLockManager] — this
  * class orchestrates them around the one thing only it owns: [applicationList].
  */
-class ApplicationProvider(private val context: Context) {
+class ApplicationProvider internal constructor(
+    private val context: Context,
+    private val renkinPackStore: RenkinPackStore,
+    private val packRepo: RenkinPackRepository,
+    private val iconPackRepo: IconPackRepository,
+    private val lockManager: IconLockManager,
+    private val profileManager: ProfileManager,
+    private val iconGenService: IconGenerationService
+) {
     // A SnapshotStateList (not mutableStateOf(List)) so editing one app's icon is an O(1)
     // in-place set instead of copying the whole list — refreshIcons edits every app, so the
     // old copy-per-edit made it O(n²). Exposed read-only as List; the UI still observes it.
@@ -129,19 +137,12 @@ class ApplicationProvider(private val context: Context) {
     var startupComplete: Boolean by mutableStateOf(false)
         private set
 
-    private val renkinPackStore = RenkinPackStore(context)
-    private val packRepo = RenkinPackRepository(context)
-    private val iconPackRepo = IconPackRepository(context)
-    private val lockManager = IconLockManager(context, packRepo)
-    private val profileManager = ProfileManager(context, packRepo)
-
     /** Keys of the active profile's icons currently locked behind a missing pack. */
     val lockedIconKeys: Set<String> get() = lockManager.lockedIconKeys
 
     /** The profile whose icons/preferences are active. Set before the saved pack loads. */
     val activeProfileId: Long get() = profileManager.activeProfileId
 
-    private val iconGenService = IconGenerationService(context, iconPackRepo)
     private val initialLoadMutex = Mutex()
     private val profileOperations = ProfileOperationGate()
 

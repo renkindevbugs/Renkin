@@ -51,6 +51,11 @@ The UI layer never constructs repositories by hand; view models receive them thr
 Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only for genuine
 Activity operations (`finish()`, starting services, permission requests).
 
+`ApplicationProvider` is the orchestration boundary, not the composition root. Hilt supplies
+its repositories, stores, profile/lock managers and icon-generation service as application
+singletons, so those collaborators can be tested or reused without constructing the whole
+provider and all persistence state is shared deliberately.
+
 ## Activities
 
 - **MainActivity** — the whole app UI; provides `LocalMainActivity` and `LocalToaster`.

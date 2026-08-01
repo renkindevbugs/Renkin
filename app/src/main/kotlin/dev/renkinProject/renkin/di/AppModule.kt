@@ -6,7 +6,13 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import dev.renkinProject.renkin.apk.IconGenerationService
+import dev.renkinProject.renkin.apk.IconLockManager
+import dev.renkinProject.renkin.apk.IconPackRepository
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.ProfileManager
+import dev.renkinProject.renkin.apk.RenkinPackStore
+import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import javax.inject.Singleton
 
@@ -26,6 +32,61 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideApplicationProvider(@ApplicationContext context: Context): ApplicationProvider =
-        ApplicationProvider(context)
+    fun provideRenkinPackRepository(
+        @ApplicationContext context: Context
+    ): RenkinPackRepository = RenkinPackRepository(context)
+
+    @Provides
+    @Singleton
+    fun provideRenkinPackStore(
+        @ApplicationContext context: Context,
+        repository: RenkinPackRepository
+    ): RenkinPackStore = RenkinPackStore(context, repository)
+
+    @Provides
+    @Singleton
+    fun provideIconPackRepository(
+        @ApplicationContext context: Context
+    ): IconPackRepository = IconPackRepository(context)
+
+    @Provides
+    @Singleton
+    fun provideIconLockManager(
+        @ApplicationContext context: Context,
+        repository: RenkinPackRepository
+    ): IconLockManager = IconLockManager(context, repository)
+
+    @Provides
+    @Singleton
+    fun provideProfileManager(
+        @ApplicationContext context: Context,
+        repository: RenkinPackRepository
+    ): ProfileManager = ProfileManager(context, repository)
+
+    @Provides
+    @Singleton
+    fun provideIconGenerationService(
+        @ApplicationContext context: Context,
+        iconPackRepository: IconPackRepository
+    ): IconGenerationService = IconGenerationService(context, iconPackRepository)
+
+    @Provides
+    @Singleton
+    fun provideApplicationProvider(
+        @ApplicationContext context: Context,
+        renkinPackStore: RenkinPackStore,
+        renkinPackRepository: RenkinPackRepository,
+        iconPackRepository: IconPackRepository,
+        iconLockManager: IconLockManager,
+        profileManager: ProfileManager,
+        iconGenerationService: IconGenerationService
+    ): ApplicationProvider = ApplicationProvider(
+        context = context,
+        renkinPackStore = renkinPackStore,
+        packRepo = renkinPackRepository,
+        iconPackRepo = iconPackRepository,
+        lockManager = iconLockManager,
+        profileManager = profileManager,
+        iconGenService = iconGenerationService
+    )
 }
