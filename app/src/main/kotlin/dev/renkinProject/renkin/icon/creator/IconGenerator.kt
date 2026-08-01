@@ -46,7 +46,6 @@ import dev.renkinProject.renkin.drawable.newAdaptiveIconDrawable
 import dev.renkinProject.renkin.drawable.shrinkIfBiggerThan
 import dev.renkinProject.renkin.extension.changeBackgroundColor
 import dev.renkinProject.renkin.extension.emptyLike
-import dev.renkinProject.renkin.extension.translated
 import dev.renkinProject.renkin.extension.newArgbBitmap
 import dev.renkinProject.renkin.extension.removeBackground
 import dev.renkinProject.renkin.extension.scaleFromCenter
@@ -94,6 +93,7 @@ class IconGenerator(
     private val resourceResolver by lazy { PackageResourceResolver(ctx) }
     private val appMan by lazy { ApplicationManager(ctx, resourceResolver) }
     private val materialYouPackSupport = mutableMapOf<String, Boolean>()
+    private val adjustmentPipeline by lazy { IconAdjustmentPipeline(ctx.resources, options) }
     private val fallbackBitmapCache by lazy {
         object : LruCache<String, Bitmap>(FALLBACK_BITMAP_CACHE_BYTES) {
             override fun sizeOf(key: String, value: Bitmap): Int = value.allocationByteCount
@@ -273,7 +273,7 @@ class IconGenerator(
             options.colorizerMode == ColorizerMode.SINGLE_COLOR &&
             !options.colorizeMonochrome
         ) {
-            modifierVector(icon)?.let { vector ->
+            adjustmentPipeline.modifierVector(icon)?.let { vector ->
                 vector.root.setReferenceColorPaths(SolidColor(Color(colorizeColor)))
                 vector.tintColor = Color.Unspecified
                 return vector
@@ -1152,142 +1152,7 @@ class IconGenerator(
      * carry over the source's adaptive-export flag and preview zoom (e.g. Material You).
      */
     private fun applyAdjustments(icon: IconPackDrawable): IconPackDrawable {
-        val offset = options.iconOffsetX != 0f || options.iconOffsetY != 0f
-        val shaped = options.iconShape != IconShape.NONE
-        val outlined = options.outlineMode != OutlineMode.NONE
-        if (!offset && options.iconScale == 1f && !shaped && !outlined) return icon
-
-        // Keep vector-safe operations as groups. If no raster-only step follows, the result
-        // remains XML all the way through DB persistence and pack export. When outline/shape
-        // follows, rasterise only once after vector scale/position so enlarged SVG pixels are
-        // never resampled from an earlier 256px bitmap.
-        val vectorAdjusted = modifierVector(icon)?.withModifierTransform(
-            options.iconScale,
-            options.iconOffsetX,
-            options.iconOffsetY
-        )
-        if (vectorAdjusted != null && !shaped && !outlined) return vectorAdjusted
-
-        var bitmap = vectorAdjusted?.toModifierBitmap() ?: icon.toBitmap()
-        if (bitmap.width <= 0 || bitmap.height <= 0) return icon
-
-        val source = icon as? BitmapIconDrawable
-        // A shape is exported as a legacy bitmap and therefore cannot keep previewScale. Bake
-        // the Material You safe-zone zoom into the pixels before shaping so its optical size
-        // stays identical to the unshaped preview. Normal bitmaps use 1f and are untouched.
-        val previewScaleToBake = previewScaleToBakeForShape(icon, shaped)
-        if (previewScaleToBake != 1f) {
-            bitmap = bitmap.scaleFromCenter(previewScaleToBake)
-        }
-
-        // Vector adjustments above are already consumed; bitmap sources keep the old path.
-        if (vectorAdjusted == null && offset) {
-            bitmap = bitmap.translated(options.iconOffsetX * bitmap.width, options.iconOffsetY * bitmap.height)
-        }
-        if (vectorAdjusted == null && options.iconScale != 1f) {
-            val src = bitmap
-            bitmap = newArgbBitmap(src.width, src.height) { canvas ->
-                canvas.scale(options.iconScale, options.iconScale, src.width / 2f, src.height / 2f)
-                // Bilinear filtering: a null paint may fall back to nearest-neighbour sampling
-                // on software canvases, giving jagged diagonals on scaled icons.
-                canvas.drawBitmap(src, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
-            }
-        }
-        if (outlined) {
-            // Before the shape: the contour hugs the icon itself; a shape crop afterwards
-            // still trims anything the outline pushed past the shape's edge.
-            // The width option is calibrated to the 256px working size; scale it with the
-            // actual bitmap so the outline looks the same at any source resolution.
-            val preOutline = bitmap
-            bitmap = IconOutline.apply(
-                preOutline,
-                options.outlineMode,
-                options.outlineWidth * maxOf(preOutline.width, preOutline.height) / 256f,
-                options.outlineColor,
-                options.outlineStyle
-            )
-            // The eraser: inside the painted areas the outline step is undone, the icon stays.
-            options.outlineEraseMask?.let { mask ->
-                bitmap = IconOutline.eraseOutline(bitmap, preOutline, mask)
-            }
-        }
-        if (shaped) {
-            bitmap = applyShape(bitmap)
-        }
-
-        return BitmapIconDrawable(
-            ctx.resources,
-            bitmap,
-            // A shaped icon IS its shape — exporting it adaptive would let the launcher mask
-            // it again (a squircle inside the launcher's circle). Ship it as a legacy bitmap.
-            exportAsAdaptiveIcon = if (shaped) false else source?.isAdaptiveIcon() ?: false,
-            previewScale = if (shaped) 1f else source?.previewScale ?: 1f
-        )
-    }
-
-    /** A detached vector representation, including an InsetIconDrawable's canvas margins. */
-    private fun modifierVector(icon: IconPackDrawable): ImageVectorDrawable? {
-        return when (icon) {
-            is ImageVectorDrawable -> icon.deepCopy()
-            is InsetIconDrawable -> {
-                val child = icon.drawable as? ImageVectorDrawable ?: return null
-                val left: Float
-                val top: Float
-                val right: Float
-                val bottom: Float
-                if (icon.isFractionsNotEmpty) {
-                    left = icon.fractions.left
-                    top = icon.fractions.top
-                    right = icon.fractions.right
-                    bottom = icon.fractions.bottom
-                } else {
-                    left = icon.dimensions.left / child.viewportWidth
-                    top = icon.dimensions.top / child.viewportHeight
-                    right = icon.dimensions.right / child.viewportWidth
-                    bottom = icon.dimensions.bottom / child.viewportHeight
-                }
-                child.withViewportInset(left, top, right, bottom)
-            }
-            else -> null
-        }
-    }
-
-    /**
-     * The Modifier tab's shape step. The icon itself stays untouched (its size is the
-     * separate Icon scale adjustment) — what [GenerationOptions.iconShapeScale] scales is
-     * THE SHAPE, around the centre: a smaller shape crops deeper into the icon, a larger one
-     * clips just the corners. Crop mode masks the icon with the shape; plate mode fills the
-     * shape with [GenerationOptions.bgColor] behind the icon first. Either way the composite
-     * is masked by the shape at the end, so nothing pokes out of curvy shapes (pebble,
-     * sunny). Anti-aliased SRC_IN masking — Canvas.clipPath would leave jagged edges.
-     */
-    private fun applyShape(src: Bitmap): Bitmap {
-        val size = maxOf(src.width, src.height, 256)
-        val sizeF = size.toFloat()
-        val path = IconShapes.path(options.iconShape, sizeF * options.iconShapeScale) ?: return src
-        // Keep the scaled shape centred on the canvas.
-        path.offset(sizeF * (1f - options.iconShapeScale) / 2f, sizeF * (1f - options.iconShapeScale) / 2f)
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-
-        val content = newArgbBitmap(size, size) { canvas ->
-            if (!options.iconShapeCrop) {
-                // The plate is the one place the background colour is visible on its own, so a
-                // gradient plate is painted with the same shader the rest of the app previews.
-                paint.shader = options.backgroundShader(size, size)
-                paint.color = options.bgColor
-                canvas.drawPath(path, paint)
-                paint.shader = null
-                paint.color = -0x1
-            }
-            canvas.drawBitmap(src, null, RectF(0f, 0f, sizeF, sizeF), paint)
-        }
-
-        return newArgbBitmap(size, size) { canvas ->
-            val mask = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-            canvas.drawPath(path, mask)
-            mask.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
-            canvas.drawBitmap(content, 0f, 0f, mask)
-        }
+        return adjustmentPipeline.apply(icon)
     }
 
     /**
