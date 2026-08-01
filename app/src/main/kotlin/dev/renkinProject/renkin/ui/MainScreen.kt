@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +21,6 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
@@ -87,6 +87,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.ui.theme.IconShape
@@ -666,6 +667,7 @@ fun ApplicationItem(
     val syncWarning = stringResource(id = R.string.syncText)
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
+    var quickActionsOpen by rememberSaveable { mutableStateOf(false) }
 
     // Closing the edit dialog (whose icon-search field had keyboard focus) otherwise lets the
     // system hand focus to the home search field, popping the keyboard. Clear focus only on the
@@ -679,19 +681,28 @@ fun ApplicationItem(
     }
 
     Surface(
-        onClick = {
-            view.performTapHaptic()
-            if (viewModel.iconPackLoaded) {
-                openAppOptions = true
-            } else {
-                toaster.show(syncWarning)
-            }
-        },
         shape = CardShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
+            // A long press opens the quick actions; the tap keeps opening the full editor, so
+            // nothing that worked before needs relearning.
+            .combinedClickable(
+                role = Role.Button,
+                onClick = {
+                    view.performTapHaptic()
+                    if (viewModel.iconPackLoaded) {
+                        openAppOptions = true
+                    } else {
+                        toaster.show(syncWarning)
+                    }
+                },
+                onLongClick = {
+                    view.performLongPressHaptic()
+                    quickActionsOpen = true
+                }
+            )
     ) {
         Row(
             modifier = Modifier
@@ -741,16 +752,31 @@ fun ApplicationItem(
             // between the preview and the edit bubble instead of popping
             Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
                 val isLocked = app.createdIcon == null && app.key in viewModel.lockedIconKeys
-                Crossfade(targetState = app.createdIcon, label = "iconPreview") { createdIcon ->
-                    if (createdIcon != null) {
+                // Rasterised at the row's size: a vector painter grows into place over the first
+                // frames, which read as the icon jumping after it appeared.
+                val createdBitmap = rememberCreatedIconBitmap(app, 56.dp)
+                // Fixed frame for every state: the edit bubble is smaller than an icon, and
+                // letting Crossfade shrink the slot around it slid the bubble into place after
+                // the fade. Each branch centres itself inside the same 56.dp box instead.
+                Crossfade(
+                    targetState = createdBitmap,
+                    label = "iconPreview",
+                    modifier = Modifier.size(56.dp)
+                ) { preview ->
+                  Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    if (preview != null) {
                         Image(
-                            painter = createdIcon.getPainter(),
+                            painter = BitmapPainter(preview),
                             contentDescription = null,
                             modifier = Modifier
                                 .size(56.dp)
                                 .clip(IconShape)
                                 .background(bgColor)
                         )
+                    } else if (app.createdIcon != null) {
+                        // Has an icon, still rasterising: an empty slot for a frame beats
+                        // flashing the "no icon" bubble on every list load.
+                        Box(Modifier.size(56.dp))
                     } else if (isLocked) {
                         // The saved icon exists but its source pack is missing/paid — show a
                         // dashed placeholder; tapping the row still lets the user pick another.
@@ -795,6 +821,7 @@ fun ApplicationItem(
                             }
                         }
                     }
+                  }
                 }
                 // Calendar day badge: shows today's date so the user can see the icon rotates.
                 if (app.calendarEnabled) {
@@ -837,6 +864,10 @@ fun ApplicationItem(
                 }
             }
         }
+    }
+
+    if (quickActionsOpen) {
+        AppQuickActionsSheet(app = app, onDismiss = { quickActionsOpen = false })
     }
 
     if (openAppOptions) {
