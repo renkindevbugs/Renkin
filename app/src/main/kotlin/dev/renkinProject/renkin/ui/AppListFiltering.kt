@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.ui
 
+import dev.renkinProject.renkin.data.AppSortOrder
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 
 private data class AppNameSortEntry<T>(

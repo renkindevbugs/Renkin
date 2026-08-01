@@ -761,6 +761,8 @@ enum class DarkMode {
     FOLLOW_SYSTEM, DARK, LIGHT
 }
 
+enum class AppSortOrder { NAME, INSTALL_DATE }
+
 enum class Source {
     NONE, ICON_PACK, APPLICATION_ICON, APPLICATION_NAME
 }

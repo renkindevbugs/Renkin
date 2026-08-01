@@ -69,7 +69,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -96,6 +95,7 @@ import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.data.AppFilterNoIconKey
+import dev.renkinProject.renkin.data.AppSortOrder
 import dev.renkinProject.renkin.data.AppSortOrderKey
 import dev.renkinProject.renkin.data.getBackgroundColor
 import dev.renkinProject.renkin.data.ExportThemedKey
@@ -104,16 +104,11 @@ import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesValue
-import dev.renkinProject.renkin.data.setBooleanValue
-import dev.renkinProject.renkin.data.setEnumValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.GlobalOptionsActivity
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.WatchViewModel
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
-
-enum class AppSortOrder { NAME, INSTALL_DATE }
 
 /**
  * The three problem groups the app list can be narrowed to. Multiple groups may be selected;
@@ -217,7 +212,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     }
 
     val prefs = getPreferences()
-    val scope = rememberCoroutineScope()
+    val viewModel: MainViewModel = hiltViewModel()
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
     val storedFilterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
     // Mirror the persisted filter locally so switching the hero buttons updates the list in
@@ -240,7 +235,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
         when (filter) {
             AppProblemFilter.MISSING -> {
                 filterNoIcon = enabled
-                scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, enabled) }
+                viewModel.setMissingIconFilter(enabled)
             }
             AppProblemFilter.FALLBACK -> filterFallback = enabled
             AppProblemFilter.LOCKED -> filterLocked = enabled
@@ -259,7 +254,6 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // so the search bar's clear-on-back handler takes priority while it has text.
     val context = LocalContext.current
     val activity = getCurrentMainActivity()
-    val viewModel: MainViewModel = hiltViewModel()
     val isInRefresh = viewModel.isRefreshing
 
     // Forward one-shot toast events from the ViewModel to the shared Toaster. A single
@@ -400,7 +394,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 filterFallback = filterFallback,
                 filterLocked = filterLocked,
                 showLockedFilter = viewModel.lockedIconKeys.isNotEmpty() || filterLocked,
-                onSortChange = { scope.launch { prefs.setEnumValue(AppSortOrderKey, it) } },
+                onSortChange = viewModel::setAppSortOrder,
                 onFilterChange = { setProblemFilter(AppProblemFilter.MISSING, it) },
                 onFallbackFilterChange = { setProblemFilter(AppProblemFilter.FALLBACK, it) },
                 onLockedFilterChange = { setProblemFilter(AppProblemFilter.LOCKED, it) },
@@ -422,7 +416,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     }.collectAsState(initial = true)
     if (!onboardingSeen) {
         OnboardingOverlay {
-            scope.launch { prefs.setBooleanValue(OnboardingSeenKey, true) }
+            viewModel.setOnboardingSeen(true)
         }
     }
 

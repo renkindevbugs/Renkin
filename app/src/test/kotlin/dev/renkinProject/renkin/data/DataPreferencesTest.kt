@@ -54,6 +54,17 @@ class DataPreferencesTest {
     }
 
     @Test
+    fun appSortOrder_persistedOrdinalsStayStable() {
+        assertEquals(0, AppSortOrder.NAME.ordinal)
+        assertEquals(1, AppSortOrder.INSTALL_DATE.ordinal)
+        val prefs = preferencesOf(AppSortOrderKey to AppSortOrder.INSTALL_DATE.ordinal)
+        assertEquals(
+            AppSortOrder.INSTALL_DATE,
+            prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
+        )
+    }
+
+    @Test
     fun getIntValue_readsStoredValue_andFallsBackToDefault() {
         val prefs = preferencesOf(AppSortOrderKey to 1)
         assertEquals(1, prefs.getIntValue(AppSortOrderKey, default = 0))

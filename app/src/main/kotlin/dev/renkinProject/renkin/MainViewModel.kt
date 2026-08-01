@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,9 +22,20 @@ import dev.renkinProject.renkin.apk.IconGenerationService
 import dev.renkinProject.renkin.apk.IconLockManager
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
+import dev.renkinProject.renkin.data.AppFilterNoIconKey
+import dev.renkinProject.renkin.data.AppSortOrder
+import dev.renkinProject.renkin.data.AppSortOrderKey
+import dev.renkinProject.renkin.data.DarkMode
+import dev.renkinProject.renkin.data.DarkModeKey
+import dev.renkinProject.renkin.data.HideProfileShareWarningKey
+import dev.renkinProject.renkin.data.OnboardingSeenKey
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
+import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.data.setBooleanValue
+import dev.renkinProject.renkin.data.setEnumValue
+import dev.renkinProject.renkin.data.setPrimarySource
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -368,6 +380,40 @@ class MainViewModel @Inject constructor(
                 isRefreshing = false
             }
         }
+    }
+
+    /** Persists the hero source, then immediately applies the same clear/refresh semantics. */
+    fun selectPrimarySource(source: Source, packageName: String?) {
+        viewModelScope.launch {
+            getApplication<Application>().dataStore.setPrimarySource(source, packageName)
+            if (source == Source.NONE) appProvider.clearRefreshedIcons() else refresh()
+        }
+    }
+
+    fun setAppSortOrder(order: AppSortOrder) = updatePreferences {
+        setEnumValue(AppSortOrderKey, order)
+    }
+
+    fun setMissingIconFilter(enabled: Boolean) = updatePreferences {
+        setBooleanValue(AppFilterNoIconKey, enabled)
+    }
+
+    fun setOnboardingSeen(seen: Boolean) = updatePreferences {
+        setBooleanValue(OnboardingSeenKey, seen)
+    }
+
+    fun setDarkMode(mode: DarkMode) = updatePreferences {
+        setEnumValue(DarkModeKey, mode)
+    }
+
+    fun hideProfileShareWarning() = updatePreferences {
+        setBooleanValue(HideProfileShareWarningKey, true)
+    }
+
+    private fun updatePreferences(
+        block: suspend DataStore<Preferences>.() -> Unit
+    ) {
+        viewModelScope.launch { getApplication<Application>().dataStore.block() }
     }
 
     /** Current build step text while a pack is building; null when no build is in progress. */
@@ -808,9 +854,6 @@ class MainViewModel @Inject constructor(
         component: InstalledApplication? = null,
         onChunk: (List<PackIconPreview>) -> Unit
     ) = packBrowserPreviews.detailPreviews(iconPack, sortOrder, query, options, component, onChunk)
-
-    /** Clears only the unsaved bulk-refresh icons — see ApplicationProvider.clearRefreshedIcons. */
-    fun clearRefreshedIcons() = appProvider.clearRefreshedIcons()
 
     // ---- Profiles -----------------------------------------------------------------
 

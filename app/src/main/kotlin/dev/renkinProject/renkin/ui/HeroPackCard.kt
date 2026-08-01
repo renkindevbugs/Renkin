@@ -60,7 +60,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -88,7 +87,6 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
-import dev.renkinProject.renkin.data.setPrimarySource
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.getBooleanValue
@@ -100,15 +98,12 @@ import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
-import dev.renkinProject.renkin.data.setEnumValue
-import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.GoldBase
 import dev.renkinProject.renkin.ui.theme.GoldShimmer
 import dev.renkinProject.renkin.ui.theme.CardShape
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal data class HeroPackStats(
@@ -179,7 +174,6 @@ fun HeroPackCard(
     val viewModel: MainViewModel = hiltViewModel()
     val prefs = getPreferences()
     val preferences = prefs.getPreferencesValue()
-    val scope = rememberCoroutineScope()
 
     val source = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     val packName = preferences.getStringValue(PrimaryIconPackKey)
@@ -372,18 +366,8 @@ fun HeroPackCard(
             onDismiss = { sheetOpen = false },
             onPick = { newSource, newPackage ->
                 sheetOpen = false
-                scope.launch {
-                    prefs.setPrimarySource(newSource, newPackage)
-                    if (newSource == Source.NONE) {
-                        // No source: the unsaved refresh output goes away; locked icons stay.
-                        viewModel.clearRefreshedIcons()
-                    } else {
-                        // Auto-refresh with the just-written preferences, so the pick takes
-                        // effect without knowing about the refresh button. Hand-picked and
-                        // built icons are safe.
-                        viewModel.refresh()
-                    }
-                }
+                // The view model keeps the preference write ordered before clear/refresh.
+                viewModel.selectPrimarySource(newSource, newPackage)
             }
         )
     }
