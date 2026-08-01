@@ -48,6 +48,20 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         dao.insertAll(apps)
     }
 
+    // ---- What the last build shipped -----------------------------------------------
+
+    private val builtIconDao = db.builtIconDao()
+
+    suspend fun builtIcons(profileId: Long): List<BuiltIcon> = withContext(Dispatchers.Default) {
+        builtIconDao.get(profileId)
+    }
+
+    /** One transaction: a half-written record would read as "half the pack is unbuilt". */
+    suspend fun replaceBuiltIcons(profileId: Long, rows: List<BuiltIcon>) = db.withTransaction {
+        builtIconDao.deleteForProfile(profileId)
+        builtIconDao.insertAll(rows)
+    }
+
     // ---- Saved colours -------------------------------------------------------------
 
     private val presetDao = db.colorPresetDao()

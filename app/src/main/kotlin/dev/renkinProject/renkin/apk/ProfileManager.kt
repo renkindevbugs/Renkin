@@ -53,6 +53,8 @@ class ProfileManager internal constructor(
 
     suspend fun profileExists(id: Long): Boolean = packRepo.profile(id) != null
 
+    suspend fun profile(id: Long): Profile? = packRepo.profile(id)
+
     /** The package name [profileId]'s pack builds under (base pack for the default). */
     fun packPackageNameFor(profileId: Long): String =
         if (profileId == DEFAULT_PROFILE_ID) IconPackBuilder.PACKAGE_NAME

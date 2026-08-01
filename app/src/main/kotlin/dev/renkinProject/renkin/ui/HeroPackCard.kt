@@ -29,7 +29,9 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.HideImage
@@ -88,6 +90,9 @@ import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.data.setPrimarySource
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.apk.packChanges
+import dev.renkinProject.renkin.data.ExportThemedKey
+import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimarySourceKey
@@ -198,6 +203,7 @@ fun HeroPackCard(
     val fallbackCount = stats.fallbackCount
 
     var sheetOpen by remember { mutableStateOf(false) }
+    var changesOpen by remember { mutableStateOf(false) }
 
     // Saved-but-not-built marker for the active profile (set by the save-before-switch flow).
     val profiles by viewModel.profiles.collectAsState(initial = emptyList())
@@ -211,7 +217,9 @@ fun HeroPackCard(
             .fillMaxWidth()
             .padding(16.dp, 8.dp)
     ) {
-        Column(Modifier.padding(16.dp)) {
+        // Less room under the last line than above it: the trailing element is a compact chip or
+        // a label, and a full 16.dp below it left the card looking bottom-heavy.
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 10.dp)) {
             Text(
                 text = stringResource(R.string.heroPackLabel),
                 style = MaterialTheme.typography.labelMedium,
@@ -309,16 +317,63 @@ fun HeroPackCard(
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                     )
                 }
-                if (activeProfile?.hasUnbuiltChanges == true) {
+                // Pending changes, now answerable: the badge says how many and opens the list of
+                // exactly which apps a build would add, change or drop.
+                // derivedStateOf, not remember(list): applicationList is one long-lived snapshot
+                // list, so its identity never changes and a refresh would leave the chip stale.
+                val changes by remember {
+                    derivedStateOf {
+                        packChanges(
+                            viewModel.applicationList,
+                            viewModel.builtIconHashes,
+                            viewModel.savedIconHashes,
+                            viewModel.updatedKeys
+                        )
+                    }
+                }
+                if (changes.isNotEmpty() || activeProfile?.hasUnbuiltChanges == true) {
                     Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = stringResource(R.string.unbuiltChanges),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.tertiary
-                    )
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        // Always openable: an empty list is an answer too ("nothing since the
+                        // last build"), and a chip that ignores taps reads as broken.
+                        onClick = { changesOpen = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = if (changes.isEmpty()) {
+                                    stringResource(R.string.unbuiltChanges)
+                                } else {
+                                    stringResource(R.string.unbuiltChangesCount, changes.size)
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+
+    if (changesOpen) {
+        PackChangesSheet(
+            iconPacks = iconPacks,
+            themed = preferences.getBooleanValue(ExportThemedKey),
+            onBuild = { viewModel.build(viewModel.activeProfileId) },
+            onDismiss = { changesOpen = false }
+        )
     }
 
     if (sheetOpen) {

@@ -43,7 +43,7 @@ class RenkinPackMigrationTest {
 
     @Test
     fun everyReleasedSchemaMigratesToCurrent() {
-        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14).forEach { version ->
+        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16).forEach { version ->
             RenkinPackDatabase.open(context, historical(version, "from-$version")).useDatabase { database ->
                 database.openHelper.writableDatabase
             }
@@ -67,6 +67,32 @@ class RenkinPackMigrationTest {
                 assertTrue(cursor.moveToFirst())
                 assertEquals("", cursor.getString(0))
                 assertEquals("pixels", cursor.getString(1))
+            }
+        }
+    }
+
+    @Test
+    fun aVersion16CarryingTheDroppedIconHashColumnStillOpens() {
+        // A development build of 16 added DbApplication.iconHash before the fingerprint moved to
+        // being derived. Devices that ran it must reach 17 with their icons intact, not crash on
+        // the schema check.
+        val name = historical(16, "v16-icon-hash") { db ->
+            db.execSQL("ALTER TABLE DbApplication ADD COLUMN iconHash TEXT NOT NULL DEFAULT ''")
+            db.execSQL(
+                "INSERT INTO DbApplication " +
+                    "(packageName, activityName, isAdaptiveIcon, isXml, drawable, profileId, " +
+                    "iconHash) " +
+                    "VALUES ('com.plain', 'com.plain.Main', 0, 0, 'pixels', 1, 'abc123')"
+            )
+        }
+
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            database.openHelper.writableDatabase.query(
+                "SELECT drawable, isFallbackIcon FROM DbApplication WHERE packageName = 'com.plain'"
+            ).use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("pixels", cursor.getString(0))
+                assertFalse(cursor.getInt(1) != 0)
             }
         }
     }
