@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -141,6 +142,26 @@ internal fun GradientGalleryDialog(
                     onStopsChange = { stops = it },
                     availableStops = remember(presets) { gradientStopCounts(presets) }
                 )
+                // The collection is someone else's work under the MIT licence; the credit belongs
+                // where the presets are used, not only buried in the about dialog.
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = stringResource(R.string.gradientGalleryCredit),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LinkText(
+                        text = stringResource(R.string.gradientGalleryCreditLink),
+                        url = UI_GRADIENTS_URL
+                    )
+                }
+                HorizontalDivider()
                 if (shown.isEmpty()) {
                     Text(
                         text = stringResource(R.string.gradientGalleryEmpty),
@@ -372,6 +393,8 @@ private fun GradientPreset.asStyle(angle: Float = GALLERY_ANGLE) = ColorizerStyl
 // Left to right, like every gradient library on the web: the tiles are wider than they are tall,
 // and a top-down sweep leaves almost none of the middle colours visible.
 private const val GALLERY_ANGLE = 90f
+
+private const val UI_GRADIENTS_URL = "https://github.com/Ghosh/uiGradients"
 
 private val GalleryCardWidth = 150.dp
 private val GalleryCardPreviewHeight = 72.dp

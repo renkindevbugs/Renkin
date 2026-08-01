@@ -302,6 +302,8 @@
     <string name="gradientGalleryEmpty">No gradient matches that search.</string>
     <string name="gradientGalleryUse">Use</string>
     <string name="gradientGalleryStops">%1$d colors</string>
+    <string name="gradientGalleryCredit">Gradients by</string>
+    <string name="gradientGalleryCreditLink">uiGradients · MIT</string>
     <string name="gradientFamilyAll">All</string>
     <string name="gradientFamilyWarm">Warm</string>
     <string name="gradientFamilyCool">Cool</string>
