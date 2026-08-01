@@ -287,6 +287,10 @@ class ApplicationProvider(private val context: Context) {
                 else applicationList.toList().filter { it.key !in lockManager.lockedKeys }
             val lockedOrigins = lockManager.lockedOriginsFor(opt)
             val modifierOptions = modifierFor(preferences, apply = preferences.getBooleanValue(GlobalApplyGeneratedKey, true))
+            // Only rows that actually LOSE an icon are worth undoing: filling an empty slot is
+            // what refresh is for. Collected as the edits happen, because whether an existing
+            // icon is replaced depends on the override setting and on the generator's own skips.
+            val replaced = mutableListOf<PackageInfoStruct>()
             var withheld = 0
             iconGenService.refreshIcons(targets, opt, modifierOptions) { application, base, rendered, isFallback, sourcePack ->
                 val origin = lockManager.resolveOrigin(application.key, sourcePack) ?: sourcePack
@@ -295,9 +299,12 @@ class ApplicationProvider(private val context: Context) {
                     // owned on this device — withhold it (the slot stays empty).
                     withheld++
                 } else {
+                    val live = applicationList.firstOrNull { it.key == application.key }
+                    if (live?.createdIcon != null) replaced += live
                     editApplication(application, application.changeExport(rendered, isFallback, origin, isRefreshMade = true, isCustom = false, isLegacy = false, baseIcon = base))
                 }
             }
+            captureUndoRows(replaced, persisted = false)
             withheld
         }
     }
@@ -836,6 +843,45 @@ class ApplicationProvider(private val context: Context) {
     suspend fun getIconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
         iconPackRepo.getDropdownIcons(application)
 
+    // Only the last change is undoable; a second one replaces it, exactly like the snackbar it
+    // is offered through.
+    private val undoTracker = IconUndoTracker()
+
+    /** How many icons the pending undo would put back; 0 when there is nothing to offer. */
+    val undoableIconCount: Int get() = undoTracker.size
+
+    /** Records the rows [keys] currently hold, so the change about to overwrite them can go back. */
+    fun captureUndo(keys: Collection<String>, persisted: Boolean) {
+        val wanted = keys.toSet()
+        captureUndoRows(applicationList.filter { it.key in wanted }, persisted)
+    }
+
+    /** Same, for callers that already hold the rows they are about to overwrite. */
+    fun captureUndoRows(rows: List<PackageInfoStruct>, persisted: Boolean) {
+        undoTracker.capture(rows, activeProfileId, persisted)
+    }
+
+    /** Drops the offer — after a build, a profile switch or anything that invalidates the rows. */
+    fun clearUndo() = undoTracker.clear()
+
+    /**
+     * Puts the captured rows back. Returns false when the step no longer applies: another
+     * profile is active, or the apps it described are gone.
+     */
+    suspend fun undoLastIconChange(): Boolean = withContext(Dispatchers.Default) {
+        profileOperations.run {
+            val persisted = undoTracker.step?.persisted ?: return@run false
+            val restoration = undoTracker.restorationFor(applicationList, activeProfileId)
+            if (restoration.isEmpty()) return@run false
+            for ((index, row) in restoration) editApplication(index, row)
+            // A change that reached the database has to be written back, or the restored state
+            // would only live until the next load.
+            if (persisted) saveRenkinPack()
+            undoTracker.clear()
+            true
+        }
+    }
+
     /**
      * Clears only the unsaved bulk-refresh icons (isRefreshMade); hand-picked and built/saved
      * icons stay. Used when the primary source is set to None: whatever the refresh produced
@@ -851,6 +897,8 @@ class ApplicationProvider(private val context: Context) {
     suspend fun clearIcons() = withContext(Dispatchers.Default) {
         // "Remove icons" is explicit user intent — held-back rows (locked/absent apps) go too.
         lockManager.clear()
+        // Everything is going; an undo pointing at rows this wipes would restore a mixture.
+        clearUndo()
         // Snapshot copy: editApplication mutates the live list in place.
         // Also reset calendar opt-ins: otherwise a calendar-enabled app is still persisted
         // (RenkinPackStore keeps calendar rows even without an icon), so it lingers in the
@@ -929,6 +977,8 @@ class ApplicationProvider(private val context: Context) {
     /** Runs only while [profileOperations] is held. */
     private suspend fun switchProfileLocked(newProfileId: Long) {
         if (!profileManager.switchTo(newProfileId)) return
+        // The captured rows belong to the profile being left; they must not be restorable here.
+        clearUndo()
         // Reset the in-memory icons and load exactly the target selected above.
         resetInMemoryIcons()
         loadRenkinPack(newProfileId)

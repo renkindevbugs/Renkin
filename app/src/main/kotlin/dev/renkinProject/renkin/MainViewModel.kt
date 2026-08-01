@@ -223,6 +223,27 @@ class MainViewModel @Inject constructor(
     private val _toastEvents = Channel<Int>(Channel.BUFFERED)
     val toastEvents = _toastEvents.receiveAsFlow()
 
+    /**
+     * A change that can still be taken back: [messageRes] describes it, [count] fills its
+     * plural. Shown as a snackbar with an Undo action rather than a toast, because a toast
+     * cannot be acted on.
+     */
+    data class UndoPrompt(@androidx.annotation.StringRes val messageRes: Int, val count: Int)
+
+    private val _undoEvents = Channel<UndoPrompt>(Channel.BUFFERED)
+    val undoEvents = _undoEvents.receiveAsFlow()
+
+    /** Puts the last icon change back. Silent when the change no longer applies. */
+    fun undoLastIconChange() {
+        viewModelScope.launch {
+            if (appProvider.undoLastIconChange()) {
+                _toastEvents.trySend(R.string.undoRestored)
+            } else {
+                _toastEvents.trySend(R.string.undoUnavailable)
+            }
+        }
+    }
+
     private fun loadStartup() {
         if (startupLoading || appProvider.startupComplete) return
         startupLoading = true
@@ -292,8 +313,13 @@ class MainViewModel @Inject constructor(
                 val withheld = appProvider.refreshIcons(profileId)
                 if (withheld == null) {
                     _toastEvents.trySend(R.string.profileStillLoading)
-                } else if (withheld > 0) {
-                    _toastEvents.trySend(R.string.refreshLockedSkipped)
+                } else {
+                    if (withheld > 0) _toastEvents.trySend(R.string.refreshLockedSkipped)
+                    // Only worth offering when the refresh actually overwrote something: with
+                    // "Refresh replaces existing icons" off it only fills empty slots.
+                    appProvider.undoableIconCount.takeIf { it > 0 }?.let { replaced ->
+                        _undoEvents.trySend(UndoPrompt(R.string.undoIconsRefreshed, replaced))
+                    }
                 }
             } finally {
                 // Without this a failed refresh would leave the spinner on forever and block builds.
@@ -435,6 +461,9 @@ class MainViewModel @Inject constructor(
     }
 
     private suspend fun completeSuccessfulInstall(pending: PendingInstallFallback) {
+        // The pack now ships what is on screen; undoing a refresh from before the build would
+        // silently disagree with the installed icons.
+        appProvider.clearUndo()
         // The next-steps dialog replaces the old "installed!" toast: what to do in
         // the launcher differs between a first install and an update.
         buildOutcome = BuildOutcomeInfo(
@@ -516,6 +545,7 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             val index = appProvider.applicationList.indexOfFirst { it.key == app.key }
             if (index < 0) return@launch
+            appProvider.captureUndo(listOf(app.key), persisted = true)
             appProvider.discardLockedIcon(app.key)
             val live = appProvider.applicationList[index]
             appProvider.editApplication(
@@ -523,6 +553,7 @@ class MainViewModel @Inject constructor(
                 live.changeExport(null).changeCalendar(false, null, null)
             )
             refreshMissingPacks(prompt = false)
+            _undoEvents.trySend(UndoPrompt(R.string.undoIconReset, 1))
         }
     }
 
