@@ -46,7 +46,6 @@ import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews
 import dev.renkinProject.renkin.icon.creator.PackIconPreview
 import dev.renkinProject.renkin.icon.creator.PackRowPreviews
-import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
@@ -110,16 +109,14 @@ enum class IconApplyResult {
 class MainViewModel @Inject constructor(
     application: Application,
     private val appProvider: ApplicationProvider,
-    private val watchRepo: WatchRepository
+    private val watchRepo: WatchRepository,
+    private val backupManager: BackupManager
 ) : AndroidViewModel(application), IconPreviewBuilder {
     /**
      * Keeps profile-session bookkeeping on the same side of a profile switch as the provider
      * operation that changed the icon. The provider separately protects its live icon list.
      */
     private val profileSessionOperations = Mutex()
-
-    // One shared manager for the pack-preview lookups, instead of a fresh instance per call.
-    private val appMan by lazy { ApplicationManager(getApplication()) }
 
     // ---- Model state exposed to the UI (read-only) -------------------------------
     // The UI observes these instead of reaching through to ApplicationProvider, so the
@@ -863,7 +860,7 @@ class MainViewModel @Inject constructor(
     // plus the row-preview cache) lives in PackBrowserPreviews; the view model just forwards to it
     // so the UI still only talks to the view model. buildPackIcons is wired to the provider.
     private val packBrowserPreviews by lazy {
-        PackBrowserPreviews(appMan, appProvider::getIconPackIcons)
+        appProvider.packBrowserPreviews()
     }
 
     /** Collapsed row previews for the icon-pack browser (see [PackBrowserPreviews.rowPreviews]). */
@@ -1050,8 +1047,6 @@ class MainViewModel @Inject constructor(
     /** True while a backup export/import runs — Settings ignores further taps meanwhile. */
     var backupInProgress by mutableStateOf(false)
         private set
-
-    private val backupManager by lazy { BackupManager(getApplication()) }
 
     /**
      * Runs one backup/import operation at a time: the shared busy flag gates re-entry, a

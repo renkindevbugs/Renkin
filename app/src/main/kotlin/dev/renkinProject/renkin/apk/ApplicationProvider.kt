@@ -32,6 +32,7 @@ import dev.renkinProject.renkin.data.online.onlineAttributionLabel
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews
 import dev.renkinProject.renkin.icon.creator.globalModifierOptions
 import dev.renkinProject.renkin.icon.creator.hasVisibleModifierEffect
 import dev.renkinProject.renkin.packages.ApplicationManager
@@ -103,7 +104,9 @@ class ApplicationProvider internal constructor(
     private val lockManager: IconLockManager,
     private val profileManager: ProfileManager,
     private val iconGenService: IconGenerationService,
-    private val iconPackBuildService: IconPackBuildService
+    private val iconPackBuildService: IconPackBuildService,
+    private val appManager: ApplicationManager,
+    private val installedAppCatalog: InstalledAppCatalog
 ) {
     // A SnapshotStateList (not mutableStateOf(List)) so editing one app's icon is an O(1)
     // in-place set instead of copying the whole list — refreshIcons edits every app, so the
@@ -133,9 +136,6 @@ class ApplicationProvider internal constructor(
     /** True while the shared preferences and live icon list are changing profiles. */
     var isProfileSwitching: Boolean by mutableStateOf(false)
         private set
-
-    private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
-    private val installedAppCatalog: InstalledAppCatalog by lazy { InstalledAppCatalog(context) }
 
     /** Saved colours/gradients, shared by every profile. Read straight from the database flow. */
     fun colorPresets(): kotlinx.coroutines.flow.Flow<List<dev.renkinProject.renkin.data.ColorPreset>> =
@@ -804,6 +804,9 @@ class ApplicationProvider internal constructor(
 
     suspend fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, IconPackDrawable?> =
         iconGenService.getIconPackIcons(iconPackName, options, drawables)
+
+    internal fun packBrowserPreviews(): PackBrowserPreviews =
+        PackBrowserPreviews(appManager, ::getIconPackIcons)
 
     suspend fun getIconPackDropdownIcons(application: InstalledApplication?): Map<String, ResourceDrawable> =
         iconPackRepo.getDropdownIcons(application)

@@ -14,8 +14,11 @@ import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ProfileManager
 import dev.renkinProject.renkin.apk.RenkinPackStore
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.data.watch.WatchRepository
+import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.IconPackCatalog
+import dev.renkinProject.renkin.packages.InstalledAppCatalog
 import javax.inject.Singleton
 
 /**
@@ -50,6 +53,20 @@ object AppModule {
     fun provideIconPackCatalog(
         @ApplicationContext context: Context
     ): IconPackCatalog = IconPackCatalog(context)
+
+    @Provides
+    @Singleton
+    fun provideBackupManager(
+        @ApplicationContext context: Context,
+        renkinPackRepository: RenkinPackRepository,
+        watchRepository: WatchRepository,
+        iconPackCatalog: IconPackCatalog
+    ): BackupManager = BackupManager(
+        context,
+        renkinPackRepository,
+        watchRepository,
+        iconPackCatalog
+    )
 
     @Provides
     @Singleton
@@ -121,6 +138,8 @@ object AppModule {
         lockManager = iconLockManager,
         profileManager = profileManager,
         iconGenService = iconGenerationService,
-        iconPackBuildService = iconPackBuildService
+        iconPackBuildService = iconPackBuildService,
+        appManager = ApplicationManager(context),
+        installedAppCatalog = InstalledAppCatalog(context)
     )
 }
