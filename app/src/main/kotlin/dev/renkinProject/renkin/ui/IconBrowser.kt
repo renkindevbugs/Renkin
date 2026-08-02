@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui
 
+import android.graphics.Bitmap
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -29,6 +30,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Sort
@@ -65,6 +67,7 @@ import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.drawable.ResourceDrawable
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
@@ -187,10 +190,14 @@ fun CreateTab(
     selectedScheme: Int = 0,
     onSchemeChange: (Int) -> Unit = {},
     // Custom-scheme foreground/background, edited inline when the Custom swatch is selected.
-    customForeground: Color = Color.White,
-    customBackground: Color = Color.Black,
-    onCustomForegroundChange: (Color) -> Unit = {},
-    onCustomBackgroundChange: (Color) -> Unit = {}
+    customForeground: ColorizerStyle = ColorizerStyle(firstColor = android.graphics.Color.WHITE),
+    customBackground: ColorizerStyle = ColorizerStyle(firstColor = android.graphics.Color.BLACK),
+    onCustomForegroundChange: (ColorizerStyle) -> Unit = {},
+    onCustomBackgroundChange: (ColorizerStyle) -> Unit = {},
+    // The dialog's own pipeline with the draft colour substituted, so the colour sheet can show
+    // the Material You icon Apply would produce.
+    renderMaterialYouForeground: (suspend (ColorizerStyle) -> Bitmap?)? = null,
+    renderMaterialYouBackground: (suspend (ColorizerStyle) -> Bitmap?)? = null
 ) {
     // Seeded from the hoisted query so returning to the tab doesn't trigger a spurious
     // re-search (debouncedQuery already matches the preserved searchQuery).
@@ -347,7 +354,9 @@ fun CreateTab(
                 customForeground = customForeground,
                 customBackground = customBackground,
                 onCustomForegroundChange = onCustomForegroundChange,
-                onCustomBackgroundChange = onCustomBackgroundChange
+                onCustomBackgroundChange = onCustomBackgroundChange,
+                renderForeground = renderMaterialYouForeground,
+                renderBackground = renderMaterialYouBackground
             ) }
             Source.APPLICATION_NAME -> Column(
                 Modifier
@@ -416,13 +425,13 @@ private fun ApplicationIconVariantSelector(
     schemes: List<Pair<Color, Color>>,
     selectedScheme: Int,
     onSchemeChange: (Int) -> Unit,
-    customForeground: Color,
-    customBackground: Color,
-    onCustomForegroundChange: (Color) -> Unit,
-    onCustomBackgroundChange: (Color) -> Unit
+    customForeground: ColorizerStyle,
+    customBackground: ColorizerStyle,
+    onCustomForegroundChange: (ColorizerStyle) -> Unit,
+    onCustomBackgroundChange: (ColorizerStyle) -> Unit,
+    renderForeground: (suspend (ColorizerStyle) -> Bitmap?)? = null,
+    renderBackground: (suspend (ColorizerStyle) -> Bitmap?)? = null
 ) {
-    var fgPickerOpen by remember { mutableStateOf(false) }
-    var bgPickerOpen by remember { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxSize()
@@ -507,93 +516,144 @@ private fun ApplicationIconVariantSelector(
         }
 
         if (variant == ApplicationIconVariant.MATERIAL_YOU) {
-            Text(
-                text = stringResource(R.string.materialYouColors),
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(top = 20.dp, bottom = 10.dp)
+            MaterialYouColorControls(
+                schemes = schemes,
+                selectedScheme = selectedScheme,
+                onSchemeChange = onSchemeChange,
+                customForeground = customForeground,
+                customBackground = customBackground,
+                onCustomForegroundChange = onCustomForegroundChange,
+                onCustomBackgroundChange = onCustomBackgroundChange,
+                renderForeground = renderForeground,
+                renderBackground = renderBackground,
+                modifier = Modifier.padding(top = 20.dp)
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                schemes.forEachIndexed { index, (fg, bg) ->
-                    SchemeSwatch(
-                        foreground = fg,
-                        background = bg,
-                        custom = false,
-                        selected = selectedScheme == index
-                    ) { onSchemeChange(index) }
-                }
-                // Custom: foreground/background chosen with the inline pickers below.
-                SchemeSwatch(
-                    foreground = MaterialTheme.colorScheme.onSurface,
-                    background = MaterialTheme.colorScheme.surfaceVariant,
-                    custom = true,
-                    selected = selectedScheme >= schemes.size
-                ) { onSchemeChange(schemes.size) }
-            }
+        }
+    }
+}
 
-            if (selectedScheme >= schemes.size) {
-                Spacer(Modifier.height(12.dp))
-                ColorRow(stringResource(R.string.iconColor), customForeground) { fgPickerOpen = true }
-                Spacer(Modifier.height(8.dp))
-                ColorRow(stringResource(R.string.backgroundColor), customBackground) { bgPickerOpen = true }
-            } else {
-                Text(
-                    text = stringResource(R.string.materialYouColorsHint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 10.dp)
-                )
+/**
+ * Shared Material You scheme chooser used by the Application Icon source and by compatible
+ * adaptive icon packs in the Modifier tab.
+ */
+@Composable
+internal fun MaterialYouColorControls(
+    schemes: List<Pair<Color, Color>>,
+    selectedScheme: Int,
+    onSchemeChange: (Int) -> Unit,
+    customForeground: ColorizerStyle,
+    customBackground: ColorizerStyle,
+    onCustomForegroundChange: (ColorizerStyle) -> Unit,
+    onCustomBackgroundChange: (ColorizerStyle) -> Unit,
+    modifier: Modifier = Modifier,
+    allowOriginal: Boolean = false,
+    sampleBitmap: Bitmap? = null,
+    // The host's real pipeline with the draft colour substituted, so the sheet's tile shows the
+    // Material You icon that Apply produces rather than a tinted stand-in.
+    renderForeground: (suspend (ColorizerStyle) -> Bitmap?)? = null,
+    renderBackground: (suspend (ColorizerStyle) -> Bitmap?)? = null
+) {
+    var fgPickerOpen by remember { mutableStateOf(false) }
+    var bgPickerOpen by remember { mutableStateOf(false) }
+
+    Column(modifier) {
+        Text(
+            text = stringResource(R.string.materialYouColors),
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(bottom = 10.dp)
+        )
+        if (allowOriginal) {
+            FilterChip(
+                selected = selectedScheme < 0,
+                onClick = { onSchemeChange(-1) },
+                label = { Text(stringResource(R.string.originalColors)) }
+            )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            schemes.forEachIndexed { index, (fg, bg) ->
+                SchemeSwatch(
+                    foreground = fg,
+                    background = bg,
+                    custom = false,
+                    selected = selectedScheme == index
+                ) { onSchemeChange(index) }
             }
+            // Custom: foreground/background chosen with the inline pickers below.
+            SchemeSwatch(
+                foreground = MaterialTheme.colorScheme.onSurface,
+                background = MaterialTheme.colorScheme.surfaceVariant,
+                custom = true,
+                selected = selectedScheme >= schemes.size
+            ) { onSchemeChange(schemes.size) }
+        }
+
+        if (selectedScheme >= schemes.size) {
+            Spacer(Modifier.height(12.dp))
+            ColorStyleCard(
+                label = stringResource(R.string.iconColor),
+                style = customForeground,
+                onClick = { fgPickerOpen = true }
+            )
+            Spacer(Modifier.height(8.dp))
+            ColorStyleCard(
+                label = stringResource(R.string.backgroundColor),
+                style = customBackground,
+                onClick = { bgPickerOpen = true }
+            )
+            Text(
+                text = stringResource(R.string.materialYouGradientHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        } else if (selectedScheme >= 0) {
+            Text(
+                text = stringResource(R.string.materialYouColorsHint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 10.dp)
+            )
         }
     }
 
     if (fgPickerOpen) {
-        ColorDialog(
+        ColorStyleSheet(
+            title = stringResource(R.string.iconColor),
+            initialStyle = customForeground,
+            sampleBitmap = sampleBitmap,
+            renderPreview = renderForeground,
+            // Solid fill / monochrome / inverse recolour artwork; a Material You layer is a
+            // silhouette being filled, so there is nothing for them to act on.
+            showSingleColorEffects = false,
             onDismiss = { fgPickerOpen = false },
-            currentlySelected = customForeground,
-            onColorSelected = onCustomForegroundChange
+            onApply = {
+                onCustomForegroundChange(it)
+                fgPickerOpen = false
+            }
         )
     }
     if (bgPickerOpen) {
-        ColorDialog(
+        ColorStyleSheet(
+            title = stringResource(R.string.backgroundColor),
+            initialStyle = customBackground,
+            sampleBitmap = sampleBitmap,
+            renderPreview = renderBackground,
+            showSingleColorEffects = false,
             onDismiss = { bgPickerOpen = false },
-            currentlySelected = customBackground,
-            onColorSelected = onCustomBackgroundChange
+            onApply = {
+                onCustomBackgroundChange(it)
+                bgPickerOpen = false
+            }
         )
     }
 }
 
-/** A tappable colour row: label on the left, a circular swatch of [color] on the right. */
-@Composable
-private fun ColorRow(label: String, color: Color, onClick: () -> Unit) {
-    Surface(
-        onClick = onClick,
-        shape = InnerShape,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.weight(1f)
-            )
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(color)
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape)
-            )
-        }
-    }
-}
 
 /** A colour-scheme chip: the background tile with a foreground dot, or a palette glyph for Custom. */
 @Composable

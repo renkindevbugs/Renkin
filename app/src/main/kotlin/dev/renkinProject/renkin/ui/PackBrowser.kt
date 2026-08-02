@@ -55,6 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
@@ -138,7 +139,14 @@ fun PackIconsRow(
     // an icon (which sets primaryIconPack) re-keys every visible row and flashes the loader.
     val previewOptions = remember(options) { options.copy(primaryIconPack = "") }
 
-    LaunchedEffect(iconPack, sortOrder, query, previewOptions) {
+    LaunchedEffect(
+        iconPack,
+        sortOrder,
+        query,
+        previewOptions,
+        component,
+        ApplicationManager.displayedNightMode
+    ) {
         isLoading = true
         onLoadingChange(true)
         try {
@@ -243,7 +251,9 @@ fun PackDetailGrid(
     var iconPairs by remember { mutableStateOf<List<PackIconPreview>>(emptyList()) }
     var isLoading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(iconPack, sortOrder, query) {
+    // Options and the target component change what each tile renders, and the theme decides
+    // which values-night variant a pack resolves to — all of them must restart the load.
+    LaunchedEffect(iconPack, sortOrder, query, options, component, ApplicationManager.displayedNightMode) {
         isLoading = true
         onLoadingChange(true)
         try {

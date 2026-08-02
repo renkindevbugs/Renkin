@@ -386,11 +386,6 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
             return editor.applyViewportInset(left, top, scaleX, scaleY)
         }
 
-        fun ImageVectorDrawable.getBounds(): Rect {
-            val editor = VectorEditor(this)
-            return editor.getBounds()
-        }
-
         fun ImageVectorDrawable.center(): ImageVectorDrawable {
             val editor = VectorEditor(this)
             return editor.center()
@@ -404,6 +399,17 @@ class VectorEditor internal constructor(private val mutableVector: ImageVectorDr
 
                 if (child is MutableVectorPath) {
                     child.strokeLineWidth = stroke
+                }
+            }
+        }
+
+        fun MutableVectorGroup.scaleStrokePaths(scale: Float) {
+            for (child in this.children) {
+                when (child) {
+                    is MutableVectorGroup -> child.scaleStrokePaths(scale)
+                    is MutableVectorPath -> {
+                        if (child.strokeLineWidth > 0f) child.strokeLineWidth *= scale
+                    }
                 }
             }
         }

@@ -33,7 +33,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.ImageSearch
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -58,6 +57,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -88,44 +88,51 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.MutablePreferences
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.GlobalOptionsViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.GlobalApplyCustomKey
 import dev.renkinProject.renkin.data.GlobalApplyExistingKey
 import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
-import dev.renkinProject.renkin.data.GlobalColorizeColorKey
 import dev.renkinProject.renkin.data.GlobalColorizeFlatKey
 import dev.renkinProject.renkin.data.GlobalColorizeInverseKey
 import dev.renkinProject.renkin.data.GlobalColorizeKey
 import dev.renkinProject.renkin.data.GlobalColorizeMonochromeKey
+import dev.renkinProject.renkin.data.GlobalColorizerStyleKeys
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
 import dev.renkinProject.renkin.data.GlobalIncludeEmptyKey
-import dev.renkinProject.renkin.data.GlobalShapeColorKey
 import dev.renkinProject.renkin.data.GlobalShapeCropKey
 import dev.renkinProject.renkin.data.GlobalShapeKey
 import dev.renkinProject.renkin.data.GlobalShapeScaleKey
+import dev.renkinProject.renkin.data.GlobalShapeStyleKeys
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
 import dev.renkinProject.renkin.data.OutlineAddKey
-import dev.renkinProject.renkin.data.OutlineColorKey
 import dev.renkinProject.renkin.data.OutlineWidthKey
+import dev.renkinProject.renkin.data.OutlineStyleKeys
+import dev.renkinProject.renkin.data.ColorStyleKeys
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
 import dev.renkinProject.renkin.data.getBooleanValue
-import dev.renkinProject.renkin.data.getColorValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.normalizeGlobalScalePercent
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
+import dev.renkinProject.renkin.data.setColorStyle
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
-import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
-import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.ColorizerMode
+import android.graphics.Bitmap
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
+import dev.renkinProject.renkin.icon.creator.colorStyle
+import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
+import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.CardShape
@@ -142,6 +149,23 @@ import kotlinx.coroutines.withContext
  * The Global options screen's staged modifier values. Nothing here touches DataStore until
  * Save — the grid below previews these values live, and Back discards them (after a prompt).
  */
+internal data class GlobalModifierSnapshot(
+    val shape: IconShape,
+    val shapeCrop: Boolean,
+    val shapeScalePercent: Int,
+    val shapeStyle: ColorizerStyle,
+    val iconScalePercent: Int,
+    val outlineAdd: Boolean,
+    val outlineWidth: Int,
+    val outlineStyle: ColorizerStyle,
+    val colorize: Boolean,
+    val colorizerStyle: ColorizerStyle,
+    val applyGenerated: Boolean,
+    val applyExisting: Boolean,
+    val applyCustom: Boolean,
+    val includeEmpty: Boolean
+)
+
 @Stable
 internal class GlobalModifierState {
     var initialized by mutableStateOf(false)
@@ -149,16 +173,15 @@ internal class GlobalModifierState {
     var shape by mutableStateOf(IconShape.NONE)
     var shapeCrop by mutableStateOf(true)
     var shapeScale by mutableFloatStateOf(1f)
-    var shapeColor by mutableStateOf(Color.White)
+    // Whole styles stay together: saver, preferences and controls cannot update only half a
+    // gradient and leave its colours, positions or angle describing different states.
+    var shapeStyle by mutableStateOf(ColorizerStyle(firstColor = Color.White.toArgb()))
     var iconScale by mutableFloatStateOf(1f)
     var outlineAdd by mutableStateOf(false)
     var outlineWidth by mutableFloatStateOf(OUTLINE_WIDTH_DEFAULT.toFloat())
-    var outlineColor by mutableStateOf(Color.Black)
+    var outlineStyle by mutableStateOf(ColorizerStyle(firstColor = Color.Black.toArgb()))
     var colorize by mutableStateOf(false)
-    var colorizeColor by mutableStateOf(Color.White)
-    var colorizeFlat by mutableStateOf(false)
-    var colorizeMonochrome by mutableStateOf(false)
-    var colorizeInverse by mutableStateOf(false)
+    var colorizerStyle by mutableStateOf(ColorizerStyle(firstColor = Color.White.toArgb()))
     // Which icon categories the modifiers apply to (the toggle-button row).
     var applyGenerated by mutableStateOf(true)
     var applyExisting by mutableStateOf(false)
@@ -175,17 +198,19 @@ internal class GlobalModifierState {
         ) { IconShape.NONE }
         shapeCrop = preferences.getBooleanValue(GlobalShapeCropKey, true)
         shapeScale = normalizeGlobalScalePercent(preferences.getIntValue(GlobalShapeScaleKey, 100)) / 100f
-        shapeColor = preferences.getColorValue(GlobalShapeColorKey, Color.White)
+        shapeStyle = preferences.colorStyle(GlobalShapeStyleKeys, Color.White)
         iconScale = normalizeGlobalScalePercent(preferences.getIntValue(GlobalIconScaleKey, 100)) / 100f
         outlineAdd = preferences.getBooleanValue(OutlineAddKey)
         outlineWidth = normalizeOutlineWidth(
             preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)).toFloat()
-        outlineColor = preferences.getColorValue(OutlineColorKey, Color.Black)
+        outlineStyle = preferences.colorStyle(OutlineStyleKeys, Color.Black)
         colorize = preferences.getBooleanValue(GlobalColorizeKey)
-        colorizeColor = preferences.getColorValue(GlobalColorizeColorKey, Color.White)
-        colorizeMonochrome = preferences.getBooleanValue(GlobalColorizeMonochromeKey)
-        colorizeFlat = preferences.getBooleanValue(GlobalColorizeFlatKey) && !colorizeMonochrome
-        colorizeInverse = preferences.getBooleanValue(GlobalColorizeInverseKey)
+        val monochrome = preferences.getBooleanValue(GlobalColorizeMonochromeKey)
+        colorizerStyle = preferences.colorStyle(GlobalColorizerStyleKeys, Color.White).copy(
+            flat = preferences.getBooleanValue(GlobalColorizeFlatKey) && !monochrome,
+            monochrome = monochrome,
+            inverse = preferences.getBooleanValue(GlobalColorizeInverseKey)
+        )
         applyGenerated = preferences.getBooleanValue(GlobalApplyGeneratedKey, true)
         applyExisting = preferences.getBooleanValue(GlobalApplyExistingKey)
         applyCustom = preferences.getBooleanValue(GlobalApplyCustomKey)
@@ -193,45 +218,140 @@ internal class GlobalModifierState {
         initialized = true
     }
 
-    /** All values as one comparable list — the screen's dirty check against its baseline. */
-    fun snapshot(): String = listOf(
-        shape.ordinal, shapeCrop, (shapeScale * 100).roundToInt(), shapeColor.toArgb(),
-        (iconScale * 100).roundToInt(), outlineAdd, outlineWidth.roundToInt(),
-        outlineColor.toArgb(), colorize, colorizeColor.toArgb(), colorizeFlat,
-        applyGenerated, applyExisting, applyCustom, includeEmpty,
-        colorizeMonochrome, colorizeInverse
-    ).joinToString("|")
+    fun snapshot() = GlobalModifierSnapshot(
+        shape = shape,
+        shapeCrop = shapeCrop,
+        shapeScalePercent = (shapeScale * 100).roundToInt(),
+        shapeStyle = shapeStyle.roundedForSnapshot(),
+        iconScalePercent = (iconScale * 100).roundToInt(),
+        outlineAdd = outlineAdd,
+        outlineWidth = outlineWidth.roundToInt(),
+        outlineStyle = outlineStyle.roundedForSnapshot(),
+        colorize = colorize,
+        colorizerStyle = colorizerStyle.roundedForSnapshot(),
+        applyGenerated = applyGenerated,
+        applyExisting = applyExisting,
+        applyCustom = applyCustom,
+        includeEmpty = includeEmpty
+    )
 
-    private fun restore(snapshot: String) {
+    private fun restore(snapshot: GlobalModifierSnapshot) {
+        shape = snapshot.shape
+        shapeCrop = snapshot.shapeCrop
+        shapeScale = snapshot.shapeScalePercent / 100f
+        shapeStyle = snapshot.shapeStyle
+        iconScale = snapshot.iconScalePercent / 100f
+        outlineAdd = snapshot.outlineAdd
+        outlineWidth = snapshot.outlineWidth.toFloat()
+        outlineStyle = snapshot.outlineStyle
+        colorize = snapshot.colorize
+        colorizerStyle = snapshot.colorizerStyle
+        applyGenerated = snapshot.applyGenerated
+        applyExisting = snapshot.applyExisting
+        applyCustom = snapshot.applyCustom
+        includeEmpty = snapshot.includeEmpty
+        initialized = true
+    }
+
+    private fun restoreLegacy(snapshot: String) {
         val values = snapshot.split('|')
-        if (values.size != 17) return
+        if (values.size !in intArrayOf(17, 20, 21, 25, 27, 32)) return
         runCatching {
             shape = IconShape.entries[values[0].toInt()]
             shapeCrop = values[1].toBooleanStrict()
             shapeScale = values[2].toInt() / 100f
-            shapeColor = Color(values[3].toInt())
+            shapeStyle = shapeStyle.copy(firstColor = values[3].toInt())
             iconScale = values[4].toInt() / 100f
             outlineAdd = values[5].toBooleanStrict()
             outlineWidth = values[6].toInt().toFloat()
-            outlineColor = Color(values[7].toInt())
+            outlineStyle = outlineStyle.copy(firstColor = values[7].toInt())
             colorize = values[8].toBooleanStrict()
-            colorizeColor = Color(values[9].toInt())
-            colorizeFlat = values[10].toBooleanStrict()
+            colorizerStyle = colorizerStyle.copy(
+                firstColor = values[9].toInt(),
+                flat = values[10].toBooleanStrict(),
+                monochrome = values[15].toBooleanStrict(),
+                inverse = values[16].toBooleanStrict()
+            )
             applyGenerated = values[11].toBooleanStrict()
             applyExisting = values[12].toBooleanStrict()
             applyCustom = values[13].toBooleanStrict()
             includeEmpty = values[14].toBooleanStrict()
-            colorizeMonochrome = values[15].toBooleanStrict()
-            colorizeInverse = values[16].toBooleanStrict()
+            if (values.size >= 20) {
+                colorizerStyle = colorizerStyle.copy(
+                    mode = ColorizerMode.entries.getOrElse(values[17].toInt()) {
+                        ColorizerMode.SINGLE_COLOR
+                    },
+                    gradientStops = values[18].split(',').mapNotNull { it.toIntOrNull() }
+                        .ifEmpty { listOf(android.graphics.Color.BLACK) },
+                    gradientAngle = values[19].toInt().coerceIn(0, 360).toFloat()
+                )
+            }
+            if (values.size >= 21) {
+                colorizerStyle = colorizerStyle.copy(
+                    gradientType = GradientType.entries.getOrElse(values[20].toInt()) {
+                        GradientType.LINEAR
+                    }
+                )
+            }
+            if (values.size >= 25) {
+                outlineStyle = outlineStyle.copy(
+                    mode = ColorizerMode.entries.getOrElse(values[21].toInt()) {
+                        ColorizerMode.SINGLE_COLOR
+                    },
+                    gradientType = GradientType.entries.getOrElse(values[22].toInt()) {
+                        GradientType.LINEAR
+                    },
+                    gradientStops = values[23].split(',').mapNotNull { it.toIntOrNull() }
+                        .ifEmpty { listOf(android.graphics.Color.BLACK) },
+                    gradientAngle = values[24].toInt().coerceIn(0, 360).toFloat()
+                )
+            }
+            if (values.size >= 27) {
+                colorizerStyle = colorizerStyle.copy(
+                    gradientPositions = values[25].split(',').mapNotNull { it.toFloatOrNull() }
+                )
+                outlineStyle = outlineStyle.copy(
+                    gradientPositions = values[26].split(',').mapNotNull { it.toFloatOrNull() }
+                )
+            }
+            if (values.size >= 32) {
+                shapeStyle = shapeStyle.copy(
+                    mode = ColorizerMode.entries.getOrElse(values[27].toInt()) {
+                        ColorizerMode.SINGLE_COLOR
+                    },
+                    gradientType = GradientType.entries.getOrElse(values[28].toInt()) {
+                        GradientType.LINEAR
+                    },
+                    gradientStops = values[29].split(',').mapNotNull { it.toIntOrNull() }
+                        .ifEmpty { listOf(android.graphics.Color.BLACK) },
+                    gradientPositions = values[30].split(',').mapNotNull { it.toFloatOrNull() },
+                    gradientAngle = values[31].toInt().coerceIn(0, 360).toFloat()
+                )
+            }
             initialized = true
         }
     }
 
     companion object {
-        val Saver = Saver<GlobalModifierState, String>(
-            save = { it.snapshot() },
-            restore = { snapshot -> GlobalModifierState().apply { restore(snapshot) } }
+        val Saver = Saver<GlobalModifierState, Any>(
+            save = { it.snapshot().toSaveableList() },
+            restore = { saved -> restoreSnapshot(saved)?.let { snapshot ->
+                GlobalModifierState().apply { restore(snapshot) }
+            } }
         )
+
+        val BaselineSaver = Saver<androidx.compose.runtime.MutableState<GlobalModifierSnapshot?>, Any>(
+            save = { it.value?.toSaveableList() },
+            restore = { saved -> mutableStateOf(restoreSnapshot(saved)) }
+        )
+
+        private fun restoreSnapshot(saved: Any): GlobalModifierSnapshot? = when (saved) {
+            is List<*> -> saved.toGlobalModifierSnapshot()
+            is String -> GlobalModifierState().apply { restoreLegacy(saved) }
+                .takeIf { it.initialized }
+                ?.snapshot()
+            else -> null
+        }
     }
 
     /** Writes staged values into [mutable] for the preview and ViewModel commit snapshot. */
@@ -239,16 +359,16 @@ internal class GlobalModifierState {
         mutable[GlobalShapeKey] = shape.ordinal
         mutable[GlobalShapeCropKey] = shapeCrop
         mutable[GlobalShapeScaleKey] = (shapeScale * 100).roundToInt()
-        mutable[GlobalShapeColorKey] = shapeColor.toHexString()
+        mutable.writeColorStyle(GlobalShapeStyleKeys, shapeStyle)
         mutable[GlobalIconScaleKey] = (iconScale * 100).roundToInt()
         mutable[OutlineAddKey] = outlineAdd
         mutable[OutlineWidthKey] = outlineWidth.roundToInt()
-        mutable[OutlineColorKey] = outlineColor.toHexString()
+        mutable.writeColorStyle(OutlineStyleKeys, outlineStyle)
         mutable[GlobalColorizeKey] = colorize
-        mutable[GlobalColorizeColorKey] = colorizeColor.toHexString()
-        mutable[GlobalColorizeFlatKey] = colorizeFlat
-        mutable[GlobalColorizeMonochromeKey] = colorizeMonochrome
-        mutable[GlobalColorizeInverseKey] = colorizeInverse
+        mutable.writeColorStyle(GlobalColorizerStyleKeys, colorizerStyle)
+        mutable[GlobalColorizeFlatKey] = colorizerStyle.flat
+        mutable[GlobalColorizeMonochromeKey] = colorizerStyle.monochrome
+        mutable[GlobalColorizeInverseKey] = colorizerStyle.inverse
         mutable[GlobalApplyGeneratedKey] = applyGenerated
         mutable[GlobalApplyExistingKey] = applyExisting
         mutable[GlobalApplyCustomKey] = applyCustom
@@ -272,24 +392,129 @@ internal class GlobalModifierState {
         primaryImageEdit = if (colorize) ImageEdit.COLORIZE else ImageEdit.NONE,
         primaryTextType = TEXT_TYPE_DEFAULT,
         primaryIconPack = "",
-        color = colorizeColor.toArgb(),
-        bgColor = if (shape != IconShape.NONE && !shapeCrop) shapeColor.toArgb()
+        color = colorizerStyle.firstColor,
+        bgColor = if (shape != IconShape.NONE && !shapeCrop) shapeStyle.firstColor
             else android.graphics.Color.TRANSPARENT,
         vector = false,
         materialYou = false,
         themed = false,
         override = true,
-        colorizeFlat = colorizeFlat,
-        colorizeMonochrome = colorizeMonochrome,
-        colorizeInverse = colorizeInverse,
+        colorizeFlat = colorizerStyle.flat,
+        colorizeMonochrome = colorizerStyle.monochrome,
+        colorizeInverse = colorizerStyle.inverse,
+        colorizerMode = colorizerStyle.mode,
+        colorizerGradientType = colorizerStyle.gradientType,
+        colorizerGradientColors = colorizerStyle.gradientStops,
+        colorizerGradientPositions = colorizerStyle.gradientPositions,
+        colorizerGradientAngle = colorizerStyle.gradientAngle,
+        // Only the plate shows the shape colour, so the style rides along with it.
+        backgroundStyle = if (shape != IconShape.NONE && !shapeCrop) {
+            shapeStyle
+        } else null,
         iconScale = iconScale,
         iconShape = shape,
         iconShapeCrop = shapeCrop,
         iconShapeScale = shapeScale,
         outlineMode = if (outlineAdd) OutlineMode.ADD else OutlineMode.NONE,
         outlineWidth = outlineWidth,
-        outlineColor = outlineColor.toArgb()
+        outlineColor = outlineStyle.firstColor,
+        outlineStyle = outlineStyle
     )
+}
+
+private fun ColorizerStyle.roundedForSnapshot(): ColorizerStyle =
+    copy(gradientAngle = gradientAngle.roundToInt().toFloat())
+
+private fun MutablePreferences.writeColorStyle(keys: ColorStyleKeys, style: ColorizerStyle) {
+    setColorStyle(
+        keys = keys,
+        mode = style.mode.ordinal,
+        gradientType = style.gradientType.ordinal,
+        gradientAngle = style.gradientAngle.roundToInt(),
+        firstColor = Color(style.firstColor),
+        gradientStops = style.gradientStops,
+        gradientPositions = style.gradientPositions
+    )
+}
+
+private fun GlobalModifierSnapshot.toSaveableList(): ArrayList<Any> = arrayListOf(
+    "shape", shape.ordinal,
+    "shapeCrop", shapeCrop,
+    "shapeScalePercent", shapeScalePercent,
+    "shapeStyle", encodeColorizerStyle(shapeStyle),
+    "iconScalePercent", iconScalePercent,
+    "outlineAdd", outlineAdd,
+    "outlineWidth", outlineWidth,
+    "outlineStyle", encodeColorizerStyle(outlineStyle),
+    "colorize", colorize,
+    "colorizerStyle", encodeColorizerStyle(colorizerStyle),
+    "applyGenerated", applyGenerated,
+    "applyExisting", applyExisting,
+    "applyCustom", applyCustom,
+    "includeEmpty", includeEmpty
+)
+
+private fun List<*>.toGlobalModifierSnapshot(): GlobalModifierSnapshot? {
+    if (firstOrNull() !is String) return null
+    val values = buildMap<String, Any?> {
+        var index = 0
+        while (index + 1 < this@toGlobalModifierSnapshot.size) {
+            val key = this@toGlobalModifierSnapshot[index] as? String ?: break
+            put(key, this@toGlobalModifierSnapshot[index + 1])
+            index += 2
+        }
+    }
+    val shapeStyle = (values["shapeStyle"] as? String)?.let(::decodeColorizerStyle) ?: return null
+    val outlineStyle = (values["outlineStyle"] as? String)?.let(::decodeColorizerStyle) ?: return null
+    val colorizerStyle = (values["colorizerStyle"] as? String)?.let(::decodeColorizerStyle)
+        ?: return null
+    return GlobalModifierSnapshot(
+        shape = IconShape.entries.getOrElse(values["shape"] as? Int ?: 0) { IconShape.NONE },
+        shapeCrop = values["shapeCrop"] as? Boolean ?: true,
+        shapeScalePercent = values["shapeScalePercent"] as? Int ?: 100,
+        shapeStyle = shapeStyle,
+        iconScalePercent = values["iconScalePercent"] as? Int ?: 100,
+        outlineAdd = values["outlineAdd"] as? Boolean ?: false,
+        outlineWidth = values["outlineWidth"] as? Int ?: OUTLINE_WIDTH_DEFAULT,
+        outlineStyle = outlineStyle,
+        colorize = values["colorize"] as? Boolean ?: false,
+        colorizerStyle = colorizerStyle,
+        applyGenerated = values["applyGenerated"] as? Boolean ?: true,
+        applyExisting = values["applyExisting"] as? Boolean ?: false,
+        applyCustom = values["applyCustom"] as? Boolean ?: false,
+        includeEmpty = values["includeEmpty"] as? Boolean ?: false
+    )
+}
+
+internal data class GlobalIconCategories(
+    val generated: List<PackageInfoStruct>,
+    val custom: List<PackageInfoStruct>,
+    val existing: List<PackageInfoStruct>,
+    val iconless: List<PackageInfoStruct>
+)
+
+internal fun categorizeGlobalIcons(
+    applications: List<PackageInfoStruct>,
+    lockedKeys: Set<String>
+): GlobalIconCategories {
+    val generated = ArrayList<PackageInfoStruct>()
+    val custom = ArrayList<PackageInfoStruct>()
+    val existing = ArrayList<PackageInfoStruct>()
+    val iconless = ArrayList<PackageInfoStruct>()
+
+    for (app in applications) {
+        if (app.createdIcon == null) {
+            if (app.key !in lockedKeys) iconless += app
+        } else if (app.isCustom) {
+            custom += app
+        } else if (app.isRefreshMade) {
+            generated += app
+        } else {
+            existing += app
+        }
+    }
+
+    return GlobalIconCategories(generated, custom, existing, iconless)
 }
 
 /**
@@ -316,7 +541,9 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
 
     val state = rememberSaveable(saver = GlobalModifierState.Saver) { GlobalModifierState() }
     // The baseline snapshot the dirty check compares against; null until seeding completes.
-    var baseline by rememberSaveable { mutableStateOf<String?>(null) }
+    var baseline by rememberSaveable(saver = GlobalModifierState.BaselineSaver) {
+        mutableStateOf<GlobalModifierSnapshot?>(null)
+    }
     LaunchedEffect(Unit) {
         if (!state.initialized) {
             state.seedFrom(prefs.data.first())
@@ -326,7 +553,9 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
 
     val applying = viewModel.globalApplyProgress != null
     val previewJobs by viewModel.previewJobs.collectAsState()
-    val dirty = baseline != null && baseline != state.snapshot()
+    val dirty by remember(state) {
+        derivedStateOf { baseline != null && baseline != state.snapshot() }
+    }
     var showExperimentalNotice by rememberSaveable { mutableStateOf(true) }
     var confirmDiscard by remember { mutableStateOf(false) }
     val close: () -> Unit = {
@@ -338,22 +567,33 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
 
     // Staged modifiers → the preview options. null = nothing to apply (tiles show the icon
     // as-is without spinning up a generation per tile).
-    val tileOptions = if (state.hasAnyEffect) state.toModifierOptions() else null
+    val tileOptions by remember(state) {
+        derivedStateOf {
+            if (state.hasAnyEffect) state.toModifierOptions() else null
+        }
+    }
     // Empty slots preview a full generation with the staged globals overlaid, so what's shown
     // matches what Save (and a later refresh) actually produces.
-    val emptySourceOptions = if (state.includeEmpty) {
-        GenerationOptions.fromPreferences(state.overlay(prefsValue), context, override = true)
-    } else null
+    val emptySourceOptions by remember(state, prefsValue, context) {
+        derivedStateOf {
+            if (state.includeEmpty) {
+                GenerationOptions.fromPreferences(state.overlay(prefsValue), context, override = true)
+            } else null
+        }
+    }
     LaunchedEffect(emptySourceOptions, tileOptions) {
         viewModel.updatePreviewConfiguration(emptySourceOptions, tileOptions)
     }
 
-    val apps = viewModel.applicationList
-    val locked = viewModel.lockedIconKeys
-    val generated = apps.filter { it.createdIcon != null && !it.isCustom && it.isRefreshMade }
-    val custom = apps.filter { it.createdIcon != null && it.isCustom }
-    val existing = apps.filter { it.createdIcon != null && !it.isCustom && !it.isRefreshMade }
-    val iconless = apps.filter { it.createdIcon == null && it.key !in locked }
+    val categories by remember(viewModel) {
+        derivedStateOf {
+            categorizeGlobalIcons(viewModel.applicationList, viewModel.lockedIconKeys)
+        }
+    }
+    val generated = categories.generated
+    val custom = categories.custom
+    val existing = categories.existing
+    val iconless = categories.iconless
 
     var editApp by remember { mutableStateOf<PackageInfoStruct?>(null) }
 
@@ -681,9 +921,9 @@ private fun AdvancedOptionsPanel(iconPacks: List<IconPack>) {
  */
 @Composable
 private fun GlobalModifierControls(state: GlobalModifierState) {
+    var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
     var shapeColorPickerOpen by remember { mutableStateOf(false) }
-    var outlineColorPickerOpen by remember { mutableStateOf(false) }
-    var colorizeColorPickerOpen by remember { mutableStateOf(false) }
+    var outlineSheetOpen by remember { mutableStateOf(false) }
 
     Surface(shape = CardShape, color = MaterialTheme.colorScheme.surfaceContainer) {
         Column(
@@ -737,8 +977,26 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
                         centered = true
                     )
                     if (!state.shapeCrop) {
-                        ColorRow(stringResource(R.string.shapeColor), state.shapeColor) {
-                            shapeColorPickerOpen = true
+                        val shapeStyle = state.shapeStyle
+                        ColorStyleCard(
+                            label = stringResource(R.string.shapeColor),
+                            style = shapeStyle,
+                            onClick = { shapeColorPickerOpen = true }
+                        )
+                        if (shapeColorPickerOpen) {
+                            ColorStyleSheet(
+                                title = stringResource(R.string.shapeColor),
+                                initialStyle = shapeStyle,
+                                sampleBitmap = null,
+                                // The plate is a fill, not artwork: there is nothing for solid /
+                                // monochrome / inverse to act on.
+                                showSingleColorEffects = false,
+                                onDismiss = { shapeColorPickerOpen = false },
+                                onApply = { style ->
+                                    state.shapeStyle = style
+                                    shapeColorPickerOpen = false
+                                }
+                            )
                         }
                     }
                 }
@@ -767,8 +1025,24 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
                         valueRange = 1f..16f,
                         valueLabel = "${state.outlineWidth.roundToInt()} px"
                     )
-                    ColorRow(stringResource(R.string.outlineColor), state.outlineColor) {
-                        outlineColorPickerOpen = true
+                    val outlineStyle = state.outlineStyle
+                    ColorStyleCard(
+                        label = stringResource(R.string.outlineColor),
+                        style = outlineStyle,
+                        onClick = { outlineSheetOpen = true }
+                    )
+                    if (outlineSheetOpen) {
+                        ColorStyleSheet(
+                            title = stringResource(R.string.outlineColor),
+                            initialStyle = outlineStyle,
+                            sampleBitmap = null,
+                            showSingleColorEffects = false,
+                            onDismiss = { outlineSheetOpen = false },
+                            onApply = { style ->
+                                state.outlineStyle = style
+                                outlineSheetOpen = false
+                            }
+                        )
                     }
                 }
             }
@@ -779,93 +1053,28 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
                 horizontalPadding = 4.dp
             ) { state.colorize = it }
             AnimatedVisibility(visible = state.colorize) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ColorRow(stringResource(R.string.iconColor), state.colorizeColor) {
-                        colorizeColorPickerOpen = true
-                    }
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(R.string.colorizeSolid),
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            Text(
-                                text = stringResource(R.string.colorizeSolidHint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                val colorizerStyle = state.colorizerStyle
+                ColorStyleCard(
+                    label = stringResource(R.string.colorize),
+                    style = colorizerStyle,
+                    onClick = { colorizeSheetOpen = true }
+                )
+                if (colorizeSheetOpen) {
+                    ColorStyleSheet(
+                        title = stringResource(R.string.colorize),
+                        initialStyle = colorizerStyle,
+                        sampleBitmap = null,
+                        onDismiss = { colorizeSheetOpen = false },
+                        onApply = { style ->
+                            state.colorizerStyle = style
+                            colorizeSheetOpen = false
                         }
-                        Switch(
-                            checked = state.colorizeFlat,
-                            onCheckedChange = {
-                                state.colorizeFlat = it
-                                if (it) state.colorizeMonochrome = false
-                            }
-                        )
-                    }
-                    ControlledSwitchRow(
-                        label = stringResource(R.string.colorizeMonochrome),
-                        checked = state.colorizeMonochrome,
-                        horizontalPadding = 4.dp,
-                        hint = stringResource(R.string.colorizeMonochromeHint)
-                    ) {
-                        state.colorizeMonochrome = it
-                        if (it) state.colorizeFlat = false
-                    }
-                    ControlledSwitchRow(
-                        label = stringResource(R.string.inverseColors),
-                        checked = state.colorizeInverse,
-                        horizontalPadding = 4.dp
-                    ) { state.colorizeInverse = it }
+                    )
                 }
             }
         }
     }
 
-    if (shapeColorPickerOpen) {
-        ColorDialog(
-            onDismiss = { shapeColorPickerOpen = false },
-            currentlySelected = state.shapeColor,
-            onColorSelected = { state.shapeColor = it }
-        )
-    }
-    if (outlineColorPickerOpen) {
-        ColorDialog(
-            onDismiss = { outlineColorPickerOpen = false },
-            currentlySelected = state.outlineColor,
-            onColorSelected = { state.outlineColor = it }
-        )
-    }
-    if (colorizeColorPickerOpen) {
-        ColorDialog(
-            onDismiss = { colorizeColorPickerOpen = false },
-            currentlySelected = state.colorizeColor,
-            onColorSelected = { state.colorizeColor = it }
-        )
-    }
-}
-
-/** A colour-picking row: label plus the current colour as a tappable swatch. */
-@Composable
-private fun ColorRow(label: String, color: Color, onClick: () -> Unit) {
-    OptionCard(
-        label = label,
-        onClick = onClick,
-        trailing = {
-            Surface(
-                shape = CircleShape,
-                color = color,
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                modifier = Modifier.size(28.dp)
-            ) {}
-        }
-    )
 }
 
 /** A switch row bound directly to caller state (unlike DefaultSwitchLayout's remembered copy). */
@@ -1270,6 +1479,9 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         app.baseIcon ?: app.createdIcon ?: heroBitmap?.let { BitmapIconDrawable(it, false) }
     }
 
+    val outlineEraseMask = remember(adjustments.eraseStrokes) {
+        if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
+    }
     val options = GenerationOptions(
         primarySource = Source.APPLICATION_ICON,
         primaryImageEdit = imageEdit,
@@ -1282,30 +1494,27 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         vector = useVector,
         materialYou = false,
         themed = false,
-        override = true,
-        edgeLowThreshold = adjustments.edgeThreshold,
-        edgeHighThreshold = adjustments.edgeThreshold * 3f,
-        edgeGaussianRadius = adjustments.edgeSmoothing,
-        edgeContrastNormalized = adjustments.edgeContrast,
-        iconScale = adjustments.iconScale,
-        bgRemovalTolerance = adjustments.bgRemovalTolerance,
-        iconOffsetX = adjustments.iconOffsetX,
-        iconOffsetY = adjustments.iconOffsetY,
-        colorizeFlat = adjustments.colorizeFlat,
-        colorizeMonochrome = adjustments.colorizeMonochrome,
-        colorizeInverse = adjustments.colorizeInverse,
-        iconShape = adjustments.iconShape,
-        iconShapeCrop = adjustments.shapeCrop,
-        iconShapeScale = adjustments.shapeScale,
-        outlineMode = adjustments.outlineMode,
-        outlineWidth = adjustments.outlineWidth,
-        outlineColor = adjustments.outlineColor.toArgb(),
-        outlineEraseMask = remember(adjustments.eraseStrokes) {
-            if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
+        override = true
+    ).withModifierAdjustments(adjustments, imageEdit, outlineEraseMask)
+
+    // The same pipeline the tile preview uses, so the colour sheets and segment pickers here
+    // behave exactly like the edit dialog's.
+    val renderWith: suspend (GenerationOptions) -> Bitmap? = { previewOptions ->
+        base?.let {
+            withContext(Dispatchers.Default) {
+                runCatching { viewModel.applyModifier(it, previewOptions).toBitmap() }.getOrNull()
+            }
         }
+    }
+    val modifierPreviews = rememberModifierPreviews(
+        options = options,
+        adjustments = adjustments,
+        sourceKey = base,
+        render = renderWith
     )
 
     var preview by remember { mutableStateOf(base) }
+    var enlarged by remember { mutableStateOf(false) }
     var generating by remember { mutableStateOf(false) }
     // Skip the very first pass: an untouched run through applyModifier would needlessly
     // rasterise a stored vector icon, and Apply must stay disabled until an actual edit.
@@ -1406,11 +1615,18 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 20.dp)
                     )
-                    Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+                    // Same affordance as the edit dialog's New slot: tap to judge the result
+                    // at a size that actually shows the detail a launcher will.
+                    Box(
+                        modifier = Modifier
+                            .size(56.dp)
+                            .clickable(enabled = preview != null) { enlarged = true },
+                        contentAlignment = Alignment.Center
+                    ) {
                         preview?.let {
                             Image(
                                 painter = it.getPainter(),
-                                contentDescription = null,
+                                contentDescription = stringResource(R.string.iconNew),
                                 modifier = Modifier
                                     .fillMaxSize()
                                     .clip(IconTileShape)
@@ -1421,6 +1637,7 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                         }
                     }
                 }
+                preview?.takeIf { enlarged }?.let { EnlargedIconDialog(it) { enlarged = false } }
                 HorizontalDivider()
 
                 ModifierTab(
@@ -1430,9 +1647,10 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                     useVector = useVector,
                     useMaterialYou = false,
                     adjustments = adjustments,
-                    centerPreview = remember(preview) { preview?.toBitmap() },
+                    centerPreview = remember(preview) { preview?.toModifierBitmap() },
                     previewGenerating = generating,
                     sampleBitmap = heroBitmap,
+                    previews = modifierPreviews,
                     onImageEditChange = { imageEdit = it },
                     onColorChange = { iconColor = it },
                     onVectorChange = { useVector = it },
@@ -1441,7 +1659,9 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                         val icon = preview
                         if (icon != null) {
                             scope.launch {
-                                val bitmap = withContext(Dispatchers.Default) { icon.toBitmap() }
+                                val bitmap = withContext(Dispatchers.Default) {
+                                    icon.toModifierBitmap()
+                                }
                                 val opened = if (toolbox) openInImageToolbox(context, bitmap)
                                     else editInAnotherApp(context, bitmap)
                                 if (!opened) toaster.show(externalEditorError)

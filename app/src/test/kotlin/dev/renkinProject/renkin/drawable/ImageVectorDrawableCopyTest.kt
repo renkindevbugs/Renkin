@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.vector.VectorGroup
 import androidx.compose.ui.graphics.vector.VectorPath
 import androidx.compose.ui.graphics.vector.toPath
 import androidx.compose.ui.unit.dp
+import dev.renkinProject.renkin.vector.VectorEditor.Companion.scaleStrokePaths
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -85,5 +86,31 @@ class ImageVectorDrawableCopyTest {
         assertEquals(2f, bounds.left, 0.001f)
         assertEquals(6f, bounds.right, 0.001f)
         assertEquals(2f, path.strokeLineWidth, 0.001f)
+    }
+
+    @Test
+    fun scaleStrokePaths_scalesNestedStrokesWithoutTurningFillsIntoStrokes() {
+        val builder = ImageVector.Builder("stroke-scale", 24.dp, 24.dp, 24f, 24f)
+        builder.addGroup()
+        builder.addPath(
+            pathData = PathData { moveTo(2f, 2f); lineTo(22f, 22f) },
+            stroke = SolidColor(Color.White),
+            strokeLineWidth = 12f
+        )
+        builder.addPath(
+            pathData = PathData { moveTo(4f, 4f); lineTo(20f, 20f) },
+            fill = SolidColor(Color.Red)
+        )
+        builder.clearGroup()
+        val drawable = ImageVectorDrawable(builder.build())
+
+        drawable.root.scaleStrokePaths(0.5f)
+
+        val group = drawable.toImageVector().root.first() as VectorGroup
+        val stroked = group.first() as VectorPath
+        val filled = group.drop(1).first() as VectorPath
+        assertEquals(6f, stroked.strokeLineWidth, 0.001f)
+        assertEquals(0f, filled.strokeLineWidth, 0.001f)
+        assertEquals(SolidColor(Color.Red), filled.fill)
     }
 }

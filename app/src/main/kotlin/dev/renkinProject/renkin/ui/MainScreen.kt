@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -13,14 +14,15 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.background
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
@@ -50,6 +52,10 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeFlexibleTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -65,7 +71,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -77,12 +82,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.ui.theme.IconShape
@@ -91,6 +98,7 @@ import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.data.AppFilterNoIconKey
+import dev.renkinProject.renkin.data.AppSortOrder
 import dev.renkinProject.renkin.data.AppSortOrderKey
 import dev.renkinProject.renkin.data.getBackgroundColor
 import dev.renkinProject.renkin.data.ExportThemedKey
@@ -99,16 +107,17 @@ import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesValue
-import dev.renkinProject.renkin.data.setBooleanValue
-import dev.renkinProject.renkin.data.setEnumValue
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.GlobalOptionsActivity
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.WatchViewModel
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.launch
 
-enum class AppSortOrder { NAME, INSTALL_DATE }
+/**
+ * The three problem groups the app list can be narrowed to. Multiple groups may be selected;
+ * the list then shows their union. A locked app is never also "missing" (see sortedFilteredApps).
+ */
+enum class AppProblemFilter { MISSING, FALLBACK, LOCKED }
 
 /**
  * Shared app sort/filter overflow: a sort icon button opening a menu with the two sort orders
@@ -154,19 +163,31 @@ fun AppSortFilterMenu(
             CheckableDropdownItem(
                 text = stringResource(R.string.filterWithoutIcon),
                 checked = filterNoIcon
-            ) { onFilterChange(true); onLockedFilterChange(false); showSortMenu = false }
+            ) { onFilterChange(!filterNoIcon); showSortMenu = false }
             CheckableDropdownItem(
                 text = stringResource(R.string.filterFallback),
                 checked = filterFallback
-            ) { onFallbackFilterChange(true); onLockedFilterChange(false); showSortMenu = false }
+            ) { onFallbackFilterChange(!filterFallback); showSortMenu = false }
             if (showLockedFilter) {
                 CheckableDropdownItem(
                     text = stringResource(R.string.filterMissingPack),
                     checked = filterLocked
-                ) { onLockedFilterChange(true); showSortMenu = false }
+                ) { onLockedFilterChange(!filterLocked); showSortMenu = false }
             }
         }
     }
+}
+
+/**
+ * How many app columns the home list shows. One on a phone; wider screens fill the space
+ * instead of stretching a single column of rows across a tablet — the same 600 dp breakpoint
+ * every other screen in the app splits at.
+ */
+internal fun homeListColumns(screenWidthDp: Int): Int = when {
+    screenWidthDp >= 1200 -> 4
+    screenWidthDp >= 900 -> 3
+    screenWidthDp >= WIDE_LAYOUT_DP -> 2
+    else -> 1
 }
 
 /**
@@ -174,7 +195,7 @@ fun AppSortFilterMenu(
  * build FAB on scroll-up and collapse it to an icon on scroll-down.
  */
 @Composable
-private fun LazyListState.isScrollingUp(): Boolean {
+private fun LazyGridState.isScrollingUp(): Boolean {
     var previousIndex by remember(this) { mutableStateOf(firstVisibleItemIndex) }
     var previousScrollOffset by remember(this) { mutableStateOf(firstVisibleItemScrollOffset) }
     return remember(this) {
@@ -196,7 +217,7 @@ private fun LazyListState.isScrollingUp(): Boolean {
 fun MainColumn(iconPacks: List<IconPack>) {
     var packageFilter by remember { mutableStateOf("") }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val listState = rememberLazyListState()
+    val listState = rememberLazyGridState()
 
     // Scrolling the app list drops the search field's focus (and so dismisses the keyboard),
     // instead of leaving the cursor blinking over the list.
@@ -206,19 +227,48 @@ fun MainColumn(iconPacks: List<IconPack>) {
     }
 
     val prefs = getPreferences()
-    val scope = rememberCoroutineScope()
+    val viewModel: MainViewModel = hiltViewModel()
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
-    val filterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
+    val storedFilterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
+    // Mirror the persisted filter locally so switching the hero buttons updates the list in
+    // the same frame instead of briefly showing every app while the DataStore write completes.
+    var filterNoIcon by rememberSaveable { mutableStateOf(storedFilterNoIcon) }
+    LaunchedEffect(storedFilterNoIcon) { filterNoIcon = storedFilterNoIcon }
     // Transient (not a pref): fallback flags only exist after a refresh, so the filter resets too.
     var filterFallback by remember { mutableStateOf(false) }
     // Transient too: locked icons are a temporary condition (install the pack and it's gone).
     var filterLocked by remember { mutableStateOf(false) }
 
+    val activeProblemFilters = buildSet {
+        if (filterNoIcon) add(AppProblemFilter.MISSING)
+        if (filterFallback) add(AppProblemFilter.FALLBACK)
+        if (filterLocked) add(AppProblemFilter.LOCKED)
+    }
+    // One transition is shared by the overflow menu and hero button group. Each problem filter
+    // remains independent; only the Missing choice is persisted because the others are transient.
+    val setProblemFilter: (AppProblemFilter, Boolean) -> Unit = { filter, enabled ->
+        when (filter) {
+            AppProblemFilter.MISSING -> {
+                filterNoIcon = enabled
+                viewModel.setMissingIconFilter(enabled)
+            }
+            AppProblemFilter.FALLBACK -> filterFallback = enabled
+            AppProblemFilter.LOCKED -> filterLocked = enabled
+        }
+    }
+    val toggleProblemFilter: (AppProblemFilter) -> Unit = { filter ->
+        setProblemFilter(filter, filter !in activeProblemFilters)
+    }
+    val clearProblemFilters: () -> Unit = {
+        setProblemFilter(AppProblemFilter.MISSING, false)
+        setProblemFilter(AppProblemFilter.FALLBACK, false)
+        setProblemFilter(AppProblemFilter.LOCKED, false)
+    }
+
     // Require a second back press to leave. Registered here (before the search bar),
     // so the search bar's clear-on-back handler takes priority while it has text.
     val context = LocalContext.current
     val activity = getCurrentMainActivity()
-    val viewModel: MainViewModel = hiltViewModel()
     val isInRefresh = viewModel.isRefreshing
 
     // Forward one-shot toast events from the ViewModel to the shared Toaster. A single
@@ -227,6 +277,24 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val toaster = LocalToaster.current
     LaunchedEffect(Unit) {
         viewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
+    }
+
+    // Undoable changes get a snackbar instead of a toast: a toast cannot be acted on, and the
+    // whole point is the action. Only the newest offer is on screen, matching the single step
+    // the provider keeps.
+    val snackbarHostState = remember { SnackbarHostState() }
+    val undoLabel = stringResource(R.string.undoAction)
+    LaunchedEffect(Unit) {
+        viewModel.undoEvents.collect { prompt ->
+            snackbarHostState.currentSnackbarData?.dismiss()
+            val result = snackbarHostState.showSnackbar(
+                message = context.getString(prompt.messageRes, prompt.count),
+                actionLabel = undoLabel,
+                withDismissAction = true,
+                duration = SnackbarDuration.Long
+            )
+            if (result == SnackbarResult.ActionPerformed) viewModel.undoLastIconChange()
+        }
     }
 
     // An external icon pack was installed while the app was open → offer to reload so it
@@ -330,6 +398,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     Scaffold(
         modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = { TitleBar(scrollBehavior) },
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         floatingActionButton = { BuildPackFab(isInRefresh, expanded = listState.isScrollingUp()) }
     ) { innerPadding ->
         Column(Modifier.padding(innerPadding)) {
@@ -340,35 +409,17 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 filterFallback = filterFallback,
                 filterLocked = filterLocked,
                 showLockedFilter = viewModel.lockedIconKeys.isNotEmpty() || filterLocked,
-                onSortChange = { scope.launch { prefs.setEnumValue(AppSortOrderKey, it) } },
-                onFilterChange = {
-                    filterFallback = false
-                    filterLocked = false
-                    scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, it) }
-                },
-                onFallbackFilterChange = {
-                    filterFallback = it
-                    if (it) {
-                        filterLocked = false
-                        scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
-                    }
-                },
-                onLockedFilterChange = {
-                    filterLocked = it
-                    if (it) {
-                        filterFallback = false
-                        scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
-                    }
-                },
+                onSortChange = viewModel::setAppSortOrder,
+                onFilterChange = { setProblemFilter(AppProblemFilter.MISSING, it) },
+                onFallbackFilterChange = { setProblemFilter(AppProblemFilter.FALLBACK, it) },
+                onLockedFilterChange = { setProblemFilter(AppProblemFilter.LOCKED, it) },
                 onSearch = { packageFilter = it }
             )
             ApplicationList(
                 iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, filterLocked, listState,
-                onShowAllApps = {
-                    filterFallback = false
-                    filterLocked = false
-                    scope.launch { prefs.setBooleanValue(AppFilterNoIconKey, false) }
-                }
+                onShowAllApps = clearProblemFilters,
+                activeProblemFilters = activeProblemFilters,
+                onProblemFilterToggle = toggleProblemFilter
             )
         }
     }
@@ -380,7 +431,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     }.collectAsState(initial = true)
     if (!onboardingSeen) {
         OnboardingOverlay {
-            scope.launch { prefs.setBooleanValue(OnboardingSeenKey, true) }
+            viewModel.setOnboardingSeen(true)
         }
     }
 
@@ -456,10 +507,13 @@ fun ApplicationList(
     filterNoIcon: Boolean,
     filterFallback: Boolean = false,
     filterLocked: Boolean = false,
-    listState: LazyListState = rememberLazyListState(),
+    listState: LazyGridState = rememberLazyGridState(),
     // Clears the active icon filters; offered on the empty state so a filtered-out list has an
     // obvious way back. Null hides the button (e.g. when no filter could be the cause).
-    onShowAllApps: (() -> Unit)? = null
+    onShowAllApps: (() -> Unit)? = null,
+    // Passed straight through to the hero card's problem toggles; a null callback hides them.
+    activeProblemFilters: Set<AppProblemFilter> = emptySet(),
+    onProblemFilterToggle: ((AppProblemFilter) -> Unit)? = null
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val applications = viewModel.applicationList
@@ -474,7 +528,11 @@ fun ApplicationList(
     // a reinstall or list refresh that swapped apps without changing the count. Looked up off
     // the main thread via the view model — until they arrive, INSTALL_DATE sort just shows the
     // default order.
-    val packageNames = applications.map { it.packageName }
+    val packageNames by remember(applications) {
+        derivedStateOf {
+            applications.mapTo(linkedSetOf()) { it.packageName }.toList()
+        }
+    }
     val installTimes by produceState(emptyMap<String, Long>(), packageNames) {
         value = viewModel.installTimes(packageNames)
     }
@@ -537,15 +595,21 @@ fun ApplicationList(
         return
     }
 
-    LazyColumn(
+    // One column on a phone, more on a tablet or in landscape. The header cards describe the
+    // whole profile, so each of them spans every column instead of sitting in one.
+    val columns = homeListColumns(LocalConfiguration.current.screenWidthDp)
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(columns),
         state = listState,
-        modifier = Modifier.drawVerticalScrollbar(listState),
+        modifier = Modifier.drawVerticalScrollbar(listState, spanCount = columns),
         contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         // Missing-pack banner rides above the hero card while anything stays locked.
         if (viewModel.missingPackSummary.isNotEmpty()) {
-            item(key = "missingPacks", contentType = "missingPacks") {
+            item(key = "missingPacks", contentType = "missingPacks", span = { GridItemSpan(maxLineSpan) }) {
                 MissingPacksBanner(
                     packCount = viewModel.missingPackSummary.size,
                     iconCount = viewModel.missingPackSummary.sumOf { it.iconCount },
@@ -554,10 +618,10 @@ fun ApplicationList(
             }
         }
         // Scrolls away with the list — only the search bar stays pinned
-        item(key = "hero", contentType = "hero") {
-            HeroPackCard(iconPacks)
+        item(key = "hero", contentType = "hero", span = { GridItemSpan(maxLineSpan) }) {
+            HeroPackCard(iconPacks, activeProblemFilters, onProblemFilterToggle)
         }
-        item(key = "options", contentType = "options") {
+        item(key = "options", contentType = "options", span = { GridItemSpan(maxLineSpan) }) {
             AdvancedOptionsCard(iconPacks) {
                 globalOptionsLauncher.launch(
                     Intent(globalOptionsContext, GlobalOptionsActivity::class.java)
@@ -566,15 +630,17 @@ fun ApplicationList(
         }
         if (displayList.isEmpty()) {
             // A filter/search matched nothing — say so instead of leaving a blank gap.
-            item(key = "empty", contentType = "empty") {
+            item(key = "empty", contentType = "empty", span = { GridItemSpan(maxLineSpan) }) {
                 // Offer the way out when an icon filter is what emptied the list.
                 val filtered = filterNoIcon || filterFallback || filterLocked
                 EmptyState(
                     icon = Icons.Filled.SearchOff,
                     text = stringResource(R.string.noAppsFound),
+                    // A grid item cannot measure against the viewport the way fillParentMaxHeight
+                    // did, so the empty state carries its own breathing room instead.
                     modifier = Modifier
-                        .fillParentMaxHeight(0.6f)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .heightIn(min = EmptyStateMinHeight),
                     actionLabel = stringResource(R.string.filterAllApps).takeIf { filtered && onShowAllApps != null },
                     onAction = onShowAllApps.takeIf { filtered }
                 )
@@ -586,6 +652,8 @@ fun ApplicationList(
         }
     }
 }
+
+private val EmptyStateMinHeight = 260.dp
 
 /**
  * Wraps a small badge so long-pressing (or hovering) it shows a plain tooltip explaining what it
@@ -618,6 +686,7 @@ fun ApplicationItem(
     val syncWarning = stringResource(id = R.string.syncText)
 
     var openAppOptions by rememberSaveable { mutableStateOf(false) }
+    var quickActionsOpen by rememberSaveable { mutableStateOf(false) }
 
     // Closing the edit dialog (whose icon-search field had keyboard focus) otherwise lets the
     // system hand focus to the home search field, popping the keyboard. Clear focus only on the
@@ -631,19 +700,28 @@ fun ApplicationItem(
     }
 
     Surface(
-        onClick = {
-            view.performTapHaptic()
-            if (viewModel.iconPackLoaded) {
-                openAppOptions = true
-            } else {
-                toaster.show(syncWarning)
-            }
-        },
         shape = CardShape,
         color = MaterialTheme.colorScheme.surfaceContainer,
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
+            // A long press opens the quick actions; the tap keeps opening the full editor, so
+            // nothing that worked before needs relearning.
+            .combinedClickable(
+                role = Role.Button,
+                onClick = {
+                    view.performTapHaptic()
+                    if (viewModel.iconPackLoaded) {
+                        openAppOptions = true
+                    } else {
+                        toaster.show(syncWarning)
+                    }
+                },
+                onLongClick = {
+                    view.performLongPressHaptic()
+                    quickActionsOpen = true
+                }
+            )
     ) {
         Row(
             modifier = Modifier
@@ -693,16 +771,31 @@ fun ApplicationItem(
             // between the preview and the edit bubble instead of popping
             Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
                 val isLocked = app.createdIcon == null && app.key in viewModel.lockedIconKeys
-                Crossfade(targetState = app.createdIcon, label = "iconPreview") { createdIcon ->
-                    if (createdIcon != null) {
+                // Rasterised at the row's size: a vector painter grows into place over the first
+                // frames, which read as the icon jumping after it appeared.
+                val createdBitmap = rememberCreatedIconBitmap(app, 56.dp)
+                // Fixed frame for every state: the edit bubble is smaller than an icon, and
+                // letting Crossfade shrink the slot around it slid the bubble into place after
+                // the fade. Each branch centres itself inside the same 56.dp box instead.
+                Crossfade(
+                    targetState = createdBitmap,
+                    label = "iconPreview",
+                    modifier = Modifier.size(56.dp)
+                ) { preview ->
+                  Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    if (preview != null) {
                         Image(
-                            painter = createdIcon.getPainter(),
+                            painter = BitmapPainter(preview),
                             contentDescription = null,
                             modifier = Modifier
                                 .size(56.dp)
                                 .clip(IconShape)
                                 .background(bgColor)
                         )
+                    } else if (app.createdIcon != null) {
+                        // Has an icon, still rasterising: an empty slot for a frame beats
+                        // flashing the "no icon" bubble on every list load.
+                        Box(Modifier.size(56.dp))
                     } else if (isLocked) {
                         // The saved icon exists but its source pack is missing/paid — show a
                         // dashed placeholder; tapping the row still lets the user pick another.
@@ -747,6 +840,7 @@ fun ApplicationItem(
                             }
                         }
                     }
+                  }
                 }
                 // Calendar day badge: shows today's date so the user can see the icon rotates.
                 if (app.calendarEnabled) {
@@ -789,6 +883,10 @@ fun ApplicationItem(
                 }
             }
         }
+    }
+
+    if (quickActionsOpen) {
+        AppQuickActionsSheet(app = app, onDismiss = { quickActionsOpen = false })
     }
 
     if (openAppOptions) {

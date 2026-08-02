@@ -11,6 +11,10 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.flow.stateIn
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -25,7 +29,6 @@ import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.isDarkModeEnabled
-import dev.renkinProject.renkin.data.persistGlobalModifierPrefs
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
@@ -33,6 +36,7 @@ import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.GlobalOptionsScreen
 import dev.renkinProject.renkin.ui.LocalToaster
+import dev.renkinProject.renkin.ui.ProvideColorPresets
 import dev.renkinProject.renkin.ui.ToastHost
 import dev.renkinProject.renkin.ui.Toaster
 import dev.renkinProject.renkin.ui.theme.RenkinTheme
@@ -41,14 +45,15 @@ import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 
 /**
@@ -77,6 +82,7 @@ class GlobalOptionsActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        window.showWallpaperBehindContent()
 
         // Same rule as MainActivity: landscape only on large screens.
         requestedOrientation = if (resources.getBoolean(R.bool.allowLandscape)) {
@@ -90,7 +96,34 @@ class GlobalOptionsActivity : ComponentActivity() {
             val style = SystemBarStyle.auto(Color.Transparent.toArgb(), Color.Transparent.toArgb()) { darkMode }
             enableEdgeToEdge(style, style)
 
+            val viewModel: GlobalOptionsViewModel = hiltViewModel()
+            val colorPresets by viewModel.colorPresets.collectAsState()
+
+            // The screen is bound to the profile it opened with (see GlobalOptionsViewModel):
+            // if that changes underneath, close and hand back what was already applied rather
+            // than let a Save write one profile's staged recipe into another.
+            LaunchedEffect(viewModel.profileChanged) {
+                if (viewModel.profileChanged) {
+                    setResult(
+                        RESULT_OK,
+                        Intent()
+                            .putStringArrayListExtra(EXTRA_EDITED_KEYS, ArrayList(viewModel.editedKeys))
+                            .putExtra(EXTRA_GLOBAL_APPLIED, viewModel.appliedGlobal)
+                    )
+                    finish()
+                }
+            }
+
+            LaunchedEffect(Unit) {
+                viewModel.toastEvents.collect { resId -> toaster.show(getString(resId)) }
+            }
+
             CompositionLocalProvider(LocalToaster provides toaster) {
+              ProvideColorPresets(
+                presets = colorPresets,
+                onSave = viewModel::saveColorPreset,
+                onDelete = viewModel::deleteColorPreset
+              ) {
                 RenkinTheme(darkMode) {
                     GlobalOptionsScreen(onClose = { editedKeys, applied ->
                         setResult(
@@ -103,6 +136,7 @@ class GlobalOptionsActivity : ComponentActivity() {
                     })
                     ToastHost(toaster)
                 }
+              }
             }
         }
     }
@@ -122,6 +156,11 @@ internal data class GlobalPreviewCacheKey(
     val modifierOptions: GenerationOptions?,
     val targetPx: Int
 )
+
+private const val MAX_PARALLEL_PREVIEWS = 4
+
+internal fun previewParallelism(availableProcessors: Int): Int =
+    availableProcessors.coerceIn(1, MAX_PARALLEL_PREVIEWS)
 
 internal class GlobalPreviewBitmapCache(maxSizeBytes: Int = DEFAULT_PREVIEW_CACHE_BYTES) {
     private val cache = object : LruCache<GlobalPreviewCacheKey, Bitmap>(maxSizeBytes) {
@@ -147,12 +186,42 @@ class GlobalOptionsViewModel @Inject constructor(
     private val appProvider: ApplicationProvider
 ) : AndroidViewModel(application), IconPreviewBuilder {
 
+    /** Saved colours/gradients, the same library the main screen's sheets use. */
+    val colorPresets: kotlinx.coroutines.flow.StateFlow<List<dev.renkinProject.renkin.data.ColorPreset>> =
+        appProvider.colorPresets().stateIn(
+            viewModelScope,
+            kotlinx.coroutines.flow.SharingStarted.Eagerly,
+            emptyList()
+        )
+
+    // One-shot toast events (string resource ids), collected by the activity. Same contract as
+    // MainViewModel's: the message fires after the write, never optimistically from the UI.
+    private val _toastEvents = kotlinx.coroutines.channels.Channel<Int>(
+        kotlinx.coroutines.channels.Channel.BUFFERED
+    )
+    val toastEvents = _toastEvents.receiveAsFlow()
+
+    fun saveColorPreset(name: String, style: String) {
+        viewModelScope.launch {
+            appProvider.saveColorPreset(name, style)
+            _toastEvents.trySend(R.string.savedColorsAdded)
+        }
+    }
+
+    fun deleteColorPreset(id: Long) {
+        viewModelScope.launch {
+            appProvider.deleteColorPreset(id)
+            _toastEvents.trySend(R.string.savedColorsRemoved)
+        }
+    }
+
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
     val iconPacks: List<IconPack> get() = appProvider.iconPacks
     val lockedIconKeys: Set<String> get() = appProvider.lockedIconKeys
 
     private val previewCache = GlobalPreviewBitmapCache()
     private val previewLock = Any()
+    private val previewPermits = Semaphore(previewParallelism(Runtime.getRuntime().availableProcessors()))
     private val inFlightPreviews = mutableMapOf<GlobalPreviewCacheKey, Deferred<Bitmap?>>()
     private var previewConfiguration: Pair<GenerationOptions?, GenerationOptions?>? = null
     private val _previewJobs = MutableStateFlow(0)
@@ -160,6 +229,25 @@ class GlobalOptionsViewModel @Inject constructor(
 
     var initialLoadRunning by mutableStateOf(!appProvider.startupComplete)
         private set
+
+    /**
+     * The profile this screen belongs to — null until the provider is ready, because a cold
+     * recreation starts on the default id before the real one is loaded.
+     */
+    var screenProfileId by mutableStateOf(if (appProvider.startupComplete) appProvider.activeProfileId else null)
+        private set
+
+    /**
+     * True when the active profile moved out from under this screen. Reaching it takes an
+     * external intent starting a second MainActivity on top (a share, say), switching there and
+     * coming back — rare, but the staged settings on screen belong to the profile it opened
+     * with, and saving them into a different one silently rewrites that profile's recipe.
+     */
+    val profileChanged: Boolean
+        get() {
+            val opened = screenProfileId ?: return false
+            return !appProvider.isProfileSwitching && appProvider.activeProfileId != opened
+        }
 
     init {
         if (initialLoadRunning) {
@@ -172,6 +260,7 @@ class GlobalOptionsViewModel @Inject constructor(
                     Log.error("GlobalOptionsViewModel", "Cold initialization failed", e)
                 } finally {
                     initialLoadRunning = false
+                    screenProfileId = appProvider.activeProfileId
                 }
             }
         }
@@ -266,7 +355,9 @@ class GlobalOptionsViewModel @Inject constructor(
             inFlightPreviews[key] ?: viewModelScope.async(Dispatchers.Default) {
                 var bitmap: Bitmap? = null
                 try {
-                    bitmap = load()?.toSafeBitmapOrNull(key.targetPx, key.targetPx)
+                    bitmap = previewPermits.withPermit {
+                        load()?.toSafeBitmapOrNull(key.targetPx, key.targetPx)
+                    }
                     bitmap?.let { previewCache.put(key, it) }
                     bitmap
                 } catch (e: CancellationException) {
@@ -287,8 +378,8 @@ class GlobalOptionsViewModel @Inject constructor(
 
     /**
      * Re-renders the global layer without mutating persisted bases (see the provider).
-     * [preferences] already contains the screen's staged values. Returns success; the
-     * screen shows the outcome toast.
+     * [preferences] contains the screen's staged values. The provider persists that recipe and
+     * the rendered icons as one profile operation. Returns success for the screen's outcome toast.
      */
     suspend fun applyGlobalModifiers(
         preferences: Preferences,
@@ -298,17 +389,11 @@ class GlobalOptionsViewModel @Inject constructor(
         applyCustom: Boolean,
         includeEmpty: Boolean
     ): Boolean {
-        if (globalApplyProgress != null) return false
+        // Staged values belong to the profile this screen opened with; the activity closes on a
+        // change, but a Save already in flight when it happens must not land in the new profile.
+        if (globalApplyProgress != null || profileChanged) return false
         globalApplyProgress = 0 to 0
-        val store = getApplication<Application>().dataStore
-        var previousPreferences: Preferences? = null
-        var preferencesPersisted = false
         return try {
-            previousPreferences = store.data.first()
-            // Commit the recipe first. The provider prepares every render before it swaps the
-            // live list and Room writes the whole profile transactionally.
-            store.persistGlobalModifierPrefs(preferences)
-            preferencesPersisted = true
             appProvider.applyGlobalModifiers(
                 preferences, modifierOptions,
                 applyGenerated, applyExisting, applyCustom, includeEmpty
@@ -316,16 +401,8 @@ class GlobalOptionsViewModel @Inject constructor(
             appliedGlobal = true
             true
         } catch (e: CancellationException) {
-            if (preferencesPersisted) previousPreferences?.let { previous ->
-                withContext(NonCancellable) { store.persistGlobalModifierPrefs(previous) }
-            }
             throw e
         } catch (e: Exception) {
-            if (preferencesPersisted) previousPreferences?.let { previous ->
-                runCatching { store.persistGlobalModifierPrefs(previous) }.onFailure { rollbackError ->
-                    Log.error("GlobalOptionsViewModel", "Rolling back global preferences failed", rollbackError)
-                }
-            }
             Log.error("GlobalOptionsViewModel", "Applying global modifiers failed", e)
             false
         } finally {

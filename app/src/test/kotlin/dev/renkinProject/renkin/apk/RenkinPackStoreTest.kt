@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import androidx.compose.ui.graphics.Color
 import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.drawable.ADAPTIVE_ICON_SCALE
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.extension.toBase64
@@ -22,6 +23,11 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [33])
 class RenkinPackStoreTest {
 
+    private fun store(): RenkinPackStore {
+        val context: Application = RuntimeEnvironment.getApplication()
+        return RenkinPackStore(context, RenkinPackRepository(context))
+    }
+
     @Test
     fun adaptiveBitmapRestoresItsPreviewScale() {
         val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888).apply {
@@ -35,7 +41,7 @@ class RenkinPackStoreTest {
             drawable = bitmap.toBase64(Bitmap.CompressFormat.PNG, 100)
         )
 
-        val icon = RenkinPackStore(RuntimeEnvironment.getApplication())
+        val icon = store()
             .decodeRow(row, Color.Black)
             .icon as BitmapIconDrawable
 
@@ -59,7 +65,7 @@ class RenkinPackStoreTest {
             isLegacyIcon = true
         )
 
-        val entry = RenkinPackStore(RuntimeEnvironment.getApplication())
+        val entry = store()
             .decodeRow(row, Color.Black)
 
         assertNull(entry.icon)
@@ -70,5 +76,30 @@ class RenkinPackStoreTest {
         assertEquals(true, entry.isCustom)
         assertEquals(true, entry.isLegacy)
         assertSame(row, entry.row)
+        assertTrue(entry.decodeFailed)
+    }
+
+    @Test
+    fun validBaseRecoversACorruptRenderedDrawable() {
+        val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(AndroidColor.GREEN)
+        }
+        val row = DbApplication(
+            packageName = "com.example",
+            activityName = "com.example.Main",
+            isAdaptiveIcon = false,
+            isXml = false,
+            drawable = "%%%",
+            baseDrawable = bitmap.toBase64(Bitmap.CompressFormat.PNG, 100),
+            baseIsAdaptiveIcon = false,
+            baseIsXml = false
+        )
+
+        val entry = store()
+            .decodeRow(row, Color.Black)
+
+        assertNull(entry.icon)
+        assertTrue(entry.baseIcon is BitmapIconDrawable)
+        assertEquals(false, entry.decodeFailed)
     }
 }

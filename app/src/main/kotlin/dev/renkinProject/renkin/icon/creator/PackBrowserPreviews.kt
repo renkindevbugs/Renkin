@@ -9,6 +9,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
+import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -207,7 +208,7 @@ internal class PackBrowserPreviews(
      * hands over the generated icon, which the comparison preview renders correctly.
      */
     private fun previewBitmap(resource: ResourceDrawable, generated: IconPackDrawable): ImageBitmap {
-        val rendered = generated.toBitmap()
+        val rendered = generated.toBrowserPreviewBitmap()
         val bitmap = if (rendered.contentBounds() != null) rendered
             else platformPreview(resource.drawable) ?: rendered
         return bitmap.scaledPreview().asImageBitmap()
@@ -264,7 +265,11 @@ internal class PackBrowserPreviews(
             return componentNames + (sorted - componentNames.toSet())
         }
 
-        /** LRU cache key: distinct per pack + sort + query + option set + target component. */
+        /**
+         * LRU cache key: distinct per pack + sort + query + option set + target component, plus
+         * the displayed light/dark mode — a pack with values-night drawables renders a different
+         * icon per theme, and a cached entry from the other theme must not be served (or picked).
+         */
         @VisibleForTesting
         internal fun cacheKey(
             iconPack: IconPack,
@@ -272,6 +277,8 @@ internal class PackBrowserPreviews(
             query: String,
             options: GenerationOptions,
             component: InstalledApplication?
-        ) = "${iconPack.packageName}|${iconPack.versionCode}|$sortOrder|$query|${options.hashCode()}|${component?.toComponentInfo() ?: ""}"
+        ) = "${iconPack.packageName}|${iconPack.versionCode}|${iconPack.changesWithMaterialYouColors}|" +
+            "$sortOrder|$query|${options.hashCode()}|${component?.toComponentInfo() ?: ""}|" +
+            "${ApplicationManager.displayedNightMode}"
     }
 }

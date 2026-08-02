@@ -9,6 +9,9 @@ import dev.renkinProject.renkin.data.DarkModeKey
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.GlobalColorizeKey
 import dev.renkinProject.renkin.data.GlobalColorizeColorKey
+import dev.renkinProject.renkin.data.GlobalColorizerGradientColorKey
+import dev.renkinProject.renkin.data.GlobalColorizerGradientTypeKey
+import dev.renkinProject.renkin.data.GlobalColorizerModeKey
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
 import dev.renkinProject.renkin.data.GlobalShapeKey
 import dev.renkinProject.renkin.data.OutlineAddKey
@@ -104,5 +107,22 @@ class GenerationOptionsPreferencesTest {
         assertEquals(IconShape.CIRCLE, global.iconShape)
         assertEquals(OutlineMode.ADD, global.outlineMode)
         assertTrue(global.hasVisibleModifierEffect())
+    }
+
+    @Test
+    fun globalModifierStyle_readsLegacySecondGradientColor() {
+        val prefs = preferencesOf(
+            GlobalColorizerModeKey to ColorizerMode.GRADIENT.ordinal,
+            GlobalColorizerGradientTypeKey to GradientType.RADIAL.ordinal,
+            GlobalColorizeColorKey to "#FF336699",
+            GlobalColorizerGradientColorKey to "#FFCC5500"
+        )
+
+        val global = globalModifierOptions(prefs)
+
+        assertEquals(ColorizerMode.GRADIENT, global.colorizerMode)
+        assertEquals(GradientType.RADIAL, global.colorizerGradientType)
+        assertEquals(0xFF336699.toInt(), global.color)
+        assertEquals(listOf(0xFFCC5500.toInt()), global.colorizerGradientColors)
     }
 }

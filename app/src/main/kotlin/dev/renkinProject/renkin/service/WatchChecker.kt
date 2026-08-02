@@ -14,10 +14,35 @@ import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.contentHash
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.InstalledAppCatalog
+import dev.renkinProject.renkin.packages.IconPackCatalog
+import dev.renkinProject.renkin.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+
+/**
+ * Isolates one third-party pack read without caching failures. Callers can therefore skip the
+ * current pass and retry the same version later, while coroutine cancellation still propagates.
+ */
+internal inline fun <T> readWatchPackOrNull(
+    packPackage: String,
+    onFailure: (Exception) -> Unit = {
+        Log.error("WatchChecker", "Skipping unreadable pack $packPackage", it)
+    },
+    read: () -> T
+): T? {
+    return try {
+        read()
+    } catch (error: CancellationException) {
+        throw error
+    } catch (error: Exception) {
+        onFailure(error)
+        null
+    }
+}
 
 /**
  * Scans active watch rules and records a suggestion when a watched pack has published a
@@ -34,8 +59,12 @@ import kotlinx.coroutines.sync.withLock
  * Pure of any UI/notification side effects — it returns the suggestions it created so a
  * trigger (phase 4) / notifier (phase 5) can act on them.
  */
-class WatchChecker(context: Context) {
+class WatchChecker(
+    context: Context,
+    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(context)
+) {
     private val appMan = ApplicationManager(context)
+    private val installedAppCatalog = InstalledAppCatalog(context)
     private val repo = WatchRepository(context)
 
     data class FiredSuggestion(
@@ -54,7 +83,8 @@ class WatchChecker(context: Context) {
     private suspend fun runCheckLocked(): List<FiredSuggestion> {
         val fired = mutableListOf<FiredSuggestion>()
         val installedPacks = watchablePacks()
-        val installedAppsByPackage = appMan.getAllInstalledApplications().groupBy { it.packageName }
+        val installedAppsByPackage = installedAppCatalog.getAllInstalledApplications()
+            .groupBy { it.packageName }
 
         for (rule in repo.getActiveRules()) {
             val packPackages = if (rule.rule.watchAllPacks) {
@@ -98,7 +128,9 @@ class WatchChecker(context: Context) {
                     // No update since last look → nothing to do (keeps periodic runs cheap)
                     if (previous != null && previous.lastPackVersionCode == pack.versionCode) continue
 
-                    val (drawableName, hash) = resolveIcon(packPackage, installedApp)
+                    // Do not record the pack version when reading failed. A transient package
+                    // update/provider failure must be retried on the next check.
+                    val (drawableName, hash) = resolveIcon(packPackage, installedApp) ?: continue
 
                     // New for the user either way: a pack installed after the rule that already
                     // carries an icon for the app (previous == null — packs present at rule
@@ -119,7 +151,7 @@ class WatchChecker(context: Context) {
                         )
                     )
 
-                    if (isNew && drawableName != null && hash != null) {
+                    if (isNew && drawableName != null) {
                         candidates.add(CandidateInput(packPackage, drawableName, hash))
                     }
                 }
@@ -184,8 +216,16 @@ class WatchChecker(context: Context) {
         // pack instead of reopening and reparsing the same pack once for every app.
         for (packPackage in packPackages) {
             val pack = installedPacks[packPackage] ?: continue
-            val elements = appMan.getAppFilterRawElements(packPackage, installedApps)
-            val resources = appMan.getDrawableFromAppFilterElements(packPackage, installedApps, elements)
+            // A third-party pack with a malformed appfilter.xml throws while parsing. Skip that
+            // pack instead of failing the whole baseline — the same isolation IconPackRepository
+            // applies when loading packs.
+            val parsed = readWatchPackOrNull(packPackage) {
+                val elements = appMan.getAppFilterRawElements(packPackage, installedApps)
+                elements to appMan.getDrawableFromAppFilterElements(
+                    packPackage, installedApps, elements
+                )
+            } ?: continue
+            val (elements, resources) = parsed
             val drawableNames = mutableMapOf<String, String>()
             elements.filterIsInstance<RawItem>().forEach { item ->
                 drawableNames.putIfAbsent(item.component, item.drawableLink)
@@ -216,19 +256,31 @@ class WatchChecker(context: Context) {
      * [IconPackBuilder.isOwnPack]): they only ever hold icons we just built, so they would
      * suggest the very icon the user already applied.
      */
-    private fun watchablePacks() = appMan.getIconPacks()
+    private fun watchablePacks() = iconPackCatalog.installedIconPacks()
         .filter { !IconPackBuilder.isOwnPack(it.packageName) }
         .associateBy { it.packageName }
 
-    /** Resolves the (drawable name, content hash) a pack currently provides for an app, or nulls. */
-    private fun resolveIcon(packPackage: String, installedApp: InstalledApplication): Pair<String?, String?> {
-        val elements = appMan.getAppFilterRawElements(packPackage, listOf(installedApp))
-        val component = installedApp.toComponentInfo()
-        val drawableName = elements.filterIsInstance<RawItem>()
-            .firstOrNull { it.component == component }?.drawableLink
-        val resource = appMan.getDrawableFromAppFilterElements(packPackage, listOf(installedApp), elements)[installedApp]
-        val hash = resource?.drawable?.toSafeBitmapOrNull()?.contentHash()
-        return drawableName to hash
+    /**
+     * Resolves the (drawable name, content hash) a pack currently provides for an app.
+     * A pair of nulls means the pack was read successfully but has no icon; null means reading
+     * failed and the caller must leave the previous check state untouched for a later retry.
+     */
+    private fun resolveIcon(
+        packPackage: String,
+        installedApp: InstalledApplication
+    ): Pair<String?, String?>? {
+        // Same isolation as the baseline pass: an unreadable pack is skipped, never thrown.
+        return readWatchPackOrNull(packPackage) {
+            val elements = appMan.getAppFilterRawElements(packPackage, listOf(installedApp))
+            val component = installedApp.toComponentInfo()
+            val drawableName = elements.filterIsInstance<RawItem>()
+                .firstOrNull { it.component == component }?.drawableLink
+            val resource = appMan.getDrawableFromAppFilterElements(
+                packPackage, listOf(installedApp), elements
+            )[installedApp]
+            val hash = resource?.drawable?.toSafeBitmapOrNull()?.contentHash()
+            drawableName to hash
+        }
     }
 
     companion object {

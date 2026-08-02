@@ -4,8 +4,10 @@ import android.app.Application
 import android.net.Uri
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -13,14 +15,28 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.BuiltIconPack
+import dev.renkinProject.renkin.apk.PackChange
+import dev.renkinProject.renkin.apk.packChanges
 import dev.renkinProject.renkin.apk.unsavedApplicationKeys
 import dev.renkinProject.renkin.apk.IconGenerationService
 import dev.renkinProject.renkin.apk.IconLockManager
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
+import dev.renkinProject.renkin.data.AppFilterNoIconKey
+import dev.renkinProject.renkin.data.AppSortOrder
+import dev.renkinProject.renkin.data.AppSortOrderKey
+import dev.renkinProject.renkin.data.DarkMode
+import dev.renkinProject.renkin.data.DarkModeKey
+import dev.renkinProject.renkin.data.HideProfileShareWarningKey
+import dev.renkinProject.renkin.data.OnboardingSeenKey
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
+import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.data.setBooleanValue
+import dev.renkinProject.renkin.data.setEnumValue
+import dev.renkinProject.renkin.data.setPrimarySource
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -30,7 +46,6 @@ import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews
 import dev.renkinProject.renkin.icon.creator.PackIconPreview
 import dev.renkinProject.renkin.icon.creator.PackRowPreviews
-import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
@@ -38,9 +53,21 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
+
+internal fun isProfileSummaryReady(
+    startupComplete: Boolean,
+    isProfileSwitching: Boolean,
+    baselineProfileId: Long?,
+    activeProfileId: Long
+): Boolean = startupComplete &&
+    !isProfileSwitching &&
+    baselineProfileId == activeProfileId
 
 /**
  * Owns the [ApplicationProvider] for the app's lifetime. The provider is injected (a Hilt
@@ -62,15 +89,34 @@ interface IconPreviewBuilder {
     suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable
 }
 
+/**
+ * Outcome of a hand-picked icon assignment. Callers that act on the result afterwards (the
+ * icon-watch modal deletes the rule) must be able to tell "applied" from "nothing happened".
+ */
+enum class IconApplyResult {
+    APPLIED,
+    /** The pick's true origin is a pack this device doesn't own — withheld. */
+    LOCKED,
+    /** The target row was gone by the time the icon finished rendering. */
+    TARGET_GONE,
+    /** Another watch deep-link switched profiles while this suggestion was being applied. */
+    PROFILE_CHANGED,
+    /** Rendering or source resolution failed; the watch rule must stay available to retry. */
+    FAILED
+}
+
 @HiltViewModel
 class MainViewModel @Inject constructor(
     application: Application,
     private val appProvider: ApplicationProvider,
-    private val watchRepo: WatchRepository
+    private val watchRepo: WatchRepository,
+    private val backupManager: BackupManager
 ) : AndroidViewModel(application), IconPreviewBuilder {
-
-    // One shared manager for the pack-preview lookups, instead of a fresh instance per call.
-    private val appMan by lazy { ApplicationManager(getApplication()) }
+    /**
+     * Keeps profile-session bookkeeping on the same side of a profile switch as the provider
+     * operation that changed the icon. The provider separately protects its live icon list.
+     */
+    private val profileSessionOperations = Mutex()
 
     // ---- Model state exposed to the UI (read-only) -------------------------------
     // The UI observes these instead of reaching through to ApplicationProvider, so the
@@ -79,6 +125,28 @@ class MainViewModel @Inject constructor(
 
     /** The loaded apps, each with its current (created) icon. Edited via [applyIcon]. */
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
+
+    /** Saved colours/gradients offered by every colour sheet. */
+    val colorPresets: kotlinx.coroutines.flow.StateFlow<List<dev.renkinProject.renkin.data.ColorPreset>> =
+        appProvider.colorPresets().stateIn(
+            viewModelScope,
+            kotlinx.coroutines.flow.SharingStarted.Eagerly,
+            emptyList()
+        )
+
+    fun saveColorPreset(name: String, style: String) {
+        viewModelScope.launch {
+            appProvider.saveColorPreset(name, style)
+            _toastEvents.trySend(R.string.savedColorsAdded)
+        }
+    }
+
+    fun deleteColorPreset(id: Long) {
+        viewModelScope.launch {
+            appProvider.deleteColorPreset(id)
+            _toastEvents.trySend(R.string.savedColorsRemoved)
+        }
+    }
 
     /** The installed icon packs available as icon sources. */
     val iconPacks: List<IconPack> get() = appProvider.iconPacks
@@ -102,6 +170,46 @@ class MainViewModel @Inject constructor(
     // An app with an icon whose key is NOT here is "added" (pending build); a key here
     // whose app no longer has an icon is "removed". Reloaded after each successful build,
     // so the change state is a diff against what was actually built (survives refresh).
+    /**
+     * Fingerprints of what the last build shipped and of what is stored right now. Together with
+     * the session's [updatedKeys] they answer "what would a build change?" — and unlike the key
+     * sets alone they survive saving and restarting.
+     */
+    var builtIconHashes by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
+    var savedIconHashes by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
+
+    /**
+     * Profile whose build/saved baselines are currently represented by the fields above.
+     * During a switch the provider swaps [applicationList] before these database reads finish;
+     * keeping the owner explicit prevents the UI from comparing the new list with the old profile.
+     */
+    private var changeBaselinesProfileId by mutableStateOf<Long?>(null)
+
+    /** True only when the hero progress and build diff describe the active profile. */
+    val profileSummaryReady: Boolean
+        get() = isProfileSummaryReady(
+            startupComplete = startupComplete,
+            isProfileSwitching = isProfileSwitching,
+            baselineProfileId = changeBaselinesProfileId,
+            activeProfileId = activeProfileId
+        )
+
+    private fun invalidateChangeBaselines() {
+        changeBaselinesProfileId = null
+    }
+
+    /**
+     * Re-reads the baselines for [profileId] after a build. Called however the install ended:
+     * producing the APK is what counts as built, so a dismissed installer must not leave the
+     * change list claiming the icons are still pending.
+     */
+    private suspend fun syncBuildBaselines(profileId: Long) {
+        if (appProvider.activeProfileId != profileId) return
+        loadChangeBaselines(profileId)
+    }
+
     var builtKeys by mutableStateOf<Set<String>>(emptySet())
         private set
 
@@ -110,6 +218,22 @@ class MainViewModel @Inject constructor(
     // Reset after every successful build.
     var updatedKeys by mutableStateOf<Set<String>>(emptySet())
         private set
+
+    /**
+     * What a build would add, change or remove. Derived here rather than in each screen so the
+     * hero card's badge and the changes sheet read one computation instead of running the same
+     * diff over the whole app list twice.
+     *
+     * derivedStateOf, not a plain getter: [applicationList] is one long-lived snapshot list whose
+     * identity never changes, so only tracking its contents keeps the result from going stale.
+     */
+    val pendingPackChanges: List<PackChange> by derivedStateOf {
+        if (profileSummaryReady) {
+            packChanges(applicationList, builtIconHashes, savedIconHashes, updatedKeys)
+        } else {
+            emptyList()
+        }
+    }
 
     // Set when opened from an icon-watch notification; the home screen shows the apply
     // modal for this suggestion.
@@ -146,7 +270,7 @@ class MainViewModel @Inject constructor(
                 return@launch
             }
             if (profileId != appProvider.activeProfileId) {
-                performSwitch(profileId, saveFirst = hasUnsavedChanges())
+                performSwitch(profileId, saveFirst = false, saveIfChanged = true)
             }
             pendingWatchSuggestionId = suggestionId
         }
@@ -177,19 +301,43 @@ class MainViewModel @Inject constructor(
     private val _toastEvents = Channel<Int>(Channel.BUFFERED)
     val toastEvents = _toastEvents.receiveAsFlow()
 
+    /**
+     * A change that can still be taken back: [messageRes] describes it, [count] fills its
+     * plural. Shown as a snackbar with an Undo action rather than a toast, because a toast
+     * cannot be acted on.
+     */
+    data class UndoPrompt(@androidx.annotation.StringRes val messageRes: Int, val count: Int)
+
+    // CONFLATED, unlike the toast channel: only one change is undoable at a time, so a queue of
+    // older prompts would offer to undo something the tracker has already forgotten.
+    private val _undoEvents = Channel<UndoPrompt>(Channel.CONFLATED)
+    val undoEvents = _undoEvents.receiveAsFlow()
+
+    /** Puts the last icon change back. Silent when the change no longer applies. */
+    fun undoLastIconChange() {
+        viewModelScope.launch {
+            if (appProvider.undoLastIconChange()) {
+                _toastEvents.trySend(R.string.undoRestored)
+            } else {
+                _toastEvents.trySend(R.string.undoUnavailable)
+            }
+        }
+    }
+
     private fun loadStartup() {
-        if (startupLoading || appProvider.startupComplete) return
+        if (startupLoading || profileSummaryReady) return
         startupLoading = true
         startupFailed = false
         viewModelScope.launch {
             try {
                 appProvider.ensureInitialized()
-                builtKeys = appProvider.getSavedPackKeys()
+                resetChangeBaselines()
                 refreshMissingPacks()
                 // Classify any source packs that still lack a paid/free verdict (quiet best
                 // effort; imported-offline icons stay locked until a lookup succeeds). A verdict
                 // becoming decisive can unlock icons — reload so that shows without a restart.
                 if (runCatching { appProvider.verifyPendingVerdicts() }.getOrDefault(false)) {
+                    invalidateChangeBaselines()
                     appProvider.reloadActiveProfile()
                     resetChangeBaselines()
                     refreshMissingPacks(prompt = false)
@@ -233,6 +381,7 @@ class MainViewModel @Inject constructor(
         isRefreshing = true
         viewModelScope.launch {
             try {
+                val profileId = appProvider.activeProfileId
                 val preferences = getApplication<Application>().dataStore
                     .getPreferencesAfterPendingWrites()
                 val iconPackageName = preferences.getStringValue(PrimaryIconPackKey)
@@ -242,14 +391,56 @@ class MainViewModel @Inject constructor(
                 }
                 // Icons whose real origin (via an own pack used as source) isn't owned on
                 // this device are withheld — say so instead of leaving silent empty slots.
-                if (appProvider.refreshIcons(preferences) > 0) {
-                    _toastEvents.trySend(R.string.refreshLockedSkipped)
+                val withheld = appProvider.refreshIcons(profileId)
+                if (withheld == null) {
+                    _toastEvents.trySend(R.string.profileStillLoading)
+                } else {
+                    if (withheld > 0) _toastEvents.trySend(R.string.refreshLockedSkipped)
+                    // Only worth offering when the refresh actually overwrote something: with
+                    // "Refresh replaces existing icons" off it only fills empty slots.
+                    appProvider.undoableIconCount.takeIf { it > 0 }?.let { replaced ->
+                        _undoEvents.trySend(UndoPrompt(R.string.undoIconsRefreshed, replaced))
+                    }
                 }
             } finally {
                 // Without this a failed refresh would leave the spinner on forever and block builds.
                 isRefreshing = false
             }
         }
+    }
+
+    /** Persists the hero source, then immediately applies the same clear/refresh semantics. */
+    fun selectPrimarySource(source: Source, packageName: String?) {
+        viewModelScope.launch {
+            getApplication<Application>().dataStore.setPrimarySource(source, packageName)
+            if (source == Source.NONE) appProvider.clearRefreshedIcons() else refresh()
+        }
+    }
+
+    fun setAppSortOrder(order: AppSortOrder) = updatePreferences {
+        setEnumValue(AppSortOrderKey, order)
+    }
+
+    fun setMissingIconFilter(enabled: Boolean) = updatePreferences {
+        setBooleanValue(AppFilterNoIconKey, enabled)
+    }
+
+    fun setOnboardingSeen(seen: Boolean) = updatePreferences {
+        setBooleanValue(OnboardingSeenKey, seen)
+    }
+
+    fun setDarkMode(mode: DarkMode) = updatePreferences {
+        setEnumValue(DarkModeKey, mode)
+    }
+
+    fun hideProfileShareWarning() = updatePreferences {
+        setBooleanValue(HideProfileShareWarningKey, true)
+    }
+
+    private fun updatePreferences(
+        block: suspend DataStore<Preferences>.() -> Unit
+    ) {
+        viewModelScope.launch { getApplication<Application>().dataStore.block() }
     }
 
     /** Current build step text while a pack is building; null when no build is in progress. */
@@ -271,7 +462,7 @@ class MainViewModel @Inject constructor(
     suspend fun installTimes(packageNames: List<String>): Map<String, Long> =
         withContext(Dispatchers.IO) {
             val pm = getApplication<Application>().packageManager
-            packageNames.associateWith { pkg ->
+            packageNames.distinct().associateWith { pkg ->
                 runCatching { pm.getPackageInfo(pkg, 0).firstInstallTime }.getOrDefault(0L)
             }
         }
@@ -295,7 +486,7 @@ class MainViewModel @Inject constructor(
     fun dismissBuildOutcome() { buildOutcome = null }
 
     private data class PendingInstallFallback(
-        val pack: ApplicationProvider.BuiltIconPack,
+        val pack: BuiltIconPack,
         val wasUpdate: Boolean,
         val packLabel: String
     )
@@ -368,7 +559,11 @@ class MainViewModel @Inject constructor(
                         installFallbackPending = true
                     }
                     ApkInstallResult.ABORTED,
-                    ApkInstallResult.FAILED -> _toastEvents.trySend(R.string.iconPackInstallFailed)
+                    ApkInstallResult.FAILED -> {
+                        // The pack was built and saved; only its installation didn't happen.
+                        syncBuildBaselines(pack.profileId)
+                        _toastEvents.trySend(R.string.iconPackInstallFailed)
+                    }
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -385,6 +580,9 @@ class MainViewModel @Inject constructor(
     }
 
     private suspend fun completeSuccessfulInstall(pending: PendingInstallFallback) {
+        // The pack now ships what is on screen; undoing a refresh from before the build would
+        // silently disagree with the installed icons.
+        appProvider.clearUndo()
         // The next-steps dialog replaces the old "installed!" toast: what to do in
         // the launcher differs between a first install and an update.
         buildOutcome = BuildOutcomeInfo(
@@ -393,10 +591,7 @@ class MainViewModel @Inject constructor(
         )
         // A watch deep link can switch profiles while the system installer is in front. Never
         // replace that profile's UI baseline with the pack that finished in the background.
-        if (appProvider.activeProfileId == pending.pack.profileId) {
-            builtKeys = appProvider.getSavedPackKeys(pending.pack.profileId)
-            updatedKeys = emptySet()
-        }
+        syncBuildBaselines(pending.pack.profileId)
         // The save dropped locked originals the user replaced by hand — the
         // missing-pack warning must not keep counting them after a build.
         refreshMissingPacks(prompt = false)
@@ -406,6 +601,20 @@ class MainViewModel @Inject constructor(
     // Clearing an icon (icon == null) is a removal, not a change, so it isn't recorded.
     private fun markUpdated(app: PackageInfoStruct, icon: IconPackDrawable?) {
         if (icon != null) updatedKeys = updatedKeys + app.key
+    }
+
+    /**
+     * Regenerates one app's icon with the current recipe — the quick action for "this one came
+     * out wrong" without refreshing the whole list.
+     */
+    fun refreshSingleIcon(app: PackageInfoStruct) {
+        viewModelScope.launch {
+            // Undo is offered only when an existing icon was actually replaced — the provider
+            // knows that, the caller doesn't (a locked origin is withheld and changes nothing).
+            if (appProvider.refreshIcon(activeProfileId, app)) {
+                _undoEvents.trySend(UndoPrompt(R.string.undoIconRefreshed, 1))
+            }
+        }
     }
 
     /**
@@ -421,20 +630,52 @@ class MainViewModel @Inject constructor(
         }
 
     /**
+     * Same assignment as [applyIcon], but awaited and reporting its outcome. The icon-watch
+     * apply modal deletes the rule (which cascades the suggestion) once the icon is applied —
+     * fire-and-forget would drop the rule even when the target row was gone and nothing landed.
+     */
+    suspend fun applyWatchIcon(
+        expectedProfileId: Long,
+        app: PackageInfoStruct,
+        icon: IconPackDrawable,
+        sourcePackName: String?
+    ): IconApplyResult {
+        return try {
+            profileSessionOperations.withLock {
+                when (
+                    appProvider.applyWatchIcon(
+                        expectedProfileId,
+                        app,
+                        icon,
+                        sourcePackName
+                    )
+                ) {
+                    ApplicationProvider.WatchIconApplyResult.APPLIED -> {
+                        markUpdated(app, icon)
+                        IconApplyResult.APPLIED
+                    }
+                    ApplicationProvider.WatchIconApplyResult.LOCKED -> IconApplyResult.LOCKED
+                    ApplicationProvider.WatchIconApplyResult.TARGET_GONE -> IconApplyResult.TARGET_GONE
+                    ApplicationProvider.WatchIconApplyResult.PROFILE_CHANGED -> IconApplyResult.PROFILE_CHANGED
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.error("MainViewModel", "Could not apply watched icon", error)
+            IconApplyResult.FAILED
+        }
+    }
+
+    /**
      * Restores one app to its launcher default. Unlike assigning a null icon generically, this
      * also discards an imported row held behind a missing pack and clears calendar rotation.
      */
     fun resetIcon(app: PackageInfoStruct) {
         viewModelScope.launch {
-            val index = appProvider.applicationList.indexOfFirst { it.key == app.key }
-            if (index < 0) return@launch
-            appProvider.discardLockedIcon(app.key)
-            val live = appProvider.applicationList[index]
-            appProvider.editApplication(
-                index,
-                live.changeExport(null).changeCalendar(false, null, null)
-            )
+            if (!appProvider.resetIcon(activeProfileId, app)) return@launch
             refreshMissingPacks(prompt = false)
+            _undoEvents.trySend(UndoPrompt(R.string.undoIconReset, 1))
         }
     }
 
@@ -511,6 +752,9 @@ class MainViewModel @Inject constructor(
     /** Live count of icons taken from each pack — orders the per-app icon picker. */
     fun packUsageCounts(): Map<String, Int> = appProvider.packUsageCounts()
 
+    /** How many installed apps each pack has an icon for — the pack picker's coverage line. */
+    fun packMatchedAppCounts(): Map<String, Int> = appProvider.packMatchedAppCounts()
+
     /** Per-pack usage by TRUE origin (locked icons included) for the stats dialog. */
     suspend fun packUsageEntries(): List<ApplicationProvider.PackUsage> = appProvider.packUsageEntries()
 
@@ -533,13 +777,30 @@ class MainViewModel @Inject constructor(
     }
 
     /** Re-reads the installed icon packs (and unlocks icons whose pack just arrived). */
+    /** True while [sync] runs — the Settings row shows it and blocks re-entry. */
+    var syncing by mutableStateOf(false)
+        private set
+
     fun sync() {
+        if (syncing) return
+        syncing = true
         viewModelScope.launch {
-            appProvider.forceSync()
-            packBrowserPreviews.clear()
-            // The sync may have unlocked held-back icons — the badge/banner must follow.
-            refreshMissingPacks(prompt = false)
-            _toastEvents.trySend(R.string.packsSynced)
+            try {
+                appProvider.forceSync()
+                packBrowserPreviews.clear()
+                // The sync may have unlocked held-back icons — the badge/banner must follow.
+                refreshMissingPacks(prompt = false)
+                _toastEvents.trySend(R.string.packsSynced)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // Re-parsing every installed pack can fail on a malformed one — say so instead
+                // of leaving the row spinning with no outcome.
+                Log.error("MainViewModel", "Icon pack sync failed", e)
+                _toastEvents.trySend(R.string.packsSyncFailed)
+            } finally {
+                syncing = false
+            }
         }
     }
 
@@ -599,7 +860,7 @@ class MainViewModel @Inject constructor(
     // plus the row-preview cache) lives in PackBrowserPreviews; the view model just forwards to it
     // so the UI still only talks to the view model. buildPackIcons is wired to the provider.
     private val packBrowserPreviews by lazy {
-        PackBrowserPreviews(appMan, appProvider::getIconPackIcons)
+        appProvider.packBrowserPreviews()
     }
 
     /** Collapsed row previews for the icon-pack browser (see [PackBrowserPreviews.rowPreviews]). */
@@ -620,9 +881,6 @@ class MainViewModel @Inject constructor(
         component: InstalledApplication? = null,
         onChunk: (List<PackIconPreview>) -> Unit
     ) = packBrowserPreviews.detailPreviews(iconPack, sortOrder, query, options, component, onChunk)
-
-    /** Clears only the unsaved bulk-refresh icons — see ApplicationProvider.clearRefreshedIcons. */
-    fun clearRefreshedIcons() = appProvider.clearRefreshedIcons()
 
     // ---- Profiles -----------------------------------------------------------------
 
@@ -649,16 +907,40 @@ class MainViewModel @Inject constructor(
      * Re-reads the change baselines from the (just switched or just saved) profile's stored
      * pack — every operation that changes which saved set is current ends with this.
      */
-    private suspend fun resetChangeBaselines() {
-        builtKeys = appProvider.getSavedPackKeys()
+    private suspend fun loadChangeBaselines(profileId: Long) {
+        invalidateChangeBaselines()
+        val newBuiltKeys = appProvider.getSavedPackKeys(profileId)
+        val newBuiltIconHashes = appProvider.getBuiltIconHashes(profileId)
+        val newSavedIconHashes = appProvider.getSavedIconHashes(profileId)
+        // A notification or another queued operation may have switched again while Room read.
+        if (appProvider.activeProfileId != profileId) return
+        builtKeys = newBuiltKeys
+        builtIconHashes = newBuiltIconHashes
+        savedIconHashes = newSavedIconHashes
         updatedKeys = emptySet()
+        changeBaselinesProfileId = profileId
     }
 
+    private suspend fun resetChangeBaselines() =
+        loadChangeBaselines(appProvider.activeProfileId)
+
     /** Saves the active profile if asked, switches to [id], and refreshes the baselines. */
-    private suspend fun performSwitch(id: Long, saveFirst: Boolean) {
-        if (saveFirst) appProvider.saveActiveProfileIcons()
-        appProvider.switchProfile(id)
-        resetChangeBaselines()
+    private suspend fun performSwitch(
+        id: Long,
+        saveFirst: Boolean,
+        saveIfChanged: Boolean = false
+    ) {
+        profileSessionOperations.withLock {
+            // Notification-driven switches automatically preserve unsaved work. Evaluate this
+            // only after waiting for an in-flight watch apply, otherwise a freshly applied icon
+            // could land after the earlier check and then be discarded by this switch.
+            if (saveFirst || (saveIfChanged && hasUnsavedChanges())) {
+                appProvider.saveActiveProfileIcons()
+            }
+            invalidateChangeBaselines()
+            appProvider.switchProfile(id)
+            resetChangeBaselines()
+        }
         refreshMissingPacks()
     }
 
@@ -691,12 +973,32 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /** Clears every created icon (and persists the empty state). */
+    /** True while [clearIcons] runs — the Settings row shows it and blocks re-entry. */
+    var clearingIcons by mutableStateOf(false)
+        private set
+
+    /**
+     * Clears every created icon (and persists the empty state). The toast is emitted here, once
+     * the work is really done: Settings used to show it the moment the call was made, so a slow
+     * or failing clear reported success that hadn't happened.
+     */
     fun clearIcons() {
+        if (clearingIcons) return
+        clearingIcons = true
         viewModelScope.launch {
-            appProvider.clearIcons()
-            // Saved pack is now empty → reset both change baselines.
-            resetChangeBaselines()
+            try {
+                appProvider.clearIcons()
+                // Saved pack is now empty → reset both change baselines.
+                resetChangeBaselines()
+                _toastEvents.trySend(R.string.iconsCleared)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.error("MainViewModel", "Clearing icons failed", e)
+                _toastEvents.trySend(R.string.iconsClearFailed)
+            } finally {
+                clearingIcons = false
+            }
         }
     }
 
@@ -745,8 +1047,6 @@ class MainViewModel @Inject constructor(
     /** True while a backup export/import runs — Settings ignores further taps meanwhile. */
     var backupInProgress by mutableStateOf(false)
         private set
-
-    private val backupManager by lazy { BackupManager(getApplication()) }
 
     /**
      * Runs one backup/import operation at a time: the shared busy flag gates re-entry, a
@@ -844,8 +1144,17 @@ class MainViewModel @Inject constructor(
         // app start and by the periodic watch worker when offline now). Free verdicts
         // unlock icons, so reload when something got decided.
         if (runCatching { appProvider.verifyPendingVerdicts() }.getOrDefault(false)) {
-            appProvider.reloadActiveProfile()
-            resetChangeBaselines()
+            when (result.kind) {
+                // The backup already replaced everything, so there is no session to keep.
+                BackupManager.ImportKind.BACKUP -> {
+                    appProvider.reloadActiveProfile()
+                    resetChangeBaselines()
+                }
+                // A shared profile lands beside the active one. Its verdicts matter when that
+                // profile is entered; reloading the current session here would risk discarding
+                // or cross-merging unrelated unsaved work.
+                BackupManager.ImportKind.PROFILE -> Unit
+            }
             refreshMissingPacks(prompt = false)
         }
     }
@@ -862,7 +1171,4 @@ class MainViewModel @Inject constructor(
     suspend fun dynamicClockDrawables(packPackageName: String): Set<String> =
         appProvider.dynamicClockDrawables(packPackageName)
 
-    /** Sample icons showing the fallback styling for [fallbackSource], for the Options preview. */
-    suspend fun fallbackPreview(preferences: Preferences, fallbackSource: dev.renkinProject.renkin.data.FallbackSource) =
-        appProvider.fallbackPreview(preferences, fallbackSource)
 }

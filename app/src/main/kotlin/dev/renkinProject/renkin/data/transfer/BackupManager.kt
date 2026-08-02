@@ -18,6 +18,7 @@ import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
+import dev.renkinProject.renkin.data.ColorPreset
 import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
@@ -29,6 +30,7 @@ import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchRuleImport
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.IconPackCatalog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -60,7 +62,8 @@ import java.util.zip.ZipOutputStream
 class BackupManager(
     private val context: Context,
     private val packRepo: RenkinPackRepository,
-    private val watchRepo: WatchRepository
+    private val watchRepo: WatchRepository,
+    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(context)
 ) {
     /** Production entry point: uses the shared singleton databases. Tests inject in-memory ones. */
     constructor(context: Context) : this(context, RenkinPackRepository(context), WatchRepository(context))
@@ -116,7 +119,10 @@ class BackupManager(
                 if (key.name == LastWatchCheckAtKey.name) return@mapNotNull null
                 BackupPref.of(value)?.let { key.name to it }
             }.toMap(),
-            packLabels = packLabelsFor(allIcons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet())
+            packLabels = packLabelsFor(allIcons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet()),
+            colorPresets = packRepo.allColorPresets().map {
+                BackupColorPreset(it.name, it.style, it.createdAt)
+            }
         )
 
         ZipOutputStream(open().buffered()).use { zip ->
@@ -256,12 +262,17 @@ class BackupManager(
         watchRepo.replaceAllRules(data.profiles.flatMap { bp ->
             bp.watchRules.map { it.toImport(bp.profile.id) }
         })
+        // Replace-all, like everything else in a full restore. Archives written before saved
+        // colours existed carry none, which correctly clears a library the user is replacing.
+        packRepo.replaceColorPresets(
+            data.colorPresets.map { ColorPreset(name = it.name, style = it.style, createdAt = it.createdAt) }
+        )
         restorePrefs(data.prefs)
         // The verdict cache is per-device truth (which packs are owned/priced HERE), not part of
         // the backup — re-derive it from what's actually installed so a restored profile locks
         // exactly like a fresh import: packs not installed here stay locked until installed.
         packRepo.resetVerdictsToInstalled(
-            runCatching { appManager.getIconPacks() }.getOrDefault(emptyList())
+            runCatching { iconPackCatalog.installedIconPacks() }.getOrDefault(emptyList())
         )
         storePackLabels(data.packLabels)
 
@@ -360,7 +371,7 @@ class BackupManager(
     /** Display names for [packs]: from the installed copy, else the verdict cache. */
     private suspend fun packLabelsFor(packs: Set<String>): Map<String, String> {
         if (packs.isEmpty()) return emptyMap()
-        val installed = runCatching { appManager.getIconPacks() }.getOrDefault(emptyList())
+        val installed = runCatching { iconPackCatalog.installedIconPacks() }.getOrDefault(emptyList())
             .associate { it.packageName to it.applicationName }
         val cached = packRepo.verdicts(packs.toList())
         return packs.mapNotNull { pack ->
@@ -443,6 +454,27 @@ private fun ZipOutputStream.putFileEntry(name: String, file: File) {
 /** Reads the CURRENT zip entry (ZipInputStream ends the stream at each entry boundary). */
 private fun ZipInputStream.readEntryText(): String = readBytes().toString(Charsets.UTF_8)
 
+/**
+ * Writes the current zip entry to [target] via a temporary file, so a failure part-way (a full
+ * disk, an I/O error) leaves the previous file intact instead of a truncated one. This matters
+ * most for the keystore: a half-written `renkinpack.keystore` cannot sign the packs the user
+ * already installed, and no earlier copy exists to fall back on.
+ *
+ * Note this makes each individual file safe, NOT the restore as a whole — the databases,
+ * preferences and the uploads gallery are still replaced in stages and a failure mid-restore
+ * leaves a partially restored app.
+ */
 private fun writeEntryTo(zip: ZipInputStream, target: File) {
-    target.outputStream().use { zip.copyTo(it) }
+    val temp = File(target.parentFile, "${target.name}.tmp")
+    try {
+        temp.outputStream().use { zip.copyTo(it) }
+        if (!temp.renameTo(target)) {
+            // Rename can fail if the target is held open; fall back to replacing in place.
+            temp.inputStream().use { source ->
+                target.outputStream().use { source.copyTo(it) }
+            }
+        }
+    } finally {
+        temp.delete()
+    }
 }

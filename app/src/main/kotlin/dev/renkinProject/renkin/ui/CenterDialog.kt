@@ -5,14 +5,12 @@ package dev.renkinProject.renkin.ui
 import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
@@ -20,10 +18,14 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -32,6 +34,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextMeasurer
@@ -41,9 +44,9 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.contentBounds
-import dev.renkinProject.renkin.ui.theme.CardShape
 
 /** Colours for the blueprint canvas; filled from either a fixed navy palette or the M3 scheme. */
 private data class BlueprintColors(
@@ -54,6 +57,20 @@ private data class BlueprintColors(
     val box: Color,
     val hatch: Color
 )
+
+internal fun centeredIconOffset(
+    frameSize: Int,
+    contentStart: Int,
+    contentSize: Int,
+    scale: Float,
+    currentOffset: Float = 0f
+): Float {
+    val safeScale = scale.takeIf { it > 0f } ?: 1f
+    return (
+        currentOffset +
+            ((frameSize - contentSize) / 2f - contentStart) / frameSize / safeScale
+        ).coerceIn(-0.5f, 0.5f)
+}
 
 /**
  * Visual positioning tool (opened from the Modifier tab's Adjustments), drawn like a technical
@@ -67,6 +84,7 @@ private data class BlueprintColors(
 internal fun CenterDialog(
     iconBitmap: Bitmap?,
     adjustments: AdjustmentState,
+    renderPositionBase: (suspend () -> Bitmap?)? = null,
     onDismiss: () -> Unit
 ) {
     val bounds = remember(iconBitmap) { iconBitmap?.contentBounds() }
@@ -80,88 +98,151 @@ internal fun CenterDialog(
         hatch = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
     )
     val textMeasurer = rememberTextMeasurer()
+    val wide = LocalConfiguration.current.screenWidthDp >= WIDE_LAYOUT_DP
+    val canvas: @Composable (Modifier) -> Unit = { modifier ->
+        Box(modifier.blueprintFrame(colors.background, colors.frame)) {
+            if (iconBitmap != null) {
+                Image(
+                    bitmap = iconBitmap.asImageBitmap(),
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Canvas(Modifier.fillMaxSize()) {
+                    drawBlueprint(iconBitmap, bounds, colors, textMeasurer)
+                }
+            }
+        }
+    }
+    var autoCenterRequest by remember { mutableIntStateOf(0) }
+    val currentPositionBase by rememberUpdatedState(renderPositionBase)
+    LaunchedEffect(autoCenterRequest) {
+        if (autoCenterRequest == 0 || !adjustments.autoCenter) return@LaunchedEffect
+        val zeroOffsetBitmap = currentPositionBase?.invoke()
+        val bitmap = zeroOffsetBitmap ?: iconBitmap ?: return@LaunchedEffect
+        val content = bitmap.contentBounds() ?: return@LaunchedEffect
+        if (!adjustments.autoCenter) return@LaunchedEffect
+
+        // Compute absolute offsets from a zero-offset render. Using the visible, already-shifted
+        // preview made clipped artwork lose the hidden part of its bounds and converge in steps.
+        val currentOffsetX = if (zeroOffsetBitmap != null) 0f else adjustments.iconOffsetX
+        val currentOffsetY = if (zeroOffsetBitmap != null) 0f else adjustments.iconOffsetY
+        adjustments.iconOffsetX = centeredIconOffset(
+            bitmap.width,
+            content.left,
+            content.width(),
+            adjustments.iconScale,
+            currentOffsetX
+        )
+        adjustments.iconOffsetY = centeredIconOffset(
+            bitmap.height,
+            content.top,
+            content.height(),
+            adjustments.iconScale,
+            currentOffsetY
+        )
+    }
+    val setAutoCenter: (Boolean) -> Unit = { on ->
+        adjustments.autoCenter = on
+        if (on) autoCenterRequest++
+    }
+    val autoCenterControl: @Composable (Modifier) -> Unit = { modifier ->
+        Row(
+            modifier = modifier.padding(top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = stringResource(R.string.centerIcon),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.weight(1f)
+            )
+            Switch(
+                checked = adjustments.autoCenter,
+                onCheckedChange = setAutoCenter
+            )
+        }
+    }
 
     RenkinAlertDialog(
         onDismissRequest = onDismiss,
+        modifier = if (wide) {
+            Modifier.widthIn(max = POSITION_BLUEPRINT_DIALOG_MAX_WIDTH)
+        } else {
+            Modifier
+        },
+        properties = DialogProperties(usePlatformDefaultWidth = !wide),
         title = { Text(stringResource(R.string.position)) },
-        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.done)) } },
+        confirmButton = {
+            if (!wide) {
+                TextButton(onClick = onDismiss) { Text(stringResource(R.string.done)) }
+            }
+        },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(1f)
-                        .clip(CardShape)
-                        .background(colors.background)
-                ) {
-                    if (iconBitmap != null) {
-                        Image(
-                            bitmap = iconBitmap.asImageBitmap(),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxWidth().aspectRatio(1f)
+            if (wide) {
+                BlueprintSideControlLayout(
+                    canvas = canvas,
+                    sideControl = { modifier ->
+                        VerticalLabeledSlider(
+                            label = stringResource(R.string.positionVertical),
+                            value = adjustments.iconOffsetY,
+                            onValueChange = {
+                                adjustments.iconOffsetY = it
+                                adjustments.autoCenter = false
+                            },
+                            valueRange = -0.5f..0.5f,
+                            modifier = modifier,
+                            centered = true,
+                            // Moving the thumb upwards should move the icon upwards.
+                            reverseValue = true
                         )
-                        Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
-                            drawBlueprint(iconBitmap, bounds, colors, textMeasurer)
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = stringResource(R.string.centerIcon),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Switch(
-                        checked = adjustments.autoCenter,
-                        onCheckedChange = { on ->
-                            adjustments.autoCenter = on
-                            // Auto-centre only computes the sliders: nudge the current offsets by
-                            // whatever is needed to put the content box in the middle. The sliders
-                            // move to show it, and the pipeline stays offset-only.
-                            if (on && iconBitmap != null && bounds != null) {
-                                // The preview is measured AFTER the pipeline's scale step, but the
-                                // offset is applied BEFORE it (translate → scale), so a correction
-                                // read off the preview gets multiplied by the scale again. Divide
-                                // it out or a 150% icon overshoots the centre and a 50% one stops
-                                // halfway there.
-                                val scale = adjustments.iconScale.takeIf { it > 0f } ?: 1f
-                                val dx = ((iconBitmap.width - bounds.width()) / 2f - bounds.left) /
-                                    iconBitmap.width / scale
-                                val dy = ((iconBitmap.height - bounds.height()) / 2f - bounds.top) /
-                                    iconBitmap.height / scale
-                                adjustments.iconOffsetX = (adjustments.iconOffsetX + dx).coerceIn(-0.5f, 0.5f)
-                                adjustments.iconOffsetY = (adjustments.iconOffsetY + dy).coerceIn(-0.5f, 0.5f)
-                            }
-                        }
-                    )
-                }
-
-                LabeledSlider(
-                    label = stringResource(R.string.positionHorizontal),
-                    value = adjustments.iconOffsetX,
-                    onValueChange = {
-                        adjustments.iconOffsetX = it
-                        // A manual nudge means the user takes over — auto-centre no longer holds.
-                        adjustments.autoCenter = false
                     },
-                    valueRange = -0.5f..0.5f,
-                    centered = true
-                )
-                LabeledSlider(
-                    label = stringResource(R.string.positionVertical),
-                    value = adjustments.iconOffsetY,
-                    onValueChange = {
-                        adjustments.iconOffsetY = it
-                        adjustments.autoCenter = false
+                    bottomControl = {
+                        LabeledSlider(
+                            label = stringResource(R.string.positionHorizontal),
+                            value = adjustments.iconOffsetX,
+                            onValueChange = {
+                                adjustments.iconOffsetX = it
+                                adjustments.autoCenter = false
+                            },
+                            valueRange = -0.5f..0.5f,
+                            centered = true
+                        )
                     },
-                    valueRange = -0.5f..0.5f,
-                    centered = true
+                    footerControl = autoCenterControl,
+                    sideFooterControl = { modifier ->
+                        TextButton(
+                            onClick = onDismiss,
+                            modifier = modifier
+                        ) {
+                            Text(stringResource(R.string.done))
+                        }
+                    },
+                    bottomReservedHeight = 240.dp
                 )
+            } else {
+                BlueprintStackedLayout(canvas = canvas) {
+                    autoCenterControl(Modifier.fillMaxWidth())
+                    LabeledSlider(
+                        label = stringResource(R.string.positionHorizontal),
+                        value = adjustments.iconOffsetX,
+                        onValueChange = {
+                            adjustments.iconOffsetX = it
+                            adjustments.autoCenter = false
+                        },
+                        valueRange = -0.5f..0.5f,
+                        centered = true
+                    )
+                    LabeledSlider(
+                        label = stringResource(R.string.positionVertical),
+                        value = adjustments.iconOffsetY,
+                        onValueChange = {
+                            adjustments.iconOffsetY = it
+                            adjustments.autoCenter = false
+                        },
+                        valueRange = -0.5f..0.5f,
+                        centered = true
+                    )
+                }
             }
         }
     )
@@ -181,13 +262,7 @@ private fun DrawScope.drawBlueprint(
 ) {
     val thin = 1.dp.toPx()
 
-    // Grid (8 divisions) + outer frame.
-    for (i in 1 until 8) {
-        val p = size.width * i / 8f
-        drawLine(colors.grid, Offset(p, 0f), Offset(p, size.height), thin)
-        drawLine(colors.grid, Offset(0f, p), Offset(size.width, p), thin)
-    }
-    drawRect(colors.frame, style = Stroke(1.5.dp.toPx()))
+    drawBlueprintGrid(colors.grid)
 
     if (bounds == null) return
     val bw = bitmap.width.toFloat()

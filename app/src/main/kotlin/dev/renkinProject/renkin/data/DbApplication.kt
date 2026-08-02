@@ -84,6 +84,31 @@ data class DbApplication(
 )
 
 /**
+ * What the last successful build of [profileId] actually shipped, one row per exported icon.
+ * Written only by a build, so it stays a record of the installed pack while the DbApplication
+ * rows move on with every save — the two together are what "changes since last build" compares.
+ */
+@Entity(primaryKeys = ["profileId", "packageName", "activityName"])
+data class BuiltIcon(
+    val profileId: Long,
+    val packageName: String,
+    val activityName: String,
+    val iconHash: String
+)
+
+@Dao
+interface BuiltIconDao {
+    @Query("SELECT * FROM BuiltIcon WHERE profileId = :profileId")
+    fun get(profileId: Long): List<BuiltIcon>
+
+    @Query("DELETE FROM BuiltIcon WHERE profileId = :profileId")
+    fun deleteForProfile(profileId: Long)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    fun insertAll(rows: List<BuiltIcon>)
+}
+
+/**
  * What this device knows about an icon pack referenced by stored icons — drives the
  * paid-pack lock on imported profiles/backups. [seenInstalled] is the ownership record:
  * a pack ever seen installed on THIS device stays usable forever, even after uninstall.
@@ -111,6 +136,37 @@ const val VERDICT_LISTED = "listed"
 // shared icons stay usable — losing them would help nobody. NOTE: Icon Pack Studio exports
 // also resolve here, but are locked by package pattern regardless (see PackVerdictManager).
 const val VERDICT_UNLISTED = "unlisted"
+
+/**
+ * A saved colour or gradient the user can reapply anywhere the colour sheet appears. Deliberately
+ * NOT per profile: a palette you built is yours across every icon set.
+ */
+@Entity
+data class ColorPreset(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    // The encoded ColorizerStyle; see encodeColorizerStyle().
+    val style: String,
+    val createdAt: Long = System.currentTimeMillis()
+)
+
+@Dao
+interface ColorPresetDao {
+    @Query("SELECT * FROM ColorPreset ORDER BY createdAt")
+    fun getAllFlow(): kotlinx.coroutines.flow.Flow<List<ColorPreset>>
+
+    @Query("SELECT * FROM ColorPreset ORDER BY createdAt")
+    fun getAll(): List<ColorPreset>
+
+    @Insert
+    fun insert(preset: ColorPreset): Long
+
+    @Query("DELETE FROM ColorPreset WHERE id = :id")
+    fun delete(id: Long)
+
+    @Query("DELETE FROM ColorPreset")
+    fun deleteEverything()
+}
 
 @Dao
 interface PackVerdictDao {
@@ -190,14 +246,28 @@ interface ProfileDao {
 // Version 13 adds DbApplication.sourceUrl (attribution reference for online-library icons).
 // Version 14 adds DbApplication.isFallbackIcon (fallback-styled refresh output) so the
 // fallback count/filter survive restarts.
+// Version 15 adds the ColorPreset table (saved colours/gradients, shared by every profile).
+// Version 16 adds the BuiltIcon table: what the last build actually shipped, so "changes since
+// last build" survives saving and restarting.
+// Version 17 rebuilds DbApplication without the iconHash column a development build of 16 had
+// added: fingerprints are derived from the stored rows instead, and the rebuild makes both
+// shapes of 16 (with and without the column) end up identical.
 @Database(
-    entities = [DbApplication::class, Profile::class, PackVerdict::class],
-    version = 14
+    entities = [
+        DbApplication::class,
+        Profile::class,
+        PackVerdict::class,
+        ColorPreset::class,
+        BuiltIcon::class
+    ],
+    version = 17
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
     abstract fun profileDao(): ProfileDao
     abstract fun packVerdictDao(): PackVerdictDao
+    abstract fun colorPresetDao(): ColorPresetDao
+    abstract fun builtIconDao(): BuiltIconDao
 
     companion object {
         @Volatile
@@ -338,6 +408,73 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `ColorPreset` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`style` TEXT NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL)"
+                )
+            }
+        }
+
+        internal val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `BuiltIcon` (" +
+                        "`profileId` INTEGER NOT NULL, " +
+                        "`packageName` TEXT NOT NULL, " +
+                        "`activityName` TEXT NOT NULL, " +
+                        "`iconHash` TEXT NOT NULL, " +
+                        "PRIMARY KEY(`profileId`, `packageName`, `activityName`))"
+                )
+            }
+        }
+
+        internal val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Copy by explicit column list: a device that ran the development 16 has an extra
+                // iconHash column, one coming straight from 15 does not, and both must land on
+                // the same shape. SQLite before 3.35 cannot drop a column, hence the rebuild.
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `DbApplication_new` (" +
+                        "`packageName` TEXT NOT NULL, `activityName` TEXT NOT NULL, " +
+                        "`isAdaptiveIcon` INTEGER NOT NULL, `isXml` INTEGER NOT NULL, " +
+                        "`drawable` TEXT NOT NULL, " +
+                        "`calendarEnabled` INTEGER NOT NULL DEFAULT 0, " +
+                        "`calendarPrefix` TEXT NOT NULL DEFAULT '', " +
+                        "`calendarPackName` TEXT NOT NULL DEFAULT '', " +
+                        "`sourcePackName` TEXT NOT NULL DEFAULT '', " +
+                        "`profileId` INTEGER NOT NULL DEFAULT 1, " +
+                        "`sourceDrawableName` TEXT NOT NULL DEFAULT '', " +
+                        "`isCustomIcon` INTEGER NOT NULL DEFAULT 0, " +
+                        "`isLegacyIcon` INTEGER NOT NULL DEFAULT 0, " +
+                        "`baseDrawable` TEXT NOT NULL DEFAULT '', " +
+                        "`baseIsAdaptiveIcon` INTEGER NOT NULL DEFAULT 0, " +
+                        "`baseIsXml` INTEGER NOT NULL DEFAULT 0, " +
+                        "`sourceUrl` TEXT NOT NULL DEFAULT '', " +
+                        "`isFallbackIcon` INTEGER NOT NULL DEFAULT 0, " +
+                        "PRIMARY KEY(`packageName`, `activityName`, `profileId`))"
+                )
+                db.execSQL(
+                    "INSERT INTO `DbApplication_new` (" +
+                        "packageName, activityName, isAdaptiveIcon, isXml, drawable, " +
+                        "calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, " +
+                        "profileId, sourceDrawableName, isCustomIcon, isLegacyIcon, " +
+                        "baseDrawable, baseIsAdaptiveIcon, baseIsXml, sourceUrl, isFallbackIcon) " +
+                        "SELECT packageName, activityName, isAdaptiveIcon, isXml, drawable, " +
+                        "calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, " +
+                        "profileId, sourceDrawableName, isCustomIcon, isLegacyIcon, " +
+                        "baseDrawable, baseIsAdaptiveIcon, baseIsXml, sourceUrl, isFallbackIcon " +
+                        "FROM `DbApplication`"
+                )
+                db.execSQL("DROP TABLE `DbApplication`")
+                db.execSQL("ALTER TABLE `DbApplication_new` RENAME TO `DbApplication`")
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -351,7 +488,10 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_10_11,
             MIGRATION_11_12,
             MIGRATION_12_13,
-            MIGRATION_13_14
+            MIGRATION_13_14,
+            MIGRATION_14_15,
+            MIGRATION_15_16,
+            MIGRATION_16_17
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {

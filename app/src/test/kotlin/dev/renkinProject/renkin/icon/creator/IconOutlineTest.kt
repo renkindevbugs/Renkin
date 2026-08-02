@@ -32,6 +32,84 @@ class IconOutlineTest {
     }
 
     @Test
+    fun add_withGradientSweepsTheContourAcrossTheIcon() {
+        val style = ColorizerStyle(
+            mode = ColorizerMode.GRADIENT,
+            gradientType = GradientType.LINEAR,
+            firstColor = Color.RED,
+            gradientStops = listOf(Color.BLUE),
+            // 90 degrees runs left to right, so the two sides of the ring differ.
+            gradientAngle = 90f
+        )
+
+        val out = IconOutline.apply(
+            disc(),
+            OutlineMode.ADD,
+            widthPx = 6f,
+            color = Color.RED,
+            style = style
+        )
+
+        val left = out.getPixel(32 - 23, 32)
+        val right = out.getPixel(32 + 23, 32)
+        assertEquals(0xFF, Color.alpha(left))
+        assertEquals(0xFF, Color.alpha(right))
+        assertTrue(Color.red(left) > Color.blue(left))
+        assertTrue(Color.blue(right) > Color.red(right))
+    }
+
+    @Test
+    fun add_withSingleColorStyleStillUsesThePlainColor() {
+        val out = IconOutline.apply(
+            disc(),
+            OutlineMode.ADD,
+            widthPx = 6f,
+            color = Color.RED,
+            style = ColorizerStyle(firstColor = Color.GREEN)
+        )
+
+        val outside = out.getPixel(32 + 23, 32)
+        assertEquals(Color.RED, outside)
+    }
+
+    @Test
+    fun add_keepsATranslucentColourTranslucent() {
+        val halfRed = Color.argb(128, 255, 0, 0)
+
+        val out = IconOutline.apply(disc(), OutlineMode.ADD, widthPx = 6f, color = halfRed)
+
+        // The dilation stamps the silhouette 32 times; painting the colour through each stamp
+        // stacked its alpha until a half-transparent outline came out solid.
+        val outside = out.getPixel(32 + 23, 32)
+        assertTrue("alpha was ${Color.alpha(outside)}", Color.alpha(outside) in 100..160)
+    }
+
+    @Test
+    fun add_keepsAGradientsTransparentEndTransparent() {
+        val style = ColorizerStyle(
+            mode = ColorizerMode.GRADIENT,
+            firstColor = Color.WHITE,
+            gradientStops = listOf(Color.TRANSPARENT),
+            gradientPositions = listOf(0f, 1f),
+            gradientAngle = 90f
+        )
+
+        val out = IconOutline.apply(
+            disc(),
+            OutlineMode.ADD,
+            widthPx = 6f,
+            color = Color.WHITE,
+            style = style
+        )
+
+        val left = out.getPixel(32 - 23, 32)
+        val right = out.getPixel(32 + 23, 32)
+        // Fading to transparent must stay white and fade out, not darken towards black.
+        assertTrue(Color.alpha(left) > 180)
+        assertTrue("alpha was ${Color.alpha(right)}", Color.alpha(right) < 60)
+    }
+
+    @Test
     fun add_paintsTheBandOutsideTheSilhouette() {
         val out = IconOutline.apply(disc(), OutlineMode.ADD, widthPx = 6f, color = Color.RED)
 

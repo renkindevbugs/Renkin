@@ -9,6 +9,7 @@ import android.graphics.drawable.ColorDrawable
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -43,6 +44,14 @@ class PackageInfoStructTest {
         isRefreshMade = true
     )
 
+    private fun namedApp(name: String) = PackageInfoStruct(
+        appName = name,
+        packageName = "com.example.${name.lowercase()}",
+        activityName = "com.example.$name.Main",
+        icon = ColorDrawable(0),
+        iconID = 0
+    )
+
     @Test
     fun changeExport_nullIcon_removesPackReferenceAndRefreshFlag() {
         val cleared = app(FakeIcon()).changeExport(null)
@@ -59,5 +68,28 @@ class PackageInfoStructTest {
 
         assertSame(replacement, changed.createdIcon)
         assertNull(changed.sourcePackName)
+    }
+
+    @Test
+    fun key_isStableAndComputedOnce() {
+        val application = app(FakeIcon())
+        val firstRead = application.key
+
+        assertEquals("com.example.app/com.example.app.Main", firstRead)
+        assertSame(firstRead, application.key)
+    }
+
+    @Test
+    fun compareTo_ignoresCaseAndDiacritics() {
+        val applications = listOf(
+            namedApp("Žaba"),
+            namedApp("apple"),
+            namedApp("Čaj")
+        )
+
+        assertEquals(
+            listOf("apple", "Čaj", "Žaba"),
+            applications.sorted().map { it.appName }
+        )
     }
 }

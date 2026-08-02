@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +14,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -26,6 +29,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
@@ -94,6 +99,9 @@ fun OptionCard(
     modifier: Modifier = Modifier,
     selected: Boolean = false,
     onClick: (() -> Unit)? = null,
+    // Nested rows (a row inside an already-carded section) pass InnerShape so the corners don't
+    // fight the card around them.
+    shape: Shape = CardShape,
     trailing: (@Composable () -> Unit)? = null
 ) {
     val container = if (selected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer
@@ -115,10 +123,39 @@ fun OptionCard(
         }
     }
     if (onClick != null) {
-        Surface(onClick = onClick, shape = CardShape, color = container, modifier = modifier.fillMaxWidth()) { row() }
+        Surface(onClick = onClick, shape = shape, color = container, modifier = modifier.fillMaxWidth()) { row() }
     } else {
-        Surface(shape = CardShape, color = container, modifier = modifier.fillMaxWidth()) { row() }
+        Surface(shape = shape, color = container, modifier = modifier.fillMaxWidth()) { row() }
     }
+}
+
+/**
+ * A tappable colour row: label on the left, a circular swatch of [color] on the right. Used by
+ * the global options, the modifier tab and the icon browser — each of which used to carry its
+ * own byte-identical copy.
+ */
+@Composable
+fun ColorRow(
+    label: String,
+    color: Color,
+    modifier: Modifier = Modifier,
+    shape: Shape = CardShape,
+    onClick: () -> Unit
+) {
+    OptionCard(
+        label = label,
+        modifier = modifier,
+        onClick = onClick,
+        shape = shape,
+        trailing = {
+            Surface(
+                shape = CircleShape,
+                color = color,
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+                modifier = Modifier.size(28.dp)
+            ) {}
+        }
+    )
 }
 
 /** Card container for a group of related controls (sliders, switches, hint text). */
@@ -147,8 +184,12 @@ fun LabeledSlider(
     centered: Boolean = false,
     // For callers persisting the value somewhere expensive (DataStore): fires once on release
     // instead of on every drag tick.
-    onValueChangeFinished: (() -> Unit)? = null
+    onValueChangeFinished: (() -> Unit)? = null,
+    // Applied to the label + track as one block, so a caller whose surroundings are inset can
+    // inset the slider too — the track otherwise runs to the container's own edge.
+    modifier: Modifier = Modifier
 ) {
+  Column(modifier) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
             text = label,
@@ -184,6 +225,7 @@ fun LabeledSlider(
             onValueChangeFinished = onValueChangeFinished
         )
     }
+  }
 }
 
 /**

@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.ui
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
 import android.util.LruCache
+import androidx.core.graphics.scale
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
@@ -82,6 +83,50 @@ internal fun rememberAppBitmap(app: PackageInfoStruct, size: Dp = 54.dp): ImageB
                     // Drawable rasterisation temporarily mutates bounds. The same app can be
                     // requested at several sizes by home/watch surfaces, so serialize on it.
                     synchronized(app.icon) { app.icon.toSafeBitmapOrNull(px, px) }
+                }
+            }
+            bitmap = loaded?.asImageBitmap()
+        }
+    }
+
+    return bitmap
+}
+
+private val createdIconCache = AppBitmapMemoryCache()
+
+/**
+ * The icon Renkin made for [app], decoded to [size]. Rasterising instead of handing the list a
+ * vector painter is what keeps a newly generated icon from appearing small and growing into
+ * place: by the time it is drawn it is already a bitmap of the right size.
+ *
+ * Null while it loads, and for apps with no icon of their own.
+ */
+@Composable
+internal fun rememberCreatedIconBitmap(app: PackageInfoStruct, size: Dp): ImageBitmap? {
+    val created = app.createdIcon
+    val target = with(LocalDensity.current) { size.roundToPx() }
+    // internalVersion changes on every edit, so replacing an icon never shows the previous one.
+    val key = remember(app.key, app.internalVersion, created, target) {
+        created?.let { AppBitmapCacheKey(app.key, app.internalVersion, app.icon, target) }
+    }
+    var bitmap by remember(key) {
+        mutableStateOf(key?.let { createdIconCache.get(it)?.asImageBitmap() })
+    }
+
+    LaunchedEffect(key) {
+        if (key != null && bitmap == null && created != null) {
+            val loaded = withContext(Dispatchers.Default) {
+                createdIconCache.getOrLoad(key) {
+                    runCatching {
+                        val full = created.previewBitmap()
+                        // Rows are 56dp; caching the generator's 256px output would fill the
+                        // budget after a couple of dozen icons and re-decode on every scroll.
+                        if (full.width > target) {
+                            full.scale(target, target)
+                        } else {
+                            full
+                        }
+                    }.getOrNull()
                 }
             }
             bitmap = loaded?.asImageBitmap()

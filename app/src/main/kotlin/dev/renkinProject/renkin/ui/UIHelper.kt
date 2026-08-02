@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalButton
@@ -57,7 +58,10 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -111,6 +115,11 @@ fun getPreferences(): DataStore<Preferences> {
 /** Light tactile tick for selecting/opening an item (e.g. picking a pack icon). */
 fun View.performTapHaptic() {
     performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+}
+
+/** The system's own long-press tick, so a press-and-hold feels like it does everywhere else. */
+fun View.performLongPressHaptic() {
+    performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
 }
 
 /** Stronger confirmation tick for committing an action (e.g. building the pack). */
@@ -229,6 +238,7 @@ fun RenkinAlertDialog(
     onDismissRequest: () -> Unit,
     confirmButton: @Composable () -> Unit = {},
     modifier: Modifier = Modifier,
+    properties: DialogProperties = DialogProperties(),
     dismissButton: (@Composable () -> Unit)? = null,
     icon: (@Composable () -> Unit)? = null,
     title: (@Composable () -> Unit)? = null,
@@ -238,6 +248,7 @@ fun RenkinAlertDialog(
         onDismissRequest = onDismissRequest,
         confirmButton = confirmButton,
         modifier = modifier,
+        properties = properties,
         dismissButton = dismissButton,
         icon = icon,
         // Expressive emphasized titles across every Renkin dialog, in one place.
@@ -276,13 +287,30 @@ fun boldStringResource(@StringRes id: Int, vararg formatArgs: Any): AnnotatedStr
  */
 @Composable
 fun LinkText(text: String, url: String, modifier: Modifier = Modifier) {
-    val uriHandler = LocalUriHandler.current
+    val openLink = rememberLinkOpener()
     Text(
         text = text,
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.primary,
-        modifier = modifier.clickable(role = Role.Button) { uriHandler.openUri(url) }
+        modifier = modifier.clickable(role = Role.Button) { openLink(url) }
     )
+}
+
+/**
+ * Opens a web link, reporting failure as a toast instead of crashing. A browser is the norm but
+ * not a guarantee — stripped ROMs and locked-down work profiles can have no handler, and
+ * `openUri` throws when nothing resolves.
+ */
+@Composable
+fun rememberLinkOpener(): (String) -> Unit {
+    val uriHandler = LocalUriHandler.current
+    val toaster = LocalToaster.current
+    val failed = stringResource(R.string.linkOpenFailed)
+    return remember(uriHandler, toaster, failed) {
+        { url: String ->
+            if (runCatching { uriHandler.openUri(url) }.isFailure) toaster.show(failed)
+        }
+    }
 }
 
 /**
@@ -420,11 +448,16 @@ fun CheckableDropdownItem(text: String, checked: Boolean, onClick: () -> Unit) {
 @Composable
 fun ToastHost(toaster: Toaster) {
     val context = LocalContext.current
+    var shown by remember { mutableStateOf<Toast?>(null) }
     LaunchedEffect(toaster) {
         toaster.events.collect { message ->
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+            // Android queues toasts, so rapid actions left a stale one on screen long after the
+            // action that caused it. Cancelling the previous keeps the newest message honest.
+            shown?.cancel()
+            shown = Toast.makeText(context, message, Toast.LENGTH_SHORT).also { it.show() }
         }
     }
+    DisposableEffect(Unit) { onDispose { shown?.cancel() } }
 }
 /**
  * Position provider for tooltips that CLAMPS the popup into the window horizontally — the

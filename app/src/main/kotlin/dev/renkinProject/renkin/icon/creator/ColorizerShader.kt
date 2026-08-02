@@ -1,0 +1,222 @@
+package dev.renkinProject.renkin.icon.creator
+
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.LinearGradient
+import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffColorFilter
+import android.graphics.PorterDuffXfermode
+import android.graphics.RadialGradient
+import android.graphics.Shader
+import kotlin.math.abs
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.sin
+
+/**
+ * Gradient construction lives here so the icon generator and the live editor preview paint the
+ * exact same thing — a second implementation in the UI would drift from the built output.
+ */
+fun buildColorizerShader(
+    colors: List<Int>,
+    type: GradientType,
+    angle: Float,
+    width: Int,
+    height: Int,
+    // Empty spreads the stops evenly, the only behaviour that existed before stop positions.
+    positions: List<Float> = emptyList()
+): Shader {
+    val centerX = width / 2f
+    val centerY = height / 2f
+    // A single stop is not a gradient; duplicate it so the shader still paints that flat colour.
+    val stops = if (colors.size >= MIN_GRADIENT_STOPS) colors else colors + colors
+    val palette = stops.toIntArray()
+    val offsets = shaderGradientPositions(stops, positions)
+    return when (type) {
+        GradientType.LINEAR -> {
+            val (startX, startY, endX, endY) = linearGradientEndpoints(angle, width.toFloat(), height.toFloat())
+            LinearGradient(
+                startX,
+                startY,
+                endX,
+                endY,
+                palette,
+                offsets,
+                Shader.TileMode.CLAMP
+            )
+        }
+        GradientType.RADIAL -> RadialGradient(
+            centerX,
+            centerY,
+            hypot(centerX, centerY),
+            palette,
+            offsets,
+            Shader.TileMode.CLAMP
+        )
+    }
+}
+
+/** Where a linear gradient starts and ends inside a box, in that box's own pixels. */
+data class GradientEndpoints(val startX: Float, val startY: Float, val endX: Float, val endY: Float)
+
+/**
+ * The line a linear gradient runs along at [angle] over a [width] x [height] box: 0° points up
+ * and increases clockwise, the convention the angle dial shows. Shared by the generated icon and
+ * by the editor's swatches — two copies of this trigonometry would let a preview disagree with
+ * the icon it describes.
+ */
+fun linearGradientEndpoints(angle: Float, width: Float, height: Float): GradientEndpoints {
+    val centerX = width / 2f
+    val centerY = height / 2f
+    val angleRadians = Math.toRadians((normalizeGradientAngle(angle) % 360f).toDouble())
+    val directionX = sin(angleRadians).toFloat()
+    val directionY = -cos(angleRadians).toFloat()
+    // Half the box's extent along the gradient's direction, so both ends land on its edge.
+    val halfSpan = abs(directionX) * centerX + abs(directionY) * centerY
+    return GradientEndpoints(
+        startX = centerX - directionX * halfSpan,
+        startY = centerY - directionY * halfSpan,
+        endX = centerX + directionX * halfSpan,
+        endY = centerY + directionY * halfSpan
+    )
+}
+
+/**
+ * [style] rasterised once so per-pixel code can look up the colour at each position. Null when
+ * the style is a single colour and the caller's flat int is all it needs.
+ */
+fun gradientPixels(style: ColorizerStyle?, width: Int, height: Int): IntArray? {
+    val gradient = style?.takeIf { it.mode == ColorizerMode.GRADIENT } ?: return null
+    if (width <= 0 || height <= 0) return null
+    val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+    Canvas(bitmap).drawRect(
+        0f,
+        0f,
+        width.toFloat(),
+        height.toFloat(),
+        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = buildColorizerShader(
+                gradient.allGradientColors,
+                gradient.gradientType,
+                gradient.gradientAngle,
+                width,
+                height,
+                gradient.gradientPositions
+            )
+        }
+    )
+    val pixels = IntArray(width * height)
+    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+    bitmap.recycle()
+    return pixels
+}
+
+/**
+ * Applies [style] to [source] the way the generator's colourize step does — gradient through the
+ * alpha mask, monochrome, solid fill or tint — and returns a new bitmap for the editor preview.
+ * Everything after colourizing (shape, scale, outline, background) is deliberately left out.
+ */
+fun colorizeSampleBitmap(
+    source: Bitmap,
+    style: ColorizerStyle,
+    // Area the gradient spans; null uses the whole bitmap. A segment gradient must sweep across
+    // the segment, not the icon, or a small region only ever shows a sliver of it.
+    gradientBounds: android.graphics.Rect? = null
+): Bitmap {
+    val gradientWidth = gradientBounds?.width() ?: source.width
+    val gradientHeight = gradientBounds?.height() ?: source.height
+    fun gradientShader() = buildColorizerShader(
+        style.allGradientColors,
+        style.gradientType,
+        style.gradientAngle,
+        gradientWidth,
+        gradientHeight,
+        style.gradientPositions
+    ).apply {
+        gradientBounds?.let { bounds ->
+            setLocalMatrix(
+                android.graphics.Matrix().apply {
+                    setTranslate(bounds.left.toFloat(), bounds.top.toFloat())
+                }
+            )
+        }
+    }
+
+    if (style.mode == ColorizerMode.GRADIENT) {
+        val base = if (style.monochrome) monochromeBitmap(source, style.inverse) else source
+        val result = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(result)
+        val solidFill = style.flat && !style.monochrome
+        val drawGradient = {
+            canvas.drawRect(
+                0f,
+                0f,
+                source.width.toFloat(),
+                source.height.toFloat(),
+                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    shader = gradientShader()
+                    if (!solidFill) xfermode = PorterDuffXfermode(PorterDuff.Mode.MULTIPLY)
+                }
+            )
+        }
+        val drawArtwork = {
+            canvas.drawBitmap(
+                base,
+                0f,
+                0f,
+                Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+                    if (solidFill) xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
+                }
+            )
+        }
+        if (solidFill) {
+            drawGradient()
+            drawArtwork()
+        } else {
+            drawArtwork()
+            drawGradient()
+        }
+        return if (style.inverse && !style.monochrome) invertBitmapColors(result) else result
+    }
+
+    // Monochrome ignores the picked colour entirely, matching colorizeImage().
+    if (style.monochrome) return monochromeBitmap(source, style.inverse)
+
+    val result = Bitmap.createBitmap(source.width, source.height, Bitmap.Config.ARGB_8888)
+    // Solid fill replaces the artwork's colours; the default tint multiplies with them.
+    val blend = if (style.flat) PorterDuff.Mode.SRC_IN else PorterDuff.Mode.MULTIPLY
+    Canvas(result).drawBitmap(
+        source,
+        0f,
+        0f,
+        Paint().apply {
+            colorFilter = PorterDuffColorFilter(
+                if (style.inverse) invertArgb(style.firstColor) else style.firstColor,
+                blend
+            )
+        }
+    )
+    return if (style.inverse) invertBitmapColors(result) else result
+}
+
+/**
+ * Applies [layers] in order: every layer colourizes the whole icon with its own style, then only
+ * the pixels its regions select are kept.
+ *
+ * Each layer matches against what the layers before it produced, not against the original
+ * artwork — the region picker shows a later layer that same accumulated icon, so a pick lands on
+ * the colour the user actually sees. Matching the original instead let a second layer silently
+ * repaint the first one's work, because the palette still offered the colours the first layer had
+ * already covered.
+ */
+fun applySegmentLayers(source: Bitmap, layers: List<SegmentLayer>): Bitmap {
+    var current = source
+    for (layer in layers) {
+        if (layer.targets.isEmpty()) continue
+        val bounds = segmentBounds(current, layer.targets, layer.tolerance)
+        val colorized = colorizeSampleBitmap(current, layer.style, bounds)
+        current = mergeSegmentLayer(current, current, colorized, layer.targets, layer.tolerance)
+    }
+    return current
+}

@@ -35,6 +35,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.CardShape
+import dev.renkinProject.renkin.IconApplyResult
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.WatchViewModel
@@ -57,6 +59,7 @@ import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -73,6 +76,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     val prefs = getPreferences()
     val view = LocalView.current
     val toaster = LocalToaster.current
+    val suggestionProfileId = remember(suggestionId) { viewModel.activeProfileId }
 
     var suggestion by remember(suggestionId) { mutableStateOf<IconSuggestion?>(null) }
     var candidates by remember(suggestionId) { mutableStateOf<List<IconSuggestionCandidate>>(emptyList()) }
@@ -81,6 +85,9 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     var generating by remember(suggestionId) { mutableStateOf(false) }
     var candidateChanged by remember(suggestionId) { mutableStateOf(false) }
     var loaded by remember(suggestionId) { mutableStateOf(false) }
+    // Guards the confirm button while the apply is awaited, so a double tap can't run it twice.
+    var applying by remember(suggestionId) { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     LaunchedEffect(suggestionId) {
         val (s, c) = watchViewModel.loadSuggestion(suggestionId)
@@ -131,7 +138,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     if (!viewModel.applicationsLoaded || !viewModel.iconPackLoaded) return
 
     RenkinAlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = { if (!applying) onDismiss() },
         title = { Text(stringResource(R.string.watchApplyTitle)) },
         text = {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -189,6 +196,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                 FilledTonalIconButton(
                     onClick = onDismiss,
+                    enabled = !applying,
                     colors = IconButtonDefaults.filledTonalIconButtonColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer
@@ -197,8 +205,10 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                     Icon(Icons.Filled.Close, stringResource(R.string.dismiss))
                 }
                 val applyToast = stringResource(R.string.watchApplyToast)
+                val applyFailedToast = stringResource(R.string.watchApplyFailed)
+                val lockedToast = stringResource(R.string.iconOriginLocked)
                 DisabledExplanation(
-                    enabled = newIcon != null && app != null,
+                    enabled = newIcon != null && app != null && !applying,
                     message = stringResource(
                         if (candidateChanged) R.string.watchCandidateChanged else R.string.watchApplyDisabledHint
                     )
@@ -208,17 +218,47 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                             view.performConfirmHaptic()
                             val icon = newIcon
                             val targetApp = app
-                            if (icon != null && targetApp != null) {
-                                // applyIcon finds the live row by key; a target no longer
-                                // in the list is a silent no-op, same as before.
-                                viewModel.applyIcon(targetApp, icon, sourcePackName = selectedPack)
-                                // Applying handles the rule, so remove it (cascades the suggestion)
-                                suggestion?.ruleId?.let { ruleId -> watchViewModel.deleteRule(ruleId) }
-                                toaster.show(applyToast)
+                            if (icon == null || targetApp == null) {
+                                onDismiss()
+                            } else {
+                                val appliedSuggestionId = suggestionId
+                                val appliedRuleId = suggestion?.ruleId
+                                val appliedPack = selectedPack
+                                applying = true
+                                scope.launch {
+                                    // The rule (and with it the suggestion) may only go once the
+                                    // icon really landed — the target row can be gone by now, and
+                                    // dropping the rule then would lose the suggestion for nothing.
+                                    try {
+                                        when (
+                                            viewModel.applyWatchIcon(
+                                                suggestionProfileId,
+                                                targetApp,
+                                                icon,
+                                                appliedPack
+                                            )
+                                        ) {
+                                            IconApplyResult.APPLIED -> {
+                                                appliedRuleId?.let { watchViewModel.deleteRule(it) }
+                                                toaster.show(applyToast)
+                                            }
+                                            IconApplyResult.LOCKED -> toaster.show(lockedToast)
+                                            IconApplyResult.TARGET_GONE,
+                                            IconApplyResult.PROFILE_CHANGED,
+                                            IconApplyResult.FAILED -> toaster.show(applyFailedToast)
+                                        }
+                                    } finally {
+                                        applying = false
+                                        // A second notification may already own the modal. The old
+                                        // apply must never dismiss that newer suggestion.
+                                        if (viewModel.pendingWatchSuggestionId == appliedSuggestionId) {
+                                            onDismiss()
+                                        }
+                                    }
+                                }
                             }
-                            onDismiss()
                         },
-                        enabled = newIcon != null && app != null
+                        enabled = newIcon != null && app != null && !applying
                     ) {
                         Icon(Icons.Filled.Check, stringResource(R.string.confirm))
                     }

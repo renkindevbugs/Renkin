@@ -17,6 +17,7 @@ import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
+import dev.renkinProject.renkin.extension.contentBounds
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -29,6 +30,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 /**
  * Coverage for the icon generator's source skipping and the shared modifier/scale pass on a
@@ -43,16 +45,26 @@ class IconGeneratorTest {
     private val context: Context get() = RuntimeEnvironment.getApplication()
     private val emptyPack get() = IconPackContainer("", emptyMap())
 
+    private fun adjustmentPipeline(options: GenerationOptions) =
+        IconAdjustmentPipeline(context.resources, options)
+
     private fun options(
         source: Source = Source.APPLICATION_NAME,
         override: Boolean = true,
         iconScale: Float = 1f,
+        iconOffsetX: Float = 0f,
+        iconOffsetY: Float = 0f,
         imageEdit: ImageEdit = ImageEdit.NONE,
         applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT,
         invertMonochrome: Boolean = false,
         iconShape: IconShape = IconShape.NONE,
+        colorizeFlat: Boolean = false,
         colorizeMonochrome: Boolean = false,
         colorizeInverse: Boolean = false,
+        colorizerMode: ColorizerMode = ColorizerMode.SINGLE_COLOR,
+        colorizerGradientType: GradientType = GradientType.LINEAR,
+        colorizerGradientColors: List<Int> = listOf(Color.BLACK),
+        colorizerGradientAngle: Float = 0f,
         color: Int = Color.BLACK,
         bgColor: Int = Color.WHITE
     ) = GenerationOptions(
@@ -67,11 +79,18 @@ class IconGeneratorTest {
         themed = false,
         override = override,
         iconScale = iconScale,
+        iconOffsetX = iconOffsetX,
+        iconOffsetY = iconOffsetY,
         applicationIconVariant = applicationIconVariant,
         invertMonochrome = invertMonochrome,
         iconShape = iconShape,
+        colorizeFlat = colorizeFlat,
         colorizeMonochrome = colorizeMonochrome,
-        colorizeInverse = colorizeInverse
+        colorizeInverse = colorizeInverse,
+        colorizerMode = colorizerMode,
+        colorizerGradientType = colorizerGradientType,
+        colorizerGradientColors = colorizerGradientColors,
+        colorizerGradientAngle = colorizerGradientAngle
     )
 
     private fun app(
@@ -90,6 +109,131 @@ class IconGeneratorTest {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         bitmap.eraseColor(Color.BLUE)
         return BitmapIconDrawable(bitmap)
+    }
+
+    /**
+     * A Lawnicons-shaped pack icon: thin light strokes inset inside a dark plate, wrapped as an
+     * adaptive icon. Exactly the structure that used to compose differently in every modifier.
+     */
+    private fun lawniconsStyleDrawable(size: Int = 108): Drawable {
+        val strokes = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+        val paint = android.graphics.Paint().apply {
+            color = Color.WHITE
+            strokeWidth = size / 27f
+            style = android.graphics.Paint.Style.STROKE
+        }
+        Canvas(strokes).apply {
+            drawCircle(size / 2f, size / 2f, size / 4f, paint)
+            drawLine(size / 2f, size / 4f, size / 2f, size * 3 / 4f, paint)
+        }
+        return android.graphics.drawable.AdaptiveIconDrawable(
+            ColorDrawable(Color.rgb(20, 20, 30)),
+            android.graphics.drawable.InsetDrawable(BitmapDrawable(null, strokes), 0.25f)
+        )
+    }
+
+    private fun packWith(drawable: Drawable, application: PackageInfoStruct) = IconPackContainer(
+        "",
+        mapOf(
+            InstalledApplication(application.packageName, application.activityName, 0)
+                to ResourceDrawable(0, drawable)
+        )
+    )
+
+    private fun generatedIcon(
+        application: PackageInfoStruct,
+        pack: IconPackContainer,
+        imageEdit: ImageEdit,
+        options: GenerationOptions = options(source = Source.ICON_PACK, imageEdit = imageEdit)
+    ): Bitmap? {
+        var produced: IconPackDrawable? = null
+        IconGenerator(context, options, pack, emptyPack)
+            .generateIcons(listOf(application)) { _, icon, _, _ -> produced = icon }
+        return produced?.toBitmap()
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun everyGenericModifierStartsFromTheSameCanonicalFrame() {
+        val application = app()
+        val pack = packWith(lawniconsStyleDrawable(), application)
+        val plain = generatedIcon(application, pack, ImageEdit.NONE)
+        assertNotNull(plain)
+        val expected = plain!!.contentBounds()
+
+        // Path tracing and edge detection rasterise through native libraries, so they are checked
+        // on-device; these three run entirely on the JVM.
+        for (edit in listOf(
+            ImageEdit.COLORIZE,
+            ImageEdit.COLORIZE_SEGMENTS,
+            ImageEdit.REMOVE_BACKGROUND
+        )) {
+            val modified = generatedIcon(application, pack, edit)
+            assertNotNull("$edit produced no icon", modified)
+            assertEquals(
+                "$edit changed the icon's frame",
+                plain.width to plain.height,
+                modified!!.width to modified.height
+            )
+            assertEquals("$edit moved or resized the artwork", expected, modified.contentBounds())
+        }
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun reopeningAStoredIconKeepsTheSameBounds() {
+        val application = app()
+        val pack = packWith(lawniconsStyleDrawable(), application)
+        val stored = generatedIcon(application, pack, ImageEdit.NONE)!!
+
+        // Second visit: the icon is a stored bitmap now, and the modifiers must not shift it.
+        val reopened = generator(options(imageEdit = ImageEdit.COLORIZE))
+            .applyModifier(BitmapIconDrawable(stored), ImageEdit.COLORIZE)
+            .toBitmap()
+
+        assertEquals(stored.contentBounds(), reopened.contentBounds())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun automaticBackgroundRemovalKeepsLineArtOnTransparency() {
+        val application = app()
+        // Foreground only: strokes on transparency, the shape a Lawnicons foreground has once the
+        // plate is gone. There is no background left to strip.
+        val strokes = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888)
+        val paint = android.graphics.Paint().apply {
+            color = Color.WHITE
+            strokeWidth = 3f
+            style = android.graphics.Paint.Style.STROKE
+        }
+        Canvas(strokes).drawCircle(32f, 32f, 20f, paint)
+        val opaqueBefore = strokes.opaquePixels()
+
+        val cleaned = generator(options(imageEdit = ImageEdit.REMOVE_BACKGROUND))
+            .applyModifier(BitmapIconDrawable(strokes), ImageEdit.REMOVE_BACKGROUND)
+            .toBitmap()
+
+        assertEquals(opaqueBefore, cleaned.opaquePixels())
+        assertNotNull(application)
+    }
+
+    private fun Bitmap.opaquePixels(): Int {
+        val pixels = IntArray(width * height)
+        getPixels(pixels, 0, width, 0, 0, width, height)
+        return pixels.count { Color.alpha(it) > 16 }
+    }
+
+    @Test
+    fun materialYouPackStrokeScale_isRelativeToTheSourceWidth() {
+        assertEquals(0.5f, effectiveMaterialYouPackStrokeScale(0.5f))
+        assertEquals(1f, effectiveMaterialYouPackStrokeScale(1f))
+        assertEquals(2f, effectiveMaterialYouPackStrokeScale(2f))
+    }
+
+    @Test
+    fun materialYouAdaptiveAppearanceDoesNotReceiveLegacyForegroundZoom() {
+        assertFalse(shouldNormalizeAdaptiveForeground(preserveAdaptiveAppearance = true))
+        assertTrue(shouldNormalizeAdaptiveForeground(preserveAdaptiveAppearance = false))
     }
 
     private fun generator(options: GenerationOptions) =
@@ -121,7 +265,7 @@ class IconGeneratorTest {
     @Test
     fun modifierWithNoEditAndNoScaleReturnsTheSameIcon() {
         val base = bitmapIcon()
-        val result = generator(options(iconScale = 1f)).applyModifier(base, ImageEdit.NONE)
+        val result = adjustmentPipeline(options(iconScale = 1f)).apply(base)
         assertSame(base, result)
     }
 
@@ -316,6 +460,157 @@ class IconGeneratorTest {
     }
 
     @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun linearGradientColorizePreservesSourceAlphaWithoutMutatingSource() {
+        val sourceAlphas = intArrayOf(0, 64, 128, 192, 255)
+        val bitmap = Bitmap.createBitmap(sourceAlphas.size, 1, Bitmap.Config.ARGB_8888).apply {
+            sourceAlphas.forEachIndexed { x, alpha ->
+                setPixel(x, 0, Color.argb(alpha, 20, 180, 70))
+            }
+        }
+        val originalPixels = IntArray(sourceAlphas.size) { bitmap.getPixel(it, 0) }
+
+        val result = generator(
+            options(
+                color = Color.RED,
+                colorizeFlat = true,
+                colorizerMode = ColorizerMode.GRADIENT,
+                colorizerGradientType = GradientType.LINEAR,
+                colorizerGradientColors = listOf(Color.BLUE),
+                colorizerGradientAngle = 90f
+            )
+        ).applyModifier(BitmapIconDrawable(bitmap), ImageEdit.COLORIZE).toBitmap()
+
+        sourceAlphas.forEachIndexed { x, alpha ->
+            assertEquals(alpha, Color.alpha(result.getPixel(x, 0)))
+            assertEquals(originalPixels[x], bitmap.getPixel(x, 0))
+        }
+        assertTrue(Color.red(result.getPixel(1, 0)) > Color.blue(result.getPixel(1, 0)))
+        assertTrue(Color.blue(result.getPixel(4, 0)) > Color.red(result.getPixel(4, 0)))
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun gradientColorizeWithThreeStopsRunsThroughTheMiddleColour() {
+        val bitmap = Bitmap.createBitmap(101, 1, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.WHITE)
+        }
+
+        val result = generator(
+            options(
+                color = Color.RED,
+                colorizeFlat = true,
+                colorizerMode = ColorizerMode.GRADIENT,
+                colorizerGradientType = GradientType.LINEAR,
+                colorizerGradientColors = listOf(Color.GREEN, Color.BLUE),
+                colorizerGradientAngle = 90f
+            )
+        ).applyModifier(BitmapIconDrawable(bitmap), ImageEdit.COLORIZE).toBitmap()
+
+        val start = result.getPixel(0, 0)
+        val middle = result.getPixel(50, 0)
+        val end = result.getPixel(100, 0)
+        assertTrue(Color.red(start) > Color.green(start))
+        assertTrue(Color.green(middle) > Color.red(middle) && Color.green(middle) > Color.blue(middle))
+        assertTrue(Color.blue(end) > Color.green(end))
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun gradientColorizeWithoutSolidFillKeepsTheArtworkUnderneath() {
+        // Half the icon is black: multiplying keeps it black, replacing would paint it.
+        val bitmap = Bitmap.createBitmap(2, 1, Bitmap.Config.ARGB_8888).apply {
+            setPixel(0, 0, Color.WHITE)
+            setPixel(1, 0, Color.BLACK)
+        }
+
+        val result = generator(
+            options(
+                color = Color.RED,
+                colorizerMode = ColorizerMode.GRADIENT,
+                colorizerGradientType = GradientType.LINEAR,
+                colorizerGradientColors = listOf(Color.RED),
+                colorizerGradientAngle = 90f
+            )
+        ).applyModifier(BitmapIconDrawable(bitmap), ImageEdit.COLORIZE).toBitmap()
+
+        assertEquals(Color.RED, result.getPixel(0, 0))
+        assertEquals(Color.BLACK, result.getPixel(1, 0))
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun gradientColorizeAppliesMonochromeBeforeTinting() {
+        val bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
+            setPixel(0, 0, Color.argb(255, 0, 255, 0))
+        }
+
+        val result = generator(
+            options(
+                color = Color.WHITE,
+                colorizeMonochrome = true,
+                colorizerMode = ColorizerMode.GRADIENT,
+                colorizerGradientType = GradientType.LINEAR,
+                colorizerGradientColors = listOf(Color.WHITE)
+            )
+        ).applyModifier(BitmapIconDrawable(bitmap), ImageEdit.COLORIZE).toBitmap()
+
+        // Green flattened to grey keeps all three channels equal; a white gradient leaves it be.
+        val pixel = result.getPixel(0, 0)
+        assertEquals(Color.red(pixel), Color.green(pixel))
+        assertEquals(Color.green(pixel), Color.blue(pixel))
+        assertTrue(Color.red(pixel) in 150..200)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun gradientColorizeKeepsTranslucentStopsTranslucent() {
+        val bitmap = Bitmap.createBitmap(2, 1, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.WHITE)
+        }
+
+        val result = generator(
+            options(
+                color = Color.argb(0, 255, 0, 0),
+                colorizeFlat = true,
+                colorizerMode = ColorizerMode.GRADIENT,
+                colorizerGradientType = GradientType.LINEAR,
+                colorizerGradientColors = listOf(Color.argb(0, 0, 0, 255)),
+                colorizerGradientAngle = 90f
+            )
+        ).applyModifier(BitmapIconDrawable(bitmap), ImageEdit.COLORIZE).toBitmap()
+
+        // A fully transparent gradient erases the icon instead of silently going opaque.
+        assertEquals(0, Color.alpha(result.getPixel(0, 0)))
+        assertEquals(0, Color.alpha(result.getPixel(1, 0)))
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun radialGradientColorizeRunsFromFirstColorAtCenterToSecondAtCorners() {
+        val bitmap = Bitmap.createBitmap(101, 101, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(Color.WHITE)
+        }
+
+        val result = generator(
+            options(
+                color = Color.RED,
+                colorizeFlat = true,
+                colorizerMode = ColorizerMode.GRADIENT,
+                colorizerGradientType = GradientType.RADIAL,
+                colorizerGradientColors = listOf(Color.BLUE)
+            )
+        ).applyModifier(BitmapIconDrawable(bitmap), ImageEdit.COLORIZE).toBitmap()
+
+        val center = result.getPixel(50, 50)
+        val corner = result.getPixel(0, 0)
+        assertTrue(Color.red(center) > Color.blue(center))
+        assertTrue(Color.blue(corner) > Color.red(corner))
+        assertEquals(255, Color.alpha(center))
+        assertEquals(255, Color.alpha(corner))
+    }
+
+    @Test
     fun invertBitmapColorsPreservesAlphaAndDensity() {
         val sourceColor = Color.argb(123, 10, 20, 30)
         val bitmap = Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888).apply {
@@ -363,10 +658,27 @@ class IconGeneratorTest {
     fun modifierScaleRasterisesButKeepsFrameSize() {
         val base = bitmapIcon(256)
         // A non-1 scale rasterises around the centre while keeping the original frame size.
-        val scaled = generator(options(iconScale = 0.5f)).applyModifier(base, ImageEdit.NONE)
+        val scaled = adjustmentPipeline(options(iconScale = 0.5f)).apply(base)
         assertNotNull(scaled)
         val bitmap = scaled.toBitmap()
         assertEquals(256, bitmap.width)
         assertEquals(256, bitmap.height)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun bitmapPositionAndScaleDoNotClipInAnIntermediateFrame() {
+        val source = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888).apply {
+            for (y in 80 until 176) {
+                for (x in 200 until width) setPixel(x, y, Color.BLUE)
+            }
+        }
+
+        val result = adjustmentPipeline(
+            options(iconScale = 0.5f, iconOffsetX = 0.25f)
+        ).apply(BitmapIconDrawable(source)).toBitmap()
+
+        // Translating first into a separate 256 px bitmap erased this stripe completely.
+        assertTrue(Color.alpha(result.getPixel(205, 128)) > 0)
     }
 }

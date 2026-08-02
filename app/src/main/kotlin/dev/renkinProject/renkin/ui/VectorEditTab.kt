@@ -138,6 +138,16 @@ internal class VectorEditState {
     // SVG's public URL); null for file imports and hand-drawn paths. Travels with the
     // confirmed icon into its stored row.
     var sourceUrl: String? by mutableStateOf(null)
+
+    /** Drops the previous vector selection when another editor source is chosen. */
+    fun reset() {
+        entries = emptyList()
+        thickness = 1f
+        automaticallyCenter = true
+        initialized = false
+        viewportOverride = null
+        sourceUrl = null
+    }
 }
 
 /**

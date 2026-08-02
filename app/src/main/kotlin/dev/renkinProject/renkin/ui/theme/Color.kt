@@ -75,6 +75,11 @@ val AddedGreen = Color(0xFF34C759)
 // warning — distinct from AddedGreen so "new" and "changed" read differently in the preview.
 val ChangedOrange = Color(0xFFFF9500)
 
+// Marks icons dropped since the last build. Fixed rather than colorScheme.error: the error tone
+// is wallpaper-derived, and on a warm Material You palette it came out close enough to the
+// hero bar's primary that the removed segment disappeared into it.
+val RemovedRed = Color(0xFFFF3B30)
+
 // The hero completion bar's "everything themed and built" celebration: the gold fill and
 // the lighter highlight that sweeps across it.
 val GoldBase = Color(0xFFDAA520)

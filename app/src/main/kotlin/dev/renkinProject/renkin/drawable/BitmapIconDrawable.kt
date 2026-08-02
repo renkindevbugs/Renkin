@@ -21,25 +21,40 @@ internal const val ADAPTIVE_ICON_SCALE = 1.5f // 108dp / 72dp
  * bitmap ([toBitmap]). Adaptive foregrounds (e.g. the monochrome variant) keep their artwork in
  * the inner safe zone, which the launcher zooms into — the flat preview doesn't, so it would look
  * too small; this scales the preview to match without affecting what the launcher receives.
+ *
+ * [browserPreviewBitmap] belongs exclusively to icon-pack browser tiles. General UI previews must
+ * paint [drawable] so the comparison header shows the same pixels that Apply persists and exports.
  */
 class BitmapIconDrawable(
     val drawable: BitmapDrawable,
     private val exportAsAdaptiveIcon: Boolean = false,
-    val previewScale: Float = 1f
+    val previewScale: Float = 1f,
+    private val browserPreviewBitmap: Bitmap? = null
 ) :
     IconPackDrawable() {
-    constructor(bitmap: Bitmap, exportAsAdaptiveIcon: Boolean = false, previewScale: Float = 1f) : this(
+    constructor(
+        bitmap: Bitmap,
+        exportAsAdaptiveIcon: Boolean = false,
+        previewScale: Float = 1f,
+        browserPreviewBitmap: Bitmap? = null
+    ) : this(
         BitmapDrawable(
             null,
             bitmap
-        ), exportAsAdaptiveIcon, previewScale
+        ), exportAsAdaptiveIcon, previewScale, browserPreviewBitmap
     )
 
-    constructor(resources: Resources, bitmap: Bitmap, exportAsAdaptiveIcon: Boolean = false, previewScale: Float = 1f) : this(
+    constructor(
+        resources: Resources,
+        bitmap: Bitmap,
+        exportAsAdaptiveIcon: Boolean = false,
+        previewScale: Float = 1f,
+        browserPreviewBitmap: Bitmap? = null
+    ) : this(
         BitmapDrawable(
             resources,
             bitmap
-        ), exportAsAdaptiveIcon, previewScale
+        ), exportAsAdaptiveIcon, previewScale, browserPreviewBitmap
     )
 
     override fun draw(canvas: Canvas) {
@@ -77,16 +92,31 @@ class BitmapIconDrawable(
 
     @Composable
     override fun getPainter(): Painter {
+        val previewBitmap = inAppPreviewBitmap()
         val bitmap = if (previewScale != 1f) {
-            remember(drawable.bitmap, previewScale) { drawable.bitmap.scaleFromCenter(previewScale) }
+            remember(previewBitmap, previewScale) { previewBitmap.scaleFromCenter(previewScale) }
         } else {
-            drawable.bitmap
+            previewBitmap
         }
         return BitmapPainter(bitmap.asImageBitmap())
     }
 
+    internal fun inAppPreviewBitmap(): Bitmap = drawable.bitmap
+
+    // Mirrors getPainter: a translucent custom background is exported flat, and the preview
+    // scale that compensates for it must show up in lists too.
+    override fun previewBitmap(): Bitmap = if (previewScale != 1f) {
+        inAppPreviewBitmap().scaleFromCenter(previewScale)
+    } else {
+        inAppPreviewBitmap()
+    }
+
     override fun toBitmap(): Bitmap {
         return drawable.bitmap
+    }
+
+    override fun toBrowserPreviewBitmap(): Bitmap {
+        return browserPreviewBitmap ?: drawable.bitmap
     }
 
     override fun toDbString(): String {

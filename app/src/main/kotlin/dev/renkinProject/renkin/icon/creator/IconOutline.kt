@@ -4,6 +4,8 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.sin
@@ -13,10 +15,49 @@ enum class OutlineMode { NONE, ADD, RECOLOR }
 
 object IconOutline {
 
-    fun apply(src: Bitmap, mode: OutlineMode, widthPx: Float, color: Int): Bitmap = when (mode) {
-        OutlineMode.NONE -> src
-        OutlineMode.ADD -> addOutline(src, widthPx, color)
-        OutlineMode.RECOLOR -> recolorOutline(src, widthPx, color)
+    /**
+     * [style] carries the outline's colour: a gradient paints the contour with a shader (ADD) or
+     * with the gradient's colour at each repainted pixel (RECOLOR). Null or single-colour styles
+     * fall back to [color].
+     */
+    fun apply(
+        src: Bitmap,
+        mode: OutlineMode,
+        widthPx: Float,
+        color: Int,
+        style: ColorizerStyle? = null
+    ): Bitmap {
+        val gradient = style?.takeIf { it.mode == ColorizerMode.GRADIENT }
+        return when (mode) {
+            OutlineMode.NONE -> src
+            OutlineMode.ADD -> addOutline(src, widthPx, color, gradient)
+            OutlineMode.RECOLOR -> recolorOutline(src, widthPx, color, gradient)
+        }
+    }
+
+    /** The gradient rasterised once, so per-pixel work can look up its colour by position. */
+    private fun gradientPixels(style: ColorizerStyle, width: Int, height: Int): IntArray {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        Canvas(bitmap).drawRect(
+            0f,
+            0f,
+            width.toFloat(),
+            height.toFloat(),
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                shader = buildColorizerShader(
+                    style.allGradientColors,
+                    style.gradientType,
+                    style.gradientAngle,
+                    width,
+                    height,
+                    style.gradientPositions
+                )
+            }
+        )
+        val pixels = IntArray(width * height)
+        bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+        bitmap.recycle()
+        return pixels
     }
 
     /**
@@ -25,30 +66,65 @@ object IconOutline {
      * itself is drawn back on top — the colour stays visible only in the [widthPx] band
      * outside the original edges.
      */
-    private fun addOutline(src: Bitmap, widthPx: Float, color: Int): Bitmap {
+    private fun addOutline(
+        src: Bitmap,
+        widthPx: Float,
+        color: Int,
+        gradient: ColorizerStyle?
+    ): Bitmap {
         val width = max(1f, widthPx)
         val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(out)
 
         val mask = src.extractAlpha()
-        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-        paint.color = color
-
         // Two rings of stamped masks approximate a filled dilation disc; the inner area is
-        // covered by the icon drawn on top anyway.
-        for (radius in floatArrayOf(width, width / 2f)) {
-            val steps = 16
-            for (i in 0 until steps) {
-                val angle = i * (2 * Math.PI / steps)
-                canvas.drawBitmap(
-                    mask,
-                    (radius * cos(angle)).toFloat(),
-                    (radius * sin(angle)).toFloat(),
-                    paint
-                )
+        // covered by the icon drawn on top anyway. The stamps build an opaque silhouette FIRST
+        // and the colour is painted through it once: stamping a translucent colour 32 times
+        // would stack its alpha until a 20%-transparent outline came out solid.
+        val dilated = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
+        val stamp = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
+            this.color = -0x1
+        }
+        Canvas(dilated).apply {
+            for (radius in floatArrayOf(width, width / 2f)) {
+                val steps = 16
+                for (i in 0 until steps) {
+                    val angle = i * (2 * Math.PI / steps)
+                    drawBitmap(
+                        mask,
+                        (radius * cos(angle)).toFloat(),
+                        (radius * sin(angle)).toFloat(),
+                        stamp
+                    )
+                }
             }
         }
         mask.recycle()
+
+        val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        if (gradient == null) {
+            paint.color = color
+        } else {
+            // The shader spans the whole icon, so the ring reads as one continuous sweep.
+            paint.shader = buildColorizerShader(
+                gradient.allGradientColors,
+                gradient.gradientType,
+                gradient.gradientAngle,
+                src.width,
+                src.height,
+                gradient.gradientPositions
+            )
+        }
+        canvas.drawBitmap(dilated, 0f, 0f, null)
+        canvas.drawRect(
+            0f,
+            0f,
+            src.width.toFloat(),
+            src.height.toFloat(),
+            paint.apply { xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN) }
+        )
+        paint.xfermode = null
+        dilated.recycle()
 
         canvas.drawBitmap(src, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG))
         return out
@@ -76,7 +152,12 @@ object IconOutline {
      * their shading in the new colour instead of flattening.
      */
     @Suppress("UNUSED_PARAMETER")
-    private fun recolorOutline(src: Bitmap, widthPx: Float, color: Int): Bitmap {
+    private fun recolorOutline(
+        src: Bitmap,
+        widthPx: Float,
+        color: Int,
+        gradient: ColorizerStyle?
+    ): Bitmap {
         val w = src.width
         val h = src.height
         val pixels = IntArray(w * h)
@@ -141,11 +222,22 @@ object IconOutline {
 
         val target = FloatArray(3)
         Color.colorToHSV(color, target)
+        // A gradient gives every repainted pixel its own hue/saturation from the same sweep.
+        val gradientAt = gradient?.let { gradientPixels(it, w, h) }
+        val baseAlpha = Color.alpha(color)
         for (i in pixels.indices) {
             if (depth[i] < 0) continue
+            var alphaScale = baseAlpha
+            gradientAt?.let {
+                Color.colorToHSV(it[i], target)
+                alphaScale = Color.alpha(it[i])
+            }
             Color.colorToHSV(pixels[i], hsv)
             val out = floatArrayOf(target[0], target[1], (target[2] * hsv[2] / refValue).coerceIn(0f, 1f))
-            pixels[i] = (pixels[i] and 0xFF000000.toInt()) or (Color.HSVToColor(out) and 0x00FFFFFF)
+            // The repaint colour's own alpha scales the outline's: a translucent stop must not
+            // come out opaque just because the pixel underneath was.
+            val alpha = Color.alpha(pixels[i]) * alphaScale / 255
+            pixels[i] = (alpha shl 24) or (Color.HSVToColor(out) and 0x00FFFFFF)
         }
 
         val outBitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)

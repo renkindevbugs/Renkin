@@ -224,6 +224,33 @@ class BackupManagerTest {
     }
 
     @Test
+    fun restoringKeystore_replacesAnOlderOneWholeAndLeavesNoTempFile() = runBlocking {
+        val filesDir = context.filesDir
+        try {
+            PackKeystore.keystoreFile(filesDir).writeBytes(byteArrayOf(1, 2, 3))
+            PackKeystore.passwordFile(filesDir).writeText("hunter2")
+            val srcPackRepo = RenkinPackRepository(srcPackDb)
+            srcPackRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
+            val out = ByteArrayOutputStream()
+            BackupManager(context, srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
+
+            // A longer keystore already on the device: restore goes through a temp file and a
+            // rename, so the result must be the backup's bytes exactly — never a mix of both.
+            PackKeystore.keystoreFile(filesDir).writeBytes(byteArrayOf(7, 7, 7, 7, 7, 7, 7, 7))
+
+            BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb))
+                .importBackup { ByteArrayInputStream(out.toByteArray()) }
+
+            assertArrayEquals(byteArrayOf(1, 2, 3), PackKeystore.keystoreFile(filesDir).readBytes())
+            // The scratch file must not survive a successful restore.
+            assertTrue(filesDir.listFiles()?.none { it.name.endsWith(".tmp") } ?: true)
+        } finally {
+            PackKeystore.keystoreFile(filesDir).delete()
+            PackKeystore.passwordFile(filesDir).delete()
+        }
+    }
+
+    @Test
     fun restoringPasswordlessBackup_dropsTheStaleRandomPassword() = runBlocking {
         val filesDir = context.filesDir
         try {

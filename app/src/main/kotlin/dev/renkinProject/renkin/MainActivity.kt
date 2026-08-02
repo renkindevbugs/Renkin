@@ -15,7 +15,9 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -26,38 +28,37 @@ import androidx.lifecycle.lifecycleScope
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
-import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
-import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
-import dev.renkinProject.renkin.data.PrimaryIconPackKey
-import dev.renkinProject.renkin.data.PrimarySourceKey
-import dev.renkinProject.renkin.data.SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.isDarkModeEnabled
 import dev.renkinProject.renkin.data.WatchCheckIntervalKey
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
-import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getIntValue
-import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
-import dev.renkinProject.renkin.data.setEnumValue
-import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.service.WatchWorker
 import dev.renkinProject.renkin.util.CrashReporter
 import dev.renkinProject.renkin.ui.*
 import dev.renkinProject.renkin.ui.theme.RenkinTheme
+import dev.renkinProject.renkin.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var iconPackCatalog: IconPackCatalog
+
     private val viewModel: MainViewModel by viewModels()
+    private var consumedSharedImageUri: String? = null
 
     // Activity-scoped (not remember-ed in composition) so non-compose code — e.g. the share
     // receiver in handleSharedImage — can queue toasts through the same single ToastHost.
@@ -65,6 +66,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        consumedSharedImageUri = savedInstanceState?.getString(STATE_CONSUMED_SHARED_IMAGE_URI)
 
         // Instantiate the view model now, on the main thread, before setContent. This forces
         // its ApplicationProvider — and the Compose snapshot state that provider holds
@@ -88,19 +90,6 @@ class MainActivity : ComponentActivity() {
         // Icon-watch: schedule the periodic safety-net check (version-gated, so it's near-free
         // when nothing changed). This is the only watch trigger — see WatchWorker.
         lifecycleScope.launch(Dispatchers.Default) {
-            // A hero-card pack pick only sticks once it's built: restore the last-built primary
-            // source/pack over any unbuilt pick from the previous session. Missing built keys =
-            // legacy or fresh install — leave the current selection alone.
-            val startupPrefs = applicationContext.dataStore.data.first()
-            if (startupPrefs.contains(BuiltPrimarySourceKey)) {
-                applicationContext.dataStore.setEnumValue(
-                    PrimarySourceKey, startupPrefs.getEnumValue(BuiltPrimarySourceKey, SOURCE_DEFAULT)
-                )
-                applicationContext.dataStore.setStringValue(
-                    PrimaryIconPackKey, startupPrefs.getStringValue(BuiltPrimaryIconPackKey)
-                )
-            }
-
             // KEEP so an already-running interval timer isn't reset on every launch; the
             // user's chosen interval is applied immediately (UPDATE) when they change it.
             val intervalMinutes = applicationContext.dataStore.data.first()
@@ -116,16 +105,23 @@ class MainActivity : ComponentActivity() {
             edgeToEdge(darkMode)
             // Pack resources must resolve values-night the way the UI displays, not the way
             // the system is set — mode-dependent pack colours are invisible otherwise.
-            ApplicationManager.displayedNightMode = darkMode
+            SideEffect { ApplicationManager.displayedNightMode = darkMode }
 
             // Detected once per launch: if the previous session crashed, offer the log for
             // manual reporting (copy / email / GitHub) — nothing is sent automatically.
             var crashPending by remember { mutableStateOf(CrashReporter.hasNewCrash(this@MainActivity)) }
 
+            val colorPresets by viewModel.colorPresets.collectAsState()
+
             CompositionLocalProvider(
                 LocalMainActivity provides this,
                 LocalToaster provides toaster
             ) {
+              ProvideColorPresets(
+                presets = colorPresets,
+                onSave = viewModel::saveColorPreset,
+                onDelete = viewModel::deleteColorPreset
+              ) {
                 RenkinTheme(darkMode) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
@@ -144,13 +140,21 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+              }
             }
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        consumedSharedImageUri?.let { outState.putString(STATE_CONSUMED_SHARED_IMAGE_URI, it) }
+        super.onSaveInstanceState(outState)
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        // A newly delivered SEND is a new user action even when it points to the same URI.
+        consumedSharedImageUri = null
         handleWatchIntent(intent)
         handleSharedImage(intent)
     }
@@ -166,7 +170,7 @@ class MainActivity : ComponentActivity() {
             // Skip until the initial pack load finished, otherwise every installed pack
             // looks "new" against the still-empty loaded list on first launch.
             if (!viewModel.iconPackLoaded) return@launch
-            val installed = ApplicationManager(this@MainActivity).getIconPacks()
+            val installed = iconPackCatalog.installedIconPacks()
             val loaded = viewModel.iconPacks.map { it.packageName }.toSet()
             val newPack = installed.firstOrNull {
                 !IconPackBuilder.isOwnPack(it.packageName) && it.packageName !in loaded
@@ -198,11 +202,32 @@ class MainActivity : ComponentActivity() {
         if (intent?.action != Intent.ACTION_SEND) return
         if (intent.type?.startsWith("image/") != true) return
         val uri = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java) ?: return
+        // Activity state survives both configuration changes and process restoration; mutating an
+        // incoming Intent extra does not reliably survive the latter.
+        val uriKey = uri.toString()
+        if (consumedSharedImageUri == uriKey) return
+        consumedSharedImageUri = uriKey
 
         lifecycleScope.launch(Dispatchers.IO) {
-            val bitmap = getBitmapFromURI(applicationContext, uri) ?: return@launch
-            UploadedImageStore.save(applicationContext, bitmap)
-            toaster.show(getString(R.string.sharedImageAdded))
+            // A shared URI can be revoked, one-shot or served by a broken provider — the same
+            // failures the gallery import already tolerates. None of them may take the app down.
+            val added = try {
+                val bitmap = getBitmapFromURI(applicationContext, uri)
+                if (bitmap == null) {
+                    false
+                } else {
+                    UploadedImageStore.save(applicationContext, bitmap)
+                    true
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.error("MainActivity", "Cannot import the shared image", error)
+                false
+            }
+            toaster.show(
+                getString(if (added) R.string.sharedImageAdded else R.string.uploadImageError)
+            )
         }
     }
 
@@ -220,3 +245,5 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_SUGGESTION_ID = "watch_suggestion_id"
     }
 }
+
+private const val STATE_CONSUMED_SHARED_IMAGE_URI = "consumedSharedImageUri"

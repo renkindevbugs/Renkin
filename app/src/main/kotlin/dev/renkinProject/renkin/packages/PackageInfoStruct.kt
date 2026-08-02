@@ -53,6 +53,12 @@ class PackageInfoStruct(
      */
     val sourceUrl: String? = null
 ) : Comparable<PackageInfoStruct> {
+    private val normalizedSortName by lazy {
+        Normalizer.normalize(appName, Normalizer.Form.NFD)
+            .replace(DIACRITICS_REGEX, "")
+            .lowercase()
+    }
+
     override fun equals(other: Any?): Boolean {
         if (other is PackageInfoStruct) {
             return packageName == other.packageName && activityName == other.activityName && other.internalVersion == internalVersion
@@ -62,7 +68,8 @@ class PackageInfoStruct(
     }
 
     override fun compareTo(other: PackageInfoStruct): Int = when {
-        this.appName != other.appName -> this.normalizeName().lowercase() compareTo other.normalizeName().lowercase() // compareTo() in the infix form
+        this.appName != other.appName ->
+            this.normalizedSortName compareTo other.normalizedSortName
         else -> 0
     }
 
@@ -134,7 +141,7 @@ class PackageInfoStruct(
      * (builtKeys, updatedKeys) and as a LazyList item key. RenkinPackStore builds the same string
      * from its DbApplication rows, so the two match.
      */
-    val key: String get() = "$packageName/$activityName"
+    val key: String = "$packageName/$activityName"
 
     fun getFileName(): String {
         return packageName.replace('.', '_')
@@ -144,17 +151,13 @@ class PackageInfoStruct(
         return InstalledApplication(packageName, activityName, iconID)
     }
 
-    private fun normalizeName(): String {
-        return removeDiacritics(appName)
-    }
-
-    private fun removeDiacritics(text: String): String {
-        return Normalizer.normalize(text, Normalizer.Form.NFD).replace("\\p{Mn}+".toRegex(), "")
-    }
-
     override fun hashCode(): Int {
         var result = packageName.hashCode()
         result = 31 * result + activityName.hashCode()
         return result
+    }
+
+    private companion object {
+        val DIACRITICS_REGEX = "\\p{Mn}+".toRegex()
     }
 }

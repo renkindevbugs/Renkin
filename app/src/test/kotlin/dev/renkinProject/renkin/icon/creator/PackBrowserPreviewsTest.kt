@@ -10,6 +10,7 @@ import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews.Companion.cache
 import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews.Companion.orderDrawableNames
 import dev.renkinProject.renkin.packages.NamedResourceDrawable
 import dev.renkinProject.renkin.packages.PackBrowserDataSource
+import dev.renkinProject.renkin.packages.ApplicationManager
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
@@ -108,6 +109,32 @@ class PackBrowserPreviewsTest {
         val updated = cacheKey(pack(versionCode = 2), IconSortOrder.NAME_ASC, "", options(), null)
 
         assertNotEquals(old, updated)
+    }
+
+    @Test
+    fun cacheKey_changesWhenMaterialYouCapabilityChanges() {
+        val ordinary = pack()
+        val materialYou = ordinary.copy(changesWithMaterialYouColors = true)
+
+        assertNotEquals(
+            cacheKey(ordinary, IconSortOrder.NAME_ASC, "", options(), null),
+            cacheKey(materialYou, IconSortOrder.NAME_ASC, "", options(), null)
+        )
+    }
+
+    @Test
+    fun cacheKey_changesWhenDisplayedThemeChanges() {
+        val previous = ApplicationManager.displayedNightMode
+        try {
+            ApplicationManager.displayedNightMode = false
+            val light = cacheKey(pack(), IconSortOrder.NAME_ASC, "", options(), null)
+            ApplicationManager.displayedNightMode = true
+            val dark = cacheKey(pack(), IconSortOrder.NAME_ASC, "", options(), null)
+
+            assertNotEquals(light, dark)
+        } finally {
+            ApplicationManager.displayedNightMode = previous
+        }
     }
 
     @Test

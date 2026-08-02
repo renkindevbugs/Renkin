@@ -8,8 +8,10 @@ import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconGenerator
+import dev.renkinProject.renkin.icon.creator.IconImageEditPipeline
 import dev.renkinProject.renkin.icon.creator.IconPackContainer
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.contentHash
@@ -24,7 +26,8 @@ import kotlinx.coroutines.withContext
  */
 class IconGenerationService(
     private val context: Context,
-    private val iconPackRepo: IconPackRepository
+    private val iconPackRepo: IconPackRepository,
+    private val iconPackCatalog: IconPackCatalog
 ) {
     data class ValidatedPackIcon(val icon: IconPackDrawable?, val sourceChanged: Boolean)
 
@@ -38,10 +41,23 @@ class IconGenerationService(
     ): IconPackDrawable? = withContext(Dispatchers.Default) {
         var icon: IconPackDrawable? = null
 
-        val pack1 = IconPackContainer(options.primaryIconPack, iconPackRepo.getAppDrawables(options.primaryIconPack))
+        val installedApplication = application.toInstalledApplication()
+        val appDrawable = if (options.primarySource == Source.ICON_PACK && customIcon == null) {
+            iconPackRepo.getAppDrawable(installedApplication, options.primaryIconPack)
+        } else null
+        val pack1 = IconPackContainer(
+            options.primaryIconPack,
+            appDrawable?.let { mapOf(installedApplication to it) } ?: emptyMap()
+        )
         val pack2 = IconPackContainer("", emptyMap())
 
-        val builder = IconGenerator(context, options, pack1, pack2)
+        val builder = IconGenerator(
+            context,
+            options,
+            pack1,
+            pack2,
+            iconPackCatalog = iconPackCatalog
+        )
         builder.generateIcon(application, customIcon) { _, newIcon ->
             icon = newIcon
         }
@@ -88,9 +104,7 @@ class IconGenerationService(
     /** Applies the modifier from [options] to an already-built icon. */
     suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =
         withContext(Dispatchers.Default) {
-            val pack = IconPackContainer("", emptyMap())
-            val builder = IconGenerator(context, options, pack, pack)
-            builder.applyModifier(icon, options.primaryImageEdit)
+            modifierPipeline(options).applyPrimary(icon)
         }
 
     /** Regenerates one app's icon from both packs, handing the result to [onResult]. */
@@ -101,9 +115,9 @@ class IconGenerationService(
         onResult: (PackageInfoStruct, IconPackDrawable?, IconPackDrawable?, sourcePackName: String) -> Unit
     ) = withContext(Dispatchers.Default) {
         val builder = buildGenerator(sourceOptions)
-        val modifier = modifierOptions?.let { modifierBuilder(it) }
+        val modifier = modifierOptions?.let { modifierPipeline(it) }
         builder.generateIcon(application) { app, base, sourcePack ->
-            onResult(app, base, base?.let { modifier?.applyModifier(it, modifierOptions!!.primaryImageEdit) ?: it }, sourcePack)
+            onResult(app, base, base?.let { modifier?.applyPrimary(it) ?: it }, sourcePack)
         }
     }
 
@@ -115,12 +129,12 @@ class IconGenerationService(
         onResult: (PackageInfoStruct, IconPackDrawable?, IconPackDrawable?, isFallback: Boolean, sourcePackName: String) -> Unit
     ) = withContext(Dispatchers.Default) {
         val builder = buildGenerator(sourceOptions)
-        val modifier = modifierOptions?.let { modifierBuilder(it) }
+        val modifier = modifierOptions?.let { modifierPipeline(it) }
         builder.generateIcons(applications) { app, base, fallback, sourcePack ->
             onResult(
                 app,
                 base,
-                base?.let { modifier?.applyModifier(it, modifierOptions!!.primaryImageEdit) ?: it },
+                base?.let { modifier?.applyPrimary(it) ?: it },
                 fallback,
                 sourcePack
             )
@@ -146,13 +160,19 @@ class IconGenerationService(
             FallbackSource.NONE -> ""
         }
         val fallback = iconPackRepo.getIconPackFallback(fallbackPack)
-        return IconGenerator(context, options, pack1, pack2, fallback, fallbackPack)
+        return IconGenerator(
+            context,
+            options,
+            pack1,
+            pack2,
+            fallback,
+            fallbackPack,
+            iconPackCatalog
+        )
     }
 
-    private fun modifierBuilder(options: GenerationOptions): IconGenerator {
-        val emptyPack = IconPackContainer("", emptyMap())
-        return IconGenerator(context, options, emptyPack, emptyPack)
-    }
+    private fun modifierPipeline(options: GenerationOptions) =
+        IconImageEditPipeline(context.resources, options)
 
     suspend fun getIconPackIcons(
         iconPackName: String,
@@ -163,7 +183,13 @@ class IconGenerationService(
 
         val pack = IconPackContainer("", emptyMap())
 
-        val builder = IconGenerator(context, options, pack, pack)
+        val builder = IconGenerator(
+            context,
+            options,
+            pack,
+            pack,
+            iconPackCatalog = iconPackCatalog
+        )
         for (drawable in drawables) {
             // One broken icon must not take the whole pack down (#119)
             exportDrawables[drawable] = try {

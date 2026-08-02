@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Build
@@ -83,9 +85,12 @@ fun OnboardingOverlay(onFinish: () -> Unit) {
             ) {
                 HorizontalPager(pagerState, Modifier.weight(1f)) { index ->
                     val page = OnboardingPages[index]
+                    // Scrolls when the card doesn't fit — a large system font or split screen
+                    // would otherwise cut the description off. Centred while it does fit.
                     Column(
                         Modifier
                             .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
                             .padding(horizontal = 16.dp),
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.Center

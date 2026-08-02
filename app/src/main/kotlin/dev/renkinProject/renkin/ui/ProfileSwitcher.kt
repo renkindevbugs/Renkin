@@ -31,7 +31,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,9 +46,7 @@ import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.HideProfileShareWarningKey
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.getBooleanValue
-import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
-import kotlinx.coroutines.launch
 
 // Input caps: the profile name doubles as the top-bar title and the pack label ends up as the
 // launcher-visible app name of the built pack — unbounded text breaks both layouts.
@@ -70,6 +67,9 @@ fun ProfileSwitcherTitle() {
     val activeId = viewModel.activeProfileId
     val active = profiles.find { it.id == activeId }
 
+    val toaster = LocalToaster.current
+    val refreshInProgress = stringResource(R.string.iconsStillGenerated)
+
     var menuOpen by remember { mutableStateOf(false) }
     var createOpen by rememberSaveable { mutableStateOf(false) }
     var editing by remember { mutableStateOf<Profile?>(null) }
@@ -84,7 +84,6 @@ fun ProfileSwitcherTitle() {
     var shareWarningFor by remember { mutableStateOf<Profile?>(null) }
     val prefs = getPreferences()
     val hideShareWarning = prefs.getBooleanValue(HideProfileShareWarningKey)
-    val scope = rememberCoroutineScope()
     val shareLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
     ) { uri ->
@@ -200,6 +199,12 @@ fun ProfileSwitcherTitle() {
                     onClick = {
                         menuOpen = false
                         if (profile.id != activeId) {
+                            // A running refresh holds the profile gate, so the switch would sit
+                            // there without any sign of it — say what's happening instead.
+                            if (viewModel.isRefreshing) {
+                                toaster.show(refreshInProgress)
+                                return@DropdownMenuItem
+                            }
                             // Unsaved work on the current profile? Offer to save it first.
                             if (viewModel.hasUnsavedChanges()) pendingSwitch = profile.id
                             else viewModel.switchProfile(profile.id)
@@ -297,7 +302,9 @@ fun ProfileSwitcherTitle() {
         ProfileShareWarningDialog(
             onShare = { dontShowAgain ->
                 shareWarningFor = null
-                if (dontShowAgain) scope.launch { prefs.setBooleanValue(HideProfileShareWarningKey, true) }
+                if (dontShowAgain) {
+                    viewModel.hideProfileShareWarning()
+                }
                 startShare(profile)
             },
             onDismiss = { shareWarningFor = null }

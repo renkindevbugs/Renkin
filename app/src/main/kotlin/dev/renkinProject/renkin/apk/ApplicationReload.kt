@@ -45,7 +45,8 @@ internal fun mergeApplicationReload(
             isRefreshMade = session.isRefreshMade,
             isCustom = session.isCustom,
             isLegacy = session.isLegacy,
-            baseIcon = session.baseIcon
+            baseIcon = session.baseIcon,
+            sourceUrl = session.sourceUrl
         )
     }
 }

@@ -13,7 +13,11 @@ import dev.renkinProject.renkin.data.IncludeVectorKey
 import dev.renkinProject.renkin.data.MonochromeKey
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
 import dev.renkinProject.renkin.data.OutlineAddKey
-import dev.renkinProject.renkin.data.OutlineColorKey
+import dev.renkinProject.renkin.data.ColorStyleKeys
+import dev.renkinProject.renkin.data.BackgroundStyleKeys
+import dev.renkinProject.renkin.data.GlobalShapeStyleKeys
+import dev.renkinProject.renkin.data.GlobalColorizerStyleKeys
+import dev.renkinProject.renkin.data.OutlineStyleKeys
 import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.OverrideIconKey
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
@@ -37,13 +41,19 @@ import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
-import dev.renkinProject.renkin.data.GlobalColorizeColorKey
 import dev.renkinProject.renkin.data.GlobalColorizeFlatKey
 import dev.renkinProject.renkin.data.GlobalColorizeInverseKey
 import dev.renkinProject.renkin.data.GlobalColorizeKey
 import dev.renkinProject.renkin.data.GlobalColorizeMonochromeKey
+import dev.renkinProject.renkin.data.ColorizerGradientAngleKey
+import dev.renkinProject.renkin.data.ColorizerGradientColorKey
+import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
+import dev.renkinProject.renkin.data.getGradientStops
+import dev.renkinProject.renkin.data.getGradientPositions
+import dev.renkinProject.renkin.data.ColorizerGradientPositionsKey
+import dev.renkinProject.renkin.data.ColorizerGradientTypeKey
+import dev.renkinProject.renkin.data.ColorizerModeKey
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
-import dev.renkinProject.renkin.data.GlobalShapeColorKey
 import dev.renkinProject.renkin.data.GlobalShapeCropKey
 import dev.renkinProject.renkin.data.GlobalShapeKey
 import dev.renkinProject.renkin.data.GlobalShapeScaleKey
@@ -92,6 +102,8 @@ data class GenerationOptions(
     val iconOffsetY: Float = 0f,
     // Colour-distance tolerance (0..1) for the Remove background modifier — how far a pixel's colour
     // can be from the border background colour and still be erased.
+    // Colours the Remove background modifier drops. Empty = the automatic border flood.
+    val bgRemovalTargets: List<Int> = emptyList(),
     val bgRemovalTolerance: Float = 0.1f,
     // Colorize as a flat fill (SRC_IN) rather than the default multiply blend, so the picked colour
     // replaces the icon's own colours instead of mixing with them. Per-icon Modifier-tab option.
@@ -99,6 +111,25 @@ data class GenerationOptions(
     // Alternative Colorize results: grayscale, plus optional inversion of either grayscale or RGB.
     val colorizeMonochrome: Boolean = false,
     val colorizeInverse: Boolean = false,
+    val colorizerMode: ColorizerMode = ColorizerMode.SINGLE_COLOR,
+    val colorizerGradientType: GradientType = GradientType.LINEAR,
+    // Gradient stops after [color]; [color] itself is stop one and doubles as the single-colour
+    // value, so it is not repeated here.
+    val colorizerGradientColors: List<Int> = listOf(android.graphics.Color.BLACK),
+    // Positions of every stop including [color], 0..1; empty spreads them evenly.
+    val colorizerGradientPositions: List<Float> = emptyList(),
+    // What fills [bgColor]'s area — the themed background, the icon shape's plate and the
+    // Material You variant's background. Null (or a single-colour style) means the flat [bgColor]
+    // every build before gradients painted.
+    val backgroundStyle: ColorizerStyle? = null,
+    // The Material You variant's foreground fill. Only that raster path honours it: a pack's own
+    // Material You icon and the vector export are paths, and a path takes one colour.
+    val foregroundStyle: ColorizerStyle? = null,
+    val colorizerGradientAngle: Float = 0f,
+    // Per-region colourize steps (the Colorize segments modifier), applied in order. Empty =
+    // the whole icon is colourized with the options above, which is what every other surface asks
+    // for. Only ever set per app; the pack-wide surfaces never populate it.
+    val colorizeLayers: List<SegmentLayer> = emptyList(),
     // Icon shape applied as the LAST step: NONE leaves the icon untouched; otherwise the icon
     // is cropped into the shape (the default — most icons are full-bleed) or laid on a
     // [bgColor]-filled shape plate. [iconShapeScale] sizes the SHAPE itself (the icon stays
@@ -112,6 +143,8 @@ data class GenerationOptions(
     val outlineMode: OutlineMode = OutlineMode.NONE,
     val outlineWidth: Float = 6f,
     val outlineColor: Int = android.graphics.Color.BLACK,
+    // Optional gradient for the outline. Null (or a single-colour style) keeps [outlineColor].
+    val outlineStyle: ColorizerStyle? = null,
     // Painted areas where the outline step must not apply (the eraser tool). Alpha mask in
     // normalised icon space; null = outline everywhere. Session-only — never persisted.
     val outlineEraseMask: android.graphics.Bitmap? = null,
@@ -131,7 +164,12 @@ data class GenerationOptions(
         ApplicationIconVariant.DEFAULT
     },
     // Per-app Monochrome option: invert luminance after desaturation (black ↔ white).
-    val invertMonochrome: Boolean = false
+    val invertMonochrome: Boolean = false,
+    // Optional restyling for an adaptive icon selected from a pack that advertises
+    // CHANGES_WITH_MATERIAL_YOU_COLORS. Null colours preserve the pack's originals.
+    val materialYouPackForeground: Int? = null,
+    val materialYouPackBackground: Int? = null,
+    val materialYouPackStrokeScale: Float = 1f
 ) {
     companion object {
         /**
@@ -168,6 +206,7 @@ data class GenerationOptions(
                 secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey),
                 color = iconColor.toArgb(),
                 bgColor = bgColor.toArgb(),
+                backgroundStyle = preferences.colorStyle(BackgroundStyleKeys, bgColor),
                 // Keep the stored choices for when PATH is selected again, but hidden controls
                 // must not silently affect a different source/modifier combination.
                 vector = pathOptionsRelevant && preferences.getBooleanValue(IncludeVectorKey),
@@ -176,6 +215,21 @@ data class GenerationOptions(
                 override = override,
                 fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
                 textFontPath = FontCatalog.usablePathOrDefault(preferences.getStringValue(TextFontKey)),
+                colorizerMode = preferences.getEnumValue(
+                    ColorizerModeKey, ColorizerMode.SINGLE_COLOR
+                ),
+                colorizerGradientType = preferences.getEnumValue(
+                    ColorizerGradientTypeKey, GradientType.LINEAR
+                ),
+                colorizerGradientColors = preferences.getGradientStops(
+                    ColorizerGradientColorsKey, ColorizerGradientColorKey
+                ),
+                colorizerGradientPositions = preferences.getGradientPositions(
+                    ColorizerGradientPositionsKey
+                ),
+                colorizerGradientAngle = normalizeGradientAngle(
+                    preferences.getIntValue(ColorizerGradientAngleKey).toFloat()
+                ),
                 // Only ADD exists pack-wide; RECOLOR stays a per-app Modifier-tab option.
                 outlineMode = OutlineMode.NONE
             )
@@ -189,6 +243,19 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         preferences.getIntValue(GlobalShapeKey, IconShape.NONE.ordinal)
     ) ?: IconShape.NONE
     val shapeCrop = preferences.getBooleanValue(GlobalShapeCropKey, true)
+    val colorizerStyle = preferences.colorStyle(
+        GlobalColorizerStyleKeys, androidx.compose.ui.graphics.Color.White
+    ).copy(
+        flat = preferences.getBooleanValue(GlobalColorizeFlatKey),
+        monochrome = preferences.getBooleanValue(GlobalColorizeMonochromeKey),
+        inverse = preferences.getBooleanValue(GlobalColorizeInverseKey)
+    )
+    val shapeStyle = if (shape != IconShape.NONE && !shapeCrop) {
+        preferences.colorStyle(GlobalShapeStyleKeys, androidx.compose.ui.graphics.Color.White)
+    } else null
+    val outlineStyle = preferences.colorStyle(
+        OutlineStyleKeys, androidx.compose.ui.graphics.Color.Black
+    )
     return GenerationOptions(
         primarySource = Source.NONE,
         primaryImageEdit = if (preferences.getBooleanValue(GlobalColorizeKey)) {
@@ -196,21 +263,22 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         } else ImageEdit.NONE,
         primaryTextType = TEXT_TYPE_DEFAULT,
         primaryIconPack = "",
-        color = preferences.getColorValue(
-            GlobalColorizeColorKey, androidx.compose.ui.graphics.Color.White
-        ).toArgb(),
-        bgColor = if (shape != IconShape.NONE && !shapeCrop) {
-            preferences.getColorValue(
-                GlobalShapeColorKey, androidx.compose.ui.graphics.Color.White
-            ).toArgb()
-        } else android.graphics.Color.TRANSPARENT,
+        color = colorizerStyle.firstColor,
+        bgColor = shapeStyle?.firstColor ?: android.graphics.Color.TRANSPARENT,
+        // Only the plate shows a background at all, so the style follows the same condition.
+        backgroundStyle = shapeStyle,
         vector = false,
         materialYou = false,
         themed = false,
         override = true,
-        colorizeFlat = preferences.getBooleanValue(GlobalColorizeFlatKey),
-        colorizeMonochrome = preferences.getBooleanValue(GlobalColorizeMonochromeKey),
-        colorizeInverse = preferences.getBooleanValue(GlobalColorizeInverseKey),
+        colorizeFlat = colorizerStyle.flat,
+        colorizeMonochrome = colorizerStyle.monochrome,
+        colorizeInverse = colorizerStyle.inverse,
+        colorizerMode = colorizerStyle.mode,
+        colorizerGradientType = colorizerStyle.gradientType,
+        colorizerGradientColors = colorizerStyle.gradientStops,
+        colorizerGradientPositions = colorizerStyle.gradientPositions,
+        colorizerGradientAngle = colorizerStyle.gradientAngle,
         iconScale = normalizeGlobalScalePercent(
             preferences.getIntValue(GlobalIconScaleKey, 100)
         ) / 100f,
@@ -225,15 +293,50 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         outlineWidth = normalizeOutlineWidth(
             preferences.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
         ).toFloat(),
-        outlineColor = preferences.getColorValue(
-            OutlineColorKey, androidx.compose.ui.graphics.Color.Black
-        ).toArgb()
+        outlineColor = outlineStyle.firstColor,
+        outlineStyle = outlineStyle
+    )
+}
+
+/**
+ * Any [ColorStyleKeys] group read back as a style. Used for the surfaces whose colour is only a
+ * fill — the background and the shape's plate — so they behave like every other colour in the app.
+ */
+fun Preferences.colorStyle(
+    keys: ColorStyleKeys,
+    defaultColor: androidx.compose.ui.graphics.Color
+): ColorizerStyle = ColorizerStyle(
+    mode = getEnumValue(keys.mode, ColorizerMode.SINGLE_COLOR),
+    gradientType = getEnumValue(keys.gradientType, GradientType.LINEAR),
+    firstColor = getColorValue(keys.firstColor, defaultColor).toArgb(),
+    gradientStops = getGradientStops(
+        keys.gradientColors, keys.legacyGradientColor ?: keys.firstColor
+    ),
+    gradientPositions = getGradientPositions(keys.gradientPositions),
+    gradientAngle = normalizeGradientAngle(getIntValue(keys.gradientAngle).toFloat())
+)
+
+/**
+ * The shader [backgroundStyle] asks for, or null when the flat [bgColor] is what to paint. Kept
+ * here so every background surface — themed fill, shape plate, previews — asks the same question.
+ */
+fun GenerationOptions.backgroundShader(width: Int, height: Int): android.graphics.Shader? {
+    val style = backgroundStyle?.takeIf { it.mode == ColorizerMode.GRADIENT } ?: return null
+    return buildColorizerShader(
+        style.allGradientColors,
+        style.gradientType,
+        style.gradientAngle,
+        width,
+        height,
+        style.gradientPositions
     )
 }
 
 fun GenerationOptions.hasVisibleModifierEffect(): Boolean =
     primaryImageEdit != ImageEdit.NONE || iconScale != 1f ||
-        iconShape != IconShape.NONE || outlineMode != OutlineMode.NONE
+        iconShape != IconShape.NONE || outlineMode != OutlineMode.NONE ||
+        materialYouPackForeground != null || materialYouPackBackground != null ||
+        materialYouPackStrokeScale != 1f
 
 /** Letter-case transform for text icons (per-app option; not persisted globally). */
 enum class TextCase { AS_IS, UPPER, LOWER }

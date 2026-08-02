@@ -21,7 +21,7 @@ import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.getBytes
 import dev.renkinProject.renkin.extension.getDrawableOrNull
 import dev.renkinProject.renkin.extension.toByteArray
-import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.setReferenceColorPaths
 import dev.renkinProject.renkin.vector.brush.ReferenceBrush
@@ -68,7 +68,8 @@ class IconPackBuilder(
     // so several packs coexist) and the launcher-visible label. The dex classes keep the base
     // package regardless — Android doesn't require an app's id to match its class packages.
     private val packPackageName: String = PACKAGE_NAME,
-    private val packLabel: String = "Renkin Pack"
+    private val packLabel: String = "Renkin Pack",
+    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(ctx)
 ) {
     private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
@@ -688,12 +689,10 @@ class IconPackBuilder(
     }
 
     private fun getInstalledVersion(): Version? {
-        val appMan = ApplicationManager(ctx)
-
-        val iconPack = appMan.getPackage(iconPackName)
+        val iconPack = iconPackCatalog.packageInfo(iconPackName)
             ?: return null
 
-        val versionCode = appMan.getVersionCode(iconPack)
+        val versionCode = iconPackCatalog.versionCode(iconPack)
         // A package squatting our name (or a corrupt install) may carry no versionName —
         // treat it like version 1 instead of crashing the build.
         val versionName = iconPack.versionName ?: "1"

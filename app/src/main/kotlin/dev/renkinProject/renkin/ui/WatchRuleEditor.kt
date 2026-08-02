@@ -74,6 +74,7 @@ import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
+import dev.renkinProject.renkin.data.AppSortOrder
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
@@ -107,7 +108,8 @@ internal fun WatchRuleEditor(
     // Looked up off the main thread via the view model (this was what made the editor take ~1s
     // to open). Until they arrive, INSTALL_DATE sort just shows the default order.
     val installTimes by produceState(emptyMap<String, Long>(), apps) {
-        value = viewModel.installTimes(apps.map { it.packageName })
+        val packageNames = apps.mapTo(linkedSetOf()) { it.packageName }.toList()
+        value = viewModel.installTimes(packageNames)
     }
 
     val sortedPacks = remember(packs) { packs.sortedBy { it.applicationName.lowercase() } }

@@ -6,6 +6,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
@@ -71,6 +72,23 @@ val MonochromeKey = booleanPreferencesKey(MONOCHROME_NAME)
 val ExportThemedKey = booleanPreferencesKey(EXPORT_THEMED_NAME)
 val IconColorKey = stringPreferencesKey(ICON_COLOR_NAME)
 val BackgroundColorKey = stringPreferencesKey(BACKGROUND_COLOR_NAME)
+// The pack-wide background can carry a gradient of its own, described like the colourizer's.
+// [BackgroundColorKey] stays its first colour, so an older build still paints something sane.
+val BackgroundColorizerModeKey = intPreferencesKey("BACKGROUND_COLORIZER_MODE")
+val BackgroundGradientTypeKey = intPreferencesKey("BACKGROUND_GRADIENT_TYPE")
+val BackgroundGradientAngleKey = intPreferencesKey("BACKGROUND_GRADIENT_ANGLE")
+val BackgroundGradientColorsKey = stringPreferencesKey("BACKGROUND_GRADIENT_COLORS")
+val BackgroundGradientPositionsKey = stringPreferencesKey("BACKGROUND_GRADIENT_POSITIONS")
+val ColorizerModeKey = intPreferencesKey("COLORIZER_MODE")
+val ColorizerGradientColorKey = stringPreferencesKey("COLORIZER_GRADIENT_COLOR")
+// Every gradient stop after the first colour, comma separated. Supersedes the single-colour key
+// above, which is still written so an older build (or an older backup) keeps working.
+val ColorizerGradientColorsKey = stringPreferencesKey("COLORIZER_GRADIENT_COLORS")
+// Where each stop sits, 0..1, comma separated, covering the first colour too — so it holds one
+// more value than the colours key. Absent (older installs, older backups) = spread evenly.
+val ColorizerGradientPositionsKey = stringPreferencesKey("COLORIZER_GRADIENT_POSITIONS")
+val ColorizerGradientAngleKey = intPreferencesKey("COLORIZER_GRADIENT_ANGLE")
+val ColorizerGradientTypeKey = intPreferencesKey("COLORIZER_GRADIENT_TYPE")
 val CalendarIconsKey = booleanPreferencesKey(RETRIEVE_CALENDAR_ICONS_NAME)
 val OverrideIconKey = booleanPreferencesKey(OVERRIDE_ICON_NAME)
 val PrimarySourceKey = intPreferencesKey(PRIMARY_SOURCE_NAME)
@@ -96,6 +114,12 @@ val TextFontKey = stringPreferencesKey("TEXT_FONT")
 val OutlineAddKey = booleanPreferencesKey("OUTLINE_ADD")
 val OutlineWidthKey = intPreferencesKey("OUTLINE_WIDTH")
 val OutlineColorKey = stringPreferencesKey("OUTLINE_COLOR")
+// The outline can carry a gradient of its own, described the same way the colourizer's is.
+val OutlineColorizerModeKey = intPreferencesKey("OUTLINE_COLORIZER_MODE")
+val OutlineGradientTypeKey = intPreferencesKey("OUTLINE_GRADIENT_TYPE")
+val OutlineGradientAngleKey = intPreferencesKey("OUTLINE_GRADIENT_ANGLE")
+val OutlineGradientColorsKey = stringPreferencesKey("OUTLINE_GRADIENT_COLORS")
+val OutlineGradientPositionsKey = stringPreferencesKey("OUTLINE_GRADIENT_POSITIONS")
 const val OUTLINE_WIDTH_DEFAULT = 6
 const val OUTLINE_WIDTH_MIN = 1
 const val OUTLINE_WIDTH_MAX = 16
@@ -107,12 +131,26 @@ val GlobalShapeKey = intPreferencesKey("GLOBAL_SHAPE")
 val GlobalShapeCropKey = booleanPreferencesKey("GLOBAL_SHAPE_CROP")
 val GlobalShapeScaleKey = intPreferencesKey("GLOBAL_SHAPE_SCALE")
 val GlobalShapeColorKey = stringPreferencesKey("GLOBAL_SHAPE_COLOR")
+// The shape's plate is the one surface a background gradient is fully visible on, so it carries
+// its own style; GlobalShapeColorKey remains its first colour.
+val GlobalShapeColorizerModeKey = intPreferencesKey("GLOBAL_SHAPE_COLORIZER_MODE")
+val GlobalShapeGradientTypeKey = intPreferencesKey("GLOBAL_SHAPE_GRADIENT_TYPE")
+val GlobalShapeGradientAngleKey = intPreferencesKey("GLOBAL_SHAPE_GRADIENT_ANGLE")
+val GlobalShapeGradientColorsKey = stringPreferencesKey("GLOBAL_SHAPE_GRADIENT_COLORS")
+val GlobalShapeGradientPositionsKey = stringPreferencesKey("GLOBAL_SHAPE_GRADIENT_POSITIONS")
 val GlobalIconScaleKey = intPreferencesKey("GLOBAL_ICON_SCALE")
 val GlobalColorizeKey = booleanPreferencesKey("GLOBAL_COLORIZE")
 val GlobalColorizeColorKey = stringPreferencesKey("GLOBAL_COLORIZE_COLOR")
 val GlobalColorizeFlatKey = booleanPreferencesKey("GLOBAL_COLORIZE_FLAT")
 val GlobalColorizeMonochromeKey = booleanPreferencesKey("GLOBAL_COLORIZE_MONOCHROME")
 val GlobalColorizeInverseKey = booleanPreferencesKey("GLOBAL_COLORIZE_INVERSE")
+val GlobalColorizerModeKey = intPreferencesKey("GLOBAL_COLORIZER_MODE")
+val GlobalColorizerGradientColorKey = stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_COLOR")
+val GlobalColorizerGradientColorsKey = stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_COLORS")
+val GlobalColorizerGradientPositionsKey =
+    stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_POSITIONS")
+val GlobalColorizerGradientAngleKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_ANGLE")
+val GlobalColorizerGradientTypeKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_TYPE")
 // Which icon categories the global modifiers apply to (the Global options screen's toggle
 // buttons): refresh-generated icons (on by default — also gates the globals during a bulk
 // refresh), hand-picked (custom) icons, and apps that have no icon yet (those get one
@@ -158,13 +196,24 @@ private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
     PrimarySourceKey, PrimaryImageEditKey, PrimaryTextTypeKey,
     SecondarySourceKey, SecondaryImageEditKey, SecondaryTextTypeKey,
     FallbackSourceKey, OutlineWidthKey, BuiltPrimarySourceKey,
-    GlobalShapeKey, GlobalShapeScaleKey, GlobalIconScaleKey
+    GlobalShapeKey, GlobalShapeScaleKey, GlobalIconScaleKey,
+    ColorizerModeKey, ColorizerGradientAngleKey, ColorizerGradientTypeKey,
+    BackgroundColorizerModeKey, BackgroundGradientTypeKey, BackgroundGradientAngleKey,
+    GlobalShapeColorizerModeKey, GlobalShapeGradientTypeKey, GlobalShapeGradientAngleKey,
+    OutlineColorizerModeKey, OutlineGradientTypeKey, OutlineGradientAngleKey,
+    GlobalColorizerModeKey, GlobalColorizerGradientAngleKey, GlobalColorizerGradientTypeKey
 )
 
 private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
     PrimaryIconPackKey, SecondaryIconPackKey, IconColorKey, BackgroundColorKey,
     TextFontKey, OutlineColorKey, BuiltPrimaryIconPackKey,
-    GlobalShapeColorKey, GlobalColorizeColorKey
+    GlobalShapeColorKey, GlobalColorizeColorKey, ColorizerGradientColorKey,
+    GlobalColorizerGradientColorKey, ColorizerGradientColorsKey,
+    GlobalColorizerGradientColorsKey, OutlineGradientColorsKey,
+    ColorizerGradientPositionsKey, GlobalColorizerGradientPositionsKey,
+    OutlineGradientPositionsKey,
+    BackgroundGradientColorsKey, BackgroundGradientPositionsKey,
+    GlobalShapeGradientColorsKey, GlobalShapeGradientPositionsKey
 )
 
 val ProfilePrefKeys: List<Preferences.Key<*>> =
@@ -182,11 +231,28 @@ suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preference
             target[OutlineAddKey] = source.getBooleanValue(OutlineAddKey)
             target[OutlineWidthKey] = source.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
             target[OutlineColorKey] = source.getStringValue(OutlineColorKey)
+            target[OutlineColorizerModeKey] = source.getIntValue(OutlineColorizerModeKey)
+            target[OutlineGradientTypeKey] = source.getIntValue(OutlineGradientTypeKey)
+            target[OutlineGradientAngleKey] = source.getIntValue(OutlineGradientAngleKey)
+            target[OutlineGradientColorsKey] = source.getStringValue(OutlineGradientColorsKey)
+            target[OutlineGradientPositionsKey] =
+                source.getStringValue(OutlineGradientPositionsKey)
             target[GlobalColorizeKey] = source.getBooleanValue(GlobalColorizeKey)
             target[GlobalColorizeColorKey] = source.getStringValue(GlobalColorizeColorKey)
             target[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
             target[GlobalColorizeMonochromeKey] = source.getBooleanValue(GlobalColorizeMonochromeKey)
             target[GlobalColorizeInverseKey] = source.getBooleanValue(GlobalColorizeInverseKey)
+            target[GlobalColorizerModeKey] = source.getIntValue(GlobalColorizerModeKey)
+            target[GlobalColorizerGradientColorKey] =
+                source.getStringValue(GlobalColorizerGradientColorKey)
+            target[GlobalColorizerGradientColorsKey] =
+                source.getStringValue(GlobalColorizerGradientColorsKey)
+            target[GlobalColorizerGradientPositionsKey] =
+                source.getStringValue(GlobalColorizerGradientPositionsKey)
+            target[GlobalColorizerGradientAngleKey] =
+                source.getIntValue(GlobalColorizerGradientAngleKey)
+            target[GlobalColorizerGradientTypeKey] =
+                source.getIntValue(GlobalColorizerGradientTypeKey)
             target[GlobalApplyGeneratedKey] = source.getBooleanValue(GlobalApplyGeneratedKey, true)
             target[GlobalApplyExistingKey] = source.getBooleanValue(GlobalApplyExistingKey)
             target[GlobalApplyCustomKey] = source.getBooleanValue(GlobalApplyCustomKey)
@@ -223,6 +289,25 @@ fun Preferences.snapshotProfilePrefs(): String {
 suspend fun DataStore<Preferences>.restoreProfilePrefs(snapshot: String) {
     preferenceAccessMutex.withLock {
         edit { it.replaceProfilePrefs(snapshot) }
+    }
+}
+
+/**
+ * Snapshots the leaving profile, persists that snapshot, restores the target and records its id
+ * while ordinary preference setters are blocked. Without one lock around the whole sequence, a
+ * UI write can land after the leaving snapshot but before the target restore and be silently lost.
+ */
+suspend fun DataStore<Preferences>.switchProfilePrefs(
+    targetSnapshot: String,
+    newProfileId: Long,
+    persistLeavingSnapshot: suspend (String) -> Unit
+) {
+    preferenceAccessMutex.withLock {
+        persistLeavingSnapshot(data.first().snapshotProfilePrefs())
+        edit { target ->
+            target.replaceProfilePrefs(targetSnapshot)
+            target[ActiveProfileIdKey] = newProfileId
+        }
     }
 }
 
@@ -388,6 +473,179 @@ fun Preferences.getColorValue(key: Preferences.Key<String>, default: Color): Col
     return hex.toNullableColor() ?: default
 }
 
+/**
+ * Gradient stops after the first colour, newline-free and comma separated. [legacyKey] holds the
+ * single second colour written before multi-stop gradients existed, so profiles saved back then
+ * still open with their gradient intact.
+ */
+fun Preferences.getGradientStops(
+    key: Preferences.Key<String>,
+    legacyKey: Preferences.Key<String>
+): List<Int> {
+    val stored = this[key].orEmpty()
+        .split(',')
+        .mapNotNull { it.trim().takeIf(String::isNotEmpty)?.toNullableColor()?.toArgb() }
+    return stored.ifEmpty { listOf(getColorValue(legacyKey, Color.Black).toArgb()) }
+}
+
+/** Stop positions as stored; an empty or malformed list means the shader spreads them evenly. */
+fun Preferences.getGradientPositions(key: Preferences.Key<String>): List<Float> =
+    this[key].orEmpty()
+        .split(',')
+        .mapNotNull { it.trim().takeIf(String::isNotEmpty)?.toFloatOrNull() }
+
+@Composable
+fun DataStore<Preferences>.getGradientPositions(key: Preferences.Key<String>): List<Float> =
+    getPreferenceValue(key, "")
+        .split(',')
+        .mapNotNull { it.trim().takeIf(String::isNotEmpty)?.toFloatOrNull() }
+
+@Composable
+fun DataStore<Preferences>.getGradientStops(
+    key: Preferences.Key<String>,
+    legacyKey: Preferences.Key<String>
+): List<Int> {
+    val stored = getPreferenceValue(key, "")
+        .split(',')
+        .mapNotNull { it.trim().takeIf(String::isNotEmpty)?.toNullableColor()?.toArgb() }
+    return stored.ifEmpty { listOf(getColorValue(legacyKey, Color.Black).toArgb()) }
+}
+
+/**
+ * Writes the hero card's icon source and its pack together. Two separate setters could be split
+ * by a profile switch (which snapshots and restores the whole key set), leaving one profile with
+ * the source and another with the pack.
+ */
+suspend fun DataStore<Preferences>.setPrimarySource(source: Source, packageName: String?) {
+    preferenceAccessMutex.withLock {
+        edit { target ->
+            target[PrimarySourceKey] = source.ordinal
+            packageName?.let { target[PrimaryIconPackKey] = it }
+        }
+    }
+}
+
+/** Startup restore of the last BUILT source/pack — same atomicity requirement. */
+suspend fun DataStore<Preferences>.restoreBuiltPrimarySource(snapshot: Preferences) {
+    preferenceAccessMutex.withLock {
+        edit { target ->
+            target[PrimarySourceKey] = snapshot.getIntValue(
+                BuiltPrimarySourceKey, SOURCE_DEFAULT.ordinal
+            )
+            target[PrimaryIconPackKey] = snapshot.getStringValue(BuiltPrimaryIconPackKey)
+        }
+    }
+}
+
+/**
+ * The preference keys one colour style lives in. Grouping them lets the whole style be written
+ * in a single edit — five separate setters could be split by a profile switch, leaving a gradient
+ * with colours from one profile and an angle from another.
+ */
+data class ColorStyleKeys(
+    val mode: Preferences.Key<Int>,
+    val gradientType: Preferences.Key<Int>,
+    val gradientAngle: Preferences.Key<Int>,
+    val firstColor: Preferences.Key<String>,
+    val gradientColors: Preferences.Key<String>,
+    val gradientPositions: Preferences.Key<String>,
+    // Pre-multi-stop key holding the single second colour, kept in sync for older builds.
+    val legacyGradientColor: Preferences.Key<String>? = null
+)
+
+val ColorizerStyleKeys = ColorStyleKeys(
+    mode = ColorizerModeKey,
+    gradientType = ColorizerGradientTypeKey,
+    gradientAngle = ColorizerGradientAngleKey,
+    firstColor = IconColorKey,
+    gradientColors = ColorizerGradientColorsKey,
+    gradientPositions = ColorizerGradientPositionsKey,
+    legacyGradientColor = ColorizerGradientColorKey
+)
+
+val BackgroundStyleKeys = ColorStyleKeys(
+    mode = BackgroundColorizerModeKey,
+    gradientType = BackgroundGradientTypeKey,
+    gradientAngle = BackgroundGradientAngleKey,
+    firstColor = BackgroundColorKey,
+    gradientColors = BackgroundGradientColorsKey,
+    gradientPositions = BackgroundGradientPositionsKey
+)
+
+val GlobalShapeStyleKeys = ColorStyleKeys(
+    mode = GlobalShapeColorizerModeKey,
+    gradientType = GlobalShapeGradientTypeKey,
+    gradientAngle = GlobalShapeGradientAngleKey,
+    firstColor = GlobalShapeColorKey,
+    gradientColors = GlobalShapeGradientColorsKey,
+    gradientPositions = GlobalShapeGradientPositionsKey
+)
+
+val GlobalColorizerStyleKeys = ColorStyleKeys(
+    mode = GlobalColorizerModeKey,
+    gradientType = GlobalColorizerGradientTypeKey,
+    gradientAngle = GlobalColorizerGradientAngleKey,
+    firstColor = GlobalColorizeColorKey,
+    gradientColors = GlobalColorizerGradientColorsKey,
+    gradientPositions = GlobalColorizerGradientPositionsKey,
+    legacyGradientColor = GlobalColorizerGradientColorKey
+)
+
+// The outline's first colour IS its legacy key, so there is no separate legacy stop to write —
+// syncing one would overwrite the first colour with the second (that bug shipped once).
+val OutlineStyleKeys = ColorStyleKeys(
+    mode = OutlineColorizerModeKey,
+    gradientType = OutlineGradientTypeKey,
+    gradientAngle = OutlineGradientAngleKey,
+    firstColor = OutlineColorKey,
+    gradientColors = OutlineGradientColorsKey,
+    gradientPositions = OutlineGradientPositionsKey
+)
+
+suspend fun DataStore<Preferences>.setColorStyle(
+    keys: ColorStyleKeys,
+    mode: Int,
+    gradientType: Int,
+    gradientAngle: Int,
+    firstColor: Color,
+    gradientStops: List<Int>,
+    // Covers the first colour too, so it is one longer than [gradientStops]; empty = even spread.
+    gradientPositions: List<Float> = emptyList()
+) {
+    preferenceAccessMutex.withLock {
+        edit { target ->
+            target.setColorStyle(
+                keys, mode, gradientType, gradientAngle,
+                firstColor, gradientStops, gradientPositions
+            )
+        }
+    }
+}
+
+/** Writes one complete colour style into an existing atomic preferences edit or staged copy. */
+fun MutablePreferences.setColorStyle(
+    keys: ColorStyleKeys,
+    mode: Int,
+    gradientType: Int,
+    gradientAngle: Int,
+    firstColor: Color,
+    gradientStops: List<Int>,
+    gradientPositions: List<Float> = emptyList()
+) {
+    this[keys.mode] = mode
+    this[keys.gradientType] = gradientType
+    this[keys.gradientAngle] = gradientAngle
+    this[keys.firstColor] = firstColor.toHexString()
+    this[keys.gradientColors] = gradientStops.joinToString(",") { Color(it).toHexString() }
+    this[keys.gradientPositions] = gradientPositions.joinToString(",")
+    keys.legacyGradientColor
+        ?.takeIf { it != keys.firstColor }
+        ?.let { legacy ->
+            gradientStops.firstOrNull()?.let { this[legacy] = Color(it).toHexString() }
+        }
+}
+
+
 //Enum
 @Composable
 inline fun <reified T: Enum<T>> DataStore<Preferences>.getEnumValue(
@@ -457,12 +715,16 @@ fun getSourceLabels(): Map<Source, String> {
 }
 
 @Composable
-fun getImageEditLabels(): Map<ImageEdit, String> {
-    return mapOf(ImageEdit.NONE to stringResource(id = R.string.none)
+fun getImageEditLabels(includeSegments: Boolean = false): Map<ImageEdit, String> {
+    val base = mapOf(ImageEdit.NONE to stringResource(id = R.string.none)
         , ImageEdit.PATH to stringResource(id = R.string.pathDetection)
         , ImageEdit.EDGE to stringResource(id = R.string.edgeDetection)
         , ImageEdit.COLORIZE to stringResource(id = R.string.colorize)
         , ImageEdit.REMOVE_BACKGROUND to stringResource(id = R.string.removeBackground))
+    // Segments are picked on one icon's own artwork, so only the edit dialog offers them.
+    return if (includeSegments) {
+        base + (ImageEdit.COLORIZE_SEGMENTS to stringResource(id = R.string.colorizeSegments))
+    } else base
 }
 
 @Composable
@@ -499,6 +761,8 @@ enum class DarkMode {
     FOLLOW_SYSTEM, DARK, LIGHT
 }
 
+enum class AppSortOrder { NAME, INSTALL_DATE }
+
 enum class Source {
     NONE, ICON_PACK, APPLICATION_ICON, APPLICATION_NAME
 }
@@ -509,8 +773,9 @@ enum class FallbackSource {
 }
 
 enum class ImageEdit {
-    // REMOVE_BACKGROUND stays last so existing stored ordinals (persisted by index) keep their value.
-    NONE, PATH, EDGE, COLORIZE, REMOVE_BACKGROUND
+    // New entries go at the END: ordinals are persisted by index. COLORIZE_SEGMENTS is the
+    // per-app "colourize only these regions" modifier, so the pack-wide dropdowns skip it.
+    NONE, PATH, EDGE, COLORIZE, REMOVE_BACKGROUND, COLORIZE_SEGMENTS
 }
 
 enum class TextType {

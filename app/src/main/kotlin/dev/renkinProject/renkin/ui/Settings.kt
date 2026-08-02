@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 
 package dev.renkinProject.renkin.ui
 
@@ -37,6 +37,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -49,7 +50,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -70,16 +70,13 @@ import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.DARK_MODE_DEFAULT
+import dev.renkinProject.renkin.data.DarkMode
 import dev.renkinProject.renkin.data.DarkModeKey
-import dev.renkinProject.renkin.data.OnboardingSeenKey
-import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.getDarkModeLabels
 import dev.renkinProject.renkin.data.getEnumValue
-import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.util.CrashReporter
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -92,9 +89,6 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     val viewModel: MainViewModel = hiltViewModel()
     val view = LocalView.current
     val context = getCurrentContext()
-    val toaster = LocalToaster.current
-    val scope = rememberCoroutineScope()
-    val iconsClearedMessage = stringResource(R.string.iconsCleared)
 
     var showStats by rememberSaveable { mutableStateOf(false) }
     var showCrashLogs by rememberSaveable { mutableStateOf(false) }
@@ -145,32 +139,48 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                         .padding(horizontal = 16.dp)
                 ) {
                     SettingsSectionHeader(stringResource(R.string.settingsAppearance))
-                    ThemeRow(prefs)
+                    ThemeRow(prefs, viewModel::setDarkMode)
 
                     SettingsSectionHeader(stringResource(R.string.settingsIconPacks))
-                    SettingsRow(Icons.Filled.Sync, stringResource(R.string.syncPacks)) {
+                    SettingsRow(
+                        Icons.Filled.Sync,
+                        stringResource(R.string.syncPacks),
+                        busy = viewModel.syncing
+                    ) {
                         viewModel.sync()
                     }
-                    SettingsRow(Icons.Filled.Apps, stringResource(R.string.refreshApplicationList)) {
+                    SettingsRow(
+                        Icons.Filled.Apps,
+                        stringResource(R.string.refreshApplicationList),
+                        busy = viewModel.appsRefreshing
+                    ) {
                         viewModel.refreshApps()
                     }
                     SettingsRow(Icons.Filled.BarChart, stringResource(R.string.statsButton)) {
                         showStats = true
                     }
                     SettingsSectionHeader(stringResource(R.string.settingsBackup))
-                    SettingsRow(Icons.Filled.Save, stringResource(R.string.exportBackup)) {
-                        if (!viewModel.backupInProgress) {
-                            exportBackupLauncher.launch(BackupManager.defaultFileName())
-                        }
+                    SettingsRow(
+                        Icons.Filled.Save,
+                        stringResource(R.string.exportBackup),
+                        busy = viewModel.backupInProgress
+                    ) {
+                        exportBackupLauncher.launch(BackupManager.defaultFileName())
                     }
-                    SettingsRow(Icons.Filled.Restore, stringResource(R.string.importBackup)) {
-                        if (!viewModel.backupInProgress) {
-                            importBackupLauncher.launch(arrayOf("*/*"))
-                        }
+                    SettingsRow(
+                        Icons.Filled.Restore,
+                        stringResource(R.string.importBackup),
+                        busy = viewModel.backupInProgress
+                    ) {
+                        importBackupLauncher.launch(arrayOf("*/*"))
                     }
 
                     SettingsSectionHeader(stringResource(R.string.settingsData), color = MaterialTheme.colorScheme.error)
-                    SettingsRow(Icons.Filled.DeleteSweep, stringResource(R.string.clearIcons)) {
+                    SettingsRow(
+                        Icons.Filled.DeleteSweep,
+                        stringResource(R.string.clearIcons),
+                        busy = viewModel.clearingIcons
+                    ) {
                         confirmClearIcons = true
                     }
                     SettingsRow(
@@ -186,7 +196,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     SettingsRow(Icons.Filled.School, stringResource(R.string.showIntro)) {
                         // Clearing the flag makes the home screen show the intro again; close
                         // Settings so it isn't sitting underneath the overlay.
-                        scope.launch { prefs.setBooleanValue(OnboardingSeenKey, false) }
+                        viewModel.setOnboardingSeen(false)
                         onDismiss()
                     }
                     SettingsRow(
@@ -247,11 +257,11 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
             title = stringResource(R.string.clearIconsTitle),
             text = stringResource(R.string.clearIconsText),
             icon = Icons.Filled.DeleteSweep,
+            // The acknowledgement toast comes from the view model once the clear really
+            // finished — the list change alone is easy to miss from Settings.
             onConfirm = {
                 confirmClearIcons = false
                 viewModel.clearIcons()
-                // Visible acknowledgement — the list change alone is easy to miss from Settings.
-                toaster.show(iconsClearedMessage)
             },
             onDismiss = { confirmClearIcons = false }
         )
@@ -270,38 +280,59 @@ private fun SettingsSectionHeader(text: String, color: Color = MaterialTheme.col
     )
 }
 
-/** One tappable settings row: leading icon, label, optional trailing content (e.g. a badge). */
+/**
+ * One tappable settings row: leading icon, label, optional trailing content (e.g. a badge).
+ *
+ * [busy] is for the rows whose work takes a noticeable moment (syncing packs, reloading the app
+ * list, backup import/export). They used to swallow the tap silently while running, so a slow
+ * operation looked like a dead row — now the row dims and shows a spinner instead.
+ */
+// internal, not private: the busy behaviour has its own compose test.
 @Composable
-private fun SettingsRow(
+internal fun SettingsRow(
     icon: ImageVector,
     label: String,
     tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    busy: Boolean = false,
     trailing: (@Composable () -> Unit)? = null,
     onClick: () -> Unit
 ) {
+    val contentAlpha = if (busy) 0.5f else 1f
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = !busy, onClick = onClick)
             .padding(vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(22.dp))
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = tint.copy(alpha = contentAlpha),
+            modifier = Modifier.size(22.dp)
+        )
         Spacer(Modifier.width(16.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.bodyLarge,
-            color = if (tint == MaterialTheme.colorScheme.error) tint else MaterialTheme.colorScheme.onSurface,
+            color = (if (tint == MaterialTheme.colorScheme.error) tint else MaterialTheme.colorScheme.onSurface)
+                .copy(alpha = contentAlpha),
             modifier = Modifier.weight(1f)
         )
-        trailing?.invoke()
+        if (busy) {
+            LoadingIndicator(
+                modifier = Modifier.size(22.dp),
+                color = MaterialTheme.colorScheme.primary
+            )
+        } else {
+            trailing?.invoke()
+        }
     }
 }
 
 /** The theme picker row: current value on the right, options in a dropdown. */
 @Composable
-private fun ThemeRow(prefs: DataStore<Preferences>) {
-    val scope = rememberCoroutineScope()
+private fun ThemeRow(prefs: DataStore<Preferences>, onSelect: (DarkMode) -> Unit) {
     val selected = prefs.getEnumValue(DarkModeKey, DARK_MODE_DEFAULT)
     val labels = getDarkModeLabels()
     var open by remember { mutableStateOf(false) }
@@ -337,7 +368,7 @@ private fun ThemeRow(prefs: DataStore<Preferences>) {
             labels.forEach { (mode, label) ->
                 CheckableDropdownItem(label, checked = mode == selected) {
                     open = false
-                    scope.launch { prefs.setEnumValue(DarkModeKey, mode) }
+                    onSelect(mode)
                 }
             }
         }
@@ -353,10 +384,13 @@ private fun ThemeRow(prefs: DataStore<Preferences>) {
 @Composable
 private fun PackUsageDialog(onDismiss: () -> Unit) {
     val viewModel: MainViewModel = hiltViewModel()
-    val entries by produceState(emptyList<ApplicationProvider.PackUsage>()) {
+    // Null while the read runs. An empty list would be indistinguishable from "no packs", so
+    // opening the dialog used to flash "No icon packs installed" before the rows arrived.
+    val entries by produceState<List<ApplicationProvider.PackUsage>?>(null) {
         value = viewModel.packUsageEntries()
     }
-    val max = (entries.maxOfOrNull { it.count } ?: 0).coerceAtLeast(1)
+    val rows = entries.orEmpty()
+    val max = (rows.maxOfOrNull { it.count } ?: 0).coerceAtLeast(1)
 
     RenkinAlertDialog(
         onDismissRequest = onDismiss,
@@ -364,14 +398,20 @@ private fun PackUsageDialog(onDismiss: () -> Unit) {
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ok)) } },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                if (entries.isEmpty()) {
-                    Text(
+                when {
+                    entries == null -> Box(
+                        Modifier.fillMaxWidth().padding(vertical = 16.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        LoadingIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                    rows.isEmpty() -> Text(
                         text = stringResource(R.string.packUsageEmpty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                entries.forEach { entry ->
+                rows.forEach { entry ->
                     Row(
                         Modifier
                             .fillMaxWidth()

@@ -110,6 +110,17 @@ fun InfoDialog(onDismiss: () -> Unit) {
                     url = "https://f-droid.org/packages/com.kaanelloed.iconeration/",
                     modifier = Modifier.padding(top = 2.dp)
                 )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = stringResource(R.string.aboutGradients),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                LinkText(
+                    text = stringResource(R.string.aboutGradientsLink),
+                    url = "https://github.com/ghosh/uiGradients",
+                    modifier = Modifier.padding(top = 2.dp)
+                )
 
                 Spacer(Modifier.height(24.dp))
                 Text(

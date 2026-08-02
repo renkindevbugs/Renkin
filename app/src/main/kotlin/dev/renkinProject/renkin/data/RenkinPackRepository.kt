@@ -48,6 +48,50 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         dao.insertAll(apps)
     }
 
+    // ---- What the last build shipped -----------------------------------------------
+
+    private val builtIconDao = db.builtIconDao()
+
+    suspend fun builtIcons(profileId: Long): List<BuiltIcon> = withContext(Dispatchers.Default) {
+        builtIconDao.get(profileId)
+    }
+
+    /** One transaction: a half-written record would read as "half the pack is unbuilt". */
+    suspend fun replaceBuiltIcons(profileId: Long, rows: List<BuiltIcon>) = db.withTransaction {
+        builtIconDao.deleteForProfile(profileId)
+        builtIconDao.insertAll(rows)
+    }
+
+    // ---- Saved colours -------------------------------------------------------------
+
+    private val presetDao = db.colorPresetDao()
+
+    /** Saved colours/gradients, oldest first — the order they appear in the picker. */
+    fun colorPresetsFlow(): Flow<List<ColorPreset>> = presetDao.getAllFlow()
+
+    suspend fun saveColorPreset(name: String, style: String): Long =
+        withContext(Dispatchers.Default) {
+            presetDao.insert(ColorPreset(name = name, style = style))
+        }
+
+    suspend fun deleteColorPreset(id: Long) = withContext(Dispatchers.Default) {
+        presetDao.delete(id)
+    }
+
+    /** Backup export reads the library in one shot. */
+    suspend fun allColorPresets(): List<ColorPreset> = withContext(Dispatchers.Default) {
+        presetDao.getAll()
+    }
+
+    /**
+     * Backup import: the saved colours belong to the device, not a profile, so a full restore
+     * replaces the whole library the same way it replaces profiles.
+     */
+    suspend fun replaceColorPresets(presets: List<ColorPreset>) = db.withTransaction {
+        presetDao.deleteEverything()
+        presets.forEach { presetDao.insert(it) }
+    }
+
     // ---- Pack verdicts -------------------------------------------------------------
 
     private val verdictDao = db.packVerdictDao()

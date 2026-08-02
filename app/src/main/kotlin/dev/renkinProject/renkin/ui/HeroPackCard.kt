@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -14,8 +15,12 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.PaddingValues
@@ -25,25 +30,38 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.HideImage
+import androidx.compose.material.icons.outlined.Lock
+import androidx.compose.material3.ButtonGroupDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.ShapeDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.ToggleButton
+import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -62,6 +80,7 @@ import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -70,6 +89,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.data.ExportThemedKey
+import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.PrimarySourceKey
@@ -78,15 +99,81 @@ import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
-import dev.renkinProject.renkin.data.setEnumValue
-import dev.renkinProject.renkin.data.setStringValue
+import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.GoldBase
+import dev.renkinProject.renkin.ui.theme.RemovedRed
 import dev.renkinProject.renkin.ui.theme.GoldShimmer
 import dev.renkinProject.renkin.ui.theme.CardShape
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+
+private const val CHANGE_BAR_ANIMATION_MS = 900
+
+internal fun heroProgressAnimationKey(
+    activeProfileId: Long,
+    profileSummaryReady: Boolean,
+    hasApplications: Boolean
+): String = "$activeProfileId:$profileSummaryReady:$hasApplications"
+
+internal fun shouldShowPendingChanges(
+    profileSummaryReady: Boolean,
+    progressAnimationSettled: Boolean,
+    changeCount: Int,
+    hasUnbuiltChanges: Boolean
+): Boolean = profileSummaryReady &&
+    progressAnimationSettled &&
+    (changeCount > 0 || hasUnbuiltChanges)
+
+internal data class HeroPackStats(
+    val builtCount: Int,
+    val addedCount: Int,
+    val removedCount: Int,
+    val themedCount: Int,
+    val totalCount: Int,
+    val fallbackCount: Int,
+    // Apps with no icon at all, excluding the locked ones — same split the list filters use, so
+    // the card's chips and the filtered list always agree on the number.
+    val missingCount: Int,
+    val lockedCount: Int
+)
+
+internal fun calculateHeroPackStats(
+    apps: List<PackageInfoStruct>,
+    builtKeys: Set<String>,
+    lockedKeys: Set<String> = emptySet()
+): HeroPackStats {
+    var builtCount = 0
+    var addedCount = 0
+    var removedCount = 0
+    var fallbackCount = 0
+    var missingCount = 0
+    var lockedCount = 0
+
+    apps.forEach { app ->
+        val locked = app.key in lockedKeys
+        if (locked) lockedCount++
+        if (app.createdIcon != null) {
+            if (app.key in builtKeys) builtCount++ else addedCount++
+            if (app.isFallback) fallbackCount++
+        } else {
+            if (app.key in builtKeys) removedCount++
+            if (!locked) missingCount++
+        }
+    }
+
+    return HeroPackStats(
+        builtCount = builtCount,
+        addedCount = addedCount,
+        removedCount = removedCount,
+        themedCount = builtCount + addedCount,
+        totalCount = apps.size,
+        fallbackCount = fallbackCount,
+        missingCount = missingCount,
+        lockedCount = lockedCount
+    )
+}
 
 /**
  * The home screen's hero card: the primary icon source, front and centre, so a first-time user
@@ -97,11 +184,16 @@ import kotlinx.coroutines.withContext
  * hand-picked and already-built icons survive that refresh (see PackageInfoStruct.isRefreshMade).
  */
 @Composable
-fun HeroPackCard(iconPacks: List<IconPack>) {
+fun HeroPackCard(
+    iconPacks: List<IconPack>,
+    // The home list's active filters, so the card's toggles can drive them. A null callback
+    // hides them — previews reuse this card without a list to filter.
+    activeFilters: Set<AppProblemFilter> = emptySet(),
+    onFilterToggle: ((AppProblemFilter) -> Unit)? = null
+) {
     val viewModel: MainViewModel = hiltViewModel()
     val prefs = getPreferences()
     val preferences = prefs.getPreferencesValue()
-    val scope = rememberCoroutineScope()
 
     val source = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     val packName = preferences.getStringValue(PrimaryIconPackKey)
@@ -109,20 +201,48 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
 
     // Completion progress (moved here from the options card): blue = already built, green =
     // added since (pending build), red = removed since.
-    val apps = viewModel.applicationList
-    val builtKeys = viewModel.builtKeys
-    val builtCount = apps.count { it.createdIcon != null && it.key in builtKeys }
-    val addedCount = apps.count { it.createdIcon != null && it.key !in builtKeys }
-    val removedCount = apps.count { it.createdIcon == null && it.key in builtKeys }
-    val themedCount = builtCount + addedCount
-    val totalCount = apps.size
-    val fallbackCount = apps.count { it.createdIcon != null && it.isFallback }
+    val stats by remember(viewModel) {
+        derivedStateOf {
+            calculateHeroPackStats(
+                viewModel.applicationList, viewModel.builtKeys, viewModel.lockedIconKeys
+            )
+        }
+    }
+    val builtCount = stats.builtCount
+    val addedCount = stats.addedCount
+    val removedCount = stats.removedCount
+    val themedCount = stats.themedCount
+    val totalCount = stats.totalCount
+    val fallbackCount = stats.fallbackCount
 
     var sheetOpen by remember { mutableStateOf(false) }
+    var changesOpen by remember { mutableStateOf(false) }
 
     // Saved-but-not-built marker for the active profile (set by the save-before-switch flow).
     val profiles by viewModel.profiles.collectAsState(initial = emptyList())
     val activeProfile = profiles.find { it.id == viewModel.activeProfileId }
+    val progressAnimationKey = heroProgressAnimationKey(
+        activeProfileId = viewModel.activeProfileId,
+        profileSummaryReady = viewModel.profileSummaryReady,
+        hasApplications = totalCount > 0
+    )
+    // LazyColumn disposes this card when it is far off-screen. Save both the completed state and
+    // the profile load it belongs to, so scrolling or applying an icon does not replay the delay.
+    var settledAnimationKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var progressAnimationSettled by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(progressAnimationKey) {
+        if (settledAnimationKey == progressAnimationKey && progressAnimationSettled) {
+            return@LaunchedEffect
+        }
+        settledAnimationKey = progressAnimationKey
+        progressAnimationSettled = false
+        if (viewModel.profileSummaryReady && totalCount > 0) {
+            delay(CHANGE_BAR_ANIMATION_MS.toLong())
+            if (settledAnimationKey == progressAnimationKey) {
+                progressAnimationSettled = true
+            }
+        }
+    }
 
     Surface(
         onClick = { sheetOpen = true },
@@ -132,7 +252,9 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
             .fillMaxWidth()
             .padding(16.dp, 8.dp)
     ) {
-        Column(Modifier.padding(16.dp)) {
+        // Less room under the last line than above it: the trailing element is a compact chip or
+        // a label, and a full 16.dp below it left the card looking bottom-heavy.
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 10.dp)) {
             Text(
                 text = stringResource(R.string.heroPackLabel),
                 style = MaterialTheme.typography.labelMedium,
@@ -210,9 +332,19 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
                 }
                 Spacer(Modifier.height(6.dp))
                 ChangeBar(totalCount, builtCount, addedCount, removedCount)
-                // Fallback icons look themed but weren't a real pack match — call out the
-                // count so a full bar isn't mistaken for "every app was found".
-                if (fallbackCount > 0) {
+                if (onFilterToggle != null) {
+                    // The problems, one tap from being worked on: each button adds or removes
+                    // exactly the group it counts (see sortedFilteredApps).
+                    ProblemFilterButtons(
+                        missingCount = stats.missingCount,
+                        fallbackCount = fallbackCount,
+                        lockedCount = stats.lockedCount,
+                        active = activeFilters,
+                        onToggle = onFilterToggle
+                    )
+                } else if (fallbackCount > 0) {
+                    // Fallback icons look themed but weren't a real pack match — call out the
+                    // count so a full bar isn't mistaken for "every app was found".
                     Spacer(Modifier.height(6.dp))
                     Text(
                         text = stringResource(R.string.fallbackCount, fallbackCount),
@@ -220,16 +352,58 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f)
                     )
                 }
-                if (activeProfile?.hasUnbuiltChanges == true) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text = stringResource(R.string.unbuiltChanges),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.tertiary
+                // Pending changes, now answerable: the badge says how many and opens the list of
+                // exactly which apps a build would add, change or drop.
+                val changes = viewModel.pendingPackChanges
+                if (shouldShowPendingChanges(
+                        profileSummaryReady = viewModel.profileSummaryReady,
+                        progressAnimationSettled = progressAnimationSettled,
+                        changeCount = changes.size,
+                        hasUnbuiltChanges = activeProfile?.hasUnbuiltChanges == true
                     )
+                ) {
+                    Spacer(Modifier.height(6.dp))
+                    Surface(
+                        shape = CircleShape,
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                        // Always openable: an empty list is an answer too ("nothing since the
+                        // last build"), and a chip that ignores taps reads as broken.
+                        onClick = { changesOpen = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = if (changes.isEmpty()) {
+                                    stringResource(R.string.unbuiltChanges)
+                                } else {
+                                    stringResource(R.string.unbuiltChangesCount, changes.size)
+                                },
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer
+                            )
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                 }
             }
         }
+    }
+
+    if (changesOpen) {
+        PackChangesSheet(
+            iconPacks = iconPacks,
+            themed = preferences.getBooleanValue(ExportThemedKey),
+            onBuild = { viewModel.build(viewModel.activeProfileId) },
+            onDismiss = { changesOpen = false }
+        )
     }
 
     if (sheetOpen) {
@@ -240,21 +414,51 @@ fun HeroPackCard(iconPacks: List<IconPack>) {
             onDismiss = { sheetOpen = false },
             onPick = { newSource, newPackage ->
                 sheetOpen = false
-                scope.launch {
-                    prefs.setEnumValue(PrimarySourceKey, newSource)
-                    if (newPackage != null) prefs.setStringValue(PrimaryIconPackKey, newPackage)
-                    if (newSource == Source.NONE) {
-                        // No source: the unsaved refresh output goes away; locked icons stay.
-                        viewModel.clearRefreshedIcons()
-                    } else {
-                        // Auto-refresh with the just-written preferences, so the pick takes
-                        // effect without knowing about the refresh button. Hand-picked and
-                        // built icons are safe.
-                        viewModel.refresh()
-                    }
-                }
+                // The view model keeps the preference write ordered before clear/refresh.
+                viewModel.selectPrimarySource(newSource, newPackage)
             }
         )
+    }
+}
+
+/**
+ * The picker's pack rows: best coverage first — that is the question the picker exists to
+ * answer — with ties by name so the order is stable between openings, then narrowed by the
+ * search query. Pulled out of the composable so the ordering has a test; it was silently lost
+ * once in a refactor and nothing failed.
+ */
+internal fun pickerPacks(
+    iconPacks: List<IconPack>,
+    matchedCounts: Map<String, Int>,
+    query: String
+): List<IconPack> {
+    val sorted = iconPacks.sortedWith(
+        compareByDescending<IconPack> { matchedCounts[it.packageName] ?: 0 }
+            .thenBy { it.applicationName.lowercase() }
+    )
+    val trimmed = query.trim()
+    return if (trimmed.isEmpty()) sorted
+    else sorted.filter { it.applicationName.contains(trimmed, ignoreCase = true) }
+}
+
+/**
+ * Which row the picker opens on: the current choice, so it isn't hidden below the fold of a
+ * coverage-sorted list. Null means "don't scroll" — while searching, the top of the results is
+ * the right place to be. The non-pack sources follow the packs and one divider, in list order.
+ */
+internal fun pickerScrollIndex(
+    shownPacks: List<IconPack>,
+    selectedSource: Source,
+    selectedPackage: String,
+    query: String
+): Int? {
+    if (query.trim().isNotEmpty()) return null
+    return when (selectedSource) {
+        Source.ICON_PACK ->
+            shownPacks.indexOfFirst { it.packageName == selectedPackage }.takeIf { it >= 0 }
+        Source.NONE -> shownPacks.size + 1
+        Source.APPLICATION_ICON -> shownPacks.size + 2
+        Source.APPLICATION_NAME -> shownPacks.size + 3
     }
 }
 
@@ -268,7 +472,18 @@ private fun PackPickerSheet(
     onPick: (source: Source, packPackage: String?) -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
-    val usage = remember { viewModel.packUsageCounts() }
+    val usage = remember(iconPacks) { viewModel.packUsageCounts() }
+    // Coverage answers the question the picker used to leave open: which pack actually knows
+    // this device's apps. Re-read only if the installed pack list changes while the sheet is up;
+    // no appfilter parsing or drawable decoding happens here.
+    val matched = remember(iconPacks) { viewModel.packMatchedAppCounts() }
+    val installedAppCount = viewModel.applicationList.size
+
+    var query by rememberSaveable { mutableStateOf("") }
+    val trimmedQuery = query.trim()
+    val shownPacks = remember(iconPacks, matched, trimmedQuery) {
+        pickerPacks(iconPacks, matched, trimmedQuery)
+    }
 
     // Two anchors only (open / dismissed), like Mihon's AdaptiveSheet: with the default
     // partially-expanded middle state, the list's nested scroll hands off to a sheet drag at
@@ -288,27 +503,64 @@ private fun PackPickerSheet(
             override suspend fun onPostFling(consumed: Velocity, available: Velocity): Velocity = available
         }
     }
+    // Opening the sheet lands on the current choice instead of the top of a coverage-sorted
+    // list, where the selected pack can sit well below the fold. Only for the unfiltered list:
+    // once the user types, the top of the results is the right place to be.
+    val listState = rememberLazyListState()
+    val selectedIndex = remember(shownPacks, selectedSource, selectedPackage, trimmedQuery) {
+        pickerScrollIndex(shownPacks, selectedSource, selectedPackage, trimmedQuery)
+    }
+    LaunchedEffect(Unit) {
+        if (selectedIndex != null) listState.scrollToItem(selectedIndex)
+    }
+
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState) {
+        Text(
+            text = stringResource(R.string.choosePackTitle),
+            style = MaterialTheme.typography.titleMediumEmphasized,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+        )
+        // Outside the list so it stays reachable while scrolling — with a couple of dozen packs
+        // installed, scrolling back up to search would defeat the point.
+        SearchField(
+            value = query,
+            onValueChange = { query = it },
+            placeholder = stringResource(R.string.searchPacks),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 4.dp)
+        )
         // LazyColumn (not Column+verticalScroll): with many packs the list is taller than the
         // sheet, and the lazy list's nested-scroll handoff to the sheet is smooth at the edges.
         LazyColumn(
-            modifier = Modifier.nestedScroll(swallowFlingLeftovers),
-            contentPadding = PaddingValues(bottom = 16.dp)
+            state = listState,
+            modifier = Modifier
+                .nestedScroll(swallowFlingLeftovers)
+                .drawVerticalScrollbar(listState),
+            contentPadding = PaddingValues(top = 8.dp, bottom = 16.dp)
         ) {
-            item {
-                Text(
-                    text = stringResource(R.string.choosePackTitle),
-                    style = MaterialTheme.typography.titleMediumEmphasized,
-                    color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
-                )
+            if (shownPacks.isEmpty() && trimmedQuery.isNotEmpty()) {
+                item {
+                    Text(
+                        text = stringResource(R.string.searchPacksEmpty),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)
+                    )
+                }
             }
-            items(iconPacks, key = { it.packageName }) { pack ->
+            items(shownPacks, key = { it.packageName }) { pack ->
                 val selected = selectedSource == Source.ICON_PACK && pack.packageName == selectedPackage
+                val used = usage[pack.packageName] ?: 0
+                val coverage = matched[pack.packageName] ?: 0
                 PickerRow(
                     title = pack.applicationName,
-                    subtitle = (usage[pack.packageName] ?: 0).let { count ->
-                        if (count > 0) stringResource(R.string.packUsedCount, count) else null
+                    subtitle = when {
+                        used > 0 -> stringResource(
+                            R.string.packCoverageUsed, coverage, installedAppCount, used
+                        )
+                        else -> stringResource(R.string.packCoverage, coverage, installedAppCount)
                     },
                     icon = rememberPackIcon(pack.packageName),
                     selected = selected
@@ -349,8 +601,9 @@ private fun PackPickerSheet(
     }
 }
 
+// internal, not private: the selection semantics have their own compose test.
 @Composable
-private fun PickerRow(
+internal fun PickerRow(
     title: String,
     subtitle: String?,
     icon: ImageBitmap?,
@@ -360,8 +613,11 @@ private fun PickerRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(horizontal = 24.dp, vertical = 10.dp),
+            // selectable, not clickable: the row is one option out of a list, so TalkBack should
+            // announce it as a radio button and say which one is picked. The check icon is
+            // decoration on top of that semantic, hence its null contentDescription.
+            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (icon != null) {
@@ -369,15 +625,18 @@ private fun PickerRow(
                 bitmap = icon,
                 contentDescription = null,
                 modifier = Modifier
-                    .padding(end = 12.dp)
-                    .size(36.dp)
-                    .clip(RoundedCornerShape(9.dp))
+                    .padding(end = 14.dp)
+                    .size(40.dp)
+                    .clip(InnerShape)
             )
         }
         Column(Modifier.weight(1f)) {
+            // The pack name carries the row; the coverage line under it is detail. At the same
+            // weight the two blurred together at a glance.
             Text(
                 text = title,
                 style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
                 color = MaterialTheme.colorScheme.onSurface
             )
             if (subtitle != null) {
@@ -414,6 +673,23 @@ private fun rememberPackIcon(packageName: String?): ImageBitmap? {
 }
 
 /**
+ * The change bar's coloured runs as (start, end, colour) fractions, in paint order: what the last
+ * build shipped, then what was added since, then what was dropped. Additions come before removals
+ * so the green always follows the built run — a removal drawn in between read as a gap in it.
+ * Empty runs are left out so a caller never draws a zero-width rect.
+ */
+internal fun changeBarSegments(
+    built: Float,
+    added: Float,
+    removed: Float,
+    builtColor: Color
+): List<Triple<Float, Float, Color>> = listOf(
+    Triple(0f, built, builtColor),
+    Triple(built, built + added, AddedGreen),
+    Triple(built + added, built + added + removed, RemovedRed)
+).filter { (from, to, _) -> to > from }
+
+/**
  * Segmented completion bar: blue = icons already in the last built pack, green = added
  * since (pending build), red = removed since. Material 3 has no multi-colour progress
  * bar, so this hand-draws one with the stock indicator's modern traits: rounded capsule
@@ -421,11 +697,28 @@ private fun rememberPackIcon(packageName: String?): ImageBitmap? {
  */
 @Composable
 internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
-    val builtF by animateFloatAsState(if (total > 0) built / total.toFloat() else 0f, label = "builtFrac")
-    val addedF by animateFloatAsState(if (total > 0) added / total.toFloat() else 0f, label = "addedFrac")
-    val removedF by animateFloatAsState(if (total > 0) removed / total.toFloat() else 0f, label = "removedFrac")
+    val progressAnimation = remember {
+        tween<Float>(
+            durationMillis = CHANGE_BAR_ANIMATION_MS,
+            easing = FastOutSlowInEasing
+        )
+    }
+    val builtF by animateFloatAsState(
+        if (total > 0) built / total.toFloat() else 0f,
+        animationSpec = progressAnimation,
+        label = "builtFrac"
+    )
+    val addedF by animateFloatAsState(
+        if (total > 0) added / total.toFloat() else 0f,
+        animationSpec = progressAnimation,
+        label = "addedFrac"
+    )
+    val removedF by animateFloatAsState(
+        if (total > 0) removed / total.toFloat() else 0f,
+        animationSpec = progressAnimation,
+        label = "removedFrac"
+    )
     val primary = MaterialTheme.colorScheme.primary
-    val errorColor = MaterialTheme.colorScheme.error
     val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
 
     // Fully themed AND fully persisted (no pending +added/-removed): the bar celebrates in
@@ -473,19 +766,12 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
                         )
                     )
                 } else {
-                    val stops = listOf(
-                        Triple(0f, builtF, primary),
-                        Triple(builtF, builtF + addedF, AddedGreen),
-                        Triple(builtF + addedF, builtF + addedF + removedF, errorColor)
-                    )
-                    for ((from, to, color) in stops) {
-                        if (to > from) {
-                            drawRect(
-                                color = color,
-                                topLeft = Offset(size.width * from, 0f),
-                                size = Size(size.width * (to - from), size.height)
-                            )
-                        }
+                    for ((from, to, color) in changeBarSegments(builtF, addedF, removedF, primary)) {
+                        drawRect(
+                            color = color,
+                            topLeft = Offset(size.width * from, 0f),
+                            size = Size(size.width * (to - from), size.height)
+                        )
                     }
                 }
             }
@@ -507,5 +793,76 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
             radius = 2.dp.toPx(),
             center = Offset(size.width - radius, size.height / 2f)
         )
+    }
+}
+
+
+/**
+ * The hero card's connected shortcuts for missing / fallback / locked apps. Every button toggles
+ * independently and the app list shows the union of all selected groups. Only non-empty groups
+ * get a button, so a finished pack shows none at all.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ProblemFilterButtons(
+    missingCount: Int,
+    fallbackCount: Int,
+    lockedCount: Int,
+    active: Set<AppProblemFilter>,
+    onToggle: (AppProblemFilter) -> Unit
+) {
+    // Build the tiny list first so empty groups don't leave inert controls or gaps in the row.
+    val entries = buildList {
+        if (missingCount > 0) {
+            add(Triple(AppProblemFilter.MISSING, stringResource(R.string.filterChipMissing, missingCount), Icons.Outlined.HideImage to Icons.Filled.HideImage))
+        }
+        if (fallbackCount > 0) {
+            add(Triple(AppProblemFilter.FALLBACK, stringResource(R.string.filterChipFallback, fallbackCount), Icons.Outlined.AutoFixHigh to Icons.Filled.AutoFixHigh))
+        }
+        if (lockedCount > 0) {
+            add(Triple(AppProblemFilter.LOCKED, stringResource(R.string.filterChipLocked, lockedCount), Icons.Outlined.Lock to Icons.Filled.Lock))
+        }
+    }
+    if (entries.isEmpty()) return
+
+    Spacer(Modifier.height(10.dp))
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(ButtonGroupDefaults.ConnectedSpaceBetween),
+        verticalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        entries.forEachIndexed { index, (filter, label, icons) ->
+            val selected = filter in active
+            ToggleButton(
+                checked = selected,
+                onCheckedChange = { onToggle(filter) },
+                shapes = when {
+                    // A lone button must follow the connected rule, not the standalone one:
+                    // ToggleButtonDefaults.shapes() is round when unchecked and SQUARE when
+                    // checked — the inverse of a button group, where checked goes fully round.
+                    entries.size == 1 -> ToggleButtonDefaults.shapes(
+                        shape = ShapeDefaults.Small,
+                        checkedShape = ButtonGroupDefaults.connectedButtonCheckedShape
+                    )
+                    index == 0 -> ButtonGroupDefaults.connectedLeadingButtonShapes()
+                    index == entries.lastIndex -> ButtonGroupDefaults.connectedTrailingButtonShapes()
+                    else -> ButtonGroupDefaults.connectedMiddleButtonShapes()
+                },
+                colors = ToggleButtonDefaults.toggleButtonColors(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.35f),
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    checkedContainerColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    checkedContentColor = MaterialTheme.colorScheme.primaryContainer
+                ),
+                contentPadding = ToggleButtonDefaults.ContentPadding
+            ) {
+                Icon(
+                    imageVector = if (selected) icons.second else icons.first,
+                    contentDescription = null,
+                    modifier = Modifier.size(ToggleButtonDefaults.IconSize)
+                )
+                Spacer(Modifier.size(ToggleButtonDefaults.IconSpacing))
+                Text(label, style = MaterialTheme.typography.labelLarge)
+            }
+        }
     }
 }

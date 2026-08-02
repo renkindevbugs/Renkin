@@ -36,10 +36,14 @@ MainViewModel / WatchViewModel            ← @HiltViewModel; own session/UI sta
         │                                    operations on viewModelScope
         ▼
 ApplicationProvider (apk/)                ← orchestrator: owns the app list, profiles, refresh,
-        │                                    build/install, writes generated icons back
+        │                                    build snapshots and persisted results
+        ├── InstalledAppCatalog            ← launcher activities, labels and application icons
+        ├── IconPackCatalog                ← installed icon-pack discovery and package metadata
         ├── IconPackRepository             ← installed packs, app-filter elements, per-app
-        │                                    drawables, calendar icons (Compose-state backed)
+        │     │                              drawables, calendar icons (Compose-state backed)
+        │     └── ApplicationManager        ← icon-pack resources and appfilter XML only
         ├── IconGenerationService          ← runs IconGenerator to produce icons
+        ├── IconPackBuildService           ← assembles/signs APKs and runs install/replace
         └── RenkinPackStore                ← persistence: DbApplication ↔ drawable serialization
                 └── RenkinPackRepository    ← raw Room I/O on RenkinPackDatabase
 
@@ -49,6 +53,11 @@ WatchRepository (data/watch/)             ← icon-watch rules/suggestions on Wa
 The UI layer never constructs repositories by hand; view models receive them through
 Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only for genuine
 Activity operations (`finish()`, starting services, permission requests).
+
+`ApplicationProvider` is the orchestration boundary, not the composition root. Hilt supplies
+its repositories, catalogs, stores, profile/lock managers, generation and pack-build services as
+application singletons, so those collaborators can be tested or reused without constructing the
+whole provider and all persistence state is shared deliberately.
 
 ## Activities
 
@@ -63,7 +72,11 @@ Activity operations (`finish()`, starting services, permission requests).
   never become the wallpaper target. It reads shared state from the `ApplicationProvider`
   singleton directly — deliberately **not** through a new `MainViewModel`, whose init would
   re-run provider initialization and drop unsaved icons. RESULT_OK = "user pressed Build";
-  the launching side (BuildPackFab) runs the build.
+  the launching side (BuildPackFab) runs the build. If Android recreates it alone over a killed
+  process (`savedInstanceState != null` while `startupComplete == false`), the reviewed session
+  no longer exists — `onCreate` closes it with `RESULT_CANCELED` + `EXTRA_SESSION_LOST` *before*
+  `setContent`, rather than initializing the provider and silently reviewing the last *saved*
+  state instead.
 
 ## Profiles
 
@@ -91,7 +104,7 @@ Switcher = the top-bar title dropdown.
 - **DataStore Preferences** (`data/DataPreferences.kt`) — all settings. Typed accessors:
   Composable `DataStore.getXValue()` for reading in composition; `Preferences.getXValue()`
   for reading a captured snapshot off the main thread.
-- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v13) — profiles + rendered and base icons
+- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v15) — profiles + rendered and base icons
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
   rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the
   Global options UI, only unsaved refresh output is Generated; saved/built non-custom rows are
@@ -102,6 +115,10 @@ Switcher = the top-bar title dropdown.
   the verdict/lock logic). Loaded into the app list.
   **Never lower the version once any build was installed** — schema-identical bump +
   migration instead (see the v5/v6/v7 history in `DbApplication.kt`).
+- **`ColorPreset` table** (same database, added in v15) — the saved colour/gradient library.
+  Deliberately NOT per profile: a palette belongs to the device, so it is shared by every
+  profile, rides the full backup (`BackupData.colorPresets`) and is never part of a shared
+  profile file. The row stores the style as one encoded string (`encodeColorizerStyle`).
 - **Room — `WatchDatabase`** (v3) — icon-watch rules, suggestions and per-rule baselines, owned per
   profile via `WatchRule.profileId`.
 
@@ -131,6 +148,33 @@ Switcher = the top-bar title dropdown.
 - No pull-to-refresh on the home list **on purpose**: its nested-scroll handler fought the
   collapsing large top bar (glitches, ghost taps). The app list reloads from Settings.
 
+## Colourizing
+
+The colour pipeline is shared by three entry points — the per-icon Colorize modifier, the
+pack-wide colourize in Global/Advanced options, and the outline colour — so they behave
+identically and none of them re-implements the maths.
+
+- **`ColorizerStyle`** (`icon/creator/`) is the whole description: single colour or gradient,
+  gradient type/angle, 2–4 stops (`MIN_GRADIENT_STOPS`/`MAX_GRADIENT_STOPS`), plus the Solid
+  fill / Monochrome / Inverse flags. Those flags apply to gradients too: solid fill replaces the
+  artwork's RGB through its alpha, otherwise the gradient multiplies with it.
+- **`ColorizerShader.kt`** builds the actual `Shader` and is called by BOTH `IconGenerator` and
+  the editor preview — a second implementation in the UI would drift from the built output.
+- **`ui/ColorStyleSheet.kt`** is the one editor UI: a bottom sheet with a docked live preview
+  (rendered through the caller's real generation pipeline, debounced), the mode pill, the stop
+  list and the angle dial. `ColorStyleCard` is the row that opens it.
+- **Segments** (`icon/creator/ColorSegments.kt`) cluster an icon into colour regions (k-means over
+  RGB). A pick is stored as COLOURS plus a tolerance, never a pixel mask, so it survives
+  regeneration and rescaling. `ImageEdit.COLORIZE_SEGMENTS` stacks `SegmentLayer`s — each layer's
+  picker shows the output of the layers before it, and generation matches against that same
+  accumulated image so the stored colours describe exactly what the user selected.
+- **Wide screens**: `WIDE_LAYOUT_DP` (600) switches the sheet and the segment picker to
+  side-by-side panes. Same breakpoint idea as `WatchRuleEditor`, but orientation-independent so
+  a tablet held upright benefits too.
+- Preferences carry gradients as comma-separated ARGB (`COLORIZER_GRADIENT_COLORS`, and the
+  outline's own `OUTLINE_GRADIENT_*` keys); the pre-gradient single-colour keys are still written
+  so older builds and older backups keep working.
+
 ## The build "change bar"
 
 The Options card shows a segmented bar (blue = already built, green = added since last
@@ -140,6 +184,11 @@ it stays correct even when icons are added via the Refresh button. `builtKeys` r
 each successful build and after "Clear icons". `updatedKeys` tracks this session's hand edits.
 
 ## Icon pack build
+
+`IconPackBuildService` receives an immutable active-profile snapshot from `ApplicationProvider`,
+then resolves calendar/lock data and delegates assembly to `IconPackBuilder`. The provider holds
+the profile-operation gate throughout the build and persists that same snapshot after the install
+attempt, so switching profiles cannot mix build inputs or results.
 
 `IconPackBuilder` assembles the APK with reandroid (no external build tools). The generated
 pack's dex classes come from prebuilt smali assets (`app/src/main/assets/{R,RLayout,
