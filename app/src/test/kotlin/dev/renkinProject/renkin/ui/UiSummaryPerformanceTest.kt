@@ -8,6 +8,7 @@ import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -129,5 +130,20 @@ class UiSummaryPerformanceTest {
                 hasUnbuiltChanges = false
             )
         )
+    }
+
+    @Test
+    fun heroProgressAnimationKey_changesOnlyAtProfileLoadBoundaries() {
+        val readyProfile = heroProgressAnimationKey(
+            activeProfileId = 1L,
+            profileSummaryReady = true,
+            hasApplications = true
+        )
+
+        // Icon counts are deliberately not inputs: applying an edit must not replay the delay.
+        assertEquals(readyProfile, heroProgressAnimationKey(1L, true, true))
+        assertNotEquals(readyProfile, heroProgressAnimationKey(2L, true, true))
+        assertNotEquals(readyProfile, heroProgressAnimationKey(1L, false, true))
+        assertNotEquals(readyProfile, heroProgressAnimationKey(1L, true, false))
     }
 }

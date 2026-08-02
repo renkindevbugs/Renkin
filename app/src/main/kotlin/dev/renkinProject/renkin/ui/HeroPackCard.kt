@@ -110,6 +110,12 @@ import kotlinx.coroutines.withContext
 
 private const val CHANGE_BAR_ANIMATION_MS = 900
 
+internal fun heroProgressAnimationKey(
+    activeProfileId: Long,
+    profileSummaryReady: Boolean,
+    hasApplications: Boolean
+): String = "$activeProfileId:$profileSummaryReady:$hasApplications"
+
 internal fun shouldShowPendingChanges(
     profileSummaryReady: Boolean,
     progressAnimationSettled: Boolean,
@@ -214,19 +220,26 @@ fun HeroPackCard(
     // Saved-but-not-built marker for the active profile (set by the save-before-switch flow).
     val profiles by viewModel.profiles.collectAsState(initial = emptyList())
     val activeProfile = profiles.find { it.id == viewModel.activeProfileId }
-    var progressAnimationSettled by remember { mutableStateOf(false) }
-    LaunchedEffect(
-        viewModel.activeProfileId,
-        viewModel.profileSummaryReady,
-        totalCount,
-        builtCount,
-        addedCount,
-        removedCount
-    ) {
+    val progressAnimationKey = heroProgressAnimationKey(
+        activeProfileId = viewModel.activeProfileId,
+        profileSummaryReady = viewModel.profileSummaryReady,
+        hasApplications = totalCount > 0
+    )
+    // LazyColumn disposes this card when it is far off-screen. Save both the completed state and
+    // the profile load it belongs to, so scrolling or applying an icon does not replay the delay.
+    var settledAnimationKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var progressAnimationSettled by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(progressAnimationKey) {
+        if (settledAnimationKey == progressAnimationKey && progressAnimationSettled) {
+            return@LaunchedEffect
+        }
+        settledAnimationKey = progressAnimationKey
         progressAnimationSettled = false
         if (viewModel.profileSummaryReady && totalCount > 0) {
             delay(CHANGE_BAR_ANIMATION_MS.toLong())
-            progressAnimationSettled = true
+            if (settledAnimationKey == progressAnimationKey) {
+                progressAnimationSettled = true
+            }
         }
     }
 
