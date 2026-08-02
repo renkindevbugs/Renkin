@@ -15,6 +15,7 @@ import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.contentHash
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.InstalledAppCatalog
+import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -58,7 +59,10 @@ internal inline fun <T> readWatchPackOrNull(
  * Pure of any UI/notification side effects — it returns the suggestions it created so a
  * trigger (phase 4) / notifier (phase 5) can act on them.
  */
-class WatchChecker(context: Context) {
+class WatchChecker(
+    context: Context,
+    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(context)
+) {
     private val appMan = ApplicationManager(context)
     private val installedAppCatalog = InstalledAppCatalog(context)
     private val repo = WatchRepository(context)
@@ -252,7 +256,7 @@ class WatchChecker(context: Context) {
      * [IconPackBuilder.isOwnPack]): they only ever hold icons we just built, so they would
      * suggest the very icon the user already applied.
      */
-    private fun watchablePacks() = appMan.getIconPacks()
+    private fun watchablePacks() = iconPackCatalog.installedIconPacks()
         .filter { !IconPackBuilder.isOwnPack(it.packageName) }
         .associateBy { it.packageName }
 

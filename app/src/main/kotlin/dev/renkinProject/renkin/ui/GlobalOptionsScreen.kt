@@ -1647,7 +1647,7 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                     useVector = useVector,
                     useMaterialYou = false,
                     adjustments = adjustments,
-                    centerPreview = remember(preview) { preview?.toBitmap() },
+                    centerPreview = remember(preview) { preview?.toModifierBitmap() },
                     previewGenerating = generating,
                     sampleBitmap = heroBitmap,
                     previews = modifierPreviews,
@@ -1659,7 +1659,9 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                         val icon = preview
                         if (icon != null) {
                             scope.launch {
-                                val bitmap = withContext(Dispatchers.Default) { icon.toBitmap() }
+                                val bitmap = withContext(Dispatchers.Default) {
+                                    icon.toModifierBitmap()
+                                }
                                 val opened = if (toolbox) openInImageToolbox(context, bitmap)
                                     else editInAnotherApp(context, bitmap)
                                 if (!opened) toaster.show(externalEditorError)

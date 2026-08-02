@@ -14,6 +14,7 @@ import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.packages.PackageResourceResolver
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
@@ -61,7 +62,10 @@ internal fun indexAppDrawableNames(elements: List<RawElement>): Map<String, Stri
  * finish loading (e.g. the edit dialog's icon-pack browser) instead of capturing the
  * empty initial list.
  */
-class IconPackRepository(private val context: Context) {
+class IconPackRepository(
+    private val context: Context,
+    private val iconPackCatalog: IconPackCatalog
+) {
     var iconPacks: List<IconPack> by mutableStateOf(listOf())
         private set
     var iconPackLoaded: Boolean by mutableStateOf(false)
@@ -86,7 +90,8 @@ class IconPackRepository(private val context: Context) {
         // Drop our own generated pack — it only ever holds icons we just built, so offering
         // it as an icon source (or a watch target) is pointless and just clutters the lists.
         // startsWith: profile packs share the base package with a ".p<id>" suffix.
-        iconPacks = appManager.getIconPacks().filter { !it.packageName.startsWith(IconPackBuilder.PACKAGE_NAME) }
+        iconPacks = iconPackCatalog.installedIconPacks()
+            .filter { !it.packageName.startsWith(IconPackBuilder.PACKAGE_NAME) }
         loadAppFilterElements(installedApps)
     }
 

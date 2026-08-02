@@ -11,6 +11,7 @@ import dev.renkinProject.renkin.icon.creator.IconGenerator
 import dev.renkinProject.renkin.icon.creator.IconImageEditPipeline
 import dev.renkinProject.renkin.icon.creator.IconPackContainer
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.contentHash
@@ -25,7 +26,8 @@ import kotlinx.coroutines.withContext
  */
 class IconGenerationService(
     private val context: Context,
-    private val iconPackRepo: IconPackRepository
+    private val iconPackRepo: IconPackRepository,
+    private val iconPackCatalog: IconPackCatalog
 ) {
     data class ValidatedPackIcon(val icon: IconPackDrawable?, val sourceChanged: Boolean)
 
@@ -49,7 +51,13 @@ class IconGenerationService(
         )
         val pack2 = IconPackContainer("", emptyMap())
 
-        val builder = IconGenerator(context, options, pack1, pack2)
+        val builder = IconGenerator(
+            context,
+            options,
+            pack1,
+            pack2,
+            iconPackCatalog = iconPackCatalog
+        )
         builder.generateIcon(application, customIcon) { _, newIcon ->
             icon = newIcon
         }
@@ -152,7 +160,15 @@ class IconGenerationService(
             FallbackSource.NONE -> ""
         }
         val fallback = iconPackRepo.getIconPackFallback(fallbackPack)
-        return IconGenerator(context, options, pack1, pack2, fallback, fallbackPack)
+        return IconGenerator(
+            context,
+            options,
+            pack1,
+            pack2,
+            fallback,
+            fallbackPack,
+            iconPackCatalog
+        )
     }
 
     private fun modifierPipeline(options: GenerationOptions) =
@@ -167,7 +183,13 @@ class IconGenerationService(
 
         val pack = IconPackContainer("", emptyMap())
 
-        val builder = IconGenerator(context, options, pack, pack)
+        val builder = IconGenerator(
+            context,
+            options,
+            pack,
+            pack,
+            iconPackCatalog = iconPackCatalog
+        )
         for (drawable in drawables) {
             // One broken icon must not take the whole pack down (#119)
             exportDrawables[drawable] = try {

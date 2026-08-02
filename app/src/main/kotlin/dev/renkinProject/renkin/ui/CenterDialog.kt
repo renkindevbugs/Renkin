@@ -18,7 +18,12 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -53,6 +58,20 @@ private data class BlueprintColors(
     val hatch: Color
 )
 
+internal fun centeredIconOffset(
+    frameSize: Int,
+    contentStart: Int,
+    contentSize: Int,
+    scale: Float,
+    currentOffset: Float = 0f
+): Float {
+    val safeScale = scale.takeIf { it > 0f } ?: 1f
+    return (
+        currentOffset +
+            ((frameSize - contentSize) / 2f - contentStart) / frameSize / safeScale
+        ).coerceIn(-0.5f, 0.5f)
+}
+
 /**
  * Visual positioning tool (opened from the Modifier tab's Adjustments), drawn like a technical
  * blueprint: the icon's content bounding box is hatched, and double-headed measurement arrows on the
@@ -65,6 +84,7 @@ private data class BlueprintColors(
 internal fun CenterDialog(
     iconBitmap: Bitmap?,
     adjustments: AdjustmentState,
+    renderPositionBase: (suspend () -> Bitmap?)? = null,
     onDismiss: () -> Unit
 ) {
     val bounds = remember(iconBitmap) { iconBitmap?.contentBounds() }
@@ -93,21 +113,37 @@ internal fun CenterDialog(
             }
         }
     }
+    var autoCenterRequest by remember { mutableIntStateOf(0) }
+    val currentPositionBase by rememberUpdatedState(renderPositionBase)
+    LaunchedEffect(autoCenterRequest) {
+        if (autoCenterRequest == 0 || !adjustments.autoCenter) return@LaunchedEffect
+        val zeroOffsetBitmap = currentPositionBase?.invoke()
+        val bitmap = zeroOffsetBitmap ?: iconBitmap ?: return@LaunchedEffect
+        val content = bitmap.contentBounds() ?: return@LaunchedEffect
+        if (!adjustments.autoCenter) return@LaunchedEffect
+
+        // Compute absolute offsets from a zero-offset render. Using the visible, already-shifted
+        // preview made clipped artwork lose the hidden part of its bounds and converge in steps.
+        val currentOffsetX = if (zeroOffsetBitmap != null) 0f else adjustments.iconOffsetX
+        val currentOffsetY = if (zeroOffsetBitmap != null) 0f else adjustments.iconOffsetY
+        adjustments.iconOffsetX = centeredIconOffset(
+            bitmap.width,
+            content.left,
+            content.width(),
+            adjustments.iconScale,
+            currentOffsetX
+        )
+        adjustments.iconOffsetY = centeredIconOffset(
+            bitmap.height,
+            content.top,
+            content.height(),
+            adjustments.iconScale,
+            currentOffsetY
+        )
+    }
     val setAutoCenter: (Boolean) -> Unit = { on ->
         adjustments.autoCenter = on
-        // Auto-centre only computes the sliders: nudge the current offsets by whatever is
-        // needed to put the content box in the middle. The pipeline stays offset-only.
-        if (on && iconBitmap != null && bounds != null) {
-            // The preview is measured AFTER scale, but translation is applied BEFORE it.
-            // Divide the correction by scale so enlarged/shrunk icons do not overshoot.
-            val scale = adjustments.iconScale.takeIf { it > 0f } ?: 1f
-            val dx = ((iconBitmap.width - bounds.width()) / 2f - bounds.left) /
-                iconBitmap.width / scale
-            val dy = ((iconBitmap.height - bounds.height()) / 2f - bounds.top) /
-                iconBitmap.height / scale
-            adjustments.iconOffsetX = (adjustments.iconOffsetX + dx).coerceIn(-0.5f, 0.5f)
-            adjustments.iconOffsetY = (adjustments.iconOffsetY + dy).coerceIn(-0.5f, 0.5f)
-        }
+        if (on) autoCenterRequest++
     }
     val autoCenterControl: @Composable (Modifier) -> Unit = { modifier ->
         Row(

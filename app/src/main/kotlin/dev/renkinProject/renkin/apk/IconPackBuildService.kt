@@ -14,6 +14,7 @@ import dev.renkinProject.renkin.data.getDefaultIconColor
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.packages.IconPackCatalog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -62,7 +63,8 @@ class IconPackBuildService internal constructor(
     private val iconPackRepository: IconPackRepository,
     private val packRepository: RenkinPackRepository,
     private val lockManager: IconLockManager,
-    private val profileManager: ProfileManager
+    private val profileManager: ProfileManager,
+    private val iconPackCatalog: IconPackCatalog
 ) {
     suspend fun build(
         profileId: Long,
@@ -108,7 +110,8 @@ class IconPackBuildService internal constructor(
             calendarData.mappings,
             calendarData.drawables,
             packPackageName = profileManager.packPackageNameFor(profileId),
-            packLabel = packLabel
+            packLabel = packLabel,
+            iconPackCatalog = iconPackCatalog
         )
         val canBeInstalled = builder.canBeInstalled() // Must run before buildAndSign.
         val apk = builder.buildAndSign(

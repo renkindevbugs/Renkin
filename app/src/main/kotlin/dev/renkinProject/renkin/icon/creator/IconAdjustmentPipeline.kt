@@ -12,7 +12,6 @@ import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
 import dev.renkinProject.renkin.extension.newArgbBitmap
 import dev.renkinProject.renkin.extension.scaleFromCenter
-import dev.renkinProject.renkin.extension.translated
 
 /**
  * Applies the source-independent geometry and output treatments from the Modifier tab.
@@ -45,14 +44,10 @@ internal class IconAdjustmentPipeline(
             bitmap = bitmap.scaleFromCenter(previewScaleToBake)
         }
 
-        if (vectorAdjusted == null && offset) {
-            bitmap = bitmap.translated(
-                options.iconOffsetX * bitmap.width,
-                options.iconOffsetY * bitmap.height
-            )
-        }
-        if (vectorAdjusted == null && options.iconScale != 1f) {
+        if (vectorAdjusted == null && (offset || options.iconScale != 1f)) {
             val sourceBitmap = bitmap
+            // Keep position and scale in one raster pass. Translating into an intermediate bitmap
+            // clipped off-canvas artwork before scaling could bring it back into view.
             bitmap = newArgbBitmap(sourceBitmap.width, sourceBitmap.height) { canvas ->
                 canvas.scale(
                     options.iconScale,
@@ -62,8 +57,8 @@ internal class IconAdjustmentPipeline(
                 )
                 canvas.drawBitmap(
                     sourceBitmap,
-                    0f,
-                    0f,
+                    options.iconOffsetX * sourceBitmap.width,
+                    options.iconOffsetY * sourceBitmap.height,
                     Paint(Paint.FILTER_BITMAP_FLAG)
                 )
             }

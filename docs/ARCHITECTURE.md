@@ -38,8 +38,10 @@ MainViewModel / WatchViewModel            ← @HiltViewModel; own session/UI sta
 ApplicationProvider (apk/)                ← orchestrator: owns the app list, profiles, refresh,
         │                                    build snapshots and persisted results
         ├── InstalledAppCatalog            ← launcher activities, labels and application icons
+        ├── IconPackCatalog                ← installed icon-pack discovery and package metadata
         ├── IconPackRepository             ← installed packs, app-filter elements, per-app
-        │                                    drawables, calendar icons (Compose-state backed)
+        │     │                              drawables, calendar icons (Compose-state backed)
+        │     └── ApplicationManager        ← icon-pack resources and appfilter XML only
         ├── IconGenerationService          ← runs IconGenerator to produce icons
         ├── IconPackBuildService           ← assembles/signs APKs and runs install/replace
         └── RenkinPackStore                ← persistence: DbApplication ↔ drawable serialization
@@ -53,9 +55,9 @@ Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only f
 Activity operations (`finish()`, starting services, permission requests).
 
 `ApplicationProvider` is the orchestration boundary, not the composition root. Hilt supplies
-its repositories, stores, profile/lock managers, generation and pack-build services as application
-singletons, so those collaborators can be tested or reused without constructing the whole
-provider and all persistence state is shared deliberately.
+its repositories, catalogs, stores, profile/lock managers, generation and pack-build services as
+application singletons, so those collaborators can be tested or reused without constructing the
+whole provider and all persistence state is shared deliberately.
 
 ## Activities
 

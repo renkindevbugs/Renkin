@@ -1,16 +1,8 @@
 package dev.renkinProject.renkin.packages
 
 import android.content.Context
-import android.content.Intent
-import android.content.pm.ApplicationInfo
-import android.content.pm.PackageInfo
-import android.content.pm.PackageManager
-import android.content.pm.PackageManager.ResolveInfoFlags
-import android.content.pm.ResolveInfo
 import android.content.res.Resources
 import android.graphics.drawable.Drawable
-import androidx.core.content.pm.PackageInfoCompat
-import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawCalendar
 import dev.renkinProject.renkin.data.RawDynamicClock
@@ -20,7 +12,6 @@ import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.extension.getIdentifierByName
-import dev.renkinProject.renkin.util.Log
 import org.xmlpull.v1.XmlPullParser
 
 internal fun matchDrawablesToApplications(
@@ -43,18 +34,6 @@ internal fun lastAppFilterItem(
         .firstOrNull { it is RawItem && it.component == component } as? RawItem
 
 internal data class NamedResourceDrawable(val name: String, val resource: ResourceDrawable)
-
-internal const val ICON_PACK_ACTION = "org.adw.launcher.THEMES"
-internal const val CHANGES_WITH_MATERIAL_YOU_COLORS =
-    "org.icontheme.CHANGES_WITH_MATERIAL_YOU_COLORS"
-
-internal fun iconPackQueryIntent(
-    materialYouColorsOnly: Boolean = false,
-    packageName: String? = null
-): Intent = Intent(ICON_PACK_ACTION, null).apply {
-    if (materialYouColorsOnly) addCategory(CHANGES_WITH_MATERIAL_YOU_COLORS)
-    if (packageName != null) setPackage(packageName)
-}
 
 internal interface PackBrowserDataSource {
     fun getIconPackDrawableNames(iconPackName: String): List<String>
@@ -81,7 +60,7 @@ internal fun resolveNamedDrawables(
 }
 
 internal class ApplicationManager(
-    private val ctx: Context,
+    ctx: Context,
     private val resourceResolver: PackageResourceResolver = PackageResourceResolver(ctx)
 ) : PackBrowserDataSource {
 
@@ -98,29 +77,6 @@ internal class ApplicationManager(
                 PackageResourceResolver.displayedNightMode = value
             }
     }
-    private val pm = ctx.packageManager
-
-    fun getIconPacks(): List<IconPack> {
-        val materialYouPacks = getResolves(
-            iconPackQueryIntent(materialYouColorsOnly = true)
-        ).mapTo(mutableSetOf()) { it.activityInfo.packageName }
-        return getIconPacks(iconPackQueryIntent(), materialYouPacks)
-    }
-
-    /**
-     * True only when the source pack explicitly advertises that its colours follow
-     * Material You. Package names are deliberately not hard-coded: Lawnicons,
-     * Arcticons You and future compatible packs use the same icon-theme contract.
-     */
-    fun changesWithMaterialYouColors(packageName: String): Boolean {
-        if (packageName.isEmpty()) return false
-        val intent = iconPackQueryIntent(
-            materialYouColorsOnly = true,
-            packageName = packageName
-        )
-        return getResolves(intent).any { it.activityInfo.packageName == packageName }
-    }
-
     override fun getAppFilterRawElements(iconPackName: String, applications: List<InstalledApplication>): List<RawElement> {
         val res = resourceResolver.getResources(iconPackName) ?: return emptyList()
         val xmlParser = getAppfilter(res, iconPackName)
@@ -284,45 +240,6 @@ internal class ApplicationManager(
         return map
     }
 
-    private fun getIconPacks(
-        intent: Intent,
-        materialYouPacks: Set<String> = emptySet()
-    ): List<IconPack> {
-        val resolves = getResolves(intent)
-        val iconPacks = mutableListOf<IconPack>()
-
-        for (resolve in resolves) {
-            try {
-                val appName = resolve.activityInfo.applicationInfo.loadLabel(pm).toString()
-                val packageName = resolve.activityInfo.packageName
-                val iconID = resolve.activityInfo.applicationInfo.icon
-                val pack = getPackage(packageName)
-
-                if (pack != null) {
-                    val versionCode = getVersionCode(pack)
-                    val versionName = pack.versionName ?: ""
-                    iconPacks.add(
-                        IconPack(
-                            packageName,
-                            appName,
-                            versionCode,
-                            versionName,
-                            iconID,
-                            changesWithMaterialYouColors = packageName in materialYouPacks
-                        )
-                    )
-                }
-            } catch (error: Exception) {
-                // Broken metadata in one advertised theme must not hide every healthy pack.
-                Log.error("ApplicationManager", "Skipping malformed icon pack activity", error)
-            }
-        }
-
-        // A pack with several THEMES activities resolves several times — dedupe here at the
-        // source instead of at every UI call site.
-        return iconPacks.distinctBy { it.packageName }
-    }
-
     private fun getAppFilterRawElements(xmlParser: XmlPullParser, components: List<String>): List<RawElement> {
         val list = mutableListOf<RawElement>()
         val componentSet = components.toHashSet()
@@ -424,12 +341,6 @@ internal class ApplicationManager(
         return thirdSplit.count() >= 2
     }
 
-    private fun getResolves(intent: Intent): List<ResolveInfo> {
-        if (dev.renkinProject.renkin.packages.PackageVersion.is33OrMore())
-            return pm.queryIntentActivities(intent, ResolveInfoFlags.of(0))
-        return pm.queryIntentActivities(intent, 0)
-    }
-
     private fun getAppfilter(res: Resources, packageName: String): XmlPullParser? {
         val xmlParser = getResAppfilter(res, packageName)
 
@@ -460,24 +371,4 @@ internal class ApplicationManager(
         return resourceResolver.getAssetXml(res, "drawable.xml")
     }
     
-    fun getApp(packageName: String): ApplicationInfo? {
-        return try {
-            pm.getApplicationInfo(packageName, 0)
-        } catch (e: PackageManager.NameNotFoundException) {
-            null
-        }
-    }
-
-    fun getPackage(packageName: String): PackageInfo? {
-        return try {
-            pm.getPackageInfo(packageName, 0)
-        } catch (e: PackageManager.NameNotFoundException) {
-            null
-        }
-    }
-
-    fun getVersionCode(pack: PackageInfo): Long {
-        // PackageInfoCompat handles the longVersionCode (API 28+) vs versionCode split.
-        return PackageInfoCompat.getLongVersionCode(pack)
-    }
 }

@@ -23,6 +23,8 @@ import dev.renkinProject.renkin.icon.creator.OutlineMode
 internal data class ModifierPreviews(
     /** The icon as the colourize step sees it: no scale, offset, shape or outline yet. */
     val colorizeBase: Bitmap?,
+    /** Current modifier stack rendered from an unclipped zero-offset canvas for auto-centering. */
+    val positionBase: suspend () -> Bitmap?,
     val colorize: suspend (ColorizerStyle) -> Bitmap?,
     val outline: suspend (ColorizerStyle) -> Bitmap?,
     val layers: suspend (index: Int, draft: ColorizerStyle) -> Bitmap?,
@@ -68,6 +70,14 @@ internal fun rememberModifierPreviews(
     return remember(colorizeBase) {
         ModifierPreviews(
             colorizeBase = colorizeBase,
+            positionBase = {
+                currentRender(
+                    currentOptions.copy(
+                        iconOffsetX = 0f,
+                        iconOffsetY = 0f
+                    )
+                )
+            },
             colorize = { style ->
                 currentRender(currentOptions.withColorizerStyle(style))
             },

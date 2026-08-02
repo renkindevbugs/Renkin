@@ -15,6 +15,7 @@ import dev.renkinProject.renkin.apk.ProfileManager
 import dev.renkinProject.renkin.apk.RenkinPackStore
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.watch.WatchRepository
+import dev.renkinProject.renkin.packages.IconPackCatalog
 import javax.inject.Singleton
 
 /**
@@ -46,9 +47,16 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideIconPackRepository(
+    fun provideIconPackCatalog(
         @ApplicationContext context: Context
-    ): IconPackRepository = IconPackRepository(context)
+    ): IconPackCatalog = IconPackCatalog(context)
+
+    @Provides
+    @Singleton
+    fun provideIconPackRepository(
+        @ApplicationContext context: Context,
+        iconPackCatalog: IconPackCatalog
+    ): IconPackRepository = IconPackRepository(context, iconPackCatalog)
 
     @Provides
     @Singleton
@@ -68,8 +76,13 @@ object AppModule {
     @Singleton
     fun provideIconGenerationService(
         @ApplicationContext context: Context,
-        iconPackRepository: IconPackRepository
-    ): IconGenerationService = IconGenerationService(context, iconPackRepository)
+        iconPackRepository: IconPackRepository,
+        iconPackCatalog: IconPackCatalog
+    ): IconGenerationService = IconGenerationService(
+        context,
+        iconPackRepository,
+        iconPackCatalog
+    )
 
     @Provides
     @Singleton
@@ -78,13 +91,15 @@ object AppModule {
         iconPackRepository: IconPackRepository,
         renkinPackRepository: RenkinPackRepository,
         iconLockManager: IconLockManager,
-        profileManager: ProfileManager
+        profileManager: ProfileManager,
+        iconPackCatalog: IconPackCatalog
     ): IconPackBuildService = IconPackBuildService(
         context = context,
         iconPackRepository = iconPackRepository,
         packRepository = renkinPackRepository,
         lockManager = iconLockManager,
-        profileManager = profileManager
+        profileManager = profileManager,
+        iconPackCatalog = iconPackCatalog
     )
 
     @Provides

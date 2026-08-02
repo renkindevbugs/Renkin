@@ -44,7 +44,7 @@ import dev.renkinProject.renkin.drawable.shrinkIfBiggerThan
 import dev.renkinProject.renkin.extension.newArgbBitmap
 import dev.renkinProject.renkin.extension.scaleFromCenter
 import dev.renkinProject.renkin.icon.parser.IconParser
-import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.packages.PackageResourceResolver
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.drawable.toImageVectorDrawable
@@ -76,11 +76,11 @@ class IconGenerator(
     // look instead of staying raw (issue #121). Empty = no fallback. [fallbackPackName] is the pack
     // those drawables (iconback/mask/upon) load from.
     private val primaryFallback: IconPackFallback = IconPackFallback(),
-    private val fallbackPackName: String = ""
+    private val fallbackPackName: String = "",
+    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(ctx)
 ) {
     private val adaptiveIconScale = ADAPTIVE_ICON_SCALE
     private val resourceResolver by lazy { PackageResourceResolver(ctx) }
-    private val appMan by lazy { ApplicationManager(ctx, resourceResolver) }
     private val materialYouPackSupport = mutableMapOf<String, Boolean>()
     private val adjustmentPipeline by lazy { IconAdjustmentPipeline(ctx.resources, options) }
     private val imageEditPipeline by lazy {
@@ -751,7 +751,7 @@ class IconGenerator(
 
     private fun packChangesWithMaterialYouColors(iconPackName: String): Boolean =
         materialYouPackSupport.getOrPut(iconPackName) {
-            appMan.changesWithMaterialYouColors(iconPackName)
+            iconPackCatalog.changesWithMaterialYouColors(iconPackName)
         }
 
     private fun renderAdaptivePackIcon(icon: AdaptiveIconDrawable?): BitmapIconDrawable? {

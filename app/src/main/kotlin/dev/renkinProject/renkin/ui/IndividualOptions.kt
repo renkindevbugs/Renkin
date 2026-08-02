@@ -584,7 +584,7 @@ fun OptionsDialog(
                 }
             }
         }
-        rendered?.toBitmap()
+        rendered?.toModifierBitmap()
     }
     val modifierPreviews = rememberModifierPreviews(
         options = generatingOptions,
@@ -846,7 +846,9 @@ fun OptionsDialog(
                                 useVector = useVector,
                                 useMaterialYou = applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
                                 adjustments = adjustments,
-                                centerPreview = remember(draft.iconToConfirm) { draft.iconToConfirm?.toBitmap() },
+                                centerPreview = remember(draft.iconToConfirm) {
+                                    draft.iconToConfirm?.toModifierBitmap()
+                                },
                                 previewGenerating = draft.generating,
                                 sampleBitmap = heroBitmap,
                                 previews = modifierPreviews,
@@ -866,7 +868,9 @@ fun OptionsDialog(
                                         toaster.show(selectIconMessage)
                                     } else {
                                         externalEditorScope.launch {
-                                            val bitmap = withContext(Dispatchers.Default) { icon.toBitmap() }
+                                            val bitmap = withContext(Dispatchers.Default) {
+                                                icon.toModifierBitmap()
+                                            }
                                             val opened = if (toolbox) {
                                                 openInImageToolbox(context, bitmap)
                                             } else {

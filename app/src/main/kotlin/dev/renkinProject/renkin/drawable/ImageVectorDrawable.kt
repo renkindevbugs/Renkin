@@ -54,7 +54,7 @@ class ImageVectorDrawable(imageVector: ImageVector): IconPackDrawable() {
     }
 
     /** Raster fallback after vector-safe modifiers, without re-centering away a user offset. */
-    fun toModifierBitmap(size: Int = 256): Bitmap {
+    override fun toModifierBitmap(size: Int): Bitmap {
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         renderToCanvas(Canvas(bitmap), nonScalingStroke = false, targetWidth = size, targetHeight = size)
         return bitmap
