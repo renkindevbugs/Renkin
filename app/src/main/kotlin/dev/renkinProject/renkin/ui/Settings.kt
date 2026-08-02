@@ -50,7 +50,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -71,16 +70,13 @@ import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.data.DARK_MODE_DEFAULT
+import dev.renkinProject.renkin.data.DarkMode
 import dev.renkinProject.renkin.data.DarkModeKey
-import dev.renkinProject.renkin.data.OnboardingSeenKey
-import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.getDarkModeLabels
 import dev.renkinProject.renkin.data.getEnumValue
-import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.util.CrashReporter
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -93,7 +89,6 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     val viewModel: MainViewModel = hiltViewModel()
     val view = LocalView.current
     val context = getCurrentContext()
-    val scope = rememberCoroutineScope()
 
     var showStats by rememberSaveable { mutableStateOf(false) }
     var showCrashLogs by rememberSaveable { mutableStateOf(false) }
@@ -144,7 +139,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                         .padding(horizontal = 16.dp)
                 ) {
                     SettingsSectionHeader(stringResource(R.string.settingsAppearance))
-                    ThemeRow(prefs)
+                    ThemeRow(prefs, viewModel::setDarkMode)
 
                     SettingsSectionHeader(stringResource(R.string.settingsIconPacks))
                     SettingsRow(
@@ -201,7 +196,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     SettingsRow(Icons.Filled.School, stringResource(R.string.showIntro)) {
                         // Clearing the flag makes the home screen show the intro again; close
                         // Settings so it isn't sitting underneath the overlay.
-                        scope.launch { prefs.setBooleanValue(OnboardingSeenKey, false) }
+                        viewModel.setOnboardingSeen(false)
                         onDismiss()
                     }
                     SettingsRow(
@@ -337,8 +332,7 @@ internal fun SettingsRow(
 
 /** The theme picker row: current value on the right, options in a dropdown. */
 @Composable
-private fun ThemeRow(prefs: DataStore<Preferences>) {
-    val scope = rememberCoroutineScope()
+private fun ThemeRow(prefs: DataStore<Preferences>, onSelect: (DarkMode) -> Unit) {
     val selected = prefs.getEnumValue(DarkModeKey, DARK_MODE_DEFAULT)
     val labels = getDarkModeLabels()
     var open by remember { mutableStateOf(false) }
@@ -374,7 +368,7 @@ private fun ThemeRow(prefs: DataStore<Preferences>) {
             labels.forEach { (mode, label) ->
                 CheckableDropdownItem(label, checked = mode == selected) {
                     open = false
-                    scope.launch { prefs.setEnumValue(DarkModeKey, mode) }
+                    onSelect(mode)
                 }
             }
         }

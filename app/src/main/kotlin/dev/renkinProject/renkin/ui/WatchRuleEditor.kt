@@ -74,6 +74,7 @@ import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
+import dev.renkinProject.renkin.data.AppSortOrder
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.RuleWithDetails

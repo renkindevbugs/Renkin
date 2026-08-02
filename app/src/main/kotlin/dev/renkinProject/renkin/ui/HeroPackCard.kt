@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui
 
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
@@ -60,7 +61,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -88,9 +88,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
-import dev.renkinProject.renkin.data.setPrimarySource
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.apk.packChanges
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.IconPack
@@ -101,16 +99,31 @@ import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
-import dev.renkinProject.renkin.data.setEnumValue
-import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.GoldBase
 import dev.renkinProject.renkin.ui.theme.GoldShimmer
 import dev.renkinProject.renkin.ui.theme.CardShape
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
+
+private const val CHANGE_BAR_ANIMATION_MS = 900
+
+internal fun heroProgressAnimationKey(
+    activeProfileId: Long,
+    profileSummaryReady: Boolean,
+    hasApplications: Boolean
+): String = "$activeProfileId:$profileSummaryReady:$hasApplications"
+
+internal fun shouldShowPendingChanges(
+    profileSummaryReady: Boolean,
+    progressAnimationSettled: Boolean,
+    changeCount: Int,
+    hasUnbuiltChanges: Boolean
+): Boolean = profileSummaryReady &&
+    progressAnimationSettled &&
+    (changeCount > 0 || hasUnbuiltChanges)
 
 internal data class HeroPackStats(
     val builtCount: Int,
@@ -180,7 +193,6 @@ fun HeroPackCard(
     val viewModel: MainViewModel = hiltViewModel()
     val prefs = getPreferences()
     val preferences = prefs.getPreferencesValue()
-    val scope = rememberCoroutineScope()
 
     val source = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     val packName = preferences.getStringValue(PrimaryIconPackKey)
@@ -208,6 +220,28 @@ fun HeroPackCard(
     // Saved-but-not-built marker for the active profile (set by the save-before-switch flow).
     val profiles by viewModel.profiles.collectAsState(initial = emptyList())
     val activeProfile = profiles.find { it.id == viewModel.activeProfileId }
+    val progressAnimationKey = heroProgressAnimationKey(
+        activeProfileId = viewModel.activeProfileId,
+        profileSummaryReady = viewModel.profileSummaryReady,
+        hasApplications = totalCount > 0
+    )
+    // LazyColumn disposes this card when it is far off-screen. Save both the completed state and
+    // the profile load it belongs to, so scrolling or applying an icon does not replay the delay.
+    var settledAnimationKey by rememberSaveable { mutableStateOf<String?>(null) }
+    var progressAnimationSettled by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(progressAnimationKey) {
+        if (settledAnimationKey == progressAnimationKey && progressAnimationSettled) {
+            return@LaunchedEffect
+        }
+        settledAnimationKey = progressAnimationKey
+        progressAnimationSettled = false
+        if (viewModel.profileSummaryReady && totalCount > 0) {
+            delay(CHANGE_BAR_ANIMATION_MS.toLong())
+            if (settledAnimationKey == progressAnimationKey) {
+                progressAnimationSettled = true
+            }
+        }
+    }
 
     Surface(
         onClick = { sheetOpen = true },
@@ -319,19 +353,14 @@ fun HeroPackCard(
                 }
                 // Pending changes, now answerable: the badge says how many and opens the list of
                 // exactly which apps a build would add, change or drop.
-                // derivedStateOf, not remember(list): applicationList is one long-lived snapshot
-                // list, so its identity never changes and a refresh would leave the chip stale.
-                val changes by remember {
-                    derivedStateOf {
-                        packChanges(
-                            viewModel.applicationList,
-                            viewModel.builtIconHashes,
-                            viewModel.savedIconHashes,
-                            viewModel.updatedKeys
-                        )
-                    }
-                }
-                if (changes.isNotEmpty() || activeProfile?.hasUnbuiltChanges == true) {
+                val changes = viewModel.pendingPackChanges
+                if (shouldShowPendingChanges(
+                        profileSummaryReady = viewModel.profileSummaryReady,
+                        progressAnimationSettled = progressAnimationSettled,
+                        changeCount = changes.size,
+                        hasUnbuiltChanges = activeProfile?.hasUnbuiltChanges == true
+                    )
+                ) {
                     Spacer(Modifier.height(6.dp))
                     Surface(
                         shape = CircleShape,
@@ -384,18 +413,8 @@ fun HeroPackCard(
             onDismiss = { sheetOpen = false },
             onPick = { newSource, newPackage ->
                 sheetOpen = false
-                scope.launch {
-                    prefs.setPrimarySource(newSource, newPackage)
-                    if (newSource == Source.NONE) {
-                        // No source: the unsaved refresh output goes away; locked icons stay.
-                        viewModel.clearRefreshedIcons()
-                    } else {
-                        // Auto-refresh with the just-written preferences, so the pick takes
-                        // effect without knowing about the refresh button. Hand-picked and
-                        // built icons are safe.
-                        viewModel.refresh()
-                    }
-                }
+                // The view model keeps the preference write ordered before clear/refresh.
+                viewModel.selectPrimarySource(newSource, newPackage)
             }
         )
     }
@@ -660,9 +679,27 @@ private fun rememberPackIcon(packageName: String?): ImageBitmap? {
  */
 @Composable
 internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
-    val builtF by animateFloatAsState(if (total > 0) built / total.toFloat() else 0f, label = "builtFrac")
-    val addedF by animateFloatAsState(if (total > 0) added / total.toFloat() else 0f, label = "addedFrac")
-    val removedF by animateFloatAsState(if (total > 0) removed / total.toFloat() else 0f, label = "removedFrac")
+    val progressAnimation = remember {
+        tween<Float>(
+            durationMillis = CHANGE_BAR_ANIMATION_MS,
+            easing = FastOutSlowInEasing
+        )
+    }
+    val builtF by animateFloatAsState(
+        if (total > 0) built / total.toFloat() else 0f,
+        animationSpec = progressAnimation,
+        label = "builtFrac"
+    )
+    val addedF by animateFloatAsState(
+        if (total > 0) added / total.toFloat() else 0f,
+        animationSpec = progressAnimation,
+        label = "addedFrac"
+    )
+    val removedF by animateFloatAsState(
+        if (total > 0) removed / total.toFloat() else 0f,
+        animationSpec = progressAnimation,
+        label = "removedFrac"
+    )
     val primary = MaterialTheme.colorScheme.primary
     val errorColor = MaterialTheme.colorScheme.error
     val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest

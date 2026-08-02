@@ -23,8 +23,11 @@ import kotlinx.coroutines.withContext
  * the stored [DbApplication] rows and live [IconPackDrawable]s. [ApplicationProvider]
  * applies the loaded icons to its app list; this class owns the encode/decode and DB I/O.
  */
-class RenkinPackStore(private val context: Context) {
-    private val repo = RenkinPackRepository(context)
+class RenkinPackStore(
+    private val context: Context,
+    private val repo: RenkinPackRepository
+) {
+    constructor(context: Context) : this(context, RenkinPackRepository(context))
 
     data class SavedEntry(
         val icon: IconPackDrawable?,

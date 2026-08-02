@@ -14,6 +14,8 @@ import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.IconPackCatalog
+import dev.renkinProject.renkin.packages.PackageResourceResolver
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -60,7 +62,10 @@ internal fun indexAppDrawableNames(elements: List<RawElement>): Map<String, Stri
  * finish loading (e.g. the edit dialog's icon-pack browser) instead of capturing the
  * empty initial list.
  */
-class IconPackRepository(private val context: Context) {
+class IconPackRepository(
+    private val context: Context,
+    private val iconPackCatalog: IconPackCatalog
+) {
     var iconPacks: List<IconPack> by mutableStateOf(listOf())
         private set
     var iconPackLoaded: Boolean by mutableStateOf(false)
@@ -72,7 +77,8 @@ class IconPackRepository(private val context: Context) {
     private var installedApplications: List<InstalledApplication> = listOf()
     private val fallbackCache = mutableMapOf<String, IconPackFallback>()
 
-    private val appManager: ApplicationManager by lazy { ApplicationManager(context) }
+    private val resourceResolver by lazy { PackageResourceResolver(context) }
+    private val appManager: ApplicationManager by lazy { ApplicationManager(context, resourceResolver) }
 
     /**
      * [installedApps] comes from the caller's already-loaded app list — re-scanning the
@@ -84,7 +90,8 @@ class IconPackRepository(private val context: Context) {
         // Drop our own generated pack — it only ever holds icons we just built, so offering
         // it as an icon source (or a watch target) is pointless and just clutters the lists.
         // startsWith: profile packs share the base package with a ".p<id>" suffix.
-        iconPacks = appManager.getIconPacks().filter { !it.packageName.startsWith(IconPackBuilder.PACKAGE_NAME) }
+        iconPacks = iconPackCatalog.installedIconPacks()
+            .filter { !it.packageName.startsWith(IconPackBuilder.PACKAGE_NAME) }
         loadAppFilterElements(installedApps)
     }
 
@@ -190,9 +197,9 @@ class IconPackRepository(private val context: Context) {
     fun isCalendarPrefix(iconPackageName: String, prefix: String): Boolean {
         if (prefix.isEmpty()) return false
         if (prefix in calendarPrefixes(iconPackageName)) return true
-        val hasFirst = appManager.hasDrawable(iconPackageName, prefix + "1") ||
-            appManager.hasDrawable(iconPackageName, prefix + "01")
-        return hasFirst && appManager.hasDrawable(iconPackageName, prefix + "28")
+        val hasFirst = resourceResolver.hasDrawable(iconPackageName, prefix + "1") ||
+            resourceResolver.hasDrawable(iconPackageName, prefix + "01")
+        return hasFirst && resourceResolver.hasDrawable(iconPackageName, prefix + "28")
     }
 
     /**
@@ -209,7 +216,7 @@ class IconPackRepository(private val context: Context) {
     /** Builds one collision-free export from both global and per-app calendar selections. */
     internal fun calendarBuildData(selections: List<CalendarSelection>): CalendarBuildData<Drawable> =
         buildCalendarData(selections) { pack, prefix ->
-            loadCalendarDays(prefix) { name -> appManager.getDrawableByName(pack, name) }
+            loadCalendarDays(prefix) { name -> resourceResolver.getDrawableByName(pack, name) }
         }
 
     /**
@@ -220,8 +227,8 @@ class IconPackRepository(private val context: Context) {
     fun missingCalendarDays(iconPackageName: String, prefix: String): List<Int> {
         if (prefix.isEmpty()) return emptyList()
         return (1..31).filter { day ->
-            !appManager.hasDrawable(iconPackageName, prefix + day) &&
-                !appManager.hasDrawable(iconPackageName, prefix + day.toString().padStart(2, '0'))
+            !resourceResolver.hasDrawable(iconPackageName, prefix + day) &&
+                !resourceResolver.hasDrawable(iconPackageName, prefix + day.toString().padStart(2, '0'))
         }
     }
 
@@ -233,7 +240,7 @@ class IconPackRepository(private val context: Context) {
             for (pack in iconPacks) {
                 if (application == null) {
                     val icon = runCatching {
-                        appManager.getResIcon(pack.packageName, pack.iconID)
+                        resourceResolver.getDrawable(pack.packageName, pack.iconID)
                     }.getOrNull()
 
                     if (icon != null) {

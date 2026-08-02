@@ -45,10 +45,15 @@ class IconGeneratorTest {
     private val context: Context get() = RuntimeEnvironment.getApplication()
     private val emptyPack get() = IconPackContainer("", emptyMap())
 
+    private fun adjustmentPipeline(options: GenerationOptions) =
+        IconAdjustmentPipeline(context.resources, options)
+
     private fun options(
         source: Source = Source.APPLICATION_NAME,
         override: Boolean = true,
         iconScale: Float = 1f,
+        iconOffsetX: Float = 0f,
+        iconOffsetY: Float = 0f,
         imageEdit: ImageEdit = ImageEdit.NONE,
         applicationIconVariant: ApplicationIconVariant = ApplicationIconVariant.DEFAULT,
         invertMonochrome: Boolean = false,
@@ -74,6 +79,8 @@ class IconGeneratorTest {
         themed = false,
         override = override,
         iconScale = iconScale,
+        iconOffsetX = iconOffsetX,
+        iconOffsetY = iconOffsetY,
         applicationIconVariant = applicationIconVariant,
         invertMonochrome = invertMonochrome,
         iconShape = iconShape,
@@ -258,7 +265,7 @@ class IconGeneratorTest {
     @Test
     fun modifierWithNoEditAndNoScaleReturnsTheSameIcon() {
         val base = bitmapIcon()
-        val result = generator(options(iconScale = 1f)).applyModifier(base, ImageEdit.NONE)
+        val result = adjustmentPipeline(options(iconScale = 1f)).apply(base)
         assertSame(base, result)
     }
 
@@ -651,10 +658,27 @@ class IconGeneratorTest {
     fun modifierScaleRasterisesButKeepsFrameSize() {
         val base = bitmapIcon(256)
         // A non-1 scale rasterises around the centre while keeping the original frame size.
-        val scaled = generator(options(iconScale = 0.5f)).applyModifier(base, ImageEdit.NONE)
+        val scaled = adjustmentPipeline(options(iconScale = 0.5f)).apply(base)
         assertNotNull(scaled)
         val bitmap = scaled.toBitmap()
         assertEquals(256, bitmap.width)
         assertEquals(256, bitmap.height)
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun bitmapPositionAndScaleDoNotClipInAnIntermediateFrame() {
+        val source = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888).apply {
+            for (y in 80 until 176) {
+                for (x in 200 until width) setPixel(x, y, Color.BLUE)
+            }
+        }
+
+        val result = adjustmentPipeline(
+            options(iconScale = 0.5f, iconOffsetX = 0.25f)
+        ).apply(BitmapIconDrawable(source)).toBitmap()
+
+        // Translating first into a separate 256 px bitmap erased this stripe completely.
+        assertTrue(Color.alpha(result.getPixel(205, 128)) > 0)
     }
 }

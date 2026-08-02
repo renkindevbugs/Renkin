@@ -7,6 +7,9 @@ import android.graphics.drawable.ColorDrawable
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -99,5 +102,48 @@ class UiSummaryPerformanceTest {
             listOf("Alpha", "Delta", "Zulu", "Beta"),
             result.applications.map { it.appName }
         )
+    }
+
+    @Test
+    fun pendingChangesChip_waitsForProfileSummaryAndFinalProgressAnimation() {
+        assertFalse(
+            shouldShowPendingChanges(
+                profileSummaryReady = false,
+                progressAnimationSettled = true,
+                changeCount = 1,
+                hasUnbuiltChanges = false
+            )
+        )
+        assertFalse(
+            shouldShowPendingChanges(
+                profileSummaryReady = true,
+                progressAnimationSettled = false,
+                changeCount = 1,
+                hasUnbuiltChanges = false
+            )
+        )
+        assertTrue(
+            shouldShowPendingChanges(
+                profileSummaryReady = true,
+                progressAnimationSettled = true,
+                changeCount = 1,
+                hasUnbuiltChanges = false
+            )
+        )
+    }
+
+    @Test
+    fun heroProgressAnimationKey_changesOnlyAtProfileLoadBoundaries() {
+        val readyProfile = heroProgressAnimationKey(
+            activeProfileId = 1L,
+            profileSummaryReady = true,
+            hasApplications = true
+        )
+
+        // Icon counts are deliberately not inputs: applying an edit must not replay the delay.
+        assertEquals(readyProfile, heroProgressAnimationKey(1L, true, true))
+        assertNotEquals(readyProfile, heroProgressAnimationKey(2L, true, true))
+        assertNotEquals(readyProfile, heroProgressAnimationKey(1L, false, true))
+        assertNotEquals(readyProfile, heroProgressAnimationKey(1L, true, false))
     }
 }

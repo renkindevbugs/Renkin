@@ -4,19 +4,14 @@ package dev.renkinProject.renkin.ui
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -31,7 +26,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -40,53 +34,28 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.unit.dp
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
-import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.OptionsViewModel
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.data.BackgroundColorKey
 import dev.renkinProject.renkin.data.CalendarIconsKey
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.FALLBACK_SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.data.FallbackSourceKey
 import dev.renkinProject.renkin.data.IMAGE_EDIT_DEFAULT
-import dev.renkinProject.renkin.data.IconColorKey
-import dev.renkinProject.renkin.data.ColorizerGradientAngleKey
 import androidx.compose.animation.AnimatedVisibility
-import dev.renkinProject.renkin.data.ColorizerGradientColorKey
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_MAX
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_MIN
 import dev.renkinProject.renkin.data.OutlineAddKey
-import dev.renkinProject.renkin.data.OutlineColorKey
-import dev.renkinProject.renkin.data.OutlineColorizerModeKey
-import dev.renkinProject.renkin.data.OutlineGradientAngleKey
-import dev.renkinProject.renkin.data.OutlineGradientColorsKey
-import dev.renkinProject.renkin.data.OutlineGradientTypeKey
 import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
-import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
-import dev.renkinProject.renkin.data.getGradientStops
-import dev.renkinProject.renkin.data.getGradientPositions
-import dev.renkinProject.renkin.data.ColorizerGradientPositionsKey
-import dev.renkinProject.renkin.data.BackgroundColorizerModeKey
-import dev.renkinProject.renkin.data.BackgroundGradientTypeKey
-import dev.renkinProject.renkin.data.BackgroundGradientAngleKey
-import dev.renkinProject.renkin.data.BackgroundGradientColorsKey
-import dev.renkinProject.renkin.data.BackgroundGradientPositionsKey
 import dev.renkinProject.renkin.data.BackgroundStyleKeys
-import dev.renkinProject.renkin.data.OutlineGradientPositionsKey
 import dev.renkinProject.renkin.data.ColorizerStyleKeys
 import dev.renkinProject.renkin.data.OutlineStyleKeys
-import dev.renkinProject.renkin.data.setColorStyle
-import dev.renkinProject.renkin.data.ColorizerGradientTypeKey
-import dev.renkinProject.renkin.data.ColorizerModeKey
 import dev.renkinProject.renkin.data.getIconColor
 import dev.renkinProject.renkin.data.getBackgroundColor
 import dev.renkinProject.renkin.data.IconPack
@@ -102,28 +71,19 @@ import dev.renkinProject.renkin.data.SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.TextType
-import dev.renkinProject.renkin.data.ColorStyleKeys
 import dev.renkinProject.renkin.data.SecondaryIconPackKey
 import dev.renkinProject.renkin.data.SecondaryImageEditKey
 import dev.renkinProject.renkin.data.SecondarySourceKey
 import dev.renkinProject.renkin.data.SecondaryTextTypeKey
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
 import dev.renkinProject.renkin.data.getBooleanValue
-import dev.renkinProject.renkin.data.getColorValue
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
-import dev.renkinProject.renkin.data.setBooleanValue
-import dev.renkinProject.renkin.data.setColorValue
-import dev.renkinProject.renkin.data.setEnumValue
-import dev.renkinProject.renkin.data.setIntValue
-import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
-import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
-import dev.renkinProject.renkin.icon.creator.GradientType
-import kotlinx.coroutines.launch
+import dev.renkinProject.renkin.icon.creator.colorStyle
 import kotlin.math.roundToInt
 
 /**
@@ -200,8 +160,8 @@ fun AdvancedOptionsCard(iconPacks: List<IconPack>, onOpenGlobal: () -> Unit) {
 
 /**
  * The refresh-wide generation options (sources, fallback, colours, switches), shared by the
- * home card above and the Global options screen's panel. Every control writes straight to the
- * profile's DataStore — only the global modifiers on that screen are staged behind Save.
+ * home card above and the Global options screen's panel. Every control sends a semantic update
+ * through [OptionsViewModel]; only the global modifiers on that screen are staged behind Save.
  * [showHint] shows the "takes effect after a refresh" note — true on the home card, false on
  * the Global options screen where the live grid already answers that question.
  */
@@ -211,14 +171,15 @@ fun AdvancedOptionsContent(
     showHint: Boolean = true
 ) {
     val state = advancedOptionsState()
+    val viewModel: OptionsViewModel = hiltViewModel()
 
     Column(Modifier.padding(bottom = 12.dp)) {
         // Users otherwise don't know these settings only take effect after a refresh
         if (showHint) RefreshHintCard()
-        AdvancedSourceSection(state, iconPacks)
-        AdvancedColorSection(state)
-        AdvancedOutlineSection(state)
-        AdvancedBehaviorSection(state)
+        AdvancedSourceSection(state, iconPacks, viewModel)
+        AdvancedColorSection(state, viewModel)
+        AdvancedOutlineSection(state, viewModel)
+        AdvancedBehaviorSection(state, viewModel)
     }
 }
 
@@ -231,6 +192,7 @@ private data class AdvancedOptionsState(
     val primaryImageEdit: ImageEdit,
     val primaryTextType: TextType,
     val primaryIconPack: String,
+    val textFont: String,
     val secondarySource: Source,
     val secondaryImageEdit: ImageEdit,
     val secondaryTextType: TextType,
@@ -266,13 +228,15 @@ private data class AdvancedOptionsState(
 
 @Composable
 private fun advancedOptionsState(): AdvancedOptionsState {
-    val prefs = getPreferences()
-    val iconColor = prefs.getIconColor()
+    val store = getPreferences()
+    val prefs = store.getPreferencesValue()
+    val iconColor = store.getIconColor()
     return AdvancedOptionsState(
         primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT),
         primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT),
         primaryTextType = prefs.getEnumValue(PrimaryTextTypeKey, TEXT_TYPE_DEFAULT),
         primaryIconPack = prefs.getStringValue(PrimaryIconPackKey),
+        textFont = prefs.getStringValue(TextFontKey),
         secondarySource = prefs.getEnumValue(SecondarySourceKey, SOURCE_DEFAULT),
         secondaryImageEdit = prefs.getEnumValue(SecondaryImageEditKey, IMAGE_EDIT_DEFAULT),
         secondaryTextType = prefs.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT),
@@ -284,36 +248,11 @@ private fun advancedOptionsState(): AdvancedOptionsState {
         overrideIcon = prefs.getBooleanValue(OverrideIconKey),
         fallbackSource = prefs.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
         iconColor = iconColor,
-        colorizerStyle = ColorizerStyle(
-            mode = prefs.getEnumValue(ColorizerModeKey, ColorizerMode.SINGLE_COLOR),
-            gradientType = prefs.getEnumValue(ColorizerGradientTypeKey, GradientType.LINEAR),
-            firstColor = iconColor.toArgb(),
-            gradientStops = prefs.getGradientStops(
-                ColorizerGradientColorsKey, ColorizerGradientColorKey
-            ),
-            gradientPositions = prefs.getGradientPositions(ColorizerGradientPositionsKey),
-            gradientAngle = prefs.getIntValue(ColorizerGradientAngleKey)
-                .coerceIn(0, 360).toFloat()
-        ),
-        backgroundStyle = ColorizerStyle(
-            mode = prefs.getEnumValue(BackgroundColorizerModeKey, ColorizerMode.SINGLE_COLOR),
-            gradientType = prefs.getEnumValue(BackgroundGradientTypeKey, GradientType.LINEAR),
-            firstColor = prefs.getBackgroundColor().toArgb(),
-            gradientStops = prefs.getGradientStops(BackgroundGradientColorsKey, BackgroundColorKey),
-            gradientPositions = prefs.getGradientPositions(BackgroundGradientPositionsKey),
-            gradientAngle = prefs.getIntValue(BackgroundGradientAngleKey)
-                .coerceIn(0, 360).toFloat()
-        ),
+        colorizerStyle = prefs.colorStyle(ColorizerStyleKeys, iconColor),
+        backgroundStyle = prefs.colorStyle(BackgroundStyleKeys, store.getBackgroundColor()),
         // Pack-wide outline: the same keys the Global options screen edits, surfaced here so the
         // hero card's Advanced options can turn it on without opening that screen.
-        outlineStyle = ColorizerStyle(
-            mode = prefs.getEnumValue(OutlineColorizerModeKey, ColorizerMode.SINGLE_COLOR),
-            gradientType = prefs.getEnumValue(OutlineGradientTypeKey, GradientType.LINEAR),
-            firstColor = prefs.getColorValue(OutlineColorKey, Color.Black).toArgb(),
-            gradientStops = prefs.getGradientStops(OutlineGradientColorsKey, OutlineColorKey),
-            gradientPositions = prefs.getGradientPositions(OutlineGradientPositionsKey),
-            gradientAngle = prefs.getIntValue(OutlineGradientAngleKey).coerceIn(0, 360).toFloat()
-        ),
+        outlineStyle = prefs.colorStyle(OutlineStyleKeys, Color.Black),
         outlineAdd = prefs.getBooleanValue(OutlineAddKey),
         outlineWidth = normalizeOutlineWidth(
             prefs.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
@@ -357,10 +296,9 @@ private fun RefreshHintCard() {
 @Composable
 private fun AdvancedSourceSection(
     state: AdvancedOptionsState,
-    iconPacks: List<IconPack>
+    iconPacks: List<IconPack>,
+    viewModel: OptionsViewModel
 ) {
-    val prefs = getPreferences()
-    val scope = rememberCoroutineScope()
     val hasSourceControls = needImageEdit(state.primarySource) ||
         needTextType(state.primarySource) || needTextType(state.secondarySource) ||
         needSecondarySource(state.primarySource) || state.primaryIsPack
@@ -370,23 +308,22 @@ private fun AdvancedSourceSection(
     }
     if (needImageEdit(state.primarySource)) {
         ImageEditDropdown(R.string.primaryImageEdit, state.primaryImageEdit) {
-            scope.launch { prefs.setEnumValue(PrimaryImageEditKey, it) }
+            viewModel.setPrimaryImageEdit(it)
         }
     }
 
     if (needTextType(state.primarySource)) {
         TextTypeDropdown(R.string.primaryTextType, state.primaryTextType) {
-            scope.launch { prefs.setEnumValue(PrimaryTextTypeKey, it) }
+            viewModel.setPrimaryTextType(it)
         }
     }
 
     // One shared font for every text icon the refresh generates (per-app override lives in the
     // edit dialog). Shown when any source produces text icons.
     if (needTextType(state.primarySource) || needTextType(state.secondarySource)) {
-        val textFont = prefs.getStringValue(TextFontKey)
         Box(Modifier.padding(horizontal = 12.dp)) {
-            FontPickerRow(selectedPath = textFont) {
-                scope.launch { prefs.setStringValue(TextFontKey, it) }
+            FontPickerRow(selectedPath = state.textFont) {
+                viewModel.setTextFont(it)
             }
         }
     }
@@ -398,31 +335,31 @@ private fun AdvancedSourceSection(
         )
 
         SourceDropdown(R.string.secondarySource, state.secondarySource) {
-            scope.launch { prefs.setEnumValue(SecondarySourceKey, it) }
+            viewModel.setSecondarySource(it)
         }
 
         if (needIconPack(state.secondarySource)) {
             IconPackDropdown(
                 R.string.secondaryIconPack, iconPacks, state.secondaryIconPack, null
-            ) { scope.launch { prefs.setStringValue(SecondaryIconPackKey, it.packageName) } }
+            ) { viewModel.setSecondaryIconPack(it.packageName) }
         }
 
         if (needImageEdit(state.secondarySource)) {
             ImageEditDropdown(R.string.secondaryImageEdit, state.secondaryImageEdit) {
-                scope.launch { prefs.setEnumValue(SecondaryImageEditKey, it) }
+                viewModel.setSecondaryImageEdit(it)
             }
         }
 
         if (needTextType(state.secondarySource)) {
             TextTypeDropdown(R.string.secondaryTextType, state.secondaryTextType) {
-                scope.launch { prefs.setEnumValue(SecondaryTextTypeKey, it) }
+                viewModel.setSecondaryTextType(it)
             }
         }
     }
 
     if (state.primaryIsPack) {
         RetrieveCalendarIconsSwitch(state.retrieveCalendarIcons) {
-            scope.launch { prefs.setBooleanValue(CalendarIconsKey, it) }
+            viewModel.setCalendarIcons(it)
         }
     }
 
@@ -432,7 +369,7 @@ private fun AdvancedSourceSection(
             selected = state.fallbackSource,
             primaryEnabled = state.primaryIsPack,
             secondaryEnabled = state.secondaryIsPack
-        ) { scope.launch { prefs.setEnumValue(FallbackSourceKey, it) } }
+        ) { viewModel.setFallbackSource(it) }
 
         val fallbackPack = when (state.fallbackSource) {
             FallbackSource.PRIMARY -> state.primaryIconPack
@@ -440,16 +377,14 @@ private fun AdvancedSourceSection(
             FallbackSource.NONE -> ""
         }
         if (state.fallbackSource != FallbackSource.NONE && fallbackPack.isNotEmpty()) {
-            FallbackPreview(state.fallbackSource, fallbackPack)
+            FallbackPreview(state.fallbackSource, fallbackPack, viewModel)
         }
     }
 }
 
 /** Icon colour (a full style while Colorize is on) and the pack-wide background. */
 @Composable
-private fun AdvancedColorSection(state: AdvancedOptionsState) {
-    val prefs = getPreferences()
-    val scope = rememberCoroutineScope()
+private fun AdvancedColorSection(state: AdvancedOptionsState, viewModel: OptionsViewModel) {
     var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
     var backgroundSheetOpen by rememberSaveable { mutableStateOf(false) }
     val showIconColor = showIconColor(
@@ -480,13 +415,13 @@ private fun AdvancedColorSection(state: AdvancedOptionsState) {
                     onDismiss = { colorizeSheetOpen = false },
                     onApply = { style ->
                         colorizeSheetOpen = false
-                        scope.launch { prefs.persistColorStyle(ColorizerStyleKeys, style) }
+                        viewModel.setColorizerStyle(style)
                     }
                 )
             }
         } else {
             ColorButton(stringResource(R.string.iconColor), state.iconColor) {
-                scope.launch { prefs.setColorValue(IconColorKey, it) }
+                viewModel.setIconColor(it)
             }
         }
     }
@@ -507,7 +442,7 @@ private fun AdvancedColorSection(state: AdvancedOptionsState) {
                 onDismiss = { backgroundSheetOpen = false },
                 onApply = { style ->
                     backgroundSheetOpen = false
-                    scope.launch { prefs.persistColorStyle(BackgroundStyleKeys, style) }
+                    viewModel.setBackgroundStyle(style)
                 }
             )
         }
@@ -516,14 +451,12 @@ private fun AdvancedColorSection(state: AdvancedOptionsState) {
 
 /** The contour drawn around every generated icon, and the colour style it is drawn with. */
 @Composable
-private fun AdvancedOutlineSection(state: AdvancedOptionsState) {
-    val prefs = getPreferences()
-    val scope = rememberCoroutineScope()
+private fun AdvancedOutlineSection(state: AdvancedOptionsState, viewModel: OptionsViewModel) {
     var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
 
     OptionsSectionLabel(R.string.outlineTitle)
     OutlineSwitch(state.outlineAdd) {
-        scope.launch { prefs.setBooleanValue(OutlineAddKey, it) }
+        viewModel.setOutlineEnabled(it)
     }
     AnimatedVisibility(visible = state.outlineAdd) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -531,7 +464,7 @@ private fun AdvancedOutlineSection(state: AdvancedOptionsState) {
                 label = stringResource(R.string.outlineThickness),
                 value = state.outlineWidth,
                 onValueChange = {
-                    scope.launch { prefs.setIntValue(OutlineWidthKey, it.roundToInt()) }
+                    viewModel.setOutlineWidth(it)
                 },
                 valueRange = OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat(),
                 valueLabel = "${state.outlineWidth.roundToInt()} px",
@@ -553,7 +486,7 @@ private fun AdvancedOutlineSection(state: AdvancedOptionsState) {
                     onDismiss = { outlineSheetOpen = false },
                     onApply = { style ->
                         outlineSheetOpen = false
-                        scope.launch { prefs.persistColorStyle(OutlineStyleKeys, style) }
+                        viewModel.setOutlineStyle(style)
                     }
                 )
             }
@@ -563,43 +496,26 @@ private fun AdvancedOutlineSection(state: AdvancedOptionsState) {
 
 /** What a refresh is allowed to touch, and how the icons are exported. */
 @Composable
-private fun AdvancedBehaviorSection(state: AdvancedOptionsState) {
-    val prefs = getPreferences()
-    val scope = rememberCoroutineScope()
+private fun AdvancedBehaviorSection(state: AdvancedOptionsState, viewModel: OptionsViewModel) {
 
     OptionsSectionLabel(R.string.advancedSectionBehavior)
     OverrideIconSwitch(state.overrideIcon) {
-        scope.launch { prefs.setBooleanValue(OverrideIconKey, it) }
+        viewModel.setOverrideIcons(it)
     }
 
     if (state.pathTracing) {
         VectorSwitch(state.useVector) {
-            scope.launch { prefs.setBooleanValue(IncludeVectorKey, it) }
+            viewModel.setVectorEnabled(it)
         }
         MaterialYouSwitch(state.useMaterialYou) {
-            scope.launch { prefs.setBooleanValue(MonochromeKey, it) }
+            viewModel.setMaterialYouEnabled(it)
         }
     }
 
     ThemedIconsSwitch(state.useThemed) {
-        scope.launch { prefs.setBooleanValue(ExportThemedKey, it) }
+        viewModel.setThemedEnabled(it)
     }
 }
-
-/** The three colour sheets all commit the same way; the ordinals belong in one place. */
-private suspend fun DataStore<Preferences>.persistColorStyle(
-    keys: ColorStyleKeys,
-    style: ColorizerStyle
-) =
-    setColorStyle(
-        keys,
-        mode = style.mode.ordinal,
-        gradientType = style.gradientType.ordinal,
-        gradientAngle = style.gradientAngle.roundToInt(),
-        firstColor = Color(style.firstColor),
-        gradientStops = style.gradientStops,
-        gradientPositions = style.gradientPositions
-    )
 
 /** Small section label splitting the advanced options into readable groups. */
 @Composable
@@ -646,11 +562,14 @@ private fun FallbackSourceSelector(
  * user switches Primary/Secondary or changes the pack.
  */
 @Composable
-private fun FallbackPreview(fallbackSource: FallbackSource, fallbackPack: String) {
-    val vm = hiltViewModel<MainViewModel>()
+private fun FallbackPreview(
+    fallbackSource: FallbackSource,
+    fallbackPack: String,
+    viewModel: OptionsViewModel
+) {
     val preferences = getPreferences().getPreferencesValue()
     val previews by produceState<List<IconPackDrawable>>(emptyList(), fallbackSource, fallbackPack, preferences) {
-        value = vm.fallbackPreview(preferences, fallbackSource)
+        value = viewModel.fallbackPreview(preferences, fallbackSource)
     }
     if (previews.isEmpty()) return
     Column(Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) {

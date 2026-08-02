@@ -35,18 +35,12 @@ fun buildColorizerShader(
     val offsets = shaderGradientPositions(stops, positions)
     return when (type) {
         GradientType.LINEAR -> {
-            val angleRadians = Math.toRadians(
-                (normalizeGradientAngle(angle) % 360f).toDouble()
-            )
-            // Match the dial used by design tools: 0° points up, increasing clockwise.
-            val directionX = sin(angleRadians).toFloat()
-            val directionY = -cos(angleRadians).toFloat()
-            val halfSpan = abs(directionX) * centerX + abs(directionY) * centerY
+            val (startX, startY, endX, endY) = linearGradientEndpoints(angle, width.toFloat(), height.toFloat())
             LinearGradient(
-                centerX - directionX * halfSpan,
-                centerY - directionY * halfSpan,
-                centerX + directionX * halfSpan,
-                centerY + directionY * halfSpan,
+                startX,
+                startY,
+                endX,
+                endY,
                 palette,
                 offsets,
                 Shader.TileMode.CLAMP
@@ -61,6 +55,31 @@ fun buildColorizerShader(
             Shader.TileMode.CLAMP
         )
     }
+}
+
+/** Where a linear gradient starts and ends inside a box, in that box's own pixels. */
+data class GradientEndpoints(val startX: Float, val startY: Float, val endX: Float, val endY: Float)
+
+/**
+ * The line a linear gradient runs along at [angle] over a [width] x [height] box: 0° points up
+ * and increases clockwise, the convention the angle dial shows. Shared by the generated icon and
+ * by the editor's swatches — two copies of this trigonometry would let a preview disagree with
+ * the icon it describes.
+ */
+fun linearGradientEndpoints(angle: Float, width: Float, height: Float): GradientEndpoints {
+    val centerX = width / 2f
+    val centerY = height / 2f
+    val angleRadians = Math.toRadians((normalizeGradientAngle(angle) % 360f).toDouble())
+    val directionX = sin(angleRadians).toFloat()
+    val directionY = -cos(angleRadians).toFloat()
+    // Half the box's extent along the gradient's direction, so both ends land on its edge.
+    val halfSpan = abs(directionX) * centerX + abs(directionY) * centerY
+    return GradientEndpoints(
+        startX = centerX - directionX * halfSpan,
+        startY = centerY - directionY * halfSpan,
+        endX = centerX + directionX * halfSpan,
+        endY = centerY + directionY * halfSpan
+    )
 }
 
 /**
@@ -183,16 +202,21 @@ fun colorizeSampleBitmap(
 
 /**
  * Applies [layers] in order: every layer colourizes the whole icon with its own style, then only
- * the pixels its regions select are kept. Matching runs against [source] throughout, so a later
- * layer still finds the colours the user picked them by.
+ * the pixels its regions select are kept.
+ *
+ * Each layer matches against what the layers before it produced, not against the original
+ * artwork — the region picker shows a later layer that same accumulated icon, so a pick lands on
+ * the colour the user actually sees. Matching the original instead let a second layer silently
+ * repaint the first one's work, because the palette still offered the colours the first layer had
+ * already covered.
  */
 fun applySegmentLayers(source: Bitmap, layers: List<SegmentLayer>): Bitmap {
     var current = source
     for (layer in layers) {
         if (layer.targets.isEmpty()) continue
-        val bounds = segmentBounds(source, layer.targets, layer.tolerance)
+        val bounds = segmentBounds(current, layer.targets, layer.tolerance)
         val colorized = colorizeSampleBitmap(current, layer.style, bounds)
-        current = mergeSegmentLayer(source, current, colorized, layer.targets, layer.tolerance)
+        current = mergeSegmentLayer(current, current, colorized, layer.targets, layer.tolerance)
     }
     return current
 }

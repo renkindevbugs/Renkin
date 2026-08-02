@@ -998,6 +998,7 @@ internal fun ModifierTab(
         CenterDialog(
             iconBitmap = centerPreview,
             adjustments = adjustments,
+            renderPositionBase = previews?.positionBase,
             onDismiss = { centerDialogOpen = false }
         )
     }

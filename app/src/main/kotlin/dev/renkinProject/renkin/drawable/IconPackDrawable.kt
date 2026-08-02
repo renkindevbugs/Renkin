@@ -12,6 +12,12 @@ abstract class IconPackDrawable: Drawable() {
     abstract fun toBitmap(): Bitmap
 
     /**
+     * Rasterises an already-modified icon without normalising its geometry again. Bitmap-backed
+     * icons already carry their final canvas; vectors override this to preserve baked position.
+     */
+    open fun toModifierBitmap(size: Int = 256): Bitmap = toBitmap()
+
+    /**
      * What [getPainter] would draw, as a bitmap. Lists use this instead of the painter: a vector
      * painter sizes itself from its own layer, so a freshly assigned icon visibly grew into place
      * on the first frames. Rasterising to the row's size makes it appear already correct.

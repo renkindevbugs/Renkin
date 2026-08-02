@@ -46,16 +46,16 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -68,6 +68,7 @@ import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.util.CrashReporter
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.text.DateFormat
@@ -277,7 +278,8 @@ private fun CrashLogDetailDialog(
     onDelete: () -> Unit
 ) {
     val context = getCurrentContext()
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val coroutineScope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val copiedMessage = stringResource(R.string.crashLogCopied)
     val shareFailedMessage = stringResource(R.string.shareFailed)
@@ -320,8 +322,10 @@ private fun CrashLogDetailDialog(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     IconButton(onClick = {
-                        clipboard.setText(AnnotatedString(entry.text))
-                        toaster.show(copiedMessage)
+                        coroutineScope.launch {
+                            clipboard.copyPlainText(copiedMessage, entry.text)
+                            toaster.show(copiedMessage)
+                        }
                     }) {
                         Icon(Icons.Filled.ContentCopy, stringResource(R.string.crashCopyLog))
                     }

@@ -36,6 +36,7 @@ import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.service.WatchWorker
 import dev.renkinProject.renkin.util.CrashReporter
 import dev.renkinProject.renkin.ui.*
@@ -47,11 +48,15 @@ import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
 val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
+    @Inject
+    lateinit var iconPackCatalog: IconPackCatalog
+
     private val viewModel: MainViewModel by viewModels()
     private var consumedSharedImageUri: String? = null
 
@@ -165,7 +170,7 @@ class MainActivity : ComponentActivity() {
             // Skip until the initial pack load finished, otherwise every installed pack
             // looks "new" against the still-empty loaded list on first launch.
             if (!viewModel.iconPackLoaded) return@launch
-            val installed = ApplicationManager(this@MainActivity).getIconPacks()
+            val installed = iconPackCatalog.installedIconPacks()
             val loaded = viewModel.iconPacks.map { it.packageName }.toSet()
             val newPack = installed.firstOrNull {
                 !IconPackBuilder.isOwnPack(it.packageName) && it.packageName !in loaded

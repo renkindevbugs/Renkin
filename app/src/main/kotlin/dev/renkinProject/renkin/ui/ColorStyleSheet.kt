@@ -73,16 +73,14 @@ import dev.renkinProject.renkin.icon.creator.clampedGradientPositions
 import dev.renkinProject.renkin.icon.creator.colorizeSampleBitmap
 import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
+import dev.renkinProject.renkin.icon.creator.linearGradientEndpoints
 import dev.renkinProject.renkin.ui.theme.IconShape as IconTileShape
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
-import kotlin.math.abs
-import kotlin.math.cos
 import kotlin.math.hypot
-import kotlin.math.sin
 
 /** Live preview redraws are debounced by this much — dragging the angle dial fires continuously. */
 private const val PreviewDebounceMs = 80L
@@ -436,19 +434,11 @@ internal fun Modifier.colorizerSwatch(style: ColorizerStyle): Modifier {
                 )
             }
         } else {
-            // Same convention as the dial and the generator: 0° points up, clockwise.
-            val radians = Math.toRadians(angle.toDouble())
-            val directionX = sin(radians).toFloat()
-            val directionY = -cos(radians).toFloat()
-            val halfSpan = abs(directionX) * size.width / 2f + abs(directionY) * size.height / 2f
-            val start = Offset(
-                center.x - directionX * halfSpan,
-                center.y - directionY * halfSpan
-            )
-            val end = Offset(
-                center.x + directionX * halfSpan,
-                center.y + directionY * halfSpan
-            )
+            // The generator's own geometry, so the swatch and the built icon share one angle
+            // convention (0° up, clockwise) instead of two copies that can drift apart.
+            val endpoints = linearGradientEndpoints(angle, size.width, size.height)
+            val start = Offset(endpoints.startX, endpoints.startY)
+            val end = Offset(endpoints.endX, endpoints.endY)
             if (colorStops != null) {
                 Brush.linearGradient(colorStops = colorStops, start = start, end = end)
             } else {

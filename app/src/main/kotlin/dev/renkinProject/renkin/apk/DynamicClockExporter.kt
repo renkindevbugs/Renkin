@@ -15,6 +15,7 @@ import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.extension.getIdentifierByName
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.PackageResourceResolver
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.PackageVersion
 import kotlin.math.abs
@@ -32,7 +33,8 @@ class DynamicClockExporter(
     // Every buildable app up front, so a pack's appfilter is parsed once, not per app.
     private val allApps: List<InstalledApplication>
 ) {
-    private val appManager by lazy { ApplicationManager(context) }
+    private val resourceResolver by lazy { PackageResourceResolver(context) }
+    private val appManager by lazy { ApplicationManager(context, resourceResolver) }
     private val packElements = mutableMapOf<String, List<RawElement>>()
 
     class ClockIcon(
@@ -76,7 +78,7 @@ class DynamicClockExporter(
 
     /** The pack's drawable as a layer stack (unwrapping an adaptive foreground), or null. */
     private fun loadLayeredDrawable(sourcePack: String, drawableName: String): LayerDrawable? {
-        val res = appManager.getResources(sourcePack) ?: return null
+        val res = resourceResolver.getResources(sourcePack) ?: return null
         val id = res.getIdentifierByName(drawableName, "drawable", sourcePack)
         if (id == 0) return null
         val drawable = runCatching { res.getDrawable(id, null) }.getOrNull() ?: return null

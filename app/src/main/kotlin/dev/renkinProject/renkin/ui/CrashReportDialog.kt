@@ -22,11 +22,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -34,6 +34,7 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.util.CrashReporter
+import kotlinx.coroutines.launch
 
 /**
  * Shown once on launch after a crash. Fully offline: lets the user copy the log and open a
@@ -44,7 +45,8 @@ import dev.renkinProject.renkin.util.CrashReporter
 @Composable
 fun CrashReportDialog(onDismiss: () -> Unit) {
     val context = getCurrentContext()
-    val clipboard = LocalClipboardManager.current
+    val clipboard = LocalClipboard.current
+    val coroutineScope = rememberCoroutineScope()
     val openLink = rememberLinkOpener()
     val toaster = LocalToaster.current
 
@@ -114,8 +116,10 @@ fun CrashReportDialog(onDismiss: () -> Unit) {
                 ) {
                     FilledTonalButton(onClick = {
                         val log = CrashReporter.latest(context)?.text ?: return@FilledTonalButton
-                        clipboard.setText(AnnotatedString(log))
-                        toaster.show(logCopied)
+                        coroutineScope.launch {
+                            clipboard.copyPlainText(logCopied, log)
+                            toaster.show(logCopied)
+                        }
                     }) {
                         Icon(
                             imageVector = Icons.Filled.ContentCopy,

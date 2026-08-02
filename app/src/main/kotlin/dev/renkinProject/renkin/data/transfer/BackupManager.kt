@@ -30,6 +30,7 @@ import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchRuleImport
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.IconPackCatalog
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -61,7 +62,8 @@ import java.util.zip.ZipOutputStream
 class BackupManager(
     private val context: Context,
     private val packRepo: RenkinPackRepository,
-    private val watchRepo: WatchRepository
+    private val watchRepo: WatchRepository,
+    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(context)
 ) {
     /** Production entry point: uses the shared singleton databases. Tests inject in-memory ones. */
     constructor(context: Context) : this(context, RenkinPackRepository(context), WatchRepository(context))
@@ -270,7 +272,7 @@ class BackupManager(
         // the backup — re-derive it from what's actually installed so a restored profile locks
         // exactly like a fresh import: packs not installed here stay locked until installed.
         packRepo.resetVerdictsToInstalled(
-            runCatching { appManager.getIconPacks() }.getOrDefault(emptyList())
+            runCatching { iconPackCatalog.installedIconPacks() }.getOrDefault(emptyList())
         )
         storePackLabels(data.packLabels)
 
@@ -369,7 +371,7 @@ class BackupManager(
     /** Display names for [packs]: from the installed copy, else the verdict cache. */
     private suspend fun packLabelsFor(packs: Set<String>): Map<String, String> {
         if (packs.isEmpty()) return emptyMap()
-        val installed = runCatching { appManager.getIconPacks() }.getOrDefault(emptyList())
+        val installed = runCatching { iconPackCatalog.installedIconPacks() }.getOrDefault(emptyList())
             .associate { it.packageName to it.applicationName }
         val cached = packRepo.verdicts(packs.toList())
         return packs.mapNotNull { pack ->

@@ -107,8 +107,8 @@ class ColorSegmentsTest {
 
         val result = applySegmentLayers(source, layers)
 
-        // The second layer's colours were picked on the ORIGINAL artwork, so it still finds blue
-        // even though the first layer already repainted its own half.
+        // The second layer matches the icon the first one produced. Blue is still there (the
+        // first layer only repainted the red half), so each layer keeps its own region.
         assertEquals(Color.GREEN, result.getPixel(0, 5))
         assertEquals(Color.WHITE, result.getPixel(source.width - 1, 5))
         assertEquals(0, Color.alpha(result.getPixel(0, 0)))

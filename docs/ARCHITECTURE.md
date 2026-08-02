@@ -36,10 +36,14 @@ MainViewModel / WatchViewModel            ← @HiltViewModel; own session/UI sta
         │                                    operations on viewModelScope
         ▼
 ApplicationProvider (apk/)                ← orchestrator: owns the app list, profiles, refresh,
-        │                                    build/install, writes generated icons back
+        │                                    build snapshots and persisted results
+        ├── InstalledAppCatalog            ← launcher activities, labels and application icons
+        ├── IconPackCatalog                ← installed icon-pack discovery and package metadata
         ├── IconPackRepository             ← installed packs, app-filter elements, per-app
-        │                                    drawables, calendar icons (Compose-state backed)
+        │     │                              drawables, calendar icons (Compose-state backed)
+        │     └── ApplicationManager        ← icon-pack resources and appfilter XML only
         ├── IconGenerationService          ← runs IconGenerator to produce icons
+        ├── IconPackBuildService           ← assembles/signs APKs and runs install/replace
         └── RenkinPackStore                ← persistence: DbApplication ↔ drawable serialization
                 └── RenkinPackRepository    ← raw Room I/O on RenkinPackDatabase
 
@@ -49,6 +53,11 @@ WatchRepository (data/watch/)             ← icon-watch rules/suggestions on Wa
 The UI layer never constructs repositories by hand; view models receive them through
 Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only for genuine
 Activity operations (`finish()`, starting services, permission requests).
+
+`ApplicationProvider` is the orchestration boundary, not the composition root. Hilt supplies
+its repositories, catalogs, stores, profile/lock managers, generation and pack-build services as
+application singletons, so those collaborators can be tested or reused without constructing the
+whole provider and all persistence state is shared deliberately.
 
 ## Activities
 
@@ -156,9 +165,9 @@ identically and none of them re-implements the maths.
   list and the angle dial. `ColorStyleCard` is the row that opens it.
 - **Segments** (`icon/creator/ColorSegments.kt`) cluster an icon into colour regions (k-means over
   RGB). A pick is stored as COLOURS plus a tolerance, never a pixel mask, so it survives
-  regeneration and rescaling. `ImageEdit.COLORIZE_SEGMENTS` stacks `SegmentLayer`s — each layer
-  colourizes its own regions, and matching always runs against the ORIGINAL artwork so a later
-  layer still finds the colours it was picked by.
+  regeneration and rescaling. `ImageEdit.COLORIZE_SEGMENTS` stacks `SegmentLayer`s — each layer's
+  picker shows the output of the layers before it, and generation matches against that same
+  accumulated image so the stored colours describe exactly what the user selected.
 - **Wide screens**: `WIDE_LAYOUT_DP` (600) switches the sheet and the segment picker to
   side-by-side panes. Same breakpoint idea as `WatchRuleEditor`, but orientation-independent so
   a tablet held upright benefits too.
@@ -175,6 +184,11 @@ it stays correct even when icons are added via the Refresh button. `builtKeys` r
 each successful build and after "Clear icons". `updatedKeys` tracks this session's hand edits.
 
 ## Icon pack build
+
+`IconPackBuildService` receives an immutable active-profile snapshot from `ApplicationProvider`,
+then resolves calendar/lock data and delegates assembly to `IconPackBuilder`. The provider holds
+the profile-operation gate throughout the build and persists that same snapshot after the install
+attempt, so switching profiles cannot mix build inputs or results.
 
 `IconPackBuilder` assembles the APK with reandroid (no external build tools). The generated
 pack's dex classes come from prebuilt smali assets (`app/src/main/assets/{R,RLayout,
