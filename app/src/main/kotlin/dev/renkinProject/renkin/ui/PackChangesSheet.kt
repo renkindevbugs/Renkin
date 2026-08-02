@@ -51,6 +51,7 @@ import dev.renkinProject.renkin.apk.PackChangeReason
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.ui.theme.InnerShape
+import dev.renkinProject.renkin.ui.theme.RemovedRed
 
 /**
  * What a build would change, compared with the icons the installed pack already has. The badge
@@ -218,7 +219,8 @@ private fun PackChangeRow(change: PackChange, onClick: () -> Unit) {
 private fun PackChangeKind.tint() = when (this) {
     PackChangeKind.ADDED -> MaterialTheme.colorScheme.primary
     PackChangeKind.CHANGED -> MaterialTheme.colorScheme.tertiary
-    PackChangeKind.REMOVED -> MaterialTheme.colorScheme.error
+    // Same fixed red as the hero bar's removed segment, so the list and the bar agree.
+    PackChangeKind.REMOVED -> RemovedRed
 }
 
 private fun PackChangeKind.labelRes(): Int = when (this) {

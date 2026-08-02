@@ -102,6 +102,7 @@ import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.GoldBase
+import dev.renkinProject.renkin.ui.theme.RemovedRed
 import dev.renkinProject.renkin.ui.theme.GoldShimmer
 import dev.renkinProject.renkin.ui.theme.CardShape
 import kotlinx.coroutines.Dispatchers
@@ -672,6 +673,23 @@ private fun rememberPackIcon(packageName: String?): ImageBitmap? {
 }
 
 /**
+ * The change bar's coloured runs as (start, end, colour) fractions, in paint order: what the last
+ * build shipped, then what was added since, then what was dropped. Additions come before removals
+ * so the green always follows the built run — a removal drawn in between read as a gap in it.
+ * Empty runs are left out so a caller never draws a zero-width rect.
+ */
+internal fun changeBarSegments(
+    built: Float,
+    added: Float,
+    removed: Float,
+    builtColor: Color
+): List<Triple<Float, Float, Color>> = listOf(
+    Triple(0f, built, builtColor),
+    Triple(built, built + added, AddedGreen),
+    Triple(built + added, built + added + removed, RemovedRed)
+).filter { (from, to, _) -> to > from }
+
+/**
  * Segmented completion bar: blue = icons already in the last built pack, green = added
  * since (pending build), red = removed since. Material 3 has no multi-colour progress
  * bar, so this hand-draws one with the stock indicator's modern traits: rounded capsule
@@ -701,7 +719,6 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
         label = "removedFrac"
     )
     val primary = MaterialTheme.colorScheme.primary
-    val errorColor = MaterialTheme.colorScheme.error
     val trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
 
     // Fully themed AND fully persisted (no pending +added/-removed): the bar celebrates in
@@ -749,19 +766,12 @@ internal fun ChangeBar(total: Int, built: Int, added: Int, removed: Int) {
                         )
                     )
                 } else {
-                    val stops = listOf(
-                        Triple(0f, builtF, primary),
-                        Triple(builtF, builtF + addedF, AddedGreen),
-                        Triple(builtF + addedF, builtF + addedF + removedF, errorColor)
-                    )
-                    for ((from, to, color) in stops) {
-                        if (to > from) {
-                            drawRect(
-                                color = color,
-                                topLeft = Offset(size.width * from, 0f),
-                                size = Size(size.width * (to - from), size.height)
-                            )
-                        }
+                    for ((from, to, color) in changeBarSegments(builtF, addedF, removedF, primary)) {
+                        drawRect(
+                            color = color,
+                            topLeft = Offset(size.width * from, 0f),
+                            size = Size(size.width * (to - from), size.height)
+                        )
                     }
                 }
             }

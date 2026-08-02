@@ -14,13 +14,15 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
@@ -80,6 +82,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalFocusManager
@@ -176,11 +179,23 @@ fun AppSortFilterMenu(
 }
 
 /**
+ * How many app columns the home list shows. One on a phone; wider screens fill the space
+ * instead of stretching a single column of rows across a tablet — the same 600 dp breakpoint
+ * every other screen in the app splits at.
+ */
+internal fun homeListColumns(screenWidthDp: Int): Int = when {
+    screenWidthDp >= 1200 -> 4
+    screenWidthDp >= 900 -> 3
+    screenWidthDp >= WIDE_LAYOUT_DP -> 2
+    else -> 1
+}
+
+/**
  * True while the list is scrolling up (or sitting at the top). Used to expand the
  * build FAB on scroll-up and collapse it to an icon on scroll-down.
  */
 @Composable
-private fun LazyListState.isScrollingUp(): Boolean {
+private fun LazyGridState.isScrollingUp(): Boolean {
     var previousIndex by remember(this) { mutableStateOf(firstVisibleItemIndex) }
     var previousScrollOffset by remember(this) { mutableStateOf(firstVisibleItemScrollOffset) }
     return remember(this) {
@@ -202,7 +217,7 @@ private fun LazyListState.isScrollingUp(): Boolean {
 fun MainColumn(iconPacks: List<IconPack>) {
     var packageFilter by remember { mutableStateOf("") }
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val listState = rememberLazyListState()
+    val listState = rememberLazyGridState()
 
     // Scrolling the app list drops the search field's focus (and so dismisses the keyboard),
     // instead of leaving the cursor blinking over the list.
@@ -492,7 +507,7 @@ fun ApplicationList(
     filterNoIcon: Boolean,
     filterFallback: Boolean = false,
     filterLocked: Boolean = false,
-    listState: LazyListState = rememberLazyListState(),
+    listState: LazyGridState = rememberLazyGridState(),
     // Clears the active icon filters; offered on the empty state so a filtered-out list has an
     // obvious way back. Null hides the button (e.g. when no filter could be the cause).
     onShowAllApps: (() -> Unit)? = null,
@@ -580,15 +595,21 @@ fun ApplicationList(
         return
     }
 
-    LazyColumn(
+    // One column on a phone, more on a tablet or in landscape. The header cards describe the
+    // whole profile, so each of them spans every column instead of sitting in one.
+    val columns = homeListColumns(LocalConfiguration.current.screenWidthDp)
+
+    LazyVerticalGrid(
+        columns = GridCells.Fixed(columns),
         state = listState,
-        modifier = Modifier.drawVerticalScrollbar(listState),
+        modifier = Modifier.drawVerticalScrollbar(listState, spanCount = columns),
         contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         // Missing-pack banner rides above the hero card while anything stays locked.
         if (viewModel.missingPackSummary.isNotEmpty()) {
-            item(key = "missingPacks", contentType = "missingPacks") {
+            item(key = "missingPacks", contentType = "missingPacks", span = { GridItemSpan(maxLineSpan) }) {
                 MissingPacksBanner(
                     packCount = viewModel.missingPackSummary.size,
                     iconCount = viewModel.missingPackSummary.sumOf { it.iconCount },
@@ -597,10 +618,10 @@ fun ApplicationList(
             }
         }
         // Scrolls away with the list — only the search bar stays pinned
-        item(key = "hero", contentType = "hero") {
+        item(key = "hero", contentType = "hero", span = { GridItemSpan(maxLineSpan) }) {
             HeroPackCard(iconPacks, activeProblemFilters, onProblemFilterToggle)
         }
-        item(key = "options", contentType = "options") {
+        item(key = "options", contentType = "options", span = { GridItemSpan(maxLineSpan) }) {
             AdvancedOptionsCard(iconPacks) {
                 globalOptionsLauncher.launch(
                     Intent(globalOptionsContext, GlobalOptionsActivity::class.java)
@@ -609,15 +630,17 @@ fun ApplicationList(
         }
         if (displayList.isEmpty()) {
             // A filter/search matched nothing — say so instead of leaving a blank gap.
-            item(key = "empty", contentType = "empty") {
+            item(key = "empty", contentType = "empty", span = { GridItemSpan(maxLineSpan) }) {
                 // Offer the way out when an icon filter is what emptied the list.
                 val filtered = filterNoIcon || filterFallback || filterLocked
                 EmptyState(
                     icon = Icons.Filled.SearchOff,
                     text = stringResource(R.string.noAppsFound),
+                    // A grid item cannot measure against the viewport the way fillParentMaxHeight
+                    // did, so the empty state carries its own breathing room instead.
                     modifier = Modifier
-                        .fillParentMaxHeight(0.6f)
-                        .fillMaxWidth(),
+                        .fillMaxWidth()
+                        .heightIn(min = EmptyStateMinHeight),
                     actionLabel = stringResource(R.string.filterAllApps).takeIf { filtered && onShowAllApps != null },
                     onAction = onShowAllApps.takeIf { filtered }
                 )
@@ -629,6 +652,8 @@ fun ApplicationList(
         }
     }
 }
+
+private val EmptyStateMinHeight = 260.dp
 
 /**
  * Wraps a small badge so long-pressing (or hovering) it shows a plain tooltip explaining what it
