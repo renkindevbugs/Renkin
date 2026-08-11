@@ -13,6 +13,10 @@ import dev.renkinProject.renkin.data.VERDICT_UNLISTED
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/** Icon Pack Studio stamps every export with this package pattern. */
+internal fun isIconPackStudioExport(packageName: String): Boolean =
+    packageName.contains("iconpackstudio.exported", ignoreCase = true)
+
 /**
  * Decides which source packs' icons are usable on this device (see [PackVerdict]) and keeps
  * the verdict cache fresh. The rules, in order:
@@ -36,9 +40,6 @@ class PackVerdictManager(
     private val repo: RenkinPackRepository,
     private val lookup: suspend (String) -> StoreLookupResult = StoreLookup::lookup
 ) {
-    /** Icon Pack Studio stamps every export with this same package — never store-installable. */
-    private fun isIconPackStudioExport(pack: String): Boolean =
-        pack.contains("iconpackstudio.exported", ignoreCase = true)
     /** Production entry point: uses the shared singleton database. */
     constructor(context: Context) : this(context, RenkinPackRepository(context))
 

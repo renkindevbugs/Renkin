@@ -38,6 +38,7 @@ import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setPrimarySource
 import dev.renkinProject.renkin.data.transfer.BackupManager
+import dev.renkinProject.renkin.data.transfer.isIconPackStudioExport
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
@@ -1043,6 +1044,27 @@ class MainViewModel @Inject constructor(
     }
 
     // ---- Backup -------------------------------------------------------------------
+
+    /**
+     * Uses the live list for the active profile so an unsaved IPS selection is not missed;
+     * inactive profiles can be read from their persisted rows.
+     */
+    suspend fun profileUsesIconPackStudio(profileId: Long): Boolean =
+        if (profileId == activeProfileId && applicationsLoaded) {
+            applicationList.any { isIconPackStudioExport(it.sourcePackName.orEmpty()) }
+        } else {
+            backupManager.profileUsesIconPackStudio(profileId)
+        }
+
+    /** Full-backup counterpart: live active-profile rows plus every other saved profile. */
+    suspend fun backupUsesIconPackStudio(): Boolean {
+        val activeProfileUsesIps = if (applicationsLoaded) {
+            applicationList.any { isIconPackStudioExport(it.sourcePackName.orEmpty()) }
+        } else {
+            backupManager.profileUsesIconPackStudio(activeProfileId)
+        }
+        return activeProfileUsesIps || backupManager.otherProfilesUseIconPackStudio(activeProfileId)
+    }
 
     /** True while a backup export/import runs — Settings ignores further taps meanwhile. */
     var backupInProgress by mutableStateOf(false)

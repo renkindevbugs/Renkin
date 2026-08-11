@@ -69,6 +69,43 @@ class BackupManagerTest {
         .allowMainThreadQueries().build()
 
     @Test
+    fun iconPackStudioChecks_distinguishProfilesAndExcludeTheActiveProfile() = runBlocking {
+        val packRepo = RenkinPackRepository(srcPackDb)
+        packRepo.replaceEverything(
+            listOf(
+                Profile(id = DEFAULT_PROFILE_ID, name = "Renkin"),
+                Profile(id = 4L, name = "IPS profile")
+            ),
+            listOf(
+                DbApplication(
+                    "com.normal",
+                    "com.normal.Main",
+                    isAdaptiveIcon = false,
+                    isXml = false,
+                    drawable = "normal",
+                    sourcePackName = "com.example.icons",
+                    profileId = DEFAULT_PROFILE_ID
+                ),
+                DbApplication(
+                    "com.ips",
+                    "com.ips.Main",
+                    isAdaptiveIcon = false,
+                    isXml = false,
+                    drawable = "ips",
+                    sourcePackName = "ginlemon.iconpackstudio.exported",
+                    profileId = 4L
+                )
+            )
+        )
+        val manager = BackupManager(context, packRepo, WatchRepository(srcWatchDb))
+
+        assertFalse(manager.profileUsesIconPackStudio(DEFAULT_PROFILE_ID))
+        assertTrue(manager.profileUsesIconPackStudio(4L))
+        assertTrue(manager.otherProfilesUseIconPackStudio(DEFAULT_PROFILE_ID))
+        assertFalse(manager.otherProfilesUseIconPackStudio(4L))
+    }
+
+    @Test
     fun exportImport_roundTripsProfilesIconsAndRules() = runBlocking {
         val srcPackRepo = RenkinPackRepository(srcPackDb)
         val srcWatchRepo = WatchRepository(srcWatchDb)

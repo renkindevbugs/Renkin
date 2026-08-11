@@ -158,6 +158,40 @@ class DialogsComposeTest {
         assertTrue(dismissed)
     }
 
+    // ---- IconPackStudioExportWarningDialog -----------------------------------------
+
+    @Test
+    fun iconPackStudioProfileWarning_continueFiresOnlyContinue() {
+        var continued = false
+        var dismissed = false
+        compose.setContent {
+            IconPackStudioExportWarningDialog(
+                target = IconPackStudioWarningTarget.PROFILE,
+                onContinue = { continued = true },
+                onDismiss = { dismissed = true }
+            )
+        }
+
+        compose.onNodeWithText(string(R.string.continueAction)).performClick()
+        assertTrue(continued)
+        assertFalse(dismissed)
+    }
+
+    @Test
+    fun iconPackStudioBackupWarning_usesExportAction() {
+        var continued = false
+        compose.setContent {
+            IconPackStudioExportWarningDialog(
+                target = IconPackStudioWarningTarget.BACKUP,
+                onContinue = { continued = true },
+                onDismiss = {}
+            )
+        }
+
+        compose.onNodeWithText(string(R.string.exportBackup)).performClick()
+        assertTrue(continued)
+    }
+
     // ---- CenterDialog ---------------------------------------------------------------
 
     @Test
