@@ -94,6 +94,8 @@ internal fun SegmentSelector(
     tolerance: Float,
     onTargetsChange: (List<Int>) -> Unit,
     onToleranceChange: (Float) -> Unit,
+    toleranceRange: ClosedFloatingPointRange<Float> = 0.02f..0.5f,
+    selectionActive: Boolean = true,
     // What an empty pick means differs per caller: colourize paints everything, background
     // removal falls back to its automatic guess.
     emptyHint: String = ""
@@ -110,9 +112,13 @@ internal fun SegmentSelector(
     LaunchedEffect(source, segmentCount) {
         segments = withContext(Dispatchers.Default) { segmentColors(source, segmentCount) }
     }
-    LaunchedEffect(source, bounds, targets, tolerance) {
-        masks = withContext(Dispatchers.Default) {
-            selectionMasks(source.cropped(bounds), targets, tolerance)
+    LaunchedEffect(source, bounds, targets, tolerance, selectionActive) {
+        masks = if (selectionActive) {
+            withContext(Dispatchers.Default) {
+                selectionMasks(source.cropped(bounds), targets, tolerance)
+            }
+        } else {
+            null
         }
     }
 
@@ -163,7 +169,7 @@ internal fun SegmentSelector(
             label = stringResource(R.string.segmentTolerance),
             value = tolerance,
             onValueChange = onToleranceChange,
-            valueRange = 0.02f..0.5f,
+            valueRange = toleranceRange,
             valueLabel = "${(tolerance * 100).roundToInt()}"
         )
         Text(

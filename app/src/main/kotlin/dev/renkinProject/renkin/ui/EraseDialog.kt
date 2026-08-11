@@ -3,8 +3,10 @@ package dev.renkinProject.renkin.ui
 import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +20,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Undo
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.ZoomOutMap
 import androidx.compose.material3.Icon
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
@@ -44,12 +47,16 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChanged
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.R
@@ -102,6 +109,9 @@ internal fun EraseDialog(
     // then it commits into the adjustments and the real erased preview takes over.
     var currentStroke by remember { mutableStateOf<BrushStroke?>(null) }
     var brushAction by remember { mutableStateOf(BrushAction.ERASE) }
+    // Two fingers zoom and pan the canvas; one finger keeps drawing. Icon detail is small on a
+    // phone, and a stroke aimed at a two-pixel fringe needs the artwork bigger than the tile.
+    var viewport by remember { mutableStateOf(BrushViewport()) }
 
     val gridColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
     val frameColor = MaterialTheme.colorScheme.outline
@@ -125,6 +135,14 @@ internal fun EraseDialog(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(title), modifier = Modifier.weight(1f))
                 IconButton(
+                    onClick = {
+                        viewport = BrushViewport()
+                    },
+                    enabled = !viewport.isReset
+                ) {
+                    Icon(Icons.Filled.ZoomOutMap, stringResource(R.string.brushZoomReset))
+                }
+                IconButton(
                     onClick = { onStrokesChange(strokes.dropLast(1)) },
                     enabled = strokes.isNotEmpty()
                 ) {
@@ -141,18 +159,73 @@ internal fun EraseDialog(
         text = {
             val canvas: @Composable (Modifier) -> Unit = { modifier ->
                 Box(
-                    modifier.blueprintFrame(
-                        background = MaterialTheme.colorScheme.surfaceVariant,
-                        frame = frameColor
-                    )
-                ) {
-                    if (iconBitmap != null) {
-                        Image(
-                            bitmap = iconBitmap.asImageBitmap(),
-                            contentDescription = null,
-                            modifier = Modifier.fillMaxSize()
+                    modifier
+                        .blueprintFrame(
+                            background = MaterialTheme.colorScheme.surfaceVariant,
+                            frame = frameColor
                         )
-                    }
+                        // Zoomed artwork must stay inside the frame instead of spilling over the
+                        // dialog's controls.
+                        .clipToBounds()
+                        .pointerInput(brush, brushAction) {
+                            awaitEachGesture {
+                                val down = awaitFirstDown(requireUnconsumed = false)
+                                down.consume()
+                                currentStroke = BrushStroke(
+                                    // The selected diameter stays constant on screen. Zoom then
+                                    // gives the user proportionally finer control over the icon.
+                                    brush = viewport.contentBrush(brush),
+                                    points = listOf(viewport.contentPosition(down.position, size)),
+                                    action = brushAction
+                                )
+                                // A second finger turns the whole gesture into a transform. The
+                                // unfinished stroke is dropped rather than leaving a stray dot.
+                                var transforming = false
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val pressed = event.changes.filter { it.pressed }
+                                    if (pressed.isEmpty()) break
+                                    if (pressed.size >= 2) {
+                                        if (!transforming) {
+                                            transforming = true
+                                            currentStroke = null
+                                        }
+                                        viewport = viewport.transformed(
+                                            zoomChange = event.calculateZoom(),
+                                            previousCentroid = event.calculateCentroid(
+                                                useCurrent = false
+                                            ),
+                                            currentCentroid = event.calculateCentroid(
+                                                useCurrent = true
+                                            ),
+                                            size = size
+                                        )
+                                        event.changes.forEach { it.consume() }
+                                        continue
+                                    }
+                                    if (transforming) {
+                                        // Keep the rest of a pinch gesture away from any parent
+                                        // scroll container after one finger has been lifted.
+                                        event.changes.forEach { it.consume() }
+                                        continue
+                                    }
+                                    val change = pressed.first()
+                                    if (!change.positionChanged()) continue
+                                    change.consume()
+                                    currentStroke = currentStroke?.let { stroke ->
+                                        stroke.copy(
+                                            points = stroke.points +
+                                                viewport.contentPosition(change.position, size)
+                                        )
+                                    }
+                                }
+                                if (!transforming) {
+                                    currentStroke?.let { onStrokesChange(liveStrokes + it) }
+                                }
+                                currentStroke = null
+                            }
+                        }
+                ) {
                     if (generating) {
                         CircularProgressIndicator(
                             strokeWidth = 2.5.dp,
@@ -160,98 +233,71 @@ internal fun EraseDialog(
                                 .align(Alignment.TopEnd)
                                 .padding(10.dp)
                                 .size(20.dp)
+                                // Keep progress anchored to the viewport instead of moving with
+                                // the artwork while the user pans.
+                                .zIndex(1f)
                         )
                     }
-                    Canvas(
+                    Box(
                         Modifier
                             .fillMaxSize()
-                            .pointerInput(brush, brushAction) {
-                                detectDragGestures(
-                                    onDragStart = { position ->
-                                        currentStroke = BrushStroke(
-                                            brush = brush,
-                                            points = listOf(
-                                                Offset(
-                                                    position.x / size.width,
-                                                    position.y / size.height
-                                                )
-                                            ),
-                                            action = brushAction
-                                        )
-                                    },
-                                    onDrag = { change, _ ->
-                                        change.consume()
-                                        val stroke =
-                                            currentStroke ?: return@detectDragGestures
-                                        val point = Offset(
-                                            (change.position.x / size.width).coerceIn(0f, 1f),
-                                            (change.position.y / size.height).coerceIn(0f, 1f)
-                                        )
-                                        currentStroke =
-                                            stroke.copy(points = stroke.points + point)
-                                    },
-                                    onDragEnd = {
-                                        currentStroke?.let {
-                                            onStrokesChange(liveStrokes + it)
-                                        }
-                                        currentStroke = null
-                                    },
-                                    onDragCancel = { currentStroke = null }
-                                )
-                            }
-                            .pointerInput(brush, brushAction) {
-                                detectTapGestures { position ->
-                                    onStrokesChange(
-                                        liveStrokes + BrushStroke(
-                                            brush = brush,
-                                            points = listOf(
-                                                Offset(
-                                                    position.x / size.width,
-                                                    position.y / size.height
-                                                )
-                                            ),
-                                            action = brushAction
-                                        )
-                                    )
-                                }
+                            // Only the presentation is transformed. The parent gesture layer maps
+                            // touches back to the canvas, so stored strokes remain zoom-independent.
+                            .graphicsLayer {
+                                scaleX = viewport.zoom
+                                scaleY = viewport.zoom
+                                translationX = viewport.pan.x
+                                translationY = viewport.pan.y
                             }
                     ) {
-                        drawBlueprintGrid(gridColor)
-
-                        if (brushPreviewVisible && currentStroke == null) {
-                            drawBrushSizeGuide(radius = brush * size.width / 2f)
+                        if (iconBitmap != null) {
+                            Image(
+                                bitmap = iconBitmap.asImageBitmap(),
+                                contentDescription = null,
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
+                        Canvas(Modifier.fillMaxSize()) {
+                            drawBlueprintGrid(gridColor)
 
-                        currentStroke?.let { stroke ->
-                            val width = stroke.brush * size.width
-                            val markerColor = when (stroke.action) {
-                                BrushAction.ERASE -> eraseMarkerColor
-                                BrushAction.RESTORE -> restoreMarkerColor
-                            }
-                            if (stroke.points.size < 2) {
-                                val p = stroke.points.firstOrNull() ?: return@let
-                                drawCircle(
-                                    markerColor,
-                                    width / 2f,
-                                    Offset(p.x * size.width, p.y * size.height)
-                                )
-                            } else {
-                                val path = Path()
-                                stroke.points.forEachIndexed { index, point ->
-                                    val x = point.x * size.width
-                                    val y = point.y * size.height
-                                    if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                            currentStroke?.let { stroke ->
+                                val width = stroke.brush * size.width
+                                val markerColor = when (stroke.action) {
+                                    BrushAction.ERASE -> eraseMarkerColor
+                                    BrushAction.RESTORE -> restoreMarkerColor
                                 }
-                                drawPath(
-                                    path,
-                                    markerColor,
-                                    style = Stroke(
-                                        width,
-                                        cap = StrokeCap.Round,
-                                        join = StrokeJoin.Round
+                                if (stroke.points.size < 2) {
+                                    val p = stroke.points.firstOrNull() ?: return@let
+                                    drawCircle(
+                                        markerColor,
+                                        width / 2f,
+                                        Offset(p.x * size.width, p.y * size.height)
                                     )
-                                )
+                                } else {
+                                    val path = Path()
+                                    stroke.points.forEachIndexed { index, point ->
+                                        val x = point.x * size.width
+                                        val y = point.y * size.height
+                                        if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                                    }
+                                    drawPath(
+                                        path,
+                                        markerColor,
+                                        style = Stroke(
+                                            width,
+                                            cap = StrokeCap.Round,
+                                            join = StrokeJoin.Round
+                                        )
+                                    )
+                                }
                             }
+                        }
+                    }
+                    if (brushPreviewVisible && currentStroke == null) {
+                        // This guide belongs to the viewport rather than the transformed artwork:
+                        // it remains centred and keeps its apparent size after zooming or panning.
+                        Canvas(Modifier.fillMaxSize()) {
+                            drawBrushSizeGuide(radius = brush * size.width / 2f)
                         }
                     }
                 }

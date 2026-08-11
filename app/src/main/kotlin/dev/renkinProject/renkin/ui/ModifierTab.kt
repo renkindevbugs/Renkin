@@ -706,6 +706,9 @@ internal fun ModifierTab(
                                             onToleranceChange = {
                                                 adjustments.bgRemovalTolerance = it
                                             },
+                                            toleranceRange = 0f..0.5f,
+                                            selectionActive =
+                                                adjustments.bgRemovalTolerance > 0f,
                                             emptyHint = stringResource(
                                                 R.string.removeBackgroundAutoHint
                                             )

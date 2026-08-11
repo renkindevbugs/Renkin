@@ -159,11 +159,10 @@ internal class IconImageEditPipeline(
     }
 
     private fun removeBackground(bitmap: Bitmap): IconPackDrawable {
-        val cleaned = if (options.bgRemovalTargets.isNotEmpty()) {
-            removeSegmentColors(bitmap, options.bgRemovalTargets, options.bgRemovalTolerance)
-        } else {
-            bitmap.removeBackground(options.bgRemovalTolerance)
-        }
+        val cleaned = bitmap.removeMatchedBackground(
+            targets = options.bgRemovalTargets,
+            tolerance = options.bgRemovalTolerance
+        )
         // Hand strokes come last: they are corrections to whatever the colour match decided, and
         // restoring reads from the untouched artwork rather than from the cleaned result.
         return defaultBitmap(
@@ -312,4 +311,11 @@ internal class IconImageEditPipeline(
             RectF(scale, scale, scale, scale)
         )
     }
+}
+
+/** Zero tolerance deliberately leaves colour removal off so brush-only corrections are possible. */
+internal fun Bitmap.removeMatchedBackground(targets: List<Int>, tolerance: Float): Bitmap = when {
+    tolerance <= 0f -> this
+    targets.isNotEmpty() -> removeSegmentColors(this, targets, tolerance)
+    else -> removeBackground(tolerance)
 }
