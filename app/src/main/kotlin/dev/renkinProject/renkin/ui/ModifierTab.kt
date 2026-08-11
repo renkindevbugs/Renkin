@@ -686,7 +686,8 @@ internal fun ModifierTab(
                                             },
                                             emptyHint = stringResource(
                                                 R.string.removeBackgroundAutoHint
-                                            )
+                                            ),
+                                            pickTitle = R.string.segmentPickTitleRemove
                                         )
                                     } else {
                                         LabeledSlider(
