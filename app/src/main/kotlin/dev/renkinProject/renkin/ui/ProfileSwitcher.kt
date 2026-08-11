@@ -31,6 +31,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,6 +48,7 @@ import dev.renkinProject.renkin.data.HideProfileShareWarningKey
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
+import kotlinx.coroutines.launch
 
 // Input caps: the profile name doubles as the top-bar title and the pack label ends up as the
 // launcher-visible app name of the built pack — unbounded text breaks both layouts.
@@ -82,6 +84,10 @@ fun ProfileSwitcherTitle() {
     var pendingShareId by rememberSaveable { mutableStateOf<Long?>(null) }
     // Profile awaiting the pre-share warning's confirmation (null once past it).
     var shareWarningFor by remember { mutableStateOf<Profile?>(null) }
+    // IPS warnings cannot be disabled: different personal exports share one package identity.
+    var ipsWarningFor by remember { mutableStateOf<Profile?>(null) }
+    var shareCheckInProgress by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val prefs = getPreferences()
     val hideShareWarning = prefs.getBooleanValue(HideProfileShareWarningKey)
     val shareLauncher = rememberLauncherForActivityResult(
@@ -159,13 +165,25 @@ fun ProfileSwitcherTitle() {
                     },
                     trailingIcon = {
                         Row {
-                            IconButton(onClick = {
-                                menuOpen = false
-                                // Warn (once) that the recipient needs the source packs, unless
-                                // the user has opted out — then go straight to the file picker.
-                                if (hideShareWarning) startShare(profile)
-                                else shareWarningFor = profile
-                            }) {
+                            IconButton(
+                                enabled = !shareCheckInProgress,
+                                onClick = {
+                                    menuOpen = false
+                                    scope.launch {
+                                        shareCheckInProgress = true
+                                        try {
+                                            when {
+                                                viewModel.profileUsesIconPackStudio(profile.id) ->
+                                                    ipsWarningFor = profile
+                                                hideShareWarning -> startShare(profile)
+                                                else -> shareWarningFor = profile
+                                            }
+                                        } finally {
+                                            shareCheckInProgress = false
+                                        }
+                                    }
+                                }
+                            ) {
                                 Icon(
                                     imageVector = Icons.Filled.Share,
                                     contentDescription = stringResource(R.string.shareProfile),
@@ -308,6 +326,18 @@ fun ProfileSwitcherTitle() {
                 startShare(profile)
             },
             onDismiss = { shareWarningFor = null }
+        )
+    }
+
+    ipsWarningFor?.let { profile ->
+        IconPackStudioExportWarningDialog(
+            target = IconPackStudioWarningTarget.PROFILE,
+            onContinue = {
+                ipsWarningFor = null
+                if (hideShareWarning) startShare(profile)
+                else shareWarningFor = profile
+            },
+            onDismiss = { ipsWarningFor = null }
         )
     }
 }

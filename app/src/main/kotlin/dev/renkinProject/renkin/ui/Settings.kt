@@ -50,6 +50,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -77,6 +78,7 @@ import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.util.CrashReporter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -94,6 +96,9 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     var showCrashLogs by rememberSaveable { mutableStateOf(false) }
     var showAbout by rememberSaveable { mutableStateOf(false) }
     var confirmClearIcons by rememberSaveable { mutableStateOf(false) }
+    var showIpsBackupWarning by rememberSaveable { mutableStateOf(false) }
+    var backupCheckInProgress by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     val exportBackupLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/octet-stream")
@@ -163,9 +168,20 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     SettingsRow(
                         Icons.Filled.Save,
                         stringResource(R.string.exportBackup),
-                        busy = viewModel.backupInProgress
+                        busy = viewModel.backupInProgress || backupCheckInProgress
                     ) {
-                        exportBackupLauncher.launch(BackupManager.defaultFileName())
+                        scope.launch {
+                            backupCheckInProgress = true
+                            try {
+                                if (viewModel.backupUsesIconPackStudio()) {
+                                    showIpsBackupWarning = true
+                                } else {
+                                    exportBackupLauncher.launch(BackupManager.defaultFileName())
+                                }
+                            } finally {
+                                backupCheckInProgress = false
+                            }
+                        }
                     }
                     SettingsRow(
                         Icons.Filled.Restore,
@@ -239,6 +255,17 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                 }
             }
         }
+    }
+
+    if (showIpsBackupWarning) {
+        IconPackStudioExportWarningDialog(
+            target = IconPackStudioWarningTarget.BACKUP,
+            onContinue = {
+                showIpsBackupWarning = false
+                exportBackupLauncher.launch(BackupManager.defaultFileName())
+            },
+            onDismiss = { showIpsBackupWarning = false }
+        )
     }
 
     if (showStats) {

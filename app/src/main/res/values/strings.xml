@@ -438,6 +438,10 @@
     <string name="shareWarningText">This profile\'s pack icons only work for people who have the **same icon packs installed**. Anyone missing a pack sees those icons locked until they install it — so let them know which packs this profile uses.</string>
     <string name="shareWarningDontShowAgain">Don\'t show again</string>
     <string name="shareWarningShare">Share</string>
+    <string name="continueAction">Continue</string>
+    <string name="ipsExportWarningTitle">Icon Pack Studio exports</string>
+    <string name="ipsExportProfileWarningText">This profile uses one or more Icon Pack Studio exports. Renkin **cannot tell different IPS exports apart** because they use the same package name. Keep a copy of every IPS APK used by this profile; the recipient may need the same files after importing it.</string>
+    <string name="ipsExportBackupWarningText">This backup includes one or more Icon Pack Studio exports. Renkin **cannot tell different IPS exports apart** because they use the same package name. Keep a copy of every IPS APK used by your profiles; you may need the same files after restoring on another device.</string>
     <string name="missingPackDontShowAgain">Don\'t show again for this profile</string>
     <string name="missingPacksBanner">%1$d icon pack(s) missing · %2$d icon(s) locked</string>
     <string name="filterMissingPack">Missing icon pack</string>
