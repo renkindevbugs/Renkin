@@ -3,6 +3,7 @@
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +19,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
@@ -34,6 +34,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
@@ -77,6 +78,12 @@ internal fun SegmentLayerEditor(
         })
     }
 
+    fun removeLayer(removeIndex: Int) {
+        val result = removeSegmentLayer(layers, index, removeIndex) ?: return
+        onLayersChange(result.layers)
+        selected = result.selectedIndex
+    }
+
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(
             modifier = Modifier
@@ -97,24 +104,24 @@ internal fun SegmentLayerEditor(
                                 .colorizerSwatch(entry.style)
                         )
                     },
+                    trailingIcon = if (layers.size > 1) {
+                        {
+                            // IconButton would expand to a 48 dp hit target and overlap the
+                            // neighbouring chip. Keep this action inside its own chip instead.
+                            Icon(
+                                imageVector = Icons.Filled.Close,
+                                contentDescription = stringResource(R.string.segmentLayerRemove),
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .clickable(role = Role.Button) { removeLayer(i) }
+                            )
+                        }
+                    } else {
+                        null
+                    },
                     label = { Text(stringResource(R.string.segmentLayerName, i + 1)) }
                 )
-            }
-            if (layers.size > 1) {
-                // Keep removal outside the selectable chip. A nested clickable icon receives a
-                // minimum touch target that can overlap the chip and remove a layer on selection.
-                IconButton(
-                    onClick = {
-                        val nextSelected = if (index == layers.lastIndex) index - 1 else index
-                        onLayersChange(layers.filterIndexed { i, _ -> i != index })
-                        selected = nextSelected.coerceAtLeast(0)
-                    }
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Close,
-                        contentDescription = stringResource(R.string.segmentLayerRemove)
-                    )
-                }
             }
         }
 
@@ -187,6 +194,29 @@ internal fun SegmentLayerEditor(
             }
         )
     }
+}
+
+/** The layer list and valid selection resulting from a structural editor operation. */
+internal data class SegmentLayerSelection(
+    val layers: List<SegmentLayer>,
+    val selectedIndex: Int
+)
+
+/** Removes one layer while preserving which logical neighbour remains selected. */
+internal fun removeSegmentLayer(
+    layers: List<SegmentLayer>,
+    selectedIndex: Int,
+    removeIndex: Int
+): SegmentLayerSelection? {
+    if (layers.size <= 1 || removeIndex !in layers.indices) return null
+    val remaining = layers.filterIndexed { index, _ -> index != removeIndex }
+    val current = selectedIndex.coerceIn(layers.indices)
+    val nextSelected = when {
+        removeIndex < current -> current - 1
+        removeIndex == current -> current.coerceAtMost(remaining.lastIndex)
+        else -> current
+    }
+    return SegmentLayerSelection(remaining, nextSelected)
 }
 
 private fun defaultLayerStyle() = ColorizerStyle(firstColor = android.graphics.Color.WHITE)

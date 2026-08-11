@@ -23,7 +23,9 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -31,10 +33,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -42,6 +47,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.R
+import kotlinx.coroutines.delay
 
 /**
  * One eraser stroke in NORMALISED canvas coordinates (0..1), so it maps onto any bitmap
@@ -101,6 +107,20 @@ internal fun EraseDialog(
     // silently dropping the strokes added since (the "second stroke undoes the first" bug).
     val liveStrokes by rememberUpdatedState(strokes)
     var brush by remember { mutableFloatStateOf(0.10f) }
+    // Bumped on every slider move: the canvas then shows the brush at its real size until the
+    // user stops adjusting. Without it the only way to learn the size was to draw and undo.
+    var brushPreviewTick by remember { mutableIntStateOf(0) }
+    var brushPreviewVisible by remember { mutableStateOf(false) }
+    val onBrushChange: (Float) -> Unit = { value ->
+        brush = value
+        brushPreviewTick++
+    }
+    LaunchedEffect(brushPreviewTick) {
+        if (brushPreviewTick == 0) return@LaunchedEffect
+        brushPreviewVisible = true
+        delay(BRUSH_PREVIEW_LINGER_MS)
+        brushPreviewVisible = false
+    }
     // The in-progress stroke, drawn as a translucent marker only until the finger lifts —
     // then it commits into the adjustments and the real erased preview takes over.
     var currentStroke by remember { mutableStateOf<EraseStroke?>(null) }
@@ -216,6 +236,10 @@ internal fun EraseDialog(
                     ) {
                         drawBlueprintGrid(gridColor)
 
+                        if (brushPreviewVisible && currentStroke == null) {
+                            drawBrushSizeGuide(radius = brush * size.width / 2f)
+                        }
+
                         currentStroke?.let { stroke ->
                             val width = stroke.brush * size.width
                             if (stroke.points.size < 2) {
@@ -253,7 +277,7 @@ internal fun EraseDialog(
                         VerticalLabeledSlider(
                             label = stringResource(R.string.eraseBrush),
                             value = brush,
-                            onValueChange = { brush = it },
+                            onValueChange = onBrushChange,
                             valueRange = 0.03f..0.25f,
                             modifier = modifier
                         )
@@ -264,7 +288,7 @@ internal fun EraseDialog(
                     LabeledSlider(
                         label = stringResource(R.string.eraseBrush),
                         value = brush,
-                        onValueChange = { brush = it },
+                        onValueChange = onBrushChange,
                         valueRange = 0.03f..0.25f
                     )
                 }
@@ -281,3 +305,37 @@ internal fun EraseDialog(
         }
     )
 }
+
+/** A reusable brush footprint that stays legible over both light and dark artwork. */
+internal fun DrawScope.drawBrushSizeGuide(radius: Float) {
+    val dashLength = 10.dp.toPx()
+    val dashGap = 7.dp.toPx()
+    val dashEffect = PathEffect.dashPathEffect(
+        intervals = floatArrayOf(dashLength, dashGap),
+        phase = 0f
+    )
+    // Matching rounded caps make the two strokes read as one outlined pill per dash.
+    drawCircle(
+        color = Color.Black.copy(alpha = 0.68f),
+        radius = radius,
+        center = center,
+        style = Stroke(
+            width = 4.dp.toPx(),
+            cap = StrokeCap.Round,
+            pathEffect = dashEffect
+        )
+    )
+    drawCircle(
+        color = Color.White.copy(alpha = 0.85f),
+        radius = radius,
+        center = center,
+        style = Stroke(
+            width = 2.dp.toPx(),
+            cap = StrokeCap.Round,
+            pathEffect = dashEffect
+        )
+    )
+}
+
+// How long the brush-size ring lingers after the last slider move.
+private const val BRUSH_PREVIEW_LINGER_MS = 900L

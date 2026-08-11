@@ -5,6 +5,7 @@ import android.graphics.RectF
 import com.caverock.androidsvg.SVG
 import com.caverock.androidsvg.SVGParseException
 import dev.renkinProject.renkin.extension.newArgbBitmap
+import dev.renkinProject.renkin.extension.toRgbHexString
 import kotlin.math.max
 
 /**
@@ -21,7 +22,7 @@ object SvgRasterizer {
      */
     fun decode(markup: String, currentColorArgb: Int = android.graphics.Color.BLACK): SVG? = try {
         SVG.getFromString(
-            markup.replace("currentColor", "#%06X".format(currentColorArgb and 0xFFFFFF))
+            markup.replace("currentColor", currentColorArgb.toRgbHexString())
         )
     } catch (_: SVGParseException) {
         null
