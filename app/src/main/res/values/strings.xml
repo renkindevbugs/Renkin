@@ -162,13 +162,10 @@
     <string name="segmentCount">Detail</string>
     <string name="segmentTolerance">Tolerance</string>
     <string name="removeBackgroundAutoHint">Nothing picked — the background is detected automatically.</string>
-    <string name="segmentPickOnIcon">Pick on the icon</string>
     <string name="segmentLayerName">Color %1$d</string>
     <string name="segmentLayerAdd">Add another color</string>
     <string name="segmentLayerRemove">Remove this color</string>
     <string name="segmentLayerHint">Each color paints its own regions, in order from left to right.</string>
-    <string name="segmentPickTitle">Tap the parts to colorize</string>
-    <string name="segmentPickTitleRemove">Tap the parts to remove</string>
     <string name="segmentNoneSelected">Nothing selected yet — the whole icon gets colorized.</string>
     <string name="segmentSelectedCount">%1$d segments selected</string>
     <string name="segmentPickedRemove">Remove %1$s</string>
@@ -281,7 +278,6 @@
     <string name="positionCustom">Custom</string>
     <string name="done">Done</string>
     <string name="removeBackgroundTolerance">Tolerance</string>
-    <string name="removeBackgroundHint">Erases the flat background colour around the icon, working inward from the edges. Raise the tolerance for backgrounds with a slight gradient.</string>
     <string name="colorizeSolid">Solid fill</string>
     <string name="colorizeSolidHint">Replace the icon\'s own colours with the picked one instead of blending, so the colour lands exactly.</string>
     <string name="colorizeMonochrome">Monochrome</string>
@@ -483,6 +479,9 @@
     <string name="eraseUndo">Undo stroke</string>
     <string name="eraseClear">Clear all strokes</string>
     <string name="eraseCount">%1$d stroke(s)</string>
+    <string name="brushErase">Erase</string>
+    <string name="brushRestore">Restore</string>
+    <string name="backgroundBrushTitle">Background brush</string>
     <string name="globalOptionsTitle">Global options</string>
     <string name="stateExpanded">Expanded</string>
     <string name="stateCollapsed">Collapsed</string>

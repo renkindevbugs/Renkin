@@ -55,6 +55,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -149,7 +150,9 @@ internal class AdjustmentState {
     var outlineGradientAngle by mutableFloatStateOf(0f)
     // Eraser strokes masking where the outline must not apply. Deliberately NOT in [Saver]:
     // they're transient per-app geometry, and holding them out keeps the saver list flat.
-    var eraseStrokes by mutableStateOf<List<EraseStroke>>(emptyList())
+    var eraseStrokes by mutableStateOf<List<BrushStroke>>(emptyList())
+    // Hand corrections to the background removal, same reasoning: transient per-app geometry.
+    var backgroundBrushStrokes by mutableStateOf<List<BrushStroke>>(emptyList())
 
     companion object {
         // Keep the keyed representation, but accept the positional list emitted by older builds.
@@ -418,9 +421,28 @@ internal fun ModifierTab(
     var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
     var shapeColorPickerOpen by remember { mutableStateOf(false) }
     var eraseDialogOpen by remember { mutableStateOf(false) }
+    var backgroundBrushDialogOpen by remember { mutableStateOf(false) }
+    var backgroundBrushPreview by remember { mutableStateOf<Bitmap?>(null) }
+    var backgroundBrushPreviewGenerating by remember { mutableStateOf(false) }
     var centerDialogOpen by remember { mutableStateOf(false) }
     val context = LocalContext.current
     val toolboxInstalled = remember { imageToolboxInstalled(context) }
+
+    // Brush coordinates belong to the image-edit stage. Rendering the final, transformed icon
+    // here would make strokes miss whenever Scale, Position, Shape or Outline is active.
+    LaunchedEffect(backgroundBrushDialogOpen, adjustments.backgroundBrushStrokes, previews) {
+        if (!backgroundBrushDialogOpen) {
+            backgroundBrushPreview = null
+            backgroundBrushPreviewGenerating = false
+            return@LaunchedEffect
+        }
+        backgroundBrushPreviewGenerating = true
+        try {
+            backgroundBrushPreview = previews?.backgroundBrush?.invoke()
+        } finally {
+            backgroundBrushPreviewGenerating = false
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -686,8 +708,7 @@ internal fun ModifierTab(
                                             },
                                             emptyHint = stringResource(
                                                 R.string.removeBackgroundAutoHint
-                                            ),
-                                            pickTitle = R.string.segmentPickTitleRemove
+                                            )
                                         )
                                     } else {
                                         LabeledSlider(
@@ -698,10 +719,26 @@ internal fun ModifierTab(
                                             valueLabel = "${(adjustments.bgRemovalTolerance * 100).roundToInt()}%"
                                         )
                                     }
-                                    Text(
-                                        text = stringResource(R.string.removeBackgroundHint),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    // The colour match works in whole regions; edges and leftover
+                                    // fringes need a hand. Restore is on the same brush so a
+                                    // stroke that took too much can be walked back in place.
+                                    OptionCard(
+                                        label = stringResource(R.string.backgroundBrushTitle),
+                                        onClick = { backgroundBrushDialogOpen = true },
+                                        trailing = {
+                                            Text(
+                                                text = if (adjustments.backgroundBrushStrokes.isEmpty()) {
+                                                    stringResource(R.string.positionDefault)
+                                                } else {
+                                                    stringResource(
+                                                        R.string.eraseCount,
+                                                        adjustments.backgroundBrushStrokes.size
+                                                    )
+                                                },
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
                                     )
                                 }
 
@@ -1011,6 +1048,18 @@ internal fun ModifierTab(
             onStrokesChange = { adjustments.eraseStrokes = it },
             generating = previewGenerating,
             onDismiss = { eraseDialogOpen = false }
+        )
+    }
+
+    if (backgroundBrushDialogOpen) {
+        EraseDialog(
+            iconBitmap = backgroundBrushPreview ?: previews?.colorizeBase ?: centerPreview,
+            strokes = adjustments.backgroundBrushStrokes,
+            onStrokesChange = { adjustments.backgroundBrushStrokes = it },
+            generating = previewGenerating || backgroundBrushPreviewGenerating,
+            allowRestore = true,
+            title = R.string.backgroundBrushTitle,
+            onDismiss = { backgroundBrushDialogOpen = false }
         )
     }
 }

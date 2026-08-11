@@ -164,7 +164,14 @@ internal class IconImageEditPipeline(
         } else {
             bitmap.removeBackground(options.bgRemovalTolerance)
         }
-        return defaultBitmap(cleaned)
+        // Hand strokes come last: they are corrections to whatever the colour match decided, and
+        // restoring reads from the untouched artwork rather than from the cleaned result.
+        return defaultBitmap(
+            cleaned.applyBackgroundBrush(
+                original = bitmap,
+                operations = options.backgroundBrushOperations
+            )
+        )
     }
 
     private fun colorizeBitmap(icon: Bitmap, mode: PorterDuff.Mode): Bitmap {
