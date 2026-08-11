@@ -23,6 +23,20 @@ class BackgroundBrushTest {
         BackgroundBrushOperation(action, pixel(Color.argb(maskAlpha, 0, 0, 0)))
 
     @Test
+    fun zeroToleranceLeavesAutomaticAndPickedColorRemovalDisabled() {
+        val original = pixel(Color.BLUE)
+
+        assertEquals(
+            Color.BLUE,
+            original.removeMatchedBackground(emptyList(), 0f).getPixel(0, 0)
+        )
+        assertEquals(
+            Color.BLUE,
+            original.removeMatchedBackground(listOf(Color.BLUE), 0f).getPixel(0, 0)
+        )
+    }
+
+    @Test
     fun restoreUsesOriginalArtwork() {
         val result = pixel(Color.TRANSPARENT).applyBackgroundBrush(
             original = pixel(Color.BLUE),
