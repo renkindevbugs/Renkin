@@ -15,6 +15,7 @@
     <string name="resetToDefault">Reset to default</string>
     <string name="originalColors">Original colors</string>
     <string name="moreOptions">More options</string>
+    <string name="backToProfiles">Back to profiles</string>
     <string name="create">Create</string>
     <string name="upload">Upload</string>
     <string name="vectorOptionDescription">If the application use a vector as an icon, edit the vector.\n\nThis will not work if Renkin is installed on the main profile and the application is installed on the work profile.</string>
