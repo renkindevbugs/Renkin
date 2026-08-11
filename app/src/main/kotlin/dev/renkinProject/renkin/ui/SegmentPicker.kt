@@ -5,7 +5,6 @@ package dev.renkinProject.renkin.ui
 import android.graphics.Bitmap
 import android.graphics.Color as AndroidColor
 import android.graphics.Rect
-import androidx.annotation.StringRes
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -26,7 +25,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -37,7 +35,6 @@ import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -65,7 +62,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.toRgbHexString
 import dev.renkinProject.renkin.icon.creator.ColorSegment
@@ -74,7 +70,6 @@ import dev.renkinProject.renkin.icon.creator.SEGMENT_COUNT_MAX
 import dev.renkinProject.renkin.icon.creator.SEGMENT_COUNT_MIN
 import dev.renkinProject.renkin.icon.creator.matchesSegment
 import dev.renkinProject.renkin.icon.creator.segmentColors
-import dev.renkinProject.renkin.ui.theme.DialogShape
 import dev.renkinProject.renkin.ui.theme.IconShape as IconTileShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -101,14 +96,10 @@ internal fun SegmentSelector(
     onToleranceChange: (Float) -> Unit,
     // What an empty pick means differs per caller: colourize paints everything, background
     // removal falls back to its automatic guess.
-    emptyHint: String = "",
-    // What the pick is FOR, likewise: the same picker serves colourizing and background removal,
-    // and its full-screen dialog must not promise to colourize what it is about to erase.
-    @StringRes pickTitle: Int = R.string.segmentPickTitle
+    emptyHint: String = ""
 ) {
     var segmentCount by remember { mutableStateOf(SEGMENT_COUNT_DEFAULT) }
     var segments by remember { mutableStateOf<List<ColorSegment>>(emptyList()) }
-    var pickerOpen by remember { mutableStateOf(false) }
     var masks by remember { mutableStateOf<SelectionMasks?>(null) }
 
     // Icons carry transparent margins (adaptive safe zones especially). Cropping to a square
@@ -175,24 +166,16 @@ internal fun SegmentSelector(
             valueRange = 0.02f..0.5f,
             valueLabel = "${(tolerance * 100).roundToInt()}"
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (targets.isEmpty()) {
-                    emptyHint.ifEmpty { stringResource(R.string.segmentNoneSelected) }
-                } else {
-                    stringResource(R.string.segmentSelectedCount, targets.size)
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            TextButton(onClick = { pickerOpen = true }) {
-                Text(stringResource(R.string.segmentPickOnIcon))
-            }
-        }
+        Text(
+            text = if (targets.isEmpty()) {
+                emptyHint.ifEmpty { stringResource(R.string.segmentNoneSelected) }
+            } else {
+                stringResource(R.string.segmentSelectedCount, targets.size)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -223,44 +206,6 @@ internal fun SegmentSelector(
                         .align(Alignment.CenterHorizontally)
                 )
                 controls()
-            }
-        }
-    }
-
-    if (pickerOpen) {
-        Dialog(onDismissRequest = { pickerOpen = false }) {
-            Surface(shape = DialogShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = stringResource(pickTitle),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    SegmentCanvas(
-                        icon = icon,
-                        masks = masks,
-                        source = source,
-                        bounds = bounds,
-                        segments = segments,
-                        targets = targets,
-                        onTargetsChange = onTargetsChange,
-                        // Capped: on a tablet a full-width dialog would blow the icon up to
-                        // half the screen without making it any easier to aim at.
-                        modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp)
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { pickerOpen = false }) {
-                            Text(stringResource(R.string.close))
-                        }
-                    }
-                }
             }
         }
     }

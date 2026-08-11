@@ -11,6 +11,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.BackgroundBrushOperation
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
@@ -25,6 +26,8 @@ internal data class ModifierPreviews(
     val colorizeBase: Bitmap?,
     /** Current modifier stack rendered from an unclipped zero-offset canvas for auto-centering. */
     val positionBase: suspend () -> Bitmap?,
+    /** Remove-background output before scale, position, shape and outline alter its coordinates. */
+    val backgroundBrush: suspend () -> Bitmap?,
     val colorize: suspend (ColorizerStyle) -> Bitmap?,
     val outline: suspend (ColorizerStyle) -> Bitmap?,
     val layers: suspend (index: Int, draft: ColorizerStyle) -> Bitmap?,
@@ -50,21 +53,20 @@ internal fun rememberModifierPreviews(
     val currentOptions by rememberUpdatedState(options)
     var colorizeBase by remember { mutableStateOf<Bitmap?>(null) }
 
-    LaunchedEffect(options, sourceKey) {
-        colorizeBase = currentRender(
-            options.copy(
-                // Colourize runs BEFORE scale/offset/shape/outline, so the picker must cluster
-                // the artwork without them — an outline or shape plate would otherwise offer a
-                // colour that does not exist yet when the pick is applied.
-                primaryImageEdit = ImageEdit.NONE,
-                iconScale = 1f,
-                iconOffsetX = 0f,
-                iconOffsetY = 0f,
-                iconShape = IconShape.NONE,
-                outlineMode = OutlineMode.NONE,
-                outlineEraseMask = null
-            )
-        )
+    // Colourize runs before every modifier below. Sanitising the key also prevents background
+    // strokes from needlessly regenerating this untouched source after every brush gesture.
+    val colorizeBaseOptions = options.copy(
+        primaryImageEdit = ImageEdit.NONE,
+        iconScale = 1f,
+        iconOffsetX = 0f,
+        iconOffsetY = 0f,
+        iconShape = IconShape.NONE,
+        outlineMode = OutlineMode.NONE,
+        outlineEraseMask = null,
+        backgroundBrushOperations = emptyList()
+    )
+    LaunchedEffect(colorizeBaseOptions, sourceKey) {
+        colorizeBase = currentRender(colorizeBaseOptions)
     }
 
     return remember(colorizeBase) {
@@ -75,6 +77,18 @@ internal fun rememberModifierPreviews(
                     currentOptions.copy(
                         iconOffsetX = 0f,
                         iconOffsetY = 0f
+                    )
+                )
+            },
+            backgroundBrush = {
+                currentRender(
+                    currentOptions.copy(
+                        iconScale = 1f,
+                        iconOffsetX = 0f,
+                        iconOffsetY = 0f,
+                        iconShape = IconShape.NONE,
+                        outlineMode = OutlineMode.NONE,
+                        outlineEraseMask = null
                     )
                 )
             },
@@ -122,8 +136,15 @@ internal fun rememberModifierPreviews(
 internal fun GenerationOptions.withModifierAdjustments(
     adjustments: AdjustmentState,
     imageEdit: ImageEdit,
-    outlineEraseMask: Bitmap?
+    outlineEraseMask: Bitmap?,
+    // Already rasterised and memoised by the caller, so options only change after a finished stroke.
+    backgroundBrushOperations: List<BackgroundBrushOperation> = emptyList()
 ): GenerationOptions = copy(
+    backgroundBrushOperations = if (imageEdit == ImageEdit.REMOVE_BACKGROUND) {
+        backgroundBrushOperations
+    } else {
+        emptyList()
+    },
     primaryImageEdit = imageEdit,
     edgeLowThreshold = adjustments.edgeThreshold,
     edgeHighThreshold = adjustments.edgeThreshold * 3f,

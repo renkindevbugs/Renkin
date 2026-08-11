@@ -1482,6 +1482,10 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
     val outlineEraseMask = remember(adjustments.eraseStrokes) {
         if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
     }
+
+    val backgroundBrushOperations = remember(adjustments.backgroundBrushStrokes) {
+        buildBackgroundBrushOperations(adjustments.backgroundBrushStrokes)
+    }
     val options = GenerationOptions(
         primarySource = Source.APPLICATION_ICON,
         primaryImageEdit = imageEdit,
@@ -1495,7 +1499,12 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         materialYou = false,
         themed = false,
         override = true
-    ).withModifierAdjustments(adjustments, imageEdit, outlineEraseMask)
+    ).withModifierAdjustments(
+        adjustments = adjustments,
+        imageEdit = imageEdit,
+        outlineEraseMask = outlineEraseMask,
+        backgroundBrushOperations = backgroundBrushOperations
+    )
 
     // The same pipeline the tile preview uses, so the colour sheets and segment pickers here
     // behave exactly like the edit dialog's.
