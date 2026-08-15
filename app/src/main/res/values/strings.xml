@@ -484,6 +484,8 @@
     <string name="eraseUndo">Undo stroke</string>
     <string name="eraseClear">Clear all strokes</string>
     <string name="brushZoomReset">Reset zoom</string>
+    <string name="rulerDecrease">Decrease by one step</string>
+    <string name="rulerIncrease">Increase by one step</string>
     <string name="eraseCount">%1$d stroke(s)</string>
     <string name="brushErase">Erase</string>
     <string name="brushRestore">Restore</string>

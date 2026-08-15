@@ -84,7 +84,6 @@ import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.colorStyle
-import kotlin.math.roundToInt
 
 /**
  * The home list's Advanced options card, back in its old place: the expandable generation
@@ -467,7 +466,7 @@ private fun AdvancedOutlineSection(state: AdvancedOptionsState, viewModel: Optio
                     viewModel.setOutlineWidth(it)
                 },
                 valueRange = OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat(),
-                valueLabel = "${state.outlineWidth.roundToInt()} px",
+                ruler = pixelRuler(),
                 // The card's other rows are inset by the same amount; without it the track ran
                 // past the card's rounded edge.
                 modifier = Modifier.padding(horizontal = 16.dp)
