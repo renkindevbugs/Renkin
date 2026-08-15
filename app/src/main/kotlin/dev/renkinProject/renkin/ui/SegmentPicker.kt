@@ -163,14 +163,14 @@ internal fun SegmentSelector(
             value = segmentCount.toFloat(),
             onValueChange = { segmentCount = it.roundToInt() },
             valueRange = SEGMENT_COUNT_MIN.toFloat()..SEGMENT_COUNT_MAX.toFloat(),
-            valueLabel = "$segmentCount"
+            ruler = countRuler(majorEvery = 2)
         )
         LabeledSlider(
             label = stringResource(R.string.segmentTolerance),
             value = tolerance,
             onValueChange = onToleranceChange,
             valueRange = toleranceRange,
-            valueLabel = "${(tolerance * 100).roundToInt()}"
+            ruler = percentRuler(suffix = "")
         )
         Text(
             text = if (targets.isEmpty()) {

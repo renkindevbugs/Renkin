@@ -973,8 +973,8 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
                         value = state.shapeScale,
                         onValueChange = { state.shapeScale = it },
                         valueRange = 0.5f..1.5f,
-                        valueLabel = "${(state.shapeScale * 100).roundToInt()}%",
-                        centered = true
+                        centered = true,
+                        ruler = percentRuler()
                     )
                     if (!state.shapeCrop) {
                         val shapeStyle = state.shapeStyle
@@ -1007,8 +1007,8 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
                 value = state.iconScale,
                 onValueChange = { state.iconScale = it },
                 valueRange = 0.5f..1.5f,
-                valueLabel = "${(state.iconScale * 100).roundToInt()}%",
-                centered = true
+                centered = true,
+                ruler = percentRuler()
             )
 
             ControlledSwitchRow(
@@ -1023,7 +1023,7 @@ private fun GlobalModifierControls(state: GlobalModifierState) {
                         value = state.outlineWidth,
                         onValueChange = { state.outlineWidth = it },
                         valueRange = 1f..16f,
-                        valueLabel = "${state.outlineWidth.roundToInt()} px"
+                        ruler = pixelRuler()
                     )
                     val outlineStyle = state.outlineStyle
                     ColorStyleCard(

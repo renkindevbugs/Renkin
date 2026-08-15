@@ -506,8 +506,12 @@ internal fun ModifierTab(
                                 centeredSliderToLineWeight(it)
                         },
                         valueRange = 0f..2f,
-                        valueLabel = "${(materialYouPackAdjustments.strokeScale * 100).roundToInt()}%",
-                        centered = true
+                        centered = true,
+                        ruler = percentRuler(
+                            valueRange = 0.5f..2f,
+                            toRulerValue = ::centeredSliderToLineWeight,
+                            fromRulerValue = ::lineWeightToCenteredSlider
+                        )
                     )
                 }
             }
@@ -590,13 +594,17 @@ internal fun ModifierTab(
                                             label = stringResource(R.string.edgeDetail),
                                             value = (1f - (adjustments.edgeThreshold - 0.5f) / 4.5f).coerceIn(0f, 1f),
                                             onValueChange = { adjustments.edgeThreshold = 0.5f + (1f - it) * 4.5f },
-                                            valueRange = 0f..1f
+                                            valueRange = 0f..1f,
+                                            ruler = percentRuler()
                                         )
                                         LabeledSlider(
                                             label = stringResource(R.string.edgeSmoothing),
                                             value = adjustments.edgeSmoothing,
                                             onValueChange = { adjustments.edgeSmoothing = it },
-                                            valueRange = 0.5f..4f
+                                            valueRange = 0.5f..4f,
+                                            // A blur radius, not a percentage: one decimal is the
+                                            // finest step that still changes the traced edges.
+                                            ruler = decimalRuler()
                                         )
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -719,7 +727,7 @@ internal fun ModifierTab(
                                             value = adjustments.bgRemovalTolerance,
                                             onValueChange = { adjustments.bgRemovalTolerance = it },
                                             valueRange = 0f..0.5f,
-                                            valueLabel = "${(adjustments.bgRemovalTolerance * 100).roundToInt()}%"
+                                            ruler = percentRuler()
                                         )
                                     }
                                     // The colour match works in whole regions; edges and leftover
@@ -764,8 +772,8 @@ internal fun ModifierTab(
                 value = adjustments.iconScale,
                 onValueChange = { adjustments.iconScale = it },
                 valueRange = 0.5f..1.5f,
-                valueLabel = "${(adjustments.iconScale * 100).roundToInt()}%",
-                centered = true
+                centered = true,
+                ruler = percentRuler()
             )
         }
         // Position under scale as its own card — related tools, separate controls.
@@ -824,8 +832,8 @@ internal fun ModifierTab(
                         value = adjustments.shapeScale,
                         onValueChange = { adjustments.shapeScale = it },
                         valueRange = 0.5f..1.5f,
-                        valueLabel = "${(adjustments.shapeScale * 100).roundToInt()}%",
-                        centered = true
+                        centered = true,
+                        ruler = percentRuler()
                     )
                     if (!adjustments.shapeCrop) {
                         val shapeStyle = ColorizerStyle(
@@ -900,7 +908,7 @@ internal fun ModifierTab(
                             value = adjustments.outlineWidth,
                             onValueChange = { adjustments.outlineWidth = it },
                             valueRange = 1f..16f,
-                            valueLabel = "${adjustments.outlineWidth.roundToInt()} px"
+                            ruler = pixelRuler()
                         )
                     }
                     val outlineStyle = ColorizerStyle(
