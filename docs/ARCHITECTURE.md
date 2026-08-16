@@ -104,7 +104,7 @@ Switcher = the top-bar title dropdown.
 - **DataStore Preferences** (`data/DataPreferences.kt`) — all settings. Typed accessors:
   Composable `DataStore.getXValue()` for reading in composition; `Preferences.getXValue()`
   for reading a captured snapshot off the main thread.
-- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v15) — profiles + rendered and base icons
+- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v18) — profiles + rendered and base icons
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
   rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the
   Global options UI, only unsaved refresh output is Generated; saved/built non-custom rows are
@@ -119,6 +119,10 @@ Switcher = the top-bar title dropdown.
   Deliberately NOT per profile: a palette belongs to the device, so it is shared by every
   profile, rides the full backup (`BackupData.colorPresets`) and is never part of a shared
   profile file. The row stores the style as one encoded string (`encodeColorizerStyle`).
+- **`ModifierPreset` table** (same database, added in v18) — reusable Modifier-tab recipes,
+  ordered by last use and shared across profiles. Payload groups contain only portable settings;
+  position, picked areas, segment targets and brush strokes remain owned by the edited icon. The
+  library rides full backups but is not included in shared-profile exports.
 - **Room — `WatchDatabase`** (v3) — icon-watch rules, suggestions and per-rule baselines, owned per
   profile via `WatchRule.profileId`.
 

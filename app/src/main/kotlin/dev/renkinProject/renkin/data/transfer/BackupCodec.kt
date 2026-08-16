@@ -20,7 +20,9 @@ data class BackupData(
     val packLabels: Map<String, String> = emptyMap(),
     // The saved colour/gradient library. Not tied to any profile, so it rides the full backup
     // rather than a shared profile — and older archives simply carry none.
-    val colorPresets: List<BackupColorPreset> = emptyList()
+    val colorPresets: List<BackupColorPreset> = emptyList(),
+    // Modifier recipes are device-wide too. Optional keeps archives from older builds readable.
+    val modifierPresets: List<BackupModifierPreset> = emptyList()
 )
 
 /** A saved colour. Ids are not carried: import inserts fresh rows. */
@@ -28,6 +30,14 @@ data class BackupColorPreset(
     val name: String,
     val style: String,
     val createdAt: Long
+)
+
+data class BackupModifierPreset(
+    val name: String,
+    val payload: String,
+    val schemaVersion: Int,
+    val createdAt: Long,
+    val lastUsedAt: Long
 )
 
 data class BackupProfile(
@@ -166,6 +176,19 @@ object BackupCodec {
         }
         root.put("colorPresets", presets)
 
+        val modifierPresets = JSONArray()
+        for (preset in data.modifierPresets) {
+            modifierPresets.put(
+                JSONObject()
+                    .put("name", preset.name)
+                    .put("payload", preset.payload)
+                    .put("schemaVersion", preset.schemaVersion)
+                    .put("createdAt", preset.createdAt)
+                    .put("lastUsedAt", preset.lastUsedAt)
+            )
+        }
+        root.put("modifierPresets", modifierPresets)
+
         return root.toString()
     }
 
@@ -295,6 +318,22 @@ object BackupCodec {
             }
         }
 
-        return BackupData(profiles, prefs, packLabels, colorPresets)
+        val modifierPresets = mutableListOf<BackupModifierPreset>()
+        root.optJSONArray("modifierPresets")?.let { presets ->
+            for (i in 0 until presets.length()) {
+                val preset = presets.getJSONObject(i)
+                modifierPresets.add(
+                    BackupModifierPreset(
+                        name = preset.getString("name"),
+                        payload = preset.getString("payload"),
+                        schemaVersion = preset.getInt("schemaVersion"),
+                        createdAt = preset.optLong("createdAt"),
+                        lastUsedAt = preset.optLong("lastUsedAt")
+                    )
+                )
+            }
+        }
+
+        return BackupData(profiles, prefs, packLabels, colorPresets, modifierPresets)
     }
 }

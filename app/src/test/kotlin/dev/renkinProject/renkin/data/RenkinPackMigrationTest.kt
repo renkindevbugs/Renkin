@@ -43,7 +43,7 @@ class RenkinPackMigrationTest {
 
     @Test
     fun everyReleasedSchemaMigratesToCurrent() {
-        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16).forEach { version ->
+        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17).forEach { version ->
             RenkinPackDatabase.open(context, historical(version, "from-$version")).useDatabase { database ->
                 database.openHelper.writableDatabase
             }
@@ -67,6 +67,24 @@ class RenkinPackMigrationTest {
                 assertTrue(cursor.moveToFirst())
                 assertEquals("", cursor.getString(0))
                 assertEquals("pixels", cursor.getString(1))
+            }
+        }
+    }
+
+    @Test
+    fun version17CreatesModifierPresetTable() {
+        RenkinPackDatabase.open(context, historical(17, "v17-modifier-presets")).useDatabase { database ->
+            val migrated = database.openHelper.writableDatabase
+            migrated.execSQL(
+                "INSERT INTO ModifierPreset " +
+                    "(name, payload, schemaVersion, createdAt, lastUsedAt) " +
+                    "VALUES ('Reusable', 'v=1', 1, 10, 20)"
+            )
+            migrated.query("SELECT name, payload, schemaVersion FROM ModifierPreset").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("Reusable", cursor.getString(0))
+                assertEquals("v=1", cursor.getString(1))
+                assertEquals(1, cursor.getInt(2))
             }
         }
     }

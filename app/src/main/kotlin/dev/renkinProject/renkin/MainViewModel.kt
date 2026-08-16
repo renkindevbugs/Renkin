@@ -149,6 +149,44 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    /** Saved Modifier-tab recipes offered by the edit dialog, most recently used first. */
+    val modifierPresets: kotlinx.coroutines.flow.StateFlow<List<dev.renkinProject.renkin.data.ModifierPreset>> =
+        appProvider.modifierPresets().stateIn(
+            viewModelScope,
+            kotlinx.coroutines.flow.SharingStarted.Eagerly,
+            emptyList()
+        )
+
+    fun saveModifierPreset(name: String, payload: String, schemaVersion: Int) {
+        viewModelScope.launch {
+            appProvider.saveModifierPreset(name, payload, schemaVersion)
+            _toastEvents.trySend(R.string.modifierPresetSaved)
+        }
+    }
+
+    fun renameModifierPreset(id: Long, name: String) {
+        viewModelScope.launch { appProvider.renameModifierPreset(id, name) }
+    }
+
+    fun updateModifierPreset(id: Long, payload: String, schemaVersion: Int) {
+        viewModelScope.launch {
+            appProvider.updateModifierPreset(id, payload, schemaVersion)
+            _toastEvents.trySend(R.string.modifierPresetUpdated)
+        }
+    }
+
+    /** Loading a preset only reorders the library; the icon itself changes on Apply. */
+    fun markModifierPresetUsed(id: Long) {
+        viewModelScope.launch { appProvider.markModifierPresetUsed(id) }
+    }
+
+    fun deleteModifierPreset(id: Long) {
+        viewModelScope.launch {
+            appProvider.deleteModifierPreset(id)
+            _toastEvents.trySend(R.string.modifierPresetRemoved)
+        }
+    }
+
     /** The installed icon packs available as icon sources. */
     val iconPacks: List<IconPack> get() = appProvider.iconPacks
 

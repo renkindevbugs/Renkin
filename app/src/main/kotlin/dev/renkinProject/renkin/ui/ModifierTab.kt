@@ -10,6 +10,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -62,9 +63,11 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -73,6 +76,8 @@ import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -92,6 +97,9 @@ import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.encode
 import dev.renkinProject.renkin.icon.creator.GradientType
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -388,6 +396,11 @@ internal fun centeredSliderToLineWeight(value: Float): Float {
     return if ((scale * 100).roundToInt() == 100) 1f else scale
 }
 
+private class PresetScrollAnchor {
+    var y: Float = Float.NaN
+    var correctionJob: Job? = null
+}
+
 @Composable
 internal fun ModifierTab(
     source: Source,
@@ -425,6 +438,9 @@ internal fun ModifierTab(
     var backgroundBrushPreview by remember { mutableStateOf<Bitmap?>(null) }
     var backgroundBrushPreviewGenerating by remember { mutableStateOf(false) }
     var centerDialogOpen by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    val scrollScope = rememberCoroutineScope()
+    val presetScrollAnchor = remember { PresetScrollAnchor() }
     val context = LocalContext.current
     val toolboxInstalled = remember { imageToolboxInstalled(context) }
 
@@ -447,7 +463,7 @@ internal fun ModifierTab(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -1031,6 +1047,45 @@ internal fun ModifierTab(
                 }
             )
         }
+
+        // Presets close the tab: everything above is what a preset can capture, and loading one
+        // rewrites those blocks in place. Only the tab's own Apply then touches the icon.
+        ModifierPresetsSection(
+            adjustments = adjustments,
+            imageEdit = imageEdit,
+            iconColor = iconColor,
+            previews = previews,
+            modifier = Modifier.onGloballyPositioned { coordinates ->
+                presetScrollAnchor.y = coordinates.positionInRoot().y
+            },
+            onPresetLoaded = { applied ->
+                val anchorY = presetScrollAnchor.y
+                applied.imageEdit?.let(onImageEditChange)
+                applied.iconColor?.let(onColorChange)
+                if (anchorY.isFinite()) {
+                    presetScrollAnchor.correctionJob?.cancel()
+                    presetScrollAnchor.correctionJob = scrollScope.launch {
+                        // AnimatedVisibility can change the height above this section for several
+                        // frames. Correct each layout delta until the anchor settles, rather than
+                        // jumping to a hard-coded scroll position.
+                        var stableFrames = 0
+                        repeat(30) {
+                            withFrameNanos { }
+                            val delta = presetScrollAnchor.y - anchorY
+                            if (!delta.isFinite()) return@launch
+                            if (abs(delta) < 0.5f) {
+                                stableFrames++
+                                if (stableFrames >= 3) return@launch
+                            } else {
+                                stableFrames = 0
+                                val consumed = scrollState.scrollBy(delta)
+                                if (abs(consumed) < 0.5f) return@launch
+                            }
+                        }
+                    }
+                }
+            }
+        )
     }
 
     if (colorPickerOpen) {

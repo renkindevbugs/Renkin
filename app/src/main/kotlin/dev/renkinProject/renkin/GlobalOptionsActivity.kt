@@ -37,6 +37,7 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.GlobalOptionsScreen
 import dev.renkinProject.renkin.ui.LocalToaster
 import dev.renkinProject.renkin.ui.ProvideColorPresets
+import dev.renkinProject.renkin.ui.ProvideModifierPresets
 import dev.renkinProject.renkin.ui.ToastHost
 import dev.renkinProject.renkin.ui.Toaster
 import dev.renkinProject.renkin.ui.theme.RenkinTheme
@@ -98,6 +99,7 @@ class GlobalOptionsActivity : ComponentActivity() {
 
             val viewModel: GlobalOptionsViewModel = hiltViewModel()
             val colorPresets by viewModel.colorPresets.collectAsState()
+            val modifierPresets by viewModel.modifierPresets.collectAsState()
 
             // The screen is bound to the profile it opened with (see GlobalOptionsViewModel):
             // if that changes underneath, close and hand back what was already applied rather
@@ -119,24 +121,33 @@ class GlobalOptionsActivity : ComponentActivity() {
             }
 
             CompositionLocalProvider(LocalToaster provides toaster) {
-              ProvideColorPresets(
-                presets = colorPresets,
-                onSave = viewModel::saveColorPreset,
-                onDelete = viewModel::deleteColorPreset
-              ) {
-                RenkinTheme(darkMode) {
-                    GlobalOptionsScreen(onClose = { editedKeys, applied ->
-                        setResult(
-                            RESULT_OK,
-                            Intent()
-                                .putStringArrayListExtra(EXTRA_EDITED_KEYS, ArrayList(editedKeys))
-                                .putExtra(EXTRA_GLOBAL_APPLIED, applied)
-                        )
-                        finish()
-                    })
-                    ToastHost(toaster)
+                ProvideColorPresets(
+                    presets = colorPresets,
+                    onSave = viewModel::saveColorPreset,
+                    onDelete = viewModel::deleteColorPreset
+                ) {
+                    ProvideModifierPresets(
+                        presets = modifierPresets,
+                        onSave = viewModel::saveModifierPreset,
+                        onUpdate = viewModel::updateModifierPreset,
+                        onRename = viewModel::renameModifierPreset,
+                        onMarkUsed = viewModel::markModifierPresetUsed,
+                        onDelete = viewModel::deleteModifierPreset
+                    ) {
+                        RenkinTheme(darkMode) {
+                            GlobalOptionsScreen(onClose = { editedKeys, applied ->
+                                setResult(
+                                    RESULT_OK,
+                                    Intent()
+                                        .putStringArrayListExtra(EXTRA_EDITED_KEYS, ArrayList(editedKeys))
+                                        .putExtra(EXTRA_GLOBAL_APPLIED, applied)
+                                )
+                                finish()
+                            })
+                            ToastHost(toaster)
+                        }
+                    }
                 }
-              }
             }
         }
     }
@@ -212,6 +223,43 @@ class GlobalOptionsViewModel @Inject constructor(
         viewModelScope.launch {
             appProvider.deleteColorPreset(id)
             _toastEvents.trySend(R.string.savedColorsRemoved)
+        }
+    }
+
+    /** The same Modifier-preset library the edit dialog on the home screen uses. */
+    val modifierPresets: kotlinx.coroutines.flow.StateFlow<List<dev.renkinProject.renkin.data.ModifierPreset>> =
+        appProvider.modifierPresets().stateIn(
+            viewModelScope,
+            kotlinx.coroutines.flow.SharingStarted.Eagerly,
+            emptyList()
+        )
+
+    fun saveModifierPreset(name: String, payload: String, schemaVersion: Int) {
+        viewModelScope.launch {
+            appProvider.saveModifierPreset(name, payload, schemaVersion)
+            _toastEvents.trySend(R.string.modifierPresetSaved)
+        }
+    }
+
+    fun renameModifierPreset(id: Long, name: String) {
+        viewModelScope.launch { appProvider.renameModifierPreset(id, name) }
+    }
+
+    fun updateModifierPreset(id: Long, payload: String, schemaVersion: Int) {
+        viewModelScope.launch {
+            appProvider.updateModifierPreset(id, payload, schemaVersion)
+            _toastEvents.trySend(R.string.modifierPresetUpdated)
+        }
+    }
+
+    fun markModifierPresetUsed(id: Long) {
+        viewModelScope.launch { appProvider.markModifierPresetUsed(id) }
+    }
+
+    fun deleteModifierPreset(id: Long) {
+        viewModelScope.launch {
+            appProvider.deleteModifierPreset(id)
+            _toastEvents.trySend(R.string.modifierPresetRemoved)
         }
     }
 
