@@ -285,3 +285,14 @@ fun WavyLoadingBar(modifier: Modifier = Modifier) {
         trackColor = MaterialTheme.colorScheme.surfaceVariant
     )
 }
+
+/** Determinate counterpart used when the caller can report real completed/total progress. */
+@Composable
+fun WavyProgressBar(progress: Float, modifier: Modifier = Modifier) {
+    LinearWavyProgressIndicator(
+        progress = { progress.coerceIn(0f, 1f) },
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.primary,
+        trackColor = MaterialTheme.colorScheme.surfaceVariant
+    )
+}

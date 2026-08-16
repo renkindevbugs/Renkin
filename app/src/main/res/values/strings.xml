@@ -131,13 +131,15 @@
     <string name="iconPackUninstalled">Renkin Pack uninstalled</string>
     <string name="refreshApplicationList">Refresh application list</string>
     <string name="applicationIcon">Application Icon</string>
+    <string name="primarySource">Primary source</string>
+    <string name="primaryIconPack">Primary icon pack</string>
     <string name="secondarySource">Secondary source</string>
     <string name="fullName">Full Name</string>
     <string name="primaryImageEdit">Primary Image Modifier</string>
     <string name="primaryTextType">Primary Text Type</string>
     <string name="secondaryImageEdit">Secondary Image Modifier</string>
     <string name="secondaryTextType">Secondary Text Type</string>
-    <string name="secondaryIconPack">Secondary Icon Pack</string>
+    <string name="secondaryIconPack">Secondary icon pack</string>
     <string name="imageEdit">Image Modifier</string>
     <string name="textType">Text Type</string>
     <string name="colorize">Colorize</string>
@@ -490,7 +492,7 @@
     <string name="brushErase">Erase</string>
     <string name="brushRestore">Restore</string>
     <string name="backgroundBrushTitle">Background brush</string>
-    <string name="globalOptionsTitle">Global options</string>
+    <string name="globalOptionsTitle">Global style</string>
     <string name="stateExpanded">Expanded</string>
     <string name="stateCollapsed">Collapsed</string>
     <string name="onlineIconsTitle">Online icons</string>
@@ -507,17 +509,12 @@
     <string name="onlineIconUse">Use icon</string>
     <string name="onlineIconUseAsImage">Use as image</string>
     <string name="onlineIconImageNote">This icon uses gradients or effects that can\'t be edited as vector paths — **Use as image** saves it to your uploaded images and uses it as a picture. Modifiers still apply.</string>
-    <string name="globalExperimentalTitle">Global options is experimental</string>
-    <string name="globalExperimentalText">This feature is not finished yet and may still contain bugs. Review the icon previews before saving your changes.</string>
     <string name="advancedSectionSource">Icon source</string>
     <string name="advancedSectionColors">Colours</string>
     <string name="advancedSectionBehavior">Refresh behaviour</string>
-    <string name="globalScreenButton">New global screen</string>
-    <string name="globalModifiersTitle">Global modifiers</string>
+    <string name="globalScreenButton">Global style</string>
     <string name="globalColorize">Colorize all icons</string>
-    <string name="globalApplyToLabel">Apply modifiers to</string>
     <string name="globalToggleGenerated">Generated</string>
-    <string name="globalToggleExisting">Existing</string>
     <string name="globalToggleCustom">Custom</string>
     <string name="globalToggleEmpty">Without icon</string>
     <string name="globalGeneratedSection">Generated icons · %1$d</string>
@@ -525,8 +522,8 @@
     <string name="globalExistingSection">Existing icons · %1$d</string>
     <string name="globalExistingHint">Saved or built automatic icons. Enable Existing to apply the staged modifiers.</string>
     <string name="globalEmptySection">Without an icon · %1$d</string>
-    <string name="globalSectionApplies">Modifiers apply</string>
-    <string name="globalSectionSkipped">Not affected</string>
+    <string name="globalSectionApplies">Included</string>
+    <string name="globalSectionSkipped">Not included</string>
     <string name="globalGridHint">Tap any icon to fine-tune its modifiers.</string>
     <string name="globalNoIcons">No icons yet — pick a source on the home screen and refresh first.</string>
     <string name="globalDiscardTitle">Discard changes?</string>
@@ -534,6 +531,39 @@
     <string name="globalOptionsApplied">Global modifiers applied</string>
     <string name="globalOptionsApplyFailed">Applying global modifiers failed</string>
     <string name="globalApplying">Applying…</string>
+    <string name="globalApplyCount">Apply to %1$d</string>
+    <string name="globalSaveStyle">Save style</string>
+    <string name="globalBefore">Before</string>
+    <string name="globalAfter">After</string>
+    <string name="globalLivePreview">Live preview</string>
+    <string name="globalTargetsTitle">Apply modifiers to</string>
+    <string name="globalSourcesTitle">Generation sources</string>
+    <string name="globalSourcesUsed">Used for missing icons</string>
+    <string name="globalSourcesUnused">Not used in this apply</string>
+    <string name="globalSourcesDescription">Sources create missing icons here and become the defaults for future refreshes. Existing and custom icons keep their current base.</string>
+    <plurals name="globalTargetCount">
+        <item quantity="one">%1$d icon</item>
+        <item quantity="other">%1$d icons</item>
+    </plurals>
+    <string name="globalNoTargets">No groups selected</string>
+    <plurals name="globalActiveEffects">
+        <item quantity="one">%1$d active effect</item>
+        <item quantity="other">%1$d active effects</item>
+    </plurals>
+    <string name="globalTargetGeneratedShort">Generated %1$d</string>
+    <string name="globalTargetExistingShort">Saved %1$d</string>
+    <string name="globalTargetCustomShort">Custom %1$d</string>
+    <string name="globalTargetEmptyShort">Missing %1$d</string>
+    <string name="globalTargetExistingTitle">Saved automatic</string>
+    <string name="globalTargetGeneratedDescription">New automatic icons from the current session.</string>
+    <string name="globalTargetExistingDescription">Automatic icons that were saved or built earlier.</string>
+    <string name="globalTargetCustomDescription">Icons selected or edited by hand.</string>
+    <string name="globalTargetEmptyDescription">Create missing icons using the Generation defaults from Advanced options.</string>
+    <string name="globalEffectOff">Off</string>
+    <string name="globalShapeSummary">%1$s · %2$d%%</string>
+    <string name="globalOutlineSummary">%1$d px</string>
+    <string name="globalOneColor">One color</string>
+    <string name="globalResetChanges">Reset changes</string>
 
     <!-- First-run intro -->
     <string name="onboardingSourceTitle">Pick your icon source</string>

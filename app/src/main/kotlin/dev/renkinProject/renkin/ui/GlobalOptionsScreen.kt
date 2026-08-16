@@ -3,20 +3,20 @@
 package dev.renkinProject.renkin.ui
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -35,21 +35,16 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.ImageSearch
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
@@ -71,7 +66,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
@@ -106,18 +100,26 @@ import dev.renkinProject.renkin.data.GlobalShapeCropKey
 import dev.renkinProject.renkin.data.GlobalShapeKey
 import dev.renkinProject.renkin.data.GlobalShapeScaleKey
 import dev.renkinProject.renkin.data.GlobalShapeStyleKeys
-import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
 import dev.renkinProject.renkin.data.OutlineAddKey
 import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.OutlineStyleKeys
 import dev.renkinProject.renkin.data.ColorStyleKeys
+import dev.renkinProject.renkin.data.FallbackSource
+import dev.renkinProject.renkin.data.FallbackSourceKey
+import dev.renkinProject.renkin.data.FALLBACK_SOURCE_DEFAULT
+import dev.renkinProject.renkin.data.PrimaryIconPackKey
+import dev.renkinProject.renkin.data.PrimarySourceKey
+import dev.renkinProject.renkin.data.SecondaryIconPackKey
+import dev.renkinProject.renkin.data.SecondarySourceKey
 import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getPreferencesValue
+import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeGlobalScalePercent
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
 import dev.renkinProject.renkin.data.setColorStyle
@@ -134,7 +136,6 @@ import dev.renkinProject.renkin.icon.creator.colorStyle
 import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import dev.renkinProject.renkin.packages.PackageInfoStruct
-import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.ui.theme.IconShape as IconTileShape
@@ -145,11 +146,23 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+private const val GLOBAL_PREVIEW_DEBOUNCE_MS = 120L
+
+/** Null means idle; a null fraction with active progress is the final persistence phase. */
+internal fun globalApplyProgressFraction(progress: Pair<Int, Int>?): Float? = progress
+    ?.takeIf { (completed, total) -> total > 0 && completed < total }
+    ?.let { (completed, total) -> completed / total.toFloat() }
+
 /**
- * The Global options screen's staged modifier values. Nothing here touches DataStore until
- * Save — the grid below previews these values live, and Back discards them (after a prompt).
+ * The Global options screen's staged sources and modifier values. Nothing here touches
+ * DataStore until Apply — the grid previews them live, and Back discards them (after a prompt).
  */
 internal data class GlobalModifierSnapshot(
+    val primarySource: Source,
+    val primaryIconPack: String,
+    val secondarySource: Source,
+    val secondaryIconPack: String,
+    val fallbackSource: FallbackSource,
     val shape: IconShape,
     val shapeCrop: Boolean,
     val shapeScalePercent: Int,
@@ -170,6 +183,11 @@ internal data class GlobalModifierSnapshot(
 internal class GlobalModifierState {
     var initialized by mutableStateOf(false)
         private set
+    var primarySource by mutableStateOf(SOURCE_DEFAULT)
+    var primaryIconPack by mutableStateOf("")
+    var secondarySource by mutableStateOf(SOURCE_DEFAULT)
+    var secondaryIconPack by mutableStateOf("")
+    var fallbackSource by mutableStateOf(FALLBACK_SOURCE_DEFAULT)
     var shape by mutableStateOf(IconShape.NONE)
     var shapeCrop by mutableStateOf(true)
     var shapeScale by mutableFloatStateOf(1f)
@@ -193,6 +211,17 @@ internal class GlobalModifierState {
         get() = shape != IconShape.NONE || iconScale != 1f || outlineAdd || colorize
 
     fun seedFrom(preferences: Preferences) {
+        primarySource = Source.entries.getOrElse(
+            preferences.getIntValue(PrimarySourceKey, SOURCE_DEFAULT.ordinal)
+        ) { SOURCE_DEFAULT }
+        primaryIconPack = preferences.getStringValue(PrimaryIconPackKey)
+        secondarySource = Source.entries.getOrElse(
+            preferences.getIntValue(SecondarySourceKey, SOURCE_DEFAULT.ordinal)
+        ) { SOURCE_DEFAULT }
+        secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey)
+        fallbackSource = FallbackSource.entries.getOrElse(
+            preferences.getIntValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT.ordinal)
+        ) { FALLBACK_SOURCE_DEFAULT }
         shape = IconShape.entries.getOrElse(
             preferences.getIntValue(GlobalShapeKey, IconShape.NONE.ordinal)
         ) { IconShape.NONE }
@@ -219,6 +248,11 @@ internal class GlobalModifierState {
     }
 
     fun snapshot() = GlobalModifierSnapshot(
+        primarySource = primarySource,
+        primaryIconPack = primaryIconPack,
+        secondarySource = secondarySource,
+        secondaryIconPack = secondaryIconPack,
+        fallbackSource = fallbackSource,
         shape = shape,
         shapeCrop = shapeCrop,
         shapeScalePercent = (shapeScale * 100).roundToInt(),
@@ -235,7 +269,12 @@ internal class GlobalModifierState {
         includeEmpty = includeEmpty
     )
 
-    private fun restore(snapshot: GlobalModifierSnapshot) {
+    fun restore(snapshot: GlobalModifierSnapshot) {
+        primarySource = snapshot.primarySource
+        primaryIconPack = snapshot.primaryIconPack
+        secondarySource = snapshot.secondarySource
+        secondaryIconPack = snapshot.secondaryIconPack
+        fallbackSource = snapshot.fallbackSource
         shape = snapshot.shape
         shapeCrop = snapshot.shapeCrop
         shapeScale = snapshot.shapeScalePercent / 100f
@@ -356,6 +395,11 @@ internal class GlobalModifierState {
 
     /** Writes staged values into [mutable] for the preview and ViewModel commit snapshot. */
     private fun writeInto(mutable: androidx.datastore.preferences.core.MutablePreferences) {
+        mutable[PrimarySourceKey] = primarySource.ordinal
+        mutable[PrimaryIconPackKey] = primaryIconPack
+        mutable[SecondarySourceKey] = secondarySource.ordinal
+        mutable[SecondaryIconPackKey] = secondaryIconPack
+        mutable[FallbackSourceKey] = fallbackSource.ordinal
         mutable[GlobalShapeKey] = shape.ordinal
         mutable[GlobalShapeCropKey] = shapeCrop
         mutable[GlobalShapeScaleKey] = (shapeScale * 100).roundToInt()
@@ -438,6 +482,11 @@ private fun MutablePreferences.writeColorStyle(keys: ColorStyleKeys, style: Colo
 }
 
 private fun GlobalModifierSnapshot.toSaveableList(): ArrayList<Any> = arrayListOf(
+    "primarySource", primarySource.ordinal,
+    "primaryIconPack", primaryIconPack,
+    "secondarySource", secondarySource.ordinal,
+    "secondaryIconPack", secondaryIconPack,
+    "fallbackSource", fallbackSource.ordinal,
     "shape", shape.ordinal,
     "shapeCrop", shapeCrop,
     "shapeScalePercent", shapeScalePercent,
@@ -469,6 +518,17 @@ private fun List<*>.toGlobalModifierSnapshot(): GlobalModifierSnapshot? {
     val colorizerStyle = (values["colorizerStyle"] as? String)?.let(::decodeColorizerStyle)
         ?: return null
     return GlobalModifierSnapshot(
+        primarySource = Source.entries.getOrElse(values["primarySource"] as? Int ?: 0) {
+            SOURCE_DEFAULT
+        },
+        primaryIconPack = values["primaryIconPack"] as? String ?: "",
+        secondarySource = Source.entries.getOrElse(values["secondarySource"] as? Int ?: 0) {
+            SOURCE_DEFAULT
+        },
+        secondaryIconPack = values["secondaryIconPack"] as? String ?: "",
+        fallbackSource = FallbackSource.entries.getOrElse(
+            values["fallbackSource"] as? Int ?: 0
+        ) { FALLBACK_SOURCE_DEFAULT },
         shape = IconShape.entries.getOrElse(values["shape"] as? Int ?: 0) { IconShape.NONE },
         shapeCrop = values["shapeCrop"] as? Boolean ?: true,
         shapeScalePercent = values["shapeScalePercent"] as? Int ?: 100,
@@ -520,16 +580,15 @@ internal fun categorizeGlobalIcons(
 /**
  * Fullscreen Global options, hosted by [dev.renkinProject.renkin.GlobalOptionsActivity] whose
  * windowShowWallpaper theme puts the REAL wallpaper behind the transparent icon grid: the
- * refresh-wide generation options (immediate, like the old Advanced options card), the staged
- * global modifiers, and a live preview grid of every icon split into generated / custom /
- * existing / iconless apps. Save re-renders the global layer from immutable icon bases and
- * persists the profile; tapping a tile opens a per-app editor. [onClose] reports the per-icon
- * edits and whether a Save happened, so MainViewModel can update its session bookkeeping.
+ * staged generation sources and global modifiers, their target groups, and a before/after
+ * preview grid split into generated / custom / existing / iconless apps. Apply re-renders the
+ * global layer from immutable icon bases and persists the profile; tapping a tile opens a
+ * per-app editor. [onClose] reports the per-icon edits and whether an apply happened, so
+ * MainViewModel can update its session bookkeeping.
  */
 @Composable
 fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> Unit) {
     val viewModel: GlobalOptionsViewModel = hiltViewModel()
-    val iconPacks = viewModel.iconPacks
     val prefs = getPreferences()
     val prefsValue = prefs.getPreferencesValue()
     val context = LocalContext.current
@@ -556,8 +615,11 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     val dirty by remember(state) {
         derivedStateOf { baseline != null && baseline != state.snapshot() }
     }
-    var showExperimentalNotice by rememberSaveable { mutableStateOf(true) }
     var confirmDiscard by remember { mutableStateOf(false) }
+    var showTargets by rememberSaveable { mutableStateOf(false) }
+    var showSources by rememberSaveable { mutableStateOf(false) }
+    var showBefore by rememberSaveable { mutableStateOf(false) }
+    var previewDebouncing by remember { mutableStateOf(false) }
     val close: () -> Unit = {
         if (applying) Unit
         else if (dirty) confirmDiscard = true
@@ -582,8 +644,13 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
         }
     }
     LaunchedEffect(emptySourceOptions, tileOptions) {
+        previewDebouncing = true
         viewModel.updatePreviewConfiguration(emptySourceOptions, tileOptions)
+        delay(GLOBAL_PREVIEW_DEBOUNCE_MS)
+        previewDebouncing = false
     }
+    val previewRefreshing = !showBefore &&
+        (previewDebouncing || previewJobs > 0 || viewModel.initialLoadRunning)
 
     val categories by remember(viewModel) {
         derivedStateOf {
@@ -594,6 +661,26 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     val custom = categories.custom
     val existing = categories.existing
     val iconless = categories.iconless
+    val iconPacks = viewModel.iconPacks
+
+    val targetCount by remember(state, categories) {
+        derivedStateOf {
+            (if (state.applyGenerated) generated.size else 0) +
+                (if (state.applyCustom) custom.size else 0) +
+                (if (state.applyExisting) existing.size else 0) +
+                (if (state.includeEmpty) iconless.size else 0)
+        }
+    }
+    val activeEffectCount by remember(state) {
+        derivedStateOf {
+            listOf(
+                state.shape != IconShape.NONE,
+                state.iconScale != 1f,
+                state.outlineAdd,
+                state.colorize
+            ).count { it }
+        }
+    }
 
     var editApp by remember { mutableStateOf<PackageInfoStruct?>(null) }
 
@@ -608,23 +695,20 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
         }
     }
 
-    // No Surface around everything: the activity window is transparent over the wallpaper, so
-    // each non-grid area paints its own opaque background and the grid area paints none.
-    // Without a Surface, LocalContentColor stays at its Black default — provide the theme's
-    // onSurface explicitly so the top bar (and any other default-coloured content) is
-    // readable in dark mode too.
+    // The preview remains transparent so the real wallpaper is part of the decision. Every
+    // control surface paints its own background and therefore stays legible over any wallpaper.
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-    Column(
-        Modifier
-            .fillMaxSize()
-            .navigationBarsPadding()
-    ) {
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                        .statusBarsPadding()
-                ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .navigationBarsPadding()
+        ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.surfaceContainerLow)
+                    .statusBarsPadding()
+            ) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -658,42 +742,41 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                         enabled = dirty && !applying,
                         shape = dev.renkinProject.renkin.ui.theme.FieldShape
                     ) {
-                        Text(stringResource(if (applying) R.string.globalApplying else R.string.save))
+                        Text(
+                            if (applying) stringResource(R.string.globalApplying)
+                            else if (targetCount == 0) stringResource(R.string.globalSaveStyle)
+                            else stringResource(R.string.globalApplyCount, targetCount)
+                        )
                     }
                 }
-                HorizontalDivider()
                 val progress = viewModel.globalApplyProgress
-                when {
-                    progress != null && progress.second > 0 -> LinearProgressIndicator(
-                        progress = { progress.first / progress.second.toFloat() },
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    progress != null || previewJobs > 0 || viewModel.initialLoadRunning -> {
-                        WavyLoadingBar(Modifier.fillMaxWidth())
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(4.dp)
+                ) {
+                    val progressFraction = globalApplyProgressFraction(progress)
+                    when {
+                        progress == null -> HorizontalDivider(Modifier.align(Alignment.Center))
+                        progressFraction == null -> WavyLoadingBar(
+                            Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.Center)
+                        )
+                        else -> WavyProgressBar(
+                            progress = progressFraction,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.Center)
+                        )
                     }
                 }
-                }
+            }
 
-                // While the pinned options panel is open the tiles shrink so more of the
-                // preview stays visible; the user collapses/expands it with the arrow button
-                // under the panel (no auto-hide — scrolling mid-tune felt like losing it).
-                var panelVisible by remember { mutableStateOf(true) }
-
-                // The icon grid, shared by both layouts below (single-pane phones and the
-                // side-by-side pane on wide screens). [compact] = smaller tiles while the
-                // options panel is expanded.
-                val gridContent: @Composable (compact: Boolean) -> Unit = { compact ->
-                val tileSize = androidx.compose.animation.core.animateDpAsState(
-                    targetValue = if (compact) 40.dp else 56.dp,
-                    animationSpec = androidx.compose.animation.core.spring(
-                        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioLowBouncy,
-                        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow
-                    ),
-                    label = "tileSize"
-                ).value
+            val gridContent: @Composable () -> Unit = {
                 LazyVerticalGrid(
                     state = gridState,
-                    columns = GridCells.Adaptive(if (compact) 62.dp else 84.dp),
+                    columns = GridCells.Adaptive(84.dp),
                     contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 24.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -722,9 +805,8 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                         items(generated, key = { "g/${it.key}" }) { app ->
                             IconPreviewTile(
                                 app,
-                                if (state.applyGenerated) tileOptions else null,
+                                if (!showBefore && state.applyGenerated) tileOptions else null,
                                 viewModel,
-                                iconSize = tileSize,
                                 modifier = Modifier.animateItem()
                             ) { editApp = app }
                         }
@@ -740,10 +822,9 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                         items(custom, key = { "c/${it.key}" }) { app ->
                             IconPreviewTile(
                                 app,
-                                if (state.applyCustom) tileOptions else null,
+                                if (!showBefore && state.applyCustom) tileOptions else null,
                                 viewModel,
                                 showEditBadge = true,
-                                iconSize = tileSize,
                                 modifier = Modifier.animateItem()
                             ) { editApp = app }
                         }
@@ -762,9 +843,8 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                         items(existing, key = { "s/${it.key}" }) { app ->
                             IconPreviewTile(
                                 app,
-                                if (state.applyExisting) tileOptions else null,
+                                if (!showBefore && state.applyExisting) tileOptions else null,
                                 viewModel,
-                                iconSize = tileSize,
                                 modifier = Modifier.animateItem()
                             ) { editApp = app }
                         }
@@ -779,102 +859,135 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                         }
                         items(iconless, key = { "e/${it.key}" }) { app ->
                             GeneratedPreviewTile(
-                                app, emptySourceOptions, tileOptions, viewModel,
-                                iconSize = tileSize,
+                                app,
+                                if (showBefore) null else emptySourceOptions,
+                                if (showBefore) null else tileOptions,
+                                viewModel,
                                 modifier = Modifier.animateItem()
                             ) { editApp = app }
                         }
                     }
                 }
-                }
+            }
 
-                val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
-                if (wide) {
-                    // Foldables/tablets/desktop: options pane on the left, the icon grid on
-                    // the right (transparent, over the real wallpaper) — no collapsing
-                    // needed, both scroll independently.
-                    Row(Modifier.fillMaxSize()) {
-                        Column(
-                            Modifier
-                                .width(340.dp)
-                                .fillMaxHeight()
-                                .background(MaterialTheme.colorScheme.surfaceContainerLow)
-                                .verticalScroll(rememberScrollState())
-                                .padding(bottom = 12.dp)
-                        ) {
-                            CategoryToggleRow(state)
-                            Column(
-                                Modifier.padding(horizontal = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                GlobalModifierControls(state)
-                                AdvancedOptionsPanel(iconPacks)
-                            }
-                        }
-                        VerticalDivider()
-                        Column(Modifier.weight(1f)) {
-                            currentSection?.let { section ->
-                                CurrentSectionBar(section, generated.size, custom.size, existing.size, iconless.size, state)
-                            }
-                            HorizontalDivider()
-                            // Transparent: the real wallpaper shows behind the tiles.
-                            Box(Modifier.fillMaxSize()) { gridContent(false) }
-                        }
-                    }
-                } else {
-                    // Phones: the pinned block (category toggles + arrow handle + expandable
-                    // options panel) is capped a bit under half the screen; in exchange the
-                    // tiles below shrink while it is open. The toggles and handle are fixed,
-                    // the panel gets the remaining height and scrolls internally.
-                    val pinnedMax = (androidx.compose.ui.platform.LocalConfiguration
-                        .current.screenHeightDp * 0.45f).dp
-                    Column(
-                        Modifier
-                            .heightIn(max = pinnedMax)
-                            .background(MaterialTheme.colorScheme.surfaceContainerLow)
+            val wide = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp >= 600
+            if (wide) {
+                Row(Modifier.fillMaxSize()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        modifier = Modifier
+                            .width(360.dp)
+                            .fillMaxHeight()
                     ) {
-                        CategoryToggleRow(state)
-                        AnimatedVisibility(
-                            visible = panelVisible,
-                            modifier = Modifier.weight(1f, fill = false)
-                        ) {
+                        Box(Modifier.fillMaxSize()) {
                             Column(
                                 Modifier
                                     .verticalScroll(rememberScrollState())
-                                    .padding(horizontal = 12.dp)
-                                    .padding(bottom = 6.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    .padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                GlobalModifierControls(state)
-                                AdvancedOptionsPanel(iconPacks)
+                                GlobalStyleControlPanel(
+                                    state = state,
+                                    categories = categories,
+                                    targetCount = targetCount,
+                                    activeEffectCount = activeEffectCount,
+                                    iconPacks = iconPacks,
+                                    resetEnabled = dirty,
+                                    onTargetsClick = { showTargets = true },
+                                    onSourcesClick = { showSources = true },
+                                    onReset = { baseline?.let(state::restore) }
+                                )
                             }
+                            GlobalPreviewProgressIndicator(
+                                visible = previewRefreshing,
+                                modifier = Modifier.align(Alignment.TopCenter)
+                            )
                         }
-                        // The expand/collapse control sits UNDER the panel, right where the
-                        // grid starts, so the thumb doesn't travel to the top to reach it.
-                        PanelHandle(panelVisible) { panelVisible = !panelVisible }
                     }
+                    VerticalDivider()
+                    Column(Modifier.weight(1f)) {
+                        PreviewModeBar(showBefore) { showBefore = it }
+                        currentSection?.let { section ->
+                            CurrentSectionBar(
+                                section, generated.size, custom.size,
+                                existing.size, iconless.size, state
+                            )
+                        }
+                        HorizontalDivider()
+                        Box(Modifier.fillMaxSize()) { gridContent() }
+                    }
+                }
+            } else {
+                Column(Modifier.weight(1f)) {
+                    PreviewModeBar(showBefore) { showBefore = it }
                     currentSection?.let { section ->
-                        CurrentSectionBar(section, generated.size, custom.size, existing.size, iconless.size, state)
+                        CurrentSectionBar(
+                            section, generated.size, custom.size,
+                            existing.size, iconless.size, state
+                        )
                     }
                     HorizontalDivider()
-                    // Transparent: the real wallpaper shows behind the tiles.
-                    Box(Modifier.fillMaxSize()) { gridContent(panelVisible) }
-                }
-    }
-    }
-
-    if (showExperimentalNotice) {
-        RenkinAlertDialog(
-            onDismissRequest = { showExperimentalNotice = false },
-            title = { Text(stringResource(R.string.globalExperimentalTitle)) },
-            text = { Text(stringResource(R.string.globalExperimentalText)) },
-            confirmButton = {
-                androidx.compose.material3.TextButton(
-                    onClick = { showExperimentalNotice = false }
-                ) {
-                    Text(stringResource(R.string.ok))
+                    Box(Modifier.weight(1f)) { gridContent() }
+                    Surface(
+                        shape = CardShape,
+                        color = MaterialTheme.colorScheme.surfaceContainerLow,
+                        tonalElevation = 3.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        val dockMaxHeight = (androidx.compose.ui.platform.LocalConfiguration
+                            .current.screenHeightDp * 0.43f).dp
+                        Box(Modifier.fillMaxWidth()) {
+                            Column(
+                                Modifier
+                                    .heightIn(max = dockMaxHeight)
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                Box(
+                                    Modifier
+                                        .size(width = 34.dp, height = 4.dp)
+                                        .clip(SwatchShape)
+                                        .background(MaterialTheme.colorScheme.outlineVariant)
+                                        .align(Alignment.CenterHorizontally)
+                                )
+                                GlobalStyleControlPanel(
+                                    state = state,
+                                    categories = categories,
+                                    targetCount = targetCount,
+                                    activeEffectCount = activeEffectCount,
+                                    iconPacks = iconPacks,
+                                    resetEnabled = dirty,
+                                    onTargetsClick = { showTargets = true },
+                                    onSourcesClick = { showSources = true },
+                                    onReset = { baseline?.let(state::restore) }
+                                )
+                            }
+                            GlobalPreviewProgressIndicator(
+                                visible = previewRefreshing,
+                                modifier = Modifier.align(Alignment.TopCenter)
+                            )
+                        }
+                    }
                 }
             }
+        }
+    }
+
+    if (showTargets) {
+        GlobalTargetsSheet(
+            state = state,
+            categories = categories,
+            targetCount = targetCount,
+            onDismiss = { showTargets = false }
+        )
+    }
+
+    if (showSources) {
+        GenerationSourcesSheet(
+            state = state,
+            iconPacks = iconPacks,
+            onDismiss = { showSources = false }
         )
     }
 
@@ -895,305 +1008,10 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     }
 }
 
-/**
- * Advanced options inside the pinned panel: always expanded (the panel itself already
- * collapses and scrolls), so no nested chevron to hunt for.
- */
-@Composable
-private fun AdvancedOptionsPanel(iconPacks: List<IconPack>) {
-    Surface(shape = CardShape, color = MaterialTheme.colorScheme.surfaceContainer) {
-        Column {
-            Text(
-                text = stringResource(R.string.advancedOptions),
-                style = MaterialTheme.typography.titleSmallEmphasized,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 4.dp)
-            )
-            // No refresh hint here: the live grid below already shows what the options do.
-            AdvancedOptionsContent(iconPacks, showHint = false)
-        }
-    }
-}
 
-/**
- * The staged global modifier controls: shape, icon scale, outline and colorize. Plain card —
- * the pinned panel wrapping it (see GlobalOptionsScreen) owns collapsing and the height cap.
- */
-@Composable
-private fun GlobalModifierControls(state: GlobalModifierState) {
-    var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
-    var shapeColorPickerOpen by remember { mutableStateOf(false) }
-    var outlineSheetOpen by remember { mutableStateOf(false) }
 
-    Surface(shape = CardShape, color = MaterialTheme.colorScheme.surfaceContainer) {
-        Column(
-            Modifier.padding(horizontal = 12.dp, vertical = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = stringResource(R.string.globalModifiersTitle),
-                style = MaterialTheme.typography.titleSmallEmphasized,
-                color = MaterialTheme.colorScheme.onSurface
-            )
 
-            // Shape — same swatches and controls as the per-app Modifier tab.
-            Text(
-                text = stringResource(R.string.iconShapeTitle),
-                style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                IconShape.entries.forEach { shape ->
-                    ShapeSwatch(
-                        shape = shape,
-                        selected = state.shape == shape,
-                        onClick = { state.shape = shape }
-                    )
-                }
-            }
-            AnimatedVisibility(visible = state.shape != IconShape.NONE) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(
-                            selected = state.shapeCrop,
-                            onClick = { state.shapeCrop = true },
-                            label = { Text(stringResource(R.string.shapeCrop)) }
-                        )
-                        FilterChip(
-                            selected = !state.shapeCrop,
-                            onClick = { state.shapeCrop = false },
-                            label = { Text(stringResource(R.string.shapePlate)) }
-                        )
-                    }
-                    LabeledSlider(
-                        label = stringResource(R.string.shapeIconScale),
-                        value = state.shapeScale,
-                        onValueChange = { state.shapeScale = it },
-                        valueRange = 0.5f..1.5f,
-                        centered = true,
-                        ruler = percentRuler()
-                    )
-                    if (!state.shapeCrop) {
-                        val shapeStyle = state.shapeStyle
-                        ColorStyleCard(
-                            label = stringResource(R.string.shapeColor),
-                            style = shapeStyle,
-                            onClick = { shapeColorPickerOpen = true }
-                        )
-                        if (shapeColorPickerOpen) {
-                            ColorStyleSheet(
-                                title = stringResource(R.string.shapeColor),
-                                initialStyle = shapeStyle,
-                                sampleBitmap = null,
-                                // The plate is a fill, not artwork: there is nothing for solid /
-                                // monochrome / inverse to act on.
-                                showSingleColorEffects = false,
-                                onDismiss = { shapeColorPickerOpen = false },
-                                onApply = { style ->
-                                    state.shapeStyle = style
-                                    shapeColorPickerOpen = false
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-
-            LabeledSlider(
-                label = stringResource(R.string.iconScale),
-                value = state.iconScale,
-                onValueChange = { state.iconScale = it },
-                valueRange = 0.5f..1.5f,
-                centered = true,
-                ruler = percentRuler()
-            )
-
-            ControlledSwitchRow(
-                label = stringResource(R.string.outlineGlobal),
-                checked = state.outlineAdd,
-                horizontalPadding = 4.dp
-            ) { state.outlineAdd = it }
-            AnimatedVisibility(visible = state.outlineAdd) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LabeledSlider(
-                        label = stringResource(R.string.outlineThickness),
-                        value = state.outlineWidth,
-                        onValueChange = { state.outlineWidth = it },
-                        valueRange = 1f..16f,
-                        ruler = pixelRuler()
-                    )
-                    val outlineStyle = state.outlineStyle
-                    ColorStyleCard(
-                        label = stringResource(R.string.outlineColor),
-                        style = outlineStyle,
-                        onClick = { outlineSheetOpen = true }
-                    )
-                    if (outlineSheetOpen) {
-                        ColorStyleSheet(
-                            title = stringResource(R.string.outlineColor),
-                            initialStyle = outlineStyle,
-                            sampleBitmap = null,
-                            showSingleColorEffects = false,
-                            onDismiss = { outlineSheetOpen = false },
-                            onApply = { style ->
-                                state.outlineStyle = style
-                                outlineSheetOpen = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            ControlledSwitchRow(
-                label = stringResource(R.string.globalColorize),
-                checked = state.colorize,
-                horizontalPadding = 4.dp
-            ) { state.colorize = it }
-            AnimatedVisibility(visible = state.colorize) {
-                val colorizerStyle = state.colorizerStyle
-                ColorStyleCard(
-                    label = stringResource(R.string.colorize),
-                    style = colorizerStyle,
-                    onClick = { colorizeSheetOpen = true }
-                )
-                if (colorizeSheetOpen) {
-                    ColorStyleSheet(
-                        title = stringResource(R.string.colorize),
-                        initialStyle = colorizerStyle,
-                        sampleBitmap = null,
-                        onDismiss = { colorizeSheetOpen = false },
-                        onApply = { style ->
-                            state.colorizerStyle = style
-                            colorizeSheetOpen = false
-                        }
-                    )
-                }
-            }
-        }
-    }
-
-}
-
-/** A switch row bound directly to caller state (unlike DefaultSwitchLayout's remembered copy). */
-@Composable
-private fun ControlledSwitchRow(
-    label: String,
-    checked: Boolean,
-    horizontalPadding: androidx.compose.ui.unit.Dp = 16.dp,
-    hint: String? = null,
-    onChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = horizontalPadding, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            if (hint != null) {
-                Text(
-                    text = hint,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-        Switch(checked = checked, onCheckedChange = onChange)
-    }
-}
-
-/**
- * The pinned category picker: M3 toggle buttons (round → square when checked) for which icon
- * groups the global modifiers apply to. Generated is on by default; the grid marks each
- * section green/red to match.
- */
-@Composable
-private fun CategoryToggleRow(state: GlobalModifierState) {
-    Column(Modifier.padding(horizontal = 12.dp, vertical = 6.dp)) {
-        Text(
-            text = stringResource(R.string.globalApplyToLabel),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp, bottom = 6.dp)
-        )
-        // Scrollable so the labels are never clipped on narrow screens — each button sizes
-        // to its own text.
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ToggleButton(
-                checked = state.applyGenerated,
-                onCheckedChange = { state.applyGenerated = it }
-            ) {
-                Text(stringResource(R.string.globalToggleGenerated), maxLines = 1)
-            }
-            ToggleButton(
-                checked = state.applyExisting,
-                onCheckedChange = { state.applyExisting = it }
-            ) {
-                Text(stringResource(R.string.globalToggleExisting), maxLines = 1)
-            }
-            ToggleButton(
-                checked = state.applyCustom,
-                onCheckedChange = { state.applyCustom = it }
-            ) {
-                Text(stringResource(R.string.globalToggleCustom), maxLines = 1)
-            }
-            ToggleButton(
-                checked = state.includeEmpty,
-                onCheckedChange = { state.includeEmpty = it }
-            ) {
-                Text(stringResource(R.string.globalToggleEmpty), maxLines = 1)
-            }
-        }
-    }
-}
-
-/**
- * The always-visible handle UNDER the options panel: a proper tonal icon button (a bare
- * chevron was easy to miss) that collapses or re-opens the panel. Up = collapse, down =
- * expand.
- */
-@Composable
-private fun PanelHandle(panelVisible: Boolean, onToggle: () -> Unit) {
-    val chevronRotation by animateFloatAsState(
-        targetValue = if (panelVisible) 180f else 0f,
-        label = "panelChevron"
-    )
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 2.dp),
-        horizontalArrangement = Arrangement.Center
-    ) {
-        androidx.compose.material3.FilledTonalIconButton(
-            onClick = onToggle,
-            modifier = Modifier.size(34.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.KeyboardArrowDown,
-                contentDescription = stringResource(R.string.globalModifiersTitle),
-                modifier = Modifier
-                    .size(22.dp)
-                    .rotate(chevronRotation)
-            )
-        }
-    }
-}
-
-/**
- * The pinned "you are here" bar: names the section the top visible tiles belong to while the
- * grid scrolls, with the same green/red applies-marker as the section headers.
- */
+/** Names the section at the top of the preview and whether it belongs to the current targets. */
 @Composable
 private fun CurrentSectionBar(
     section: Char,
@@ -1209,17 +1027,16 @@ private fun CurrentSectionBar(
         's' -> stringResource(R.string.globalExistingSection, existingCount) to state.applyExisting
         else -> stringResource(R.string.globalEmptySection, iconlessCount) to state.includeEmpty
     }
-    val marker = if (applies) AddedGreen else MaterialTheme.colorScheme.error
+    val marker = if (applies) MaterialTheme.colorScheme.primary
+        else MaterialTheme.colorScheme.onSurfaceVariant
     Surface(color = MaterialTheme.colorScheme.surfaceContainer, modifier = Modifier.fillMaxWidth()) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
-                Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(marker)
+            TargetStatusDot(
+                included = applies,
+                excludedColor = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Text(
                 text = title,
@@ -1240,17 +1057,15 @@ private fun CurrentSectionBar(
     }
 }
 
-/**
- * A grid section title under its coloured rule: green when the global modifiers apply to the
- * section, red when it is left untouched.
- */
+/** A grid section title with a primary included state and a neutral excluded state. */
 @Composable
 private fun SectionHeader(
     title: String,
     applies: Boolean,
     hint: androidx.compose.ui.text.AnnotatedString? = null
 ) {
-    val marker = if (applies) AddedGreen else MaterialTheme.colorScheme.error
+    val marker = if (applies) MaterialTheme.colorScheme.primary
+        else Color.White.copy(alpha = 0.7f)
     // Sits directly on the wallpaper — white text with a shadow, like the tile labels.
     val onWallpaperShadow = androidx.compose.ui.graphics.Shadow(
         color = Color.Black.copy(alpha = 0.85f), blurRadius = 6f
@@ -1263,12 +1078,18 @@ private fun SectionHeader(
                 .padding(top = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            TargetStatusDot(
+                included = applies,
+                excludedColor = Color.White.copy(alpha = 0.8f)
+            )
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleSmall.copy(shadow = onWallpaperShadow),
                 fontWeight = FontWeight.SemiBold,
                 color = Color.White,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier
+                    .padding(start = 8.dp)
+                    .weight(1f)
             )
             Text(
                 text = stringResource(
@@ -1289,6 +1110,17 @@ private fun SectionHeader(
     }
 }
 
+/** A filled dot means included; a hollow dot means excluded. */
+@Composable
+private fun TargetStatusDot(included: Boolean, excludedColor: Color) {
+    val indicator = if (included) {
+        Modifier.background(MaterialTheme.colorScheme.primary, CircleShape)
+    } else {
+        Modifier.border(1.5.dp, excludedColor, CircleShape)
+    }
+    Box(Modifier.size(10.dp).then(indicator))
+}
+
 /**
  * One preview tile for an app that already has an icon: shows the icon with [options]
  * applied (or as-is when null), the app name, and an edit badge for custom icons.
@@ -1304,17 +1136,20 @@ private fun IconPreviewTile(
     onClick: () -> Unit
 ) {
     val base = app.baseIcon ?: app.createdIcon
-    // Cache at the largest tile size. The animated 40→56 dp resize must not create a new
-    // raster and cache entry for every animation frame.
-    val targetPx = with(LocalDensity.current) { 56.dp.roundToPx() }
+    // Cache at the actual preview size so a recompose never creates a second raster variant.
+    val targetPx = with(LocalDensity.current) { iconSize.roundToPx() }
+    val baseBitmap = rememberIconBitmap(app, base, iconSize)
     val cached = remember(app.key, app.internalVersion, options, targetPx) {
         options?.let { viewModel.cachedModifiedPreview(app, it, targetPx) }
     }
     // ViewModel-scoped work survives LazyGrid disposing the tile; returning to it reuses the
     // memory-bounded raster cache instead of applying the same modifier again.
     val preview by produceState(cached, app.key, app.internalVersion, options, targetPx) {
-        if (value == null && base != null && options != null) {
-            delay(120)
+        // produceState retains its value when a key changes. Decide from the new cache result,
+        // not that retained value, while keeping the previous preview visible during the update.
+        if (cached != null || options == null) value = cached
+        if (cached == null && base != null && options != null) {
+            delay(GLOBAL_PREVIEW_DEBOUNCE_MS)
             value = viewModel.modifiedPreview(app, options, targetPx)
         }
     }
@@ -1327,9 +1162,9 @@ private fun IconPreviewTile(
                     .fillMaxSize()
                     .clip(IconTileShape)
             )
-        } else if (base != null) {
+        } else if (baseBitmap != null) {
             Image(
-                painter = base.getPainter(),
+                painter = BitmapPainter(baseBitmap),
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxSize()
@@ -1360,16 +1195,30 @@ private fun GeneratedPreviewTile(
             viewModel.cachedGeneratedPreview(app, it, modifierOptions, targetPx)
         }
     }
-    val preview by produceState(cached, app.key, app.internalVersion, sourceOptions, modifierOptions, targetPx) {
-        if (value == null && sourceOptions != null) {
-            delay(120)
-            value = viewModel.generatedPreview(app, sourceOptions, modifierOptions, targetPx)
+    val result by produceState(
+        GeneratedPreviewResult(cached, loading = cached == null && sourceOptions != null),
+        app.key, app.internalVersion, sourceOptions, modifierOptions, targetPx
+    ) {
+        value = when {
+            sourceOptions == null -> GeneratedPreviewResult(null, loading = false)
+            cached != null -> GeneratedPreviewResult(cached, loading = false)
+            else -> GeneratedPreviewResult(value.bitmap, loading = true)
+        }
+        if (cached == null && sourceOptions != null) {
+            delay(GLOBAL_PREVIEW_DEBOUNCE_MS)
+            value = GeneratedPreviewResult(
+                bitmap = viewModel.generatedPreview(
+                    app, sourceOptions, modifierOptions, targetPx
+                ),
+                loading = false
+            )
         }
     }
     PreviewTileFrame(app, showEditBadge = false, iconSize = iconSize, modifier = modifier, onClick = onClick) {
-        if (preview != null) {
+        val bitmap = result.bitmap
+        if (bitmap != null) {
             Image(
-                painter = BitmapPainter(preview!!.asImageBitmap()),
+                painter = BitmapPainter(bitmap.asImageBitmap()),
                 contentDescription = null,
                 modifier = Modifier
                     .fillMaxSize()
@@ -1384,14 +1233,15 @@ private fun GeneratedPreviewTile(
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(IconTileShape)
-                        // Dim only while an actual preview is on its way; with the category
-                        // toggled off the launcher icon IS the content.
-                        .alpha(if (sourceOptions == null) 1f else 0.35f)
+                        // A failed source chain is a final fallback, not a perpetual loading state.
+                        .alpha(if (result.loading) 0.35f else 1f)
                 )
             }
         }
     }
 }
+
+private data class GeneratedPreviewResult(val bitmap: Bitmap?, val loading: Boolean)
 
 /** The shared tile chrome: icon slot on top, single-line app name below, optional edit badge. */
 @Composable

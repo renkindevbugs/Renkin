@@ -26,11 +26,13 @@ import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getDefaultIconColor
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.getStringValue
-import dev.renkinProject.renkin.data.persistGlobalModifierPrefs
+import dev.renkinProject.renkin.data.persistGlobalStylePrefs
 import dev.renkinProject.renkin.data.restoreBuiltPrimarySource
 import dev.renkinProject.renkin.data.online.onlineAttributionLabel
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
+import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews
 import dev.renkinProject.renkin.icon.creator.globalModifierOptions
@@ -439,7 +441,7 @@ class ApplicationProvider internal constructor(
             suspend fun rollbackPreferences(error: Throwable) {
                 if (!preferencesPersisted) return
                 withContext(NonCancellable) {
-                    runCatching { store.persistGlobalModifierPrefs(previousPreferences) }
+                    runCatching { store.persistGlobalStylePrefs(previousPreferences) }
                         .onFailure(error::addSuppressed)
                 }
             }
@@ -447,7 +449,7 @@ class ApplicationProvider internal constructor(
             try {
                 // Preferences and icons belong to the same profile operation. Keeping both under
                 // this lock prevents a switch from pairing one profile's recipe with another's icons.
-                store.persistGlobalModifierPrefs(preferences)
+                store.persistGlobalStylePrefs(preferences)
                 preferencesPersisted = true
                 val targets = original.filter { app ->
                     app.key !in lockManager.lockedKeys && shouldProcessGlobalLayer(
@@ -503,13 +505,54 @@ class ApplicationProvider internal constructor(
         modifierOptions: GenerationOptions
     ): PackageInfoStruct? {
         val sourceOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
+        val generated = generateEmptyIcon(application, sourceOptions, modifierOptions) ?: return null
+        return application.changeExport(
+            generated.rendered,
+            sourcePackName = generated.origin,
+            isRefreshMade = true,
+            isCustom = false,
+            isLegacy = false,
+            baseIcon = generated.base
+        )
+    }
+
+    /** Uses the exact two-source/fallback path that Apply uses for an app without a saved icon. */
+    suspend fun previewEmptyIcon(
+        application: PackageInfoStruct,
+        sourceOptions: GenerationOptions,
+        modifierOptions: GenerationOptions?
+    ): IconPackDrawable? = generateEmptyIcon(
+        application, sourceOptions, modifierOptions
+    )?.rendered
+
+    private data class EmptyIconGeneration(
+        val base: IconPackDrawable?,
+        val rendered: IconPackDrawable,
+        val origin: String?
+    )
+
+    private suspend fun generateEmptyIcon(
+        application: PackageInfoStruct,
+        sourceOptions: GenerationOptions,
+        modifierOptions: GenerationOptions?
+    ): EmptyIconGeneration? {
         val lockedOrigins = lockManager.lockedOriginsFor(sourceOptions)
-        var result: PackageInfoStruct? = null
+        var result: EmptyIconGeneration? = null
         iconGenService.refreshIcon(application, sourceOptions, modifierOptions) { app, base, rendered, sourcePack ->
             val origin = lockManager.resolveOrigin(app.key, sourcePack)
             if (rendered == null || origin == null || origin !in lockedOrigins) {
-                result = app.changeExport(rendered, sourcePackName = origin, isRefreshMade = true, isCustom = false, isLegacy = false, baseIcon = base)
+                rendered?.let { result = EmptyIconGeneration(base, it, origin) }
             }
+        }
+        // "Without an icon" is an explicit request to create something. If neither configured
+        // source nor pack fallback can represent a newly installed app, use its complete launcher
+        // drawable as the immutable base and apply only the staged global layer. This also covers
+        // unusual adaptive icons whose artwork lives entirely in the background layer.
+        if (result == null) {
+            val bitmap = application.icon.toSafeBitmapOrNull() ?: return null
+            val base = BitmapIconDrawable(bitmap, exportAsAdaptiveIcon = false)
+            val rendered = modifierOptions?.let { iconGenService.applyModifier(base, it) } ?: base
+            result = EmptyIconGeneration(base, rendered, origin = null)
         }
         return result
     }

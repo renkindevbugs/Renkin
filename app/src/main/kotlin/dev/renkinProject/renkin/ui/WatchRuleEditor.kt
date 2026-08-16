@@ -175,9 +175,20 @@ internal fun WatchRuleEditor(
                 }
             }
         }
-        HorizontalDivider()
-        if (isSaving) {
-            WavyLoadingBar(Modifier.fillMaxWidth())
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(4.dp)
+        ) {
+            if (isSaving) {
+                WavyLoadingBar(
+                    Modifier
+                        .fillMaxWidth()
+                        .align(Alignment.Center)
+                )
+            } else {
+                HorizontalDivider(Modifier.align(Alignment.Center))
+            }
         }
 
         // Shared pieces of both layouts. The apps header (title + search + sort), one app
