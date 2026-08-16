@@ -106,11 +106,20 @@ import dev.renkinProject.renkin.data.OutlineAddKey
 import dev.renkinProject.renkin.data.OutlineWidthKey
 import dev.renkinProject.renkin.data.OutlineStyleKeys
 import dev.renkinProject.renkin.data.ColorStyleKeys
+import dev.renkinProject.renkin.data.FallbackSource
+import dev.renkinProject.renkin.data.FallbackSourceKey
+import dev.renkinProject.renkin.data.FALLBACK_SOURCE_DEFAULT
+import dev.renkinProject.renkin.data.PrimaryIconPackKey
+import dev.renkinProject.renkin.data.PrimarySourceKey
+import dev.renkinProject.renkin.data.SecondaryIconPackKey
+import dev.renkinProject.renkin.data.SecondarySourceKey
 import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getPreferencesValue
+import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeGlobalScalePercent
 import dev.renkinProject.renkin.data.normalizeOutlineWidth
 import dev.renkinProject.renkin.data.setColorStyle
@@ -145,10 +154,15 @@ internal fun globalApplyProgressFraction(progress: Pair<Int, Int>?): Float? = pr
     ?.let { (completed, total) -> completed / total.toFloat() }
 
 /**
- * The Global options screen's staged modifier values. Nothing here touches DataStore until
- * Save — the grid below previews these values live, and Back discards them (after a prompt).
+ * The Global options screen's staged sources and modifier values. Nothing here touches
+ * DataStore until Apply — the grid previews them live, and Back discards them (after a prompt).
  */
 internal data class GlobalModifierSnapshot(
+    val primarySource: Source,
+    val primaryIconPack: String,
+    val secondarySource: Source,
+    val secondaryIconPack: String,
+    val fallbackSource: FallbackSource,
     val shape: IconShape,
     val shapeCrop: Boolean,
     val shapeScalePercent: Int,
@@ -169,6 +183,11 @@ internal data class GlobalModifierSnapshot(
 internal class GlobalModifierState {
     var initialized by mutableStateOf(false)
         private set
+    var primarySource by mutableStateOf(SOURCE_DEFAULT)
+    var primaryIconPack by mutableStateOf("")
+    var secondarySource by mutableStateOf(SOURCE_DEFAULT)
+    var secondaryIconPack by mutableStateOf("")
+    var fallbackSource by mutableStateOf(FALLBACK_SOURCE_DEFAULT)
     var shape by mutableStateOf(IconShape.NONE)
     var shapeCrop by mutableStateOf(true)
     var shapeScale by mutableFloatStateOf(1f)
@@ -192,6 +211,17 @@ internal class GlobalModifierState {
         get() = shape != IconShape.NONE || iconScale != 1f || outlineAdd || colorize
 
     fun seedFrom(preferences: Preferences) {
+        primarySource = Source.entries.getOrElse(
+            preferences.getIntValue(PrimarySourceKey, SOURCE_DEFAULT.ordinal)
+        ) { SOURCE_DEFAULT }
+        primaryIconPack = preferences.getStringValue(PrimaryIconPackKey)
+        secondarySource = Source.entries.getOrElse(
+            preferences.getIntValue(SecondarySourceKey, SOURCE_DEFAULT.ordinal)
+        ) { SOURCE_DEFAULT }
+        secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey)
+        fallbackSource = FallbackSource.entries.getOrElse(
+            preferences.getIntValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT.ordinal)
+        ) { FALLBACK_SOURCE_DEFAULT }
         shape = IconShape.entries.getOrElse(
             preferences.getIntValue(GlobalShapeKey, IconShape.NONE.ordinal)
         ) { IconShape.NONE }
@@ -218,6 +248,11 @@ internal class GlobalModifierState {
     }
 
     fun snapshot() = GlobalModifierSnapshot(
+        primarySource = primarySource,
+        primaryIconPack = primaryIconPack,
+        secondarySource = secondarySource,
+        secondaryIconPack = secondaryIconPack,
+        fallbackSource = fallbackSource,
         shape = shape,
         shapeCrop = shapeCrop,
         shapeScalePercent = (shapeScale * 100).roundToInt(),
@@ -235,6 +270,11 @@ internal class GlobalModifierState {
     )
 
     fun restore(snapshot: GlobalModifierSnapshot) {
+        primarySource = snapshot.primarySource
+        primaryIconPack = snapshot.primaryIconPack
+        secondarySource = snapshot.secondarySource
+        secondaryIconPack = snapshot.secondaryIconPack
+        fallbackSource = snapshot.fallbackSource
         shape = snapshot.shape
         shapeCrop = snapshot.shapeCrop
         shapeScale = snapshot.shapeScalePercent / 100f
@@ -355,6 +395,11 @@ internal class GlobalModifierState {
 
     /** Writes staged values into [mutable] for the preview and ViewModel commit snapshot. */
     private fun writeInto(mutable: androidx.datastore.preferences.core.MutablePreferences) {
+        mutable[PrimarySourceKey] = primarySource.ordinal
+        mutable[PrimaryIconPackKey] = primaryIconPack
+        mutable[SecondarySourceKey] = secondarySource.ordinal
+        mutable[SecondaryIconPackKey] = secondaryIconPack
+        mutable[FallbackSourceKey] = fallbackSource.ordinal
         mutable[GlobalShapeKey] = shape.ordinal
         mutable[GlobalShapeCropKey] = shapeCrop
         mutable[GlobalShapeScaleKey] = (shapeScale * 100).roundToInt()
@@ -437,6 +482,11 @@ private fun MutablePreferences.writeColorStyle(keys: ColorStyleKeys, style: Colo
 }
 
 private fun GlobalModifierSnapshot.toSaveableList(): ArrayList<Any> = arrayListOf(
+    "primarySource", primarySource.ordinal,
+    "primaryIconPack", primaryIconPack,
+    "secondarySource", secondarySource.ordinal,
+    "secondaryIconPack", secondaryIconPack,
+    "fallbackSource", fallbackSource.ordinal,
     "shape", shape.ordinal,
     "shapeCrop", shapeCrop,
     "shapeScalePercent", shapeScalePercent,
@@ -468,6 +518,17 @@ private fun List<*>.toGlobalModifierSnapshot(): GlobalModifierSnapshot? {
     val colorizerStyle = (values["colorizerStyle"] as? String)?.let(::decodeColorizerStyle)
         ?: return null
     return GlobalModifierSnapshot(
+        primarySource = Source.entries.getOrElse(values["primarySource"] as? Int ?: 0) {
+            SOURCE_DEFAULT
+        },
+        primaryIconPack = values["primaryIconPack"] as? String ?: "",
+        secondarySource = Source.entries.getOrElse(values["secondarySource"] as? Int ?: 0) {
+            SOURCE_DEFAULT
+        },
+        secondaryIconPack = values["secondaryIconPack"] as? String ?: "",
+        fallbackSource = FallbackSource.entries.getOrElse(
+            values["fallbackSource"] as? Int ?: 0
+        ) { FALLBACK_SOURCE_DEFAULT },
         shape = IconShape.entries.getOrElse(values["shape"] as? Int ?: 0) { IconShape.NONE },
         shapeCrop = values["shapeCrop"] as? Boolean ?: true,
         shapeScalePercent = values["shapeScalePercent"] as? Int ?: 100,
@@ -519,12 +580,11 @@ internal fun categorizeGlobalIcons(
 /**
  * Fullscreen Global options, hosted by [dev.renkinProject.renkin.GlobalOptionsActivity] whose
  * windowShowWallpaper theme puts the REAL wallpaper behind the transparent icon grid: the
- * staged global modifiers, their target groups, and a before/after preview grid split into
- * generated / custom / existing / iconless apps. Generation defaults remain in the home
- * screen's Advanced options because they affect a later refresh rather than this staged apply.
- * Apply re-renders the global layer from immutable icon bases and persists the profile; tapping
- * a tile opens a per-app editor. [onClose] reports the per-icon edits and whether an apply
- * happened, so MainViewModel can update its session bookkeeping.
+ * staged generation sources and global modifiers, their target groups, and a before/after
+ * preview grid split into generated / custom / existing / iconless apps. Apply re-renders the
+ * global layer from immutable icon bases and persists the profile; tapping a tile opens a
+ * per-app editor. [onClose] reports the per-icon edits and whether an apply happened, so
+ * MainViewModel can update its session bookkeeping.
  */
 @Composable
 fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> Unit) {
@@ -557,6 +617,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     }
     var confirmDiscard by remember { mutableStateOf(false) }
     var showTargets by rememberSaveable { mutableStateOf(false) }
+    var showSources by rememberSaveable { mutableStateOf(false) }
     var showBefore by rememberSaveable { mutableStateOf(false) }
     var previewDebouncing by remember { mutableStateOf(false) }
     val close: () -> Unit = {
@@ -600,6 +661,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     val custom = categories.custom
     val existing = categories.existing
     val iconless = categories.iconless
+    val iconPacks = viewModel.iconPacks
 
     val targetCount by remember(state, categories) {
         derivedStateOf {
@@ -824,15 +886,17 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                                     .padding(12.dp),
                                 verticalArrangement = Arrangement.spacedBy(10.dp)
                             ) {
-                                TargetSummaryCard(
+                                GlobalStyleControlPanel(
                                     state = state,
                                     categories = categories,
                                     targetCount = targetCount,
                                     activeEffectCount = activeEffectCount,
-                                    onClick = { showTargets = true }
+                                    iconPacks = iconPacks,
+                                    resetEnabled = dirty,
+                                    onTargetsClick = { showTargets = true },
+                                    onSourcesClick = { showSources = true },
+                                    onReset = { baseline?.let(state::restore) }
                                 )
-                                GlobalStyleEffects(state)
-                                ResetGlobalStyleButton(dirty) { baseline?.let(state::restore) }
                             }
                             GlobalPreviewProgressIndicator(
                                 visible = previewRefreshing,
@@ -887,15 +951,17 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                                         .background(MaterialTheme.colorScheme.outlineVariant)
                                         .align(Alignment.CenterHorizontally)
                                 )
-                                TargetSummaryCard(
+                                GlobalStyleControlPanel(
                                     state = state,
                                     categories = categories,
                                     targetCount = targetCount,
                                     activeEffectCount = activeEffectCount,
-                                    onClick = { showTargets = true }
+                                    iconPacks = iconPacks,
+                                    resetEnabled = dirty,
+                                    onTargetsClick = { showTargets = true },
+                                    onSourcesClick = { showSources = true },
+                                    onReset = { baseline?.let(state::restore) }
                                 )
-                                GlobalStyleEffects(state)
-                                ResetGlobalStyleButton(dirty) { baseline?.let(state::restore) }
                             }
                             GlobalPreviewProgressIndicator(
                                 visible = previewRefreshing,
@@ -914,6 +980,14 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
             categories = categories,
             targetCount = targetCount,
             onDismiss = { showTargets = false }
+        )
+    }
+
+    if (showSources) {
+        GenerationSourcesSheet(
+            state = state,
+            iconPacks = iconPacks,
+            onDismiss = { showSources = false }
         )
     }
 

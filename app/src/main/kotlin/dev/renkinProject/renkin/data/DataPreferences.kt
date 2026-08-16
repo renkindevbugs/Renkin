@@ -222,43 +222,60 @@ val ProfilePrefKeys: List<Preferences.Key<*>> =
 /** Commits only the staged Global options keys from [source], under the shared write mutex. */
 suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preferences) {
     preferenceAccessMutex.withLock {
+        edit { target -> target.copyGlobalModifierPrefsFrom(source) }
+    }
+}
+
+/** Commits the staged sources and modifiers as one profile-scoped Global style transaction. */
+suspend fun DataStore<Preferences>.persistGlobalStylePrefs(source: Preferences) {
+    preferenceAccessMutex.withLock {
         edit { target ->
-            target[GlobalShapeKey] = source.getIntValue(GlobalShapeKey, 0)
-            target[GlobalShapeCropKey] = source.getBooleanValue(GlobalShapeCropKey, true)
-            target[GlobalShapeScaleKey] = source.getIntValue(GlobalShapeScaleKey, 100)
-            target[GlobalShapeColorKey] = source.getStringValue(GlobalShapeColorKey)
-            target[GlobalIconScaleKey] = source.getIntValue(GlobalIconScaleKey, 100)
-            target[OutlineAddKey] = source.getBooleanValue(OutlineAddKey)
-            target[OutlineWidthKey] = source.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
-            target[OutlineColorKey] = source.getStringValue(OutlineColorKey)
-            target[OutlineColorizerModeKey] = source.getIntValue(OutlineColorizerModeKey)
-            target[OutlineGradientTypeKey] = source.getIntValue(OutlineGradientTypeKey)
-            target[OutlineGradientAngleKey] = source.getIntValue(OutlineGradientAngleKey)
-            target[OutlineGradientColorsKey] = source.getStringValue(OutlineGradientColorsKey)
-            target[OutlineGradientPositionsKey] =
-                source.getStringValue(OutlineGradientPositionsKey)
-            target[GlobalColorizeKey] = source.getBooleanValue(GlobalColorizeKey)
-            target[GlobalColorizeColorKey] = source.getStringValue(GlobalColorizeColorKey)
-            target[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
-            target[GlobalColorizeMonochromeKey] = source.getBooleanValue(GlobalColorizeMonochromeKey)
-            target[GlobalColorizeInverseKey] = source.getBooleanValue(GlobalColorizeInverseKey)
-            target[GlobalColorizerModeKey] = source.getIntValue(GlobalColorizerModeKey)
-            target[GlobalColorizerGradientColorKey] =
-                source.getStringValue(GlobalColorizerGradientColorKey)
-            target[GlobalColorizerGradientColorsKey] =
-                source.getStringValue(GlobalColorizerGradientColorsKey)
-            target[GlobalColorizerGradientPositionsKey] =
-                source.getStringValue(GlobalColorizerGradientPositionsKey)
-            target[GlobalColorizerGradientAngleKey] =
-                source.getIntValue(GlobalColorizerGradientAngleKey)
-            target[GlobalColorizerGradientTypeKey] =
-                source.getIntValue(GlobalColorizerGradientTypeKey)
-            target[GlobalApplyGeneratedKey] = source.getBooleanValue(GlobalApplyGeneratedKey, true)
-            target[GlobalApplyExistingKey] = source.getBooleanValue(GlobalApplyExistingKey)
-            target[GlobalApplyCustomKey] = source.getBooleanValue(GlobalApplyCustomKey)
-            target[GlobalIncludeEmptyKey] = source.getBooleanValue(GlobalIncludeEmptyKey)
+            target[PrimarySourceKey] = source.getIntValue(
+                PrimarySourceKey, SOURCE_DEFAULT.ordinal
+            )
+            target[PrimaryIconPackKey] = source.getStringValue(PrimaryIconPackKey)
+            target[SecondarySourceKey] = source.getIntValue(
+                SecondarySourceKey, SOURCE_DEFAULT.ordinal
+            )
+            target[SecondaryIconPackKey] = source.getStringValue(SecondaryIconPackKey)
+            target[FallbackSourceKey] = source.getIntValue(
+                FallbackSourceKey, FALLBACK_SOURCE_DEFAULT.ordinal
+            )
+            target.copyGlobalModifierPrefsFrom(source)
         }
     }
+}
+
+private fun MutablePreferences.copyGlobalModifierPrefsFrom(source: Preferences) {
+    this[GlobalShapeKey] = source.getIntValue(GlobalShapeKey, 0)
+    this[GlobalShapeCropKey] = source.getBooleanValue(GlobalShapeCropKey, true)
+    this[GlobalShapeScaleKey] = source.getIntValue(GlobalShapeScaleKey, 100)
+    this[GlobalShapeColorKey] = source.getStringValue(GlobalShapeColorKey)
+    this[GlobalIconScaleKey] = source.getIntValue(GlobalIconScaleKey, 100)
+    this[OutlineAddKey] = source.getBooleanValue(OutlineAddKey)
+    this[OutlineWidthKey] = source.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
+    this[OutlineColorKey] = source.getStringValue(OutlineColorKey)
+    this[OutlineColorizerModeKey] = source.getIntValue(OutlineColorizerModeKey)
+    this[OutlineGradientTypeKey] = source.getIntValue(OutlineGradientTypeKey)
+    this[OutlineGradientAngleKey] = source.getIntValue(OutlineGradientAngleKey)
+    this[OutlineGradientColorsKey] = source.getStringValue(OutlineGradientColorsKey)
+    this[OutlineGradientPositionsKey] = source.getStringValue(OutlineGradientPositionsKey)
+    this[GlobalColorizeKey] = source.getBooleanValue(GlobalColorizeKey)
+    this[GlobalColorizeColorKey] = source.getStringValue(GlobalColorizeColorKey)
+    this[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
+    this[GlobalColorizeMonochromeKey] = source.getBooleanValue(GlobalColorizeMonochromeKey)
+    this[GlobalColorizeInverseKey] = source.getBooleanValue(GlobalColorizeInverseKey)
+    this[GlobalColorizerModeKey] = source.getIntValue(GlobalColorizerModeKey)
+    this[GlobalColorizerGradientColorKey] = source.getStringValue(GlobalColorizerGradientColorKey)
+    this[GlobalColorizerGradientColorsKey] = source.getStringValue(GlobalColorizerGradientColorsKey)
+    this[GlobalColorizerGradientPositionsKey] =
+        source.getStringValue(GlobalColorizerGradientPositionsKey)
+    this[GlobalColorizerGradientAngleKey] = source.getIntValue(GlobalColorizerGradientAngleKey)
+    this[GlobalColorizerGradientTypeKey] = source.getIntValue(GlobalColorizerGradientTypeKey)
+    this[GlobalApplyGeneratedKey] = source.getBooleanValue(GlobalApplyGeneratedKey, true)
+    this[GlobalApplyExistingKey] = source.getBooleanValue(GlobalApplyExistingKey)
+    this[GlobalApplyCustomKey] = source.getBooleanValue(GlobalApplyCustomKey)
+    this[GlobalIncludeEmptyKey] = source.getBooleanValue(GlobalIncludeEmptyKey)
 }
 
 /** Records the hero source that a successful build actually used as one atomic profile write. */

@@ -283,8 +283,8 @@ private fun RefreshHintCard() {
 }
 
 /**
- * The primary source/pack itself is picked in the hero card on the home screen; only its tweaks
- * (image modifier, text type, the secondary source and the fallback) live here.
+ * The primary source/pack is picked from the hero card or staged in Global style. Its detailed
+ * generation tweaks (image modifier, text type, secondary source and fallback) also live here.
  */
 @Composable
 private fun AdvancedSourceSection(
@@ -526,7 +526,7 @@ private fun OptionsSectionLabel(@androidx.annotation.StringRes id: Int) {
  * Secondary). Primary/Secondary are disabled unless that source is a configured icon pack.
  */
 @Composable
-private fun FallbackSourceSelector(
+internal fun FallbackSourceSelector(
     selected: FallbackSource,
     primaryEnabled: Boolean,
     secondaryEnabled: Boolean,

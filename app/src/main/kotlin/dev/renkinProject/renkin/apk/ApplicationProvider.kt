@@ -26,7 +26,7 @@ import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getDefaultIconColor
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.getStringValue
-import dev.renkinProject.renkin.data.persistGlobalModifierPrefs
+import dev.renkinProject.renkin.data.persistGlobalStylePrefs
 import dev.renkinProject.renkin.data.restoreBuiltPrimarySource
 import dev.renkinProject.renkin.data.online.onlineAttributionLabel
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -441,7 +441,7 @@ class ApplicationProvider internal constructor(
             suspend fun rollbackPreferences(error: Throwable) {
                 if (!preferencesPersisted) return
                 withContext(NonCancellable) {
-                    runCatching { store.persistGlobalModifierPrefs(previousPreferences) }
+                    runCatching { store.persistGlobalStylePrefs(previousPreferences) }
                         .onFailure(error::addSuppressed)
                 }
             }
@@ -449,7 +449,7 @@ class ApplicationProvider internal constructor(
             try {
                 // Preferences and icons belong to the same profile operation. Keeping both under
                 // this lock prevents a switch from pairing one profile's recipe with another's icons.
-                store.persistGlobalModifierPrefs(preferences)
+                store.persistGlobalStylePrefs(preferences)
                 preferencesPersisted = true
                 val targets = original.filter { app ->
                     app.key !in lockManager.lockedKeys && shouldProcessGlobalLayer(

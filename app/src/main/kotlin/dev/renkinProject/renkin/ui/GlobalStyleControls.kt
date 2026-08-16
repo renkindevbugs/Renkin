@@ -46,6 +46,10 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.data.FallbackSource
+import dev.renkinProject.renkin.data.IconPack
+import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.getSourceLabels
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.ui.theme.CardShape
@@ -173,6 +177,205 @@ internal fun TargetSummaryCard(
                 tint = MaterialTheme.colorScheme.onSecondaryContainer
             )
         }
+    }
+}
+
+@Composable
+internal fun GenerationSourcesCard(
+    state: GlobalModifierState,
+    iconPacks: List<IconPack>,
+    onClick: () -> Unit
+) {
+    val primary = sourceDisplayName(state.primarySource, state.primaryIconPack, iconPacks)
+    val secondary = sourceDisplayName(
+        state.secondarySource, state.secondaryIconPack, iconPacks
+    )
+    val summary = if (needSecondarySource(state.primarySource)) {
+        "$primary  →  $secondary"
+    } else primary
+
+    Surface(
+        onClick = onClick,
+        shape = CardShape,
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.globalSourcesTitle),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    text = summary,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = stringResource(
+                        if (state.includeEmpty) R.string.globalSourcesUsed
+                        else R.string.globalSourcesUnused
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = stringResource(R.string.globalSourcesTitle),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/** Shared contents of the wide side panel and the compact bottom dock. */
+@Composable
+internal fun GlobalStyleControlPanel(
+    state: GlobalModifierState,
+    categories: GlobalIconCategories,
+    targetCount: Int,
+    activeEffectCount: Int,
+    iconPacks: List<IconPack>,
+    resetEnabled: Boolean,
+    onTargetsClick: () -> Unit,
+    onSourcesClick: () -> Unit,
+    onReset: () -> Unit
+) {
+    TargetSummaryCard(
+        state = state,
+        categories = categories,
+        targetCount = targetCount,
+        activeEffectCount = activeEffectCount,
+        onClick = onTargetsClick
+    )
+    GenerationSourcesCard(state, iconPacks, onSourcesClick)
+    GlobalStyleEffects(state)
+    ResetGlobalStyleButton(resetEnabled, onReset)
+}
+
+@Composable
+private fun sourceDisplayName(
+    source: Source,
+    packageName: String,
+    iconPacks: List<IconPack>
+): String {
+    if (source != Source.ICON_PACK) return getSourceLabels()[source].orEmpty()
+    val none = stringResource(R.string.none)
+    return iconPacks.firstOrNull { it.packageName == packageName }?.applicationName
+        ?: packageName.ifBlank { none }
+}
+
+@Composable
+internal fun GenerationSourcesSheet(
+    state: GlobalModifierState,
+    iconPacks: List<IconPack>,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(onDismissRequest = onDismiss) {
+        Column(
+            Modifier
+                .navigationBarsPadding()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 12.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.globalSourcesTitle),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 8.dp)
+            )
+            Text(
+                text = stringResource(R.string.globalSourcesDescription),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 8.dp)
+            )
+            SourceDropdown(R.string.primarySource, state.primarySource) { source ->
+                state.primarySource = source
+                state.normalizeFallbackSource()
+            }
+            if (state.primarySource == Source.ICON_PACK) {
+                GlobalIconPackDropdown(
+                    labelId = R.string.primaryIconPack,
+                    iconPacks = iconPacks,
+                    selectedPackage = state.primaryIconPack
+                ) { packageName ->
+                    state.primaryIconPack = packageName
+                    state.normalizeFallbackSource()
+                }
+
+                SourceDropdown(R.string.secondarySource, state.secondarySource) { source ->
+                    state.secondarySource = source
+                    state.normalizeFallbackSource()
+                }
+                if (state.secondarySource == Source.ICON_PACK) {
+                    GlobalIconPackDropdown(
+                        labelId = R.string.secondaryIconPack,
+                        iconPacks = iconPacks,
+                        selectedPackage = state.secondaryIconPack
+                    ) { packageName ->
+                        state.secondaryIconPack = packageName
+                        state.normalizeFallbackSource()
+                    }
+                }
+            }
+
+            val primaryPackEnabled = state.primarySource == Source.ICON_PACK &&
+                state.primaryIconPack.isNotBlank()
+            val secondaryPackEnabled = needSecondarySource(state.primarySource) &&
+                state.secondarySource == Source.ICON_PACK &&
+                state.secondaryIconPack.isNotBlank()
+            if (primaryPackEnabled || secondaryPackEnabled) {
+                FallbackSourceSelector(
+                    selected = state.fallbackSource,
+                    primaryEnabled = primaryPackEnabled,
+                    secondaryEnabled = secondaryPackEnabled
+                ) { state.fallbackSource = it }
+            }
+
+            Button(
+                onClick = onDismiss,
+                shape = FieldShape,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 10.dp)
+            ) {
+                Text(stringResource(R.string.done))
+            }
+        }
+    }
+}
+
+@Composable
+private fun GlobalIconPackDropdown(
+    @androidx.annotation.StringRes labelId: Int,
+    iconPacks: List<IconPack>,
+    selectedPackage: String,
+    onChange: (String) -> Unit
+) {
+    val none = stringResource(R.string.none)
+    val labels = remember(iconPacks, selectedPackage, none) {
+        linkedMapOf("" to none).apply {
+            iconPacks.forEach { put(it.packageName, it.applicationName) }
+            if (selectedPackage.isNotBlank() && selectedPackage !in this) {
+                put(selectedPackage, selectedPackage)
+            }
+        }
+    }
+    EnumDropdown(labelId, selectedPackage, labels, onChange = onChange)
+}
+
+private fun GlobalModifierState.normalizeFallbackSource() {
+    val primaryAvailable = primarySource == Source.ICON_PACK && primaryIconPack.isNotBlank()
+    val secondaryAvailable = needSecondarySource(primarySource) &&
+        secondarySource == Source.ICON_PACK && secondaryIconPack.isNotBlank()
+    fallbackSource = when (fallbackSource) {
+        FallbackSource.PRIMARY -> if (primaryAvailable) fallbackSource else FallbackSource.NONE
+        FallbackSource.SECONDARY -> if (secondaryAvailable) fallbackSource else FallbackSource.NONE
+        FallbackSource.NONE -> FallbackSource.NONE
     }
 }
 

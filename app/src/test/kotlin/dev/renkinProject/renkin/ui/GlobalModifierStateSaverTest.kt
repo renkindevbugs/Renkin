@@ -4,6 +4,9 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.SaverScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import dev.renkinProject.renkin.data.FallbackSource
+import dev.renkinProject.renkin.data.SOURCE_DEFAULT
+import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.GradientType
@@ -81,6 +84,11 @@ class GlobalModifierStateSaverTest {
 
         assertNotNull(restored)
         restored!!
+        assertEquals(SOURCE_DEFAULT, restored.primarySource)
+        assertEquals("", restored.primaryIconPack)
+        assertEquals(SOURCE_DEFAULT, restored.secondarySource)
+        assertEquals("", restored.secondaryIconPack)
+        assertEquals(FallbackSource.NONE, restored.fallbackSource)
         assertEquals(IconShape.COOKIE, restored.shape)
         assertEquals(125, restored.snapshot().shapeScalePercent)
         assertEquals(80, restored.snapshot().iconScalePercent)
@@ -102,6 +110,11 @@ class GlobalModifierStateSaverTest {
     }
 
     private fun populatedState() = GlobalModifierState().apply {
+        primarySource = Source.ICON_PACK
+        primaryIconPack = "primary.pack"
+        secondarySource = Source.ICON_PACK
+        secondaryIconPack = "secondary.pack"
+        fallbackSource = FallbackSource.SECONDARY
         shape = IconShape.COOKIE
         shapeCrop = false
         shapeScale = 1.25f

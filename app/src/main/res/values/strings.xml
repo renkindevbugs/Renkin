@@ -131,13 +131,15 @@
     <string name="iconPackUninstalled">Renkin Pack uninstalled</string>
     <string name="refreshApplicationList">Refresh application list</string>
     <string name="applicationIcon">Application Icon</string>
+    <string name="primarySource">Primary source</string>
+    <string name="primaryIconPack">Primary icon pack</string>
     <string name="secondarySource">Secondary source</string>
     <string name="fullName">Full Name</string>
     <string name="primaryImageEdit">Primary Image Modifier</string>
     <string name="primaryTextType">Primary Text Type</string>
     <string name="secondaryImageEdit">Secondary Image Modifier</string>
     <string name="secondaryTextType">Secondary Text Type</string>
-    <string name="secondaryIconPack">Secondary Icon Pack</string>
+    <string name="secondaryIconPack">Secondary icon pack</string>
     <string name="imageEdit">Image Modifier</string>
     <string name="textType">Text Type</string>
     <string name="colorize">Colorize</string>
@@ -535,6 +537,10 @@
     <string name="globalAfter">After</string>
     <string name="globalLivePreview">Live preview</string>
     <string name="globalTargetsTitle">Apply modifiers to</string>
+    <string name="globalSourcesTitle">Generation sources</string>
+    <string name="globalSourcesUsed">Used for missing icons</string>
+    <string name="globalSourcesUnused">Not used in this apply</string>
+    <string name="globalSourcesDescription">Sources create missing icons here and become the defaults for future refreshes. Existing and custom icons keep their current base.</string>
     <plurals name="globalTargetCount">
         <item quantity="one">%1$d icon</item>
         <item quantity="other">%1$d icons</item>
