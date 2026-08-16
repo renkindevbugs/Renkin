@@ -151,6 +151,30 @@ class ApplicationProvider internal constructor(
         packRepo.deleteColorPreset(id)
     }
 
+    /** Saved Modifier-tab recipes, shared by every profile like the colour library. */
+    fun modifierPresets(): kotlinx.coroutines.flow.Flow<List<dev.renkinProject.renkin.data.ModifierPreset>> =
+        packRepo.modifierPresetsFlow()
+
+    suspend fun saveModifierPreset(name: String, payload: String, schemaVersion: Int) {
+        packRepo.saveModifierPreset(name, payload, schemaVersion)
+    }
+
+    suspend fun renameModifierPreset(id: Long, name: String) {
+        packRepo.renameModifierPreset(id, name)
+    }
+
+    suspend fun updateModifierPreset(id: Long, payload: String, schemaVersion: Int) {
+        packRepo.updateModifierPreset(id, payload, schemaVersion)
+    }
+
+    suspend fun markModifierPresetUsed(id: Long) {
+        packRepo.markModifierPresetUsed(id)
+    }
+
+    suspend fun deleteModifierPreset(id: Long) {
+        packRepo.deleteModifierPreset(id)
+    }
+
     suspend fun initialize() {
         // Startup phase timings land in logcat (tag "Startup") so a slow cold start can be
         // attributed to a phase instead of guessed at. Debug-level: silent in release logs.

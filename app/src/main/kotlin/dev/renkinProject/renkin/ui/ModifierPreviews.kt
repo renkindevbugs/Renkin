@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
+import android.util.LruCache
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -15,6 +16,10 @@ import dev.renkinProject.renkin.icon.creator.BackgroundBrushOperation
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
+import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
+import dev.renkinProject.renkin.icon.creator.withModifierPreset
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Everything the Modifier tab needs to preview a colour before it is applied, plus the artwork
@@ -30,6 +35,12 @@ internal data class ModifierPreviews(
     val backgroundBrush: suspend () -> Bitmap?,
     val colorize: suspend (ColorizerStyle) -> Bitmap?,
     val outline: suspend (ColorizerStyle) -> Bitmap?,
+    /** Current icon rendered with a reusable preset substituted into its source-specific options. */
+    val preset: suspend (ModifierPresetPayload) -> Bitmap?,
+    /** Invalidates row previews when the current icon/options change. */
+    val presetKey: Any?,
+    /** Resets editor-session selection when the host starts editing another source icon. */
+    val presetSourceKey: Any?,
     val layers: suspend (index: Int, draft: ColorizerStyle) -> Bitmap?,
     /** A pack's own Material You icon under a draft colour — its layers take the first stop. */
     val materialYouPackForeground: suspend (ColorizerStyle) -> Bitmap?,
@@ -51,6 +62,13 @@ internal fun rememberModifierPreviews(
 ): ModifierPreviews {
     val currentRender by rememberUpdatedState(render)
     val currentOptions by rememberUpdatedState(options)
+    val presetRenderMutex = remember { Mutex() }
+    val presetPreviewCache = remember(options, sourceKey) {
+        object : LruCache<ModifierPresetPayload, Bitmap>(8 * 1024 * 1024) {
+            override fun sizeOf(key: ModifierPresetPayload, value: Bitmap): Int =
+                value.allocationByteCount
+        }
+    }
     var colorizeBase by remember { mutableStateOf<Bitmap?>(null) }
 
     // Colourize runs before every modifier below. Sanitising the key also prevents background
@@ -69,7 +87,7 @@ internal fun rememberModifierPreviews(
         colorizeBase = currentRender(colorizeBaseOptions)
     }
 
-    return remember(colorizeBase) {
+    return remember(colorizeBase, options, sourceKey) {
         ModifierPreviews(
             colorizeBase = colorizeBase,
             positionBase = {
@@ -106,6 +124,18 @@ internal fun rememberModifierPreviews(
                     )
                 )
             },
+            // A visible library can request several heavyweight renders at once. Serialising them
+            // keeps slider interaction and the main preview responsive while thumbnails fill in.
+            preset = { payload ->
+                presetRenderMutex.withLock {
+                    presetPreviewCache.get(payload)
+                        ?: currentRender(currentOptions.withModifierPreset(payload))?.also {
+                            presetPreviewCache.put(payload, it)
+                        }
+                }
+            },
+            presetKey = options to sourceKey,
+            presetSourceKey = sourceKey,
             materialYouPackForeground = { style ->
                 currentRender(currentOptions.copy(materialYouPackForeground = style.firstColor))
             },

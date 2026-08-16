@@ -77,6 +77,9 @@ class BackupCodecTest {
             colorPresets = listOf(
                 BackupColorPreset("Color 1", "0;0;-65536;-16777216;0.0;false;false;false", 10L),
                 BackupColorPreset("Sunset", "1;0;-39424;-16776961;90.0;true;false;false", 20L)
+            ),
+            modifierPresets = listOf(
+                BackupModifierPreset("Warm plate", "v=1\nshape=1", 1, 30L, 40L)
             )
         )
     }
@@ -87,6 +90,7 @@ class BackupCodecTest {
         val json = """{"prefs":{},"profiles":[]}"""
 
         assertTrue(BackupCodec.decode(json).colorPresets.isEmpty())
+        assertTrue(BackupCodec.decode(json).modifierPresets.isEmpty())
     }
 
     @Test

@@ -150,6 +150,54 @@ data class ColorPreset(
     val createdAt: Long = System.currentTimeMillis()
 )
 
+/**
+ * A saved Modifier-tab recipe. Like [ColorPreset] it belongs to the device, not to a profile: a
+ * look you built is worth reusing in every icon set. The payload is the encoded
+ * [dev.renkinProject.renkin.icon.creator.ModifierPresetPayload]; [schemaVersion] is stored
+ * alongside it so a future reader can tell a stale row from a damaged one without parsing.
+ */
+@Entity
+data class ModifierPreset(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    val payload: String,
+    val schemaVersion: Int,
+    val createdAt: Long = System.currentTimeMillis(),
+    // Drives the recent list in the Modifier tab; seeded with createdAt so a fresh
+    // preset is immediately the newest one.
+    val lastUsedAt: Long = createdAt
+)
+
+@Dao
+interface ModifierPresetDao {
+    @Query("SELECT * FROM ModifierPreset ORDER BY lastUsedAt DESC, id DESC")
+    fun getAllFlow(): kotlinx.coroutines.flow.Flow<List<ModifierPreset>>
+
+    @Query("SELECT * FROM ModifierPreset ORDER BY lastUsedAt DESC, id DESC")
+    fun getAll(): List<ModifierPreset>
+
+    @Insert
+    fun insert(preset: ModifierPreset): Long
+
+    @Query("UPDATE ModifierPreset SET name = :name WHERE id = :id")
+    fun rename(id: Long, name: String)
+
+    @Query(
+        "UPDATE ModifierPreset SET payload = :payload, schemaVersion = :schemaVersion, " +
+            "lastUsedAt = :updatedAt WHERE id = :id"
+    )
+    fun update(id: Long, payload: String, schemaVersion: Int, updatedAt: Long)
+
+    @Query("UPDATE ModifierPreset SET lastUsedAt = :usedAt WHERE id = :id")
+    fun markUsed(id: Long, usedAt: Long)
+
+    @Query("DELETE FROM ModifierPreset WHERE id = :id")
+    fun delete(id: Long)
+
+    @Query("DELETE FROM ModifierPreset")
+    fun deleteEverything()
+}
+
 @Dao
 interface ColorPresetDao {
     @Query("SELECT * FROM ColorPreset ORDER BY createdAt")
@@ -252,21 +300,24 @@ interface ProfileDao {
 // Version 17 rebuilds DbApplication without the iconHash column a development build of 16 had
 // added: fingerprints are derived from the stored rows instead, and the rebuild makes both
 // shapes of 16 (with and without the column) end up identical.
+// Version 18 adds the ModifierPreset table (saved Modifier-tab recipes, shared by every profile).
 @Database(
     entities = [
         DbApplication::class,
         Profile::class,
         PackVerdict::class,
         ColorPreset::class,
-        BuiltIcon::class
+        BuiltIcon::class,
+        ModifierPreset::class
     ],
-    version = 17
+    version = 18
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
     abstract fun profileDao(): ProfileDao
     abstract fun packVerdictDao(): PackVerdictDao
     abstract fun colorPresetDao(): ColorPresetDao
+    abstract fun modifierPresetDao(): ModifierPresetDao
     abstract fun builtIconDao(): BuiltIconDao
 
     companion object {
@@ -475,6 +526,20 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_17_18 = object : Migration(17, 18) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `ModifierPreset` (" +
+                        "`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                        "`name` TEXT NOT NULL, " +
+                        "`payload` TEXT NOT NULL, " +
+                        "`schemaVersion` INTEGER NOT NULL, " +
+                        "`createdAt` INTEGER NOT NULL, " +
+                        "`lastUsedAt` INTEGER NOT NULL)"
+                )
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -491,7 +556,8 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_13_14,
             MIGRATION_14_15,
             MIGRATION_15_16,
-            MIGRATION_16_17
+            MIGRATION_16_17,
+            MIGRATION_17_18
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {
