@@ -330,10 +330,7 @@ class GlobalOptionsViewModel @Inject constructor(
         modifierOptions: GenerationOptions?,
         targetPx: Int
     ): Bitmap? = loadPreview(previewKey(app, sourceOptions, modifierOptions, targetPx)) {
-        val base = appProvider.getIcon(app, sourceOptions, null)
-        if (base != null && modifierOptions != null) {
-            appProvider.applyModifier(base, modifierOptions)
-        } else base
+        appProvider.previewEmptyIcon(app, sourceOptions, modifierOptions)
     }
 
     private fun previewKey(
