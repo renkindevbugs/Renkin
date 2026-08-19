@@ -289,7 +289,16 @@ private fun SaveModifierPresetDialog(
     onSave: (String, ModifierPresetPayload) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var name by rememberSaveable { mutableStateOf("") }
+    val store = LocalModifierPresets.current
+    // Pre-filled so saving is one tap for anyone who does not care about naming; the field is
+    // still focused-and-editable for anyone who does. Same idea as the numbered suffix an
+    // imported profile gets, only here the number is the whole name.
+    val defaultNamePrefix = stringResource(R.string.modifierPresetNamePrefix)
+    var name by rememberSaveable {
+        mutableStateOf(
+            defaultModifierPresetName(store.presets.map { it.name }, defaultNamePrefix)
+        )
+    }
     // Saved as one string: a set of enums is not Bundle-storable, and the names keep the saved
     // form readable if this ever has to be debugged from a state dump.
     var groups by rememberSaveable(stateSaver = modifierPresetGroupsSaver()) {
@@ -442,8 +451,10 @@ private fun ModifierPresetsDialog(
         else presets.filter { it.name.contains(trimmed, ignoreCase = true) }
     }
 
-    if (renaming == null && deleting == null) {
-        RenkinAlertDialog(
+    // The library stays on screen while a rename or a delete asks its question on top of it:
+    // both are dialog windows, so they stack, and the row the question is about remains visible
+    // behind it. Hiding the list instead made the two look like one dialog being replaced.
+    RenkinAlertDialog(
             onDismissRequest = onDismiss,
             title = { Text(stringResource(R.string.modifierPresetsTitle)) },
             text = {
@@ -494,8 +505,7 @@ private fun ModifierPresetsDialog(
             confirmButton = {
                 TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
             }
-        )
-    }
+    )
 
     renaming?.let { preset ->
         RenameModifierPresetDialog(
