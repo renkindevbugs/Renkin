@@ -442,8 +442,10 @@ private fun ModifierPresetsDialog(
 ) {
     val store = LocalModifierPresets.current
     var query by rememberSaveable { mutableStateOf("") }
-    var renaming by remember { mutableStateOf<ModifierPreset?>(null) }
-    var deleting by remember { mutableStateOf<ModifierPreset?>(null) }
+    // Persist stable identities, not Room entities. Re-resolving from [presets] also means a row
+    // removed elsewhere cannot leave a stale object behind an open confirmation.
+    var renamingId by rememberSaveable { mutableStateOf<Long?>(null) }
+    var deletingId by rememberSaveable { mutableStateOf<Long?>(null) }
 
     val shown = remember(presets, query) {
         val trimmed = query.trim()
@@ -494,8 +496,8 @@ private fun ModifierPresetsDialog(
                                     selected = preset.id == selectedPresetId,
                                     previews = previews,
                                     onClick = { onPick(preset) },
-                                    onRename = { renaming = preset },
-                                    onDelete = { deleting = preset }
+                                    onRename = { renamingId = preset.id },
+                                    onDelete = { deletingId = preset.id }
                                 )
                             }
                         }
@@ -507,27 +509,27 @@ private fun ModifierPresetsDialog(
             }
     )
 
-    renaming?.let { preset ->
+    presets.firstOrNull { it.id == renamingId }?.let { preset ->
         RenameModifierPresetDialog(
             preset = preset,
             onRename = { newName ->
                 store.rename(preset.id, newName)
-                renaming = null
+                renamingId = null
             },
-            onDismiss = { renaming = null }
+            onDismiss = { renamingId = null }
         )
     }
 
-    deleting?.let { preset ->
+    presets.firstOrNull { it.id == deletingId }?.let { preset ->
         ConfirmDialog(
             title = stringResource(R.string.modifierPresetDeleteTitle),
             text = stringResource(R.string.modifierPresetDeleteText, preset.name),
             icon = Icons.Filled.Delete,
             onConfirm = {
                 store.delete(preset.id)
-                deleting = null
+                deletingId = null
             },
-            onDismiss = { deleting = null }
+            onDismiss = { deletingId = null }
         )
     }
 }

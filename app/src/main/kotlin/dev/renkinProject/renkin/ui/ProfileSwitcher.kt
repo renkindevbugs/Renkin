@@ -80,8 +80,13 @@ fun ProfileSwitcherTitle() {
     var editing by remember { mutableStateOf<Profile?>(null) }
     var pendingDelete by remember { mutableStateOf<Profile?>(null) }
     // Switch target (or create request) held while the save-before-switch prompt is up.
-    var pendingSwitch by remember { mutableStateOf<Long?>(null) }
-    var pendingCreate by remember { mutableStateOf<Triple<String, String, String>?>(null) }
+    var pendingSwitch by rememberSaveable { mutableStateOf<Long?>(null) }
+    // The create form remains composed behind the prompt. Save its primitive request fields too,
+    // so recreation restores the same prompt without trying to save a domain object or Triple.
+    var pendingCreate by rememberSaveable { mutableStateOf(false) }
+    var pendingCreateName by rememberSaveable { mutableStateOf("") }
+    var pendingCreateDescription by rememberSaveable { mutableStateOf("") }
+    var pendingCreatePackLabel by rememberSaveable { mutableStateOf("") }
 
     // Profile whose share was requested, held while the system file picker is up.
     var pendingShareId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -265,7 +270,10 @@ fun ProfileSwitcherTitle() {
                 // prompt then returns to the details the user already typed, rather than an
                 // empty dialog they have to fill in again.
                 if (viewModel.hasUnsavedChanges()) {
-                    pendingCreate = Triple(name, description, packLabel)
+                    pendingCreateName = name
+                    pendingCreateDescription = description
+                    pendingCreatePackLabel = packLabel
+                    pendingCreate = true
                 } else {
                     createOpen = false
                     viewModel.createProfile(name, description, packLabel)
@@ -292,31 +300,41 @@ fun ProfileSwitcherTitle() {
 
     // Save-before-switch prompt: Save keeps the current profile's icons without building
     // (marked "not built yet"), Don't save discards them; tapping outside cancels the switch.
-    if (pendingSwitch != null || pendingCreate != null) {
+    if (pendingSwitch != null || pendingCreate) {
         RenkinAlertDialog(
-            onDismissRequest = { pendingSwitch = null; pendingCreate = null },
+            onDismissRequest = { pendingSwitch = null; pendingCreate = false },
             icon = { Icon(Icons.Filled.Save, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
             title = { Text(stringResource(R.string.saveBeforeSwitchTitle)) },
             text = { Text(boldStringResource(R.string.saveBeforeSwitchText)) },
             confirmButton = {
                 TextButton(onClick = {
                     pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = true) }
-                    pendingCreate?.let { (n, d, l) ->
-                        viewModel.createProfile(n, d, l, saveFirst = true)
+                    if (pendingCreate) {
+                        viewModel.createProfile(
+                            pendingCreateName,
+                            pendingCreateDescription,
+                            pendingCreatePackLabel,
+                            saveFirst = true
+                        )
                         // The form did its job — close it only once the profile is on its way.
                         createOpen = false
                     }
-                    pendingSwitch = null; pendingCreate = null
+                    pendingSwitch = null; pendingCreate = false
                 }) { Text(stringResource(R.string.saveAction)) }
             },
             dismissButton = {
                 TextButton(onClick = {
                     pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = false) }
-                    pendingCreate?.let { (n, d, l) ->
-                        viewModel.createProfile(n, d, l, saveFirst = false)
+                    if (pendingCreate) {
+                        viewModel.createProfile(
+                            pendingCreateName,
+                            pendingCreateDescription,
+                            pendingCreatePackLabel,
+                            saveFirst = false
+                        )
                         createOpen = false
                     }
-                    pendingSwitch = null; pendingCreate = null
+                    pendingSwitch = null; pendingCreate = false
                 }) { Text(stringResource(R.string.discardAction)) }
             }
         )

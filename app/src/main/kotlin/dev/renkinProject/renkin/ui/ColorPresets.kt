@@ -147,7 +147,9 @@ internal fun ColorPresetDialog(
     // Deleting a saved colour is not undoable, so it asks first — the same contract every other
     // destructive action in the app has. The question stacks on the library instead of replacing
     // it, so the row it is about stays visible.
-    var deleting by remember { mutableStateOf<ColorPreset?>(null) }
+    // Keep only the stable database identity across recreation; Room entities themselves do not
+    // belong in saved UI state and the current row can always be resolved from the live library.
+    var deletingId by rememberSaveable { mutableStateOf<Long?>(null) }
     val shown = remember(store.presets, query, sort) {
         sortedColorPresets(store.presets, query, sort)
     }
@@ -227,7 +229,7 @@ internal fun ColorPresetDialog(
                                         color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    IconButton(onClick = { deleting = preset }) {
+                                    IconButton(onClick = { deletingId = preset.id }) {
                                         Icon(
                                             imageVector = Icons.Filled.Close,
                                             contentDescription = stringResource(
@@ -250,16 +252,16 @@ internal fun ColorPresetDialog(
         }
     }
 
-    deleting?.let { preset ->
+    store.presets.firstOrNull { it.id == deletingId }?.let { preset ->
         ConfirmDialog(
             title = stringResource(R.string.savedColorsDeleteTitle),
             text = stringResource(R.string.savedColorsDeleteText, preset.name),
             icon = Icons.Filled.Delete,
             onConfirm = {
                 store.delete(preset.id)
-                deleting = null
+                deletingId = null
             },
-            onDismiss = { deleting = null }
+            onDismiss = { deletingId = null }
         )
     }
 }
