@@ -261,9 +261,15 @@ fun ProfileSwitcherTitle() {
             title = stringResource(R.string.createProfileTitle),
             confirmLabel = stringResource(R.string.createProfileAction),
             onConfirm = { name, description, packLabel ->
-                createOpen = false
-                if (viewModel.hasUnsavedChanges()) pendingCreate = Triple(name, description, packLabel)
-                else viewModel.createProfile(name, description, packLabel)
+                // The save prompt stacks ON the form instead of replacing it: cancelling the
+                // prompt then returns to the details the user already typed, rather than an
+                // empty dialog they have to fill in again.
+                if (viewModel.hasUnsavedChanges()) {
+                    pendingCreate = Triple(name, description, packLabel)
+                } else {
+                    createOpen = false
+                    viewModel.createProfile(name, description, packLabel)
+                }
             },
             onDismiss = { createOpen = false }
         )
@@ -295,14 +301,21 @@ fun ProfileSwitcherTitle() {
             confirmButton = {
                 TextButton(onClick = {
                     pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = true) }
-                    pendingCreate?.let { (n, d, l) -> viewModel.createProfile(n, d, l, saveFirst = true) }
+                    pendingCreate?.let { (n, d, l) ->
+                        viewModel.createProfile(n, d, l, saveFirst = true)
+                        // The form did its job — close it only once the profile is on its way.
+                        createOpen = false
+                    }
                     pendingSwitch = null; pendingCreate = null
                 }) { Text(stringResource(R.string.saveAction)) }
             },
             dismissButton = {
                 TextButton(onClick = {
                     pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = false) }
-                    pendingCreate?.let { (n, d, l) -> viewModel.createProfile(n, d, l, saveFirst = false) }
+                    pendingCreate?.let { (n, d, l) ->
+                        viewModel.createProfile(n, d, l, saveFirst = false)
+                        createOpen = false
+                    }
                     pendingSwitch = null; pendingCreate = null
                 }) { Text(stringResource(R.string.discardAction)) }
             }

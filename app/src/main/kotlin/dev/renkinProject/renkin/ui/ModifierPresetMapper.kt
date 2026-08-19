@@ -190,3 +190,19 @@ internal fun AdjustmentState.applyOutlineStyle(style: ColorizerStyle) {
     outlineGradientPositions = style.gradientPositions
     outlineGradientAngle = style.gradientAngle
 }
+
+/**
+ * The name a new preset is offered: the first free "<prefix> N". Only exact matches of that shape
+ * count, so renaming one to something of your own never leaves a gap the next save has to skip.
+ * The prefix comes from resources — this stays a pure function so it can be tested.
+ */
+internal fun defaultModifierPresetName(existing: List<String>, prefix: String): String {
+    val taken = existing.mapNotNullTo(mutableSetOf()) { name ->
+        name.removePrefix("$prefix ")
+            .takeIf { it != name }
+            ?.toIntOrNull()
+    }
+    var candidate = 1
+    while (candidate in taken) candidate++
+    return "$prefix $candidate"
+}

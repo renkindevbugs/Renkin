@@ -56,4 +56,45 @@ class ModifierPresetMapperTest {
         assertEquals(ImageEdit.COLORIZE, payload.effect?.imageEdit)
         assertEquals(Color.Red.toArgb(), payload.effect!!.colorizerStyle.firstColor)
     }
+
+    @Test
+    fun theFirstOfferedNameIsNumberedOne() {
+        assertEquals("Preset 1", defaultModifierPresetName(emptyList(), PREFIX))
+    }
+
+    @Test
+    fun theOfferedNumberSkipsTheOnesAlreadyTaken() {
+        val existing = listOf("Preset 1", "Preset 2")
+
+        assertEquals("Preset 3", defaultModifierPresetName(existing, PREFIX))
+    }
+
+    @Test
+    fun aDeletedNumberIsOfferedAgain() {
+        // Saving three and deleting the middle one must reuse the gap rather than keep counting:
+        // the number is a convenience, not an identifier.
+        val existing = listOf("Preset 1", "Preset 3")
+
+        assertEquals("Preset 2", defaultModifierPresetName(existing, PREFIX))
+    }
+
+    @Test
+    fun namesOfTheUsersOwnMakingDoNotConsumeNumbers() {
+        // Only the exact "<prefix> N" shape counts, so renaming a preset frees its number and
+        // unrelated names never push the counter forward.
+        val existing = listOf("Dark squircle", "Preset", "Presets 1", "Preset one", "Preset 1x")
+
+        assertEquals("Preset 1", defaultModifierPresetName(existing, PREFIX))
+    }
+
+    @Test
+    fun theNumberIsIndependentOfTheOrderTheLibraryIsIn() {
+        val existing = listOf("Preset 3", "Preset 1", "Preset 2")
+
+        assertEquals("Preset 4", defaultModifierPresetName(existing, PREFIX))
+    }
+
+    private companion object {
+        const val PREFIX = "Preset"
+    }
 }

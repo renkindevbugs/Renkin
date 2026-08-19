@@ -151,6 +151,8 @@
     <string name="savedColorsName">Name</string>
     <string name="savedColorsDefaultName">Color %1$d</string>
     <string name="savedColorsDelete">Delete saved color</string>
+    <string name="savedColorsDeleteTitle">Delete saved color?</string>
+    <string name="savedColorsDeleteText">“%1$s” will be removed from your saved colors.</string>
     <string name="savedColorsEmpty">Nothing saved yet. Pick a color or gradient, then tap the save icon.</string>
     <string name="savedColorsRemoveTitle">Remove from saved colors</string>
     <string name="savedColorsEmptySingle">No single colors saved yet. Tap the save icon to keep this one.</string>
@@ -163,6 +165,7 @@
     <string name="modifierPresetsSaveAction">Save preset</string>
     <string name="modifierPresetsInclude">Include</string>
     <string name="modifierPresetName">Preset name</string>
+    <string name="modifierPresetNamePrefix">Preset</string>
     <string name="modifierPresetGroupEffect">Image effect</string>
     <string name="modifierPresetShapeSummary">%1$s · %2$d%%</string>
     <string name="modifierPresetPerIconNote">Position, picked areas, color segments and brush strokes stay with this icon.</string>

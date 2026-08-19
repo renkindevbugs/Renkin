@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -143,6 +144,10 @@ internal fun ColorPresetDialog(
     val store = LocalColorPresets.current
     var query by rememberSaveable { mutableStateOf("") }
     var sort by rememberSaveable { mutableStateOf(ColorPresetSort.NEWEST) }
+    // Deleting a saved colour is not undoable, so it asks first — the same contract every other
+    // destructive action in the app has. The question stacks on the library instead of replacing
+    // it, so the row it is about stays visible.
+    var deleting by remember { mutableStateOf<ColorPreset?>(null) }
     val shown = remember(store.presets, query, sort) {
         sortedColorPresets(store.presets, query, sort)
     }
@@ -222,7 +227,7 @@ internal fun ColorPresetDialog(
                                         color = MaterialTheme.colorScheme.onSurface,
                                         modifier = Modifier.weight(1f)
                                     )
-                                    IconButton(onClick = { store.delete(preset.id) }) {
+                                    IconButton(onClick = { deleting = preset }) {
                                         Icon(
                                             imageVector = Icons.Filled.Close,
                                             contentDescription = stringResource(
@@ -243,6 +248,19 @@ internal fun ColorPresetDialog(
                 }
             }
         }
+    }
+
+    deleting?.let { preset ->
+        ConfirmDialog(
+            title = stringResource(R.string.savedColorsDeleteTitle),
+            text = stringResource(R.string.savedColorsDeleteText, preset.name),
+            icon = Icons.Filled.Delete,
+            onConfirm = {
+                store.delete(preset.id)
+                deleting = null
+            },
+            onDismiss = { deleting = null }
+        )
     }
 }
 
