@@ -56,6 +56,22 @@ class ColorSegmentsTest {
     }
 
     @Test
+    fun duplicateRoundedClusterColorsBecomeOnePickerSegment() {
+        val duplicate = Color.rgb(127, 187, 179)
+
+        val merged = mergeSegmentsByColor(
+            listOf(
+                ColorSegment(duplicate, 0.35f),
+                ColorSegment(Color.BLUE, 0.2f),
+                ColorSegment(duplicate, 0.45f)
+            )
+        )
+
+        assertEquals(listOf(duplicate, Color.BLUE), merged.map(ColorSegment::color))
+        assertEquals(0.8f, merged.first().coverage, 0.0001f)
+    }
+
+    @Test
     fun matchesSegmentHonoursTolerance() {
         val nearlyRed = Color.rgb(230, 20, 20)
 
