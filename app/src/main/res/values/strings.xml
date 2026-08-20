@@ -525,6 +525,9 @@
     <string name="brushRestore">Restore</string>
     <string name="backgroundBrushTitle">Background brush</string>
     <string name="globalOptionsTitle">Global style</string>
+    <string name="globalBetaTitle">Global Style is in beta</string>
+    <string name="globalBetaText">This feature is still being improved, so you may encounter bugs or unexpected results. If you find a problem or have an idea for making it better, please let us know on GitHub.</string>
+    <string name="globalBetaGithub">Open GitHub issues</string>
     <string name="stateExpanded">Expanded</string>
     <string name="stateCollapsed">Collapsed</string>
     <string name="onlineIconsTitle">Online icons</string>

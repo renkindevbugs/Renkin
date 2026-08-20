@@ -35,6 +35,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Create
 import androidx.compose.material.icons.filled.ImageSearch
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -45,6 +46,7 @@ import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
@@ -597,8 +599,11 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     val toaster = LocalToaster.current
     val appliedMessage = stringResource(R.string.globalOptionsApplied)
     val applyFailedMessage = stringResource(R.string.globalOptionsApplyFailed)
+    val githubIssuesUrl = stringResource(R.string.crashGithubUrl)
+    val openLink = rememberLinkOpener()
 
     val state = rememberSaveable(saver = GlobalModifierState.Saver) { GlobalModifierState() }
+    var showBetaDialog by rememberSaveable { mutableStateOf(true) }
     // The baseline snapshot the dirty check compares against; null until seeding completes.
     var baseline by rememberSaveable(saver = GlobalModifierState.BaselineSaver) {
         mutableStateOf<GlobalModifierSnapshot?>(null)
@@ -683,6 +688,36 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     }
 
     var editApp by remember { mutableStateOf<PackageInfoStruct?>(null) }
+
+    if (showBetaDialog) {
+        RenkinAlertDialog(
+            onDismissRequest = { showBetaDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            title = { Text(stringResource(R.string.globalBetaTitle)) },
+            text = { Text(stringResource(R.string.globalBetaText)) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showBetaDialog = false
+                        openLink(githubIssuesUrl)
+                    }
+                ) {
+                    Text(stringResource(R.string.globalBetaGithub))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBetaDialog = false }) {
+                    Text(stringResource(R.string.continueAction))
+                }
+            }
+        )
+    }
 
     // Which section the top visible tile belongs to ('g'/'c'/'e'), read from the item keys —
     // drives the pinned "you are here" bar while the grid scrolls.
