@@ -1,0 +1,6 @@
+• Redesigned Global Style with live previews, source selection, and targeting controls.
+• Added reusable Modifier presets (#4).
+• Added precise ruler-style controls for modifier values (#4).
+• Added erase and restore background brushes with pinch zoom.
+• Fixed a crash caused by duplicate picker items (#5).
+• Improved repeated icon-pack installation and diagnostics (#6).
