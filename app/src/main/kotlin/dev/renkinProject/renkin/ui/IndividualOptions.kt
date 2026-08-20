@@ -537,6 +537,9 @@ fun OptionsDialog(
     val outlineEraseMask = remember(adjustments.eraseStrokes) {
         if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
     }
+    val backgroundBrushOperations = remember(adjustments.backgroundBrushStrokes) {
+        buildBackgroundBrushOperations(adjustments.backgroundBrushStrokes)
+    }
     val generatingOptions = GenerationOptions(
         source, imageEdit, textType, iconPack,
         effectiveColor.toInt(), effectiveBgColor.toInt(), useVector,
@@ -555,7 +558,12 @@ fun OptionsDialog(
         materialYouPackStrokeScale = if (selectedMaterialYouPackIcon) {
             materialYouPackAdjustments.strokeScale
         } else 1f
-    ).withModifierAdjustments(adjustments, imageEdit, outlineEraseMask)
+    ).withModifierAdjustments(
+        adjustments = adjustments,
+        imageEdit = imageEdit,
+        outlineEraseMask = outlineEraseMask,
+        backgroundBrushOperations = backgroundBrushOperations
+    )
     // Pack rows describe the source artwork, not the per-icon draft currently being edited.
     // Keeping these options separate prevents a Material You slider from restyling every
     // Lawnicons tile while the selected icon alone is regenerated below.

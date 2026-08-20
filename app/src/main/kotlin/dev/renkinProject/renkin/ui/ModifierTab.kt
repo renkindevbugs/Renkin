@@ -10,6 +10,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,15 +56,18 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -72,6 +76,8 @@ import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -91,6 +97,9 @@ import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.encode
 import dev.renkinProject.renkin.icon.creator.GradientType
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 /**
@@ -149,7 +158,9 @@ internal class AdjustmentState {
     var outlineGradientAngle by mutableFloatStateOf(0f)
     // Eraser strokes masking where the outline must not apply. Deliberately NOT in [Saver]:
     // they're transient per-app geometry, and holding them out keeps the saver list flat.
-    var eraseStrokes by mutableStateOf<List<EraseStroke>>(emptyList())
+    var eraseStrokes by mutableStateOf<List<BrushStroke>>(emptyList())
+    // Hand corrections to the background removal, same reasoning: transient per-app geometry.
+    var backgroundBrushStrokes by mutableStateOf<List<BrushStroke>>(emptyList())
 
     companion object {
         // Keep the keyed representation, but accept the positional list emitted by older builds.
@@ -385,6 +396,11 @@ internal fun centeredSliderToLineWeight(value: Float): Float {
     return if ((scale * 100).roundToInt() == 100) 1f else scale
 }
 
+private class PresetScrollAnchor {
+    var y: Float = Float.NaN
+    var correctionJob: Job? = null
+}
+
 @Composable
 internal fun ModifierTab(
     source: Source,
@@ -418,14 +434,36 @@ internal fun ModifierTab(
     var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
     var shapeColorPickerOpen by remember { mutableStateOf(false) }
     var eraseDialogOpen by remember { mutableStateOf(false) }
+    var backgroundBrushDialogOpen by remember { mutableStateOf(false) }
+    var backgroundBrushPreview by remember { mutableStateOf<Bitmap?>(null) }
+    var backgroundBrushPreviewGenerating by remember { mutableStateOf(false) }
     var centerDialogOpen by remember { mutableStateOf(false) }
+    val scrollState = rememberScrollState()
+    val scrollScope = rememberCoroutineScope()
+    val presetScrollAnchor = remember { PresetScrollAnchor() }
     val context = LocalContext.current
     val toolboxInstalled = remember { imageToolboxInstalled(context) }
+
+    // Brush coordinates belong to the image-edit stage. Rendering the final, transformed icon
+    // here would make strokes miss whenever Scale, Position, Shape or Outline is active.
+    LaunchedEffect(backgroundBrushDialogOpen, adjustments.backgroundBrushStrokes, previews) {
+        if (!backgroundBrushDialogOpen) {
+            backgroundBrushPreview = null
+            backgroundBrushPreviewGenerating = false
+            return@LaunchedEffect
+        }
+        backgroundBrushPreviewGenerating = true
+        try {
+            backgroundBrushPreview = previews?.backgroundBrush?.invoke()
+        } finally {
+            backgroundBrushPreviewGenerating = false
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(scrollState)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
@@ -484,8 +522,12 @@ internal fun ModifierTab(
                                 centeredSliderToLineWeight(it)
                         },
                         valueRange = 0f..2f,
-                        valueLabel = "${(materialYouPackAdjustments.strokeScale * 100).roundToInt()}%",
-                        centered = true
+                        centered = true,
+                        ruler = percentRuler(
+                            valueRange = 0.5f..2f,
+                            toRulerValue = ::centeredSliderToLineWeight,
+                            fromRulerValue = ::lineWeightToCenteredSlider
+                        )
                     )
                 }
             }
@@ -568,13 +610,17 @@ internal fun ModifierTab(
                                             label = stringResource(R.string.edgeDetail),
                                             value = (1f - (adjustments.edgeThreshold - 0.5f) / 4.5f).coerceIn(0f, 1f),
                                             onValueChange = { adjustments.edgeThreshold = 0.5f + (1f - it) * 4.5f },
-                                            valueRange = 0f..1f
+                                            valueRange = 0f..1f,
+                                            ruler = percentRuler()
                                         )
                                         LabeledSlider(
                                             label = stringResource(R.string.edgeSmoothing),
                                             value = adjustments.edgeSmoothing,
                                             onValueChange = { adjustments.edgeSmoothing = it },
-                                            valueRange = 0.5f..4f
+                                            valueRange = 0.5f..4f,
+                                            // A blur radius, not a percentage: one decimal is the
+                                            // finest step that still changes the traced edges.
+                                            ruler = decimalRuler()
                                         )
                                         Row(
                                             modifier = Modifier.fillMaxWidth(),
@@ -684,6 +730,9 @@ internal fun ModifierTab(
                                             onToleranceChange = {
                                                 adjustments.bgRemovalTolerance = it
                                             },
+                                            toleranceRange = 0f..0.5f,
+                                            selectionActive =
+                                                adjustments.bgRemovalTolerance > 0f,
                                             emptyHint = stringResource(
                                                 R.string.removeBackgroundAutoHint
                                             )
@@ -694,13 +743,29 @@ internal fun ModifierTab(
                                             value = adjustments.bgRemovalTolerance,
                                             onValueChange = { adjustments.bgRemovalTolerance = it },
                                             valueRange = 0f..0.5f,
-                                            valueLabel = "${(adjustments.bgRemovalTolerance * 100).roundToInt()}%"
+                                            ruler = percentRuler()
                                         )
                                     }
-                                    Text(
-                                        text = stringResource(R.string.removeBackgroundHint),
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    // The colour match works in whole regions; edges and leftover
+                                    // fringes need a hand. Restore is on the same brush so a
+                                    // stroke that took too much can be walked back in place.
+                                    OptionCard(
+                                        label = stringResource(R.string.backgroundBrushTitle),
+                                        onClick = { backgroundBrushDialogOpen = true },
+                                        trailing = {
+                                            Text(
+                                                text = if (adjustments.backgroundBrushStrokes.isEmpty()) {
+                                                    stringResource(R.string.positionDefault)
+                                                } else {
+                                                    stringResource(
+                                                        R.string.eraseCount,
+                                                        adjustments.backgroundBrushStrokes.size
+                                                    )
+                                                },
+                                                style = MaterialTheme.typography.labelLarge,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                        }
                                     )
                                 }
 
@@ -723,8 +788,8 @@ internal fun ModifierTab(
                 value = adjustments.iconScale,
                 onValueChange = { adjustments.iconScale = it },
                 valueRange = 0.5f..1.5f,
-                valueLabel = "${(adjustments.iconScale * 100).roundToInt()}%",
-                centered = true
+                centered = true,
+                ruler = percentRuler()
             )
         }
         // Position under scale as its own card — related tools, separate controls.
@@ -783,8 +848,8 @@ internal fun ModifierTab(
                         value = adjustments.shapeScale,
                         onValueChange = { adjustments.shapeScale = it },
                         valueRange = 0.5f..1.5f,
-                        valueLabel = "${(adjustments.shapeScale * 100).roundToInt()}%",
-                        centered = true
+                        centered = true,
+                        ruler = percentRuler()
                     )
                     if (!adjustments.shapeCrop) {
                         val shapeStyle = ColorizerStyle(
@@ -859,7 +924,7 @@ internal fun ModifierTab(
                             value = adjustments.outlineWidth,
                             onValueChange = { adjustments.outlineWidth = it },
                             valueRange = 1f..16f,
-                            valueLabel = "${adjustments.outlineWidth.roundToInt()} px"
+                            ruler = pixelRuler()
                         )
                     }
                     val outlineStyle = ColorizerStyle(
@@ -982,6 +1047,45 @@ internal fun ModifierTab(
                 }
             )
         }
+
+        // Presets close the tab: everything above is what a preset can capture, and loading one
+        // rewrites those blocks in place. Only the tab's own Apply then touches the icon.
+        ModifierPresetsSection(
+            adjustments = adjustments,
+            imageEdit = imageEdit,
+            iconColor = iconColor,
+            previews = previews,
+            modifier = Modifier.onGloballyPositioned { coordinates ->
+                presetScrollAnchor.y = coordinates.positionInRoot().y
+            },
+            onPresetLoaded = { applied ->
+                val anchorY = presetScrollAnchor.y
+                applied.imageEdit?.let(onImageEditChange)
+                applied.iconColor?.let(onColorChange)
+                if (anchorY.isFinite()) {
+                    presetScrollAnchor.correctionJob?.cancel()
+                    presetScrollAnchor.correctionJob = scrollScope.launch {
+                        // AnimatedVisibility can change the height above this section for several
+                        // frames. Correct each layout delta until the anchor settles, rather than
+                        // jumping to a hard-coded scroll position.
+                        var stableFrames = 0
+                        repeat(30) {
+                            withFrameNanos { }
+                            val delta = presetScrollAnchor.y - anchorY
+                            if (!delta.isFinite()) return@launch
+                            if (abs(delta) < 0.5f) {
+                                stableFrames++
+                                if (stableFrames >= 3) return@launch
+                            } else {
+                                stableFrames = 0
+                                val consumed = scrollState.scrollBy(delta)
+                                if (abs(consumed) < 0.5f) return@launch
+                            }
+                        }
+                    }
+                }
+            }
+        )
     }
 
     if (colorPickerOpen) {
@@ -1010,6 +1114,18 @@ internal fun ModifierTab(
             onStrokesChange = { adjustments.eraseStrokes = it },
             generating = previewGenerating,
             onDismiss = { eraseDialogOpen = false }
+        )
+    }
+
+    if (backgroundBrushDialogOpen) {
+        EraseDialog(
+            iconBitmap = backgroundBrushPreview ?: previews?.colorizeBase ?: centerPreview,
+            strokes = adjustments.backgroundBrushStrokes,
+            onStrokesChange = { adjustments.backgroundBrushStrokes = it },
+            generating = previewGenerating || backgroundBrushPreviewGenerating,
+            allowRestore = true,
+            title = R.string.backgroundBrushTitle,
+            onDismiss = { backgroundBrushDialogOpen = false }
         )
     }
 }

@@ -1,7 +1,6 @@
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
-import android.graphics.drawable.Drawable
 import android.util.LruCache
 import androidx.core.graphics.scale
 import androidx.compose.foundation.Image
@@ -24,6 +23,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
+import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -35,9 +35,9 @@ import kotlinx.coroutines.withContext
 internal data class AppBitmapCacheKey(
     val component: String,
     val iconId: Int,
-    // Drawable identity changes when application metadata is reloaded or the package updates,
-    // invalidating an otherwise unchanged resource id without retaining entries forever (LRU).
-    val drawable: Drawable,
+    // Identity changes when the launcher metadata or a rendered icon changes, invalidating an
+    // otherwise unchanged id without retaining entries forever (LRU).
+    val drawable: Any,
     val targetPx: Int
 )
 
@@ -103,24 +103,32 @@ private val createdIconCache = AppBitmapMemoryCache()
  */
 @Composable
 internal fun rememberCreatedIconBitmap(app: PackageInfoStruct, size: Dp): ImageBitmap? {
-    val created = app.createdIcon
+    return rememberIconBitmap(app, app.createdIcon, size)
+}
+
+/** Rasterises any generated layer (base or rendered) through the shared memory-bounded cache. */
+@Composable
+internal fun rememberIconBitmap(
+    app: PackageInfoStruct,
+    icon: IconPackDrawable?,
+    size: Dp
+): ImageBitmap? {
     val target = with(LocalDensity.current) { size.roundToPx() }
-    // internalVersion changes on every edit, so replacing an icon never shows the previous one.
-    val key = remember(app.key, app.internalVersion, created, target) {
-        created?.let { AppBitmapCacheKey(app.key, app.internalVersion, app.icon, target) }
+    val key = remember(app.key, app.internalVersion, icon, target) {
+        icon?.let { AppBitmapCacheKey(app.key, app.internalVersion, it, target) }
     }
     var bitmap by remember(key) {
         mutableStateOf(key?.let { createdIconCache.get(it)?.asImageBitmap() })
     }
 
     LaunchedEffect(key) {
-        if (key != null && bitmap == null && created != null) {
+        if (key != null && bitmap == null && icon != null) {
             val loaded = withContext(Dispatchers.Default) {
                 createdIconCache.getOrLoad(key) {
                     runCatching {
-                        val full = created.previewBitmap()
-                        // Rows are 56dp; caching the generator's 256px output would fill the
-                        // budget after a couple of dozen icons and re-decode on every scroll.
+                        val full = icon.previewBitmap()
+                        // Caching the generator's 256px output would fill the budget after a
+                        // couple of dozen icons and re-decode on every scroll.
                         if (full.width > target) {
                             full.scale(target, target)
                         } else {

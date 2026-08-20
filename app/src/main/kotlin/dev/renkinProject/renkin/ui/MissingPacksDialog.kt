@@ -160,6 +160,53 @@ fun ProfileShareWarningDialog(onShare: (dontShowAgain: Boolean) -> Unit, onDismi
     )
 }
 
+enum class IconPackStudioWarningTarget { PROFILE, BACKUP }
+
+/**
+ * Shared portability warning for profile sharing and full backups. IPS exports reuse one
+ * package identity, so Renkin deliberately explains the limitation without claiming it can
+ * identify which individual export APK is required.
+ */
+@Composable
+fun IconPackStudioExportWarningDialog(
+    target: IconPackStudioWarningTarget,
+    onContinue: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val message = when (target) {
+        IconPackStudioWarningTarget.PROFILE -> R.string.ipsExportProfileWarningText
+        IconPackStudioWarningTarget.BACKUP -> R.string.ipsExportBackupWarningText
+    }
+    val action = when (target) {
+        IconPackStudioWarningTarget.PROFILE -> R.string.continueAction
+        IconPackStudioWarningTarget.BACKUP -> R.string.exportBackup
+    }
+    RenkinAlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                Icons.Filled.Warning,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary
+            )
+        },
+        title = { Text(stringResource(R.string.ipsExportWarningTitle)) },
+        text = {
+            Text(
+                text = boldStringResource(message),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = onContinue) { Text(stringResource(action)) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.dismiss)) }
+        }
+    )
+}
+
 /**
  * Home-screen banner shown while the active profile has icons locked behind missing packs.
  * Tapping opens [MissingPacksDialog] (regardless of the profile's "don't show again").

@@ -30,4 +30,10 @@ class ColorHexTest {
         // alpha 128/255 ≈ 0.50196 → 127.999…; rounding keeps it 0x80 instead of 0x7f.
         assertEquals("#80ff0000", Color(0x80FF0000).toHexString())
     }
+
+    @Test
+    fun toRgbHexString_omitsAlphaAndPadsComponents() {
+        assertEquals("#00A0FF", 0x7F00A0FF.toRgbHexString())
+        assertEquals("#000001", 0xFF000001.toInt().toRgbHexString())
+    }
 }

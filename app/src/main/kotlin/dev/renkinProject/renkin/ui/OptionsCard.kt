@@ -84,12 +84,10 @@ import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.colorStyle
-import kotlin.math.roundToInt
 
 /**
- * The home list's Advanced options card, back in its old place: the expandable generation
- * options plus (for now, while the new screen is being evaluated) a test button that opens
- * the fullscreen Global options screen — the same content is reachable from both.
+ * The home list's Advanced options card: expandable Generation defaults plus the entry point
+ * to the separate preview-first Global style workspace.
  */
 @Composable
 fun AdvancedOptionsCard(iconPacks: List<IconPack>, onOpenGlobal: () -> Unit) {
@@ -140,8 +138,8 @@ fun AdvancedOptionsCard(iconPacks: List<IconPack>, onOpenGlobal: () -> Unit) {
             }
             androidx.compose.animation.AnimatedVisibility(visible = expanded) {
                 Column {
-                    // Trial entry point for the fullscreen Global options screen; sits above
-                    // the option controls so testers actually find it.
+                    // Global styling is a separate preview-first workflow; Generation defaults
+                    // stay below because they affect the next refresh instead of the current grid.
                     androidx.compose.material3.OutlinedButton(
                         onClick = onOpenGlobal,
                         shape = FieldShape,
@@ -159,23 +157,18 @@ fun AdvancedOptionsCard(iconPacks: List<IconPack>, onOpenGlobal: () -> Unit) {
 }
 
 /**
- * The refresh-wide generation options (sources, fallback, colours, switches), shared by the
- * home card above and the Global options screen's panel. Every control sends a semantic update
- * through [OptionsViewModel]; only the global modifiers on that screen are staged behind Save.
- * [showHint] shows the "takes effect after a refresh" note — true on the home card, false on
- * the Global options screen where the live grid already answers that question.
+ * The refresh-wide generation options (sources, fallback, colours, switches). Every control
+ * sends a semantic update through [OptionsViewModel]. The hint explains that these settings
+ * affect the next refresh rather than the already generated icons shown by Global style.
  */
 @Composable
-fun AdvancedOptionsContent(
-    iconPacks: List<IconPack>,
-    showHint: Boolean = true
-) {
+fun AdvancedOptionsContent(iconPacks: List<IconPack>) {
     val state = advancedOptionsState()
     val viewModel: OptionsViewModel = hiltViewModel()
 
     Column(Modifier.padding(bottom = 12.dp)) {
-        // Users otherwise don't know these settings only take effect after a refresh
-        if (showHint) RefreshHintCard()
+        // Users otherwise don't know these settings only take effect after a refresh.
+        RefreshHintCard()
         AdvancedSourceSection(state, iconPacks, viewModel)
         AdvancedColorSection(state, viewModel)
         AdvancedOutlineSection(state, viewModel)
@@ -290,8 +283,8 @@ private fun RefreshHintCard() {
 }
 
 /**
- * The primary source/pack itself is picked in the hero card on the home screen; only its tweaks
- * (image modifier, text type, the secondary source and the fallback) live here.
+ * The primary source/pack is picked from the hero card or staged in Global style. Its detailed
+ * generation tweaks (image modifier, text type, secondary source and fallback) also live here.
  */
 @Composable
 private fun AdvancedSourceSection(
@@ -467,7 +460,7 @@ private fun AdvancedOutlineSection(state: AdvancedOptionsState, viewModel: Optio
                     viewModel.setOutlineWidth(it)
                 },
                 valueRange = OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat(),
-                valueLabel = "${state.outlineWidth.roundToInt()} px",
+                ruler = pixelRuler(),
                 // The card's other rows are inset by the same amount; without it the track ran
                 // past the card's rounded edge.
                 modifier = Modifier.padding(horizontal = 16.dp)
@@ -533,7 +526,7 @@ private fun OptionsSectionLabel(@androidx.annotation.StringRes id: Int) {
  * Secondary). Primary/Secondary are disabled unless that source is a configured icon pack.
  */
 @Composable
-private fun FallbackSourceSelector(
+internal fun FallbackSourceSelector(
     selected: FallbackSource,
     primaryEnabled: Boolean,
     secondaryEnabled: Boolean,

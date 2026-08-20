@@ -117,6 +117,11 @@ fun View.performTapHaptic() {
     performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
 }
 
+/** Short, low-intensity tick for continuous discrete controls such as a ruler picker. */
+fun View.performTickHaptic() {
+    performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+}
+
 /** The system's own long-press tick, so a press-and-hold feels like it does everywhere else. */
 fun View.performLongPressHaptic() {
     performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)

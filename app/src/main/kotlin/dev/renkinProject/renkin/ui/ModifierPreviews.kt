@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
+import android.util.LruCache
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -11,9 +12,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toArgb
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.BackgroundBrushOperation
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
+import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
+import dev.renkinProject.renkin.icon.creator.withModifierPreset
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /**
  * Everything the Modifier tab needs to preview a colour before it is applied, plus the artwork
@@ -25,8 +31,16 @@ internal data class ModifierPreviews(
     val colorizeBase: Bitmap?,
     /** Current modifier stack rendered from an unclipped zero-offset canvas for auto-centering. */
     val positionBase: suspend () -> Bitmap?,
+    /** Remove-background output before scale, position, shape and outline alter its coordinates. */
+    val backgroundBrush: suspend () -> Bitmap?,
     val colorize: suspend (ColorizerStyle) -> Bitmap?,
     val outline: suspend (ColorizerStyle) -> Bitmap?,
+    /** Current icon rendered with a reusable preset substituted into its source-specific options. */
+    val preset: suspend (ModifierPresetPayload) -> Bitmap?,
+    /** Invalidates row previews when the current icon/options change. */
+    val presetKey: Any?,
+    /** Resets editor-session selection when the host starts editing another source icon. */
+    val presetSourceKey: Any?,
     val layers: suspend (index: Int, draft: ColorizerStyle) -> Bitmap?,
     /** A pack's own Material You icon under a draft colour — its layers take the first stop. */
     val materialYouPackForeground: suspend (ColorizerStyle) -> Bitmap?,
@@ -48,26 +62,32 @@ internal fun rememberModifierPreviews(
 ): ModifierPreviews {
     val currentRender by rememberUpdatedState(render)
     val currentOptions by rememberUpdatedState(options)
+    val presetRenderMutex = remember { Mutex() }
+    val presetPreviewCache = remember(options, sourceKey) {
+        object : LruCache<ModifierPresetPayload, Bitmap>(8 * 1024 * 1024) {
+            override fun sizeOf(key: ModifierPresetPayload, value: Bitmap): Int =
+                value.allocationByteCount
+        }
+    }
     var colorizeBase by remember { mutableStateOf<Bitmap?>(null) }
 
-    LaunchedEffect(options, sourceKey) {
-        colorizeBase = currentRender(
-            options.copy(
-                // Colourize runs BEFORE scale/offset/shape/outline, so the picker must cluster
-                // the artwork without them — an outline or shape plate would otherwise offer a
-                // colour that does not exist yet when the pick is applied.
-                primaryImageEdit = ImageEdit.NONE,
-                iconScale = 1f,
-                iconOffsetX = 0f,
-                iconOffsetY = 0f,
-                iconShape = IconShape.NONE,
-                outlineMode = OutlineMode.NONE,
-                outlineEraseMask = null
-            )
-        )
+    // Colourize runs before every modifier below. Sanitising the key also prevents background
+    // strokes from needlessly regenerating this untouched source after every brush gesture.
+    val colorizeBaseOptions = options.copy(
+        primaryImageEdit = ImageEdit.NONE,
+        iconScale = 1f,
+        iconOffsetX = 0f,
+        iconOffsetY = 0f,
+        iconShape = IconShape.NONE,
+        outlineMode = OutlineMode.NONE,
+        outlineEraseMask = null,
+        backgroundBrushOperations = emptyList()
+    )
+    LaunchedEffect(colorizeBaseOptions, sourceKey) {
+        colorizeBase = currentRender(colorizeBaseOptions)
     }
 
-    return remember(colorizeBase) {
+    return remember(colorizeBase, options, sourceKey) {
         ModifierPreviews(
             colorizeBase = colorizeBase,
             positionBase = {
@@ -75,6 +95,18 @@ internal fun rememberModifierPreviews(
                     currentOptions.copy(
                         iconOffsetX = 0f,
                         iconOffsetY = 0f
+                    )
+                )
+            },
+            backgroundBrush = {
+                currentRender(
+                    currentOptions.copy(
+                        iconScale = 1f,
+                        iconOffsetX = 0f,
+                        iconOffsetY = 0f,
+                        iconShape = IconShape.NONE,
+                        outlineMode = OutlineMode.NONE,
+                        outlineEraseMask = null
                     )
                 )
             },
@@ -92,6 +124,18 @@ internal fun rememberModifierPreviews(
                     )
                 )
             },
+            // A visible library can request several heavyweight renders at once. Serialising them
+            // keeps slider interaction and the main preview responsive while thumbnails fill in.
+            preset = { payload ->
+                presetRenderMutex.withLock {
+                    presetPreviewCache.get(payload)
+                        ?: currentRender(currentOptions.withModifierPreset(payload))?.also {
+                            presetPreviewCache.put(payload, it)
+                        }
+                }
+            },
+            presetKey = options to sourceKey,
+            presetSourceKey = sourceKey,
             materialYouPackForeground = { style ->
                 currentRender(currentOptions.copy(materialYouPackForeground = style.firstColor))
             },
@@ -122,8 +166,15 @@ internal fun rememberModifierPreviews(
 internal fun GenerationOptions.withModifierAdjustments(
     adjustments: AdjustmentState,
     imageEdit: ImageEdit,
-    outlineEraseMask: Bitmap?
+    outlineEraseMask: Bitmap?,
+    // Already rasterised and memoised by the caller, so options only change after a finished stroke.
+    backgroundBrushOperations: List<BackgroundBrushOperation> = emptyList()
 ): GenerationOptions = copy(
+    backgroundBrushOperations = if (imageEdit == ImageEdit.REMOVE_BACKGROUND) {
+        backgroundBrushOperations
+    } else {
+        emptyList()
+    },
     primaryImageEdit = imageEdit,
     edgeLowThreshold = adjustments.edgeThreshold,
     edgeHighThreshold = adjustments.edgeThreshold * 3f,

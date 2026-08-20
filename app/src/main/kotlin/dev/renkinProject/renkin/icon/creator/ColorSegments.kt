@@ -83,7 +83,7 @@ fun segmentColors(icon: Bitmap, count: Int = SEGMENT_COUNT_DEFAULT): List<ColorS
 
     val counts = IntArray(clusters)
     assignment.forEach { counts[it]++ }
-    return (0 until clusters)
+    val rawSegments = (0 until clusters)
         .filter { counts[it] > 0 }
         .map { cluster ->
             ColorSegment(
@@ -96,8 +96,24 @@ fun segmentColors(icon: Bitmap, count: Int = SEGMENT_COUNT_DEFAULT): List<ColorS
                 coverage = counts[cluster].toFloat() / samples.size
             )
         }
-        .sortedByDescending { it.coverage }
+    return mergeSegmentsByColor(rawSegments)
 }
+
+/**
+ * K-means clusters can converge to centroids that round to the same ARGB colour. Such clusters
+ * are one logical picker target: keeping both would show coupled chips and duplicate Compose
+ * lazy-list keys. Preserve their combined coverage while exposing every colour only once.
+ */
+internal fun mergeSegmentsByColor(segments: List<ColorSegment>): List<ColorSegment> =
+    segments
+        .groupBy(ColorSegment::color)
+        .map { (color, sameColor) ->
+            ColorSegment(
+                color = color,
+                coverage = sameColor.sumOf { it.coverage.toDouble() }.toFloat()
+            )
+        }
+        .sortedByDescending(ColorSegment::coverage)
 
 /**
  * True when [pixel] belongs to one of [targets] within [tolerance]. Segments are stored as plain

@@ -15,6 +15,9 @@ fun Color.toHexString(): String {
     )
 }
 
+/** "#RRGGBB" for an ARGB integer when alpha is intentionally irrelevant. */
+fun Int.toRgbHexString(): String = String.format("#%06X", this and 0xFFFFFF)
+
 val Color.alphaInt: Int
     get() = floatTo255Component(this.alpha)
 

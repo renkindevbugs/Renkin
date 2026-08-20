@@ -148,6 +148,8 @@ data class GenerationOptions(
     // Painted areas where the outline step must not apply (the eraser tool). Alpha mask in
     // normalised icon space; null = outline everywhere. Session-only — never persisted.
     val outlineEraseMask: android.graphics.Bitmap? = null,
+    // Ordered hand corrections to background removal. Session-only, like the outline eraser.
+    val backgroundBrushOperations: List<BackgroundBrushOperation> = emptyList(),
     // Text-icon options: the string rendered for TextType.CUSTOM (empty falls back to the app
     // name), the letter-case transform (all text types), and the TTF/OTF the glyphs come from
     // (empty = the bundled Arcticons Sans).

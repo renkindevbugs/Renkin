@@ -358,4 +358,37 @@ class DataPreferencesTest {
             scope.cancel()
         }
     }
+
+    @Test
+    fun persistGlobalStylePrefs_updatesSourcesAndModifiersButKeepsOtherPrefs() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val store = PreferenceDataStoreFactory.create(scope = scope) {
+            temporaryFolder.root.resolve("global-style.preferences_pb")
+        }
+        try {
+            store.setStringValue(TextFontKey, "keep-font.ttf")
+            val staged = preferencesOf(
+                PrimarySourceKey to Source.ICON_PACK.ordinal,
+                PrimaryIconPackKey to "primary.pack",
+                SecondarySourceKey to Source.APPLICATION_ICON.ordinal,
+                SecondaryIconPackKey to "secondary.pack",
+                FallbackSourceKey to FallbackSource.PRIMARY.ordinal,
+                GlobalIconScaleKey to 73,
+                TextFontKey to "staged-font.ttf"
+            )
+
+            store.persistGlobalStylePrefs(staged)
+            val saved = store.getPreferencesAfterPendingWrites()
+
+            assertEquals(Source.ICON_PACK.ordinal, saved[PrimarySourceKey])
+            assertEquals("primary.pack", saved[PrimaryIconPackKey])
+            assertEquals(Source.APPLICATION_ICON.ordinal, saved[SecondarySourceKey])
+            assertEquals("secondary.pack", saved[SecondaryIconPackKey])
+            assertEquals(FallbackSource.PRIMARY.ordinal, saved[FallbackSourceKey])
+            assertEquals(73, saved[GlobalIconScaleKey])
+            assertEquals("keep-font.ttf", saved[TextFontKey])
+        } finally {
+            scope.cancel()
+        }
+    }
 }

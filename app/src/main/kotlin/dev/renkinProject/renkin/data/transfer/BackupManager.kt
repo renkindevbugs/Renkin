@@ -19,6 +19,7 @@ import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.ColorPreset
+import dev.renkinProject.renkin.data.ModifierPreset
 import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
@@ -82,6 +83,17 @@ class BackupManager(
 
     // ---- Export --------------------------------------------------------------------
 
+    /** Whether a saved profile references at least one personal Icon Pack Studio export. */
+    suspend fun profileUsesIconPackStudio(profileId: Long): Boolean =
+        packRepo.getAll(profileId).usesIconPackStudioExport()
+
+    /** Whether any saved profile except [excludedProfileId] references an IPS export. */
+    suspend fun otherProfilesUseIconPackStudio(excludedProfileId: Long): Boolean =
+        packRepo.getAllProfilesApplications()
+            .asSequence()
+            .filterNot { it.profileId == excludedProfileId }
+            .usesIconPackStudioExport()
+
     suspend fun exportBackup(uri: Uri) = exportBackup {
         context.contentResolver.openOutputStream(uri) ?: throw IOException("Cannot open $uri for writing")
     }
@@ -122,6 +134,15 @@ class BackupManager(
             packLabels = packLabelsFor(allIcons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet()),
             colorPresets = packRepo.allColorPresets().map {
                 BackupColorPreset(it.name, it.style, it.createdAt)
+            },
+            modifierPresets = packRepo.allModifierPresets().map {
+                BackupModifierPreset(
+                    it.name,
+                    it.payload,
+                    it.schemaVersion,
+                    it.createdAt,
+                    it.lastUsedAt
+                )
             }
         )
 
@@ -185,6 +206,12 @@ class BackupManager(
             zip.putTextEntry(DATA_ENTRY, BackupCodec.encode(data))
         }
     }
+
+    private fun Sequence<DbApplication>.usesIconPackStudioExport(): Boolean =
+        any { isIconPackStudioExport(it.sourcePackName) }
+
+    private fun Iterable<DbApplication>.usesIconPackStudioExport(): Boolean =
+        asSequence().usesIconPackStudioExport()
 
     // ---- Import --------------------------------------------------------------------
 
@@ -266,6 +293,17 @@ class BackupManager(
         // colours existed carry none, which correctly clears a library the user is replacing.
         packRepo.replaceColorPresets(
             data.colorPresets.map { ColorPreset(name = it.name, style = it.style, createdAt = it.createdAt) }
+        )
+        packRepo.replaceModifierPresets(
+            data.modifierPresets.map {
+                ModifierPreset(
+                    name = it.name,
+                    payload = it.payload,
+                    schemaVersion = it.schemaVersion,
+                    createdAt = it.createdAt,
+                    lastUsedAt = it.lastUsedAt
+                )
+            }
         )
         restorePrefs(data.prefs)
         // The verdict cache is per-device truth (which packs are owned/priced HERE), not part of

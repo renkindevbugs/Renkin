@@ -112,35 +112,45 @@ class MainActivity : ComponentActivity() {
             var crashPending by remember { mutableStateOf(CrashReporter.hasNewCrash(this@MainActivity)) }
 
             val colorPresets by viewModel.colorPresets.collectAsState()
+            val modifierPresets by viewModel.modifierPresets.collectAsState()
 
             CompositionLocalProvider(
                 LocalMainActivity provides this,
                 LocalToaster provides toaster
             ) {
-              ProvideColorPresets(
-                presets = colorPresets,
-                onSave = viewModel::saveColorPreset,
-                onDelete = viewModel::deleteColorPreset
-              ) {
-                RenkinTheme(darkMode) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = MaterialTheme.colorScheme.background
+                ProvideColorPresets(
+                    presets = colorPresets,
+                    onSave = viewModel::saveColorPreset,
+                    onDelete = viewModel::deleteColorPreset
+                ) {
+                    ProvideModifierPresets(
+                        presets = modifierPresets,
+                        onSave = viewModel::saveModifierPreset,
+                        onUpdate = viewModel::updateModifierPreset,
+                        onRename = viewModel::renameModifierPreset,
+                        onMarkUsed = viewModel::markModifierPresetUsed,
+                        onDelete = viewModel::deleteModifierPreset
                     ) {
-                        ToastHost(toaster)
-                        MainColumn(viewModel.iconPacks)
+                        RenkinTheme(darkMode) {
+                            Surface(
+                                modifier = Modifier.fillMaxSize(),
+                                color = MaterialTheme.colorScheme.background
+                            ) {
+                                ToastHost(toaster)
+                                MainColumn(viewModel.iconPacks)
 
-                        if (crashPending) {
-                            CrashReportDialog(
-                                onDismiss = {
-                                    CrashReporter.markCrashesSeen(this@MainActivity)
-                                    crashPending = false
+                                if (crashPending) {
+                                    CrashReportDialog(
+                                        onDismiss = {
+                                            CrashReporter.markCrashesSeen(this@MainActivity)
+                                            crashPending = false
+                                        }
+                                    )
                                 }
-                            )
+                            }
                         }
                     }
                 }
-              }
             }
         }
     }

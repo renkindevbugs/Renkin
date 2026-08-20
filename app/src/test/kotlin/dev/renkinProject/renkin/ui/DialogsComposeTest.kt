@@ -6,13 +6,18 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.isToggleable
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.IconLockManager.MissingPack
+import dev.renkinProject.renkin.data.ColorPreset
 import dev.renkinProject.renkin.data.VERDICT_PAID
 import dev.renkinProject.renkin.data.VERDICT_UNKNOWN
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -91,6 +96,36 @@ class DialogsComposeTest {
         assertFalse(confirmed)
     }
 
+    @Test
+    fun savedColorDeleteConfirmation_restoresItsTarget() {
+        val preset = ColorPreset(
+            id = 42L,
+            name = "Ocean",
+            style = encodeColorizerStyle(ColorizerStyle(firstColor = android.graphics.Color.BLUE))
+        )
+        var deletedId: Long? = null
+        val store = object : ColorPresetStore {
+            override val presets = listOf(preset)
+            override fun save(name: String, style: ColorizerStyle) = Unit
+            override fun delete(id: Long) { deletedId = id }
+        }
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent {
+            CompositionLocalProvider(LocalColorPresets provides store) {
+                ColorPresetDialog(onPick = {}, onDismiss = {})
+            }
+        }
+
+        compose.onNodeWithContentDescription(string(R.string.savedColorsDelete)).performClick()
+        compose.onNodeWithText(string(R.string.savedColorsDeleteTitle)).assertIsDisplayed()
+
+        restoration.emulateSavedInstanceStateRestore()
+
+        compose.onNodeWithText(string(R.string.savedColorsDeleteTitle)).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.confirm)).performClick()
+        assertEquals(preset.id, deletedId)
+    }
+
     // ---- MissingPacksDialog ----------------------------------------------------------
 
     private val paidPack = MissingPack("com.pack.paid", "Paid Icons", VERDICT_PAID, 12)
@@ -156,6 +191,40 @@ class DialogsComposeTest {
         compose.onNodeWithText(string(R.string.dismiss)).performClick()
         assertEquals(0, shareCalls)
         assertTrue(dismissed)
+    }
+
+    // ---- IconPackStudioExportWarningDialog -----------------------------------------
+
+    @Test
+    fun iconPackStudioProfileWarning_continueFiresOnlyContinue() {
+        var continued = false
+        var dismissed = false
+        compose.setContent {
+            IconPackStudioExportWarningDialog(
+                target = IconPackStudioWarningTarget.PROFILE,
+                onContinue = { continued = true },
+                onDismiss = { dismissed = true }
+            )
+        }
+
+        compose.onNodeWithText(string(R.string.continueAction)).performClick()
+        assertTrue(continued)
+        assertFalse(dismissed)
+    }
+
+    @Test
+    fun iconPackStudioBackupWarning_usesExportAction() {
+        var continued = false
+        compose.setContent {
+            IconPackStudioExportWarningDialog(
+                target = IconPackStudioWarningTarget.BACKUP,
+                onContinue = { continued = true },
+                onDismiss = {}
+            )
+        }
+
+        compose.onNodeWithText(string(R.string.exportBackup)).performClick()
+        assertTrue(continued)
     }
 
     // ---- CenterDialog ---------------------------------------------------------------

@@ -20,8 +20,12 @@ class InstallFallbackTest {
             installFailureResult(InstallFailure.Aborted("cancelled"))
         )
         assertEquals(
-            ApkInstallResult.FAILED,
+            ApkInstallResult.STORAGE,
             installFailureResult(InstallFailure.Storage("full"))
+        )
+        assertEquals(
+            ApkInstallResult.BLOCKED,
+            installFailureResult(InstallFailure.Blocked("blocked by policy"))
         )
     }
 
@@ -29,46 +33,47 @@ class InstallFallbackTest {
     fun knownNonUpdatablePack_reportsConflictWithoutStartingInstall() = runBlocking {
         var installerCalled = false
 
-        val result = installOrReportConflict(canUpdateInPlace = false) {
+        val outcome = installOrReportConflict(canUpdateInPlace = false) {
             installerCalled = true
-            ApkInstallResult.SUCCESS
+            ApkInstallOutcome(ApkInstallResult.SUCCESS)
         }
 
-        assertEquals(ApkInstallResult.CONFLICT, result)
+        assertEquals(ApkInstallResult.CONFLICT, outcome.result)
         assertFalse(installerCalled)
     }
 
     @Test
     fun userAbortedInstall_doesNotBecomeReplacementConflict() = runBlocking {
-        val result = installOrReportConflict(canUpdateInPlace = true) {
-            ApkInstallResult.ABORTED
+        val outcome = installOrReportConflict(canUpdateInPlace = true) {
+            ApkInstallOutcome(ApkInstallResult.ABORTED)
         }
 
-        assertEquals(ApkInstallResult.ABORTED, result)
+        assertEquals(ApkInstallResult.ABORTED, outcome.result)
     }
 
     @Test
     fun ordinaryInstallFailure_doesNotBecomeReplacementConflict() = runBlocking {
-        val result = installOrReportConflict(canUpdateInPlace = true) {
-            ApkInstallResult.FAILED
+        val outcome = installOrReportConflict(canUpdateInPlace = true) {
+            ApkInstallOutcome(ApkInstallResult.FAILED, "installer error")
         }
 
-        assertEquals(ApkInstallResult.FAILED, result)
+        assertEquals(ApkInstallResult.FAILED, outcome.result)
+        assertEquals("installer error", outcome.detail)
     }
 
     @Test
     fun cancelledUninstall_keepsOldPackAndDoesNotStartInstall() = runBlocking {
         var installerCalled = false
 
-        val result = replaceAfterConflict(
+        val outcome = replaceAfterConflict(
             uninstall = { false },
             install = {
                 installerCalled = true
-                ApkInstallResult.SUCCESS
+                ApkInstallOutcome(ApkInstallResult.SUCCESS)
             }
         )
 
-        assertEquals(ApkInstallResult.ABORTED, result)
+        assertEquals(ApkInstallResult.ABORTED, outcome.result)
         assertFalse(installerCalled)
     }
 
@@ -76,15 +81,15 @@ class InstallFallbackTest {
     fun approvedSuccessfulUninstall_startsNewInstall() = runBlocking {
         var installerCalled = false
 
-        val result = replaceAfterConflict(
+        val outcome = replaceAfterConflict(
             uninstall = { true },
             install = {
                 installerCalled = true
-                ApkInstallResult.SUCCESS
+                ApkInstallOutcome(ApkInstallResult.SUCCESS)
             }
         )
 
-        assertEquals(ApkInstallResult.SUCCESS, result)
+        assertEquals(ApkInstallResult.SUCCESS, outcome.result)
         assertTrue(installerCalled)
     }
 }

@@ -26,6 +26,10 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -185,10 +189,18 @@ fun LabeledSlider(
     // For callers persisting the value somewhere expensive (DataStore): fires once on release
     // instead of on every drag tick.
     onValueChangeFinished: (() -> Unit)? = null,
+    // Given a spec, the value badge becomes a button opening the ruler picker — the way to hit an
+    // exact number, which a slider spreading its range over a phone's width cannot offer.
+    ruler: RulerSpec? = null,
     // Applied to the label + track as one block, so a caller whose surroundings are inset can
     // inset the slider too — the track otherwise runs to the container's own edge.
     modifier: Modifier = Modifier
 ) {
+  var rulerOpen by rememberSaveable { mutableStateOf(false) }
+  val displayedValue = ruler?.let { spec ->
+      spec.format(spec.toRulerValue(value))
+  } ?: valueLabel
+
   Column(modifier) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(
@@ -197,17 +209,23 @@ fun LabeledSlider(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
-        if (valueLabel != null) {
-            // Small tonal badge instead of bare primary text — the value reads as a chip.
-            Surface(shape = SwatchShape, color = MaterialTheme.colorScheme.secondaryContainer) {
-                Text(
-                    text = valueLabel,
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
-                )
-            }
+        if (displayedValue != null) {
+            SliderValueBadge(displayedValue, if (ruler != null) ({ rulerOpen = true }) else null)
         }
+    }
+    if (rulerOpen && ruler != null) {
+        RulerPickerDialog(
+            label = label,
+            value = ruler.toRulerValue(value),
+            valueRange = ruler.valueRange ?: valueRange,
+            spec = ruler,
+            onValueChange = { onValueChange(ruler.fromRulerValue(it)) },
+            onDismiss = {
+                rulerOpen = false
+                // Callers that persist on release expect the same signal the slider gives them.
+                onValueChangeFinished?.invoke()
+            }
+        )
     }
     if (centered) {
         Slider(
@@ -228,6 +246,33 @@ fun LabeledSlider(
   }
 }
 
+/** Keeps read-only value badges visually identical to the badges that open an exact picker. */
+@Composable
+private fun SliderValueBadge(value: String, onClick: (() -> Unit)?) {
+    val content: @Composable () -> Unit = {
+        Text(
+            text = value,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+        )
+    }
+    if (onClick != null) {
+        Surface(
+            shape = SwatchShape,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            onClick = onClick,
+            content = content
+        )
+    } else {
+        Surface(
+            shape = SwatchShape,
+            color = MaterialTheme.colorScheme.secondaryContainer,
+            content = content
+        )
+    }
+}
+
 /**
  * The shared indeterminate wavy loading bar (primary over the surfaceVariant track) used while
  * browsers and grids resolve their content — callers only position it.
@@ -235,6 +280,17 @@ fun LabeledSlider(
 @Composable
 fun WavyLoadingBar(modifier: Modifier = Modifier) {
     LinearWavyProgressIndicator(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.primary,
+        trackColor = MaterialTheme.colorScheme.surfaceVariant
+    )
+}
+
+/** Determinate counterpart used when the caller can report real completed/total progress. */
+@Composable
+fun WavyProgressBar(progress: Float, modifier: Modifier = Modifier) {
+    LinearWavyProgressIndicator(
+        progress = { progress.coerceIn(0f, 1f) },
         modifier = modifier,
         color = MaterialTheme.colorScheme.primary,
         trackColor = MaterialTheme.colorScheme.surfaceVariant

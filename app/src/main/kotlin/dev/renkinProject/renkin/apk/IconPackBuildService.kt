@@ -32,15 +32,15 @@ data class BuiltIconPack(
 
 internal suspend fun installOrReportConflict(
     canUpdateInPlace: Boolean,
-    install: suspend () -> ApkInstallResult
-): ApkInstallResult =
-    if (canUpdateInPlace) install() else ApkInstallResult.CONFLICT
+    install: suspend () -> ApkInstallOutcome
+): ApkInstallOutcome =
+    if (canUpdateInPlace) install() else ApkInstallOutcome(ApkInstallResult.CONFLICT)
 
 internal suspend fun replaceAfterConflict(
     uninstall: suspend () -> Boolean,
-    install: suspend () -> ApkInstallResult
-): ApkInstallResult =
-    if (uninstall()) install() else ApkInstallResult.ABORTED
+    install: suspend () -> ApkInstallOutcome
+): ApkInstallOutcome =
+    if (uninstall()) install() else ApkInstallOutcome(ApkInstallResult.ABORTED)
 
 internal fun excludeLockedSources(
     profileApps: List<PackageInfoStruct>,
@@ -134,14 +134,14 @@ class IconPackBuildService internal constructor(
         )
     }
 
-    suspend fun install(iconPack: BuiltIconPack): ApkInstallResult =
+    suspend fun install(iconPack: BuiltIconPack): ApkInstallOutcome =
         withContext(Dispatchers.Default) {
             installOrReportConflict(iconPack.canBeInstalled) {
                 ApkInstaller(context).install(iconPack.uri)
             }
         }
 
-    suspend fun replace(iconPack: BuiltIconPack): ApkInstallResult =
+    suspend fun replace(iconPack: BuiltIconPack): ApkInstallOutcome =
         withContext(Dispatchers.Default) {
             replaceAfterConflict(
                 uninstall = { ApkUninstaller(context).uninstall(iconPack.packageName) },

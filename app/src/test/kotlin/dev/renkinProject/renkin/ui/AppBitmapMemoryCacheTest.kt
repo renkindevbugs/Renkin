@@ -42,6 +42,22 @@ class AppBitmapMemoryCacheTest {
     }
 
     @Test
+    fun differentGeneratedLayers_doNotShareTheSameCachedBitmap() {
+        val cache = AppBitmapMemoryCache(maxSizeBytes = 1024)
+        val baseKey = AppBitmapCacheKey("com.app/com.app.Main", 1, Any(), 56)
+        val renderedKey = AppBitmapCacheKey("com.app/com.app.Main", 1, Any(), 56)
+
+        val base = cache.getOrLoad(baseKey) {
+            Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        }
+        val rendered = cache.getOrLoad(renderedKey) {
+            Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        }
+
+        assertNotSame(base, rendered)
+    }
+
+    @Test
     fun byteLimit_evictsLeastRecentlyUsedBitmap() {
         val cache = AppBitmapMemoryCache(maxSizeBytes = 32)
         val firstKey = key(ColorDrawable(1))

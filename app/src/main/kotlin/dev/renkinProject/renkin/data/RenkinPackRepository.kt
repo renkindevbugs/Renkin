@@ -92,6 +92,47 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         presets.forEach { presetDao.insert(it) }
     }
 
+    // ---- Modifier presets ----------------------------------------------------------
+
+    private val modifierPresetDao = db.modifierPresetDao()
+
+    /** Saved Modifier-tab recipes, most recently used first — the order the strip shows them. */
+    fun modifierPresetsFlow(): Flow<List<ModifierPreset>> = modifierPresetDao.getAllFlow()
+
+    suspend fun saveModifierPreset(name: String, payload: String, schemaVersion: Int): Long =
+        withContext(Dispatchers.Default) {
+            modifierPresetDao.insert(
+                ModifierPreset(name = name, payload = payload, schemaVersion = schemaVersion)
+            )
+        }
+
+    suspend fun renameModifierPreset(id: Long, name: String) = withContext(Dispatchers.Default) {
+        modifierPresetDao.rename(id, name)
+    }
+
+    suspend fun updateModifierPreset(id: Long, payload: String, schemaVersion: Int) =
+        withContext(Dispatchers.Default) {
+            modifierPresetDao.update(id, payload, schemaVersion, System.currentTimeMillis())
+        }
+
+    /** Loading a preset makes it the most recent one, which is what the strip is ordered by. */
+    suspend fun markModifierPresetUsed(id: Long) = withContext(Dispatchers.Default) {
+        modifierPresetDao.markUsed(id, System.currentTimeMillis())
+    }
+
+    suspend fun deleteModifierPreset(id: Long) = withContext(Dispatchers.Default) {
+        modifierPresetDao.delete(id)
+    }
+
+    suspend fun allModifierPresets(): List<ModifierPreset> = withContext(Dispatchers.Default) {
+        modifierPresetDao.getAll()
+    }
+
+    suspend fun replaceModifierPresets(presets: List<ModifierPreset>) = db.withTransaction {
+        modifierPresetDao.deleteEverything()
+        presets.forEach { modifierPresetDao.insert(it.copy(id = 0)) }
+    }
+
     // ---- Pack verdicts -------------------------------------------------------------
 
     private val verdictDao = db.packVerdictDao()

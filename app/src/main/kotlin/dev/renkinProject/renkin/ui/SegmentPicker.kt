@@ -25,14 +25,16 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -60,15 +62,14 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.extension.toRgbHexString
 import dev.renkinProject.renkin.icon.creator.ColorSegment
 import dev.renkinProject.renkin.icon.creator.SEGMENT_COUNT_DEFAULT
 import dev.renkinProject.renkin.icon.creator.SEGMENT_COUNT_MAX
 import dev.renkinProject.renkin.icon.creator.SEGMENT_COUNT_MIN
 import dev.renkinProject.renkin.icon.creator.matchesSegment
 import dev.renkinProject.renkin.icon.creator.segmentColors
-import dev.renkinProject.renkin.ui.theme.DialogShape
 import dev.renkinProject.renkin.ui.theme.IconShape as IconTileShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -93,13 +94,14 @@ internal fun SegmentSelector(
     tolerance: Float,
     onTargetsChange: (List<Int>) -> Unit,
     onToleranceChange: (Float) -> Unit,
+    toleranceRange: ClosedFloatingPointRange<Float> = 0.02f..0.5f,
+    selectionActive: Boolean = true,
     // What an empty pick means differs per caller: colourize paints everything, background
     // removal falls back to its automatic guess.
     emptyHint: String = ""
 ) {
     var segmentCount by remember { mutableStateOf(SEGMENT_COUNT_DEFAULT) }
     var segments by remember { mutableStateOf<List<ColorSegment>>(emptyList()) }
-    var pickerOpen by remember { mutableStateOf(false) }
     var masks by remember { mutableStateOf<SelectionMasks?>(null) }
 
     // Icons carry transparent margins (adaptive safe zones especially). Cropping to a square
@@ -110,9 +112,13 @@ internal fun SegmentSelector(
     LaunchedEffect(source, segmentCount) {
         segments = withContext(Dispatchers.Default) { segmentColors(source, segmentCount) }
     }
-    LaunchedEffect(source, bounds, targets, tolerance) {
-        masks = withContext(Dispatchers.Default) {
-            selectionMasks(source.cropped(bounds), targets, tolerance)
+    LaunchedEffect(source, bounds, targets, tolerance, selectionActive) {
+        masks = if (selectionActive) {
+            withContext(Dispatchers.Default) {
+                selectionMasks(source.cropped(bounds), targets, tolerance)
+            }
+        } else {
+            null
         }
     }
 
@@ -157,91 +163,55 @@ internal fun SegmentSelector(
             value = segmentCount.toFloat(),
             onValueChange = { segmentCount = it.roundToInt() },
             valueRange = SEGMENT_COUNT_MIN.toFloat()..SEGMENT_COUNT_MAX.toFloat(),
-            valueLabel = "$segmentCount"
+            ruler = countRuler(majorEvery = 2)
         )
         LabeledSlider(
             label = stringResource(R.string.segmentTolerance),
             value = tolerance,
             onValueChange = onToleranceChange,
-            valueRange = 0.02f..0.5f,
-            valueLabel = "${(tolerance * 100).roundToInt()}"
+            valueRange = toleranceRange,
+            ruler = percentRuler(suffix = "")
         )
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = if (targets.isEmpty()) {
-                    emptyHint.ifEmpty { stringResource(R.string.segmentNoneSelected) }
-                } else {
-                    stringResource(R.string.segmentSelectedCount, targets.size)
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.weight(1f)
-            )
-            TextButton(onClick = { pickerOpen = true }) {
-                Text(stringResource(R.string.segmentPickOnIcon))
-            }
-        }
+        Text(
+            text = if (targets.isEmpty()) {
+                emptyHint.ifEmpty { stringResource(R.string.segmentNoneSelected) }
+            } else {
+                stringResource(R.string.segmentSelectedCount, targets.size)
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.fillMaxWidth()
+        )
     }
 
-    if (wide) {
-        // Wide screens: the icon is the thing being aimed at, so it gets its own column instead
-        // of pushing every control below the fold.
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            canvas(Modifier.width(WideCanvasSize))
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                content = controls
-            )
-        }
-    } else {
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            canvas(
-                Modifier
-                    .fillMaxWidth(0.55f)
-                    .align(Alignment.CenterHorizontally)
-            )
-            controls()
-        }
-    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        // Above the icon, because it is the answer to "what did I pick?" — and the only control
+        // that can undo a pick made before Detail re-clustered the artwork into other colours.
+        PickedSegmentChips(
+            targets = targets,
+            segments = segments,
+            onTargetsChange = onTargetsChange
+        )
 
-    if (pickerOpen) {
-        Dialog(onDismissRequest = { pickerOpen = false }) {
-            Surface(shape = DialogShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+        if (wide) {
+            // Wide screens: the icon is the thing being aimed at, so it gets its own column
+            // instead of pushing every control below the fold.
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                canvas(Modifier.width(WideCanvasSize))
                 Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = stringResource(R.string.segmentPickTitle),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    SegmentCanvas(
-                        icon = icon,
-                        masks = masks,
-                        source = source,
-                        bounds = bounds,
-                        segments = segments,
-                        targets = targets,
-                        onTargetsChange = onTargetsChange,
-                        // Capped: on a tablet a full-width dialog would blow the icon up to
-                        // half the screen without making it any easier to aim at.
-                        modifier = Modifier.fillMaxWidth().widthIn(max = 420.dp)
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        TextButton(onClick = { pickerOpen = false }) {
-                            Text(stringResource(R.string.close))
-                        }
-                    }
-                }
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    content = controls
+                )
+            }
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                canvas(
+                    Modifier
+                        .fillMaxWidth(0.55f)
+                        .align(Alignment.CenterHorizontally)
+                )
+                controls()
             }
         }
     }
@@ -342,6 +312,54 @@ private fun SegmentCanvas(
                 dstOffset = IntOffset.Zero,
                 dstSize = target,
                 colorFilter = ColorFilter.tint(markColor)
+            )
+        }
+    }
+}
+
+/**
+ * The picks themselves, one removable chip each — the segment row below shows what the icon can
+ * be split into right now, which is not the same thing: raising Detail re-clusters the artwork
+ * into different colours, and a pick made at the old setting then had no chip to switch off.
+ * These read straight from the stored targets, so every pick stays removable.
+ */
+@Composable
+private fun PickedSegmentChips(
+    targets: List<Int>,
+    segments: List<ColorSegment>,
+    onTargetsChange: (List<Int>) -> Unit
+) {
+    if (targets.isEmpty()) return
+    // Imported profiles are external input and can contain repeated encoded colours. Compose
+    // requires unique lazy-list keys, while duplicates have no visual or matching meaning here.
+    val pickedTargets = remember(targets) { targets.distinct() }
+
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        items(pickedTargets.size, key = { pickedTargets[it] }) { index ->
+            val target = pickedTargets[index]
+            // A pick still present in the current split is named by its share of the icon;
+            // one left over from another Detail setting falls back to its colour value.
+            val label = segments.firstOrNull { it.color == target }
+                ?.let { "${(it.coverage * 100).roundToInt()}%" }
+                ?: target.toRgbHexString()
+            InputChip(
+                selected = true,
+                onClick = { onTargetsChange(targets - target) },
+                avatar = {
+                    Surface(
+                        shape = CircleShape,
+                        color = Color(target),
+                        modifier = Modifier.size(18.dp)
+                    ) {}
+                },
+                trailingIcon = {
+                    Icon(
+                        imageVector = Icons.Filled.Close,
+                        contentDescription = stringResource(R.string.segmentPickedRemove, label),
+                        modifier = Modifier.size(16.dp)
+                    )
+                },
+                label = { Text(label) }
             )
         }
     }

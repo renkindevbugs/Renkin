@@ -130,4 +130,39 @@ class RenkinPackRepositoryTest {
         assertTrue(row.isXml)
         assertEquals("blob", row.drawable)
     }
+
+    @Test
+    fun modifierPresets_saveUpdateAndReplaceKeepMostRecentOrder() = runBlocking {
+        val firstId = repo.saveModifierPreset("First", "old", 1)
+        repo.saveModifierPreset("Second", "second", 1)
+
+        repo.updateModifierPreset(firstId, "updated", 2)
+
+        val updated = repo.allModifierPresets().first { it.id == firstId }
+        assertEquals("updated", updated.payload)
+        assertEquals(2, updated.schemaVersion)
+
+        repo.replaceModifierPresets(
+            listOf(
+                ModifierPreset(
+                    name = "Older",
+                    payload = "old",
+                    schemaVersion = 1,
+                    createdAt = 10,
+                    lastUsedAt = 20
+                ),
+                ModifierPreset(
+                    name = "Recent",
+                    payload = "new",
+                    schemaVersion = 1,
+                    createdAt = 30,
+                    lastUsedAt = 40
+                )
+            )
+        )
+
+        val restored = repo.allModifierPresets()
+        assertEquals(listOf("Recent", "Older"), restored.map { it.name })
+        assertEquals(listOf("new", "old"), restored.map { it.payload })
+    }
 }
