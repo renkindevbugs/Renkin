@@ -10,6 +10,34 @@ import ru.solrudev.ackpine.installer.InstallFailure
 class InstallFallbackTest {
 
     @Test
+    fun deadInstallerSession_isRecognizedWithoutMatchingOtherFailures() {
+        assertTrue(
+            isDeadInstallerSession(
+                ApkInstallOutcome(ApkInstallResult.FAILED, "Session 1866153790 is dead.")
+            )
+        )
+        assertFalse(
+            isDeadInstallerSession(
+                ApkInstallOutcome(ApkInstallResult.FAILED, "Session timed out")
+            )
+        )
+        assertFalse(
+            isDeadInstallerSession(
+                ApkInstallOutcome(ApkInstallResult.SUCCESS, "Session 1 is dead.")
+            )
+        )
+    }
+
+    @Test
+    fun installationAdvanced_requiresANewOrHigherInstalledVersion() {
+        assertTrue(installationAdvanced(previousVersion = null, currentVersion = 1L))
+        assertTrue(installationAdvanced(previousVersion = 4L, currentVersion = 5L))
+        assertFalse(installationAdvanced(previousVersion = null, currentVersion = null))
+        assertFalse(installationAdvanced(previousVersion = 4L, currentVersion = 4L))
+        assertFalse(installationAdvanced(previousVersion = 5L, currentVersion = 4L))
+    }
+
+    @Test
     fun conflictAndAbortRemainDistinctFromOtherFailures() {
         assertEquals(
             ApkInstallResult.CONFLICT,
