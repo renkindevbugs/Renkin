@@ -1,0 +1,8 @@
+• Added gradients for icon colors, backgrounds, shape plates, outlines and Material You, with a bundled gradient gallery.
+• Added Colorize Segments: per-region color layers on a single icon.
+• Added saved colors and gradients, reusable from every color picker.
+• Added a changes-since-last-build list, with undo for icon resets and refreshes.
+• Added long-press quick actions on the app list: refresh, watch or reset an icon.
+• Improved the pack picker with coverage counts and search, and added problem filters to the home card.
+• Improved wide-screen layouts for the app list, color sheet, segment picker and dialogs.
+• Various stability, performance, and code-quality improvements, plus bug fixes.
