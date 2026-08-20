@@ -137,7 +137,7 @@ class IconPackBuildService internal constructor(
     suspend fun install(iconPack: BuiltIconPack): ApkInstallOutcome =
         withContext(Dispatchers.Default) {
             installOrReportConflict(iconPack.canBeInstalled) {
-                ApkInstaller(context).install(iconPack.uri)
+                ApkInstaller(context).install(iconPack.uri, iconPack.packageName)
             }
         }
 
@@ -145,7 +145,7 @@ class IconPackBuildService internal constructor(
         withContext(Dispatchers.Default) {
             replaceAfterConflict(
                 uninstall = { ApkUninstaller(context).uninstall(iconPack.packageName) },
-                install = { ApkInstaller(context).install(iconPack.uri) }
+                install = { ApkInstaller(context).install(iconPack.uri, iconPack.packageName) }
             )
         }
 }
