@@ -30,22 +30,38 @@ suspend fun Session<*>.awaitSucceeded(tag: String): Boolean =
 internal fun installFailureResult(failure: InstallFailure): ApkInstallResult = when (failure) {
     is InstallFailure.Conflict -> ApkInstallResult.CONFLICT
     is InstallFailure.Aborted -> ApkInstallResult.ABORTED
+    is InstallFailure.Blocked -> ApkInstallResult.BLOCKED
+    is InstallFailure.Incompatible -> ApkInstallResult.INCOMPATIBLE
+    is InstallFailure.Invalid -> ApkInstallResult.INVALID
+    is InstallFailure.Storage -> ApkInstallResult.STORAGE
+    is InstallFailure.Timeout -> ApkInstallResult.TIMEOUT
+    is InstallFailure.Exceptional,
+    is InstallFailure.Generic -> ApkInstallResult.FAILED
     else -> ApkInstallResult.FAILED
 }
 
+private fun installFailureDetail(failure: InstallFailure): String? =
+    when (failure) {
+        is InstallFailure.Exceptional -> failure.exception.stackTraceToString()
+        else -> failure.message
+    }
+
 /** Keeps the install failure category so callers never treat user cancellation like a conflict. */
-suspend fun Session<InstallFailure>.awaitInstallResult(tag: String): ApkInstallResult =
+suspend fun Session<InstallFailure>.awaitInstallResult(tag: String): ApkInstallOutcome =
     try {
         when (val result = await()) {
-            is Session.State.Succeeded -> ApkInstallResult.SUCCESS
+            is Session.State.Succeeded -> ApkInstallOutcome(ApkInstallResult.SUCCESS)
             is Session.State.Failed -> {
                 Log.error(tag, "Session failed: ${result.failure}")
-                installFailureResult(result.failure)
+                ApkInstallOutcome(
+                    result = installFailureResult(result.failure),
+                    detail = installFailureDetail(result.failure)
+                )
             }
         }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
         Log.error(tag, "Session error", e)
-        ApkInstallResult.FAILED
+        ApkInstallOutcome(ApkInstallResult.FAILED, e.stackTraceToString())
     }

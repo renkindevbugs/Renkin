@@ -13,6 +13,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
+import dev.renkinProject.renkin.apk.ApkInstallOutcome
 import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.BuiltIconPack
@@ -524,6 +525,12 @@ class MainViewModel @Inject constructor(
 
     fun dismissBuildOutcome() { buildOutcome = null }
 
+    data class InstallFailureInfo(val summary: String, val report: String)
+    var installFailure by mutableStateOf<InstallFailureInfo?>(null)
+        private set
+
+    fun dismissInstallFailure() { installFailure = null }
+
     private data class PendingInstallFallback(
         val pack: BuiltIconPack,
         val wasUpdate: Boolean,
@@ -546,10 +553,11 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 buildStep = getApplication<Application>().getString(R.string.buildReplacing)
-                when (appProvider.replaceIconPack(pending.pack)) {
-                    ApkInstallResult.SUCCESS -> completeSuccessfulInstall(pending)
-                    else -> _toastEvents.trySend(R.string.iconPackInstallFailed)
-                }
+                handleInstallOutcome(
+                    outcome = appProvider.replaceIconPack(pending.pack),
+                    pending = pending,
+                    offerReplacement = false
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -591,19 +599,11 @@ class MainViewModel @Inject constructor(
                 buildStep = getApplication<Application>().getString(
                     if (wasUpdate) R.string.buildUpdating else R.string.buildInstalling
                 )
-                when (appProvider.installIconPack(pack)) {
-                    ApkInstallResult.SUCCESS -> completeSuccessfulInstall(pending)
-                    ApkInstallResult.CONFLICT -> {
-                        pendingInstallFallback = pending
-                        installFallbackPending = true
-                    }
-                    ApkInstallResult.ABORTED,
-                    ApkInstallResult.FAILED -> {
-                        // The pack was built and saved; only its installation didn't happen.
-                        syncBuildBaselines(pack.profileId)
-                        _toastEvents.trySend(R.string.iconPackInstallFailed)
-                    }
-                }
+                handleInstallOutcome(
+                    outcome = appProvider.installIconPack(pack),
+                    pending = pending,
+                    offerReplacement = true
+                )
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -616,6 +616,53 @@ class MainViewModel @Inject constructor(
                 buildProgress = null
             }
         }
+    }
+
+    private suspend fun handleInstallOutcome(
+        outcome: ApkInstallOutcome,
+        pending: PendingInstallFallback,
+        offerReplacement: Boolean
+    ) {
+        when (outcome.result) {
+            ApkInstallResult.SUCCESS -> completeSuccessfulInstall(pending)
+            ApkInstallResult.CONFLICT -> if (offerReplacement) {
+                pendingInstallFallback = pending
+                installFallbackPending = true
+            } else {
+                syncBuildBaselines(pending.pack.profileId)
+                _toastEvents.trySend(R.string.iconPackInstallFailed)
+                showInstallFailure(outcome, pending.pack)
+            }
+            ApkInstallResult.ABORTED -> {
+                syncBuildBaselines(pending.pack.profileId)
+                _toastEvents.trySend(R.string.iconPackInstallFailed)
+            }
+            else -> {
+                // The pack was built and saved; only Android's installation step failed.
+                syncBuildBaselines(pending.pack.profileId)
+                _toastEvents.trySend(R.string.iconPackInstallFailed)
+                showInstallFailure(outcome, pending.pack)
+            }
+        }
+    }
+
+    private fun showInstallFailure(outcome: ApkInstallOutcome, pack: BuiltIconPack) {
+        val detail = outcome.detail?.trim().takeUnless { it.isNullOrEmpty() }
+            ?: "No additional details were provided by Android."
+        val summaryDetail = detail.lineSequence().first().take(300)
+        installFailure = InstallFailureInfo(
+            summary = "${outcome.result.name}: $summaryDetail",
+            report = buildString {
+                appendLine("Renkin icon pack installation report")
+                appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                appendLine("Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
+                appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+                appendLine("Pack: ${pack.packageName}")
+                appendLine("Result: ${outcome.result.name}")
+                appendLine()
+                append(detail)
+            }
+        )
     }
 
     private suspend fun completeSuccessfulInstall(pending: PendingInstallFallback) {

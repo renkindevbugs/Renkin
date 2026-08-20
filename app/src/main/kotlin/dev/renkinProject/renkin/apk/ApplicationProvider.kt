@@ -603,21 +603,21 @@ class ApplicationProvider internal constructor(
         )
     }
 
-    suspend fun installIconPack(iconPack: BuiltIconPack): ApkInstallResult {
-        val result = iconPackBuildService.install(iconPack)
-        finishInstallAttempt(iconPack, result)
-        return result
+    suspend fun installIconPack(iconPack: BuiltIconPack): ApkInstallOutcome {
+        val outcome = iconPackBuildService.install(iconPack)
+        finishInstallAttempt(iconPack, outcome)
+        return outcome
     }
 
     /** Explicitly approved fallback after an update conflict: uninstall, then install the APK. */
-    suspend fun replaceIconPack(iconPack: BuiltIconPack): ApkInstallResult {
-        val result = iconPackBuildService.replace(iconPack)
-        finishInstallAttempt(iconPack, result)
-        return result
+    suspend fun replaceIconPack(iconPack: BuiltIconPack): ApkInstallOutcome {
+        val outcome = iconPackBuildService.replace(iconPack)
+        finishInstallAttempt(iconPack, outcome)
+        return outcome
     }
 
-    private suspend fun finishInstallAttempt(iconPack: BuiltIconPack, result: ApkInstallResult) {
-        val success = result == ApkInstallResult.SUCCESS
+    private suspend fun finishInstallAttempt(iconPack: BuiltIconPack, outcome: ApkInstallOutcome) {
+        val success = outcome.result == ApkInstallResult.SUCCESS
         // Building the APK is the commitment, not installing it: someone who only wants their
         // icons stored can go through Build and dismiss the installer. Either way the save
         // matches the pack that was produced, so it counts as built.
