@@ -1,0 +1,2 @@
+• Hopefully fixed icon pack installation failures on some Samsung and other OEM devices (#6).
+• Updated the Ackpine installer library and improved fallback handling and error diagnostics.
