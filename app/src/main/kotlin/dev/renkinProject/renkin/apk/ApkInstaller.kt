@@ -10,13 +10,24 @@ enum class ApkInstallResult {
     SUCCESS,
     CONFLICT,
     ABORTED,
+    BLOCKED,
+    INCOMPATIBLE,
+    INVALID,
+    STORAGE,
+    TIMEOUT,
     FAILED
 }
+
+/** Typed system outcome plus the raw PackageInstaller detail needed for remote diagnostics. */
+data class ApkInstallOutcome(
+    val result: ApkInstallResult,
+    val detail: String? = null
+)
 
 class ApkInstaller(context: Context) {
     private val packageInstaller = PackageInstaller.getInstance(context)
 
-    suspend fun install(apk: Uri): ApkInstallResult {
+    suspend fun install(apk: Uri): ApkInstallOutcome {
         val session = packageInstaller.createSession(apk) {
             confirmation = Confirmation.IMMEDIATE
         }

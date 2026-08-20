@@ -12,11 +12,13 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
@@ -29,6 +31,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Info
@@ -71,6 +74,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -83,6 +87,7 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalFocusManager
@@ -112,6 +117,7 @@ import dev.renkinProject.renkin.GlobalOptionsActivity
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.WatchViewModel
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 /**
  * The three problem groups the app list can be narrowed to. Multiple groups may be selected;
@@ -275,6 +281,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // collector here covers every VM-originated toast (build installed, packs synced,
     // app list refreshed) regardless of which dialog/button triggered it.
     val toaster = LocalToaster.current
+    val clipboard = LocalClipboard.current
+    val coroutineScope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         viewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
     }
@@ -308,6 +316,50 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 viewModel.dismissNewIconPack()
             },
             onDismiss = { viewModel.dismissNewIconPack() }
+        )
+    }
+
+    val installFailure = viewModel.installFailure
+    if (installFailure != null) {
+        val copiedMessage = stringResource(R.string.installFailureCopied)
+        val reportLabel = stringResource(R.string.installFailureTitle)
+        RenkinAlertDialog(
+            onDismissRequest = { viewModel.dismissInstallFailure() },
+            icon = {
+                Icon(
+                    Icons.Filled.Warning,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text(stringResource(R.string.installFailureTitle)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(stringResource(R.string.installFailureText))
+                    Text(
+                        text = installFailure.summary,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    coroutineScope.launch {
+                        clipboard.copyPlainText(reportLabel, installFailure.report)
+                        toaster.show(copiedMessage)
+                    }
+                }) {
+                    Icon(Icons.Filled.ContentCopy, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.installFailureCopy))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissInstallFailure() }) {
+                    Text(stringResource(R.string.dismiss))
+                }
+            }
         )
     }
 

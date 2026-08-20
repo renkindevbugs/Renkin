@@ -1,5 +1,5 @@
 [versions]
-ackpineCore = "0.10.2"
+ackpineCore = "0.21.2"
 agp = "8.9.0"
 androidx-activityCompose = "1.10.1"
 androidx-appcompat = "1.7.0"

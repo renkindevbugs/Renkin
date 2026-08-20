@@ -444,6 +444,10 @@
     <string name="sortZToA">Z → A</string>
     <string name="iconPackBuildFailed">Couldn\'t build the icon pack</string>
     <string name="iconPackInstallFailed">The icon pack wasn\'t installed</string>
+    <string name="installFailureTitle">Icon pack installation failed</string>
+    <string name="installFailureText">Android rejected the installation. Copy these diagnostic details and include them when reporting the problem.</string>
+    <string name="installFailureCopy">Copy details</string>
+    <string name="installFailureCopied">Installation details copied</string>
     <string name="installFallbackTitle">Replace existing icon pack?</string>
     <string name="installFallbackText">Android can\'t update the installed pack, usually because its signing key is different. To continue, Renkin must **uninstall the existing pack and then install the new one**. Complete both system dialogs. If you cancel the second installation, the old pack will no longer be installed.</string>
     <string name="installFallbackAction">Replace pack</string>
