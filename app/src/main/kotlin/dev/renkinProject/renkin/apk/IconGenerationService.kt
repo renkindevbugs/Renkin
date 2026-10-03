@@ -16,6 +16,8 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.extension.contentHash
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 /**
@@ -116,8 +118,12 @@ class IconGenerationService(
     ) = withContext(Dispatchers.Default) {
         val builder = buildGenerator(sourceOptions)
         val modifier = modifierOptions?.let { modifierPipeline(it) }
+        val generationContext = currentCoroutineContext()
         builder.generateIcon(application) { app, base, sourcePack ->
-            onResult(app, base, base?.let { modifier?.applyPrimary(it) ?: it }, sourcePack)
+            generationContext.ensureActive()
+            val rendered = base?.let { modifier?.applyPrimary(it) ?: it }
+            generationContext.ensureActive()
+            onResult(app, base, rendered, sourcePack)
         }
     }
 
@@ -130,11 +136,15 @@ class IconGenerationService(
     ) = withContext(Dispatchers.Default) {
         val builder = buildGenerator(sourceOptions)
         val modifier = modifierOptions?.let { modifierPipeline(it) }
+        val generationContext = currentCoroutineContext()
         builder.generateIcons(applications) { app, base, fallback, sourcePack ->
+            generationContext.ensureActive()
+            val rendered = base?.let { modifier?.applyPrimary(it) ?: it }
+            generationContext.ensureActive()
             onResult(
                 app,
                 base,
-                base?.let { modifier?.applyPrimary(it) ?: it },
+                rendered,
                 fallback,
                 sourcePack
             )

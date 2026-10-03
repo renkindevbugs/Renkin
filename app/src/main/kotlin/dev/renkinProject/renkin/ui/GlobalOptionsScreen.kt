@@ -602,7 +602,6 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     val view = LocalView.current
     val toaster = LocalToaster.current
     val appliedMessage = stringResource(R.string.globalOptionsApplied)
-    val applyFailedMessage = stringResource(R.string.globalOptionsApplyFailed)
     val githubIssuesUrl = stringResource(R.string.crashGithubUrl)
     val openLink = rememberLinkOpener()
 
@@ -772,8 +771,8 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                                     state.applyGenerated, state.applyExisting,
                                     state.applyCustom, state.includeEmpty
                                 )
-                                toaster.show(if (applied) appliedMessage else applyFailedMessage)
                                 if (applied) {
+                                    toaster.show(appliedMessage)
                                     baseline = state.snapshot()
                                 }
                             }
@@ -1359,7 +1358,6 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val externalEditorError = stringResource(R.string.noImageEditorAvailable)
-    val originLockedMessage = stringResource(R.string.iconOriginLocked)
 
     var imageEdit by remember { mutableStateOf(ImageEdit.NONE) }
     var iconColor by remember { mutableStateOf(Color.White) }
@@ -1475,10 +1473,9 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                             val edited = preview
                             if (edited != null) {
                                 scope.launch {
-                                    val stored = viewModel.applyEditedIcon(
+                                    viewModel.applyEditedIcon(
                                         app, edited, sourcePackName = app.sourcePackName
                                     )
-                                    if (!stored) toaster.show(originLockedMessage)
                                     onDismiss()
                                 }
                             } else {

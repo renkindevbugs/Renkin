@@ -7,9 +7,13 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.SavedStateHandle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.ProfileOperationBusyException
+import dev.renkinProject.renkin.apk.ProfileSessionToken
+import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.data.BackgroundStyleKeys
 import dev.renkinProject.renkin.data.CalendarIconsKey
 import dev.renkinProject.renkin.data.ColorStyleKeys
@@ -44,6 +48,7 @@ import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.util.Log
 import javax.inject.Inject
 import kotlin.math.roundToInt
 import kotlinx.coroutines.Dispatchers
@@ -51,7 +56,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
 
 /**
  * Shared owner for the option controls hosted by both MainActivity and GlobalOptionsActivity.
@@ -61,10 +69,17 @@ import kotlinx.coroutines.launch
 @HiltViewModel
 class OptionsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val appProvider: ApplicationProvider
+    private val appProvider: ApplicationProvider,
+    private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
     private val preferences = context.dataStore
+
+    val sessionToken: ProfileSessionToken
+        get() = savedStateHandle.profileSession() ?: appProvider.sessionToken
+
+    private val _toastEvents = Channel<Int>(Channel.BUFFERED)
+    val toastEvents = _toastEvents.receiveAsFlow()
 
     /**
      * Activity-scoped preference snapshot for option UIs that can temporarily leave composition.
@@ -128,7 +143,11 @@ class OptionsViewModel @Inject constructor(
 
     fun setOutlineEnabled(enabled: Boolean) = write { setBooleanValue(OutlineAddKey, enabled) }
 
-    fun setOutlineWidth(width: Float) = write {
+    fun setOutlineWidth(
+        width: Float,
+        expected: ProfileSessionToken,
+        onComplete: (Boolean) -> Unit
+    ) = write(expected, onComplete) {
         setIntValue(OutlineWidthKey, width.roundToInt())
     }
 
@@ -159,7 +178,34 @@ class OptionsViewModel @Inject constructor(
         )
     }
 
-    private fun write(block: suspend DataStore<Preferences>.() -> Unit) {
-        viewModelScope.launch { preferences.block() }
+    private fun write(
+        expected: ProfileSessionToken = sessionToken,
+        onComplete: (Boolean) -> Unit = {},
+        block: suspend DataStore<Preferences>.() -> Unit
+    ) {
+        if (!appProvider.startupComplete || appProvider.isProfileSwitching) {
+            _toastEvents.trySend(R.string.profileStillLoading)
+            onComplete(false)
+            return
+        }
+        viewModelScope.launch {
+            val saved = try {
+                appProvider.updateProfilePreferences(expected, block)
+                true
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: ProfileSessionChangedException) {
+                _toastEvents.trySend(error.userMessage())
+                false
+            } catch (error: ProfileOperationBusyException) {
+                _toastEvents.trySend(R.string.profileOperationBusy)
+                false
+            } catch (error: Exception) {
+                Log.error("OptionsViewModel", "Could not save profile options", error)
+                _toastEvents.trySend(R.string.profileOperationFailed)
+                false
+            }
+            onComplete(saved)
+        }
     }
 }

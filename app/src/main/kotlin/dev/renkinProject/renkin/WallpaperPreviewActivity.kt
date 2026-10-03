@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import dagger.hilt.android.AndroidEntryPoint
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.isDarkModeEnabled
 import dev.renkinProject.renkin.ui.BuildPackPreviewContent
 import dev.renkinProject.renkin.ui.LocalToaster
@@ -44,7 +45,7 @@ class WallpaperPreviewActivity : ComponentActivity() {
     companion object {
         const val EXTRA_BUILT_KEYS = "builtKeys"
         const val EXTRA_UPDATED_KEYS = "updatedKeys"
-        const val EXTRA_PROFILE_ID = "profileId"
+        const val EXTRA_SESSION_CHANGED = "sessionChanged"
 
         /** Set on a CANCELED result when the process died under the preview (see onCreate). */
         const val EXTRA_SESSION_LOST = "sessionLost"
@@ -74,7 +75,15 @@ class WallpaperPreviewActivity : ComponentActivity() {
 
         val builtKeys = intent.getStringArrayListExtra(EXTRA_BUILT_KEYS)?.toSet() ?: emptySet()
         val updatedKeys = intent.getStringArrayListExtra(EXTRA_UPDATED_KEYS)?.toSet() ?: emptySet()
-        val profileId = intent.getLongExtra(EXTRA_PROFILE_ID, -1L)
+        val expected = intent.profileSession()
+        if (expected == null) {
+            finish()
+            return
+        }
+        if (!appProvider.isCurrentSession(expected)) {
+            cancelExpiredPreview(expected)
+            return
+        }
 
         setContent {
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
@@ -86,13 +95,13 @@ class WallpaperPreviewActivity : ComponentActivity() {
             CompositionLocalProvider(LocalToaster provides toaster) {
                 RenkinTheme(darkMode) {
                     LaunchedEffect(
-                        appProvider.activeProfileId,
+                        appProvider.sessionToken,
                         appProvider.isProfileSwitching
                     ) {
                         // The reviewed icons must stay tied to one profile. A watch deep link can
                         // otherwise switch the singleton provider underneath this activity.
-                        if (appProvider.isProfileSwitching || appProvider.activeProfileId != profileId) {
-                            finish()
+                        if (!appProvider.isCurrentSession(expected)) {
+                            cancelExpiredPreview(expected)
                         }
                     }
                     BuildPackPreviewContent(
@@ -102,16 +111,27 @@ class WallpaperPreviewActivity : ComponentActivity() {
                         loadCalendarWarnings = { preferences -> appProvider.calendarWarnings(preferences) },
                         onDismiss = { finish() },
                         onBuild = {
-                            setResult(
-                                RESULT_OK,
-                                Intent().putExtra(EXTRA_PROFILE_ID, profileId)
-                            )
-                            finish()
+                            if (appProvider.isCurrentSession(expected)) {
+                                setResult(RESULT_OK, Intent().withProfileSession(expected))
+                                finish()
+                            } else {
+                                cancelExpiredPreview(expected)
+                            }
                         }
                     )
                     ToastHost(toaster)
                 }
             }
         }
+    }
+
+    private fun cancelExpiredPreview(expected: ProfileSessionToken) {
+        val lostProcess = expected.providerInstanceId != appProvider.sessionToken.providerInstanceId
+        setResult(
+            RESULT_CANCELED,
+            Intent().withProfileSession(expected)
+                .putExtra(if (lostProcess) EXTRA_SESSION_LOST else EXTRA_SESSION_CHANGED, true)
+        )
+        finish()
     }
 }

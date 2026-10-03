@@ -62,6 +62,9 @@ import androidx.compose.ui.res.stringResource
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.WallpaperPreviewActivity
+import dev.renkinProject.renkin.profileSession
+import dev.renkinProject.renkin.withProfileSession
+import dev.renkinProject.renkin.expiredSessionMessage
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -134,16 +137,16 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
     // show behind it; RESULT_OK = the user pressed Build there.
     val previewLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
-            val profileId = result.data?.getLongExtra(
-                WallpaperPreviewActivity.EXTRA_PROFILE_ID, -1L
-            ) ?: -1L
-            if (profileId < 0L) return@rememberLauncherForActivityResult
+            val expected = result.data?.profileSession() ?: return@rememberLauncherForActivityResult
             view.performConfirmHaptic()
-            viewModel.build(profileId)
+            viewModel.build(expected)
         } else if (result.data?.getBooleanExtra(WallpaperPreviewActivity.EXTRA_SESSION_LOST, false) == true) {
             // The process was killed while the preview was in front: it closed itself rather
             // than review a state the user never saw. Say so instead of looking like a no-op.
             toaster.show(context.getString(R.string.buildPreviewSessionLost))
+        } else if (result.data?.getBooleanExtra(WallpaperPreviewActivity.EXTRA_SESSION_CHANGED, false) == true) {
+            val expected = result.data?.profileSession() ?: return@rememberLauncherForActivityResult
+            toaster.show(context.getString(expected.expiredSessionMessage(viewModel.sessionToken)))
         }
     }
 
@@ -162,7 +165,7 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
             view.performTapHaptic()
             previewLauncher.launch(
                 Intent(context, WallpaperPreviewActivity::class.java)
-                    .putExtra(WallpaperPreviewActivity.EXTRA_PROFILE_ID, viewModel.activeProfileId)
+                    .withProfileSession(viewModel.sessionToken)
                     .putStringArrayListExtra(WallpaperPreviewActivity.EXTRA_BUILT_KEYS, ArrayList(viewModel.builtKeys))
                     .putStringArrayListExtra(WallpaperPreviewActivity.EXTRA_UPDATED_KEYS, ArrayList(viewModel.updatedKeys))
             )

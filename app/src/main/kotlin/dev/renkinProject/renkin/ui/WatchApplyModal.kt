@@ -47,7 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.CardShape
-import dev.renkinProject.renkin.IconApplyResult
+import dev.renkinProject.renkin.apk.IconApplyOutcome
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.WatchViewModel
@@ -76,7 +76,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     val prefs = getPreferences()
     val view = LocalView.current
     val toaster = LocalToaster.current
-    val suggestionProfileId = remember(suggestionId) { viewModel.activeProfileId }
+    val suggestionSession = remember(suggestionId) { viewModel.sessionToken }
 
     var suggestion by remember(suggestionId) { mutableStateOf<IconSuggestion?>(null) }
     var candidates by remember(suggestionId) { mutableStateOf<List<IconSuggestionCandidate>>(emptyList()) }
@@ -231,21 +231,21 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                                     try {
                                         when (
                                             viewModel.applyWatchIcon(
-                                                suggestionProfileId,
                                                 targetApp,
                                                 icon,
-                                                appliedPack
+                                                appliedPack,
+                                                suggestionSession
                                             )
                                         ) {
-                                            IconApplyResult.APPLIED -> {
+                                            IconApplyOutcome.APPLIED -> {
                                                 appliedRuleId?.let { watchViewModel.deleteRule(it) }
                                                 toaster.show(applyToast)
                                                 onDismiss()
                                             }
-                                            IconApplyResult.LOCKED -> toaster.show(lockedToast)
-                                            IconApplyResult.TARGET_GONE,
-                                            IconApplyResult.PROFILE_CHANGED,
-                                            IconApplyResult.FAILED -> toaster.show(applyFailedToast)
+                                            IconApplyOutcome.LOCKED -> toaster.show(lockedToast)
+                                            IconApplyOutcome.TARGET_GONE,
+                                            IconApplyOutcome.PROFILE_CHANGED,
+                                            IconApplyOutcome.FAILED -> toaster.show(applyFailedToast)
                                         }
                                     } finally {
                                         applying = false

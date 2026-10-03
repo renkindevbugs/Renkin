@@ -25,6 +25,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +57,10 @@ internal fun AppQuickActionsSheet(
     onDismiss: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
+    val expected = remember(app.key) { viewModel.sessionToken }
+    LaunchedEffect(viewModel.sessionToken) {
+        if (viewModel.sessionToken != expected) onDismiss()
+    }
     val watchViewModel: WatchViewModel = hiltViewModel()
     val toaster = LocalToaster.current
     val watchingMessage = stringResource(R.string.quickActionWatchAdded, app.appName)
@@ -84,7 +89,7 @@ internal fun AppQuickActionsSheet(
                 ),
                 hint = stringResource(R.string.quickActionRefreshHint)
             ) {
-                viewModel.refreshSingleIcon(app)
+                viewModel.refreshSingleIcon(app, expected)
                 onDismiss()
             }
 
@@ -135,7 +140,7 @@ internal fun AppQuickActionsSheet(
                     hint = stringResource(R.string.quickActionResetHint),
                     destructive = true
                 ) {
-                    viewModel.resetIcon(app)
+                    viewModel.resetIcon(app, expected)
                     onDismiss()
                 }
             }

@@ -27,6 +27,7 @@ import dev.renkinProject.renkin.data.getDefaultIconColor
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.persistGlobalStylePrefs
+import dev.renkinProject.renkin.data.setPrimarySource
 import dev.renkinProject.renkin.data.restoreBuiltPrimarySource
 import dev.renkinProject.renkin.data.online.onlineAttributionLabel
 import dev.renkinProject.renkin.drawable.IconPackDrawable
@@ -46,10 +47,14 @@ import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import java.util.UUID
 
 internal fun shouldApplyGlobalLayer(
     isCustom: Boolean,
@@ -85,11 +90,28 @@ internal fun mergeGlobalRenders(
     renderedByKey: Map<String, PackageInfoStruct>
 ): List<PackageInfoStruct> = original.map { renderedByKey[it.key] ?: it }
 
-/** Serializes every operation that reads or replaces the active profile session. */
+/** Serializes active-profile mutations and coordinated snapshots. */
 internal class ProfileOperationGate {
     private val mutex = Mutex()
 
     suspend fun <T> run(operation: suspend () -> T): T = mutex.withLock { operation() }
+
+    suspend fun <T> runWithBoundedWait(operation: suspend () -> T): T {
+        var acquired = false
+        try {
+            // Limit only acquisition: canceling a preference write could leave a partial recipe.
+            val available = withTimeoutOrNull(300L) {
+                mutex.lock()
+                acquired = true
+                true
+            } == true
+            if (!available) throw ProfileOperationBusyException()
+            currentCoroutineContext().ensureActive()
+            return operation()
+        } finally {
+            if (acquired) mutex.unlock()
+        }
+    }
 }
 
 /**
@@ -134,6 +156,46 @@ class ApplicationProvider internal constructor(
 
     private val initialLoadMutex = Mutex()
     private val profileOperations = ProfileOperationGate()
+    private val providerInstanceId = UUID.randomUUID().toString()
+    private var sessionRevision by mutableStateOf(0L)
+
+    val sessionToken: ProfileSessionToken
+        get() = ProfileSessionToken(activeProfileId, sessionRevision, providerInstanceId)
+
+    fun isCurrentSession(expected: ProfileSessionToken): Boolean =
+        startupComplete && !isProfileSwitching && expected == sessionToken
+
+    private fun requireCurrentSession(expected: ProfileSessionToken) {
+        val reason = when {
+            expected.providerInstanceId != providerInstanceId -> ProfileSessionFailureReason.PROCESS_LOST
+            !startupComplete || isProfileSwitching -> ProfileSessionFailureReason.LOADING
+            expected != sessionToken -> ProfileSessionFailureReason.EXPIRED
+            else -> return
+        }
+        throw ProfileSessionChangedException(reason)
+    }
+
+    private suspend fun <T> runProfileOperation(
+        expected: ProfileSessionToken,
+        operation: suspend () -> T
+    ): T = profileOperations.run {
+        requireCurrentSession(expected)
+        currentCoroutineContext().ensureActive()
+        operation()
+    }
+
+    suspend fun commitSessionState(expected: ProfileSessionToken, update: () -> Unit): Boolean =
+        profileOperations.run {
+            if (!isCurrentSession(expected)) return@run false
+            currentCoroutineContext().ensureActive()
+            update()
+            true
+        }
+
+    private fun invalidateSession() {
+        sessionRevision++
+        clearUndo()
+    }
 
     /** True while the shared preferences and live icon list are changing profiles. */
     var isProfileSwitching: Boolean by mutableStateOf(false)
@@ -175,7 +237,7 @@ class ApplicationProvider internal constructor(
         packRepo.deleteModifierPreset(id)
     }
 
-    suspend fun initialize() {
+    private suspend fun initialize() {
         // Startup phase timings land in logcat (tag "Startup") so a slow cold start can be
         // attributed to a phase instead of guessed at. Debug-level: silent in release logs.
         timedPhase("apps") { initializeApplications() }
@@ -213,20 +275,29 @@ class ApplicationProvider internal constructor(
      * edited in this session. Nothing is written to storage: a process restart still returns to
      * the last build/save. If reloading fails after clearing the list, restore the old session.
      */
-    suspend fun reloadPreservingSession(preserveKeys: Set<String>) {
-        profileOperations.run {
+    suspend fun reloadPreservingSession(
+        expected: ProfileSessionToken,
+        preserveKeys: Set<String>
+    ): ProfileSessionToken = withContext(Dispatchers.Default) {
+        runProfileOperation(expected) {
+            invalidateSession()
             val session = applicationList.toList()
+            isProfileSwitching = true
             try {
                 initialize()
                 replaceApplications(mergeApplicationReload(session, applicationList.toList(), preserveKeys))
+                sessionToken
             } catch (error: Exception) {
                 replaceApplications(session)
-                throw error
+                if (error is CancellationException) throw error
+                throw ProfileReloadFailedException(sessionToken, error)
+            } finally {
+                isProfileSwitching = false
             }
         }
     }
 
-    suspend fun initializeApplications() = withContext(Dispatchers.Default) {
+    private suspend fun initializeApplications() = withContext(Dispatchers.Default) {
         val apps = installedAppCatalog.getAllInstalledApps()
         apps.sort()
 
@@ -239,7 +310,7 @@ class ApplicationProvider internal constructor(
         _applicationList.addAll(apps)
     }
 
-    suspend fun initializeIconPacks() {
+    private suspend fun initializeIconPacks() {
         iconPackRepo.load(installedApplicationRefs())
         // Every pack seen installed is owned on this device forever — the paid-pack lock
         // never applies to it again, even after an uninstall.
@@ -250,12 +321,9 @@ class ApplicationProvider internal constructor(
     private fun installedApplicationRefs(): List<InstalledApplication> =
         applicationList.map { InstalledApplication(it.packageName, it.activityName, it.iconID) }
 
-    suspend fun initializeRenkinPack() {
+    private suspend fun initializeRenkinPack() {
         profileManager.initActiveId()
         loadRenkinPack(activeProfileId)
-        // MainViewModel's startup calls the initialize* steps individually (not initialize()),
-        // and this one runs last of the two that profile switching depends on (apps + saved
-        // icons) — so THIS is where switching becomes safe, not initialize().
         startupComplete = true
     }
 
@@ -266,13 +334,12 @@ class ApplicationProvider internal constructor(
      * which is the one case worth offering Undo for (filling an empty slot is what refresh is
      * for, and a withheld locked origin changes nothing at all).
      */
-    suspend fun refreshIcon(expectedProfileId: Long, application: PackageInfoStruct): Boolean =
+    suspend fun refreshIcon(expected: ProfileSessionToken, application: PackageInfoStruct): Boolean =
         withContext(Dispatchers.Default) {
-            profileOperations.run {
-                if (activeProfileId != expectedProfileId) return@run false
+            runProfileOperation(expected) {
                 val preferences = context.dataStore.getPreferencesAfterPendingWrites()
                 // The row the user long-pressed may be a stale copy; regenerate over the live one.
-                val target = applicationList.firstOrNull { it.key == application.key } ?: return@run false
+                val target = applicationList.firstOrNull { it.key == application.key } ?: return@runProfileOperation false
                 // A newly installed app always gets its icon (re)generated
                 val sourceOptions = GenerationOptions.fromPreferences(preferences, context, override = true)
                 val modifierOptions = modifierFor(preferences, apply = preferences.getBooleanValue(GlobalApplyGeneratedKey, true))
@@ -300,17 +367,16 @@ class ApplicationProvider internal constructor(
      * index lookup and the edit must see one list. Returns true when something was actually
      * cleared, so the caller only offers Undo then.
      */
-    suspend fun resetIcon(expectedProfileId: Long, application: PackageInfoStruct): Boolean =
+    suspend fun resetIcon(expected: ProfileSessionToken, application: PackageInfoStruct): Boolean =
         withContext(Dispatchers.Default) {
-            profileOperations.run {
-                if (activeProfileId != expectedProfileId) return@run false
+            runProfileOperation(expected) {
                 val index = applicationList.indexOfFirst { it.key == application.key }
-                if (index < 0) return@run false
+                if (index < 0) return@runProfileOperation false
                 val live = applicationList[index]
                 val hadSomething = live.createdIcon != null ||
                     live.calendarEnabled ||
                     application.key in lockManager.lockedKeys
-                if (!hadSomething) return@run false
+                if (!hadSomething) return@runProfileOperation false
                 captureUndoRows(listOf(live), persisted = true)
                 lockManager.discard(application.key)
                 editApplication(index, live.changeExport(null).changeCalendar(false, null, null))
@@ -320,12 +386,11 @@ class ApplicationProvider internal constructor(
 
     /** Regenerates all icons. Returns how many were withheld because their real origin
      * (recorded by an own pack used as source) is a pack this device doesn't own. */
-    suspend fun refreshIcons(expectedProfileId: Long): Int? = withContext(Dispatchers.Default) {
+    suspend fun refreshIcons(expected: ProfileSessionToken): Int = withContext(Dispatchers.Default) {
         // The preferences recipe and applicationList must belong to the same profile: a switch
         // landing between them would pair A's settings with B's list, and its wholesale list
         // swap would fight the per-app edits below. Read both under the switchProfile gate.
-        profileOperations.run {
-            if (activeProfileId != expectedProfileId) return@run null
+        runProfileOperation(expected) {
             val preferences = context.dataStore.getPreferencesAfterPendingWrites()
             var opt = GenerationOptions.fromPreferences(preferences, context)
             // Themed icons on Android 12+ are recoloured with the system dynamic palette
@@ -367,46 +432,46 @@ class ApplicationProvider internal constructor(
         }
     }
 
-    enum class WatchIconApplyResult {
-        APPLIED,
-        LOCKED,
-        TARGET_GONE,
-        PROFILE_CHANGED
-    }
-
     /**
      * Applies a watched icon only to the profile that opened its suggestion. Resolving the true
      * source, rendering and editing the live row stay under one profile operation so a second
      * notification cannot switch sessions between those steps.
      */
     suspend fun applyWatchIcon(
-        expectedProfileId: Long,
+        expected: ProfileSessionToken,
         application: PackageInfoStruct,
         icon: IconPackDrawable,
         sourcePackName: String?
-    ): WatchIconApplyResult = withContext(Dispatchers.Default) {
+    ): IconApplyOutcome = applyPickedIcon(expected, application, icon, sourcePackName) { live, origin, rendered ->
+        live.changeExport(
+            rendered, sourcePackName = origin, isRefreshMade = false,
+            isCustom = true, isLegacy = false, baseIcon = icon
+        )
+    }
+
+    suspend fun applyPickedIcon(
+        expected: ProfileSessionToken,
+        application: PackageInfoStruct,
+        icon: IconPackDrawable?,
+        sourcePackName: String?,
+        edit: (PackageInfoStruct, String?, IconPackDrawable?) -> PackageInfoStruct
+    ): IconApplyOutcome = withContext(Dispatchers.Default) {
         profileOperations.run {
-            if (activeProfileId != expectedProfileId) return@run WatchIconApplyResult.PROFILE_CHANGED
+            if (!isCurrentSession(expected)) return@run IconApplyOutcome.PROFILE_CHANGED
+            currentCoroutineContext().ensureActive()
             val preferences = context.dataStore.getPreferencesAfterPendingWrites()
-            val (origin, locked) = lockManager.resolvePickedSource(application.key, sourcePackName)
-            if (locked) return@run WatchIconApplyResult.LOCKED
-            val rendered = renderCustomIcon(icon, preferences)
+            val (origin, locked) = lockManager.resolvePickedSource(
+                application.key, if (icon == null) null else sourcePackName
+            )
+            if (icon != null && locked) return@run IconApplyOutcome.LOCKED
+            val rendered = icon?.let { renderCustomIcon(it, preferences) }
+            currentCoroutineContext().ensureActive()
             val index = applicationList.indexOfFirst { it.key == application.key }
-            if (index < 0) return@run WatchIconApplyResult.TARGET_GONE
-            applicationList[index].let { live ->
-                editApplication(
-                    index,
-                    live.changeExport(
-                        rendered,
-                        sourcePackName = origin,
-                        isRefreshMade = false,
-                        isCustom = true,
-                        isLegacy = false,
-                        baseIcon = icon
-                    )
-                )
-            }
-            WatchIconApplyResult.APPLIED
+            if (index < 0) return@run IconApplyOutcome.TARGET_GONE
+            val updated = edit(applicationList[index], origin, rendered)
+            require(updated.key == application.key)
+            editApplication(index, updated)
+            IconApplyOutcome.APPLIED
         }
     }
 
@@ -448,6 +513,7 @@ class ApplicationProvider internal constructor(
      * untouched; selecting a category with no visible modifier explicitly restores its base.
      */
     suspend fun applyGlobalModifiers(
+        expected: ProfileSessionToken,
         preferences: Preferences,
         modifierOptions: GenerationOptions,
         applyGenerated: Boolean,
@@ -456,7 +522,7 @@ class ApplicationProvider internal constructor(
         includeEmpty: Boolean,
         onProgress: (done: Int, total: Int) -> Unit = { _, _ -> }
     ) = withContext(Dispatchers.Default) {
-        profileOperations.run {
+        runProfileOperation(expected) {
             val store = context.dataStore
             val previousPreferences = store.data.first()
             var preferencesPersisted = false
@@ -490,6 +556,7 @@ class ApplicationProvider internal constructor(
                 val renderedByKey = mutableMapOf<String, PackageInfoStruct>()
                 onProgress(0, targets.size)
                 for (app in targets) {
+                    currentCoroutineContext().ensureActive()
                     val base = app.baseIcon ?: app.createdIcon
                     if (base != null) {
                         val apply = shouldApplyGlobalLayer(
@@ -509,6 +576,7 @@ class ApplicationProvider internal constructor(
                     onProgress(done, targets.size)
                 }
                 val updated = mergeGlobalRenders(original, renderedByKey)
+                currentCoroutineContext().ensureActive()
                 replaceApplications(updated)
                 persistActiveProfileIcons(unbuiltAfter = true)
             } catch (e: CancellationException) {
@@ -587,20 +655,19 @@ class ApplicationProvider internal constructor(
     }
 
     suspend fun buildAndSignIconPack(
-        profileId: Long,
+        expected: ProfileSessionToken,
         preferences: Preferences,
         textMethod: (text: String) -> Unit,
         progressMethod: (done: Int, total: Int) -> Unit = { _, _ -> }
-    ): BuiltIconPack = profileOperations.run {
-        check(activeProfileId == profileId) { "Profile changed before icon pack build" }
+    ): BuiltIconPack = runProfileOperation(expected) {
         iconPackBuildService.build(
-            profileId = profileId,
+            profileId = expected.profileId,
             preferences = preferences,
             profileApps = applicationList.toList(),
             preservedRows = lockManager.preservedRows().toList(),
             textMethod = textMethod,
             progressMethod = progressMethod
-        )
+        ).copy(sessionToken = expected, undoStep = undoTracker.step)
     }
 
     suspend fun installIconPack(
@@ -632,26 +699,28 @@ class ApplicationProvider internal constructor(
         // icons stored can go through Build and dismiss the installer. Either way the save
         // matches the pack that was produced, so it counts as built.
         profileOperations.run {
+            val ownsLiveUndo = iconPack.sessionToken?.let(::isCurrentSession) == true &&
+                undoTracker.step === iconPack.undoStep
             persistProfileIcons(
                 profileId = iconPack.profileId,
                 apps = iconPack.profileApps,
                 preservedRows = iconPack.preservedRows,
-                unbuiltAfter = false
+                unbuiltAfter = false,
+                liveSession = iconPack.sessionToken
             )
             renkinPackStore.recordBuilt(iconPack.profileId)
             if (success) profileManager.recordBuiltPrimary(iconPack.profileId, iconPack.preferences)
+            if (ownsLiveUndo) clearUndo()
+            if (success) lockManager.clearProvenanceCache()
         }
-
-        // The just-(re)installed pack carries a fresh provenance map.
-        if (success) lockManager.clearProvenanceCache()
     }
 
     /**
      * Persists the active profile's icons without building (offered before switching away).
      * Locks the refresh output like a build does and marks the profile as saved-but-not-built.
      */
-    suspend fun saveActiveProfileIcons() = withContext(Dispatchers.Default) {
-        profileOperations.run { persistActiveProfileIcons(unbuiltAfter = true) }
+    suspend fun saveActiveProfileIcons(expected: ProfileSessionToken) = withContext(Dispatchers.Default) {
+        runProfileOperation(expected) { persistActiveProfileIcons(unbuiltAfter = true) }
     }
 
     /**
@@ -664,7 +733,8 @@ class ApplicationProvider internal constructor(
             profileId = activeProfileId,
             apps = applicationList.toList(),
             preservedRows = lockManager.preservedRows().toList(),
-            unbuiltAfter = unbuiltAfter
+            unbuiltAfter = unbuiltAfter,
+            liveSession = sessionToken
         )
     }
 
@@ -673,7 +743,8 @@ class ApplicationProvider internal constructor(
         profileId: Long,
         apps: List<PackageInfoStruct>,
         preservedRows: Collection<DbApplication>,
-        unbuiltAfter: Boolean
+        unbuiltAfter: Boolean,
+        liveSession: ProfileSessionToken?
     ) {
         // A profile can be deleted through another UI path while the system installer owns the
         // screen. Do not recreate icon rows that no longer have an owning profile.
@@ -683,11 +754,12 @@ class ApplicationProvider internal constructor(
 
         // Only the matching live session may be mutated. An inactive profile will load these
         // persisted rows as locked when the user returns to it.
-        if (activeProfileId != profileId) return
+        if (liveSession == null || !isCurrentSession(liveSession)) return
         val replacedKeys = apps.filter { it.createdIcon != null }.map { it.key }.toSet()
         lockManager.releaseReplaced(replacedKeys)
+        val savedByKey = apps.associateBy { it.key }
         for (app in applicationList.toList()) {
-            if (app.isRefreshMade) editApplication(app, app.locked())
+            if (app.isRefreshMade && savedByKey[app.key] == app) editApplication(app, app.locked())
         }
     }
 
@@ -775,7 +847,13 @@ class ApplicationProvider internal constructor(
         apply: Boolean
     ): IconPackDrawable {
         val options = modifierFor(preferences, apply) ?: return base
-        return runCatching { iconGenService.applyModifier(base, options) }.getOrDefault(base)
+        return try {
+            iconGenService.applyModifier(base, options)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            base
+        }
     }
 
     /**
@@ -796,9 +874,13 @@ class ApplicationProvider internal constructor(
             primaryImageEdit = ImageEdit.NONE,
             primaryIconPack = sourcePack
         )
-        return runCatching {
+        return try {
             iconGenService.getIconFromPackDrawable(app, sourcePack, drawableName, options)
-        }.getOrNull()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            null
+        }
     }
 
     /** The drawable name [packPackage]'s appfilter maps to [app]'s component, if any. */
@@ -812,8 +894,9 @@ class ApplicationProvider internal constructor(
         renkinPackStore.save(activeProfileId, applicationList, lockManager.preservedRows())
     }
 
-    suspend fun forceSync() {
-        if (iconPackRepo.iconPackLoaded) {
+    suspend fun forceSync(expected: ProfileSessionToken) = withContext(Dispatchers.Default) {
+        runProfileOperation(expected) {
+            if (!iconPackRepo.iconPackLoaded) return@runProfileOperation
             iconPackRepo.load(installedApplicationRefs())
             lockManager.recordInstalledPacks(iconPacks)
             // Packs may have been updated/rebuilt — their provenance maps can be stale.
@@ -821,6 +904,10 @@ class ApplicationProvider internal constructor(
             // A freshly installed pack may be exactly the one some icons were waiting for.
             refreshLockedIcons()
         }
+    }
+
+    suspend fun refreshIconLocks(expected: ProfileSessionToken) = withContext(Dispatchers.Default) {
+        runProfileOperation(expected) { refreshLockedIcons() }
     }
 
     /**
@@ -834,6 +921,7 @@ class ApplicationProvider internal constructor(
         val prefs = context.dataStore.data.first()
         val defaultColor = prefs.getDefaultIconColor(context)
         for ((key, row) in lockManager.lockedRowsSnapshot()) {
+            currentCoroutineContext().ensureActive()
             if (row.sourcePackName in stillLocked) continue
             val app = applicationList.firstOrNull { it.key == key } ?: continue
             val entry = renkinPackStore.decodeRow(row, defaultColor)
@@ -875,7 +963,7 @@ class ApplicationProvider internal constructor(
             editApplication(index, newApp)
     }
 
-    fun editApplication(index: Int, newApp: PackageInfoStruct) {
+    private fun editApplication(index: Int, newApp: PackageInfoStruct) {
         _applicationList[index] = newApp
     }
 
@@ -896,22 +984,22 @@ class ApplicationProvider internal constructor(
     val undoableIconCount: Int get() = undoTracker.size
 
     /** Records the rows a change is about to overwrite, so it can go back. */
-    fun captureUndoRows(rows: List<PackageInfoStruct>, persisted: Boolean) {
+    private fun captureUndoRows(rows: List<PackageInfoStruct>, persisted: Boolean) {
         undoTracker.capture(rows, activeProfileId, persisted)
     }
 
     /** Drops the offer — after a build, a profile switch or anything that invalidates the rows. */
-    fun clearUndo() = undoTracker.clear()
+    private fun clearUndo() = undoTracker.clear()
 
     /**
      * Puts the captured rows back. Returns false when the step no longer applies: another
      * profile is active, or the apps it described are gone.
      */
-    suspend fun undoLastIconChange(): Boolean = withContext(Dispatchers.Default) {
-        profileOperations.run {
-            val persisted = undoTracker.step?.persisted ?: return@run false
+    suspend fun undoLastIconChange(expected: ProfileSessionToken): Boolean = withContext(Dispatchers.Default) {
+        runProfileOperation(expected) {
+            val persisted = undoTracker.step?.persisted ?: return@runProfileOperation false
             val restoration = undoTracker.restorationFor(applicationList, activeProfileId)
-            if (restoration.isEmpty()) return@run false
+            if (restoration.isEmpty()) return@runProfileOperation false
             for ((index, row) in restoration) editApplication(index, row)
             // A change that reached the database has to be written back, or the restored state
             // would only live until the next load.
@@ -927,25 +1015,41 @@ class ApplicationProvider internal constructor(
      * and nothing has locked in yet simply goes away. Nothing is persisted — these icons were
      * never saved.
      */
-    fun clearRefreshedIcons() {
+    private fun clearRefreshedIcons() {
+        clearUndo()
         for (app in applicationList.toList()) {
             if (app.isRefreshMade) editApplication(app, app.changeExport(null))
         }
     }
 
-    suspend fun clearIcons() = withContext(Dispatchers.Default) {
-        // "Remove icons" is explicit user intent — held-back rows (locked/absent apps) go too.
-        lockManager.clear()
-        // Everything is going; an undo pointing at rows this wipes would restore a mixture.
-        clearUndo()
-        // Snapshot copy: editApplication mutates the live list in place.
-        // Also reset calendar opt-ins: otherwise a calendar-enabled app is still persisted
-        // (RenkinPackStore keeps calendar rows even without an icon), so it lingers in the
-        // saved pack and the change bar counts it as a pending removal (a phantom "−1").
-        resetInMemoryIcons()
-        // Persist the cleared state, otherwise the saved pack reloads the icons on the
-        // next launch and "Remove icons" looks like it did nothing.
-        saveRenkinPack()
+    suspend fun clearIcons(expected: ProfileSessionToken): ProfileSessionToken = withContext(Dispatchers.Default) {
+        runProfileOperation(expected) {
+            invalidateSession()
+            // Explicit removal includes held-back rows and calendar-only assignments.
+            lockManager.clear()
+            resetInMemoryIcons()
+            saveRenkinPack()
+            sessionToken
+        }
+    }
+
+    suspend fun updateProfilePreferences(
+        expected: ProfileSessionToken,
+        update: suspend androidx.datastore.core.DataStore<Preferences>.() -> Unit
+    ) = profileOperations.runWithBoundedWait {
+        requireCurrentSession(expected)
+        currentCoroutineContext().ensureActive()
+        context.dataStore.update()
+    }
+
+    suspend fun selectPrimarySource(
+        expected: ProfileSessionToken,
+        source: Source,
+        packageName: String?
+    ): ProfileSessionToken = runProfileOperation(expected) {
+        context.dataStore.setPrimarySource(source, packageName)
+        if (source == Source.NONE) clearRefreshedIcons()
+        sessionToken
     }
 
     /** Blanks every in-memory icon and calendar opt-in (profile switch, restore, clear). */
@@ -989,10 +1093,10 @@ class ApplicationProvider internal constructor(
 
     /** Creates a profile and returns its id. */
     suspend fun createProfile(name: String, description: String, packLabel: String): Long =
-        profileManager.createProfile(name, description, packLabel)
+        profileOperations.run { profileManager.createProfile(name, description, packLabel) }
 
     suspend fun updateProfileDetails(id: Long, name: String, description: String, packLabel: String) =
-        profileManager.updateProfileDetails(id, name, description, packLabel)
+        profileOperations.run { profileManager.updateProfileDetails(id, name, description, packLabel) }
 
     /** Deletes [id] (never the default) and its icons; switches to the default first if active. */
     suspend fun deleteProfile(id: Long) = withContext(Dispatchers.Default) {
@@ -1013,27 +1117,35 @@ class ApplicationProvider internal constructor(
     suspend fun profileExists(id: Long): Boolean = profileManager.profileExists(id)
 
     /** Persists the active profile's "don't show the missing-packs dialog again" choice. */
-    suspend fun setHideMissingPackWarning(hide: Boolean) = profileManager.setHideMissingPackWarning(hide)
+    suspend fun setHideMissingPackWarning(expected: ProfileSessionToken, hide: Boolean) =
+        runProfileOperation(expected) { profileManager.setHideMissingPackWarning(hide) }
 
     /**
      * Switches the active profile: snapshots the leaving profile's generation preferences,
      * restores the target's, and swaps the in-memory icons for the target's saved set. For the
      * leaving profile this behaves like an app restart — unbuilt edits are not persisted.
      */
-    suspend fun switchProfile(newProfileId: Long) = withContext(Dispatchers.Default) {
+    suspend fun switchProfile(newProfileId: Long, saveFirst: Boolean = false): ProfileSessionToken = withContext(Dispatchers.Default) {
         ensureInitialized()
         profileOperations.run {
+            if (newProfileId == activeProfileId || !profileManager.profileExists(newProfileId)) {
+                return@run sessionToken
+            }
+            if (saveFirst) persistActiveProfileIcons(unbuiltAfter = true)
             isProfileSwitching = true
             try {
                 switchProfileLocked(newProfileId)
             } finally {
                 isProfileSwitching = false
             }
+            sessionToken
         }
     }
 
     /** Runs only while [profileOperations] is held. */
     private suspend fun switchProfileLocked(newProfileId: Long) {
+        if (newProfileId == activeProfileId || !profileManager.profileExists(newProfileId)) return
+        invalidateSession()
         if (!profileManager.switchTo(newProfileId)) return
         // The captured rows belong to the profile being left; they must not be restorable here.
         clearUndo()
@@ -1051,14 +1163,41 @@ class ApplicationProvider internal constructor(
         profileOperations.run {
             isProfileSwitching = true
             try {
-                profileManager.reloadActiveId()
-                val profileId = activeProfileId
-                resetInMemoryIcons()
-                loadRenkinPack(profileId)
+                invalidateSession()
+                reloadActiveProfileLocked()
             } finally {
                 isProfileSwitching = false
             }
         }
+    }
+
+    suspend fun <T> replaceProfileSession(replaceStorage: suspend () -> T): T =
+        withContext(Dispatchers.Default) {
+            profileOperations.run {
+                currentCoroutineContext().ensureActive()
+                isProfileSwitching = true
+                invalidateSession()
+                try {
+                    val result = replaceStorage()
+                    reloadActiveProfileLocked()
+                    result
+                } catch (error: Exception) {
+                    // A failed import may already have replaced part of storage. Keep the live
+                    // session aligned with it; backup rollback belongs to the restore protocol.
+                    withContext(NonCancellable) {
+                        runCatching { reloadActiveProfileLocked() }.onFailure(error::addSuppressed)
+                    }
+                    throw error
+                } finally {
+                    isProfileSwitching = false
+                }
+            }
+        }
+
+    private suspend fun reloadActiveProfileLocked() {
+        profileManager.reloadActiveId()
+        resetInMemoryIcons()
+        loadRenkinPack(activeProfileId)
     }
 
     // ---- Locks & verdicts (delegated to IconLockManager) -----------------------------
@@ -1070,8 +1209,18 @@ class ApplicationProvider internal constructor(
      */
     suspend fun verifyPendingVerdicts(): Boolean = lockManager.verifyPendingVerdicts()
 
-    /** The active profile's locked icons grouped by their missing source pack. */
-    suspend fun missingPackSummary(): List<IconLockManager.MissingPack> = lockManager.missingPackSummary()
+    data class MissingPackStatus(
+        val packs: List<IconLockManager.MissingPack>,
+        val hideWarning: Boolean
+    )
+
+    suspend fun missingPackStatus(expected: ProfileSessionToken): MissingPackStatus =
+        runProfileOperation(expected) {
+            MissingPackStatus(
+                lockManager.missingPackSummary(),
+                profileManager.activeProfile()?.hideMissingPackWarning == true
+            )
+        }
 
     /**
      * The hand-pick path's provenance gate: translates an own-pack source to the origin its

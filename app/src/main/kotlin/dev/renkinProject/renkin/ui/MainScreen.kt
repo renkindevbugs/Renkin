@@ -117,6 +117,9 @@ import dev.renkinProject.renkin.apk.installerSelection
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.GlobalOptionsActivity
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.profileSession
+import dev.renkinProject.renkin.withProfileSession
+import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.OptionsViewModel
 import dev.renkinProject.renkin.WatchViewModel
 import kotlinx.coroutines.flow.map
@@ -285,6 +288,10 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // app list refreshed) regardless of which dialog/button triggered it.
     val toaster = LocalToaster.current
     val clipboard = LocalClipboard.current
+    val optionsViewModel: OptionsViewModel = hiltViewModel()
+    LaunchedEffect(optionsViewModel) {
+        optionsViewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
+    }
     val coroutineScope = rememberCoroutineScope()
     LaunchedEffect(Unit) {
         viewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
@@ -304,7 +311,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 withDismissAction = true,
                 duration = SnackbarDuration.Long
             )
-            if (result == SnackbarResult.ActionPerformed) viewModel.undoLastIconChange()
+            if (result == SnackbarResult.ActionPerformed) viewModel.undoLastIconChange(prompt.session)
         }
     }
 
@@ -646,15 +653,23 @@ fun ApplicationList(
     // over the real wallpaper). Its result carries the session bookkeeping back: hand-edited
     // keys and whether a Save persisted the profile.
     val globalOptionsContext = LocalContext.current
+    val globalOptionsToaster = LocalToaster.current
     val globalOptionsLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        if (result.data?.getBooleanExtra(GlobalOptionsActivity.EXTRA_SESSION_LOST, false) == true) {
+            globalOptionsToaster.show(globalOptionsContext.getString(R.string.editorSessionLost))
+            return@rememberLauncherForActivityResult
+        }
         val edited = result.data
             ?.getStringArrayListExtra(GlobalOptionsActivity.EXTRA_EDITED_KEYS)
             ?.toSet() ?: emptySet()
         val applied = result.data
             ?.getBooleanExtra(GlobalOptionsActivity.EXTRA_GLOBAL_APPLIED, false) ?: false
-        if (edited.isNotEmpty() || applied) viewModel.onGlobalOptionsClosed(edited, applied)
+        val session = result.data?.profileSession()
+        if (session != null && (edited.isNotEmpty() || applied)) {
+            viewModel.onGlobalOptionsClosed(session, edited, applied)
+        }
     }
 
     // Startup loads apps, then icon packs, then the profile's saved icons — all off the main
@@ -728,6 +743,7 @@ fun ApplicationList(
                 AdvancedOptionsCard(iconPacks) {
                     globalOptionsLauncher.launch(
                         Intent(globalOptionsContext, GlobalOptionsActivity::class.java)
+                            .withProfileSession(viewModel.sessionToken)
                     )
                 }
             }
@@ -1022,14 +1038,19 @@ fun OpenAppOptions(
 ) {
     val viewModel: MainViewModel = hiltViewModel()
 
+    val profileId = rememberSaveable(app.key) { viewModel.sessionToken.profileId }
+    val revision = rememberSaveable(app.key) { viewModel.sessionToken.revision }
+    val providerInstance = rememberSaveable(app.key) { viewModel.sessionToken.providerInstanceId }
+    val expected = ProfileSessionToken(profileId, revision, providerInstance)
+
     OptionsDialog(iconPacks, app, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl ->
-        viewModel.applyIcon(app, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl)
+        viewModel.applyIcon(app, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, expected)
         onDismiss()
     }, {
         onDismiss()
     }) {
         onDismiss()
-        viewModel.resetIcon(app)
+        viewModel.resetIcon(app, expected)
     }
 }
 

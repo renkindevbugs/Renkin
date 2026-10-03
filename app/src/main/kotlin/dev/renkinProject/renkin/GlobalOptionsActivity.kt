@@ -22,12 +22,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.IconApplyOutcome
+import dev.renkinProject.renkin.apk.ProfileSessionToken
+import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.data.IconPack
-import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.isDarkModeEnabled
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
@@ -80,6 +83,7 @@ class GlobalOptionsActivity : ComponentActivity() {
 
         /** True when Save baked+persisted — MainViewModel refreshes its change baselines. */
         const val EXTRA_GLOBAL_APPLIED = "globalApplied"
+        const val EXTRA_SESSION_LOST = "sessionLost"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,6 +103,7 @@ class GlobalOptionsActivity : ComponentActivity() {
             enableEdgeToEdge(style, style)
 
             val viewModel: GlobalOptionsViewModel = hiltViewModel()
+            val optionsViewModel: OptionsViewModel = hiltViewModel()
             val colorPresets by viewModel.colorPresets.collectAsState()
             val modifierPresets by viewModel.modifierPresets.collectAsState()
 
@@ -110,6 +115,8 @@ class GlobalOptionsActivity : ComponentActivity() {
                     setResult(
                         RESULT_OK,
                         Intent()
+                            .withProfileSession(viewModel.screenSession)
+                            .putExtra(EXTRA_SESSION_LOST, viewModel.sessionLost)
                             .putStringArrayListExtra(EXTRA_EDITED_KEYS, ArrayList(viewModel.editedKeys))
                             .putExtra(EXTRA_GLOBAL_APPLIED, viewModel.appliedGlobal)
                     )
@@ -119,6 +126,9 @@ class GlobalOptionsActivity : ComponentActivity() {
 
             LaunchedEffect(Unit) {
                 viewModel.toastEvents.collect { resId -> toaster.show(getString(resId)) }
+            }
+            LaunchedEffect(optionsViewModel) {
+                optionsViewModel.toastEvents.collect { resId -> toaster.show(getString(resId)) }
             }
 
             ProvideAdaptiveLayoutInfo(this@GlobalOptionsActivity) {
@@ -141,6 +151,8 @@ class GlobalOptionsActivity : ComponentActivity() {
                                     setResult(
                                         RESULT_OK,
                                         Intent()
+                                            .withProfileSession(viewModel.screenSession)
+                                            .putExtra(EXTRA_SESSION_LOST, viewModel.sessionLost)
                                             .putStringArrayListExtra(EXTRA_EDITED_KEYS, ArrayList(editedKeys))
                                             .putExtra(EXTRA_GLOBAL_APPLIED, applied)
                                     )
@@ -197,7 +209,8 @@ internal class GlobalPreviewBitmapCache(maxSizeBytes: Int = DEFAULT_PREVIEW_CACH
 @HiltViewModel
 class GlobalOptionsViewModel @Inject constructor(
     application: Application,
-    private val appProvider: ApplicationProvider
+    private val appProvider: ApplicationProvider,
+    private val savedStateHandle: SavedStateHandle
 ) : AndroidViewModel(application), IconPreviewBuilder {
 
     /** Saved colours/gradients, the same library the main screen's sheets use. */
@@ -285,7 +298,9 @@ class GlobalOptionsViewModel @Inject constructor(
      * The profile this screen belongs to — null until the provider is ready, because a cold
      * recreation starts on the default id before the real one is loaded.
      */
-    var screenProfileId by mutableStateOf(if (appProvider.startupComplete) appProvider.activeProfileId else null)
+    var screenSession by mutableStateOf(
+        savedStateHandle.profileSession() ?: if (appProvider.startupComplete) appProvider.sessionToken else null
+    )
         private set
 
     /**
@@ -296,11 +311,21 @@ class GlobalOptionsViewModel @Inject constructor(
      */
     val profileChanged: Boolean
         get() {
-            val opened = screenProfileId ?: return false
-            return !appProvider.isProfileSwitching && appProvider.activeProfileId != opened
+            val opened = screenSession ?: return false
+            return appProvider.startupComplete && !appProvider.isProfileSwitching && opened != appProvider.sessionToken
         }
 
+    val sessionLost: Boolean
+        get() = screenSession?.providerInstanceId?.let {
+            it != appProvider.sessionToken.providerInstanceId
+        } == true
+
+    private val expiredSessionNotice: Int
+        get() = screenSession?.expiredSessionMessage(appProvider.sessionToken)
+            ?: R.string.profileSessionChanged
+
     init {
+        screenSession?.let { savedStateHandle.saveProfileSession(it) }
         if (initialLoadRunning) {
             viewModelScope.launch {
                 try {
@@ -311,7 +336,10 @@ class GlobalOptionsViewModel @Inject constructor(
                     Log.error("GlobalOptionsViewModel", "Cold initialization failed", e)
                 } finally {
                     initialLoadRunning = false
-                    screenProfileId = appProvider.activeProfileId
+                    if (screenSession == null && appProvider.startupComplete) {
+                        screenSession = appProvider.sessionToken
+                        savedStateHandle.saveProfileSession(appProvider.sessionToken)
+                    }
                 }
             }
         }
@@ -439,19 +467,29 @@ class GlobalOptionsViewModel @Inject constructor(
     ): Boolean {
         // Staged values belong to the profile this screen opened with; the activity closes on a
         // change, but a Save already in flight when it happens must not land in the new profile.
-        if (globalApplyProgress != null || profileChanged) return false
+        if (globalApplyProgress != null) return false
+        if (profileChanged) {
+            _toastEvents.trySend(expiredSessionNotice)
+            return false
+        }
+        val expected = screenSession ?: return false
         globalApplyProgress = 0 to 0
         return try {
             appProvider.applyGlobalModifiers(
-                preferences, modifierOptions,
+                expected, preferences, modifierOptions,
                 applyGenerated, applyExisting, applyCustom, includeEmpty
             ) { done, total -> globalApplyProgress = done to total }
-            appliedGlobal = true
-            true
+            appProvider.commitSessionState(expected) { appliedGlobal = true }.also { committed ->
+                if (!committed) _toastEvents.trySend(expiredSessionNotice)
+            }
         } catch (e: CancellationException) {
             throw e
+        } catch (e: ProfileSessionChangedException) {
+            _toastEvents.trySend(e.userMessage())
+            false
         } catch (e: Exception) {
             Log.error("GlobalOptionsViewModel", "Applying global modifiers failed", e)
+            _toastEvents.trySend(R.string.globalOptionsApplyFailed)
             false
         } finally {
             globalApplyProgress = null
@@ -468,26 +506,42 @@ class GlobalOptionsViewModel @Inject constructor(
         icon: IconPackDrawable,
         sourcePackName: String?
     ): Boolean {
-        val (origin, locked) = appProvider.resolvePickedSource(app, sourcePackName)
-        if (locked) return false
-        val preferences = getApplication<Application>().dataStore.getPreferencesAfterPendingWrites()
-        val rendered = appProvider.renderCustomIcon(icon, preferences)
-        val index = appProvider.applicationList.indexOfFirst { it.key == app.key }
-        if (index < 0) return true
-        appProvider.editApplication(
-            index,
-            appProvider.applicationList[index].changeExport(
-                rendered,
-                sourcePackName = origin,
-                isRefreshMade = false,
-                isCustom = true,
-                isLegacy = false,
-                baseIcon = icon,
-                // A modifier tweak reworks the same artwork — its attribution stays.
-                sourceUrl = app.sourceUrl
-            )
-        )
-        editedKeys += app.key
-        return true
+        val expected = screenSession ?: return false
+        return try {
+            when (appProvider.applyPickedIcon(expected, app, icon, sourcePackName) { live, origin, rendered ->
+                live.changeExport(
+                    rendered, sourcePackName = origin, isRefreshMade = false,
+                    isCustom = true, isLegacy = false, baseIcon = icon,
+                    sourceUrl = live.sourceUrl
+                )
+            }) {
+                IconApplyOutcome.APPLIED ->
+                    appProvider.commitSessionState(expected) { editedKeys += app.key }.also { committed ->
+                        if (!committed) _toastEvents.trySend(expiredSessionNotice)
+                    }
+                IconApplyOutcome.LOCKED -> {
+                    _toastEvents.trySend(R.string.iconOriginLocked)
+                    false
+                }
+                IconApplyOutcome.PROFILE_CHANGED -> {
+                    _toastEvents.trySend(expiredSessionNotice)
+                    false
+                }
+                IconApplyOutcome.TARGET_GONE -> {
+                    _toastEvents.trySend(R.string.iconEditTargetGone)
+                    false
+                }
+                IconApplyOutcome.FAILED -> {
+                    _toastEvents.trySend(R.string.profileOperationFailed)
+                    false
+                }
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.error("GlobalOptionsViewModel", "Editing an icon failed", error)
+            _toastEvents.trySend(R.string.profileOperationFailed)
+            false
+        }
     }
 }

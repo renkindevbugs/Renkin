@@ -88,6 +88,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.getBooleanValue
@@ -216,7 +217,10 @@ fun HeroPackCard(
     val fallbackCount = stats.fallbackCount
 
     var sheetOpen by remember { mutableStateOf(false) }
-    var changesOpen by remember { mutableStateOf(false) }
+    var changesSession by remember { mutableStateOf<ProfileSessionToken?>(null) }
+    LaunchedEffect(viewModel.sessionToken) {
+        if (changesSession != null && changesSession != viewModel.sessionToken) changesSession = null
+    }
 
     // Saved-but-not-built marker for the active profile (set by the save-before-switch flow).
     val profiles by viewModel.profiles.collectAsState(initial = emptyList())
@@ -368,7 +372,7 @@ fun HeroPackCard(
                         color = MaterialTheme.colorScheme.tertiaryContainer,
                         // Always openable: an empty list is an answer too ("nothing since the
                         // last build"), and a chip that ignores taps reads as broken.
-                        onClick = { changesOpen = true }
+                        onClick = { changesSession = viewModel.sessionToken }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
@@ -397,12 +401,12 @@ fun HeroPackCard(
         }
     }
 
-    if (changesOpen) {
+    changesSession?.let { expected ->
         PackChangesSheet(
             iconPacks = iconPacks,
             themed = preferences.getBooleanValue(ExportThemedKey),
-            onBuild = { viewModel.build(viewModel.activeProfileId) },
-            onDismiss = { changesOpen = false }
+            onBuild = { viewModel.build(expected) },
+            onDismiss = { changesSession = null }
         )
     }
 

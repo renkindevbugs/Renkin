@@ -27,7 +27,9 @@ data class BuiltIconPack(
     val packLabel: String,
     val preferences: Preferences,
     val profileApps: List<PackageInfoStruct>,
-    val preservedRows: List<DbApplication>
+    val preservedRows: List<DbApplication>,
+    val sessionToken: ProfileSessionToken? = null,
+    val undoStep: IconUndoStep? = null
 )
 
 internal suspend fun installOrReportConflict(

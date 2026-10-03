@@ -22,6 +22,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -85,6 +88,7 @@ import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.colorStyle
+import kotlin.math.roundToInt
 
 /**
  * The home list's Advanced options card: expandable Generation defaults plus the entry point
@@ -454,18 +458,40 @@ private fun AdvancedOutlineSection(state: AdvancedOptionsState, viewModel: Optio
     }
     AnimatedVisibility(visible = state.outlineAdd) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            LabeledSlider(
-                label = stringResource(R.string.outlineThickness),
-                value = state.outlineWidth,
-                onValueChange = {
-                    viewModel.setOutlineWidth(it)
-                },
-                valueRange = OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat(),
-                ruler = pixelRuler(),
-                // The card's other rows are inset by the same amount; without it the track ran
-                // past the card's rounded edge.
-                modifier = Modifier.padding(horizontal = 16.dp)
-            )
+            val expected = viewModel.sessionToken
+            key(expected) {
+                var draftWidth by remember { mutableStateOf<Float?>(null) }
+                var dragging by remember { mutableStateOf(false) }
+                var editVersion by remember { mutableIntStateOf(0) }
+                LaunchedEffect(state.outlineWidth) {
+                    if (!dragging && draftWidth == state.outlineWidth) draftWidth = null
+                }
+                LabeledSlider(
+                    label = stringResource(R.string.outlineThickness),
+                    value = draftWidth ?: state.outlineWidth,
+                    onValueChange = {
+                        draftWidth = normalizeOutlineWidth(it.roundToInt()).toFloat()
+                        dragging = true
+                        editVersion++
+                    },
+                    onValueChangeFinished = {
+                        val width = draftWidth
+                        if (dragging && width != null) {
+                            dragging = false
+                            val submittedVersion = editVersion
+                            viewModel.setOutlineWidth(width, expected) { saved ->
+                                if (!saved && editVersion == submittedVersion && !dragging) {
+                                    draftWidth = null
+                                }
+                            }
+                        }
+                    },
+                    valueRange = OUTLINE_WIDTH_MIN.toFloat()..OUTLINE_WIDTH_MAX.toFloat(),
+                    ruler = pixelRuler(),
+                    // Keep the track aligned with the card's other rows.
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+            }
             ColorStyleCard(
                 label = stringResource(R.string.outlineColor),
                 style = state.outlineStyle,

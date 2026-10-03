@@ -55,6 +55,7 @@ import dev.renkinProject.renkin.packages.PackageVersion
 import dev.renkinProject.renkin.vector.PathConverter.Companion.toNodes
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.applyAndRemoveGroup
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.editStrokePaths
+import kotlinx.coroutines.CancellationException
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.resizeAndCenter
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.scaleAtCenter
 import dev.renkinProject.renkin.vector.VectorEditor.Companion.scaleStrokePaths
@@ -173,6 +174,8 @@ class IconGenerator(
                         onUpdate(app, fallback, fallback != null, "")
                     }
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
                 Log.error("IconGenerator", "Failed to generate icon for ${app.packageName}", e)
             }

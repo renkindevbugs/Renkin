@@ -64,7 +64,9 @@ whole provider and all persistence state is shared deliberately.
 - **MainActivity** — the whole app UI; provides `LocalMainActivity` and `LocalToaster`.
 - **GlobalOptionsActivity** — wallpaper-backed Global options grid. It uses a lightweight
   view model over the shared provider and performs guarded provider initialization when Android
-  recreates it in a cold process without MainActivity/MainViewModel.
+  recreates it in a cold process without MainActivity/MainViewModel. Its editor remains tied to
+  the original session: activity recreation in the same process preserves ownership, but a cold
+  recreation closes the expired editor and reports that unsaved changes must be repeated.
 - **WallpaperPreviewActivity** — the pack preview before a build. Its theme sets
   `windowShowWallpaper` + a transparent background so the system draws the real wallpaper
   behind it (the launcher trick — no permission; `WallpaperManager.getDrawable` is locked
@@ -77,6 +79,9 @@ whole provider and all persistence state is shared deliberately.
   no longer exists — `onCreate` closes it with `RESULT_CANCELED` + `EXTRA_SESSION_LOST` *before*
   `setContent`, rather than initializing the provider and silently reviewing the last *saved*
   state instead.
+  The launch intent and successful result carry the original `ProfileSessionToken`; the preview
+  and build both reject a changed session, including reload/clear and returning to the same
+  profile. This guards session ownership, not an immutable revision of every icon edit.
 
 ## Profiles
 
@@ -95,6 +100,24 @@ Switcher = the top-bar title dropdown.
 - `lifecycleScope.launch` is the Main dispatcher — never touch Room / PackageManager from it
   directly; go through a suspend function with `withContext(Default)` inside.
 - Loaded lists / flags are Compose `mutableStateOf` so the UI recomposes when they change.
+- Active-profile mutations run through the provider's profile-operation gate. Callers capture a
+  `ProfileSessionToken` before launching work; the provider checks it after acquiring the gate.
+  Tokens include the profile, session revision and provider instance, so leaving and returning to
+  the same profile or recreating the process cannot revive a stale edit. Switch, full restore,
+  app-list reload and clearing all icons invalidate the session. Rendering remains inside the
+  gate; moving it outside requires additional per-icon conflict checks.
+- MainViewModel commits change baselines and edited keys against that same token. Global options
+  saves its owner as primitive saved-state fields and returns it with its activity result; expired
+  results cannot affect the current profile. Full imports hold the gate through storage replacement
+  and live-session reload. This protects session ownership, not backup crash recovery.
+- Option writes wait at most 300 ms to acquire the provider gate, allowing short bookkeeping
+  operations to finish. The timeout covers acquisition only, never a preference write already
+  in progress. Busy, loading and expired-session rejections produce a notice. The outline slider
+  keeps a session-owned local draft and writes once on release (or ruler dismissal), reverting
+  a rejected draft without overwriting a newer gesture. Successful writes still check ownership
+  under the gate. App-list reload failures report the restored token from the provider rather
+  than making the ViewModel infer its revision. Verdict changes only re-evaluate held-back icons;
+  explicit pack synchronization also rediscovers installed packs.
 - Global-options modifier previews use ViewModel-scoped, shared jobs and a byte-bounded bitmap
   LRU. Lazy-grid disposal therefore does not discard an in-flight/current preview, while a new
   modifier configuration cancels obsolete work. Cache misses drive the shared `WavyLoadingBar`.
@@ -197,7 +220,9 @@ each successful build and after "Clear icons". `updatedKeys` tracks this session
 `IconPackBuildService` receives an immutable active-profile snapshot from `ApplicationProvider`,
 then resolves calendar/lock data and delegates assembly to `IconPackBuilder`. The provider holds
 the profile-operation gate throughout the build and persists that same snapshot after the install
-attempt, so switching profiles cannot mix build inputs or results.
+attempt, so switching profiles cannot mix build inputs or results. Installation itself does not
+hold the gate. The built result carries its session token: completing an old install cannot clear
+another session's undo or lock newer live refresh output.
 
 `IconPackBuilder` assembles the APK with reandroid (no external build tools). The generated
 pack's dex classes come from prebuilt smali assets (`app/src/main/assets/{R,RLayout,
