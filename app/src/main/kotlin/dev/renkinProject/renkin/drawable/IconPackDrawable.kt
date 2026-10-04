@@ -24,6 +24,8 @@ abstract class IconPackDrawable: Drawable() {
      */
     open fun previewBitmap(): Bitmap = toBitmap()
 
+    open fun previewBitmap(sizePx: Int): Bitmap = previewBitmap().fitPreview(sizePx)
+
     /**
      * A bitmap rasterised specifically for the icon browser. Thin vector strokes survive
      * better when they are drawn at the target size than when a large finished raster is
@@ -31,9 +33,21 @@ abstract class IconPackDrawable: Drawable() {
      */
     open fun toBrowserPreviewBitmap(): Bitmap = toBitmap()
 
+    open fun toBrowserPreviewBitmap(sizePx: Int): Bitmap = toBrowserPreviewBitmap().fitPreview(sizePx)
+
     abstract fun toDbString(): String
 
     open fun isAdaptiveIcon(): Boolean {
         return false
     }
+}
+
+private fun Bitmap.fitPreview(sizePx: Int): Bitmap {
+    require(sizePx > 0)
+    val extent = maxOf(width, height)
+    if (extent <= sizePx) return this
+    val scale = sizePx.toFloat() / extent
+    return Bitmap.createScaledBitmap(
+        this, (width * scale).toInt().coerceAtLeast(1), (height * scale).toInt().coerceAtLeast(1), true
+    )
 }

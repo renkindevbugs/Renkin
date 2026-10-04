@@ -15,12 +15,9 @@ import android.graphics.drawable.Drawable
 import android.os.Build
 import android.view.Gravity
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.graphics.painter.Painter
 import dev.renkinProject.renkin.extension.newArgbBitmap
 import dev.renkinProject.renkin.extension.getBytes
-import dev.renkinProject.renkin.extension.scaleFromCenter
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.parser.AdaptiveIconPayload
 
@@ -63,30 +60,31 @@ class AdaptiveIconPackDrawable internal constructor(
     // A pack can contain thousands of icons; retain compressed layers, not three large pixel buffers.
     val foreground: Bitmap get() = decodeLayer(foregroundPng)
     val background: Bitmap get() = decodeLayer(backgroundPng)
-    val monochrome: Bitmap? get() = monochromePng?.let(::decodeLayer)
+    val monochrome: Bitmap? get() = monochromePng?.let { decodeLayer(it) }
     val hasMonochrome: Boolean get() = monochromePng != null
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
-    // The stored bitmaps are complete 108dp adaptive layers. Launchers zoom through their outer
-    // safe-zone padding, while an ordinary Compose BitmapPainter does not. Keep the export raster
-    // untouched, but apply the same 108/72 preview compensation used by BitmapIconDrawable so a
-    // freshly picked layered icon does not look tiny and then jump larger after a modifier.
-    private val rendered by lazy { render(PREVIEW_SIZE) }
-    private val preview by lazy { rendered.scaleFromCenter(ADAPTIVE_ICON_SCALE) }
-
     override fun isAdaptiveIcon(): Boolean = true
-    override fun toBitmap(): Bitmap = rendered
+    override fun toBitmap(): Bitmap = render(PREVIEW_SIZE)
     override fun toModifierBitmap(size: Int): Bitmap = render(size)
-    override fun previewBitmap(): Bitmap = preview
-    override fun toBrowserPreviewBitmap(): Bitmap = preview
+    override fun previewBitmap(): Bitmap = previewBitmap(PREVIEW_SIZE)
+    override fun previewBitmap(sizePx: Int): Bitmap {
+        require(sizePx > 0)
+        return render(sizePx.coerceAtMost(PREVIEW_SIZE), ADAPTIVE_ICON_SCALE)
+    }
+    override fun toBrowserPreviewBitmap(): Bitmap = previewBitmap()
+    override fun toBrowserPreviewBitmap(sizePx: Int): Bitmap = previewBitmap(sizePx)
     override fun toDbString(): String = AdaptiveIconPayload.encode(this)
     override fun getIntrinsicWidth(): Int = PREVIEW_SIZE
     override fun getIntrinsicHeight(): Int = PREVIEW_SIZE
 
     @Composable
-    override fun getPainter(): Painter = BitmapPainter(preview.asImageBitmap())
+    override fun getPainter(): Painter = rememberPreviewPainter(PREVIEW_SIZE)
 
     override fun draw(canvas: Canvas) {
-        canvas.drawBitmap(preview, null, bounds, paint)
+        val size = maxOf(bounds.width(), bounds.height()).coerceAtMost(PREVIEW_SIZE)
+        if (size <= 0) return
+        val bitmap = IconPreviewCache.getOrRender(IconPreviewCacheKey(this, size)) ?: return
+        canvas.drawBitmap(bitmap, null, bounds, paint)
     }
 
     override fun setAlpha(alpha: Int) { paint.alpha = alpha }
@@ -130,9 +128,14 @@ class AdaptiveIconPackDrawable internal constructor(
         )
     }
 
-    private fun render(size: Int): Bitmap = newArgbBitmap(size, size) { canvas ->
+    private fun render(size: Int, previewScale: Float = 1f): Bitmap = newArgbBitmap(size, size) { canvas ->
+        // Match the launcher's 108/72 viewport without allocating a second full-size preview.
+        if (previewScale != 1f) canvas.scale(previewScale, previewScale, size / 2f, size / 2f)
+        val layerSize = (size * ADAPTIVE_ICON_SCALE * previewScale).toInt().coerceAtLeast(1)
+        val renderedBackground = decodeLayer(backgroundPng, layerSize)
+        val renderedForeground = decodeLayer(foregroundPng, layerSize)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            AdaptiveIconDrawable(layerDrawable(background), layerDrawable(foreground)).apply {
+            AdaptiveIconDrawable(layerDrawable(renderedBackground), layerDrawable(renderedForeground)).apply {
                 setBounds(0, 0, size, size)
                 draw(canvas)
             }
@@ -141,8 +144,8 @@ class AdaptiveIconPackDrawable internal constructor(
             canvas.clipPath(Path().apply { addOval(0f, 0f, extent, extent, Path.Direction.CW) })
             val inset = extent * (ADAPTIVE_ICON_SCALE - 1f) / 2f
             val target = RectF(-inset, -inset, extent + inset, extent + inset)
-            canvas.drawBitmap(background, null, target, paint)
-            canvas.drawBitmap(foreground, null, target, paint)
+            canvas.drawBitmap(renderedBackground, null, target, paint)
+            canvas.drawBitmap(renderedForeground, null, target, paint)
         }
     }
 
@@ -188,9 +191,22 @@ class AdaptiveIconPackDrawable internal constructor(
 
         // Payloads are only header-checked on load (a full decode per layer made startup slow), so a
         // damaged layer renders as transparent instead of crashing the list.
-        private fun decodeLayer(png: ByteArray): Bitmap {
-            val layer = BitmapFactory.decodeByteArray(png, 0, png.size)
-                ?: Bitmap.createBitmap(LAYER_SIZE, LAYER_SIZE, Bitmap.Config.ARGB_8888)
+        private fun decodeLayer(png: ByteArray, targetSize: Int = LAYER_SIZE): Bitmap {
+            val options = BitmapFactory.Options()
+            if (targetSize < LAYER_SIZE) {
+                options.inJustDecodeBounds = true
+                BitmapFactory.decodeByteArray(png, 0, png.size, options)
+                options.inJustDecodeBounds = false
+                var sample = 1
+                while (minOf(options.outWidth, options.outHeight) / (sample * 2) >= targetSize) {
+                    sample *= 2
+                }
+                options.inSampleSize = sample
+            }
+            val layer = BitmapFactory.decodeByteArray(png, 0, png.size, options)
+                ?: Bitmap.createBitmap(
+                    targetSize.coerceAtMost(LAYER_SIZE), targetSize.coerceAtMost(LAYER_SIZE), Bitmap.Config.ARGB_8888
+                )
             return layer.apply { density = Bitmap.DENSITY_NONE }
         }
     }

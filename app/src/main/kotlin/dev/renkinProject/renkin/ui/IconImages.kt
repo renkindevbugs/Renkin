@@ -2,7 +2,6 @@ package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
 import android.util.LruCache
-import androidx.core.graphics.scale
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
@@ -24,8 +23,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
+import dev.renkinProject.renkin.drawable.IconPreviewCacheKey
+import dev.renkinProject.renkin.drawable.IconPreviewCache
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 
 // Shared low-level icon/bitmap rendering, reused anywhere an app or icon-pack icon is shown
@@ -92,8 +96,6 @@ internal fun rememberAppBitmap(app: PackageInfoStruct, size: Dp = 54.dp): ImageB
     return bitmap
 }
 
-private val createdIconCache = AppBitmapMemoryCache()
-
 /**
  * The icon Renkin made for [app], decoded to [size]. Rasterising instead of handing the list a
  * vector painter is what keeps a newly generated icon from appearing small and growing into
@@ -115,27 +117,19 @@ internal fun rememberIconBitmap(
 ): ImageBitmap? {
     val target = with(LocalDensity.current) { size.roundToPx() }
     val key = remember(app.key, app.internalVersion, icon, target) {
-        icon?.let { AppBitmapCacheKey(app.key, app.internalVersion, it, target) }
+        icon?.let {
+            IconPreviewCacheKey(it, target, if (it is AdaptiveIconPackDrawable) 0 else app.internalVersion)
+        }
     }
     var bitmap by remember(key) {
-        mutableStateOf(key?.let { createdIconCache.get(it)?.asImageBitmap() })
+        mutableStateOf(key?.let { IconPreviewCache.get(it)?.asImageBitmap() })
     }
 
     LaunchedEffect(key) {
         if (key != null && bitmap == null && icon != null) {
             val loaded = withContext(Dispatchers.Default) {
-                createdIconCache.getOrLoad(key) {
-                    runCatching {
-                        val full = icon.previewBitmap()
-                        // Caching the generator's 256px output would fill the budget after a
-                        // couple of dozen icons and re-decode on every scroll.
-                        if (full.width > target) {
-                            full.scale(target, target)
-                        } else {
-                            full
-                        }
-                    }.getOrNull()
-                }
+                currentCoroutineContext().ensureActive()
+                IconPreviewCache.getOrRender(key)
             }
             bitmap = loaded?.asImageBitmap()
         }

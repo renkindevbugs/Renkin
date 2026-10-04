@@ -268,6 +268,22 @@ monochrome layer. Source vectors, bitmaps and drawable wrappers are rendered ind
 750 px (108dp layer space); Android applies the adaptive mask and 1.5x viewport expansion only
 when composing the 500 px preview. Original layer insets are not removed or normalized. Layers
 stay compressed in memory, and the exported resources never reference another installed APK.
+Adaptive drawables do not retain full-size rendered/preview bitmap fields. List and browser
+previews render directly to their requested size with the same 108/72 viewport compensation;
+small previews decode sampled PNG layers. Export and modifier rasterization retain their own
+uncompensated geometry and the stored/exported PNG payloads remain at full resolution.
+Generated-icon previews use `IconPreviewCache` with a total 8 MiB budget: 6 MiB for previews
+up to 256 px and 2 MiB for larger editor/painter images, so detail previews cannot evict list
+thumbnails. Keys weakly reference drawables and verify identity rather than relying on identity
+hashes alone; replaced source drawables are not retained by cached thumbnails. Mutable sources
+also include their edit revision, while immutable adaptive instances share entries across list,
+painter and `draw()` requests. Adaptive painters load off Main, show cache hits in the current
+frame, and retain the previous image while a cache miss renders; an initially empty painter still
+has a stable intrinsic size. Rendering is serialized per drawable; future main-thread View users
+must prewarm previews to avoid waiting for an in-flight render through synchronous `draw()`.
+Render failures produce an empty preview, cancellation propagates, and a failed allocation
+clears both caches without recycling bitmaps still used by visible composables. Default preview
+downscaling preserves aspect ratio in both lists and the browser.
 
 Position/scale transform foreground and monochrome together while leaving the background in
 place. Colorize changes only the foreground; gradients retain its alpha. Shape, Outline,

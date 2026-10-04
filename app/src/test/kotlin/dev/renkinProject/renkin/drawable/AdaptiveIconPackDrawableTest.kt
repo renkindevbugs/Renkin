@@ -3,6 +3,11 @@ package dev.renkinProject.renkin.drawable
 import android.graphics.Bitmap
 import android.graphics.Color
 import dev.renkinProject.renkin.extension.getBytes
+import dev.renkinProject.renkin.extension.scaleFromCenter
+import android.graphics.Canvas
+import org.junit.Assert.assertNotSame
+import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -48,4 +53,57 @@ class AdaptiveIconPackDrawableTest {
         assertEquals(Color.WHITE, checkNotNull(kept.monochrome).getPixel(0, 0))
         assertEquals(Color.GREEN, checkNotNull(swapped.monochrome).getPixel(0, 0))
     }
+    @Test
+    fun previewRendersAtRequestedSizeWhileExportRemainsFullResolution() {
+        val icon = AdaptiveIconPackDrawable(layer(Color.RED), layer(Color.BLUE))
+        val payload = icon.toDbString()
+        val thumbnail = icon.previewBitmap(96)
+        assertEquals(96, thumbnail.width)
+        assertEquals(96, thumbnail.height)
+        assertEquals(Color.RED, thumbnail.getPixel(48, 48))
+        assertEquals(96, icon.toBrowserPreviewBitmap(96).width)
+        assertEquals(500, icon.toBitmap().width)
+        assertEquals(750, icon.foreground.width)
+        assertEquals(payload, icon.toDbString())
+    }
+
+    @Test
+    fun directPreviewMatchesFormerViewportCompensation() {
+        val foreground = Bitmap.createBitmap(750, 750, Bitmap.Config.ARGB_8888)
+        Canvas(foreground).drawRect(280f, 280f, 470f, 470f,
+            android.graphics.Paint().apply { color = Color.RED })
+        val icon = AdaptiveIconPackDrawable(foreground.getBytes(Bitmap.CompressFormat.PNG, 100), layer(Color.BLUE))
+        val previous = icon.toBitmap().scaleFromCenter(ADAPTIVE_ICON_SCALE)
+        val current = icon.previewBitmap(500)
+        for (y in 100..400 step 30) for (x in 100..400 step 30) {
+            assertEquals("Pixel $x,$y", previous.getPixel(x, y), current.getPixel(x, y))
+        }
+    }
+
+    @Test
+    fun repeatedDrawUsesCachedRasterInsteadOfRetainingBitmapOnDrawable() {
+        val icon = AdaptiveIconPackDrawable(layer(Color.RED), layer(Color.BLUE))
+        val key = IconPreviewCacheKey(icon, 96)
+        icon.setBounds(0, 0, 96, 96)
+        val canvas = Canvas(Bitmap.createBitmap(96, 96, Bitmap.Config.ARGB_8888))
+        icon.draw(canvas)
+        val first = IconPreviewCache.get(key)
+        assertTrue(first != null)
+        icon.draw(canvas)
+        assertSame(first, IconPreviewCache.get(key))
+        assertNotSame(icon.toBitmap(), icon.toBitmap())
+    }
+
+    @Test
+    fun defaultPreviewDownscalingPreservesRectangularArtwork() {
+        val icon = BitmapIconDrawable(Bitmap.createBitmap(200, 100, Bitmap.Config.ARGB_8888))
+        val list = icon.previewBitmap(50)
+        val browser = icon.toBrowserPreviewBitmap(50)
+        assertEquals(50, list.width)
+        assertEquals(25, list.height)
+        assertEquals(list.width, browser.width)
+        assertEquals(list.height, browser.height)
+        assertEquals(200, icon.toBitmap().width)
+    }
+
 }
