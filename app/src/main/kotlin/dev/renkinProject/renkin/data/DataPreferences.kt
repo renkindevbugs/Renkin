@@ -241,6 +241,24 @@ private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
 val ProfilePrefKeys: List<Preferences.Key<*>> =
     ProfileBooleanPrefKeys + ProfileIntPrefKeys + ProfileStringPrefKeys
 
+private val persistedPreferenceTypes: Map<String, (Any) -> Boolean> = buildMap {
+    for (key in ProfileBooleanPrefKeys + listOf(
+        AskInstallerEveryTimeKey, InstallerChoiceConfirmedKey, AppFilterNoIconKey,
+        OnboardingSeenKey, HideProfileShareWarningKey
+    )) put(key.name) { it is Boolean }
+    for (key in ProfileIntPrefKeys + listOf(
+        DarkModeKey, InstallMethodKey, AppSortOrderKey, WatchCheckIntervalKey,
+        AutoBackupIntervalKey, LastSeenWhatsNewVersionKey
+    )) put(key.name) { it is Int }
+    for (key in ProfileStringPrefKeys + listOf(ExternalInstallerComponentKey, AutoBackupTreeUriKey)) {
+        put(key.name) { it is String }
+    }
+    for (key in listOf(ActiveProfileIdKey, LastWatchCheckAtKey, LastAutoBackupAtKey)) put(key.name) { it is Long }
+}
+
+internal fun isValidPersistedPreference(name: String, value: Any): Boolean =
+    persistedPreferenceTypes[name]?.invoke(value) ?: true
+
 /** Commits only the staged Global options keys from [source], under the shared write mutex. */
 suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preferences) {
     preferenceAccessMutex.withLock {

@@ -179,6 +179,86 @@ Switcher = the top-bar title dropdown.
 - **Room — `WatchDatabase`** (v3) — icon-watch rules, suggestions and per-rule baselines, owned per
   profile via `WatchRule.profileId`.
 
+### Backup import and export (phase 3A)
+
+`BackupManager` is a Hilt singleton shared by manual operations and `AutoBackupWorker`
+(through an application entry point). Its mutex serializes archive inspection, export and
+import. It does not yet make exports a consistent snapshot of concurrent profile, watch or
+gallery mutations; coordinating those writers belongs to phase 3B.
+
+Import copies the input into a unique staging directory under `filesDir/backup-imports`
+and reads it with `ZipFile`, requiring the central directory. Every entry, including unknown
+ones, is read to verify its actual size and CRC before any persistent store changes. Paths,
+duplicate entries, format versions, profile identities, active-profile ownership, icon
+uniqueness, known preference types and preset decodability are validated. Formats 1–3 remain
+supported; older optional fields keep their codec defaults. JSON nesting is capped at 64.
+
+Watch data is normalized on both export and import, without changing the exporting DB.
+Invalid or duplicate app/pack children, stale baselines, orphan suggestions and unusable
+candidates are removed. The newest usable baseline/suggestion is retained for duplicate
+owners. Completed rules with no remaining suggestion are skipped, matching the repository's
+legacy import policy. Core profile/icon identity problems still reject the archive. The
+normalized export is validated before the output URI is opened.
+Normalization logs discarded rule, completed-rule, app/pack, baseline, suggestion and
+candidate counts at info level, including cascaded removals, without logging payloads.
+
+Production reads/writes `data.json` through `JsonReader`/`JsonWriter` rather than allocating
+a complete JSON string and a second UTF-8 byte array. Identical `drawable`/`baseDrawable`
+strings share a reference during decoding. Models and a JSON tree still retain the icon
+payloads; very large imports can still exceed a device's heap. A future format with separate
+icon entries and a streaming storage commit remains necessary for bounded payload memory.
+
+Both export and import cap archives at 10,000 entries, 64 KiB for the manifest, 512 MiB for
+`data.json`, 64 MiB per other file and 1 GiB total uncompressed. Import also caps the source
+ZIP at 1088 MiB. These are transport limits, not a guarantee that every supported file fits
+every device's heap. A fraction of `maxMemory()` cannot reliably predict the live heap,
+JSON object overhead or the number of distinct payload strings; it is not used as an
+additional compatibility cutoff. Export streams the JSON into a bounded temporary file before opening
+the destination and checks actual file bytes while writing. `StatFs` checks staging space
+before extraction and periodically while reading/writing. Low storage, size limits and low
+memory have distinct UI messages; OOM logs include available payload sizes and heap capacity.
+Space checks retain a 32 MiB minimum reserve. Full restore additionally reserves the current
+database/WAL sizes plus the incoming JSON bytes, checked before file preparation and again
+before the first live mutation. This estimates SQLite write space, not a guarantee against
+other concurrent storage writers. Large-archive transfer progress remains future work.
+
+The supplied real format-3 backup measured 3,096,120 ZIP bytes and 6,286,362 `data.json`
+bytes, with 192 icons (none adaptive) and seven watch rules. It fits the former 64 MiB cap;
+it is not evidence of the upper size of an adaptive-heavy profile.
+
+Inspection records SHA-256 and produces a `PreparedImport` owning verified staged files.
+The ViewModel retains this handle during the confirmation dialog and imports that exact
+snapshot, even if the original URI changes or disappears. JSON is parsed again at commit,
+but the ZIP is not copied or extracted twice and icon models are not retained in the dialog.
+Cancellation, replacement of a pending import, completed jobs and ViewModel cleanup release
+the staging handle. Main-process application startup removes abandoned staging/export directories on IO,
+without waiting for another import or a 24-hour expiry. Directory creation, active ownership
+and cleanup share a process-local lock so startup cleanup cannot remove a live preview,
+export or file transaction. Abandoned file-commit batches are preserved and reported in logs
+because they may contain the only surviving originals; durable recovery belongs to phase 3B.
+Secondary processes skip cleanup; running backup operations in multiple processes would also
+require cross-process coordination beyond the current registry and manager mutex.
+
+The provider acquires its session gate only for the validated commit: lock order is backup
+mutex → provider gate, never the reverse. An invalid archive leaves the live session intact.
+Restored files are synced and moved from the verified staging directory into a temporary
+batch under `filesDir`, keeping all final renames on the destination filesystem. Only an
+`EXDEV` failure falls back to a checked, synced copy. Preparation consumes the staged files;
+the import handle is released after that attempt, including cancelled preparation. Import
+failure messages tell the user to select the file again when retrying. File changes are applied before database
+writes; old files remain in the batch until storage commit succeeds. A caught file/storage
+failure rolls back those file changes, and failed rollbacks preserve the original files for
+recovery. An absent keystore preserves both local signing files; restoring a legacy keystore
+removes a stale random password. Coroutine cancellation is accepted through file preparation
+and blocked once file mutations start. Cancelled automatic exports delete their output and
+propagate cancellation rather than scheduling a retry.
+
+This is not a crash-atomic restore: Room databases, DataStore, signing credentials and gallery
+files still commit separately. File rollback does not undo partial database/preferences writes.
+Phase 3B must add a durable pre-restore storage snapshot and recovery marker, startup recovery,
+and coordinated storage snapshots (including build/signing writers). Image/keystore payload
+semantics also need separate validation; CRC checks transport integrity only.
+
 ## UI conventions
 
 - **Fullscreen screens** (Settings, Crash logs, Watched icons) are fullscreen dialogs with

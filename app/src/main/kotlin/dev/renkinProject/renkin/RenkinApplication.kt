@@ -1,12 +1,21 @@
 package dev.renkinProject.renkin
 
+import android.app.ActivityManager
 import android.app.Application
 import android.content.Intent
+import android.os.Build
+import android.os.Process
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import dagger.hilt.android.HiltAndroidApp
+import dev.renkinProject.renkin.data.transfer.BackupStaging
 import dev.renkinProject.renkin.util.CrashReporter
+import dev.renkinProject.renkin.util.Log
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 /**
  * Application entry point for Hilt. [HiltAndroidApp] triggers Hilt's code generation and
@@ -14,12 +23,33 @@ import dev.renkinProject.renkin.util.CrashReporter
  */
 @HiltAndroidApp
 class RenkinApplication : Application() {
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     override fun onCreate() {
         super.onCreate()
         // Capture uncaught exceptions to a local file so the next launch can offer to email
         // the log (see CrashReporter / the crash dialog in MainActivity).
         CrashReporter.install(this)
         registerCrashLogsShortcut()
+        if (isMainProcess()) {
+            applicationScope.launch {
+                try {
+                    BackupStaging.cleanAfterProcessStart(filesDir)
+                } catch (error: Exception) {
+                    Log.error("BackupStaging", "Could not clean abandoned backup staging", error)
+                }
+            }
+        }
+    }
+
+    private fun isMainProcess(): Boolean {
+        val processName = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            Application.getProcessName()
+        } else {
+            getSystemService(ActivityManager::class.java)?.runningAppProcesses
+                ?.firstOrNull { it.pid == Process.myPid() }?.processName
+        }
+        return processName == packageName
     }
 
     /**

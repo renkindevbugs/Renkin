@@ -12,6 +12,10 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import dev.renkinProject.renkin.data.AUTO_BACKUP_INTERVAL_OFF
 import dev.renkinProject.renkin.data.AutoBackupTreeUriKey
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
@@ -21,6 +25,7 @@ import dev.renkinProject.renkin.data.setLongValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import java.io.IOException
 import java.time.LocalDateTime
@@ -39,13 +44,20 @@ class AutoBackupWorker(appContext: Context, params: WorkerParameters) :
 
         var outputUri: Uri? = null
         return try {
-            val createdUri = createBackupDocument(treeUri)
-            outputUri = createdUri
-            BackupManager(applicationContext).exportBackup(createdUri)
+            EntryPointAccessors.fromApplication(applicationContext, AutoBackupEntryPoint::class.java)
+                .backupManager().exportBackup {
+                    val createdUri = createBackupDocument(treeUri)
+                    outputUri = createdUri
+                    applicationContext.contentResolver.openOutputStream(createdUri)
+                        ?: throw IOException("Cannot open automatic backup for writing")
+                }
             runCatching { deleteExpiredBackups(treeUri) }
                 .onFailure { Log.error("AutoBackupWorker", "Could not prune old backups", it) }
             applicationContext.dataStore.setLongValue(LastAutoBackupAtKey, System.currentTimeMillis())
             Result.success()
+        } catch (e: CancellationException) {
+            outputUri?.let(::deleteDocument)
+            throw e
         } catch (e: SecurityException) {
             outputUri?.let(::deleteDocument)
             Log.error("AutoBackupWorker", "Automatic backup folder is no longer accessible", e)
@@ -147,4 +159,10 @@ class AutoBackupWorker(appContext: Context, params: WorkerParameters) :
                 .enqueueUniqueWork(IMMEDIATE_WORK_NAME, ExistingWorkPolicy.REPLACE, request)
         }
     }
+}
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+internal interface AutoBackupEntryPoint {
+    fun backupManager(): BackupManager
 }

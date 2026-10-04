@@ -61,6 +61,9 @@ import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
+import dev.renkinProject.renkin.data.transfer.BackupSpaceException
+import dev.renkinProject.renkin.data.transfer.BackupSizeException
+import dev.renkinProject.renkin.data.transfer.BackupMemoryException
 import dev.renkinProject.renkin.data.transfer.AutoBackupManager
 import dev.renkinProject.renkin.data.transfer.isIconPackStudioExport
 import dev.renkinProject.renkin.data.watch.WatchRepository
@@ -627,6 +630,7 @@ class MainViewModel @Inject constructor(
     fun openShizukuManager(): Boolean = ShizukuSupport.openManager(getApplication<Application>())
 
     override fun onCleared() {
+        cancelBackupImport()
         shizukuObservation.close()
         val pendingPacks = listOfNotNull(pendingInstallerSelection?.pack, pendingInstallFallback?.pack)
         pendingInstallerSelection = null
@@ -1452,26 +1456,37 @@ class MainViewModel @Inject constructor(
      * Runs one backup/import operation at a time: the shared busy flag gates re-entry, a
      * failure logs and toasts [failureToast], cancellation propagates.
      */
-    private fun runBackupOp(@StringRes failureToast: Int, op: suspend (ProfileSessionToken) -> Unit) {
+    private fun runBackupOp(
+        @StringRes failureToast: Int,
+        onCompletion: () -> Unit = {},
+        op: suspend (ProfileSessionToken) -> Unit
+    ) {
         if (backupInProgress) return
         backupInProgress = true
         val expected = sessionToken
         viewModelScope.launch {
-            profileSessionOperations.withLock {
-                try {
+            try {
+                profileSessionOperations.withLock {
                     op(expected)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: ProfileSessionChangedException) {
-                    _toastEvents.trySend(e.userMessage())
-                } catch (e: Exception) {
-                    Log.error("MainViewModel", "Backup operation failed", e)
-                    _toastEvents.trySend(failureToast)
-                } finally {
-                    backupInProgress = false
                 }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ProfileSessionChangedException) {
+                _toastEvents.trySend(e.userMessage())
+            } catch (e: Exception) {
+                Log.error("MainViewModel", "Backup operation failed", e)
+                _toastEvents.trySend(when (e) {
+                    is BackupSpaceException -> if (failureToast == R.string.backupImportFailed) {
+                        R.string.backupImportInsufficientStorage
+                    } else R.string.backupInsufficientStorage
+                    is BackupSizeException -> R.string.backupSizeLimitExceeded
+                    is BackupMemoryException -> R.string.backupInsufficientMemory
+                    else -> failureToast
+                })
+            } finally {
+                backupInProgress = false
             }
-        }
+        }.invokeOnCompletion { onCompletion() }
     }
 
     /**
@@ -1506,7 +1521,7 @@ class MainViewModel @Inject constructor(
     // A picked full-backup file waiting for the "replace everything?" confirmation.
     // (Profile files import right away — they only add a new profile.)
     data class PendingBackupImport(
-        val uri: Uri,
+        val prepared: BackupManager.PreparedImport,
         val preview: BackupManager.BackupPreview
     )
 
@@ -1514,32 +1529,51 @@ class MainViewModel @Inject constructor(
         private set
 
     fun confirmBackupImport() {
-        val uri = pendingBackupImport?.uri ?: return
+        if (backupInProgress) return
+        val pending = pendingBackupImport ?: return
         pendingBackupImport = null
-        runBackupOp(R.string.backupImportFailed) { performImport(uri, replacesSession = true) }
+        runBackupOp(R.string.backupImportFailed, onCompletion = { releasePreparedImport(pending.prepared) }) {
+            performImport(pending.prepared)
+        }
     }
 
-    fun cancelBackupImport() { pendingBackupImport = null }
+    fun cancelBackupImport() {
+        val pending = pendingBackupImport
+        pendingBackupImport = null
+        pending?.let { releasePreparedImport(it.prepared) }
+    }
+
+    private fun releasePreparedImport(prepared: BackupManager.PreparedImport) {
+        viewModelScope.launch(NonCancellable + Dispatchers.IO) { backupManager.discardImport(prepared) }
+    }
 
     /**
      * Entry point for a picked `.renkin` file: full backups are destructive, so they stop at
      * a confirmation ([pendingBackupImport]); shared profiles are additive and import now.
      */
     fun importFile(uri: Uri) = runBackupOp(R.string.backupImportFailed) {
-        val inspection = backupManager.inspectFile(uri)
-        when (inspection.kind) {
-            BackupManager.ImportKind.BACKUP -> pendingBackupImport = PendingBackupImport(
-                uri = uri,
-                preview = checkNotNull(inspection.backup)
-            )
-            BackupManager.ImportKind.PROFILE -> performImport(uri, replacesSession = false)
+        cancelBackupImport()
+        val prepared = backupManager.prepareImport(uri)
+        var handedOff = false
+        try {
+            when (prepared.inspection.kind) {
+                BackupManager.ImportKind.BACKUP -> {
+                    pendingBackupImport = PendingBackupImport(prepared, checkNotNull(prepared.inspection.backup))
+                    handedOff = true
+                }
+                BackupManager.ImportKind.PROFILE -> performImport(prepared)
+            }
+        } finally {
+            if (!handedOff) backupManager.discardImport(prepared)
         }
     }
 
-    private suspend fun performImport(uri: Uri, replacesSession: Boolean) {
-        val result = if (replacesSession) {
-            appProvider.replaceProfileSession { backupManager.importFile(uri) }
-        } else backupManager.importFile(uri)
+    private suspend fun performImport(prepared: BackupManager.PreparedImport) {
+        val result = backupManager.importPrepared(prepared) { commit ->
+            if (prepared.inspection.kind == BackupManager.ImportKind.BACKUP) {
+                appProvider.replaceProfileSession { commit() }
+            } else commit()
+        }
         when (result.kind) {
             BackupManager.ImportKind.BACKUP -> {
                 // Everything was replaced — reload the in-memory state in place.

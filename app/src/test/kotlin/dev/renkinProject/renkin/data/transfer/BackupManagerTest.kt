@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.data.transfer
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.room.Room
 import dev.renkinProject.renkin.apk.PackKeystore
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
@@ -18,6 +19,11 @@ import dev.renkinProject.renkin.data.watch.SuggestionImport
 import dev.renkinProject.renkin.data.watch.WatchDatabase
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchRuleImport
+import dev.renkinProject.renkin.data.watch.WatchState
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
+import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
+import dev.renkinProject.renkin.icon.creator.encodeModifierPreset
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
@@ -30,8 +36,12 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
+import org.robolectric.shadows.ShadowStatFs
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
+import java.io.IOException
+import java.util.zip.ZipEntry
+import java.util.zip.ZipOutputStream
 
 /**
  * End-to-end round trip of the `.renkin` ZIP: export from one set of (in-memory) stores,
@@ -40,7 +50,7 @@ import java.io.ByteArrayOutputStream
  * manifest validation and store replacement are under test.
  */
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [33])
+@Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 class BackupManagerTest {
 
     private lateinit var context: Context
@@ -52,6 +62,7 @@ class BackupManagerTest {
     @Before
     fun setUp() {
         context = RuntimeEnvironment.getApplication()
+        ShadowStatFs.registerStats(context.filesDir, 1_000_000, 1_000_000, 1_000_000)
         srcPackDb = inMemoryPackDb()
         srcWatchDb = inMemoryWatchDb()
         tgtPackDb = inMemoryPackDb()
@@ -201,8 +212,8 @@ class BackupManagerTest {
                 DbApplication("com.c", "C", false, false, "c", profileId = 7L)
             )
         )
-        packRepo.saveColorPreset("Blue", "blue")
-        packRepo.saveModifierPreset("Soft", "{}", 1)
+        packRepo.saveColorPreset("Blue", encodeColorizerStyle(ColorizerStyle(firstColor = 0xff0000ff.toInt())))
+        packRepo.saveModifierPreset("Soft", encodeModifierPreset(ModifierPresetPayload(iconScale = 0.8f)), 1)
         watchRepo.replaceAllRules(
             listOf(
                 WatchRuleImport(DEFAULT_PROFILE_ID, true, false, 1L, null, emptyList(), emptyList()),
@@ -470,5 +481,138 @@ class BackupManagerTest {
         assertTrue(result.isFailure)
         assertEquals(listOf("Keep me"), tgtPackRepo.profiles().map { it.name })
         assertEquals(listOf("com.keep"), tgtPackRepo.getAll(DEFAULT_PROFILE_ID).map { it.packageName })
+    }
+
+    private fun minimalData(name: String = "Incoming") = BackupData(
+        listOf(BackupProfile(Profile(id = 1, name = name), emptyList(), emptyList())), emptyMap()
+    )
+
+    private fun archive(data: BackupData, format: Int = 3, extras: Map<String, String> = emptyMap()): ByteArray {
+        val output = ByteArrayOutputStream()
+        ZipOutputStream(output).use { zip ->
+            val entries = linkedMapOf(
+                "manifest.json" to "{\"format\":$format,\"kind\":\"backup\"}",
+                "data.json" to BackupCodec.encode(data)
+            ).apply { putAll(extras) }
+            for ((name, content) in entries) {
+                zip.putNextEntry(ZipEntry(name))
+                zip.write(content.toByteArray())
+                zip.closeEntry()
+            }
+        }
+        return output.toByteArray()
+    }
+
+    @Test fun invalidArchives_neverReachCommitOrChangeLiveFilesAndStores() = runBlocking {
+        val pack = RenkinPackRepository(tgtPackDb)
+        pack.replaceEverything(listOf(Profile(id = 1, name = "Keep")), emptyList())
+        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb))
+        val data = minimalData()
+        val profile = data.profiles.single()
+        val files = context.filesDir
+        val keystore = PackKeystore.keystoreFile(files).apply { writeText("original") }
+        try {
+            val invalid = listOf(
+                archive(data, format = 4), archive(data, format = 0),
+                archive(data.copy(profiles = listOf(profile, profile))),
+                archive(data.copy(profiles = listOf(profile.copy(profile = profile.profile.copy(id = 2))))),
+                archive(data, extras = mapOf("uploads/nested/image.png" to "invalid")),
+                archive(data, extras = mapOf("keystore/${PackKeystore.PASSWORD_FILE_NAME}" to "orphan"))
+            )
+            for (bytes in invalid) {
+                val source = context.cacheDir.resolve("invalid.renkin").apply { writeBytes(bytes) }
+                var committed = false
+                val error = runCatching {
+                    manager.importFile(Uri.fromFile(source), commit = { operation -> committed = true; operation() })
+                }.exceptionOrNull()
+                assertTrue(error is IOException)
+                assertFalse(committed)
+                assertEquals("Keep", pack.profiles().single().name)
+                assertEquals("original", keystore.readText())
+            }
+        } finally { keystore.delete() }
+    }
+
+    @Test fun preparedImport_usesVerifiedSnapshotAfterSourceDisappears() = runBlocking {
+        val pack = RenkinPackRepository(tgtPackDb)
+        pack.replaceEverything(listOf(Profile(id = 1, name = "Before")), emptyList())
+        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb))
+        val source = context.cacheDir.resolve("prepared.renkin").apply { writeBytes(archive(minimalData())) }
+        val prepared = manager.prepareImport(Uri.fromFile(source))
+        assertEquals("Before", pack.profiles().single().name)
+        assertTrue(source.delete())
+        manager.importPrepared(prepared)
+        assertEquals("Incoming", pack.profiles().single().name)
+        assertTrue(prepared.closed)
+        assertTrue(prepared.staged.entries.values.none { it.exists() })
+    }
+
+    @Test fun discardedImport_releasesFilesAndCannotBeCommitted() = runBlocking {
+        val manager = BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb))
+        val source = context.cacheDir.resolve("discard.renkin").apply { writeBytes(archive(minimalData())) }
+        val prepared = manager.prepareImport(Uri.fromFile(source))
+        manager.discardImport(prepared)
+        manager.discardImport(prepared)
+        assertTrue(prepared.staged.entries.values.none { it.exists() })
+        assertTrue(runCatching { manager.importPrepared(prepared) }.exceptionOrNull() is IllegalStateException)
+        assertTrue(RenkinPackRepository(tgtPackDb).profiles().isEmpty())
+    }
+
+    @Test fun changedFingerprint_rejectsLegacyReopenedInputBeforeCommit() = runBlocking {
+        val pack = RenkinPackRepository(tgtPackDb)
+        pack.replaceEverything(listOf(Profile(id = 1, name = "Keep")), emptyList())
+        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb))
+        val source = context.cacheDir.resolve("changed.renkin").apply { writeBytes(archive(minimalData())) }
+        val inspection = manager.inspectFile { source.inputStream() }
+        source.writeBytes(archive(minimalData("Different")))
+        val error = runCatching { manager.importFile(Uri.fromFile(source), expectedFingerprint = inspection.fingerprint) }.exceptionOrNull()
+        assertTrue(error is IOException)
+        assertEquals("Keep", pack.profiles().single().name)
+    }
+
+    @Test fun export_validatesBeforeOpeningOutput() = runBlocking {
+        val pack = RenkinPackRepository(srcPackDb)
+        pack.replaceEverything(listOf(Profile(id = 1, name = "Saved")), emptyList())
+        pack.saveColorPreset("Broken", "invalid")
+        var opened = false
+        val error = runCatching {
+            BackupManager(context, pack, WatchRepository(srcWatchDb)).exportBackup {
+                opened = true
+                ByteArrayOutputStream()
+            }
+        }.exceptionOrNull()
+        assertTrue(error is IOException)
+        assertFalse(opened)
+    }
+
+    @Test fun exportImport_normalizesRealStaleWatchRowsWithoutChangingSource() = runBlocking {
+        val pack = RenkinPackRepository(srcPackDb)
+        val watch = WatchRepository(srcWatchDb)
+        pack.replaceEverything(listOf(Profile(id = 1, name = "Saved")), emptyList())
+        val app = AppComponent("app.one", "Main")
+        val active = watch.saveRule(null, listOf(app), false, listOf("pack.one"), 1)
+        watch.upsertState(WatchState(active, "removed.app", "Main", "pack.one", 1, null, null, 1))
+        val completed = watch.saveRule(null, listOf(app), false, listOf("pack.one"), 1)
+        watch.completeWithSuggestion(completed, app, listOf(CandidateInput("pack.one", "icon", "")))
+        // Insert after the normal prune path to exercise an older database's orphan state.
+        watch.upsertState(WatchState(active, "removed.app", "Main", "pack.one", 1, null, null, 1))
+        val output = ByteArrayOutputStream()
+        BackupManager(context, pack, watch).exportBackup { output }
+        assertEquals(2, watch.getAllRules().size)
+        assertEquals(1, watch.getStatesForRule(active).size)
+        val target = WatchRepository(tgtWatchDb)
+        BackupManager(context, RenkinPackRepository(tgtPackDb), target)
+            .importBackup { ByteArrayInputStream(output.toByteArray()) }
+        assertEquals(1, target.getAllRules().size)
+        assertTrue(target.getStatesForRule(target.getAllRules().single().rule.id).isEmpty())
+    }
+
+    @Test fun legacyFormatsOneAndTwoRemainImportable() = runBlocking {
+        val pack = RenkinPackRepository(tgtPackDb)
+        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb))
+        for (format in 1..2) {
+            manager.importBackup { ByteArrayInputStream(archive(minimalData("Legacy $format"), format)) }
+            assertEquals("Legacy $format", pack.profiles().single().name)
+        }
     }
 }

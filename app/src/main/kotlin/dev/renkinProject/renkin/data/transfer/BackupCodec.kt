@@ -117,7 +117,9 @@ object BackupCodec {
     // Version 3 preserves watch baselines and pending completed suggestions.
     const val FORMAT_VERSION = 3
 
-    fun encode(data: BackupData): String {
+    fun encode(data: BackupData): String = encodeJson(data).toString()
+
+    internal fun encodeJson(data: BackupData): JSONObject {
         val root = JSONObject()
 
         val prefs = JSONObject()
@@ -248,12 +250,13 @@ object BackupCodec {
         }
         root.put("modifierPresets", modifierPresets)
 
-        return root.toString()
+        return root
     }
 
     /** Throws (JSONException) on malformed input — callers surface that as a failed import. */
-    fun decode(json: String): BackupData {
-        val root = JSONObject(json)
+    fun decode(json: String): BackupData = decodeJson(parseBackupJson(json))
+
+    internal fun decodeJson(root: JSONObject): BackupData {
 
         val prefs = mutableMapOf<String, BackupPref>()
         val prefsJson = root.getJSONObject("prefs")
@@ -343,7 +346,7 @@ object BackupCodec {
                 }
                 val packsJson = r.getJSONArray("packs")
                 val packs = (0 until packsJson.length()).map { packsJson.getString(it) }
-                val baselinesJson = r.optJSONArray("baselines") ?: JSONArray()
+                val baselinesJson = r.optionalArray("baselines") ?: JSONArray()
                 val baselines = (0 until baselinesJson.length()).map { index ->
                     val state = baselinesJson.getJSONObject(index)
                     BackupWatchState(
@@ -356,7 +359,7 @@ object BackupCodec {
                         lastCheckedAt = state.getLong("lastCheckedAt")
                     )
                 }
-                val suggestionsJson = r.optJSONArray("suggestions") ?: JSONArray()
+                val suggestionsJson = r.optionalArray("suggestions") ?: JSONArray()
                 val suggestions = (0 until suggestionsJson.length()).map { index ->
                     val suggestion = suggestionsJson.getJSONObject(index)
                     val candidatesJson = suggestion.getJSONArray("candidates")
@@ -392,12 +395,12 @@ object BackupCodec {
         }
 
         val packLabels = mutableMapOf<String, String>()
-        root.optJSONObject("packs")?.let { packs ->
+        (if (root.has("packs")) root.getJSONObject("packs") else null)?.let { packs ->
             for (name in packs.keys()) packLabels[name] = packs.getString(name)
         }
 
         val colorPresets = mutableListOf<BackupColorPreset>()
-        root.optJSONArray("colorPresets")?.let { presets ->
+        root.optionalArray("colorPresets")?.let { presets ->
             for (i in 0 until presets.length()) {
                 val preset = presets.getJSONObject(i)
                 colorPresets.add(
@@ -411,7 +414,7 @@ object BackupCodec {
         }
 
         val modifierPresets = mutableListOf<BackupModifierPreset>()
-        root.optJSONArray("modifierPresets")?.let { presets ->
+        root.optionalArray("modifierPresets")?.let { presets ->
             for (i in 0 until presets.length()) {
                 val preset = presets.getJSONObject(i)
                 modifierPresets.add(
@@ -429,3 +432,6 @@ object BackupCodec {
         return BackupData(profiles, prefs, packLabels, colorPresets, modifierPresets)
     }
 }
+
+private fun JSONObject.optionalArray(name: String): JSONArray? =
+    if (has(name)) getJSONArray(name) else null

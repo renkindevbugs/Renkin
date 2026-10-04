@@ -506,7 +506,11 @@
     <string name="backupExported">Backup exported</string>
     <string name="backupExportFailed">Couldn\'t export the backup</string>
     <string name="backupImported">Backup imported</string>
-    <string name="backupImportFailed">Couldn\'t import this file — is it a Renkin backup?</string>
+    <string name="backupImportFailed">Couldn\'t import this file. Check that it is a Renkin backup, then select the file again to retry.</string>
+    <string name="backupInsufficientStorage">Not enough free storage to prepare this backup. Free up space and try again.</string>
+    <string name="backupImportInsufficientStorage">Not enough free storage to prepare this import. Free up space, then select the file again.</string>
+    <string name="backupSizeLimitExceeded">This backup exceeds the supported size limits.</string>
+    <string name="backupInsufficientMemory">This backup needs more memory than is available on this device.</string>
     <string name="automaticBackups">Automatic backups</string>
     <string name="autoBackupOff">Off</string>
     <string name="autoBackupDaily">Daily</string>
