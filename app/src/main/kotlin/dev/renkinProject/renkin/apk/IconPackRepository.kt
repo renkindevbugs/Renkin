@@ -155,6 +155,15 @@ class IconPackRepository(
         )
     }
 
+    internal fun captureAppDrawables(iconPack: String): () -> Map<InstalledApplication, ResourceDrawable> {
+        val elements = appFilterElementsByPackage[iconPack]?.toList() ?: emptyList()
+        val applications = installedApplications.toList()
+        return {
+            if (iconPack.isEmpty() || elements.isEmpty()) emptyMap()
+            else appManager.getDrawableFromAppFilterElements(iconPack, applications, elements)
+        }
+    }
+
     /**
      * Resolves one component without scanning or decoding the rest of the pack. The index is
      * rebuilt with the appfilter, and duplicate component declarations keep the last value just

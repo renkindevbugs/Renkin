@@ -766,6 +766,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                         onClick = {
                             view.performConfirmHaptic()
                             scope.launch {
+                                val savedState = state.snapshot()
                                 val applied = viewModel.applyGlobalModifiers(
                                     state.overlay(prefsValue), state.toModifierOptions(),
                                     state.applyGenerated, state.applyExisting,
@@ -773,7 +774,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                                 )
                                 if (applied) {
                                     toaster.show(appliedMessage)
-                                    baseline = state.snapshot()
+                                    baseline = savedState
                                 }
                             }
                         },

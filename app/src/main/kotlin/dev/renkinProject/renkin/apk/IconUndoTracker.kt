@@ -14,7 +14,9 @@ class IconUndoStep(
     val profileId: Long,
     val rows: List<PackageInfoStruct>,
     /** Whether the change had reached the database, so undoing it has to be saved as well. */
-    val persisted: Boolean
+    val persisted: Boolean,
+    val operationId: Long = 0L,
+    val unsavedBefore: Set<String> = emptySet()
 )
 
 /**
@@ -23,6 +25,7 @@ class IconUndoStep(
  * database, a package manager or an icon generator.
  */
 class IconUndoTracker {
+    private var nextOperationId = 0L
 
     // Compose state: the UI hides a stale offer without being told.
     var step by mutableStateOf<IconUndoStep?>(null)
@@ -32,8 +35,24 @@ class IconUndoTracker {
     val size: Int get() = step?.rows?.size ?: 0
 
     /** Records rows about to be overwritten. An empty list withdraws the offer entirely. */
-    fun capture(rows: List<PackageInfoStruct>, profileId: Long, persisted: Boolean) {
-        step = if (rows.isEmpty()) null else IconUndoStep(profileId, rows, persisted)
+    fun capture(
+        rows: List<PackageInfoStruct>, profileId: Long, persisted: Boolean,
+        unsavedBefore: Set<String> = emptySet()
+    ) {
+        step = if (rows.isEmpty()) null else IconUndoStep(
+            profileId, rows, persisted, ++nextOperationId,
+            rows.map { it.key }.toSet().intersect(unsavedBefore)
+        )
+    }
+
+    fun discard(key: String) {
+        val pending = step ?: return
+        if (pending.rows.none { it.key == key }) return
+        val remaining = pending.rows.filterNot { it.key == key }
+        step = if (remaining.isEmpty()) null else IconUndoStep(
+            pending.profileId, remaining, pending.persisted, pending.operationId,
+            pending.unsavedBefore - key
+        )
     }
 
     fun clear() { step = null }

@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.apk
 
 import android.content.Context
 import dev.renkinProject.renkin.data.ImageEdit
+import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.data.FallbackSource
@@ -19,6 +20,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+
+internal data class IconGenerationSources(
+    val primary: () -> Map<InstalledApplication, ResourceDrawable>,
+    val secondary: () -> Map<InstalledApplication, ResourceDrawable>,
+    val fallbackPack: String
+)
 
 /**
  * Runs the actual icon generation: it wires [IconGenerator] together with the pack
@@ -110,13 +117,14 @@ class IconGenerationService(
         }
 
     /** Regenerates one app's icon from both packs, handing the result to [onResult]. */
-    suspend fun refreshIcon(
+    internal suspend fun refreshIcon(
         application: PackageInfoStruct,
         sourceOptions: GenerationOptions,
         modifierOptions: GenerationOptions?,
+        sources: IconGenerationSources,
         onResult: (PackageInfoStruct, IconPackDrawable?, IconPackDrawable?, sourcePackName: String) -> Unit
     ) = withContext(Dispatchers.Default) {
-        val builder = buildGenerator(sourceOptions)
+        val builder = buildGenerator(sourceOptions, sources)
         val modifier = modifierOptions?.let { modifierPipeline(it) }
         val generationContext = currentCoroutineContext()
         builder.generateIcon(application) { app, base, sourcePack ->
@@ -127,27 +135,41 @@ class IconGenerationService(
         }
     }
 
-    /** Regenerates every app's icon from both packs, streaming each result to [onResult]. */
-    suspend fun refreshIcons(
+    internal data class GeneratedIconResult(
+        val key: String,
+        val base: IconPackDrawable?,
+        val rendered: IconPackDrawable?,
+        val isFallback: Boolean,
+        val sourcePack: String
+    )
+
+    internal suspend fun refreshIcons(
         applications: List<PackageInfoStruct>,
         sourceOptions: GenerationOptions,
         modifierOptions: GenerationOptions?,
-        onResult: (PackageInfoStruct, IconPackDrawable?, IconPackDrawable?, isFallback: Boolean, sourcePackName: String) -> Unit
+        sources: IconGenerationSources,
+        onProgress: (done: Int, total: Int) -> Unit,
+        onBatch: suspend (List<GeneratedIconResult>) -> Unit
     ) = withContext(Dispatchers.Default) {
-        val builder = buildGenerator(sourceOptions)
+        onProgress(0, applications.size)
+        if (applications.isEmpty()) return@withContext
+        val builder = buildGenerator(sourceOptions, sources)
         val modifier = modifierOptions?.let { modifierPipeline(it) }
         val generationContext = currentCoroutineContext()
-        builder.generateIcons(applications) { app, base, fallback, sourcePack ->
+        var done = 0
+        for (batch in applications.asSequence().chunked(20)) {
             generationContext.ensureActive()
-            val rendered = base?.let { modifier?.applyPrimary(it) ?: it }
+            val results = mutableListOf<GeneratedIconResult>()
+            builder.generateIcons(batch) { app, base, fallback, sourcePack ->
+                generationContext.ensureActive()
+                val rendered = base?.let { modifier?.applyPrimary(it) ?: it }
+                generationContext.ensureActive()
+                results += GeneratedIconResult(app.key, base, rendered, fallback, sourcePack)
+            }
             generationContext.ensureActive()
-            onResult(
-                app,
-                base,
-                rendered,
-                fallback,
-                sourcePack
-            )
+            onBatch(results)
+            done += batch.size
+            onProgress(done, applications.size)
         }
     }
 
@@ -160,23 +182,33 @@ class IconGenerationService(
         samples.mapNotNull { builder.fallbackIcon(it) }
     }
 
-    private fun buildGenerator(options: GenerationOptions): IconGenerator {
-        val pack1 = IconPackContainer(options.primaryIconPack, iconPackRepo.getAppDrawables(options.primaryIconPack))
-        val pack2 = IconPackContainer(options.secondaryIconPack, iconPackRepo.getAppDrawables(options.secondaryIconPack))
-        // The pack whose fallback styling unthemed apps inherit, per the user's choice.
+    internal fun captureRefreshSources(options: GenerationOptions): IconGenerationSources {
         val fallbackPack = when (options.fallbackSource) {
             FallbackSource.PRIMARY -> options.primaryIconPack
             FallbackSource.SECONDARY -> options.secondaryIconPack
             FallbackSource.NONE -> ""
         }
-        val fallback = iconPackRepo.getIconPackFallback(fallbackPack)
+        return IconGenerationSources(
+            iconPackRepo.captureAppDrawables(options.primaryIconPack),
+            iconPackRepo.captureAppDrawables(options.secondaryIconPack),
+            fallbackPack
+        )
+    }
+
+    private fun buildGenerator(
+        options: GenerationOptions,
+        sources: IconGenerationSources = captureRefreshSources(options)
+    ): IconGenerator {
+        val pack1 = IconPackContainer(options.primaryIconPack, sources.primary())
+        val pack2 = IconPackContainer(options.secondaryIconPack, sources.secondary())
+        val fallback = iconPackRepo.getIconPackFallback(sources.fallbackPack)
         return IconGenerator(
             context,
             options,
             pack1,
             pack2,
             fallback,
-            fallbackPack,
+            sources.fallbackPack,
             iconPackCatalog
         )
     }

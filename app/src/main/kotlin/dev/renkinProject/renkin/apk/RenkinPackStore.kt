@@ -119,6 +119,14 @@ class RenkinPackStore(
         apps: List<PackageInfoStruct>,
         preservedRows: Collection<DbApplication> = emptyList()
     ) = withContext(Dispatchers.Default) {
+        repo.replaceAll(profileId, encodeRows(profileId, apps, preservedRows))
+    }
+
+    private fun encodeRows(
+        profileId: Long,
+        apps: List<PackageInfoStruct>,
+        preservedRows: Collection<DbApplication>
+    ): List<DbApplication> {
         val dbApps = apps.mapNotNull { app ->
             val rendered = app.createdIcon
             val base = app.baseIcon ?: rendered
@@ -148,7 +156,7 @@ class RenkinPackStore(
         }
         val liveKeys = dbApps.map { "${it.packageName}/${it.activityName}" }.toSet()
         val kept = preservedRows.filter { "${it.packageName}/${it.activityName}" !in liveKeys }
-        repo.replaceAll(profileId, dbApps + kept)
+        return dbApps + kept
     }
 
     /** Keys ("package/activity") of the apps in [profileId]'s last built/saved pack. */
@@ -172,6 +180,16 @@ class RenkinPackStore(
                 BuiltIcon(profileId, it.packageName, it.activityName, it.fingerprint())
             }
         )
+    }
+
+    suspend fun recordBuilt(
+        profileId: Long,
+        apps: List<PackageInfoStruct>,
+        preservedRows: Collection<DbApplication>
+    ) = withContext(Dispatchers.Default) {
+        repo.replaceBuiltIcons(profileId, encodeRows(profileId, apps, preservedRows).map {
+            BuiltIcon(profileId, it.packageName, it.activityName, it.fingerprint())
+        })
     }
 
     /**

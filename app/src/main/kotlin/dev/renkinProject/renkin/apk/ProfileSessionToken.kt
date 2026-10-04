@@ -18,6 +18,8 @@ class ProfileSessionChangedException(
 
 class ProfileOperationBusyException : IllegalStateException("A profile operation is already running")
 
+class ProfileOperationSupersededException : IllegalStateException("The render inputs changed")
+
 class ProfileReloadFailedException(
     val restoredSession: ProfileSessionToken,
     cause: Exception

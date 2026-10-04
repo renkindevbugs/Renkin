@@ -241,6 +241,7 @@
     <string name="iconEditTargetGone">This app is no longer available to edit</string>
     <string name="profileOperationFailed">Couldn\'t update the profile</string>
     <string name="profileOperationBusy">A profile operation is running. Try changing the setting again when it finishes.</string>
+    <string name="profileOperationSuperseded">The icons or settings changed while this operation was running. Try again.</string>
     <string name="editorSessionLost">The editing session was lost when the app restarted. Reopen the editor to repeat your unsaved changes.</string>
     <string name="sortByName">Name</string>
     <string name="sortByInstallDate">Recently installed</string>
@@ -740,4 +741,9 @@
     <string name="whatsNewBackup">**Backup:** Save and restore the whole app in one file.</string>
     <string name="whatsNewTextSvg">**More sources:** Create text icons or import SVG artwork.</string>
     <string name="whatsNewMaterialShapes">**Material You shapes:** Crop icons or place them on a colour plate.</string>
+    <string name="refreshNewerEditsKept">Newer icon edits were kept during refresh.</string>
+    <string name="profileRenderBusy">Refresh, Global Save, or a build is running for this profile. Try again when it finishes.</string>
+    <string name="refreshCancelled">Refresh was cancelled.</string>
+    <string name="refreshTargetsGone">Some apps are no longer available and were skipped.</string>
+    <string name="refreshProgress">Processing icons: %1$d/%2$d</string>
 </resources>

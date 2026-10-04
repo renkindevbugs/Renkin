@@ -29,6 +29,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.IconApplyOutcome
 import dev.renkinProject.renkin.apk.ProfileSessionToken
+import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
+import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.isDarkModeEnabled
@@ -484,6 +486,12 @@ class GlobalOptionsViewModel @Inject constructor(
             }
         } catch (e: CancellationException) {
             throw e
+        } catch (e: ProfileOperationBusyException) {
+            _toastEvents.trySend(R.string.profileRenderBusy)
+            false
+        } catch (e: ProfileOperationSupersededException) {
+            _toastEvents.trySend(R.string.profileOperationSuperseded)
+            false
         } catch (e: ProfileSessionChangedException) {
             _toastEvents.trySend(e.userMessage())
             false
@@ -516,9 +524,17 @@ class GlobalOptionsViewModel @Inject constructor(
                 )
             }) {
                 IconApplyOutcome.APPLIED ->
-                    appProvider.commitSessionState(expected) { editedKeys += app.key }.also { committed ->
+                    appProvider.commitSessionState(expected) {
+                        if (appProvider.applicationList.any { it.key == app.key && it.baseIcon === icon }) {
+                            editedKeys += app.key
+                        }
+                    }.also { committed ->
                         if (!committed) _toastEvents.trySend(expiredSessionNotice)
                     }
+                IconApplyOutcome.CONFLICT -> {
+                    _toastEvents.trySend(R.string.profileOperationSuperseded)
+                    false
+                }
                 IconApplyOutcome.LOCKED -> {
                     _toastEvents.trySend(R.string.iconOriginLocked)
                     false

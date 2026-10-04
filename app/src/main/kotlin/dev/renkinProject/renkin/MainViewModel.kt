@@ -30,7 +30,10 @@ import dev.renkinProject.renkin.apk.InstallerSelection
 import dev.renkinProject.renkin.apk.ShizukuSupport
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.apk.IconApplyOutcome
+import dev.renkinProject.renkin.apk.IconUndoStep
 import dev.renkinProject.renkin.apk.ProfileReloadFailedException
+import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
+import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.IconPack
@@ -72,6 +75,8 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.delay
@@ -267,14 +272,19 @@ class MainViewModel @Inject constructor(
 
     private fun launchProfileOperation(
         expected: ProfileSessionToken = sessionToken,
+        serialize: Boolean = true,
         operation: suspend (ProfileSessionToken) -> Unit
-    ) {
-        viewModelScope.launch {
-            profileSessionOperations.withLock {
+    ): Job {
+        return viewModelScope.launch {
+            suspend fun execute() {
                 try {
                     operation(expected)
                 } catch (error: ProfileSessionChangedException) {
                     _toastEvents.trySend(error.userMessage())
+                } catch (error: ProfileOperationBusyException) {
+                    _toastEvents.trySend(R.string.profileRenderBusy)
+                } catch (error: ProfileOperationSupersededException) {
+                    _toastEvents.trySend(R.string.profileOperationSuperseded)
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: Exception) {
@@ -282,6 +292,7 @@ class MainViewModel @Inject constructor(
                     _toastEvents.trySend(R.string.profileOperationFailed)
                 }
             }
+            if (serialize) profileSessionOperations.withLock { execute() } else execute()
         }
     }
 
@@ -375,18 +386,20 @@ class MainViewModel @Inject constructor(
      */
     data class UndoPrompt(
         @androidx.annotation.StringRes val messageRes: Int,
-        val count: Int,
-        val session: ProfileSessionToken
+        val session: ProfileSessionToken,
+        val step: IconUndoStep
     )
 
     // CONFLATED, unlike the toast channel: only one change is undoable at a time, so a queue of
     // older prompts would offer to undo something the tracker has already forgotten.
     private val _undoEvents = Channel<UndoPrompt>(Channel.CONFLATED)
     val undoEvents = _undoEvents.receiveAsFlow()
+    val currentUndoStep: IconUndoStep? get() = appProvider.currentUndoStep
+    val longOperationRunning: Boolean get() = appProvider.longOperationRunning
 
-    fun undoLastIconChange(expected: ProfileSessionToken) {
+    fun undoLastIconChange(expected: ProfileSessionToken, step: IconUndoStep) {
         launchProfileOperation(expected) {
-            if (appProvider.undoLastIconChange(expected)) {
+            if (appProvider.undoLastIconChange(expected, step)) {
                 _toastEvents.trySend(R.string.undoRestored)
             } else {
                 _toastEvents.trySend(R.string.undoUnavailable)
@@ -429,11 +442,20 @@ class MainViewModel @Inject constructor(
 
     fun retryStartup() = loadStartup()
 
+    var isRefreshing by mutableStateOf(false)
+        private set
+    private var refreshJob: Job? = null
+    private var refreshSession: ProfileSessionToken? = null
+    @Volatile private var refreshRequest: Any? = null
+    var refreshProgress by mutableStateOf<Pair<Int, Int>?>(null)
+        private set
+
     private fun observeProfileSession() {
         viewModelScope.launch {
             snapshotFlow { sessionToken.takeIf { startupComplete && !isProfileSwitching } }
                 .filterNotNull()
                 .collect { expected ->
+                    if (refreshSession != null && refreshSession != expected) cancelRefresh()
                     profileSessionOperations.withLock {
                         if (appProvider.isCurrentSession(expected) && changeBaselinesSession != expected) {
                             try {
@@ -459,8 +481,15 @@ class MainViewModel @Inject constructor(
         loadWhatsNewState()
     }
 
-    var isRefreshing by mutableStateOf(false)
-        private set
+    private fun cancelRefresh() {
+        if (refreshRequest != null) _toastEvents.trySend(R.string.refreshCancelled)
+        refreshJob?.cancel()
+        refreshJob = null
+        refreshSession = null
+        refreshRequest = null
+        refreshProgress = null
+        isRefreshing = false
+    }
 
     fun refresh() = refresh(sessionToken)
 
@@ -468,8 +497,11 @@ class MainViewModel @Inject constructor(
         if (isRefreshing) return
         // Set synchronously so a second tap cannot enqueue another refresh before the coroutine
         // starts, and so the top-bar action immediately communicates that work is running.
+        val request = Any()
+        refreshRequest = request
+        refreshSession = expected
         isRefreshing = true
-        launchProfileOperation(expected) {
+        refreshJob = launchProfileOperation(expected, serialize = false) {
             try {
                 val preferences = getApplication<Application>().dataStore
                     .getPreferencesAfterPendingWrites()
@@ -480,18 +512,27 @@ class MainViewModel @Inject constructor(
                 }
                 // Icons whose real origin (via an own pack used as source) isn't owned on
                 // this device are withheld — say so instead of leaving silent empty slots.
-                val withheld = appProvider.refreshIcons(expected)
+                val result = appProvider.refreshIcons(expected) { done, total ->
+                    if (refreshRequest === request) refreshProgress = done to total
+                }
                 appProvider.commitSessionState(expected) {
-                    if (withheld > 0) _toastEvents.trySend(R.string.refreshLockedSkipped)
+                    if (result.withheldCount > 0) _toastEvents.trySend(R.string.refreshLockedSkipped)
+                    if (result.conflictedCount > 0) _toastEvents.trySend(R.string.refreshNewerEditsKept)
+                    if (result.missingCount > 0) _toastEvents.trySend(R.string.refreshTargetsGone)
                     // Only worth offering when the refresh actually overwrote something: with
                     // "Refresh replaces existing icons" off it only fills empty slots.
-                    appProvider.undoableIconCount.takeIf { it > 0 }?.let { replaced ->
-                        _undoEvents.trySend(UndoPrompt(R.string.undoIconsRefreshed, replaced, expected))
+                    result.undoStep?.takeIf(appProvider::ownsUndo)?.let { step ->
+                        _undoEvents.trySend(UndoPrompt(R.string.undoIconsRefreshed, expected, step))
                     }
                 }
             } finally {
-                // Without this a failed refresh would leave the spinner on forever and block builds.
-                isRefreshing = false
+                if (refreshRequest === request) {
+                    refreshJob = null
+                    refreshSession = null
+                    refreshRequest = null
+                    refreshProgress = null
+                    isRefreshing = false
+                }
             }
         }
     }
@@ -587,6 +628,12 @@ class MainViewModel @Inject constructor(
 
     override fun onCleared() {
         shizukuObservation.close()
+        val pendingPacks = listOfNotNull(pendingInstallerSelection?.pack, pendingInstallFallback?.pack)
+        pendingInstallerSelection = null
+        pendingInstallFallback = null
+        if (pendingPacks.isNotEmpty()) viewModelScope.launch(NonCancellable) {
+            pendingPacks.forEach { appProvider.releaseBuiltArtifacts(it) }
+        }
         super.onCleared()
     }
 
@@ -655,13 +702,16 @@ class MainViewModel @Inject constructor(
         private set
 
     fun dismissInstallFallback() {
+        val pending = pendingInstallFallback
         pendingInstallFallback = null
         installFallbackPending = false
+        if (pending != null) viewModelScope.launch { appProvider.releaseBuiltArtifacts(pending.pack) }
     }
 
     fun confirmInstallFallback() {
         val pending = pendingInstallFallback ?: return
-        dismissInstallFallback()
+        pendingInstallFallback = null
+        installFallbackPending = false
         viewModelScope.launch {
             try {
                 buildStep = getApplication<Application>().getString(R.string.buildReplacing)
@@ -676,6 +726,7 @@ class MainViewModel @Inject constructor(
                 Log.error("MainViewModel", "Icon pack replacement failed", e)
                 _toastEvents.trySend(R.string.iconPackInstallFailed)
             } finally {
+                releaseUnclaimedBuild(pending.pack)
                 buildStep = null
                 buildProgress = null
             }
@@ -706,6 +757,7 @@ class MainViewModel @Inject constructor(
                 Log.error("MainViewModel", "Selected installer failed", e)
                 _toastEvents.trySend(selectedPending.failedMessage)
             } finally {
+                releaseUnclaimedBuild(selectedPending.pack)
                 buildStep = null
                 buildProgress = null
             }
@@ -720,7 +772,11 @@ class MainViewModel @Inject constructor(
     }
 
     fun build(expected: ProfileSessionToken) {
-        if (buildStep != null) return
+        if (buildStep != null || pendingInstallerSelection != null || pendingInstallFallback != null) return
+        if (longOperationRunning) {
+            _toastEvents.trySend(R.string.profileRenderBusy)
+            return
+        }
         if (!startupComplete || isProfileSwitching) {
             _toastEvents.trySend(R.string.profileStillLoading)
             return
@@ -732,6 +788,7 @@ class MainViewModel @Inject constructor(
         // Claim the operation synchronously so the preview result cannot enqueue it twice.
         buildStep = ""
         viewModelScope.launch {
+            var builtPack: BuiltIconPack? = null
             try {
                 val preferences = getApplication<Application>().dataStore
                     .getPreferencesAfterPendingWrites()
@@ -742,6 +799,7 @@ class MainViewModel @Inject constructor(
                     textMethod = { buildStep = it; buildProgress = null },
                     progressMethod = { done, total -> buildProgress = done to total }
                 )
+                builtPack = pack
                 val wasUpdate = isIconPackInstalled(pack.packageName)
                 val selection = preferences.installerSelection()
                 val pending = PendingPackInstall(pack, wasUpdate, pack.packLabel, selection)
@@ -757,6 +815,10 @@ class MainViewModel @Inject constructor(
                 installBuiltPack(pending)
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: ProfileOperationBusyException) {
+                _toastEvents.trySend(R.string.profileRenderBusy)
+            } catch (e: ProfileOperationSupersededException) {
+                _toastEvents.trySend(R.string.profileOperationSuperseded)
             } catch (e: ProfileSessionChangedException) {
                 _toastEvents.trySend(e.userMessage())
             } catch (e: Exception) {
@@ -765,10 +827,16 @@ class MainViewModel @Inject constructor(
                 Log.error("MainViewModel", "Icon pack build failed", e)
                 _toastEvents.trySend(R.string.iconPackBuildFailed)
             } finally {
+                builtPack?.let { releaseUnclaimedBuild(it) }
                 buildStep = null
                 buildProgress = null
             }
         }
+    }
+
+    private suspend fun releaseUnclaimedBuild(pack: BuiltIconPack) {
+        if (pendingInstallerSelection?.pack === pack || pendingInstallFallback?.pack === pack) return
+        withContext(NonCancellable) { appProvider.releaseBuiltArtifacts(pack, completed = false) }
     }
 
     private suspend fun installBuiltPack(pending: PendingPackInstall) {
@@ -803,6 +871,7 @@ class MainViewModel @Inject constructor(
                 pendingInstallFallback = pending
                 installFallbackPending = true
             } else {
+                appProvider.releaseBuiltArtifacts(pending.pack)
                 syncBuildBaselines(pending.pack)
                 _toastEvents.trySend(pending.failedMessage)
                 showInstallFailure(outcome, pending.pack)
@@ -866,7 +935,9 @@ class MainViewModel @Inject constructor(
     // Clearing an icon (icon == null) is a removal, not a change, so it isn't recorded.
     private suspend fun markUpdated(expected: ProfileSessionToken, app: PackageInfoStruct, icon: IconPackDrawable?): Boolean =
         appProvider.commitSessionState(expected) {
-            if (icon != null) updatedKeys = updatedKeys + app.key
+            if (icon != null && appProvider.applicationList.any { it.key == app.key && it.baseIcon === icon }) {
+                updatedKeys = updatedKeys + app.key
+            }
         }
 
     /**
@@ -874,12 +945,13 @@ class MainViewModel @Inject constructor(
      * out wrong" without refreshing the whole list.
      */
     fun refreshSingleIcon(app: PackageInfoStruct, expected: ProfileSessionToken) {
-        launchProfileOperation(expected) {
+        launchProfileOperation(expected, serialize = false) {
             // Undo is offered only when an existing icon was actually replaced — the provider
             // knows that, the caller doesn't (a locked origin is withheld and changes nothing).
-            if (appProvider.refreshIcon(expected, app)) {
-                appProvider.commitSessionState(expected) {
-                    _undoEvents.trySend(UndoPrompt(R.string.undoIconRefreshed, 1, expected))
+            val step = appProvider.refreshIcon(expected, app) ?: return@launchProfileOperation
+            appProvider.commitSessionState(expected) {
+                if (appProvider.ownsUndo(step)) {
+                    _undoEvents.trySend(UndoPrompt(R.string.undoIconRefreshed, expected, step))
                 }
             }
         }
@@ -925,10 +997,12 @@ class MainViewModel @Inject constructor(
      */
     fun resetIcon(app: PackageInfoStruct, expected: ProfileSessionToken) {
         launchProfileOperation(expected) {
-            if (!appProvider.resetIcon(expected, app)) return@launchProfileOperation
+            val step = appProvider.resetIcon(expected, app) ?: return@launchProfileOperation
             refreshMissingPacks(prompt = false)
             appProvider.commitSessionState(expected) {
-                _undoEvents.trySend(UndoPrompt(R.string.undoIconReset, 1, expected))
+                if (appProvider.ownsUndo(step)) {
+                    _undoEvents.trySend(UndoPrompt(R.string.undoIconReset, expected, step))
+                }
             }
         }
     }
@@ -966,9 +1040,10 @@ class MainViewModel @Inject constructor(
         sourcePackName: String?,
         edit: (live: PackageInfoStruct, origin: String?, rendered: IconPackDrawable?) -> PackageInfoStruct
     ) {
-        launchProfileOperation(expected) {
+        launchProfileOperation(expected, serialize = false) {
             when (appProvider.applyPickedIcon(expected, app, icon, sourcePackName, edit)) {
                 IconApplyOutcome.APPLIED -> markUpdated(expected, app, icon)
+                IconApplyOutcome.CONFLICT -> _toastEvents.trySend(R.string.profileOperationSuperseded)
                 IconApplyOutcome.LOCKED -> _toastEvents.trySend(R.string.iconOriginLocked)
                 IconApplyOutcome.PROFILE_CHANGED -> _toastEvents.trySend(expected.expiredSessionMessage(sessionToken))
                 IconApplyOutcome.TARGET_GONE -> _toastEvents.trySend(R.string.iconEditTargetGone)
@@ -1154,7 +1229,7 @@ class MainViewModel @Inject constructor(
     }
 
     private fun unsavedKeys(): Set<String> =
-        unsavedApplicationKeys(appProvider.applicationList, builtKeys, updatedKeys)
+        unsavedApplicationKeys(appProvider.applicationList, builtKeys, updatedKeys) + appProvider.unsavedIconKeys
 
     /**
      * Re-reads the change baselines from the (just switched or just saved) profile's stored
@@ -1187,13 +1262,15 @@ class MainViewModel @Inject constructor(
     ) {
         profileSessionOperations.withLock {
             if (id == activeProfileId) return@withLock
-            // Notification-driven switches automatically preserve unsaved work. Evaluate this
-            // only after waiting for an in-flight watch apply, otherwise a freshly applied icon
-            // could land after the earlier check and then be discarded by this switch.
+            // The provider rechecks committed dirty keys under its gate, including an edit
+            // that lands between this UI check and the actual notification-driven switch.
             val shouldSave = saveFirst || (saveIfChanged && hasUnsavedChanges())
             val previous = sessionToken
-            val switched = appProvider.switchProfile(id, saveFirst = shouldSave)
-            if (switched != previous) loadChangeBaselines(switched)
+            val switched = appProvider.switchProfile(id, saveFirst = shouldSave, saveIfChanged = saveIfChanged)
+            if (switched != previous) {
+                cancelRefresh()
+                loadChangeBaselines(switched)
+            }
         }
         refreshMissingPacks()
     }

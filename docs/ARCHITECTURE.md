@@ -104,12 +104,41 @@ Switcher = the top-bar title dropdown.
   `ProfileSessionToken` before launching work; the provider checks it after acquiring the gate.
   Tokens include the profile, session revision and provider instance, so leaving and returning to
   the same profile or recreating the process cannot revive a stale edit. Switch, full restore,
-  app-list reload and clearing all icons invalidate the session. Rendering remains inside the
-  gate; moving it outside requires additional per-icon conflict checks.
+  app-list reload and clearing all icons invalidate the session. Refresh, hand-picked icons and
+  Global Save capture their inputs under the gate, render outside it, and reacquire it to commit.
+  Each target has a render-request ticket and a mutation revision: a newer request, reset or edit
+  prevents an older result from replacing it. Commits also compare the captured profile recipe
+  with the current effective generation/modifier options. Bulk refresh commits batches of at
+  most 20 results, reports completed/total progress, and keeps newer edits. It captures lightweight
+  generation targets rather than retaining the old icon payloads; only the rows needed for Undo
+  retain their previous artwork. Global Save observes revisions without reserving new requests
+  and rejects the entire operation if any captured row or recipe changed. Its staged
+  preferences are persisted only after validation, together with the rendered icon list.
+- The provider records unsaved icon keys in the same critical section as each edit, so profile
+  switching and app-list reload cannot miss a change awaiting ViewModel bookkeeping. Undo
+  captures committed changes; subsequent edits remove their rows from that offer. Snackbar
+  actions identify the original operation and cannot undo a newer, unrelated change. Undo restores
+  the captured dirty state as well as the icon; its snackbar follows the remaining live row count.
+- Builds capture profile identity, recipe, icons, calendar selections and lock policy under the
+  gate. Calendar drawable loading, APK assembly and signing run outside it. Build jobs serialize
+  separately around the shared keystore and use distinct APK directories. Unsigned APKs are
+  removed after signing; completed directories are pruned on the next build. Pending installer
+  choices and conflict/replacement retries retain their APK reservation; dismissing a choice or
+  clearing its ViewModel releases it. Cancelled build handoffs remove their working directory.
+  Unmarked orphaned or timed-out artifacts have a 24-hour grace period before pruning. Installation persists
+  the captured profile snapshot only if a newer save has not superseded it; otherwise it records
+  the built baseline separately and preserves the newer saved rows. A full storage restore
+  invalidates pending build persistence entirely. Later live edits remain unsaved.
 - MainViewModel commits change baselines and edited keys against that same token. Global options
   saves its owner as primitive saved-state fields and returns it with its activity result; expired
   results cannot affect the current profile. Full imports hold the gate through storage replacement
   and live-session reload. This protects session ownership, not backup crash recovery.
+- Refresh, Global Save and APK generation take an exclusive long-operation lease for their
+  owning profile session. Recipe writes are rejected immediately while that lease is active;
+  unrelated sessions can proceed after a switch. Global options opening/Save is refused during
+  an active long operation rather than competing for render tickets. Switching profiles cancels
+  refresh with a notice; already committed batches participate in save-before-switch. Watch
+  applies remain serialized with notification-driven switches by MainViewModel's mutex.
 - Option writes wait at most 300 ms to acquire the provider gate, allowing short bookkeeping
   operations to finish. The timeout covers acquisition only, never a preference write already
   in progress. Busy, loading and expired-session rejections produce a notice. The outline slider

@@ -95,4 +95,29 @@ class IconUndoTrackerTest {
         assertNull(tracker.step)
         assertTrue(tracker.restorationFor(current, 1L).isEmpty())
     }
+    @Test
+    fun discardingOneEditedRowPreservesOperationAndOtherRowsDirtyState() {
+        val tracker = IconUndoTracker()
+        tracker.capture(current, 1L, false, setOf(signal.key, "unrelated"))
+        val original = tracker.step!!
+        tracker.discard(firefox.key)
+        assertEquals(original.operationId, tracker.step!!.operationId)
+        assertEquals(1, tracker.size)
+        assertEquals(setOf(signal.key), tracker.step!!.unsavedBefore)
+        assertEquals(listOf(0 to signal), tracker.restorationFor(current, 1L))
+        tracker.discard(signal.key)
+        assertNull(tracker.step)
+    }
+
+    @Test
+    fun newUndoCannotReuseTheOperationOfAnOlderSnackbar() {
+        val tracker = IconUndoTracker()
+        tracker.capture(listOf(signal), 1L, false)
+        val old = tracker.step!!
+        tracker.clear()
+        tracker.capture(listOf(firefox), 1L, false)
+        assertTrue(tracker.step!!.operationId > old.operationId)
+        assertTrue(tracker.step!!.unsavedBefore.isEmpty())
+    }
+
 }

@@ -15,6 +15,10 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
+import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -179,4 +183,94 @@ class ProfileSessionIntegrityTest {
         }
         assertFalse(buildStarted)
     }
+    private suspend fun pausedGlobalSave(
+        started: CompletableDeferred<Unit>, release: CountDownLatch
+    ) {
+        val prefs = context.dataStore.data.first()
+        provider.applyGlobalModifiers(
+            provider.sessionToken, prefs, GenerationOptions.fromPreferences(prefs, context),
+            applyGenerated = true, applyExisting = true, applyCustom = true, includeEmpty = false
+        ) { done, _ ->
+            if (done == 0) {
+                started.complete(Unit)
+                check(release.await(10, TimeUnit.SECONDS)) { "Timed out waiting to release render" }
+            }
+        }
+    }
+
+    @Test
+    fun longRenderRejectsRecipeWritesAndAnotherBulkOperationImmediately() = runBlocking {
+        provider.ensureInitialized()
+        val started = CompletableDeferred<Unit>()
+        val release = CountDownLatch(1)
+        val saving = async { pausedGlobalSave(started, release) }
+        try {
+            withTimeout(5_000) { started.await() }
+            assertTrue(provider.longOperationRunning)
+            var wrote = false
+            try {
+                withTimeout(1_000) {
+                    provider.updateProfilePreferences(provider.sessionToken) { wrote = true }
+                }
+                fail("Recipe write must be refused during render")
+            } catch (_: ProfileOperationBusyException) { }
+            assertFalse(wrote)
+            try {
+                withTimeout(1_000) { provider.refreshIcons(provider.sessionToken) }
+                fail("Refresh must not invalidate Global Save")
+            } catch (_: ProfileOperationBusyException) { }
+        } finally {
+            release.countDown()
+        }
+        saving.await()
+        assertFalse(provider.longOperationRunning)
+        provider.updateProfilePreferences(provider.sessionToken) { }
+    }
+
+    @Test
+    fun cancelledRenderReleasesItsLeaseAndCannotCommitPreferences() = runBlocking {
+        provider.ensureInitialized()
+        val before = context.dataStore.data.first()
+        val started = CompletableDeferred<Unit>()
+        val release = CountDownLatch(1)
+        val saving = launch { pausedGlobalSave(started, release) }
+        try {
+            withTimeout(5_000) { started.await() }
+            saving.cancel()
+        } finally {
+            release.countDown()
+        }
+        saving.join()
+        assertFalse(provider.longOperationRunning)
+        assertEquals(before, context.dataStore.data.first())
+        var wrote = false
+        provider.updateProfilePreferences(provider.sessionToken) { wrote = true }
+        assertTrue(wrote)
+    }
+
+    @Test
+    fun switchingDuringRenderLetsNewSessionWriteAndRejectsOldSave() = runBlocking {
+        provider.ensureInitialized()
+        val original = provider.sessionToken
+        val other = provider.createProfile("Other", "", "Other icons")
+        val started = CompletableDeferred<Unit>()
+        val release = CountDownLatch(1)
+        val saving = launch {
+            expectFailure(ProfileSessionFailureReason.EXPIRED) { pausedGlobalSave(started, release) }
+        }
+        try {
+            withTimeout(5_000) { started.await() }
+            provider.switchProfile(other)
+            assertFalse(provider.longOperationRunning)
+            assertNotEquals(original, provider.sessionToken)
+            var wrote = false
+            provider.updateProfilePreferences(provider.sessionToken) { wrote = true }
+            assertTrue(wrote)
+        } finally {
+            release.countDown()
+        }
+        saving.join()
+        assertEquals(other, provider.activeProfileId)
+    }
+
 }

@@ -58,6 +58,7 @@ import dev.renkinProject.renkin.xml.file.BaseInsetXml
 import dev.renkinProject.renkin.xml.file.InsetXml
 import dev.renkinProject.renkin.xml.file.VectorWrapperXml
 import java.io.File
+import java.util.UUID
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 
@@ -71,9 +72,9 @@ class IconPackBuilder(
     // package regardless — Android doesn't require an app's id to match its class packages.
     private val packPackageName: String = PACKAGE_NAME,
     private val packLabel: String = "Renkin Pack",
-    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(ctx)
+    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(ctx),
+    private val apkDir: File = ctx.cacheDir.resolve("apk").resolve(UUID.randomUUID().toString())
 ) {
-    private val apkDir = ctx.cacheDir.resolve("apk")
     private val unsignedApk = apkDir.resolve("app-release-unsigned.apk")
     private val signedApk = apkDir.resolve("app-release.apk")
     private val keyStoreFile = PackKeystore.keystoreFile(ctx.filesDir)
@@ -168,8 +169,11 @@ class IconPackBuilder(
         textMethod: (text: String) -> Unit,
         // Reports per-app progress while the icons are written (done, total), so the build
         // dialog can show a determinate bar for the longest phase.
-        progressMethod: (done: Int, total: Int) -> Unit = { _, _ -> }
+        progressMethod: (done: Int, total: Int) -> Unit = { _, _ -> },
+        checkActive: () -> Unit = {}
     ): Uri {
+        checkActive()
+        check(apkDir.mkdirs() || apkDir.isDirectory)
         val apkModule = ApkModule()
         val tableBlock = TableBlock()
         val manifest = AndroidManifestBlock()
@@ -224,6 +228,7 @@ class IconPackBuilder(
         val clockExporter = DynamicClockExporter(ctx, apps.map { it.toInstalledApplication() })
         var doneIcons = 0
         for (app in apps) {
+            checkActive()
             if (app.createdIcon != null) {
                 // Pre-increment so the bar reaches total/total on the last icon (post-increment
                 // topped out one short and never showed completion).
@@ -340,10 +345,12 @@ class IconPackBuilder(
         }
 
         for (calendarIcon in calendarIcons) {
+            checkActive()
             appfilterXml.calendar(calendarIcon.key.packageName, calendarIcon.key.activityName, calendarIcon.value)
         }
 
         for (drawable in calendarIconsDrawable) {
+            checkActive()
             val bitmap = drawable.value.toSafeBitmapOrNull()
             if (bitmap != null) {
                 createBitmapResource(apkModule, packageBlock, bitmap, drawable.key)
@@ -381,10 +388,13 @@ class IconPackBuilder(
         textMethod(ctx.resources.getString(R.string.buildingApk))
         buildDex(apkModule, layout.resourceId)
         apkModule.uncompressedFiles.addCommonExtensions()
+        checkActive()
         apkModule.writeApk(unsignedApk)
 
         textMethod(ctx.resources.getString(R.string.signApk))
+        checkActive()
         signApk(unsignedApk, signedApk)
+        checkActive()
 
         // No "done" step here: building/signing is finished, but the (slower) system install
         // still runs after this. MainViewModel sets the "Installing…" step for that phase, so

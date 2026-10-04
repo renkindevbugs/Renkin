@@ -67,6 +67,7 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -123,6 +124,8 @@ import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.OptionsViewModel
 import dev.renkinProject.renkin.WatchViewModel
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 /**
@@ -303,15 +306,18 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val snackbarHostState = remember { SnackbarHostState() }
     val undoLabel = stringResource(R.string.undoAction)
     LaunchedEffect(Unit) {
-        viewModel.undoEvents.collect { prompt ->
+        viewModel.undoEvents.combine(snapshotFlow { viewModel.currentUndoStep }) { prompt, step ->
+            prompt to step
+        }.collectLatest { (prompt, step) ->
             snackbarHostState.currentSnackbarData?.dismiss()
+            if (step == null || step.operationId != prompt.step.operationId) return@collectLatest
             val result = snackbarHostState.showSnackbar(
-                message = context.getString(prompt.messageRes, prompt.count),
+                message = context.getString(prompt.messageRes, step.rows.size),
                 actionLabel = undoLabel,
                 withDismissAction = true,
                 duration = SnackbarDuration.Long
             )
-            if (result == SnackbarResult.ActionPerformed) viewModel.undoLastIconChange(prompt.session)
+            if (result == SnackbarResult.ActionPerformed) viewModel.undoLastIconChange(prompt.session, prompt.step)
         }
     }
 
@@ -494,6 +500,20 @@ fun MainColumn(iconPacks: List<IconPack>) {
                     onLockedFilterChange = { setProblemFilter(AppProblemFilter.LOCKED, it) },
                     onSearch = { packageFilter = it }
                 )
+                if (viewModel.isRefreshing) {
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        val progress = viewModel.refreshProgress
+                        if (progress == null || progress.second == 0) {
+                            WavyLoadingBar(Modifier.fillMaxWidth())
+                        } else {
+                            Text(
+                                stringResource(R.string.refreshProgress, progress.first, progress.second),
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                            WavyProgressBar(progress.first.toFloat() / progress.second, Modifier.fillMaxWidth())
+                        }
+                    }
+                }
                 ApplicationList(
                     iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, filterLocked, listState,
                     onShowAllApps = clearProblemFilters,
@@ -741,10 +761,14 @@ fun ApplicationList(
         item(key = "options", contentType = "options", span = { GridItemSpan(maxLineSpan) }) {
             Box(Modifier.introTarget(IntroTarget.ADVANCED_OPTIONS)) {
                 AdvancedOptionsCard(iconPacks) {
-                    globalOptionsLauncher.launch(
-                        Intent(globalOptionsContext, GlobalOptionsActivity::class.java)
-                            .withProfileSession(viewModel.sessionToken)
-                    )
+                    if (viewModel.longOperationRunning) {
+                        globalOptionsToaster.show(globalOptionsContext.getString(R.string.profileRenderBusy))
+                    } else {
+                        globalOptionsLauncher.launch(
+                            Intent(globalOptionsContext, GlobalOptionsActivity::class.java)
+                                .withProfileSession(viewModel.sessionToken)
+                        )
+                    }
                 }
             }
         }
