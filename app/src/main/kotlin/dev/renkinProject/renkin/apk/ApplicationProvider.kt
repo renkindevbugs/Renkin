@@ -37,6 +37,10 @@ import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.withSource
+import dev.renkinProject.renkin.icon.creator.withModifiers
+import dev.renkinProject.renkin.icon.creator.withExport
+import dev.renkinProject.renkin.icon.creator.withEffect
 import dev.renkinProject.renkin.icon.creator.PackBrowserPreviews
 import dev.renkinProject.renkin.icon.creator.globalModifierOptions
 import dev.renkinProject.renkin.icon.creator.hasVisibleModifierEffect
@@ -418,19 +422,18 @@ class ApplicationProvider internal constructor(
         val preferences = context.dataStore.getPreferencesAfterPendingWrites()
         var options = GenerationOptions.fromPreferences(preferences, context, override =
             application != null || preferences.getBooleanValue(OverrideIconKey))
-        if (application == null && options.themed && supportDynamicColors()) {
-            options = options.copy(
-                modifiers = options.modifiers.copy(effect = options.modifiers.effect.copy(
-                    colorizer = options.modifiers.effect.colorizer.copy(
-                        firstColor = context.resources.getColor(R.color.icon_color, null)
-                    )
-                )),
-                bgColor = context.resources.getColor(R.color.icon_background_color, null)
-            )
+        if (application == null && options.export.themed && supportDynamicColors()) {
+            options = options.withExport {
+                copy(background = background.copy(color = context.resources.getColor(R.color.icon_background_color, null)))
+            }.withModifiers {
+                withEffect {
+                    copy(colorizer = colorizer.copy(firstColor = context.resources.getColor(R.color.icon_color, null)))
+                }
+            }
         }
         val targets = applicationList.filter { app ->
             (application == null || app.key == application.key) &&
-                options.primarySource != Source.NONE &&
+                options.source.primarySource != Source.NONE &&
                 (options.override || app.createdIcon == null || app.isRefreshMade) &&
                 (options.override || app.key !in lockManager.lockedKeys)
         }
@@ -662,7 +665,7 @@ class ApplicationProvider internal constructor(
     private suspend fun captureEmptyIconSources(
         applications: List<PackageInfoStruct>, options: GenerationOptions
     ): EmptyIconSources {
-        val packs = listOf(options.primaryIconPack, options.secondaryIconPack, "").distinct()
+        val packs = listOf(options.source.primaryIconPack, options.source.secondaryIconPack, "").distinct()
         return EmptyIconSources(
             iconGenService.captureRefreshSources(options),
             applications.associate { app ->
@@ -1066,11 +1069,11 @@ class ApplicationProvider internal constructor(
             appFilterDrawableName(sourcePack, app) ?: return null
         }
         val sourceOptions = GenerationOptions.fromPreferences(preferences, context)
-        val options = sourceOptions.copy(
-            primarySource = Source.ICON_PACK,
-            modifiers = sourceOptions.modifiers.copy(effect = sourceOptions.modifiers.effect.copy(imageEdit = ImageEdit.NONE)),
-            primaryIconPack = sourcePack
-        )
+        val options = sourceOptions.withSource {
+            copy(primarySource = Source.ICON_PACK, primaryIconPack = sourcePack)
+        }.withModifiers {
+            withEffect { copy(imageEdit = ImageEdit.NONE) }
+        }
         return try {
             iconGenService.getIconFromPackDrawable(app, sourcePack, drawableName, options)
         } catch (error: CancellationException) {
@@ -1525,7 +1528,9 @@ class ApplicationProvider internal constructor(
     suspend fun fallbackPreview(preferences: Preferences, fallbackSource: FallbackSource): List<IconPackDrawable> =
         withContext(Dispatchers.Default) {
             if (fallbackSource == FallbackSource.NONE) return@withContext emptyList()
-            val options = GenerationOptions.fromPreferences(preferences, context).copy(fallbackSource = fallbackSource)
+            val sourceOptions = GenerationOptions.fromPreferences(preferences, context)
+            val requestedFallbackSource = fallbackSource
+            val options = sourceOptions.withSource { copy(fallbackSource = requestedFallbackSource) }
             iconGenService.fallbackPreview(options, applicationList.take(4))
         }
 

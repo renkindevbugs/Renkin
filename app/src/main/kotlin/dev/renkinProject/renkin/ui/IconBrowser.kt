@@ -172,7 +172,7 @@ fun CreateTab(
     fontPath: String = "",
     onFontPathChange: (String) -> Unit = {},
     contentReady: Boolean = true,
-    // Resource id of the icon currently picked (from options.primaryIconPack), so the grid
+    // Resource id of the icon currently picked (from options.source.primaryIconPack), so the grid
     // can frame it. null = nothing picked yet.
     selectedResourceId: Int? = null,
     // Prefix of the picked calendar icon (e.g. "bee_calendar_"), so the grid frames the whole
@@ -292,8 +292,8 @@ fun CreateTab(
                         query = debouncedQuery,
                         component = componentMatch,
                         onLoadingChange = trackLoad,
-                        selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.primaryIconPack },
-                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { detailPack.packageName == options.primaryIconPack },
+                        selectedResourceId = selectedResourceId.takeIf { detailPack.packageName == options.source.primaryIconPack },
+                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { detailPack.packageName == options.source.primaryIconPack },
                         gridState = gridState,
                         onBack = { onExpandedPackChange(null) },
                         onSelect = { resource, _, drawableName -> onIconSelect(resource, detailPack, drawableName) }
@@ -331,8 +331,8 @@ fun CreateTab(
                                         query = debouncedQuery,
                                         component = componentMatch,
                                         onLoadingChange = trackLoad,
-                                        selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.primaryIconPack },
-                                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.primaryIconPack },
+                                        selectedResourceId = selectedResourceId.takeIf { pack.packageName == options.source.primaryIconPack },
+                                        selectedCalendarPrefix = selectedCalendarPrefix?.takeIf { pack.packageName == options.source.primaryIconPack },
                                         onMore = { onExpandedPackChange(pack) },
                                         onResult = { hasMatches ->
                                             packMatches = packMatches + (pack.packageName to hasMatches)

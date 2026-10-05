@@ -250,10 +250,9 @@ private fun Map<String, String>.floatIn(key: String, range: ClosedFloatingPointR
  */
 fun GenerationOptions.withModifierPreset(payload: ModifierPresetPayload): GenerationOptions {
     val plate = payload.shape?.takeIf { it.shape != IconShape.NONE && !it.crop }?.style
-    val background = ColorFill(plate?.firstColor ?: bgColor, plate ?: backgroundStyle)
+    val background = ColorFill(plate?.firstColor ?: export.background.color, plate ?: export.background.style)
     return copy(
-        bgColor = background.color,
-        backgroundStyle = background.style,
+        export = export.copy(background = background),
         modifiers = modifiers.withModifierPreset(payload)
     )
 }

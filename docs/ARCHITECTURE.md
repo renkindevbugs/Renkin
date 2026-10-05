@@ -411,12 +411,28 @@ identically and none of them re-implements the maths.
   callers replacing a colour style. It replaces the complete effect colour group and preserves
   the caller's image-edit choice and segment layers. The editor's
   `asColorizePreview` explicitly selects plain Colorize and clears segments.
+- **`GenerationOptions`** owns `IconSourceOptions`, `ModifierStack` and `IconExportOptions`,
+  plus the replacement policy (`override`). Source options describe primary/secondary source
+  selection, text, fallback styling and the application-icon variant. Export options own vector
+  output, PATH monochrome selection, themed presentation, one background `ColorFill` and foreground
+  style. Application-icon variants and PATH monochrome output are independent; only the legacy
+  preferences boundary and editor explicitly preserve their previous relationship. Creating a
+  PATH monochrome export does not require selecting the application's Material You variant.
+  Primary image editing belongs to `modifiers.effect`; `source.secondaryImageEdit` belongs to
+  the secondary source attempt and runs only when the primary source cannot supply an icon.
+  `withSource`, `withModifiers` and `withExport` update one owned group; `withEffect` updates
+  only the stack's effect group. Other groups are retained unchanged. There is no flat generation
+  constructor or read-only flat modifier/source/export API.
 - **`ModifierStack`** groups image effects (colour style, segments, edge detection and background
-  removal), transform, shape, outline and shadow. `GenerationOptions` owns the stack as a
+  removal), transform, shape, outline, shadow and pack-specific `MaterialYouPackModifier`. `GenerationOptions` owns the stack as a
   constructor field; source-only `copy()` calls retain it rather than rebuilding a flat mapping.
   Editor adjustments, global preferences and preset application construct or replace groups
-  directly. `IconImageEditPipeline` takes the stack plus `IconPresentationOptions` (themed
-  background and Material You pack presentation), and `IconAdjustmentPipeline` consumes the
+  directly. Editor adjustment mapping copies only its owned groups into the existing stack,
+  retaining Material You pack controls edited in their separate state. Pack restyling is applied
+  before the image edit and is included in `ModifierStack.hasVisibleEffect`; it does not change
+  the geometry-only rasterization or flattening predicates.
+  `IconImageEditPipeline` takes the stack plus the owned `IconExportOptions`; it no
+  longer builds a separate presentation projection. `IconAdjustmentPipeline` consumes the
   stack directly. Shared predicates decide whether adjustments are present, pixels
   are required and the output loses its adaptive presentation. Transform-only operations retain
   vectors or adaptive layers, while outline alone retains an existing bitmap source's adaptive
@@ -431,14 +447,13 @@ identically and none of them re-implements the maths.
   shared-background behaviour. An explicit fill instead belongs only to the shape, and a shape
   colour preview updates that override without changing the presentation background.
   The renderer receives the inherited background explicitly; it never guesses a fallback colour.
-  Read-only accessors remain as migration adapters; production construction, modifier writes and
-  test fixtures use the grouped API. The flat constructor has been removed. New modifiers belong
-  in their groups, not in these legacy adapters. Data-class equality includes the stack and source/presentation
-  options. Preferences, preset payloads and editor saved-state codecs keep their existing formats.
-  The next step is to finish removing compatibility accessors from editor controls and consumers,
-  and split the remaining source/export options. Equality deliberately retains inactive configuration;
-  a visual-only cache key may later normalize disabled groups, but session/recipe comparisons must
-  continue distinguishing their full configuration.
+  New modifiers belong in their groups. Data-class equality includes every source, modifier and
+  export group. Preferences, preset payloads and editor saved-state codecs keep their existing
+  formats. The next step is to remove the editor state's remaining per-colour compatibility
+  accessors and consolidate recipe codecs before adding persistent non-destructive recipes.
+  Equality deliberately retains inactive configuration; a visual-only cache key may later
+  normalize disabled groups, but session/recipe comparisons must continue distinguishing their
+  full configuration.
   `OutlineModifier.eraseMask` retains bitmap reference equality; do not treat stack equality as
   a comparison of mask pixels when designing cache keys.
 - **`ColorizerShader.kt`** builds the actual `Shader` and is called by BOTH `IconGenerator` and

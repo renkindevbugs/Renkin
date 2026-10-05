@@ -128,6 +128,8 @@ import dev.renkinProject.renkin.data.setColorStyle
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.IconSourceOptions
+import dev.renkinProject.renkin.icon.creator.IconExportOptions
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import android.graphics.Bitmap
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
@@ -449,14 +451,17 @@ internal class GlobalModifierState {
             shapeStyle.takeIf { shape != IconShape.NONE && !shapeCrop }
         )
         return GenerationOptions(
-            primarySource = Source.NONE,
-            primaryTextType = TEXT_TYPE_DEFAULT,
-            primaryIconPack = "",
-            bgColor = background.color,
-            backgroundStyle = background.style,
-            vector = false,
-            materialYou = false,
-            themed = false,
+            source = IconSourceOptions(
+                primarySource = Source.NONE,
+                primaryTextType = TEXT_TYPE_DEFAULT,
+                primaryIconPack = ""
+            ),
+            export = IconExportOptions(
+                vector = false,
+                materialYou = false,
+                themed = false,
+                background = background
+            ),
             override = true,
             modifiers = ModifierStack(
                 effect = EffectModifier(if (colorize) ImageEdit.COLORIZE else ImageEdit.NONE, colorizerStyle),
@@ -1381,16 +1386,22 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
         buildBackgroundBrushOperations(adjustments.backgroundBrushStrokes)
     }
     val options = GenerationOptions(
-        primarySource = Source.APPLICATION_ICON,
+        source = IconSourceOptions(
+            primarySource = Source.APPLICATION_ICON,
+            primaryTextType = TEXT_TYPE_DEFAULT,
+            primaryIconPack = ""
+        ),
+        export = IconExportOptions(
+            vector = useVector,
+            materialYou = false,
+            themed = false,
+            background = ColorFill(
+                color = if (adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop) {
+                    adjustments.shapeColor.toArgb()
+                } else android.graphics.Color.TRANSPARENT
+            )
+        ),
         modifiers = ModifierStack(EffectModifier(imageEdit, ColorizerStyle(firstColor = iconColor.toArgb()))),
-        primaryTextType = TEXT_TYPE_DEFAULT,
-        primaryIconPack = "",
-        bgColor = if (adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop) {
-            adjustments.shapeColor.toArgb()
-        } else android.graphics.Color.TRANSPARENT,
-        vector = useVector,
-        materialYou = false,
-        themed = false,
         override = true
     ).withModifierAdjustments(
         adjustments = adjustments,

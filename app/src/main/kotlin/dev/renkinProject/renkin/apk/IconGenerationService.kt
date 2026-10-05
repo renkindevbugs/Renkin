@@ -8,6 +8,9 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.withSource
+import dev.renkinProject.renkin.icon.creator.withModifiers
+import dev.renkinProject.renkin.icon.creator.withEffect
 import dev.renkinProject.renkin.icon.creator.IconGenerator
 import dev.renkinProject.renkin.icon.creator.IconImageEditPipeline
 import dev.renkinProject.renkin.icon.creator.IconPackContainer
@@ -51,11 +54,11 @@ class IconGenerationService(
         var icon: IconPackDrawable? = null
 
         val installedApplication = application.toInstalledApplication()
-        val appDrawable = if (options.primarySource == Source.ICON_PACK && customIcon == null) {
-            iconPackRepo.getAppDrawable(installedApplication, options.primaryIconPack)
+        val appDrawable = if (options.source.primarySource == Source.ICON_PACK && customIcon == null) {
+            iconPackRepo.getAppDrawable(installedApplication, options.source.primaryIconPack)
         } else null
         val pack1 = IconPackContainer(
-            options.primaryIconPack,
+            options.source.primaryIconPack,
             appDrawable?.let { mapOf(installedApplication to it) } ?: emptyMap()
         )
         val pack2 = IconPackContainer("", emptyMap())
@@ -102,11 +105,11 @@ class IconGenerationService(
             return ValidatedPackIcon(null, sourceChanged = true)
         }
         resource ?: return ValidatedPackIcon(null, sourceChanged = false)
-        val packOptions = options.copy(
-            primarySource = Source.ICON_PACK,
-            modifiers = options.modifiers.copy(effect = options.modifiers.effect.copy(imageEdit = ImageEdit.NONE)),
-            primaryIconPack = packPackage
-        )
+        val packOptions = options.withSource {
+            copy(primarySource = Source.ICON_PACK, primaryIconPack = packPackage)
+        }.withModifiers {
+            withEffect { copy(imageEdit = ImageEdit.NONE) }
+        }
         return ValidatedPackIcon(getIcon(application, packOptions, resource), sourceChanged = false)
     }
 
@@ -183,14 +186,14 @@ class IconGenerationService(
     }
 
     internal fun captureRefreshSources(options: GenerationOptions): IconGenerationSources {
-        val fallbackPack = when (options.fallbackSource) {
-            FallbackSource.PRIMARY -> options.primaryIconPack
-            FallbackSource.SECONDARY -> options.secondaryIconPack
+        val fallbackPack = when (options.source.fallbackSource) {
+            FallbackSource.PRIMARY -> options.source.primaryIconPack
+            FallbackSource.SECONDARY -> options.source.secondaryIconPack
             FallbackSource.NONE -> ""
         }
         return IconGenerationSources(
-            iconPackRepo.captureAppDrawables(options.primaryIconPack),
-            iconPackRepo.captureAppDrawables(options.secondaryIconPack),
+            iconPackRepo.captureAppDrawables(options.source.primaryIconPack),
+            iconPackRepo.captureAppDrawables(options.source.secondaryIconPack),
             fallbackPack
         )
     }
@@ -199,8 +202,8 @@ class IconGenerationService(
         options: GenerationOptions,
         sources: IconGenerationSources = captureRefreshSources(options)
     ): IconGenerator {
-        val pack1 = IconPackContainer(options.primaryIconPack, sources.primary())
-        val pack2 = IconPackContainer(options.secondaryIconPack, sources.secondary())
+        val pack1 = IconPackContainer(options.source.primaryIconPack, sources.primary())
+        val pack2 = IconPackContainer(options.source.secondaryIconPack, sources.secondary())
         val fallback = iconPackRepo.getIconPackFallback(sources.fallbackPack)
         return IconGenerator(
             context,

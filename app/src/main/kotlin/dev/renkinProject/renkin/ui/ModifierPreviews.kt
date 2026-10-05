@@ -13,6 +13,9 @@ import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.BackgroundBrushOperation
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.withModifiers
+import dev.renkinProject.renkin.icon.creator.withExport
+import dev.renkinProject.renkin.icon.creator.withEffect
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
@@ -77,15 +80,15 @@ internal fun rememberModifierPreviews(
 
     // Colourize runs before every modifier below. Sanitising the key also prevents background
     // strokes from needlessly regenerating this untouched source after every brush gesture.
-    val colorizeBaseOptions = options.copy(
-        modifiers = options.modifiers.copy(
-            effect = options.modifiers.effect.copy(
+    val colorizeBaseOptions = options.withModifiers {
+        copy(
+            effect = effect.copy(
                 imageEdit = ImageEdit.NONE,
-                backgroundRemoval = options.modifiers.effect.backgroundRemoval.copy(brushOperations = emptyList())
+                backgroundRemoval = effect.backgroundRemoval.copy(brushOperations = emptyList())
             ),
             transform = TransformModifier(), shape = null, outline = null, shadow = null
         )
-    )
+    }
     LaunchedEffect(colorizeBaseOptions, sourceKey) {
         colorizeBase = currentRender(colorizeBaseOptions)
     }
@@ -95,20 +98,18 @@ internal fun rememberModifierPreviews(
             colorizeBase = colorizeBase,
             positionBase = {
                 currentRender(
-                    currentOptions.copy(
-                        modifiers = currentOptions.modifiers.copy(
-                            transform = currentOptions.modifiers.transform.copy(offsetX = 0f, offsetY = 0f)
-                        )
-                    )
+                    currentOptions.withModifiers {
+                        copy(transform = transform.copy(offsetX = 0f, offsetY = 0f))
+                    }
                 )
             },
             backgroundBrush = {
                 currentRender(
-                    currentOptions.copy(
-                        modifiers = currentOptions.modifiers.copy(
+                    currentOptions.withModifiers {
+                        copy(
                             transform = TransformModifier(), shape = null, outline = null, shadow = null
                         )
-                    )
+                    }
                 )
             },
             colorize = { style ->
@@ -119,23 +120,23 @@ internal fun rememberModifierPreviews(
             },
             outline = { style ->
                 currentRender(
-                    currentOptions.copy(
-                        modifiers = currentOptions.modifiers.copy(outline = OutlineModifier(
+                    currentOptions.withModifiers {
+                        copy(outline = OutlineModifier(
                             adjustments.outlineMode.takeIf { it != OutlineMode.NONE } ?: OutlineMode.ADD,
-                            currentOptions.outlineWidth,
+                            outline?.width ?: 6f,
                             ColorFill(style.firstColor, style),
-                            currentOptions.outlineEraseMask
+                            outline?.eraseMask
                         ))
-                    )
+                    }
                 )
             },
             shadow = { style ->
                 currentRender(
-                    currentOptions.copy(
-                        modifiers = currentOptions.modifiers.copy(shadow =
+                    currentOptions.withModifiers {
+                        copy(shadow =
                             adjustments.shadowModifier().copy(style = style, enabled = true)
                         )
-                    )
+                    }
                 )
             },
             // A visible library can request several heavyweight renders at once. Serialising them
@@ -151,21 +152,31 @@ internal fun rememberModifierPreviews(
             presetKey = options to sourceKey,
             presetSourceKey = sourceKey,
             materialYouPackForeground = { style ->
-                currentRender(currentOptions.copy(materialYouPackForeground = style.firstColor))
+                currentRender(
+                    currentOptions.withModifiers {
+                        copy(materialYouPack = materialYouPack.copy(foreground = style.firstColor))
+                    }
+                )
             },
             materialYouPackBackground = { style ->
-                currentRender(currentOptions.copy(materialYouPackBackground = style.firstColor))
+                currentRender(
+                    currentOptions.withModifiers {
+                        copy(materialYouPack = materialYouPack.copy(background = style.firstColor))
+                    }
+                )
             },
             layers = { index, draft ->
                 currentRender(
-                    currentOptions.copy(
-                        modifiers = currentOptions.modifiers.copy(effect = currentOptions.modifiers.effect.copy(
-                            imageEdit = ImageEdit.COLORIZE_SEGMENTS,
-                            segments = adjustments.colorizeLayers.mapIndexed { i, layer ->
-                                if (i == index) layer.copy(style = draft) else layer
-                            }
-                        ))
-                    )
+                    currentOptions.withModifiers {
+                        withEffect {
+                            copy(
+                                imageEdit = ImageEdit.COLORIZE_SEGMENTS,
+                                segments = adjustments.colorizeLayers.mapIndexed { i, layer ->
+                                    if (i == index) layer.copy(style = draft) else layer
+                                }
+                            )
+                        }
+                    }
                 )
             }
         )
@@ -187,27 +198,26 @@ internal fun GenerationOptions.withModifierAdjustments(
     // The generated Material You background remains source-owned unless a shape plate replaces it.
     val plateStyle = if (adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop) {
         adjustments.shapeStyle()
-    } else backgroundStyle
-    return copy(
-        backgroundStyle = plateStyle,
-        modifiers = adjustments.toModifierStack(
-            imageEdit, color, outlineEraseMask, backgroundBrushOperations
-        )
-    )
+    } else export.background.style
+    return withExport { copy(background = background.copy(style = plateStyle)) }
+        .withModifiers {
+            adjustments.applyToModifierStack(
+                this, imageEdit, effect.colorizer.firstColor, outlineEraseMask, backgroundBrushOperations
+            )
+        }
 }
 
 /** Previews plain Colorize even when the editor currently selects a different image edit. */
-internal fun GenerationOptions.asColorizePreview(style: ColorizerStyle): GenerationOptions = copy(
-    modifiers = modifiers.copy(effect = modifiers.effect.copy(
-        imageEdit = ImageEdit.COLORIZE, colorizer = style, segments = emptyList()
-    ))
-)
+internal fun GenerationOptions.asColorizePreview(style: ColorizerStyle): GenerationOptions =
+    withModifiers {
+        withEffect { copy(imageEdit = ImageEdit.COLORIZE, colorizer = style, segments = emptyList()) }
+    }
 
 internal fun GenerationOptions.withShapeStyle(style: ColorizerStyle): GenerationOptions {
-    val shape = modifiers.shape
-    return if (shape?.fill != null) {
-        copy(modifiers = modifiers.copy(shape = shape.copy(fill = ColorFill(style.firstColor, style))))
+    val configuredShape = modifiers.shape
+    return if (configuredShape?.fill != null) {
+        withModifiers { copy(shape = configuredShape.copy(fill = ColorFill(style.firstColor, style))) }
     } else {
-        copy(bgColor = style.firstColor, backgroundStyle = style)
+        withExport { copy(background = ColorFill(style.firstColor, style)) }
     }
 }

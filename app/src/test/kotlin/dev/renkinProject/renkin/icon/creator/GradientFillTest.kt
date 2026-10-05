@@ -113,16 +113,16 @@ class GradientFillTest {
 
     @Test
     fun inheritedPlateFollowsBackgroundOnlyCopies() {
-        val base = plateOptions().copy(bgColor = Color.RED)
+        val base = plateOptions().withExport { copy(background = background.copy(color = Color.RED)) }
         assertEquals(Color.RED, renderPlate(base).getPixel(128, 128))
-        val updated = base.copy(bgColor = Color.GREEN)
+        val updated = base.withExport { copy(background = background.copy(color = Color.GREEN)) }
         assertEquals(Color.GREEN, renderPlate(updated).getPixel(128, 128))
         assertNull(updated.modifiers.shape?.fill)
     }
 
     @Test
     fun inheritedPlateFollowsAChangedGradientBackground() {
-        val result = renderPlate(plateOptions().copy(backgroundStyle = leftToRight))
+        val result = renderPlate(plateOptions().withExport { copy(background = background.copy(style = leftToRight)) })
         assertTrue(Color.red(result.getPixel(40, 128)) > 180)
         assertTrue(Color.blue(result.getPixel(216, 128)) > 180)
     }
@@ -131,8 +131,7 @@ class GradientFillTest {
     fun explicitPlateFillIsIndependentOfPresentationBackground() {
         val base = plateOptions()
         val updated = base.copy(
-            bgColor = Color.RED,
-            backgroundStyle = leftToRight,
+            export = base.export.copy(background = ColorFill(Color.RED, leftToRight)),
             modifiers = base.modifiers.copy(shape = base.modifiers.shape!!.copy(fill = ColorFill(Color.GREEN)))
         )
         assertEquals(Color.GREEN, renderPlate(updated).getPixel(128, 128))
@@ -149,15 +148,21 @@ class GradientFillTest {
     }
 
     private fun options(backgroundStyle: ColorizerStyle? = null) = GenerationOptions(
-        primarySource = Source.NONE,
-        primaryTextType = TextType.FULL_NAME,
-        primaryIconPack = "",
-        bgColor = Color.WHITE,
-        vector = false,
-        materialYou = false,
-        themed = false,
+        source = IconSourceOptions(
+            primarySource = Source.NONE,
+            primaryTextType = TextType.FULL_NAME,
+            primaryIconPack = ""
+        ),
+        export = IconExportOptions(
+            vector = false,
+            materialYou = false,
+            themed = false,
+            background = ColorFill(
+                color = Color.WHITE,
+                style = backgroundStyle
+            )
+        ),
         override = true,
-        backgroundStyle = backgroundStyle,
         modifiers = ModifierStack(
             effect = EffectModifier(imageEdit = ImageEdit.NONE, colorizer = ColorizerStyle(firstColor = Color.WHITE)),
         )

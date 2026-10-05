@@ -18,6 +18,7 @@ import dev.renkinProject.renkin.data.GlobalIconScaleKey
 import dev.renkinProject.renkin.data.GlobalShapeKey
 import dev.renkinProject.renkin.data.OutlineAddKey
 import dev.renkinProject.renkin.data.SecondaryImageEditKey
+import dev.renkinProject.renkin.data.SecondarySourceKey
 import dev.renkinProject.renkin.data.IncludeVectorKey
 import dev.renkinProject.renkin.data.MonochromeKey
 import dev.renkinProject.renkin.data.PrimaryImageEditKey
@@ -49,9 +50,9 @@ class GenerationOptionsPreferencesTest {
 
         val options = GenerationOptions.fromPreferences(prefs, context)
 
-        assertFalse(options.vector)
-        assertFalse(options.materialYou)
-        assertEquals(ApplicationIconVariant.DEFAULT, options.applicationIconVariant)
+        assertFalse(options.export.vector)
+        assertFalse(options.export.materialYou)
+        assertEquals(ApplicationIconVariant.DEFAULT, options.source.applicationIconVariant)
     }
 
     @Test
@@ -65,15 +66,16 @@ class GenerationOptionsPreferencesTest {
 
         val options = GenerationOptions.fromPreferences(prefs, context)
 
-        assertTrue(options.vector)
-        assertTrue(options.materialYou)
+        assertTrue(options.export.vector)
+        assertTrue(options.export.materialYou)
+        assertEquals(ApplicationIconVariant.MATERIAL_YOU, options.source.applicationIconVariant)
     }
 
     @Test
     fun staleFontPath_usesBundledDefault() {
         val prefs = preferencesOf(TextFontKey to "/font/that/does/not/exist.ttf")
 
-        assertEquals("", GenerationOptions.fromPreferences(prefs, context).textFontPath)
+        assertEquals("", GenerationOptions.fromPreferences(prefs, context).source.textFontPath)
         assertEquals("", FontCatalog.usablePathOrDefault(prefs[TextFontKey]!!))
     }
 
@@ -101,13 +103,13 @@ class GenerationOptionsPreferencesTest {
         val source = GenerationOptions.fromPreferences(prefs, context)
         val global = globalModifierOptions(prefs)
 
-        assertEquals(ImageEdit.PATH, source.primaryImageEdit)
-        assertEquals(ImageEdit.EDGE, source.secondaryImageEdit)
-        assertEquals(OutlineMode.NONE, source.outlineMode)
-        assertEquals(ImageEdit.COLORIZE, global.primaryImageEdit)
-        assertEquals(0.8f, global.iconScale)
-        assertEquals(IconShape.CIRCLE, global.iconShape)
-        assertEquals(OutlineMode.ADD, global.outlineMode)
+        assertEquals(ImageEdit.PATH, source.modifiers.effect.imageEdit)
+        assertEquals(ImageEdit.EDGE, source.source.secondaryImageEdit)
+        assertEquals(OutlineMode.NONE, source.modifiers.outline?.mode ?: OutlineMode.NONE)
+        assertEquals(ImageEdit.COLORIZE, global.modifiers.effect.imageEdit)
+        assertEquals(0.8f, global.modifiers.transform.scale)
+        assertEquals(IconShape.CIRCLE, global.modifiers.shape?.shape)
+        assertEquals(OutlineMode.ADD, global.modifiers.outline?.mode)
         assertTrue(global.hasVisibleModifierEffect())
     }
 
@@ -122,9 +124,26 @@ class GenerationOptionsPreferencesTest {
 
         val global = globalModifierOptions(prefs)
 
-        assertEquals(ColorizerMode.GRADIENT, global.colorizerMode)
-        assertEquals(GradientType.RADIAL, global.colorizerGradientType)
-        assertEquals(0xFF336699.toInt(), global.color)
-        assertEquals(listOf(0xFFCC5500.toInt()), global.colorizerGradientColors)
+        assertEquals(ColorizerMode.GRADIENT, global.modifiers.effect.colorizer.mode)
+        assertEquals(GradientType.RADIAL, global.modifiers.effect.colorizer.gradientType)
+        assertEquals(0xFF336699.toInt(), global.modifiers.effect.colorizer.firstColor)
+        assertEquals(listOf(0xFFCC5500.toInt()), global.modifiers.effect.colorizer.gradientStops)
     }
+    @Test fun secondaryPathRetainsItsOwnEditAndLegacyMonochromeSelection() {
+        val prefs = preferencesOf(
+            PrimarySourceKey to Source.ICON_PACK.ordinal,
+            PrimaryImageEditKey to ImageEdit.COLORIZE.ordinal,
+            SecondarySourceKey to Source.APPLICATION_ICON.ordinal,
+            SecondaryImageEditKey to ImageEdit.PATH.ordinal,
+            IncludeVectorKey to true,
+            MonochromeKey to true
+        )
+        val options = GenerationOptions.fromPreferences(prefs, context)
+        assertEquals(ImageEdit.COLORIZE, options.modifiers.effect.imageEdit)
+        assertEquals(ImageEdit.PATH, options.source.secondaryImageEdit)
+        assertTrue(options.export.vector)
+        assertTrue(options.export.materialYou)
+        assertEquals(ApplicationIconVariant.MATERIAL_YOU, options.source.applicationIconVariant)
+    }
+
 }

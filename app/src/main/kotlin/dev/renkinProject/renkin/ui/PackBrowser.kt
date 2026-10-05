@@ -65,6 +65,7 @@ import dev.renkinProject.renkin.extension.calendarPrefixOrNull
 import dev.renkinProject.renkin.extension.prettyDrawableName
 import dev.renkinProject.renkin.extension.isCalendarDayName
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.icon.creator.PackIconPreview
@@ -137,7 +138,9 @@ fun PackIconsRow(
     // The picked pack (primaryIconPack) doesn't change how a pack's preview icons render — the
     // generator colourises by explicit pack name — so exclude it from the key. Otherwise picking
     // an icon (which sets primaryIconPack) re-keys every visible row and flashes the loader.
-    val previewOptions = remember(options) { options.copy(primaryIconPack = "") }
+    val previewOptions = remember(options) {
+        options.withSource { copy(primaryIconPack = "") }
+    }
 
     LaunchedEffect(
         iconPack,

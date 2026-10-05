@@ -7,6 +7,9 @@ import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.EffectModifier
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.withExport
+import dev.renkinProject.renkin.icon.creator.IconExportOptions
+import dev.renkinProject.renkin.icon.creator.IconSourceOptions
 import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.ModifierStack
 import dev.renkinProject.renkin.icon.creator.ColorFill
@@ -29,9 +32,9 @@ class ModifierPreviewsTest {
 
         val updated = original.withShapeStyle(style)
 
-        assertEquals(style.firstColor, updated.bgColor)
-        assertEquals(style, updated.backgroundStyle)
-        assertEquals(original.copy(bgColor = style.firstColor, backgroundStyle = style), updated)
+        assertEquals(style.firstColor, updated.export.background.color)
+        assertEquals(style, updated.export.background.style)
+        assertEquals(original.withExport { copy(background = ColorFill(style.firstColor, style)) }, updated)
     }
 
     @Test
@@ -42,20 +45,24 @@ class ModifierPreviewsTest {
         ))
         val style = ColorizerStyle(firstColor = 0xFFFF0000.toInt())
         val updated = original.withShapeStyle(style)
-        assertEquals(original.bgColor, updated.bgColor)
-        assertEquals(original.backgroundStyle, updated.backgroundStyle)
+        assertEquals(original.export.background.color, updated.export.background.color)
+        assertEquals(original.export.background.style, updated.export.background.style)
         assertEquals(ColorFill(style.firstColor, style), updated.modifiers.shape?.fill)
         assertEquals(original.modifiers.effect, updated.modifiers.effect)
     }
 
     private fun options() = GenerationOptions(
-        primarySource = Source.APPLICATION_ICON,
-        primaryTextType = TextType.FULL_NAME,
-        primaryIconPack = "",
-        bgColor = 0xFFFFFFFF.toInt(),
-        vector = false,
-        materialYou = false,
-        themed = false,
+        source = IconSourceOptions(
+            primarySource = Source.APPLICATION_ICON,
+            primaryTextType = TextType.FULL_NAME,
+            primaryIconPack = ""
+        ),
+        export = IconExportOptions(
+            vector = false,
+            materialYou = false,
+            themed = false,
+            background = ColorFill(0xFFFFFFFF.toInt())
+        ),
         override = true,
         modifiers = ModifierStack(
             effect = EffectModifier(imageEdit = ImageEdit.NONE, colorizer = ColorizerStyle(firstColor = 0xFF000000.toInt())),

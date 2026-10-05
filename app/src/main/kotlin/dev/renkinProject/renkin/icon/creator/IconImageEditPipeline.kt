@@ -37,15 +37,16 @@ import dev.renkinProject.renkin.vector.VectorEditor.Companion.setReferenceColorP
 internal class IconImageEditPipeline(
     private val resources: Resources,
     modifiers: ModifierStack,
-    private val presentation: IconPresentationOptions,
-    private val adjustments: IconAdjustmentPipeline = IconAdjustmentPipeline(resources, modifiers, presentation.background)
+    private val export: IconExportOptions,
+    private val adjustments: IconAdjustmentPipeline = IconAdjustmentPipeline(resources, modifiers, export.background)
 ) {
     constructor(
         resources: Resources,
         options: GenerationOptions,
         adjustments: IconAdjustmentPipeline = IconAdjustmentPipeline(resources, options)
-    ) : this(resources, options.modifiers, options.iconPresentation, adjustments)
+    ) : this(resources, options.modifiers, options.export, adjustments)
 
+    private val materialYouPack = modifiers.materialYouPack
     private val effect = modifiers.effect
     private val colorizer = effect.colorizer
 
@@ -64,7 +65,7 @@ internal class IconImageEditPipeline(
         if (imageEdit == ImageEdit.NONE) return icon
 
         if (icon is AdaptiveIconPackDrawable) {
-            if (presentation.themed) {
+            if (export.themed) {
                 return applyEdit(BitmapIconDrawable(resources, icon.foreground), imageEdit)
             }
             if (imageEdit == ImageEdit.COLORIZE && effect.segments.isEmpty()) {
@@ -164,18 +165,18 @@ internal class IconImageEditPipeline(
 
     private fun restyleMaterialYouPackIcon(icon: AdaptiveIconPackDrawable): AdaptiveIconPackDrawable {
         if (icon.materialYouEditState == null) return icon
-        val customForeground = presentation.materialYouPack.customForeground ?: return icon
-        val customBackground = presentation.materialYouPack.customBackground ?: return icon
+        val customForeground = materialYouPack.customForeground ?: return icon
+        val customBackground = materialYouPack.customBackground ?: return icon
         val state = MaterialYouPackEditState(
-            selectedScheme = presentation.materialYouPack.selectedScheme,
+            selectedScheme = materialYouPack.selectedScheme,
             customForeground = customForeground,
             customBackground = customBackground,
-            strokeScale = presentation.materialYouPack.strokeScale
+            strokeScale = materialYouPack.strokeScale
         )
         if (state.selectedScheme < 0) return icon.restoreOriginalMaterialYouLayers(state)
 
-        val foregroundColor = presentation.materialYouPack.foreground ?: return icon
-        val backgroundColor = presentation.materialYouPack.background ?: return icon
+        val foregroundColor = materialYouPack.foreground ?: return icon
+        val backgroundColor = materialYouPack.background ?: return icon
         val foreground = tintAlphaLayer(icon.foreground, foregroundColor)
         val background = newArgbBitmap(AdaptiveIconPackDrawable.LAYER_SIZE, AdaptiveIconPackDrawable.LAYER_SIZE) {
             it.drawColor(backgroundColor)
@@ -210,8 +211,8 @@ internal class IconImageEditPipeline(
     private fun colorizedBitmap(bitmap: Bitmap): BitmapIconDrawable = BitmapIconDrawable(
         resources,
         bitmap,
-        exportAsAdaptiveIcon = presentation.themed,
-        previewScale = if (presentation.themed) ADAPTIVE_ICON_SCALE else 1f
+        exportAsAdaptiveIcon = export.themed,
+        previewScale = if (export.themed) ADAPTIVE_ICON_SCALE else 1f
     )
 
     internal fun colorizeVector(vector: ImageVectorDrawable): IconPackDrawable {
@@ -232,7 +233,7 @@ internal class IconImageEditPipeline(
         val vector = imageVector.toImageVectorDrawable()
         recolorVectorStrokes(vector)
         vector.resizeAndCenter()
-        return if (presentation.themed) vectorToInset(vector) else vector
+        return if (export.themed) vectorToInset(vector) else vector
     }
 
     private fun detectEdges(bitmap: Bitmap): IconPackDrawable {
@@ -247,7 +248,7 @@ internal class IconImageEditPipeline(
                 contrastNormalized = effect.edges.normalizeContrast
             }
         )
-        return if (presentation.themed) {
+        return if (export.themed) {
             bitmapToInset(detector.edgesImage)
         } else {
             BitmapIconDrawable(resources, detector.edgesImage)
@@ -289,7 +290,7 @@ internal class IconImageEditPipeline(
     }
 
     private fun themedColorizeSource(icon: Bitmap): Bitmap {
-        if (!presentation.themed) return icon
+        if (!export.themed) return icon
         return icon.emptyLike().also { scaled ->
             Canvas(scaled).apply {
                 scale(0.5f, 0.5f, icon.width * 0.5f, icon.height * 0.5f)
@@ -322,7 +323,7 @@ internal class IconImageEditPipeline(
             val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
                 if (solidFill) xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
             }
-            if (presentation.themed) {
+            if (export.themed) {
                 canvas.save()
                 canvas.scale(0.5f, 0.5f, centerX, centerY)
                 canvas.drawBitmap(base, 0f, 0f, maskPaint)
@@ -358,7 +359,7 @@ internal class IconImageEditPipeline(
                 val alphaMask = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
                     xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
                 }
-                if (presentation.themed) {
+                if (export.themed) {
                     canvas.save()
                     canvas.scale(0.5f, 0.5f, centerX, centerY)
                     canvas.drawBitmap(base, 0f, 0f, alphaMask)
@@ -377,9 +378,9 @@ internal class IconImageEditPipeline(
     }
 
     private fun addBackground(image: Bitmap): Bitmap {
-        if (!presentation.themed) return image
-        val shader = presentation.background.shader(image.width, image.height)
-            ?: return image.changeBackgroundColor(presentation.background.color)
+        if (!export.themed) return image
+        val shader = export.background.shader(image.width, image.height)
+            ?: return image.changeBackgroundColor(export.background.color)
         val result = image.emptyLike()
         Canvas(result).apply {
             drawRect(
@@ -395,7 +396,7 @@ internal class IconImageEditPipeline(
     }
 
     private fun defaultBitmap(bitmap: Bitmap): IconPackDrawable =
-        if (presentation.themed) bitmapToInset(bitmap) else BitmapIconDrawable(resources, bitmap)
+        if (export.themed) bitmapToInset(bitmap) else BitmapIconDrawable(resources, bitmap)
 
     private fun preserveBitmapPresentation(
         source: IconPackDrawable,

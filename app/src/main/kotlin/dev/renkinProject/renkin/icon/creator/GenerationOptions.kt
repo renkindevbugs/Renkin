@@ -5,7 +5,6 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.FALLBACK_SOURCE_DEFAULT
-import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.data.FallbackSourceKey
 import dev.renkinProject.renkin.data.IMAGE_EDIT_DEFAULT
 import dev.renkinProject.renkin.data.ImageEdit
@@ -33,7 +32,6 @@ import dev.renkinProject.renkin.data.SecondaryTextTypeKey
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TEXT_TYPE_DEFAULT
 import dev.renkinProject.renkin.data.TextFontKey
-import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getBackgroundColor
 import dev.renkinProject.renkin.data.getColorValue
@@ -68,78 +66,11 @@ fun arePathOptionsRelevant(
             (secondarySource == Source.ICON_PACK || secondarySource == Source.APPLICATION_ICON))
 
 data class GenerationOptions(
-    val primarySource: Source,
-    val primaryTextType: TextType,
-    val primaryIconPack: String,
-    val bgColor: Int,
-    val vector: Boolean,
-    val materialYou: Boolean,
-    val themed: Boolean,
-    val override: Boolean,
+    val source: IconSourceOptions,
     val modifiers: ModifierStack,
-    val secondarySource: Source = Source.NONE,
-    val secondaryImageEdit: ImageEdit = ImageEdit.NONE,
-    val secondaryTextType: TextType = TextType.FULL_NAME,
-    val secondaryIconPack: String = "",
-    val backgroundStyle: ColorizerStyle? = null,
-    val foregroundStyle: ColorizerStyle? = null,
-    val textCustom: String = "",
-    val textCase: TextCase = TextCase.AS_IS,
-    val textFontPath: String = "",
-    val fallbackSource: FallbackSource = FallbackSource.NONE,
-    val applicationIconVariant: ApplicationIconVariant = if (materialYou) {
-        ApplicationIconVariant.MATERIAL_YOU
-    } else {
-        ApplicationIconVariant.DEFAULT
-    },
-    val invertMonochrome: Boolean = false,
-    val materialYouPackForeground: Int? = null,
-    val materialYouPackBackground: Int? = null,
-    val materialYouPackStrokeScale: Float = 1f,
-    val materialYouPackSelectedScheme: Int = -1,
-    val materialYouPackCustomForeground: ColorizerStyle? = null,
-    val materialYouPackCustomBackground: ColorizerStyle? = null,
-    val useFullApplicationIcon: Boolean = false
+    val export: IconExportOptions,
+    val override: Boolean
 ) {
-    // Read-only compatibility accessors; modifier ownership lives exclusively in the stack.
-    val primaryImageEdit: ImageEdit get() = modifiers.effect.imageEdit
-    val color: Int get() = modifiers.effect.colorizer.firstColor
-    val edgeLowThreshold: Float get() = modifiers.effect.edges.lowThreshold
-    val edgeHighThreshold: Float get() = modifiers.effect.edges.highThreshold
-    val edgeGaussianRadius: Float get() = modifiers.effect.edges.smoothing
-    val edgeContrastNormalized: Boolean get() = modifiers.effect.edges.normalizeContrast
-    val bgRemovalTargets: List<Int> get() = modifiers.effect.backgroundRemoval.targets
-    val bgRemovalTolerance: Float get() = modifiers.effect.backgroundRemoval.tolerance
-    val backgroundBrushOperations: List<BackgroundBrushOperation> get() = modifiers.effect.backgroundRemoval.brushOperations
-    val colorizeLayers: List<SegmentLayer> get() = modifiers.effect.segments
-    val iconScale: Float get() = modifiers.transform.scale
-    val iconOffsetX: Float get() = modifiers.transform.offsetX
-    val iconOffsetY: Float get() = modifiers.transform.offsetY
-    val iconShape: IconShape get() = modifiers.shape?.shape ?: IconShape.NONE
-    val iconShapeCrop: Boolean get() = modifiers.shape?.crop ?: true
-    val iconShapeScale: Float get() = modifiers.shape?.scale ?: 1f
-    val outlineMode: OutlineMode get() = modifiers.outline?.mode ?: OutlineMode.NONE
-    val outlineWidth: Float get() = modifiers.outline?.width ?: 6f
-    val outlineColor: Int get() = modifiers.outline?.fill?.color ?: android.graphics.Color.BLACK
-    val outlineStyle: ColorizerStyle? get() = modifiers.outline?.fill?.style
-    val outlineEraseMask: android.graphics.Bitmap? get() = modifiers.outline?.eraseMask
-    val shadowEnabled: Boolean get() = modifiers.shadow?.enabled == true
-    val shadowBlur: Float get() = modifiers.shadow?.blur ?: SHADOW_BLUR_DEFAULT
-    val shadowDistance: Float get() = modifiers.shadow?.distance ?: SHADOW_DISTANCE_DEFAULT
-    val shadowAngle: Float get() = modifiers.shadow?.angle ?: SHADOW_ANGLE_DEFAULT
-    val shadowAllDirections: Boolean get() = modifiers.shadow?.allDirections ?: false
-    val shadowStyle: ColorizerStyle get() = modifiers.shadow?.style ?: ColorizerStyle(firstColor = android.graphics.Color.BLACK)
-    val shadowOpacity: Float get() = modifiers.shadow?.opacity ?: SHADOW_OPACITY_DEFAULT
-    val colorizeFlat: Boolean get() = modifiers.effect.colorizer.flat
-    val colorizeLighten: Boolean get() = modifiers.effect.colorizer.lighten
-    val colorizeMonochrome: Boolean get() = modifiers.effect.colorizer.monochrome
-    val colorizeInverse: Boolean get() = modifiers.effect.colorizer.inverse
-    val colorizerMode: ColorizerMode get() = modifiers.effect.colorizer.mode
-    val colorizerGradientType: GradientType get() = modifiers.effect.colorizer.gradientType
-    val colorizerGradientColors: List<Int> get() = modifiers.effect.colorizer.gradientStops
-    val colorizerGradientPositions: List<Float> get() = modifiers.effect.colorizer.gradientPositions
-    val colorizerGradientAngle: Float get() = modifiers.effect.colorizer.gradientAngle
-
     companion object {
         /**
          * Builds the options from the stored preferences. [override] defaults to the
@@ -164,27 +95,35 @@ data class GenerationOptions(
                 primarySource, primaryImageEdit, secondarySource, secondaryImageEdit
             )
 
+            val materialYou = pathOptionsRelevant && preferences.getBooleanValue(MonochromeKey)
             return GenerationOptions(
-                primarySource = primarySource,
+                source = IconSourceOptions(
+                    primarySource = primarySource,
+                    primaryTextType = preferences.getEnumValue(PrimaryTextTypeKey, TEXT_TYPE_DEFAULT),
+                    primaryIconPack = preferences.getStringValue(PrimaryIconPackKey),
+                    secondarySource = secondarySource,
+                    secondaryImageEdit = secondaryImageEdit,
+                    secondaryTextType = preferences.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT),
+                    secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey),
+                    fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
+                    textFontPath = FontCatalog.usablePathOrDefault(preferences.getStringValue(TextFontKey)),
+                    applicationIconVariant = if (materialYou) {
+                        ApplicationIconVariant.MATERIAL_YOU
+                    } else ApplicationIconVariant.DEFAULT
+                ),
+                export = IconExportOptions(
+                    vector = pathOptionsRelevant && preferences.getBooleanValue(IncludeVectorKey),
+                    materialYou = materialYou,
+                    themed = preferences.getBooleanValue(ExportThemedKey),
+                    background = ColorFill(
+                        color = bgColor.toArgb(),
+                        style = preferences.colorStyle(BackgroundStyleKeys, bgColor)
+                    )
+                ),
                 modifiers = ModifierStack(EffectModifier(
                     primaryImageEdit, preferences.colorStyle(ColorizerStyleKeys, iconColor)
                 )),
-                primaryTextType = preferences.getEnumValue(PrimaryTextTypeKey, TEXT_TYPE_DEFAULT),
-                primaryIconPack = preferences.getStringValue(PrimaryIconPackKey),
-                secondarySource = secondarySource,
-                secondaryImageEdit = secondaryImageEdit,
-                secondaryTextType = preferences.getEnumValue(SecondaryTextTypeKey, TEXT_TYPE_DEFAULT),
-                secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey),
-                bgColor = bgColor.toArgb(),
-                backgroundStyle = preferences.colorStyle(BackgroundStyleKeys, bgColor),
-                // Keep the stored choices for when PATH is selected again, but hidden controls
-                // must not silently affect a different source/modifier combination.
-                vector = pathOptionsRelevant && preferences.getBooleanValue(IncludeVectorKey),
-                materialYou = pathOptionsRelevant && preferences.getBooleanValue(MonochromeKey),
-                themed = preferences.getBooleanValue(ExportThemedKey),
-                override = override,
-                fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
-                textFontPath = FontCatalog.usablePathOrDefault(preferences.getStringValue(TextFontKey))
+                override = override
             )
         }
     }
@@ -214,14 +153,17 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
     )
     val background = ColorFill(shapeStyle?.firstColor ?: android.graphics.Color.TRANSPARENT, shapeStyle)
     return GenerationOptions(
-        primarySource = Source.NONE,
-        primaryTextType = TEXT_TYPE_DEFAULT,
-        primaryIconPack = "",
-        bgColor = background.color,
-        backgroundStyle = background.style,
-        vector = false,
-        materialYou = false,
-        themed = false,
+        source = IconSourceOptions(
+            primarySource = Source.NONE,
+            primaryTextType = TEXT_TYPE_DEFAULT,
+            primaryIconPack = ""
+        ),
+        export = IconExportOptions(
+            vector = false,
+            materialYou = false,
+            themed = false,
+            background = background
+        ),
         override = true,
         modifiers = ModifierStack(
             effect = EffectModifier(
@@ -262,37 +204,29 @@ fun Preferences.colorStyle(
 )
 
 /**
- * The shader [backgroundStyle] asks for, or null when the flat [bgColor] is what to paint. Kept
+ * The shader the export background asks for, or null when its flat colour is what to paint. Kept
  * here so every background surface — themed fill, shape plate, previews — asks the same question.
  */
 fun GenerationOptions.backgroundShader(width: Int, height: Int): android.graphics.Shader? =
-    ColorFill(bgColor, backgroundStyle).shader(width, height)
+    export.background.shader(width, height)
 
 /** Transfers every colourize field together; callers decide the image edit and segment layers. */
-fun GenerationOptions.withColorizerStyle(style: ColorizerStyle): GenerationOptions = copy(
-    modifiers = modifiers.copy(effect = modifiers.effect.copy(colorizer = style))
-)
-
-internal val GenerationOptions.colorizerStyle: ColorizerStyle get() = modifiers.effect.colorizer
-
-// Colorize blend for bitmap icons: SRC_IN replaces the icon's colours with the picked one (flat
-// fill), SCREEN lightens toward it, MULTIPLY tints them. Vectors recolour flat unless baked.
-internal val GenerationOptions.colorizeBlendMode: android.graphics.PorterDuff.Mode
-    get() = modifiers.effect.colorizer.blendMode
+fun GenerationOptions.withColorizerStyle(style: ColorizerStyle): GenerationOptions =
+    withModifiers { withEffect { copy(colorizer = style) } }
 
 // Position, scale, shape, outline and shadow: everything [IconAdjustmentPipeline] applies after
 // the image edit. Callers that skip work when nothing changes must all agree on this list.
 fun GenerationOptions.hasIconAdjustments(): Boolean = modifiers.hasAdjustments
 
-fun GenerationOptions.hasVisibleModifierEffect(): Boolean =
-    modifiers.effect.imageEdit != ImageEdit.NONE || modifiers.hasAdjustments ||
-        materialYouPackForeground != null || materialYouPackBackground != null ||
-        materialYouPackStrokeScale != 1f
+fun GenerationOptions.hasVisibleModifierEffect(): Boolean = modifiers.hasVisibleEffect
 
 fun GenerationOptions.hasVisibleShadow(): Boolean = modifiers.shadow?.isVisible == true
 
-/** Letter-case transform for text icons (per-app option; not persisted globally). */
-enum class TextCase { AS_IS, UPPER, LOWER }
+inline fun GenerationOptions.withSource(update: IconSourceOptions.() -> IconSourceOptions): GenerationOptions =
+    copy(source = source.update())
 
-/** How an app's own launcher icon is represented in the per-app editor. */
-enum class ApplicationIconVariant { DEFAULT, MATERIAL_YOU, MONOCHROME }
+inline fun GenerationOptions.withModifiers(update: ModifierStack.() -> ModifierStack): GenerationOptions =
+    copy(modifiers = modifiers.update())
+
+inline fun GenerationOptions.withExport(update: IconExportOptions.() -> IconExportOptions): GenerationOptions =
+    copy(export = export.update())

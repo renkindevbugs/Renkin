@@ -113,7 +113,7 @@ class IconLockManager(
      * device — precomputed so the (non-suspend) generation callbacks can gate on it.
      */
     suspend fun lockedOriginsFor(options: GenerationOptions): Set<String> {
-        val ownPacks = listOf(options.primaryIconPack, options.secondaryIconPack)
+        val ownPacks = listOf(options.source.primaryIconPack, options.source.secondaryIconPack)
             .filter { it.isNotEmpty() && IconPackBuilder.isOwnPack(it) }
         if (ownPacks.isEmpty()) return emptySet()
         return lockedPacksAmong(ownPacks.flatMap { provenanceFor(it).values }.toSet())

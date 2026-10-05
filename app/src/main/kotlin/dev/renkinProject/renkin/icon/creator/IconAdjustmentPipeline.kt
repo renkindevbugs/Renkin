@@ -26,7 +26,7 @@ internal class IconAdjustmentPipeline(
     private val background: ColorFill
 ) {
     constructor(resources: Resources, options: GenerationOptions) : this(
-        resources, options.modifiers, ColorFill(options.bgColor, options.backgroundStyle)
+        resources, options.modifiers, options.export.background
     )
 
     fun apply(icon: IconPackDrawable): IconPackDrawable {

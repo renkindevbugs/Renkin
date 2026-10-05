@@ -12,6 +12,10 @@ import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.EffectModifier
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.MaterialYouPackModifier
+import dev.renkinProject.renkin.icon.creator.withModifiers
+import dev.renkinProject.renkin.icon.creator.IconExportOptions
+import dev.renkinProject.renkin.icon.creator.IconSourceOptions
 import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.ModifierStack
@@ -25,7 +29,6 @@ import dev.renkinProject.renkin.icon.creator.SegmentLayer
 import dev.renkinProject.renkin.icon.creator.ShadowModifier
 import dev.renkinProject.renkin.icon.creator.ShapeModifier
 import dev.renkinProject.renkin.icon.creator.TransformModifier
-import dev.renkinProject.renkin.icon.creator.colorizerStyle
 import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.withColorizerStyle
 import dev.renkinProject.renkin.icon.creator.withModifierPreset
@@ -53,13 +56,17 @@ class ModifierColorStyleTest {
     )
 
     private fun options() = GenerationOptions(
-        primarySource = Source.APPLICATION_ICON,
-        primaryTextType = TextType.FULL_NAME,
-        primaryIconPack = "",
-        bgColor = Color.White.toArgb(),
-        vector = false,
-        materialYou = false,
-        themed = false,
+        source = IconSourceOptions(
+            primarySource = Source.APPLICATION_ICON,
+            primaryTextType = TextType.FULL_NAME,
+            primaryIconPack = ""
+        ),
+        export = IconExportOptions(
+            vector = false,
+            materialYou = false,
+            themed = false,
+            background = ColorFill(Color.White.toArgb())
+        ),
         override = true,
         modifiers = ModifierStack(
             effect = EffectModifier(
@@ -170,14 +177,14 @@ class ModifierColorStyleTest {
     @Test fun sharedGenerationAdapterPreservesSelectedEditLayersAndGeometry() {
         val original = options()
         val updated = original.withColorizerStyle(gradient)
-        assertEquals(gradient, updated.colorizerStyle)
-        assertEquals(original.primaryImageEdit, updated.primaryImageEdit)
-        assertEquals(original.colorizeLayers, updated.colorizeLayers)
-        assertEquals(original.iconShape, updated.iconShape)
-        assertEquals(original.iconScale, updated.iconScale)
-        assertEquals(original.outlineMode, updated.outlineMode)
-        assertEquals(original.shadowEnabled, updated.shadowEnabled)
-        assertEquals(original.bgColor, updated.bgColor)
+        assertEquals(gradient, updated.modifiers.effect.colorizer)
+        assertEquals(original.modifiers.effect.imageEdit, updated.modifiers.effect.imageEdit)
+        assertEquals(original.modifiers.effect.segments, updated.modifiers.effect.segments)
+        assertEquals(original.modifiers.shape?.shape, updated.modifiers.shape?.shape)
+        assertEquals(original.modifiers.transform.scale, updated.modifiers.transform.scale)
+        assertEquals(original.modifiers.outline?.mode, updated.modifiers.outline?.mode)
+        assertEquals(original.modifiers.shadow?.enabled, updated.modifiers.shadow?.enabled)
+        assertEquals(original.export.background.color, updated.export.background.color)
     }
 
     @Test fun colorSheetPreviewForcesColorizeAndClearsSegmentsWithoutChangingOriginal() {
@@ -186,24 +193,24 @@ class ModifierColorStyleTest {
             effect = base.modifiers.effect.copy(imageEdit = ImageEdit.COLORIZE_SEGMENTS)
         ))
         val updated = original.asColorizePreview(gradient)
-        assertEquals(ImageEdit.COLORIZE, updated.primaryImageEdit)
-        assertTrue(updated.colorizeLayers.isEmpty())
-        assertEquals(gradient, updated.colorizerStyle)
-        assertEquals(original.iconShape, updated.iconShape)
-        assertEquals(ImageEdit.COLORIZE_SEGMENTS, original.primaryImageEdit)
-        assertFalse(original.colorizeLayers.isEmpty())
+        assertEquals(ImageEdit.COLORIZE, updated.modifiers.effect.imageEdit)
+        assertTrue(updated.modifiers.effect.segments.isEmpty())
+        assertEquals(gradient, updated.modifiers.effect.colorizer)
+        assertEquals(original.modifiers.shape?.shape, updated.modifiers.shape?.shape)
+        assertEquals(ImageEdit.COLORIZE_SEGMENTS, original.modifiers.effect.imageEdit)
+        assertFalse(original.modifiers.effect.segments.isEmpty())
     }
 
     @Test fun editorMappingUsesHoistedFirstColorAndKeepsSegmentsOnlyForTheirEdit() {
         val state = AdjustmentState().apply {
             colorizerStyle = gradient
-            colorizeLayers = options().colorizeLayers
+            colorizeLayers = options().modifiers.effect.segments
         }
         val original = options()
         val segmented = original.withModifierAdjustments(state, ImageEdit.COLORIZE_SEGMENTS, null)
-        assertEquals(gradient.copy(firstColor = original.color), segmented.colorizerStyle)
-        assertEquals(state.colorizeLayers, segmented.colorizeLayers)
-        assertTrue(original.withModifierAdjustments(state, ImageEdit.COLORIZE, null).colorizeLayers.isEmpty())
+        assertEquals(gradient.copy(firstColor = original.modifiers.effect.colorizer.firstColor), segmented.modifiers.effect.colorizer)
+        assertEquals(state.colorizeLayers, segmented.modifiers.effect.segments)
+        assertTrue(original.withModifierAdjustments(state, ImageEdit.COLORIZE, null).modifiers.effect.segments.isEmpty())
     }
 
     @Test fun presetRoundTripKeepsAllStylesAndDoesNotReplaceIconSpecificGeometry() {
@@ -227,8 +234,32 @@ class ModifierColorStyleTest {
         assertEquals(0.2f, target.iconOffsetX)
         assertEquals(listOf(5, 7), target.bgRemovalTargets)
         val generated = options().withModifierPreset(payload)
-        assertEquals(target.colorizerStyle, generated.colorizerStyle)
-        assertEquals(source.outlineColorStyle, generated.outlineStyle)
-        assertEquals(source.shadowColorStyle, generated.shadowStyle)
+        assertEquals(target.colorizerStyle, generated.modifiers.effect.colorizer)
+        assertEquals(source.outlineColorStyle, generated.modifiers.outline?.fill?.style)
+        assertEquals(source.shadowColorStyle, generated.modifiers.shadow?.style)
     }
+    @Test fun editorAdjustmentsAndPortablePresetsRetainPackSpecificControls() {
+        val pack = MaterialYouPackModifier(
+            foreground = Color.Blue.toArgb(), background = Color.Yellow.toArgb(),
+            selectedScheme = 2, strokeScale = 1.6f,
+            customForeground = gradient, customBackground = gradient.copy(inverse = false)
+        )
+        val original = options().withModifiers { copy(materialYouPack = pack) }
+        val state = AdjustmentState().apply {
+            colorizerStyle = gradient
+            iconShape = IconShape.CIRCLE
+            shapeCrop = false
+            shadowEnabled = true
+        }
+        val edited = original.withModifierAdjustments(state, ImageEdit.COLORIZE, null)
+        assertSame(pack, edited.modifiers.materialYouPack)
+        assertEquals(IconShape.CIRCLE, edited.modifiers.shape?.shape)
+        assertTrue(edited.modifiers.shadow?.enabled == true)
+        assertSame(original.source, edited.source)
+        val payload = captureModifierPreset(state, ImageEdit.COLORIZE, Color.Blue, ModifierPresetGroup.entries.toSet())
+        assertSame(pack, edited.withModifierPreset(payload).modifiers.materialYouPack)
+        assertSame(pack, edited.asColorizePreview(gradient).modifiers.materialYouPack)
+        assertSame(pack, edited.withShapeStyle(gradient).modifiers.materialYouPack)
+    }
+
 }

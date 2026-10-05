@@ -310,12 +310,13 @@ internal class AdjustmentState {
     }
 }
 
-internal fun AdjustmentState.toModifierStack(
+internal fun AdjustmentState.applyToModifierStack(
+    stack: ModifierStack,
     imageEdit: ImageEdit,
     iconColor: Int,
     outlineEraseMask: Bitmap?,
     backgroundBrushOperations: List<BackgroundBrushOperation>
-): ModifierStack = ModifierStack(
+): ModifierStack = stack.copy(
     effect = EffectModifier(
         imageEdit = imageEdit,
         colorizer = colorizerStyle.copy(firstColor = iconColor),

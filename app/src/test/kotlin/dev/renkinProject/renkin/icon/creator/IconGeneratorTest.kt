@@ -72,17 +72,21 @@ class IconGeneratorTest {
         themed: Boolean = false,
         colorizeLayers: List<SegmentLayer> = emptyList()
     ) = GenerationOptions(
-        primarySource = source,
-        primaryTextType = TextType.ONE_LETTER,
-        primaryIconPack = "",
-        bgColor = bgColor,
-        vector = false,
-        materialYou = false,
-        themed = themed,
+        source = IconSourceOptions(
+            primarySource = source,
+            primaryTextType = TextType.ONE_LETTER,
+            primaryIconPack = "",
+            applicationIconVariant = applicationIconVariant,
+            invertMonochrome = invertMonochrome,
+            useFullApplicationIcon = useFullApplicationIcon
+        ),
+        export = IconExportOptions(
+            vector = false,
+            materialYou = false,
+            themed = themed,
+            background = ColorFill(bgColor)
+        ),
         override = override,
-        applicationIconVariant = applicationIconVariant,
-        invertMonochrome = invertMonochrome,
-        useFullApplicationIcon = useFullApplicationIcon,
         modifiers = ModifierStack(
             effect = EffectModifier(
                 imageEdit = imageEdit,

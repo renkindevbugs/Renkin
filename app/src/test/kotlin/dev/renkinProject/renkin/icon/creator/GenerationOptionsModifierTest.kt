@@ -28,13 +28,17 @@ class GenerationOptionsModifierTest {
     )
 
     private fun options(modifiers: ModifierStack = baseStack) = GenerationOptions(
-        primarySource = Source.APPLICATION_ICON,
-        primaryTextType = TextType.FULL_NAME,
-        primaryIconPack = "",
-        bgColor = Color.TRANSPARENT,
-        vector = false,
-        materialYou = false,
-        themed = false,
+        source = IconSourceOptions(
+            primarySource = Source.APPLICATION_ICON,
+            primaryTextType = TextType.FULL_NAME,
+            primaryIconPack = ""
+        ),
+        export = IconExportOptions(
+            vector = false,
+            materialYou = false,
+            themed = false,
+            background = ColorFill(Color.TRANSPARENT)
+        ),
         override = true,
         modifiers = modifiers
     )
@@ -44,14 +48,14 @@ class GenerationOptionsModifierTest {
 
     @Test
     fun colorizeBlendMode_monochromeWinsOverFlatAndLighten() {
-        assertEquals(PorterDuff.Mode.MULTIPLY, options().colorizeBlendMode)
-        assertEquals(PorterDuff.Mode.SRC_IN, options().withColorizerStyle(baseStyle.copy(flat = true)).colorizeBlendMode)
-        assertEquals(PorterDuff.Mode.SCREEN, options().withColorizerStyle(baseStyle.copy(lighten = true)).colorizeBlendMode)
+        assertEquals(PorterDuff.Mode.MULTIPLY, options().modifiers.effect.colorizer.blendMode)
+        assertEquals(PorterDuff.Mode.SRC_IN, options().withColorizerStyle(baseStyle.copy(flat = true)).modifiers.effect.colorizer.blendMode)
+        assertEquals(PorterDuff.Mode.SCREEN, options().withColorizerStyle(baseStyle.copy(lighten = true)).modifiers.effect.colorizer.blendMode)
         assertEquals(
             PorterDuff.Mode.MULTIPLY,
             options().withColorizerStyle(baseStyle.copy(
                 monochrome = true, flat = true, lighten = true
-            )).colorizeBlendMode
+            )).modifiers.effect.colorizer.blendMode
         )
     }
 
@@ -87,9 +91,9 @@ class GenerationOptionsModifierTest {
     @Test
     fun sourceOnlyCopyRetainsTheOwnedModifierStack() {
         val original = optionsWithShadow(baseShadow.copy(enabled = false))
-        val updated = original.copy(primarySource = Source.APPLICATION_NAME, textCustom = "R")
+        val updated = original.withSource { copy(primarySource = Source.APPLICATION_NAME, textCustom = "R") }
         assertSame(original.modifiers, updated.modifiers)
-        assertEquals(original.colorizerStyle, updated.colorizerStyle)
+        assertEquals(original.modifiers.effect.colorizer, updated.modifiers.effect.colorizer)
         assertEquals(original.modifiers.shadow, updated.modifiers.shadow)
     }
 }

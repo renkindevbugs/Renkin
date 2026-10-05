@@ -10,8 +10,12 @@ data class ModifierStack(
     val transform: TransformModifier = TransformModifier(),
     val shape: ShapeModifier? = null,
     val outline: OutlineModifier? = null,
-    val shadow: ShadowModifier? = null
+    val shadow: ShadowModifier? = null,
+    val materialYouPack: MaterialYouPackModifier = MaterialYouPackModifier()
 ) {
+    val hasVisibleEffect: Boolean
+        get() = effect.imageEdit != ImageEdit.NONE || hasAdjustments || materialYouPack.hasRestyling
+
     val hasAdjustments: Boolean
         get() = !transform.isIdentity || requiresRasterization
 
@@ -107,3 +111,6 @@ internal val ColorizerStyle.blendMode: PorterDuff.Mode
         lighten -> PorterDuff.Mode.SCREEN
         else -> PorterDuff.Mode.MULTIPLY
     }
+
+inline fun ModifierStack.withEffect(update: EffectModifier.() -> EffectModifier): ModifierStack =
+    copy(effect = effect.update())

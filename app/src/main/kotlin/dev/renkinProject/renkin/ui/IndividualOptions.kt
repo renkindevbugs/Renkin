@@ -68,6 +68,13 @@ import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.withModifiers
+import dev.renkinProject.renkin.icon.creator.withExport
+import dev.renkinProject.renkin.icon.creator.withEffect
+import dev.renkinProject.renkin.icon.creator.ColorFill
+import dev.renkinProject.renkin.icon.creator.IconSourceOptions
+import dev.renkinProject.renkin.icon.creator.IconExportOptions
+import dev.renkinProject.renkin.icon.creator.MaterialYouPackModifier
 import dev.renkinProject.renkin.icon.creator.hasIconAdjustments
 import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
@@ -279,7 +286,7 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
                 // Icon-pack source with no new pick: apply the modifier to the already saved icon
                 // rather than pulling a fresh one from the first pack (which would swap the icon
                 // out from under the user). Null until a tap if none.
-                options.primarySource == Source.ICON_PACK ->
+                options.source.primarySource == Source.ICON_PACK ->
                     (app.baseIcon ?: app.createdIcon)?.let { builder.applyModifier(it, options) }
                 else -> builder.previewIcon(app, options, null)
             }
@@ -293,7 +300,7 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         val generated = when {
             base == null -> null
             // Adjustments without an image edit still go through applyModifier.
-            options.primaryImageEdit == ImageEdit.NONE && !options.hasIconAdjustments() -> base
+            options.modifiers.effect.imageEdit == ImageEdit.NONE && !options.hasIconAdjustments() -> base
             else -> trackGeneration { builder.applyModifier(base, options) }
         }
         if (generation == vectorGeneration) modifiedVector = generated
@@ -532,31 +539,41 @@ fun OptionsDialog(
         buildBackgroundBrushOperations(adjustments.backgroundBrushStrokes)
     }
     val generatingOptions = GenerationOptions(
-        primarySource = source,
-        primaryTextType = textType,
-        primaryIconPack = iconPack,
-        bgColor = effectiveBgColor.toInt(),
-        vector = useVector,
-        modifiers = ModifierStack(EffectModifier(imageEdit, ColorizerStyle(firstColor = effectiveColor.toInt()))),
-        materialYou = applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
-        themed = themed,
-        override = true,
-        textCustom = customText,
-        textCase = textCase,
-        textFontPath = textFontPath,
-        applicationIconVariant = applicationIconVariant,
-        useFullApplicationIcon = useFullApplicationIcon,
-        invertMonochrome = invertMonochrome,
-        materialYouPackForeground = materialYouPackForeground,
-        materialYouPackBackground = materialYouPackBackground,
-        foregroundStyle = effectiveForegroundStyle,
-        backgroundStyle = effectiveBackgroundStyle,
-        materialYouPackStrokeScale = if (selectedMaterialYouPackIcon) {
-            materialYouPackAdjustments.strokeScale
-        } else 1f,
-        materialYouPackSelectedScheme = materialYouPackAdjustments.selectedScheme,
-        materialYouPackCustomForeground = materialYouPackAdjustments.customForeground,
-        materialYouPackCustomBackground = materialYouPackAdjustments.customBackground
+        source = IconSourceOptions(
+            primarySource = source,
+            primaryTextType = textType,
+            primaryIconPack = iconPack,
+            textCustom = customText,
+            textCase = textCase,
+            textFontPath = textFontPath,
+            applicationIconVariant = applicationIconVariant,
+            useFullApplicationIcon = useFullApplicationIcon,
+            invertMonochrome = invertMonochrome
+        ),
+        export = IconExportOptions(
+            vector = useVector,
+            materialYou = applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
+            themed = themed,
+            foregroundStyle = effectiveForegroundStyle,
+            background = ColorFill(
+                color = effectiveBgColor.toInt(),
+                style = effectiveBackgroundStyle
+            )
+        ),
+        modifiers = ModifierStack(
+            effect = EffectModifier(imageEdit, ColorizerStyle(firstColor = effectiveColor.toInt())),
+            materialYouPack = MaterialYouPackModifier(
+                foreground = materialYouPackForeground,
+                background = materialYouPackBackground,
+                strokeScale = if (selectedMaterialYouPackIcon) {
+                    materialYouPackAdjustments.strokeScale
+                } else 1f,
+                selectedScheme = materialYouPackAdjustments.selectedScheme,
+                customForeground = materialYouPackAdjustments.customForeground,
+                customBackground = materialYouPackAdjustments.customBackground
+            )
+        ),
+        override = true
     ).withModifierAdjustments(
         adjustments = adjustments,
         imageEdit = imageEdit,
@@ -566,15 +583,9 @@ fun OptionsDialog(
     // Pack rows describe the source artwork, not its themed export. The launcher applies the
     // adaptive viewport to themed output; applying that inset directly to these flat browser
     // tiles made every candidate look half-sized until a modifier happened to flatten it.
-    val browserOptions = generatingOptions.copy(
-        themed = false,
-        materialYouPackForeground = null,
-        materialYouPackBackground = null,
-        materialYouPackStrokeScale = 1f,
-        materialYouPackSelectedScheme = -1,
-        materialYouPackCustomForeground = null,
-        materialYouPackCustomBackground = null
-    )
+    val browserOptions = generatingOptions
+        .withExport { copy(themed = false) }
+        .withModifiers { copy(materialYouPack = MaterialYouPackModifier()) }
 
     // The Colorize sheet previews a draft style that is NOT applied yet, so it runs the real
     // generation pipeline with the draft substituted in — anything cheaper (colouring the app's
@@ -587,7 +598,7 @@ fun OptionsDialog(
                 val custom = customIconList.firstOrNull()
                 when {
                     custom != null -> viewModel.previewIcon(app, previewOptions, custom)
-                    previewOptions.primarySource == Source.ICON_PACK ->
+                    previewOptions.source.primarySource == Source.ICON_PACK ->
                         (app.baseIcon ?: app.createdIcon)?.let {
                             viewModel.applyModifier(it, previewOptions)
                         }
@@ -803,38 +814,34 @@ fun OptionsDialog(
                                 renderMaterialYouForeground = { style ->
                                     renderPreviewWith(
                                         if (swapGeneratedCustomColors) {
-                                            generatingOptions.copy(
-                                                bgColor = style.firstColor,
-                                                backgroundStyle = style
-                                            )
+                                            generatingOptions.withExport {
+                                                copy(background = ColorFill(style.firstColor, style))
+                                            }
                                         } else {
-                                            generatingOptions.copy(
-                                                modifiers = generatingOptions.modifiers.copy(
-                                                    effect = generatingOptions.modifiers.effect.copy(
-                                                        colorizer = generatingOptions.modifiers.effect.colorizer.copy(firstColor = style.firstColor)
-                                                    )
-                                                ),
-                                                foregroundStyle = style
-                                            )
+                                            generatingOptions
+                                                .withExport { copy(foregroundStyle = style) }
+                                                .withModifiers {
+                                                    withEffect {
+                                                        copy(colorizer = colorizer.copy(firstColor = style.firstColor))
+                                                    }
+                                                }
                                         }
                                     )
                                 },
                                 renderMaterialYouBackground = { style ->
                                     renderPreviewWith(
                                         if (swapGeneratedCustomColors) {
-                                            generatingOptions.copy(
-                                                modifiers = generatingOptions.modifiers.copy(
-                                                    effect = generatingOptions.modifiers.effect.copy(
-                                                        colorizer = generatingOptions.modifiers.effect.colorizer.copy(firstColor = style.firstColor)
-                                                    )
-                                                ),
-                                                foregroundStyle = style
-                                            )
+                                            generatingOptions
+                                                .withExport { copy(foregroundStyle = style) }
+                                                .withModifiers {
+                                                    withEffect {
+                                                        copy(colorizer = colorizer.copy(firstColor = style.firstColor))
+                                                    }
+                                                }
                                         } else {
-                                            generatingOptions.copy(
-                                                bgColor = style.firstColor,
-                                                backgroundStyle = style
-                                            )
+                                            generatingOptions.withExport {
+                                                copy(background = ColorFill(style.firstColor, style))
+                                            }
                                         }
                                     )
                                 }

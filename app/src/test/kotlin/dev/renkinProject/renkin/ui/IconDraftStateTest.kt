@@ -17,6 +17,9 @@ import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.EffectModifier
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.ColorFill
+import dev.renkinProject.renkin.icon.creator.IconExportOptions
+import dev.renkinProject.renkin.icon.creator.IconSourceOptions
 import dev.renkinProject.renkin.icon.creator.ModifierStack
 import dev.renkinProject.renkin.icon.creator.TransformModifier
 import dev.renkinProject.renkin.packages.PackageInfoStruct
@@ -105,13 +108,17 @@ class IconDraftStateTest {
         imageEdit: ImageEdit = ImageEdit.NONE,
         iconScale: Float = 1f
     ) = GenerationOptions(
-        primarySource = source,
-        primaryTextType = TextType.FULL_NAME,
-        primaryIconPack = "",
-        bgColor = 0,
-        vector = false,
-        materialYou = false,
-        themed = false,
+        source = IconSourceOptions(
+            primarySource = source,
+            primaryTextType = TextType.FULL_NAME,
+            primaryIconPack = ""
+        ),
+        export = IconExportOptions(
+            vector = false,
+            materialYou = false,
+            themed = false,
+            background = ColorFill(0)
+        ),
         override = true,
         modifiers = ModifierStack(
             effect = EffectModifier(imageEdit = imageEdit, colorizer = ColorizerStyle(firstColor = 0)),
