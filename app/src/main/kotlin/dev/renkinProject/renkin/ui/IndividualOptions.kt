@@ -121,6 +121,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
+import dev.renkinProject.renkin.icon.creator.EffectModifier
+import dev.renkinProject.renkin.icon.creator.ModifierStack
 
 internal enum class IconOrigin { CREATE, UPLOAD, VECTOR }
 
@@ -530,8 +532,12 @@ fun OptionsDialog(
         buildBackgroundBrushOperations(adjustments.backgroundBrushStrokes)
     }
     val generatingOptions = GenerationOptions(
-        source, imageEdit, textType, iconPack,
-        effectiveColor.toInt(), effectiveBgColor.toInt(), useVector,
+        primarySource = source,
+        primaryTextType = textType,
+        primaryIconPack = iconPack,
+        bgColor = effectiveBgColor.toInt(),
+        vector = useVector,
+        modifiers = ModifierStack(EffectModifier(imageEdit, ColorizerStyle(firstColor = effectiveColor.toInt()))),
         materialYou = applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
         themed = themed,
         override = true,
@@ -803,7 +809,11 @@ fun OptionsDialog(
                                             )
                                         } else {
                                             generatingOptions.copy(
-                                                color = style.firstColor,
+                                                modifiers = generatingOptions.modifiers.copy(
+                                                    effect = generatingOptions.modifiers.effect.copy(
+                                                        colorizer = generatingOptions.modifiers.effect.colorizer.copy(firstColor = style.firstColor)
+                                                    )
+                                                ),
                                                 foregroundStyle = style
                                             )
                                         }
@@ -813,7 +823,11 @@ fun OptionsDialog(
                                     renderPreviewWith(
                                         if (swapGeneratedCustomColors) {
                                             generatingOptions.copy(
-                                                color = style.firstColor,
+                                                modifiers = generatingOptions.modifiers.copy(
+                                                    effect = generatingOptions.modifiers.effect.copy(
+                                                        colorizer = generatingOptions.modifiers.effect.colorizer.copy(firstColor = style.firstColor)
+                                                    )
+                                                ),
                                                 foregroundStyle = style
                                             )
                                         } else {

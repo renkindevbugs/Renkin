@@ -420,7 +420,11 @@ class ApplicationProvider internal constructor(
             application != null || preferences.getBooleanValue(OverrideIconKey))
         if (application == null && options.themed && supportDynamicColors()) {
             options = options.copy(
-                color = context.resources.getColor(R.color.icon_color, null),
+                modifiers = options.modifiers.copy(effect = options.modifiers.effect.copy(
+                    colorizer = options.modifiers.effect.colorizer.copy(
+                        firstColor = context.resources.getColor(R.color.icon_color, null)
+                    )
+                )),
                 bgColor = context.resources.getColor(R.color.icon_background_color, null)
             )
         }
@@ -1061,9 +1065,10 @@ class ApplicationProvider internal constructor(
         val drawableName = entry.row.sourceDrawableName.ifEmpty {
             appFilterDrawableName(sourcePack, app) ?: return null
         }
-        val options = GenerationOptions.fromPreferences(preferences, context).copy(
+        val sourceOptions = GenerationOptions.fromPreferences(preferences, context)
+        val options = sourceOptions.copy(
             primarySource = Source.ICON_PACK,
-            primaryImageEdit = ImageEdit.NONE,
+            modifiers = sourceOptions.modifiers.copy(effect = sourceOptions.modifiers.effect.copy(imageEdit = ImageEdit.NONE)),
             primaryIconPack = sourcePack
         )
         return try {

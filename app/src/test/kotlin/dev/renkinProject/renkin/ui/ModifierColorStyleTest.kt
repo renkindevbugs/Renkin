@@ -7,13 +7,24 @@ import androidx.compose.ui.graphics.toArgb
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextType
+import dev.renkinProject.renkin.icon.creator.ColorFill
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.EffectModifier
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.icon.creator.ModifierStack
 import dev.renkinProject.renkin.icon.creator.OutlineMode
+import dev.renkinProject.renkin.icon.creator.OutlineModifier
+import dev.renkinProject.renkin.icon.creator.SHADOW_ANGLE_DEFAULT
+import dev.renkinProject.renkin.icon.creator.SHADOW_BLUR_DEFAULT
+import dev.renkinProject.renkin.icon.creator.SHADOW_DISTANCE_DEFAULT
+import dev.renkinProject.renkin.icon.creator.SHADOW_OPACITY_DEFAULT
 import dev.renkinProject.renkin.icon.creator.SegmentLayer
+import dev.renkinProject.renkin.icon.creator.ShadowModifier
+import dev.renkinProject.renkin.icon.creator.ShapeModifier
+import dev.renkinProject.renkin.icon.creator.TransformModifier
 import dev.renkinProject.renkin.icon.creator.colorizerStyle
 import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.withColorizerStyle
@@ -43,20 +54,31 @@ class ModifierColorStyleTest {
 
     private fun options() = GenerationOptions(
         primarySource = Source.APPLICATION_ICON,
-        primaryImageEdit = ImageEdit.REMOVE_BACKGROUND,
         primaryTextType = TextType.FULL_NAME,
         primaryIconPack = "",
-        color = Color.Red.toArgb(),
         bgColor = Color.White.toArgb(),
         vector = false,
         materialYou = false,
         themed = false,
         override = true,
-        iconScale = 0.8f,
-        iconShape = IconShape.COOKIE,
-        outlineMode = OutlineMode.ADD,
-        shadowEnabled = true,
-        colorizeLayers = listOf(SegmentLayer(listOf(1, 2), style = gradient))
+        modifiers = ModifierStack(
+            effect = EffectModifier(
+                imageEdit = ImageEdit.REMOVE_BACKGROUND,
+                colorizer = ColorizerStyle(firstColor = Color.Red.toArgb()),
+                segments = listOf(SegmentLayer(listOf(1, 2), style = gradient))
+            ),
+            transform = TransformModifier(scale = 0.8f),
+            shape = ShapeModifier(shape = IconShape.COOKIE, crop = true, scale = 1f),
+            outline = OutlineModifier(mode = OutlineMode.ADD, width = 6f, fill = ColorFill(color = android.graphics.Color.BLACK, style = null)),
+            shadow = ShadowModifier(
+                blur = SHADOW_BLUR_DEFAULT,
+                distance = SHADOW_DISTANCE_DEFAULT,
+                angle = SHADOW_ANGLE_DEFAULT,
+                allDirections = false,
+                style = ColorizerStyle(firstColor = android.graphics.Color.BLACK),
+                opacity = SHADOW_OPACITY_DEFAULT
+            ),
+        )
     )
 
     private fun roundTrip(state: AdjustmentState): AdjustmentState {
@@ -159,7 +181,10 @@ class ModifierColorStyleTest {
     }
 
     @Test fun colorSheetPreviewForcesColorizeAndClearsSegmentsWithoutChangingOriginal() {
-        val original = options().copy(primaryImageEdit = ImageEdit.COLORIZE_SEGMENTS)
+        val base = options()
+        val original = base.copy(modifiers = base.modifiers.copy(
+            effect = base.modifiers.effect.copy(imageEdit = ImageEdit.COLORIZE_SEGMENTS)
+        ))
         val updated = original.asColorizePreview(gradient)
         assertEquals(ImageEdit.COLORIZE, updated.primaryImageEdit)
         assertTrue(updated.colorizeLayers.isEmpty())

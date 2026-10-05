@@ -14,7 +14,11 @@ import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.EffectModifier
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.ModifierStack
+import dev.renkinProject.renkin.icon.creator.TransformModifier
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
@@ -102,16 +106,17 @@ class IconDraftStateTest {
         iconScale: Float = 1f
     ) = GenerationOptions(
         primarySource = source,
-        primaryImageEdit = imageEdit,
         primaryTextType = TextType.FULL_NAME,
         primaryIconPack = "",
-        color = 0,
         bgColor = 0,
         vector = false,
         materialYou = false,
         themed = false,
         override = true,
-        iconScale = iconScale
+        modifiers = ModifierStack(
+            effect = EffectModifier(imageEdit = imageEdit, colorizer = ColorizerStyle(firstColor = 0)),
+            transform = TransformModifier(scale = iconScale),
+        )
     )
 
     private val customPick = ResourceDrawable(1, ColorDrawable(0))

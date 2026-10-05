@@ -408,27 +408,39 @@ identically and none of them re-implements the maths.
   the Create tab. The saver encodes each complete style as a primitive string through the
   existing style codec; older keyed and positional saved states remain readable.
 - **`GenerationOptions.withColorizerStyle`** is the common transfer into generation for
-  preferences, global modifiers, editor adjustments and reusable presets. It changes all colour
-  fields together and preserves the caller's image-edit choice and segment layers. The editor's
+  callers replacing a colour style. It replaces the complete effect colour group and preserves
+  the caller's image-edit choice and segment layers. The editor's
   `asColorizePreview` explicitly selects plain Colorize and clears segments.
 - **`ModifierStack`** groups image effects (colour style, segments, edge detection and background
-  removal), transform, shape, outline and shadow. `GenerationOptions` derives one stack per
-  options snapshot. `IconImageEditPipeline` reads its effect group; `IconAdjustmentPipeline`
-  consumes the stack directly. Shared predicates decide whether adjustments are present, pixels
+  removal), transform, shape, outline and shadow. `GenerationOptions` owns the stack as a
+  constructor field; source-only `copy()` calls retain it rather than rebuilding a flat mapping.
+  Editor adjustments, global preferences and preset application construct or replace groups
+  directly. `IconImageEditPipeline` takes the stack plus `IconPresentationOptions` (themed
+  background and Material You pack presentation), and `IconAdjustmentPipeline` consumes the
+  stack directly. Shared predicates decide whether adjustments are present, pixels
   are required and the output loses its adaptive presentation. Transform-only operations retain
   vectors or adaptive layers, while outline alone retains an existing bitmap source's adaptive
-  export flag and preview scale. A disabled shape, outline or shadow is represented by null;
-  a configured but invisible shadow also leaves the source presentation unchanged. Render order
+  export flag and preview scale. Groups may be absent, or retain inactive configuration through
+  `IconShape.NONE`, `OutlineMode.NONE` and the shadow's enabled flag. Disabling a configured
+  modifier therefore retains its colours and geometry. An invisible shadow also leaves the
+  source presentation unchanged. Render order
   remains image edit → transform → outline → shape → shadow.
-  The flat `GenerationOptions` constructor remains a compatibility adapter for existing UI,
-  preferences and presets; data-class equality and saved formats still use its original fields.
-  The immediate next step is to make the stack a constructor-owned field of `GenerationOptions`
-  and have editor state, presets and global preferences build its groups directly. Flat accessors
-  should then become temporary adapters and be removed with their callers. Complete this ownership
-  migration before adding more modifiers; the derived stack currently adds a mapping boundary.
-  Splitting source/export options will also let the image-edit pipeline receive only the groups
-  and presentation policies it needs. `OutlineModifier.eraseMask` retains bitmap reference equality;
-  do not treat stack equality as a comparison of mask pixels when designing cache keys.
+  `ShapeModifier.fill` defaults to null and inherits the presentation background at render time;
+  a background-only `copy()` therefore updates the plate without copying colour state into the
+  stack. Editors, global options and presets use this inherited fill to preserve the previous
+  shared-background behaviour. An explicit fill instead belongs only to the shape, and a shape
+  colour preview updates that override without changing the presentation background.
+  The renderer receives the inherited background explicitly; it never guesses a fallback colour.
+  Read-only accessors remain as migration adapters; production construction, modifier writes and
+  test fixtures use the grouped API. The flat constructor has been removed. New modifiers belong
+  in their groups, not in these legacy adapters. Data-class equality includes the stack and source/presentation
+  options. Preferences, preset payloads and editor saved-state codecs keep their existing formats.
+  The next step is to finish removing compatibility accessors from editor controls and consumers,
+  and split the remaining source/export options. Equality deliberately retains inactive configuration;
+  a visual-only cache key may later normalize disabled groups, but session/recipe comparisons must
+  continue distinguishing their full configuration.
+  `OutlineModifier.eraseMask` retains bitmap reference equality; do not treat stack equality as
+  a comparison of mask pixels when designing cache keys.
 - **`ColorizerShader.kt`** builds the actual `Shader` and is called by BOTH `IconGenerator` and
   the editor preview — a second implementation in the UI would drift from the built output.
 - **`ui/ColorStyleSheet.kt`** is the one editor UI: a bottom sheet with a docked live preview

@@ -85,9 +85,9 @@ class IconGenerator(
     private val adaptiveIconScale = ADAPTIVE_ICON_SCALE
     private val resourceResolver by lazy { PackageResourceResolver(ctx) }
     private val materialYouPackSupport = mutableMapOf<String, Boolean>()
-    private val adjustmentPipeline by lazy { IconAdjustmentPipeline(ctx.resources, options.modifiers) }
+    private val adjustmentPipeline by lazy { IconAdjustmentPipeline(ctx.resources, options) }
     private val imageEditPipeline by lazy {
-        IconImageEditPipeline(ctx.resources, options, adjustmentPipeline)
+        IconImageEditPipeline(ctx.resources, options.modifiers, options.iconPresentation, adjustmentPipeline)
     }
     private val fallbackBitmapCache by lazy {
         object : LruCache<String, Bitmap>(FALLBACK_BITMAP_CACHE_BYTES) {

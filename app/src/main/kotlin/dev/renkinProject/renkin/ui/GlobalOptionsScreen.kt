@@ -147,6 +147,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import dev.renkinProject.renkin.icon.creator.ColorFill
+import dev.renkinProject.renkin.icon.creator.EffectModifier
+import dev.renkinProject.renkin.icon.creator.ModifierStack
+import dev.renkinProject.renkin.icon.creator.OutlineModifier
+import dev.renkinProject.renkin.icon.creator.ShapeModifier
+import dev.renkinProject.renkin.icon.creator.TransformModifier
 
 private const val GLOBAL_PREVIEW_DEBOUNCE_MS = 120L
 
@@ -436,40 +442,33 @@ internal class GlobalModifierState {
      * Modifier-only options for previewing/baking over an EXISTING icon: colorize as the image
      * edit (when on), plus scale, shape and outline. Sources are irrelevant to applyModifier.
      */
-    fun toModifierOptions(): GenerationOptions = GenerationOptions(
-        primarySource = Source.NONE,
-        primaryImageEdit = if (colorize) ImageEdit.COLORIZE else ImageEdit.NONE,
-        primaryTextType = TEXT_TYPE_DEFAULT,
-        primaryIconPack = "",
-        color = colorizerStyle.firstColor,
-        bgColor = if (shape != IconShape.NONE && !shapeCrop) shapeStyle.firstColor
-            else android.graphics.Color.TRANSPARENT,
-        vector = false,
-        materialYou = false,
-        themed = false,
-        override = true,
-        colorizeFlat = colorizerStyle.flat,
-        colorizeLighten = colorizerStyle.lighten,
-        colorizeMonochrome = colorizerStyle.monochrome,
-        colorizeInverse = colorizerStyle.inverse,
-        colorizerMode = colorizerStyle.mode,
-        colorizerGradientType = colorizerStyle.gradientType,
-        colorizerGradientColors = colorizerStyle.gradientStops,
-        colorizerGradientPositions = colorizerStyle.gradientPositions,
-        colorizerGradientAngle = colorizerStyle.gradientAngle,
-        // Only the plate shows the shape colour, so the style rides along with it.
-        backgroundStyle = if (shape != IconShape.NONE && !shapeCrop) {
-            shapeStyle
-        } else null,
-        iconScale = iconScale,
-        iconShape = shape,
-        iconShapeCrop = shapeCrop,
-        iconShapeScale = shapeScale,
-        outlineMode = if (outlineAdd) OutlineMode.ADD else OutlineMode.NONE,
-        outlineWidth = outlineWidth,
-        outlineColor = outlineStyle.firstColor,
-        outlineStyle = outlineStyle
-    )
+    fun toModifierOptions(): GenerationOptions {
+        val background = ColorFill(
+            if (shape != IconShape.NONE && !shapeCrop) shapeStyle.firstColor
+                else android.graphics.Color.TRANSPARENT,
+            shapeStyle.takeIf { shape != IconShape.NONE && !shapeCrop }
+        )
+        return GenerationOptions(
+            primarySource = Source.NONE,
+            primaryTextType = TEXT_TYPE_DEFAULT,
+            primaryIconPack = "",
+            bgColor = background.color,
+            backgroundStyle = background.style,
+            vector = false,
+            materialYou = false,
+            themed = false,
+            override = true,
+            modifiers = ModifierStack(
+                effect = EffectModifier(if (colorize) ImageEdit.COLORIZE else ImageEdit.NONE, colorizerStyle),
+                transform = TransformModifier(iconScale),
+                shape = ShapeModifier(shape, shapeCrop, shapeScale),
+                outline = OutlineModifier(
+                    if (outlineAdd) OutlineMode.ADD else OutlineMode.NONE,
+                    outlineWidth, ColorFill(outlineStyle.firstColor, outlineStyle)
+                )
+            )
+        )
+    }
 }
 
 private fun ColorizerStyle.roundedForSnapshot(): ColorizerStyle =
@@ -1383,10 +1382,9 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
     }
     val options = GenerationOptions(
         primarySource = Source.APPLICATION_ICON,
-        primaryImageEdit = imageEdit,
+        modifiers = ModifierStack(EffectModifier(imageEdit, ColorizerStyle(firstColor = iconColor.toArgb()))),
         primaryTextType = TEXT_TYPE_DEFAULT,
         primaryIconPack = "",
-        color = iconColor.toArgb(),
         bgColor = if (adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop) {
             adjustments.shapeColor.toArgb()
         } else android.graphics.Color.TRANSPARENT,

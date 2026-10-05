@@ -22,6 +22,18 @@ import dev.renkinProject.renkin.icon.creator.SHADOW_ANGLE_DEFAULT
 import dev.renkinProject.renkin.icon.creator.SHADOW_BLUR_DEFAULT
 import dev.renkinProject.renkin.icon.creator.SHADOW_DISTANCE_DEFAULT
 import dev.renkinProject.renkin.icon.creator.SHADOW_OPACITY_DEFAULT
+import android.graphics.Bitmap
+import dev.renkinProject.renkin.data.ImageEdit
+import dev.renkinProject.renkin.icon.creator.BackgroundBrushOperation
+import dev.renkinProject.renkin.icon.creator.BackgroundRemovalModifier
+import dev.renkinProject.renkin.icon.creator.ColorFill
+import dev.renkinProject.renkin.icon.creator.EdgeModifier
+import dev.renkinProject.renkin.icon.creator.EffectModifier
+import dev.renkinProject.renkin.icon.creator.ModifierStack
+import dev.renkinProject.renkin.icon.creator.OutlineModifier
+import dev.renkinProject.renkin.icon.creator.ShadowModifier
+import dev.renkinProject.renkin.icon.creator.ShapeModifier
+import dev.renkinProject.renkin.icon.creator.TransformModifier
 
 /**
  * The Modifier tab's per-icon adjustment state (edge tuning, background-removal tolerance, scale,
@@ -297,3 +309,29 @@ internal class AdjustmentState {
         }
     }
 }
+
+internal fun AdjustmentState.toModifierStack(
+    imageEdit: ImageEdit,
+    iconColor: Int,
+    outlineEraseMask: Bitmap?,
+    backgroundBrushOperations: List<BackgroundBrushOperation>
+): ModifierStack = ModifierStack(
+    effect = EffectModifier(
+        imageEdit = imageEdit,
+        colorizer = colorizerStyle.copy(firstColor = iconColor),
+        edges = EdgeModifier(edgeThreshold, edgeThreshold * 3f, edgeSmoothing, edgeContrast),
+        backgroundRemoval = BackgroundRemovalModifier(
+            bgRemovalTargets, bgRemovalTolerance,
+            backgroundBrushOperations.takeIf { imageEdit == ImageEdit.REMOVE_BACKGROUND } ?: emptyList()
+        ),
+        segments = colorizeLayers.takeIf { imageEdit == ImageEdit.COLORIZE_SEGMENTS } ?: emptyList()
+    ),
+    transform = TransformModifier(iconScale, iconOffsetX, iconOffsetY),
+    shape = ShapeModifier(iconShape, shapeCrop, shapeScale),
+    outline = OutlineModifier(outlineMode, outlineWidth, ColorFill(outlineColorStyle.firstColor, outlineColorStyle), outlineEraseMask),
+    shadow = shadowModifier()
+)
+
+internal fun AdjustmentState.shadowModifier(): ShadowModifier = ShadowModifier(
+    shadowBlur, shadowDistance, shadowAngle, shadowAllDirections, shadowColorStyle, shadowOpacity, shadowEnabled
+)

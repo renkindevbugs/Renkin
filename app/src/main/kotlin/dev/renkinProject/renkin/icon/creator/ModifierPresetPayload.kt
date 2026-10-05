@@ -249,56 +249,36 @@ private fun Map<String, String>.floatIn(key: String, range: ClosedFloatingPointR
  * pipeline as Apply without creating a temporary [AdjustmentState].
  */
 fun GenerationOptions.withModifierPreset(payload: ModifierPresetPayload): GenerationOptions {
-    var result = this
-    payload.effect?.let { effect ->
-        result = result.copy(
-            primaryImageEdit = effect.imageEdit,
-            edgeLowThreshold = effect.edgeThreshold,
-            edgeHighThreshold = effect.edgeThreshold * 3f,
-            edgeGaussianRadius = effect.edgeSmoothing,
-            edgeContrastNormalized = effect.edgeContrast,
-            bgRemovalTolerance = effect.backgroundTolerance,
-            colorizeLayers = emptyList()
-        ).withColorizerStyle(effect.colorizerStyle)
-    }
-    payload.iconScale?.let { result = result.copy(iconScale = it) }
-    payload.shape?.let { shape ->
-        result = result.copy(
-            iconShape = shape.shape,
-            iconShapeCrop = shape.crop,
-            iconShapeScale = shape.scale,
-            bgColor = if (shape.shape != IconShape.NONE && !shape.crop) {
-                shape.style.firstColor
-            } else {
-                result.bgColor
-            },
-            backgroundStyle = if (shape.shape != IconShape.NONE && !shape.crop) {
-                shape.style
-            } else {
-                result.backgroundStyle
-            }
+    val plate = payload.shape?.takeIf { it.shape != IconShape.NONE && !it.crop }?.style
+    val background = ColorFill(plate?.firstColor ?: bgColor, plate ?: backgroundStyle)
+    return copy(
+        bgColor = background.color,
+        backgroundStyle = background.style,
+        modifiers = modifiers.withModifierPreset(payload)
+    )
+}
+
+internal fun ModifierStack.withModifierPreset(payload: ModifierPresetPayload): ModifierStack {
+    val newEffect = payload.effect?.let { preset ->
+        effect.copy(
+            imageEdit = preset.imageEdit,
+            colorizer = preset.colorizerStyle,
+            edges = EdgeModifier(preset.edgeThreshold, preset.edgeThreshold * 3f, preset.edgeSmoothing, preset.edgeContrast),
+            backgroundRemoval = effect.backgroundRemoval.copy(tolerance = preset.backgroundTolerance),
+            segments = emptyList()
         )
-    }
-    payload.outline?.let { outline ->
-        result = result.copy(
-            outlineMode = outline.mode,
-            outlineWidth = outline.width,
-            outlineColor = outline.style.firstColor,
-            outlineStyle = outline.style
-        )
-    }
-    payload.shadow?.let { shadow ->
-        result = result.copy(
-            shadowEnabled = shadow.enabled,
-            shadowBlur = shadow.blur,
-            shadowDistance = shadow.distance,
-            shadowAngle = shadow.angle,
-            shadowAllDirections = shadow.allDirections,
-            shadowStyle = shadow.style,
-            shadowOpacity = shadow.opacity
-        )
-    }
-    return result
+    } ?: effect
+    return copy(
+        effect = newEffect,
+        transform = payload.iconScale?.let { transform.copy(scale = it) } ?: transform,
+        shape = payload.shape?.let { ShapeModifier(it.shape, it.crop, it.scale) } ?: shape,
+        outline = payload.outline?.let {
+            OutlineModifier(it.mode, it.width, ColorFill(it.style.firstColor, it.style), outline?.eraseMask)
+        } ?: outline,
+        shadow = payload.shadow?.let {
+            ShadowModifier(it.blur, it.distance, it.angle, it.allDirections, it.style, it.opacity, it.enabled)
+        } ?: shadow
+    )
 }
 
 // A damaged or missing style falls back to a plain colour rather than dropping the whole group: the

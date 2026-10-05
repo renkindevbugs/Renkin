@@ -104,7 +104,7 @@ class IconGenerationService(
         resource ?: return ValidatedPackIcon(null, sourceChanged = false)
         val packOptions = options.copy(
             primarySource = Source.ICON_PACK,
-            primaryImageEdit = ImageEdit.NONE,
+            modifiers = options.modifiers.copy(effect = options.modifiers.effect.copy(imageEdit = ImageEdit.NONE)),
             primaryIconPack = packPackage
         )
         return ValidatedPackIcon(getIcon(application, packOptions, resource), sourceChanged = false)

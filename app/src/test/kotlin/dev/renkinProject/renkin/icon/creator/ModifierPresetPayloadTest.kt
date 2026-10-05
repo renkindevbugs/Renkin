@@ -12,17 +12,17 @@ class ModifierPresetPayloadTest {
 
     private fun options() = GenerationOptions(
         primarySource = Source.APPLICATION_ICON,
-        primaryImageEdit = ImageEdit.NONE,
         primaryTextType = TextType.FULL_NAME,
         primaryIconPack = "",
-        color = Color.BLACK,
         bgColor = Color.TRANSPARENT,
         vector = false,
         materialYou = false,
         themed = false,
         override = true,
-        iconOffsetX = 0.2f,
-        iconOffsetY = -0.1f
+        modifiers = ModifierStack(
+            effect = EffectModifier(imageEdit = ImageEdit.NONE, colorizer = ColorizerStyle(firstColor = Color.BLACK)),
+            transform = TransformModifier(offsetX = 0.2f, offsetY = -0.1f),
+        )
     )
 
     @Test

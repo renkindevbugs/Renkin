@@ -4,6 +4,7 @@ import android.graphics.PorterDuff
 import dev.renkinProject.renkin.data.ImageEdit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -80,5 +81,24 @@ class ModifierStackTest {
             black.copy(monochrome = true, flat = true, lighten = true) to PorterDuff.Mode.MULTIPLY
         )
         cases.forEach { (style, mode) -> assertEquals(mode, style.blendMode) }
+    }
+
+    @Test
+    fun inactiveGroupsRetainConfigurationWithoutRasterizing() {
+        val stack = ModifierStack(
+            effect,
+            shape = ShapeModifier(IconShape.NONE, false, 0.7f, ColorFill(-1)),
+            outline = OutlineModifier(OutlineMode.NONE, 9f, ColorFill(-1)),
+            shadow = shadow.copy(enabled = false)
+        )
+        assertFalse(stack.hasAdjustments)
+        assertFalse(stack.requiresRasterization)
+        assertFalse(stack.flattensOutput)
+        val configuredShadow = requireNotNull(stack.shadow)
+        val enabled = stack.copy(shadow = configuredShadow.copy(enabled = true))
+        assertTrue(enabled.hasAdjustments)
+        assertTrue(enabled.flattensOutput)
+        assertEquals(shadow, enabled.shadow)
+        assertNotEquals(stack, stack.copy(shadow = configuredShadow.copy(blur = 9f)))
     }
 }

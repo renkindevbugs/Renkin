@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.icon.creator
 import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Color
+import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextType
@@ -15,6 +16,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.RuntimeEnvironment
 
 /**
  * The surfaces a gradient fills rather than tints: the shape plate, the themed background and the
@@ -109,17 +111,55 @@ class GradientFillTest {
         assertEquals(Color.BLACK, result.getPixel(1, 0))
     }
 
+    @Test
+    fun inheritedPlateFollowsBackgroundOnlyCopies() {
+        val base = plateOptions().copy(bgColor = Color.RED)
+        assertEquals(Color.RED, renderPlate(base).getPixel(128, 128))
+        val updated = base.copy(bgColor = Color.GREEN)
+        assertEquals(Color.GREEN, renderPlate(updated).getPixel(128, 128))
+        assertNull(updated.modifiers.shape?.fill)
+    }
+
+    @Test
+    fun inheritedPlateFollowsAChangedGradientBackground() {
+        val result = renderPlate(plateOptions().copy(backgroundStyle = leftToRight))
+        assertTrue(Color.red(result.getPixel(40, 128)) > 180)
+        assertTrue(Color.blue(result.getPixel(216, 128)) > 180)
+    }
+
+    @Test
+    fun explicitPlateFillIsIndependentOfPresentationBackground() {
+        val base = plateOptions()
+        val updated = base.copy(
+            bgColor = Color.RED,
+            backgroundStyle = leftToRight,
+            modifiers = base.modifiers.copy(shape = base.modifiers.shape!!.copy(fill = ColorFill(Color.GREEN)))
+        )
+        assertEquals(Color.GREEN, renderPlate(updated).getPixel(128, 128))
+    }
+
+    private fun plateOptions(): GenerationOptions {
+        val base = options()
+        return base.copy(modifiers = base.modifiers.copy(shape = ShapeModifier(IconShape.CIRCLE, false, 1f)))
+    }
+
+    private fun renderPlate(options: GenerationOptions): Bitmap {
+        val source = BitmapIconDrawable(Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888))
+        return IconAdjustmentPipeline(RuntimeEnvironment.getApplication().resources, options).apply(source).toBitmap()
+    }
+
     private fun options(backgroundStyle: ColorizerStyle? = null) = GenerationOptions(
         primarySource = Source.NONE,
-        primaryImageEdit = ImageEdit.NONE,
         primaryTextType = TextType.FULL_NAME,
         primaryIconPack = "",
-        color = Color.WHITE,
         bgColor = Color.WHITE,
         vector = false,
         materialYou = false,
         themed = false,
         override = true,
-        backgroundStyle = backgroundStyle
+        backgroundStyle = backgroundStyle,
+        modifiers = ModifierStack(
+            effect = EffectModifier(imageEdit = ImageEdit.NONE, colorizer = ColorizerStyle(firstColor = Color.WHITE)),
+        )
     )
 }

@@ -5,7 +5,7 @@ import android.graphics.PorterDuff
 import android.graphics.Shader
 import dev.renkinProject.renkin.data.ImageEdit
 
-internal data class ModifierStack(
+data class ModifierStack(
     val effect: EffectModifier,
     val transform: TransformModifier = TransformModifier(),
     val shape: ShapeModifier? = null,
@@ -16,14 +16,14 @@ internal data class ModifierStack(
         get() = !transform.isIdentity || requiresRasterization
 
     val requiresRasterization: Boolean
-        get() = shape != null || outline != null || shadow?.isVisible == true
+        get() = shape?.isEnabled == true || outline?.isEnabled == true || shadow?.isVisible == true
 
     // An outline alone retains the source's adaptive export flag and preview scale.
     val flattensOutput: Boolean
-        get() = shape != null || shadow?.isVisible == true
+        get() = shape?.isEnabled == true || shadow?.isVisible == true
 }
 
-internal data class EffectModifier(
+data class EffectModifier(
     val imageEdit: ImageEdit,
     val colorizer: ColorizerStyle,
     val edges: EdgeModifier = EdgeModifier(),
@@ -31,20 +31,20 @@ internal data class EffectModifier(
     val segments: List<SegmentLayer> = emptyList()
 )
 
-internal data class EdgeModifier(
+data class EdgeModifier(
     val lowThreshold: Float = 2.5f,
     val highThreshold: Float = 7.5f,
     val smoothing: Float = 2f,
     val normalizeContrast: Boolean = false
 )
 
-internal data class BackgroundRemovalModifier(
+data class BackgroundRemovalModifier(
     val targets: List<Int> = emptyList(),
     val tolerance: Float = 0.1f,
     val brushOperations: List<BackgroundBrushOperation> = emptyList()
 )
 
-internal data class TransformModifier(
+data class TransformModifier(
     val scale: Float = 1f,
     val offsetX: Float = 0f,
     val offsetY: Float = 0f
@@ -52,31 +52,37 @@ internal data class TransformModifier(
     val isIdentity: Boolean get() = scale == 1f && offsetX == 0f && offsetY == 0f
 }
 
-internal data class ShapeModifier(
+data class ShapeModifier(
     val shape: IconShape,
     val crop: Boolean,
     val scale: Float,
-    val fill: ColorFill
-)
+    // Null inherits the presentation background; an explicit fill belongs only to this shape.
+    val fill: ColorFill? = null
+) {
+    val isEnabled: Boolean get() = shape != IconShape.NONE
+}
 
-internal data class OutlineModifier(
+data class OutlineModifier(
     val mode: OutlineMode,
     val width: Float,
     val fill: ColorFill,
     val eraseMask: Bitmap? = null
-)
+) {
+    val isEnabled: Boolean get() = mode != OutlineMode.NONE
+}
 
-internal data class ShadowModifier(
+data class ShadowModifier(
     val blur: Float,
     val distance: Float,
     val angle: Float,
     val allDirections: Boolean,
     val style: ColorizerStyle,
-    val opacity: Float
+    val opacity: Float,
+    val enabled: Boolean = true
 ) {
     val isVisible: Boolean
         get() {
-            if (!(opacity > 0f && (blur > 0f || distance > 0f))) return false
+            if (!(enabled && opacity > 0f && (blur > 0f || distance > 0f))) return false
             val colors = if (style.mode == ColorizerMode.GRADIENT) style.allGradientColors else listOf(style.firstColor)
             return colors.any { (it ushr 24) > 0 }
         }
@@ -84,7 +90,7 @@ internal data class ShadowModifier(
 
 // Legacy options distinguish a flat fallback colour from an optional gradient's first stop.
 // Retain both values: a source-specific background must not inherit an editor plate colour.
-internal data class ColorFill(val color: Int, val style: ColorizerStyle? = null) {
+data class ColorFill(val color: Int, val style: ColorizerStyle? = null) {
     fun shader(width: Int, height: Int): Shader? {
         val gradient = style?.takeIf { it.mode == ColorizerMode.GRADIENT } ?: return null
         return buildColorizerShader(

@@ -73,30 +73,34 @@ class IconGeneratorTest {
         colorizeLayers: List<SegmentLayer> = emptyList()
     ) = GenerationOptions(
         primarySource = source,
-        primaryImageEdit = imageEdit,
         primaryTextType = TextType.ONE_LETTER,
         primaryIconPack = "",
-        color = color,
         bgColor = bgColor,
         vector = false,
         materialYou = false,
         themed = themed,
         override = override,
-        iconScale = iconScale,
-        iconOffsetX = iconOffsetX,
-        iconOffsetY = iconOffsetY,
         applicationIconVariant = applicationIconVariant,
         invertMonochrome = invertMonochrome,
-        iconShape = iconShape,
-        colorizeFlat = colorizeFlat,
-        colorizeMonochrome = colorizeMonochrome,
-        colorizeInverse = colorizeInverse,
-        colorizerMode = colorizerMode,
-        colorizerGradientType = colorizerGradientType,
-        colorizerGradientColors = colorizerGradientColors,
-        colorizerGradientAngle = colorizerGradientAngle,
         useFullApplicationIcon = useFullApplicationIcon,
-        colorizeLayers = colorizeLayers
+        modifiers = ModifierStack(
+            effect = EffectModifier(
+                imageEdit = imageEdit,
+                colorizer = ColorizerStyle(
+                    firstColor = color,
+                    flat = colorizeFlat,
+                    monochrome = colorizeMonochrome,
+                    inverse = colorizeInverse,
+                    mode = colorizerMode,
+                    gradientType = colorizerGradientType,
+                    gradientStops = colorizerGradientColors,
+                    gradientAngle = colorizerGradientAngle
+                ),
+                segments = colorizeLayers
+            ),
+            transform = TransformModifier(scale = iconScale, offsetX = iconOffsetX, offsetY = iconOffsetY),
+            shape = ShapeModifier(shape = iconShape, crop = true, scale = 1f),
+        )
     )
 
     private fun app(

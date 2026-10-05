@@ -22,9 +22,12 @@ import dev.renkinProject.renkin.extension.scaleFromCenter
  */
 internal class IconAdjustmentPipeline(
     private val resources: Resources,
-    private val modifiers: ModifierStack
+    private val modifiers: ModifierStack,
+    private val background: ColorFill
 ) {
-    constructor(resources: Resources, options: GenerationOptions) : this(resources, options.modifiers)
+    constructor(resources: Resources, options: GenerationOptions) : this(
+        resources, options.modifiers, ColorFill(options.bgColor, options.backgroundStyle)
+    )
 
     fun apply(icon: IconPackDrawable): IconPackDrawable {
         if (!modifiers.hasAdjustments) return icon
@@ -35,7 +38,7 @@ internal class IconAdjustmentPipeline(
                 offsetX = transform.offsetX / ADAPTIVE_ICON_SCALE,
                 offsetY = transform.offsetY / ADAPTIVE_ICON_SCALE
             ))
-            val layerAdjustments = IconAdjustmentPipeline(resources, layerModifiers)
+            val layerAdjustments = IconAdjustmentPipeline(resources, layerModifiers, background)
             fun transformLayer(bitmap: Bitmap): Bitmap = layerAdjustments.apply(BitmapIconDrawable(bitmap)).toBitmap()
             return icon.withForeground(transformLayer(icon.foreground), icon.monochrome?.let(::transformLayer))
         }
@@ -75,7 +78,7 @@ internal class IconAdjustmentPipeline(
                 )
             }
         }
-        modifiers.outline?.let { outline ->
+        modifiers.outline?.takeIf { it.isEnabled }?.let { outline ->
             val preOutline = bitmap
             bitmap = IconOutline.apply(
                 preOutline,
@@ -88,7 +91,7 @@ internal class IconAdjustmentPipeline(
                 bitmap = IconOutline.eraseOutline(bitmap, preOutline, mask)
             }
         }
-        modifiers.shape?.let { shape -> bitmap = applyShape(bitmap, shape) }
+        modifiers.shape?.takeIf { it.isEnabled }?.let { shape -> bitmap = applyShape(bitmap, shape) }
         modifiers.shadow?.takeIf { it.isVisible }?.let { shadow ->
             bitmap = IconShadow.apply(
                 source = bitmap,
@@ -148,8 +151,9 @@ internal class IconAdjustmentPipeline(
 
         val content = newArgbBitmap(size, size) { canvas ->
             if (!shape.crop) {
-                paint.shader = shape.fill.shader(size, size)
-                paint.color = shape.fill.color
+                val fill = shape.fill ?: background
+                paint.shader = fill.shader(size, size)
+                paint.color = fill.color
                 canvas.drawPath(path, paint)
                 paint.shader = null
                 paint.color = -0x1

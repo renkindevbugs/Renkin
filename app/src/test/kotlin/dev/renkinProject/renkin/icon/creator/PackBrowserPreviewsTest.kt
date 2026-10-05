@@ -72,15 +72,16 @@ class PackBrowserPreviewsTest {
 
     private fun options(color: Int = 0xFF000000.toInt()) = GenerationOptions(
         primarySource = Source.APPLICATION_NAME,
-        primaryImageEdit = ImageEdit.NONE,
         primaryTextType = TextType.FULL_NAME,
         primaryIconPack = "",
-        color = color,
         bgColor = 0,
         vector = false,
         materialYou = false,
         themed = false,
-        override = true
+        override = true,
+        modifiers = ModifierStack(
+            effect = EffectModifier(imageEdit = ImageEdit.NONE, colorizer = ColorizerStyle(firstColor = color)),
+        )
     )
 
     @Test
