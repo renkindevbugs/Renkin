@@ -410,9 +410,25 @@ identically and none of them re-implements the maths.
 - **`GenerationOptions.withColorizerStyle`** is the common transfer into generation for
   preferences, global modifiers, editor adjustments and reusable presets. It changes all colour
   fields together and preserves the caller's image-edit choice and segment layers. The editor's
-  `asColorizePreview` explicitly selects plain Colorize and clears segments. GenerationOptions
-  still exposes its existing flat constructor in this first increment; moving that boundary to
-  typed modifier groups belongs to the next increment.
+  `asColorizePreview` explicitly selects plain Colorize and clears segments.
+- **`ModifierStack`** groups image effects (colour style, segments, edge detection and background
+  removal), transform, shape, outline and shadow. `GenerationOptions` derives one stack per
+  options snapshot. `IconImageEditPipeline` reads its effect group; `IconAdjustmentPipeline`
+  consumes the stack directly. Shared predicates decide whether adjustments are present, pixels
+  are required and the output loses its adaptive presentation. Transform-only operations retain
+  vectors or adaptive layers, while outline alone retains an existing bitmap source's adaptive
+  export flag and preview scale. A disabled shape, outline or shadow is represented by null;
+  a configured but invisible shadow also leaves the source presentation unchanged. Render order
+  remains image edit → transform → outline → shape → shadow.
+  The flat `GenerationOptions` constructor remains a compatibility adapter for existing UI,
+  preferences and presets; data-class equality and saved formats still use its original fields.
+  The immediate next step is to make the stack a constructor-owned field of `GenerationOptions`
+  and have editor state, presets and global preferences build its groups directly. Flat accessors
+  should then become temporary adapters and be removed with their callers. Complete this ownership
+  migration before adding more modifiers; the derived stack currently adds a mapping boundary.
+  Splitting source/export options will also let the image-edit pipeline receive only the groups
+  and presentation policies it needs. `OutlineModifier.eraseMask` retains bitmap reference equality;
+  do not treat stack equality as a comparison of mask pixels when designing cache keys.
 - **`ColorizerShader.kt`** builds the actual `Shader` and is called by BOTH `IconGenerator` and
   the editor preview — a second implementation in the UI would drift from the built output.
 - **`ui/ColorStyleSheet.kt`** is the one editor UI: a bottom sheet with a docked live preview

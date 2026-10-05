@@ -22,93 +22,90 @@ import dev.renkinProject.renkin.extension.scaleFromCenter
  */
 internal class IconAdjustmentPipeline(
     private val resources: Resources,
-    private val options: GenerationOptions
+    private val modifiers: ModifierStack
 ) {
-    fun apply(icon: IconPackDrawable): IconPackDrawable {
-        if (!options.hasIconAdjustments()) return icon
-        val offset = options.iconOffsetX != 0f || options.iconOffsetY != 0f
-        val shaped = options.iconShape != IconShape.NONE
-        val outlined = options.outlineMode != OutlineMode.NONE
-        val shadowed = options.hasVisibleShadow()
+    constructor(resources: Resources, options: GenerationOptions) : this(resources, options.modifiers)
 
-        if (icon is AdaptiveIconPackDrawable && !shaped && !outlined && !shadowed) {
-            val layerOptions = options.copy(
-                iconOffsetX = options.iconOffsetX / ADAPTIVE_ICON_SCALE,
-                iconOffsetY = options.iconOffsetY / ADAPTIVE_ICON_SCALE
-            )
-            val layerAdjustments = IconAdjustmentPipeline(resources, layerOptions)
-            fun transform(bitmap: Bitmap): Bitmap = layerAdjustments.apply(BitmapIconDrawable(bitmap)).toBitmap()
-            return icon.withForeground(transform(icon.foreground), icon.monochrome?.let(::transform))
+    fun apply(icon: IconPackDrawable): IconPackDrawable {
+        if (!modifiers.hasAdjustments) return icon
+        val transform = modifiers.transform
+
+        if (icon is AdaptiveIconPackDrawable && !modifiers.requiresRasterization) {
+            val layerModifiers = modifiers.copy(transform = transform.copy(
+                offsetX = transform.offsetX / ADAPTIVE_ICON_SCALE,
+                offsetY = transform.offsetY / ADAPTIVE_ICON_SCALE
+            ))
+            val layerAdjustments = IconAdjustmentPipeline(resources, layerModifiers)
+            fun transformLayer(bitmap: Bitmap): Bitmap = layerAdjustments.apply(BitmapIconDrawable(bitmap)).toBitmap()
+            return icon.withForeground(transformLayer(icon.foreground), icon.monochrome?.let(::transformLayer))
         }
 
         val vectorAdjusted = modifierVector(icon)?.withModifierTransform(
-            options.iconScale,
-            options.iconOffsetX,
-            options.iconOffsetY
+            transform.scale,
+            transform.offsetX,
+            transform.offsetY
         )
-        if (vectorAdjusted != null && !shaped && !outlined && !shadowed) return vectorAdjusted
+        if (vectorAdjusted != null && !modifiers.requiresRasterization) return vectorAdjusted
 
         var bitmap = vectorAdjusted?.toModifierBitmap() ?: icon.toBitmap()
         if (bitmap.width <= 0 || bitmap.height <= 0) return icon
 
         val source = icon as? BitmapIconDrawable
-        val previewScaleToBake = previewScaleToBakeForShape(icon, shaped || shadowed)
+        val previewScaleToBake = previewScaleToBakeForShape(icon, modifiers.flattensOutput)
         if (previewScaleToBake != 1f) {
             bitmap = bitmap.scaleFromCenter(previewScaleToBake)
         }
 
-        if (vectorAdjusted == null && (offset || options.iconScale != 1f)) {
+        if (vectorAdjusted == null && !transform.isIdentity) {
             val sourceBitmap = bitmap
             // Keep position and scale in one raster pass. Translating into an intermediate bitmap
             // clipped off-canvas artwork before scaling could bring it back into view.
             bitmap = newArgbBitmap(sourceBitmap.width, sourceBitmap.height) { canvas ->
                 canvas.scale(
-                    options.iconScale,
-                    options.iconScale,
+                    transform.scale,
+                    transform.scale,
                     sourceBitmap.width / 2f,
                     sourceBitmap.height / 2f
                 )
                 canvas.drawBitmap(
                     sourceBitmap,
-                    options.iconOffsetX * sourceBitmap.width,
-                    options.iconOffsetY * sourceBitmap.height,
+                    transform.offsetX * sourceBitmap.width,
+                    transform.offsetY * sourceBitmap.height,
                     Paint(Paint.FILTER_BITMAP_FLAG)
                 )
             }
         }
-        if (outlined) {
+        modifiers.outline?.let { outline ->
             val preOutline = bitmap
             bitmap = IconOutline.apply(
                 preOutline,
-                options.outlineMode,
-                options.outlineWidth * maxOf(preOutline.width, preOutline.height) / 256f,
-                options.outlineColor,
-                options.outlineStyle
+                outline.mode,
+                outline.width * maxOf(preOutline.width, preOutline.height) / 256f,
+                outline.fill.color,
+                outline.fill.style
             )
-            options.outlineEraseMask?.let { mask ->
+            outline.eraseMask?.let { mask ->
                 bitmap = IconOutline.eraseOutline(bitmap, preOutline, mask)
             }
         }
-        if (shaped) {
-            bitmap = applyShape(bitmap)
-        }
-        if (shadowed) {
+        modifiers.shape?.let { shape -> bitmap = applyShape(bitmap, shape) }
+        modifiers.shadow?.takeIf { it.isVisible }?.let { shadow ->
             bitmap = IconShadow.apply(
                 source = bitmap,
-                blur = options.shadowBlur,
-                distance = options.shadowDistance,
-                angle = options.shadowAngle,
-                allDirections = options.shadowAllDirections,
-                style = options.shadowStyle,
-                opacity = options.shadowOpacity
+                blur = shadow.blur,
+                distance = shadow.distance,
+                angle = shadow.angle,
+                allDirections = shadow.allDirections,
+                style = shadow.style,
+                opacity = shadow.opacity
             )
         }
 
         return BitmapIconDrawable(
             resources,
             bitmap,
-            exportAsAdaptiveIcon = if (shaped || shadowed) false else source?.isAdaptiveIcon() ?: false,
-            previewScale = if (shaped || shadowed) 1f else source?.previewScale ?: 1f
+            exportAsAdaptiveIcon = if (modifiers.flattensOutput) false else source?.isAdaptiveIcon() ?: false,
+            previewScale = if (modifiers.flattensOutput) 1f else source?.previewScale ?: 1f
         )
     }
 
@@ -138,21 +135,21 @@ internal class IconAdjustmentPipeline(
         }
     }
 
-    private fun applyShape(source: Bitmap): Bitmap {
+    private fun applyShape(source: Bitmap, shape: ShapeModifier): Bitmap {
         val size = maxOf(source.width, source.height, 256)
         val sizeF = size.toFloat()
-        val path = IconShapes.path(options.iconShape, sizeF * options.iconShapeScale)
+        val path = IconShapes.path(shape.shape, sizeF * shape.scale)
             ?: return source
         path.offset(
-            sizeF * (1f - options.iconShapeScale) / 2f,
-            sizeF * (1f - options.iconShapeScale) / 2f
+            sizeF * (1f - shape.scale) / 2f,
+            sizeF * (1f - shape.scale) / 2f
         )
         val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
         val content = newArgbBitmap(size, size) { canvas ->
-            if (!options.iconShapeCrop) {
-                paint.shader = options.backgroundShader(size, size)
-                paint.color = options.bgColor
+            if (!shape.crop) {
+                paint.shader = shape.fill.shader(size, size)
+                paint.color = shape.fill.color
                 canvas.drawPath(path, paint)
                 paint.shader = null
                 paint.color = -0x1

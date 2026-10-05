@@ -297,4 +297,3 @@ internal class AdjustmentState {
         }
     }
 }
-

@@ -85,7 +85,7 @@ class IconGenerator(
     private val adaptiveIconScale = ADAPTIVE_ICON_SCALE
     private val resourceResolver by lazy { PackageResourceResolver(ctx) }
     private val materialYouPackSupport = mutableMapOf<String, Boolean>()
-    private val adjustmentPipeline by lazy { IconAdjustmentPipeline(ctx.resources, options) }
+    private val adjustmentPipeline by lazy { IconAdjustmentPipeline(ctx.resources, options.modifiers) }
     private val imageEditPipeline by lazy {
         IconImageEditPipeline(ctx.resources, options, adjustmentPipeline)
     }
@@ -885,10 +885,11 @@ class IconGenerator(
         // here stacks the source safe zone on top of it; use the already-normalised bitmap frame.
         if (options.themed) return imageEditPipeline.colorize(bitmapIcon, mode)
         // Segment layers are per-pixel, which the vector recolour path cannot express: bake.
-        if (options.colorizeLayers.isNotEmpty() ||
-            options.colorizeLighten ||
-            options.colorizerMode == ColorizerMode.GRADIENT ||
-            options.colorizeMonochrome ||
+        val effect = options.modifiers.effect
+        if (effect.segments.isNotEmpty() ||
+            effect.colorizer.lighten ||
+            effect.colorizer.mode == ColorizerMode.GRADIENT ||
+            effect.colorizer.monochrome ||
             parsedIcon == null
         ) {
             return imageEditPipeline.colorize(bitmapIcon, mode)

@@ -185,6 +185,27 @@ data class GenerationOptions(
     val materialYouPackCustomBackground: ColorizerStyle? = null,
     val useFullApplicationIcon: Boolean = false
 ) {
+    // Constructed once per immutable options snapshot, outside data-class equality/persistence.
+    internal val modifiers = ModifierStack(
+        effect = EffectModifier(
+            imageEdit = primaryImageEdit,
+            colorizer = colorizerStyle,
+            edges = EdgeModifier(edgeLowThreshold, edgeHighThreshold, edgeGaussianRadius, edgeContrastNormalized),
+            backgroundRemoval = BackgroundRemovalModifier(bgRemovalTargets, bgRemovalTolerance, backgroundBrushOperations),
+            segments = colorizeLayers
+        ),
+        transform = TransformModifier(iconScale, iconOffsetX, iconOffsetY),
+        shape = if (iconShape != IconShape.NONE) {
+            ShapeModifier(iconShape, iconShapeCrop, iconShapeScale, ColorFill(bgColor, backgroundStyle))
+        } else null,
+        outline = if (outlineMode != OutlineMode.NONE) {
+            OutlineModifier(outlineMode, outlineWidth, ColorFill(outlineColor, outlineStyle), outlineEraseMask)
+        } else null,
+        shadow = if (shadowEnabled) {
+            ShadowModifier(shadowBlur, shadowDistance, shadowAngle, shadowAllDirections, shadowStyle, shadowOpacity)
+        } else null
+    )
+
     companion object {
         /**
          * Builds the options from the stored preferences. [override] defaults to the
@@ -314,17 +335,8 @@ fun Preferences.colorStyle(
  * The shader [backgroundStyle] asks for, or null when the flat [bgColor] is what to paint. Kept
  * here so every background surface — themed fill, shape plate, previews — asks the same question.
  */
-fun GenerationOptions.backgroundShader(width: Int, height: Int): android.graphics.Shader? {
-    val style = backgroundStyle?.takeIf { it.mode == ColorizerMode.GRADIENT } ?: return null
-    return buildColorizerShader(
-        style.allGradientColors,
-        style.gradientType,
-        style.gradientAngle,
-        width,
-        height,
-        style.gradientPositions
-    )
-}
+fun GenerationOptions.backgroundShader(width: Int, height: Int): android.graphics.Shader? =
+    ColorFill(bgColor, backgroundStyle).shader(width, height)
 
 /** Transfers every colourize field together; callers decide the image edit and segment layers. */
 fun GenerationOptions.withColorizerStyle(style: ColorizerStyle): GenerationOptions = copy(
@@ -358,36 +370,18 @@ internal val GenerationOptions.colorizerStyle: ColorizerStyle
 // Colorize blend for bitmap icons: SRC_IN replaces the icon's colours with the picked one (flat
 // fill), SCREEN lightens toward it, MULTIPLY tints them. Vectors recolour flat unless baked.
 internal val GenerationOptions.colorizeBlendMode: android.graphics.PorterDuff.Mode
-    get() = when {
-        colorizeMonochrome -> android.graphics.PorterDuff.Mode.MULTIPLY
-        colorizeFlat -> android.graphics.PorterDuff.Mode.SRC_IN
-        colorizeLighten -> android.graphics.PorterDuff.Mode.SCREEN
-        else -> android.graphics.PorterDuff.Mode.MULTIPLY
-    }
+    get() = modifiers.effect.colorizer.blendMode
 
 // Position, scale, shape, outline and shadow: everything [IconAdjustmentPipeline] applies after
 // the image edit. Callers that skip work when nothing changes must all agree on this list.
-fun GenerationOptions.hasIconAdjustments(): Boolean =
-    iconOffsetX != 0f || iconOffsetY != 0f || iconScale != 1f ||
-        iconShape != IconShape.NONE || outlineMode != OutlineMode.NONE || hasVisibleShadow()
+fun GenerationOptions.hasIconAdjustments(): Boolean = modifiers.hasAdjustments
 
 fun GenerationOptions.hasVisibleModifierEffect(): Boolean =
-    primaryImageEdit != ImageEdit.NONE || hasIconAdjustments() ||
+    modifiers.effect.imageEdit != ImageEdit.NONE || modifiers.hasAdjustments ||
         materialYouPackForeground != null || materialYouPackBackground != null ||
         materialYouPackStrokeScale != 1f
 
-fun GenerationOptions.hasVisibleShadow(): Boolean =
-    shadowEnabled && shadowOpacity > 0f && shadowHasVisibleColor() &&
-        (shadowBlur > 0f || shadowDistance > 0f)
-
-private fun GenerationOptions.shadowHasVisibleColor(): Boolean {
-    val colors = if (shadowStyle.mode == ColorizerMode.GRADIENT) {
-        shadowStyle.allGradientColors
-    } else {
-        listOf(shadowStyle.firstColor)
-    }
-    return colors.any { android.graphics.Color.alpha(it) > 0 }
-}
+fun GenerationOptions.hasVisibleShadow(): Boolean = modifiers.shadow?.isVisible == true
 
 /** Letter-case transform for text icons (per-app option; not persisted globally). */
 enum class TextCase { AS_IS, UPPER, LOWER }

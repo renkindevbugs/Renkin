@@ -39,8 +39,11 @@ internal class IconImageEditPipeline(
     private val options: GenerationOptions,
     private val adjustments: IconAdjustmentPipeline = IconAdjustmentPipeline(resources, options)
 ) {
+    private val effect = options.modifiers.effect
+    private val colorizer = effect.colorizer
+
     private val colorizeColor
-        get() = if (options.colorizeInverse) invertArgb(options.color) else options.color
+        get() = if (colorizer.inverse) invertArgb(colorizer.firstColor) else colorizer.firstColor
 
     fun apply(icon: IconPackDrawable, imageEdit: ImageEdit): IconPackDrawable {
         val source = if (icon is AdaptiveIconPackDrawable) restyleMaterialYouPackIcon(icon) else icon
@@ -48,7 +51,7 @@ internal class IconImageEditPipeline(
     }
 
     fun applyPrimary(icon: IconPackDrawable): IconPackDrawable =
-        apply(icon, options.primaryImageEdit)
+        apply(icon, effect.imageEdit)
 
     internal fun applyEdit(icon: IconPackDrawable, imageEdit: ImageEdit): IconPackDrawable {
         if (imageEdit == ImageEdit.NONE) return icon
@@ -57,17 +60,17 @@ internal class IconImageEditPipeline(
             if (options.themed) {
                 return applyEdit(BitmapIconDrawable(resources, icon.foreground), imageEdit)
             }
-            if (imageEdit == ImageEdit.COLORIZE && options.colorizeLayers.isEmpty()) {
+            if (imageEdit == ImageEdit.COLORIZE && effect.segments.isEmpty()) {
                 val foreground = colorizeAdaptiveForeground(icon.foreground)
                 return icon.withForeground(foreground)
             }
-            return applyToBitmap(icon.toBitmap(), imageEdit, options.colorizeBlendMode)
+            return applyToBitmap(icon.toBitmap(), imageEdit, colorizer.blendMode)
         }
 
         if (imageEdit == ImageEdit.COLORIZE &&
-            options.colorizerMode == ColorizerMode.SINGLE_COLOR &&
-            !options.colorizeLighten &&
-            !options.colorizeMonochrome
+            colorizer.mode == ColorizerMode.SINGLE_COLOR &&
+            !colorizer.lighten &&
+            !colorizer.monochrome
         ) {
             adjustments.modifierVector(icon)?.let { vector ->
                 vector.root.setReferenceColorPaths(SolidColor(Color(colorizeColor)))
@@ -80,13 +83,13 @@ internal class IconImageEditPipeline(
             val copy = ImageVectorDrawable(icon.toImageVector())
             return when (imageEdit) {
                 ImageEdit.NONE -> icon
-                ImageEdit.COLORIZE_SEGMENTS -> colorize(copy.toBitmap(), options.colorizeBlendMode)
+                ImageEdit.COLORIZE_SEGMENTS -> colorize(copy.toBitmap(), colorizer.blendMode)
                 ImageEdit.COLORIZE -> {
-                    if (options.colorizeLighten ||
-                        options.colorizerMode == ColorizerMode.GRADIENT ||
-                        options.colorizeMonochrome
+                    if (colorizer.lighten ||
+                        colorizer.mode == ColorizerMode.GRADIENT ||
+                        colorizer.monochrome
                     ) {
-                        colorize(copy.toBitmap(), options.colorizeBlendMode)
+                        colorize(copy.toBitmap(), colorizer.blendMode)
                     } else {
                         copy.root.setReferenceColorPaths(SolidColor(Color(colorizeColor)))
                         copy.tintColor = Color.Unspecified
@@ -99,7 +102,7 @@ internal class IconImageEditPipeline(
             }
         }
 
-        val modified = applyToBitmap(icon.toBitmap(), imageEdit, options.colorizeBlendMode)
+        val modified = applyToBitmap(icon.toBitmap(), imageEdit, colorizer.blendMode)
         return preserveBitmapPresentation(icon, modified)
     }
 
@@ -116,15 +119,15 @@ internal class IconImageEditPipeline(
     }
 
     private fun colorizeAdaptiveForeground(source: Bitmap): Bitmap {
-        if (options.colorizerMode != ColorizerMode.GRADIENT) {
-            return colorize(source, options.colorizeBlendMode).toBitmap()
+        if (colorizer.mode != ColorizerMode.GRADIENT) {
+            return colorize(source, colorizer.blendMode).toBitmap()
         }
-        val gradient = requireNotNull(gradientPixels(options.colorizerStyle, source.width, source.height))
-        val base = if (options.colorizeMonochrome) monochromeBitmap(source, options.colorizeInverse) else source
+        val gradient = requireNotNull(gradientPixels(colorizer, source.width, source.height))
+        val base = if (colorizer.monochrome) monochromeBitmap(source, colorizer.inverse) else source
         val pixels = IntArray(source.width * source.height)
         base.getPixels(pixels, 0, source.width, 0, 0, source.width, source.height)
-        val solid = options.colorizeBlendMode == PorterDuff.Mode.SRC_IN
-        val lighten = options.colorizeBlendMode == PorterDuff.Mode.SCREEN
+        val solid = colorizer.blendMode == PorterDuff.Mode.SRC_IN
+        val lighten = colorizer.blendMode == PorterDuff.Mode.SCREEN
         for (index in pixels.indices) {
             val original = pixels[index]
             val tint = gradient[index]
@@ -145,7 +148,7 @@ internal class IconImageEditPipeline(
                 if (solid) (alpha * tintAlpha).toInt() else alpha,
                 channel(16), channel(8), channel(0)
             )
-            pixels[index] = if (options.colorizeInverse && !options.colorizeMonochrome) invertArgb(colored) else colored
+            pixels[index] = if (colorizer.inverse && !colorizer.monochrome) invertArgb(colored) else colored
         }
         return Bitmap.createBitmap(pixels, source.width, source.height, Bitmap.Config.ARGB_8888).apply {
             density = source.density
@@ -180,18 +183,18 @@ internal class IconImageEditPipeline(
         }
 
     internal fun colorize(bitmap: Bitmap, mode: PorterDuff.Mode): IconPackDrawable {
-        if (options.colorizeLayers.isNotEmpty()) {
+        if (effect.segments.isNotEmpty()) {
             return colorizedBitmap(
                 addBackground(
-                    applySegmentLayers(themedColorizeSource(bitmap), options.colorizeLayers)
+                    applySegmentLayers(themedColorizeSource(bitmap), effect.segments)
                 )
             )
         }
-        if (options.colorizerMode == ColorizerMode.GRADIENT) {
+        if (colorizer.mode == ColorizerMode.GRADIENT) {
             return colorizedBitmap(colorizeWithGradient(bitmap))
         }
-        if (options.colorizeMonochrome) {
-            return defaultBitmap(monochromeBitmap(bitmap, options.colorizeInverse))
+        if (colorizer.monochrome) {
+            return defaultBitmap(monochromeBitmap(bitmap, colorizer.inverse))
         }
         return colorizedBitmap(colorizeBitmap(bitmap, mode))
     }
@@ -205,7 +208,7 @@ internal class IconImageEditPipeline(
     )
 
     internal fun colorizeVector(vector: ImageVectorDrawable): IconPackDrawable {
-        if (options.colorizeLighten) return colorize(vector.toBitmap(), options.colorizeBlendMode)
+        if (colorizer.lighten) return colorize(vector.toBitmap(), colorizer.blendMode)
         vector.root.editPathColors(
             SolidColor(Color.Unspecified),
             SolidColor(Color(colorizeColor))
@@ -229,12 +232,12 @@ internal class IconImageEditPipeline(
         val detector = CannyEdgeDetector()
         detector.process(
             bitmap.asImageBitmap(),
-            options.color,
+            colorizer.firstColor,
             DetectionOptions().apply {
-                lowThreshold = options.edgeLowThreshold
-                highThreshold = options.edgeHighThreshold
-                gaussianKernelRadius = options.edgeGaussianRadius
-                contrastNormalized = options.edgeContrastNormalized
+                lowThreshold = effect.edges.lowThreshold
+                highThreshold = effect.edges.highThreshold
+                gaussianKernelRadius = effect.edges.smoothing
+                contrastNormalized = effect.edges.normalizeContrast
             }
         )
         return if (options.themed) {
@@ -246,15 +249,15 @@ internal class IconImageEditPipeline(
 
     private fun removeBackground(bitmap: Bitmap): IconPackDrawable {
         val cleaned = bitmap.removeMatchedBackground(
-            targets = options.bgRemovalTargets,
-            tolerance = options.bgRemovalTolerance
+            targets = effect.backgroundRemoval.targets,
+            tolerance = effect.backgroundRemoval.tolerance
         )
         // Hand strokes come last: they are corrections to whatever the colour match decided, and
         // restoring reads from the untouched artwork rather than from the cleaned result.
         return defaultBitmap(
             cleaned.applyBackgroundBrush(
                 original = bitmap,
-                operations = options.backgroundBrushOperations
+                operations = effect.backgroundRemoval.brushOperations
             )
         )
     }
@@ -262,20 +265,20 @@ internal class IconImageEditPipeline(
     private fun colorizeBitmap(icon: Bitmap, mode: PorterDuff.Mode): Bitmap {
         val source = themedColorizeSource(icon)
         val coloredIcon = if (mode == PorterDuff.Mode.SCREEN) {
-            screenColorizeBitmap(source, options.color)
+            screenColorizeBitmap(source, colorizer.firstColor)
         } else {
             source.emptyLike().also { result ->
                 Canvas(result).drawBitmap(
                     source,
                     0f,
                     0f,
-                    Paint().apply { colorFilter = PorterDuffColorFilter(options.color, mode) }
+                    Paint().apply { colorFilter = PorterDuffColorFilter(colorizer.firstColor, mode) }
                 )
             }
         }
         if (source !== icon) source.recycle()
         val result = addBackground(coloredIcon)
-        return if (options.colorizeInverse) invertBitmapColors(result) else result
+        return if (colorizer.inverse) invertBitmapColors(result) else result
     }
 
     private fun themedColorizeSource(icon: Bitmap): Bitmap {
@@ -291,12 +294,12 @@ internal class IconImageEditPipeline(
     private fun colorizeWithGradient(icon: Bitmap): Bitmap {
         val centerX = icon.width / 2f
         val centerY = icon.height / 2f
-        val base = if (options.colorizeMonochrome) {
-            monochromeBitmap(icon, options.colorizeInverse)
+        val base = if (colorizer.monochrome) {
+            monochromeBitmap(icon, colorizer.inverse)
         } else {
             icon
         }
-        val style = options.colorizerStyle
+        val style = colorizer
         val gradient = buildColorizerShader(
             style.allGradientColors,
             style.gradientType,
@@ -307,7 +310,7 @@ internal class IconImageEditPipeline(
         )
         val coloredIcon = icon.emptyLike()
         val canvas = Canvas(coloredIcon)
-        val solidFill = options.colorizeFlat && !options.colorizeMonochrome
+        val solidFill = colorizer.flat && !colorizer.monochrome
         val drawMask = {
             val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
                 if (solidFill) xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
@@ -331,7 +334,7 @@ internal class IconImageEditPipeline(
                     shader = gradient
                     if (!solidFill) {
                         xfermode = PorterDuffXfermode(
-                            if (options.colorizeLighten) PorterDuff.Mode.SCREEN
+                            if (colorizer.lighten) PorterDuff.Mode.SCREEN
                             else PorterDuff.Mode.MULTIPLY
                         )
                     }
@@ -344,7 +347,7 @@ internal class IconImageEditPipeline(
         } else {
             drawMask()
             drawGradient()
-            if (options.colorizeLighten) {
+            if (colorizer.lighten) {
                 val alphaMask = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
                     xfermode = PorterDuffXfermode(PorterDuff.Mode.DST_IN)
                 }
@@ -358,7 +361,7 @@ internal class IconImageEditPipeline(
                 }
             }
         }
-        val tinted = if (options.colorizeInverse && !options.colorizeMonochrome) {
+        val tinted = if (colorizer.inverse && !colorizer.monochrome) {
             invertBitmapColors(coloredIcon)
         } else {
             coloredIcon
@@ -406,7 +409,7 @@ internal class IconImageEditPipeline(
         vector.root.editPaths(
             stroke,
             SolidColor(Color.Unspecified),
-            SolidColor(Color(options.color))
+            SolidColor(Color(colorizer.firstColor))
         )
         vector.tintColor = Color.Unspecified
     }
