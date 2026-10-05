@@ -115,6 +115,12 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     var showIpsBackupWarning by rememberSaveable { mutableStateOf(false) }
     var showInstallerPicker by rememberSaveable { mutableStateOf(false) }
     var backupCheckInProgress by remember { mutableStateOf(false) }
+    var confirmRestorePreviousState by rememberSaveable { mutableStateOf(false) }
+    val previousStateAvailable by viewModel.previousStateAvailable.collectAsState()
+    val previousStateStored by viewModel.previousStateStored.collectAsState()
+    var confirmDiscardPreviousState by rememberSaveable { mutableStateOf(false) }
+    val abandonedRecoveryAvailable by viewModel.abandonedRecoveryAvailable.collectAsState()
+    var confirmDiscardAbandonedRecovery by rememberSaveable { mutableStateOf(false) }
     var pendingAutoBackupInterval by rememberSaveable { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
     val installerSelection = prefs.getPreferencesValue().installerSelection()
@@ -272,6 +278,28 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                         importBackupLauncher.launch(arrayOf("*/*"))
                     }
 
+                    if (previousStateAvailable) {
+                        SettingsRow(
+                            Icons.Filled.Restore,
+                            stringResource(R.string.restorePreviousState),
+                            busy = viewModel.backupInProgress
+                        ) { confirmRestorePreviousState = true }
+                    }
+                    if (previousStateStored) {
+                        SettingsRow(
+                            Icons.Filled.Delete,
+                            stringResource(R.string.discardPreviousState),
+                            busy = viewModel.backupInProgress
+                        ) { confirmDiscardPreviousState = true }
+                    }
+                    if (abandonedRecoveryAvailable) {
+                        SettingsRow(
+                            Icons.Filled.Delete,
+                            stringResource(R.string.discardAbandonedRecovery),
+                            busy = viewModel.backupInProgress
+                        ) { confirmDiscardAbandonedRecovery = true }
+                    }
+
                     SettingsSectionHeader(stringResource(R.string.settingsData), color = MaterialTheme.colorScheme.error)
                     SettingsRow(
                         Icons.Filled.DeleteSweep,
@@ -399,6 +427,42 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                 viewModel.clearIcons()
             },
             onDismiss = { confirmClearIcons = false }
+        )
+    }
+    if (confirmRestorePreviousState) {
+        ConfirmDialog(
+            title = stringResource(R.string.restorePreviousState),
+            text = stringResource(R.string.restorePreviousStateConfirmation),
+            icon = Icons.Filled.Restore,
+            onConfirm = {
+                confirmRestorePreviousState = false
+                viewModel.restorePreviousState()
+            },
+            onDismiss = { confirmRestorePreviousState = false }
+        )
+    }
+    if (confirmDiscardPreviousState) {
+        ConfirmDialog(
+            title = stringResource(R.string.discardPreviousState),
+            text = stringResource(R.string.discardPreviousStateConfirmation),
+            icon = Icons.Filled.Delete,
+            onConfirm = {
+                confirmDiscardPreviousState = false
+                viewModel.discardPreviousState()
+            },
+            onDismiss = { confirmDiscardPreviousState = false }
+        )
+    }
+    if (confirmDiscardAbandonedRecovery) {
+        ConfirmDialog(
+            title = stringResource(R.string.discardAbandonedRecovery),
+            text = stringResource(R.string.discardAbandonedRecoveryConfirmation),
+            icon = Icons.Filled.Delete,
+            onConfirm = {
+                confirmDiscardAbandonedRecovery = false
+                viewModel.discardAbandonedRecovery()
+            },
+            onDismiss = { confirmDiscardAbandonedRecovery = false }
         )
     }
 }

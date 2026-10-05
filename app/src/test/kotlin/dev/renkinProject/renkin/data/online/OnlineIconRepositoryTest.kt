@@ -1,5 +1,8 @@
 package dev.renkinProject.renkin.data.online
 
+import android.app.Application
+import org.robolectric.annotation.Config
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -11,6 +14,7 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 @RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class, sdk = [33])
 class OnlineIconRepositoryTest {
 
     @Test

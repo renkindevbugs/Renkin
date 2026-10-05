@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.icon.creator
 
+import android.app.Application
+
 import android.graphics.Color
 import android.graphics.PorterDuff
 import dev.renkinProject.renkin.data.ImageEdit
@@ -14,7 +16,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
+@Config(application = Application::class, sdk = [33])
 class GenerationOptionsModifierTest {
 
     private fun options() = GenerationOptions(

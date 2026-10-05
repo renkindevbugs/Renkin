@@ -8,6 +8,8 @@ import java.util.UUID
 internal object BackupStaging {
     private val activeDirectories = mutableSetOf<String>()
 
+    fun isActive(directory: File): Boolean = synchronized(activeDirectories) { directory.absolutePath in activeDirectories }
+
     fun create(root: File, prefix: String): File = synchronized(activeDirectories) {
         if (!root.isDirectory && !root.mkdirs()) throw IOException("Cannot create backup staging directory")
         val directory = File(root, "$prefix${UUID.randomUUID()}")
@@ -42,8 +44,8 @@ internal object BackupStaging {
             file.isDirectory && file.name.startsWith("backup-file-commit-") && file.absolutePath !in activeDirectories
         }.orEmpty()
         if (pendingRecovery.isNotEmpty()) {
-            // These may contain the only remaining signing credentials or gallery originals.
-            // Phase 3B must recover them using a durable transaction marker.
+            // Journal-owned batches are cleaned by BackupRecoveryStore first. Older batches
+            // have no durable ownership metadata and may hold the only surviving originals.
             Log.error("BackupStaging", "Preserved backup file transactions requiring recovery: ${pendingRecovery.size}")
         }
         Unit

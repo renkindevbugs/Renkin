@@ -1,6 +1,8 @@
 package dev.renkinProject.renkin.service
 
 import android.content.Context
+import dev.renkinProject.renkin.data.StorageOperationGate
+import kotlinx.coroutines.CancellationException
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -13,6 +15,7 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.renkinProject.renkin.data.transfer.PackVerdictManager
 import dev.renkinProject.renkin.data.getLongValue
@@ -41,31 +44,44 @@ import java.util.concurrent.TimeUnit
 class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWorker(appContext, params) {
     override suspend fun doWork(): Result {
         return try {
-            if (inputData.getBoolean(KEY_PERIODIC, false) && !enoughTimeElapsed()) {
-                Log.debug("Renkin", "WatchChecker periodic run skipped — too soon since last check")
-                return Result.success()
+            val shouldCheck = StorageOperationGate.run {
+                !inputData.getBoolean(KEY_PERIODIC, false) || enoughTimeElapsed()
             }
-
-            val fired = WatchChecker(applicationContext).runCheck()
-            Log.debug("Renkin", "WatchChecker fired ${fired.size} suggestion(s)")
-            val notifier = RenkinNotifications()
-            val profileRepo = RenkinPackRepository(applicationContext)
-            for (suggestion in fired) {
-                // Name the owning profile in the notification; the tap deep-links into it.
-                val profileName = profileRepo.profile(suggestion.profileId)?.name ?: "Renkin"
-                notifier.postIconAvailable(
-                    applicationContext,
-                    suggestion.suggestionId,
-                    suggestion.packageName,
-                    suggestion.packPackages,
-                    profileName
-                )
-            }
-            applicationContext.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())
+            val checked = if (shouldCheck) {
+                val result = WatchChecker(applicationContext).runCheckResult()
+                Log.debug("Renkin", "WatchChecker fired ${result.suggestions.size} suggestion(s)")
+                StorageOperationGate.run {
+                    if (!result.isCurrent()) return@run false
+                    val notifier = RenkinNotifications()
+                    val profileRepo = RenkinPackRepository(applicationContext)
+                    val watchRepo = WatchRepository(applicationContext)
+                    for (suggestion in result.suggestions) {
+                        val stored = watchRepo.getSuggestion(suggestion.suggestionId) ?: continue
+                        val rule = watchRepo.getRule(stored.ruleId) ?: continue
+                        if (stored.packageName != suggestion.packageName || stored.activityName != suggestion.activityName ||
+                            rule.rule.profileId != suggestion.profileId) continue
+                        val profileName = profileRepo.profile(suggestion.profileId)?.name ?: "Renkin"
+                        notifier.postIconAvailable(applicationContext, suggestion.suggestionId,
+                            suggestion.packageName, suggestion.packPackages, profileName)
+                    }
+                    applicationContext.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())
+                    true
+                }
+            } else false
             // Piggyback the paid-pack verdict retries on the periodic run: an import done
             // offline gets verified as soon as a later check runs with connectivity.
-            runCatching { PackVerdictManager(applicationContext).verifyPendingVerdicts() }
+            if (checked) {
+                try {
+                    PackVerdictManager(applicationContext).verifyPendingVerdicts()
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    Log.error("WatchWorker", "Pack verification failed", error)
+                }
+            }
             Result.success()
+        } catch (e: CancellationException) {
+            throw e
         } catch (e: Exception) {
             Log.debug("Renkin", "WatchChecker failed: ${e.message}")
             Result.retry()

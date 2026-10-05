@@ -4,10 +4,10 @@ import android.content.Context
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.datastore.preferences.core.edit
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
+import dev.renkinProject.renkin.data.setPreferenceValue
 import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
@@ -151,7 +151,7 @@ class ProfileManager internal constructor(
         val storedId = store.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         activeProfileId = if (packRepo.profile(storedId) != null) storedId else DEFAULT_PROFILE_ID
         if (activeProfileId != storedId) {
-            store.edit { it[ActiveProfileIdKey] = activeProfileId }
+            store.setPreferenceValue(ActiveProfileIdKey, activeProfileId)
         }
     }
 }

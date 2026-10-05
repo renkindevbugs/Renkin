@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.data
 
+import android.app.Application
+
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
@@ -25,7 +27,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
+@Config(application = Application::class, sdk = [33])
 class DataPreferencesTest {
     @get:Rule
     val temporaryFolder = TemporaryFolder()

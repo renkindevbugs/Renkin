@@ -179,12 +179,38 @@ Switcher = the top-bar title dropdown.
 - **Room — `WatchDatabase`** (v3) — icon-watch rules, suggestions and per-rule baselines, owned per
   profile via `WatchRule.profileId`.
 
-### Backup import and export (phase 3A)
+### Backup import, export and recovery (phases 3A–3B)
 
 `BackupManager` is a Hilt singleton shared by manual operations and `AutoBackupWorker`
-(through an application entry point). Its mutex serializes archive inspection, export and
-import. It does not yet make exports a consistent snapshot of concurrent profile, watch or
-gallery mutations; coordinating those writers belongs to phase 3B.
+(through an application entry point). Its mutex serializes archive inspection, local export preparation and
+import. `StorageOperationGate` also serializes profile commits, repository mutations,
+preference writes, watch commits, gallery writes and APK signing/credential creation. Export holds this
+shared gate while producing a complete ZIP in registered local staging, so it cannot mix preferences from one
+Global Save with icons from another. SAF/cloud transfer reads only that immutable ZIP after
+releasing the storage, manager and ViewModel profile-session locks. Staging is released on
+success, failure and cancellation; automatic exports still remove incomplete SAF documents.
+Network verdict lookups and interactive APK installation
+stay outside the gate; their eventual database commits acquire it. APK resource generation
+also stays outside the gate, using its immutable build plan; only signing reads/writes the
+live credentials under the gate. A storage replacement invalidates that build's storage epoch
+before installation or persistence can use its result.
+
+Lock order is ViewModel profile-session mutex (when present) → storage gate → backup manager
+mutex → provider session gate; watch commits use storage gate → Room transaction,
+and preference helpers use storage gate → preference mutex. Initial load also acquires the
+storage gate before its load mutex. APK builds have a separate mutex, then acquire the storage
+gate for signing; backup/profile operations never acquire the build mutex. Nested calls
+inherit ownership through coroutine context.
+Watch checks capture rule details, baselines, candidate rows and a storage epoch under the gate.
+PackageManager scans, pack parsing and bitmap hashes then run outside it. Before committing
+one rule, the checker verifies that its captured rows and epoch still match. Concurrent checks
+cannot complete the same rule twice, and edits, deletion or storage replacement invalidate stale
+results. Rule saves also compute their baselines outside the gate and validate the existing rule
+and provider session at commit. Import baseline initialization intentionally remains inside the
+storage commit. Notification posting and last-check metadata acquire the gate again and verify
+the result epoch, so a restore cannot reuse old suggestion IDs. No checker mutex is held across
+work that later reacquires the storage gate.
+The bounded settings path limits lock acquisition, not the subsequent preference transaction.
 
 Import copies the input into a unique staging directory under `filesDir/backup-imports`
 and reads it with `ZipFile`, requiring the central directory. Every entry, including unknown
@@ -235,29 +261,105 @@ the staging handle. Main-process application startup removes abandoned staging/e
 without waiting for another import or a 24-hour expiry. Directory creation, active ownership
 and cleanup share a process-local lock so startup cleanup cannot remove a live preview,
 export or file transaction. Abandoned file-commit batches are preserved and reported in logs
-because they may contain the only surviving originals; durable recovery belongs to phase 3B.
+because they may contain the only surviving originals. Journal-owned batches are removed after
+recovery; legacy phase-3A batches without ownership metadata are preserved and logged.
 Secondary processes skip cleanup; running backup operations in multiple processes would also
 require cross-process coordination beyond the current registry and manager mutex.
 
-The provider acquires its session gate only for the validated commit: lock order is backup
-mutex → provider gate, never the reverse. An invalid archive leaves the live session intact.
+The provider acquires its session gate only for the validated commit. Archive work already
+owns the outer storage gate before entering the backup manager mutex and provider gate.
+An invalid archive leaves the live session intact.
 Restored files are synced and moved from the verified staging directory into a temporary
 batch under `filesDir`, keeping all final renames on the destination filesystem. Only an
 `EXDEV` failure falls back to a checked, synced copy. Preparation consumes the staged files;
 the import handle is released after that attempt, including cancelled preparation. Import
 failure messages tell the user to select the file again when retrying. File changes are applied before database
-writes; old files remain in the batch until storage commit succeeds. A caught file/storage
-failure rolls back those file changes, and failed rollbacks preserve the original files for
-recovery. An absent keystore preserves both local signing files; restoring a legacy keystore
+writes; old files remain in the batch until storage commit succeeds. The full local recovery
+snapshot, described below, rolls back files and both databases/preferences together. Failed
+rollbacks preserve the snapshot, pending marker and original file batch for recovery.
+An absent keystore preserves both local signing files; restoring a legacy keystore
 removes a stale random password. Coroutine cancellation is accepted through file preparation
 and blocked once file mutations start. Cancelled automatic exports delete their output and
 propagate cancellation rather than scheduling a retry.
 
-This is not a crash-atomic restore: Room databases, DataStore, signing credentials and gallery
-files still commit separately. File rollback does not undo partial database/preferences writes.
-Phase 3B must add a durable pre-restore storage snapshot and recovery marker, startup recovery,
-and coordinated storage snapshots (including build/signing writers). Image/keystore payload
-semantics also need separate validation; CRC checks transport integrity only.
+Before either a full-backup import or an additive shared-profile import mutates live storage,
+`BackupRecoveryStore` captures the complete persisted local state under
+`filesDir/backup-recovery/<id>`. Both Room databases are written row by row in an internal
+format retaining every table, column, row ID and `sqlite_sequence`, including built-icon
+records and cached verdicts. Preferences include device-local keys; the gallery includes
+trash, file timestamps and the presence or absence of each signing credential. This snapshot
+is deliberately separate from portable backups, whose normalization and regenerated IDs
+would lose local state during rollback. Unsaved editor drafts are not part of it.
+
+Every snapshot file is synced, sized and SHA-256 hashed before the manifest and directories
+are synced. An atomic, directory-synced `pending.json` points to that immutable snapshot
+before the first live mutation. File batches are recorded in its manifest before staging is
+consumed. Import and rollback run non-cancellably after activation. Caught failures restore
+both databases, all preferences and files; failed rollback keeps the marker and blocks
+subsequent writers. Database WAL checkpoints and changed directories are flushed before
+clearing the marker. These stores still commit separately internally: the guarantee comes
+from rollback before exposing an interrupted state, not a distributed database transaction.
+
+Application `attachBaseContext` installs recovery before content-provider initialization,
+including WorkManager, can start UI/repository writers or workers. A pending import is rolled back to its previous saved state, even if most steps had
+already finished. Recovery is idempotent; another process death during rollback repeats the
+same snapshot on the next launch. Failure displays a recovery screen with explicit retry,
+retains all recovery material and blocks writes. The gate exposes a typed failure reason:
+schema change, missing/corrupt snapshot, I/O, or unknown. Schema/corruption messages recommend
+the confirmed keep-current option; storage advice is reserved for I/O failures. The failure
+classification also checks nested and suppressed rollback causes. Failed retry/abandon actions
+show inline feedback on the recovery screen, and their buttons are disabled while running.
+Retry reloads the provider session before
+releasing the UI. A confirmed “Keep current data and abandon recovery” action is the escape
+when corruption or an incompatible schema makes retry ineffective. It warns that current stores
+may be inconsistent, atomically moves the entire journal to a logged
+`backup-recovery-abandoned-<id>` directory and syncs filesDir. This preserves even unreadable
+metadata and snapshots outside normal cleanup. Only then may the gate become READY; the
+provider reloads current persisted data, with a normal startup retry screen if loading fails.
+Quarantined recovery material remains on disk for troubleshooting and is not the normal undo
+state. Settings exposes a separately confirmed "Delete abandoned recovery copies" action when
+these directories exist. Only directories with the exact abandoned prefix and UUID suffix are
+selected; deletion does not follow symbolic links. Current storage, the active journal and
+normal undo snapshot are untouched. Partial deletion failures remain visible and can be retried.
+No automatic expiry removes potential troubleshooting/signing material. Room flows cancel their source subscription whenever recovery leaves READY
+and resubscribe once it finishes; ordinary app start shows a checking
+state, and only a pending marker shows the interrupted-import message. This coordination is
+process-local; adding database writers in another process requires a cross-process protocol.
+
+Success retains one pre-import snapshot through `previous.json`. Settings exposes
+“Restore previous saved state”, with confirmation that unsaved edits will be lost and that a
+changed signing key requires uninstalling/reinstalling packs signed after import. Restore is
+hidden for incompatible database versions or columns; “Discard previous saved state” remains
+available with confirmation, including for unreadable or incompatible undo metadata. Discard
+removes and syncs the previous pointer before normal snapshot cleanup. This restore action
+also captures the current persisted state and uses the same pending-marker protocol, making
+its own interruption recoverable. It restores all profiles, watch IDs, presets, device-local
+preferences, gallery and signing credentials, rather than importing a portable archive.
+Unused snapshots are cleaned after completion and at startup; active and retained snapshots
+are kept. Gallery trash callbacks carry a generation so delayed undo cannot overwrite a
+restored gallery. Existing watch notifications are cancelled before replacing watch records;
+system notifications are not reconstructed from the internal snapshot. After a successful
+restore or explicit recovery retry, `BackgroundWorkScheduler` reconciles periodic watch and
+automatic-backup jobs with the restored preferences. Startup repeats that reconciliation to
+cover process death after the durable storage commit but before rescheduling. Interval
+setters also hold the storage gate through submitting their WorkManager update.
+
+The import/undo UI reports saving current state, restoring data, and restoring files instead
+of showing an unexplained wait. Recovery needs additional disk space for immutable snapshots and SQLite writes. Capture
+checks free space while streaming database rows and before copying files; commit reserves
+both snapshot database sizes, incoming JSON, the largest file to restore, and 32 MiB. This
+remains an estimate against other apps consuming storage. One retained snapshot can occupy
+roughly the saved databases plus gallery and signing files.
+
+Internal database recovery currently requires identical schema versions and columns. Every
+future Room schema bump must add compatible recovery handling before shipping: a pending
+snapshot from the preceding version must not strand startup behind a schema mismatch.
+Both database schemas are preflighted before either database is mutated. A mismatch fails
+closed and preserves the snapshot, with the explicit abandon option above. Portable backup DTOs
+are not substituted for exact local recovery: they normalize data and do not preserve every ID
+or local column. Schema-aware snapshot migrations are still required for automatic recovery
+across future updates. Large portable JSON payload memory, byte transfer progress and image/keystore semantic validation remain separate
+follow-ups; CRC verifies transport integrity only.
 
 ## UI conventions
 
@@ -418,6 +520,9 @@ Renkin cannot reproduce that launcher-only selection through the standard resour
 - **Robolectric** tests for the data layer with an in-memory Room database
   (`WatchRepositoryTest`, `RenkinPackRepositoryTest`). They use a plain `Application` and a
   pinned `@Config(sdk = [33])` to stay off Hilt and the very new `compileSdk`.
+- Recovery/Application tests in a shared JVM must call `StorageOperationGate.resetForTests()`
+  between isolated scenarios, only after all gate owners/jobs have stopped. Production still
+  rejects installing two recovery callbacks.
 
 ## Gotchas (don't relearn these the hard way)
 

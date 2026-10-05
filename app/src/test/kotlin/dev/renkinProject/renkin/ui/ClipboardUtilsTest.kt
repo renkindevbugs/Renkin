@@ -1,5 +1,8 @@
 package dev.renkinProject.renkin.ui
 
+import android.app.Application
+import org.robolectric.annotation.Config
+
 import android.content.ClipboardManager
 import android.content.Context
 import androidx.compose.ui.platform.ClipEntry
@@ -12,6 +15,7 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class, sdk = [33])
 class ClipboardUtilsTest {
 
     @Test

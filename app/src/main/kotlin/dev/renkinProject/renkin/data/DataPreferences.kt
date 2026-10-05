@@ -31,6 +31,10 @@ import kotlin.enums.enumEntries
 // snapshot read started by the next tap. This mutex gives writes and action snapshots one order.
 private val preferenceAccessMutex = Mutex()
 
+private suspend fun <T> withPreferenceAccess(block: suspend () -> T): T = StorageOperationGate.run {
+    preferenceAccessMutex.withLock { block() }
+}
+
 private const val DARK_MODE_NAME = "NIGHT_THEME"
 private const val INSTALL_METHOD_NAME = "INSTALL_METHOD"
 private const val EXTERNAL_INSTALLER_COMPONENT_NAME = "EXTERNAL_INSTALLER_COMPONENT"
@@ -261,14 +265,14 @@ internal fun isValidPersistedPreference(name: String, value: Any): Boolean =
 
 /** Commits only the staged Global options keys from [source], under the shared write mutex. */
 suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preferences) {
-    preferenceAccessMutex.withLock {
+    withPreferenceAccess {
         edit { target -> target.copyGlobalModifierPrefsFrom(source) }
     }
 }
 
 /** Commits the staged sources and modifiers as one profile-scoped Global style transaction. */
 suspend fun DataStore<Preferences>.persistGlobalStylePrefs(source: Preferences) {
-    preferenceAccessMutex.withLock {
+    withPreferenceAccess {
         edit { target ->
             target[PrimarySourceKey] = source.getIntValue(
                 PrimarySourceKey, SOURCE_DEFAULT.ordinal
@@ -321,7 +325,7 @@ private fun MutablePreferences.copyGlobalModifierPrefsFrom(source: Preferences) 
 
 /** Records the hero source that a successful build actually used as one atomic profile write. */
 suspend fun DataStore<Preferences>.persistBuiltPrimaryPrefs(source: Preferences) {
-    preferenceAccessMutex.withLock {
+    withPreferenceAccess {
         edit { target ->
             target[BuiltPrimarySourceKey] = source.getIntValue(
                 PrimarySourceKey, SOURCE_DEFAULT.ordinal
@@ -345,7 +349,7 @@ fun Preferences.snapshotProfilePrefs(): String {
  * ones removed — a fresh profile starts from the defaults.
  */
 suspend fun DataStore<Preferences>.restoreProfilePrefs(snapshot: String) {
-    preferenceAccessMutex.withLock {
+    withPreferenceAccess {
         edit { it.replaceProfilePrefs(snapshot) }
     }
 }
@@ -360,7 +364,7 @@ suspend fun DataStore<Preferences>.switchProfilePrefs(
     newProfileId: Long,
     persistLeavingSnapshot: suspend (String) -> Unit
 ) {
-    preferenceAccessMutex.withLock {
+    withPreferenceAccess {
         persistLeavingSnapshot(data.first().snapshotProfilePrefs())
         edit { target ->
             target.replaceProfilePrefs(targetSnapshot)
@@ -578,7 +582,7 @@ fun DataStore<Preferences>.getGradientStops(
  * the source and another with the pack.
  */
 suspend fun DataStore<Preferences>.setPrimarySource(source: Source, packageName: String?) {
-    preferenceAccessMutex.withLock {
+    withPreferenceAccess {
         edit { target ->
             target[PrimarySourceKey] = source.ordinal
             packageName?.let { target[PrimaryIconPackKey] = it }
@@ -588,7 +592,7 @@ suspend fun DataStore<Preferences>.setPrimarySource(source: Source, packageName:
 
 /** Startup restore of the last BUILT source/pack — same atomicity requirement. */
 suspend fun DataStore<Preferences>.restoreBuiltPrimarySource(snapshot: Preferences) {
-    preferenceAccessMutex.withLock {
+    withPreferenceAccess {
         edit { target ->
             target[PrimarySourceKey] = snapshot.getIntValue(
                 BuiltPrimarySourceKey, SOURCE_DEFAULT.ordinal
@@ -673,7 +677,7 @@ suspend fun DataStore<Preferences>.setColorStyle(
     // Covers the first colour too, so it is one longer than [gradientStops]; empty = even spread.
     gradientPositions: List<Float> = emptyList()
 ) {
-    preferenceAccessMutex.withLock {
+    withPreferenceAccess {
         edit { target ->
             target.setColorStyle(
                 keys, mode, gradientType, gradientAngle,
@@ -748,7 +752,7 @@ fun <T : Any> DataStore<Preferences>.getPreferenceValue(key: Preferences.Key<T>,
 }
 
 suspend fun <T> DataStore<Preferences>.setPreferenceValue(key: Preferences.Key<T>, value: T) {
-    preferenceAccessMutex.withLock {
+    withPreferenceAccess {
         edit { settings ->
             settings[key] = value
         }
@@ -757,7 +761,7 @@ suspend fun <T> DataStore<Preferences>.setPreferenceValue(key: Preferences.Key<T
 
 /** Reads a snapshot only after every preference write that started before it has completed. */
 suspend fun DataStore<Preferences>.getPreferencesAfterPendingWrites(): Preferences =
-    preferenceAccessMutex.withLock { data.first() }
+    withPreferenceAccess { data.first() }
 
 //Labels
 @Composable

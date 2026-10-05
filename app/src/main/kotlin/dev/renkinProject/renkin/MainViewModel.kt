@@ -64,6 +64,9 @@ import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.data.transfer.BackupSpaceException
 import dev.renkinProject.renkin.data.transfer.BackupSizeException
 import dev.renkinProject.renkin.data.transfer.BackupMemoryException
+import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.data.StorageRecoveryState
+import dev.renkinProject.renkin.service.BackgroundWorkScheduler
 import dev.renkinProject.renkin.data.transfer.AutoBackupManager
 import dev.renkinProject.renkin.data.transfer.isIconPackStudioExport
 import dev.renkinProject.renkin.data.watch.WatchRepository
@@ -86,6 +89,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -410,16 +414,20 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    private var currentStateReloadRequired = false
+
     private fun loadStartup() {
-        if (startupLoading || profileSummaryReady) return
+        if (startupLoading || (profileSummaryReady && !startupFailed)) return
         startupLoading = true
         startupFailed = false
         viewModelScope.launch {
             try {
                 profileSessionOperations.withLock {
-                    appProvider.ensureInitialized()
+                    if (currentStateReloadRequired && appProvider.startupComplete) appProvider.replaceProfileSession { }
+                    else appProvider.ensureInitialized()
                     resetChangeBaselines()
                     refreshMissingPacks()
+                    currentStateReloadRequired = false
                 }
                 // Classify any source packs that still lack a paid/free verdict (quiet best
                 // effort; imported-offline icons stay locked until a lookup succeeds). A verdict
@@ -564,17 +572,26 @@ class MainViewModel @Inject constructor(
 
     private fun loadWhatsNewState() {
         viewModelScope.launch {
-            val store = getApplication<Application>().dataStore
-            val preferences = store.getPreferencesAfterPendingWrites()
-            val lastSeen = preferences[LastSeenWhatsNewVersionKey]
-            if (shouldShowWhatsNew(
-                    lastSeenVersion = lastSeen,
-                    onboardingSeen = preferences.getBooleanValue(OnboardingSeenKey)
-                )
-            ) {
-                whatsNewVisible = true
-            } else if (lastSeen == null) {
-                store.setIntValue(LastSeenWhatsNewVersionKey, LATEST_WHATS_NEW_VERSION_CODE)
+            StorageOperationGate.recoveryState.first { it == StorageRecoveryState.READY }
+            try {
+                StorageOperationGate.run {
+                    val store = getApplication<Application>().dataStore
+                    val preferences = store.getPreferencesAfterPendingWrites()
+                    val lastSeen = preferences[LastSeenWhatsNewVersionKey]
+                    if (shouldShowWhatsNew(
+                            lastSeenVersion = lastSeen,
+                            onboardingSeen = preferences.getBooleanValue(OnboardingSeenKey)
+                        )
+                    ) {
+                        whatsNewVisible = true
+                    } else if (lastSeen == null) {
+                        store.setIntValue(LastSeenWhatsNewVersionKey, LATEST_WHATS_NEW_VERSION_CODE)
+                    }
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.error("MainViewModel", "Could not load release notes state", error)
             }
         }
     }
@@ -1452,6 +1469,94 @@ class MainViewModel @Inject constructor(
         runCatching { autoBackupManager.folderName(uri) }.getOrNull()
     }
 
+    val previousStateAvailable = backupManager.previousStateAvailable
+    val previousStateStored = backupManager.previousStateStored
+    val abandonedRecoveryAvailable = backupManager.abandonedRecoveryAvailable
+    val backupRestoreStage = backupManager.restoreStage
+    var storageRecoveryRetryRunning by mutableStateOf(false)
+        private set
+    var recoveryActionError by mutableStateOf<Int?>(null)
+        private set
+
+    fun retryStorageRecovery() {
+        if (storageRecoveryRetryRunning) return
+        storageRecoveryRetryRunning = true
+        recoveryActionError = null
+        viewModelScope.launch {
+            try {
+                profileSessionOperations.withLock {
+                    StorageOperationGate.retryRecovery {
+                        withContext(Dispatchers.Main) {
+                            if (appProvider.startupComplete) appProvider.replaceProfileSession { }
+                            else appProvider.ensureInitialized()
+                            resetChangeBaselines()
+                            startupFailed = false
+                            refreshMissingPacks()
+                        }
+                    }
+                    refreshBackgroundSchedules()
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.error("MainViewModel", "Storage recovery retry failed", error)
+                recoveryActionError = R.string.backupRecoveryRetryFailed
+            } finally { storageRecoveryRetryRunning = false }
+        }
+    }
+
+    fun abandonStorageRecovery() {
+        if (storageRecoveryRetryRunning) return
+        storageRecoveryRetryRunning = true
+        recoveryActionError = null
+        viewModelScope.launch {
+            try {
+                profileSessionOperations.withLock {
+                    StorageOperationGate.abandonRecovery {
+                        backupManager.abandonPendingRecovery()
+                        currentStateReloadRequired = true
+                        try {
+                            if (appProvider.startupComplete) appProvider.replaceProfileSession { }
+                            else appProvider.ensureInitialized()
+                            resetChangeBaselines()
+                            startupFailed = false
+                            refreshMissingPacks()
+                            currentStateReloadRequired = false
+                        } catch (error: CancellationException) { throw error }
+                        catch (error: Exception) {
+                            startupFailed = true
+                            Log.error("MainViewModel", "Current data could not be loaded after abandoning recovery", error)
+                        }
+                    }
+                    refreshBackgroundSchedules()
+                }
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) {
+                Log.error("MainViewModel", "Could not abandon storage recovery", error)
+                recoveryActionError = R.string.backupRecoveryKeepCurrentFailed
+            }
+            finally { storageRecoveryRetryRunning = false }
+        }
+    }
+
+    fun discardPreviousState() = runBackupOp(R.string.previousStateDiscardFailed) {
+        backupManager.discardPreviousState()
+        _toastEvents.trySend(R.string.previousStateDiscarded)
+    }
+
+    fun discardAbandonedRecovery() = runBackupOp(R.string.abandonedRecoveryDiscardFailed) {
+        backupManager.discardAbandonedRecovery()
+        _toastEvents.trySend(R.string.abandonedRecoveryDiscarded)
+    }
+
+    fun restorePreviousState() = runBackupOp(R.string.previousStateRestoreFailed) {
+        backupManager.restorePreviousState { restore -> appProvider.replaceProfileSession { restore() } }
+        refreshBackgroundSchedules()
+        resetChangeBaselines()
+        refreshMissingPacks()
+        _toastEvents.trySend(R.string.previousStateRestored)
+    }
+
     /**
      * Runs one backup/import operation at a time: the shared busy flag gates re-entry, a
      * failure logs and toasts [failureToast], cancellation propagates.
@@ -1459,6 +1564,7 @@ class MainViewModel @Inject constructor(
     private fun runBackupOp(
         @StringRes failureToast: Int,
         onCompletion: () -> Unit = {},
+        serializeProfile: Boolean = true,
         op: suspend (ProfileSessionToken) -> Unit
     ) {
         if (backupInProgress) return
@@ -1466,9 +1572,8 @@ class MainViewModel @Inject constructor(
         val expected = sessionToken
         viewModelScope.launch {
             try {
-                profileSessionOperations.withLock {
-                    op(expected)
-                }
+                if (serializeProfile) profileSessionOperations.withLock { op(expected) }
+                else op(expected)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ProfileSessionChangedException) {
@@ -1494,28 +1599,36 @@ class MainViewModel @Inject constructor(
      * [uri]. Unsaved work is saved first, the same way the save-before-switch prompt would —
      * exporting a backup that silently lacks what's on screen would be worse.
      */
-    fun exportBackup(uri: Uri) = runBackupOp(R.string.backupExportFailed) { expected ->
-        if (hasUnsavedChanges()) {
-            appProvider.saveActiveProfileIcons(expected)
-            loadChangeBaselines(expected)
-            refreshMissingPacks(prompt = false)
-        }
-        backupManager.exportBackup(uri)
-        _toastEvents.trySend(R.string.backupExported)
+    fun exportBackup(uri: Uri) = runBackupOp(R.string.backupExportFailed, serializeProfile = false) { expected ->
+        var prepared: BackupManager.PreparedExport? = null
+        try {
+            profileSessionOperations.withLock {
+                if (hasUnsavedChanges()) {
+                    appProvider.saveActiveProfileIcons(expected)
+                    loadChangeBaselines(expected)
+                    refreshMissingPacks(prompt = false)
+                }
+                prepared = backupManager.prepareBackupExport()
+            }
+            backupManager.writePreparedExport(checkNotNull(prepared), uri)
+            _toastEvents.trySend(R.string.backupExported)
+        } finally { prepared?.let { backupManager.discardExport(it) } }
     }
 
-    /**
-     * Exports one profile as a shareable file. Icons embed their image data; whether
-     * paid-pack icons are usable is enforced on the importing device (see BackupManager).
-     */
-    fun exportProfile(profileId: Long, uri: Uri) = runBackupOp(R.string.profileExportFailed) { expected ->
-        if (profileId == activeProfileId && hasUnsavedChanges()) {
-            appProvider.saveActiveProfileIcons(expected)
-            loadChangeBaselines(expected)
-            refreshMissingPacks(prompt = false)
-        }
-        backupManager.exportProfile(profileId, uri)
-        _toastEvents.trySend(R.string.profileExported)
+    fun exportProfile(profileId: Long, uri: Uri) = runBackupOp(R.string.profileExportFailed, serializeProfile = false) { expected ->
+        var prepared: BackupManager.PreparedExport? = null
+        try {
+            profileSessionOperations.withLock {
+                if (profileId == activeProfileId && hasUnsavedChanges()) {
+                    appProvider.saveActiveProfileIcons(expected)
+                    loadChangeBaselines(expected)
+                    refreshMissingPacks(prompt = false)
+                }
+                prepared = backupManager.prepareProfileExport(profileId)
+            }
+            backupManager.writePreparedExport(checkNotNull(prepared), uri)
+            _toastEvents.trySend(R.string.profileExported)
+        } finally { prepared?.let { backupManager.discardExport(it) } }
     }
 
     // A picked full-backup file waiting for the "replace everything?" confirmation.
@@ -1576,6 +1689,7 @@ class MainViewModel @Inject constructor(
         }
         when (result.kind) {
             BackupManager.ImportKind.BACKUP -> {
+                refreshBackgroundSchedules()
                 // Everything was replaced — reload the in-memory state in place.
                 resetChangeBaselines()
                 // A restored profile counts as freshly entered for the prompt.
@@ -1605,6 +1719,16 @@ class MainViewModel @Inject constructor(
                 BackupManager.ImportKind.PROFILE -> Unit
             }
             refreshMissingPacks(prompt = false)
+        }
+    }
+
+    private suspend fun refreshBackgroundSchedules() {
+        try {
+            BackgroundWorkScheduler.reconcile(getApplication<Application>())
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.error("MainViewModel", "Could not reschedule background work for restored settings", error)
         }
     }
 

@@ -26,6 +26,9 @@ import dev.renkinProject.renkin.data.ModifierPreset
 import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
+import dev.renkinProject.renkin.data.StorageOperationGate
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import dev.renkinProject.renkin.data.snapshotProfilePrefs
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.watch.AppComponent
@@ -39,8 +42,10 @@ import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.service.WatchChecker
+import dev.renkinProject.renkin.service.RenkinNotifications
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -68,8 +73,8 @@ import java.io.OutputStreamWriter
  *    that pack is installed there — but because the pixels ride along, a pack that later
  *    disappears from the store keeps working (its verdict flips to unlisted and unlocks).
  *
- * Import stages and validates the entire archive BEFORE any store is touched. Committing
- * across the databases, preferences and files is not yet crash-atomic. Whether
+ * Import stages and validates the entire archive BEFORE any store is touched. A durable
+ * local snapshot rolls back interrupted commits across databases, preferences and files. Whether
  * imported icons are usable is decided on the importing device every time they load
  * (PackVerdictManager) — verdicts inside the file are never trusted. After an import the
  * caller reloads the in-memory state and kicks off verdict verification.
@@ -82,15 +87,27 @@ class BackupManager(
 ) {
     private val appManager by lazy { ApplicationManager(context) }
     private val operations = Mutex()
+    private val recovery = BackupRecoveryStore(context)
+    private val mutablePreviousStateAvailable = MutableStateFlow(false)
+    val previousStateAvailable = mutablePreviousStateAvailable.asStateFlow()
+    private val mutablePreviousStateStored = MutableStateFlow(false)
+    val previousStateStored = mutablePreviousStateStored.asStateFlow()
+    private val mutableAbandonedRecoveryAvailable = MutableStateFlow(false)
+    val abandonedRecoveryAvailable = mutableAbandonedRecoveryAvailable.asStateFlow()
+    enum class RestoreStage { IDLE, VALIDATING_SAVED_STATE, SAVING_CURRENT_STATE, RESTORING_DATA, RESTORING_FILES }
+    private val mutableRestoreStage = MutableStateFlow(RestoreStage.IDLE)
+    val restoreStage = mutableRestoreStage.asStateFlow()
 
     private suspend fun <T> runOperation(block: suspend () -> T): T =
         withContext(Dispatchers.IO) {
-            operations.withLock {
-                try {
-                    block()
-                } catch (error: OutOfMemoryError) {
-                    Log.error("BackupManager", "Backup exceeded heap; maxHeapBytes=${Runtime.getRuntime().maxMemory()}", error)
-                    throw BackupMemoryException(error)
+            StorageOperationGate.run {
+                operations.withLock {
+                    try {
+                        block()
+                    } catch (error: OutOfMemoryError) {
+                        Log.error("BackupManager", "Backup exceeded heap; maxHeapBytes=${Runtime.getRuntime().maxMemory()}", error)
+                        throw BackupMemoryException(error)
+                    } finally { mutableRestoreStage.value = RestoreStage.IDLE }
                 }
             }
         }
@@ -146,9 +163,65 @@ class BackupManager(
         context.contentResolver.openOutputStream(uri) ?: throw IOException("Cannot open $uri for writing")
     }
 
-    suspend fun exportBackup(open: () -> OutputStream) = runOperation {
-        // The backup mutex excludes restores, not Global Save or watch/gallery writers.
-        // A storage-wide snapshot coordinated with those writers belongs to phase 3B.
+    suspend fun exportBackup(open: () -> OutputStream) {
+        val prepared = prepareBackupExport()
+        writePreparedExport(prepared, open)
+    }
+
+    suspend fun exportProfile(profileId: Long, open: () -> OutputStream) {
+        val prepared = prepareProfileExport(profileId)
+        writePreparedExport(prepared, open)
+    }
+
+    class PreparedExport internal constructor(internal val directory: File, internal val archive: File) {
+        internal var closed = false
+    }
+
+    private suspend fun prepareExport(operation: suspend () -> PreparedExport): PreparedExport {
+        var prepared: PreparedExport? = null
+        try {
+            return runOperation { operation().also { prepared = it } }
+        } catch (error: Throwable) {
+            prepared?.let { discardExport(it) }
+            throw error
+        }
+    }
+
+    suspend fun discardExport(prepared: PreparedExport) = withContext(NonCancellable + Dispatchers.IO) {
+        if (!prepared.closed) {
+            prepared.closed = true
+            BackupStaging.release(prepared.directory)
+        }
+    }
+
+    suspend fun writePreparedExport(prepared: PreparedExport, uri: Uri) = writePreparedExport(prepared) {
+        context.contentResolver.openOutputStream(uri) ?: throw IOException("Cannot open $uri for writing")
+    }
+
+    suspend fun writePreparedExport(prepared: PreparedExport, open: () -> OutputStream) {
+        try {
+            withContext(Dispatchers.IO) {
+                check(!prepared.closed) { "Prepared export has expired" }
+                currentCoroutineContext().ensureActive()
+                // Only immutable local bytes travel to SAF. No storage or profile lock is held.
+                open().use { output ->
+                    prepared.archive.inputStream().use { input ->
+                        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                        while (true) {
+                            currentCoroutineContext().ensureActive()
+                            val count = input.read(buffer)
+                            if (count < 0) break
+                            output.write(buffer, 0, count)
+                        }
+                    }
+                }
+            }
+        } finally { discardExport(prepared) }
+    }
+
+    suspend fun prepareBackupExport(): PreparedExport = prepareExport {
+        // The storage gate freezes profile commits, watch, prefs, gallery and signing
+        // writers until the complete archive has copied every live input.
         val prefs = context.dataStore.getPreferencesAfterPendingWrites()
         val activeId = prefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         packRepo.profile(activeId)?.let {
@@ -201,7 +274,7 @@ class BackupManager(
                 put("$UPLOADS_DIR/${file.name}", file)
             }
         }
-        exportArchive(open, KIND_BACKUP, BackupValidator.prepare(data, ImportKind.BACKUP), files)
+        exportArchive(KIND_BACKUP, BackupValidator.prepare(data, ImportKind.BACKUP), files)
     }
 
     /**
@@ -211,7 +284,7 @@ class BackupManager(
      * importing device at load time, not here — so the export works fully offline.
      * No uploads or keystore travel with a share.
      */
-    suspend fun exportProfile(profileId: Long, open: () -> OutputStream) = runOperation {
+    suspend fun prepareProfileExport(profileId: Long): PreparedExport = prepareExport {
         val prefs = context.dataStore.getPreferencesAfterPendingWrites()
         val activeId = prefs[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         if (profileId == activeId) {
@@ -242,15 +315,14 @@ class BackupManager(
             packLabels = packLabelsFor(sourcePacks)
         )
 
-        exportArchive(open, KIND_PROFILE, BackupValidator.prepare(data, ImportKind.PROFILE))
+        exportArchive(KIND_PROFILE, BackupValidator.prepare(data, ImportKind.PROFILE))
     }
 
     private suspend fun exportArchive(
-        open: () -> OutputStream,
         kind: String,
         data: BackupData,
         files: Map<String, File> = emptyMap()
-    ) {
+    ): PreparedExport {
         val directory = BackupStaging.create(stagingRoot(), "backup-export-")
         val dataFile = File(directory, DATA_ENTRY)
         try {
@@ -277,12 +349,35 @@ class BackupManager(
                 writer.flush()
                 output.fd.sync()
             }
-            writeBackupArchive(open, manifestJson(kind), dataFile, files)
+            val archive = File(directory, "archive.zip")
+            writeBackupArchive({
+                val output = FileOutputStream(archive)
+                object : OutputStream() {
+                    private var bytes = 0L
+                    private var nextSpaceCheck = 0L
+                    override fun write(value: Int) = write(byteArrayOf(value.toByte()), 0, 1)
+                    override fun write(buffer: ByteArray, offset: Int, count: Int) {
+                        coroutineContext.ensureActive()
+                        bytes += count
+                        if (bytes > BackupArchiveLimits.MAX_ARCHIVE_BYTES) throw BackupSizeException()
+                        if (bytes >= nextSpaceCheck) {
+                            ensureBackupSpace(directory, 1024 * 1024L)
+                            nextSpaceCheck = bytes + 1024 * 1024L
+                        }
+                        output.write(buffer, offset, count)
+                    }
+                    override fun close() = output.close()
+                }
+            }, manifestJson(kind), dataFile, files)
+            dataFile.delete()
+            return PreparedExport(directory, archive)
         } catch (error: OutOfMemoryError) {
             Log.error("BackupManager", "Out of memory exporting; profiles=${data.profiles.size}, icons=${data.profiles.sumOf { it.icons.size }}, dataBytes=${dataFile.length()}", error)
-            throw error
-        } finally {
             BackupStaging.release(directory)
+            throw error
+        } catch (error: Throwable) {
+            BackupStaging.release(directory)
+            throw error
         }
     }
 
@@ -342,6 +437,7 @@ class BackupManager(
         commit: suspend (suspend () -> ImportResult) -> ImportResult = ::commitImportDirectly
     ): ImportResult = runOperation {
         check(!prepared.closed) { "Prepared import has expired" }
+        mutableRestoreStage.value = RestoreStage.VALIDATING_SAVED_STATE
         try {
             readContents(prepared.staged).use { archive ->
                 if (kindOf(archive.manifest) != prepared.inspection.kind) throw IOException("Prepared file kind changed")
@@ -425,7 +521,14 @@ class BackupManager(
             currentCoroutineContext().ensureActive()
             when (kindOf(archive.manifest)) {
                 ImportKind.BACKUP -> restoreBackup(archive)
-                ImportKind.PROFILE -> withContext(NonCancellable) { importProfile(archive.data) }
+                ImportKind.PROFILE -> {
+                    val snapshot = captureCurrentState()
+                    try {
+                        currentCoroutineContext().ensureActive()
+                        ensureRecoverySpace(snapshot, archive.staged.entries[DATA_ENTRY]?.length() ?: 0L)
+                        commitWithRecovery(snapshot) { importProfile(archive.data) }
+                    } finally { recovery.discard(snapshot) }
+                }
             }
         }
     }
@@ -481,9 +584,174 @@ class BackupManager(
         else -> throw IOException("Unknown file kind")
     }
 
+    suspend fun recoverPendingRestore() = runOperation {
+        val snapshot = recovery.pendingSnapshot()
+        if (snapshot != null) {
+            StorageOperationGate.reportRecoveryRunning()
+            withContext(NonCancellable) {
+                Log.info("BackupManager", "Recovering interrupted storage restore")
+                restoreSnapshot(snapshot)
+                recovery.clearPending()
+            }
+        }
+        recovery.syncMetadata()
+        recovery.cleanup()
+        BackupStaging.cleanAfterProcessStart(context.filesDir)
+        refreshAbandonedRecoveryAvailability()
+        try {
+            refreshPreviousStateAvailability()
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            mutablePreviousStateAvailable.value = false
+            Log.error("BackupManager", "Retained undo snapshot is unavailable; preserved recovery storage", error)
+        }
+    }
+
+    suspend fun restorePreviousState(commit: suspend (suspend () -> Unit) -> Unit) = runOperation {
+        mutableRestoreStage.value = RestoreStage.VALIDATING_SAVED_STATE
+        val previous = recovery.previousSnapshot() ?: throw IOException("No previous saved state")
+        recovery.validate(previous)
+        checkSnapshotCompatibility(previous)
+        commit {
+            val snapshot = captureCurrentState()
+            try {
+                currentCoroutineContext().ensureActive()
+                ensureRecoverySpace(snapshot, 0)
+                commitWithRecovery(snapshot) { restoreSnapshot(previous) }
+            } finally { recovery.discard(snapshot) }
+        }
+    }
+
+    suspend fun abandonPendingRecovery() = runOperation {
+        withContext(NonCancellable) {
+            recovery.preserveAbandonedRecovery()
+            refreshAbandonedRecoveryAvailability()
+            StorageOperationGate.markStorageReplaced()
+            mutablePreviousStateAvailable.value = false
+            mutablePreviousStateStored.value = false
+        }
+    }
+
+    suspend fun discardAbandonedRecovery() = runOperation {
+        try {
+            withContext(NonCancellable) { recovery.discardAbandonedRecovery() }
+        } finally { refreshAbandonedRecoveryAvailability() }
+    }
+
+    private fun refreshAbandonedRecoveryAvailability() {
+        try {
+            mutableAbandonedRecoveryAvailable.value = recovery.hasAbandonedRecovery()
+        } catch (error: Exception) {
+            Log.error("BackupManager", "Cannot list abandoned recovery copies", error)
+        }
+    }
+
+    suspend fun discardPreviousState() = runOperation {
+        withContext(NonCancellable) { recovery.discardPreviousState() }
+        refreshPreviousStateAvailability()
+    }
+
+    private suspend fun refreshPreviousStateAvailability() {
+        mutablePreviousStateStored.value = recovery.hasPreviousState()
+        mutablePreviousStateAvailable.value = false
+        val snapshot = recovery.previousSnapshot() ?: return
+        try {
+            checkSnapshotCompatibility(snapshot)
+            mutablePreviousStateStored.value = true
+            mutablePreviousStateAvailable.value = true
+        } catch (error: CancellationException) { throw error }
+        catch (error: Exception) { Log.error("BackupManager", "Previous state is incompatible; retained for explicit discard", error) }
+    }
+
+    private suspend fun captureCurrentState(): BackupRecoveryStore.Snapshot {
+        mutableRestoreStage.value = RestoreStage.SAVING_CURRENT_STATE
+        return recovery.capture(packRepo, watchRepo)
+    }
+
+    private suspend fun checkSnapshotCompatibility(snapshot: BackupRecoveryStore.Snapshot) {
+        packRepo.checkRecoveryCompatibility(File(snapshot.directory, "pack.json"))
+        watchRepo.checkRecoveryCompatibility(File(snapshot.directory, "watch.json"))
+    }
+
+    private fun ensureRecoverySpace(snapshot: BackupRecoveryStore.Snapshot, incomingDataBytes: Long) {
+        val databaseBytes = snapshot.directory.resolve("pack.json").length() + snapshot.directory.resolve("watch.json").length()
+        val largestFile = snapshot.files.filter { it.startsWith("gallery/") || it.startsWith("signing/") }
+            .maxOfOrNull { File(snapshot.directory, it).length() } ?: 0L
+        ensureBackupSpace(context.filesDir, databaseBytes + incomingDataBytes + largestFile)
+    }
+
+    private suspend fun restoreSnapshot(snapshot: BackupRecoveryStore.Snapshot) {
+        recovery.validate(snapshot)
+        checkSnapshotCompatibility(snapshot)
+        mutableRestoreStage.value = RestoreStage.RESTORING_DATA
+        StorageOperationGate.markStorageReplaced()
+        // The pending marker survives every step. A failed or interrupted rollback is retried
+        // from these immutable files before any subsequent storage operation can proceed.
+        clearWatchNotifications()
+        packRepo.restoreRecoverySnapshot(File(snapshot.directory, "pack.json"))
+        watchRepo.restoreRecoverySnapshot(File(snapshot.directory, "watch.json"))
+        val prefs = File(snapshot.directory, "prefs.json").reader(Charsets.UTF_8).use { readBackupData(it).prefs }
+        restorePrefs(prefs, preserveDeviceLocal = false)
+        mutableRestoreStage.value = RestoreStage.RESTORING_FILES
+        recovery.restoreFiles(snapshot)
+        packRepo.flushRecoveryWrites()
+        watchRepo.flushRecoveryWrites()
+    }
+
+    private suspend fun clearWatchNotifications() {
+        val ids = watchRepo.getAllRules().flatMap { rule -> rule.suggestions.map { it.id } }
+        try {
+            RenkinNotifications().cancelIconAvailable(context, ids, cancelSummary = true)
+        } catch (error: Exception) {
+            Log.error("BackupManager", "Cannot clear notifications for replaced watch records", error)
+        }
+    }
+
+    private suspend fun <T> commitWithRecovery(
+        snapshot: BackupRecoveryStore.Snapshot,
+        operation: suspend () -> T
+    ): T = withContext(NonCancellable) {
+        var activated = false
+        try {
+            recovery.activate(snapshot)
+            activated = true
+            StorageOperationGate.markStorageReplaced()
+            mutableRestoreStage.value = RestoreStage.RESTORING_DATA
+            val result = operation()
+            packRepo.flushRecoveryWrites()
+            watchRepo.flushRecoveryWrites()
+            recovery.complete(snapshot)
+            mutablePreviousStateStored.value = true
+            mutablePreviousStateAvailable.value = true
+            result
+        } catch (error: Throwable) {
+            if (activated) {
+                try {
+                    recovery.ensurePending(snapshot)
+                    restoreSnapshot(snapshot)
+                    recovery.clearPending()
+                } catch (rollbackError: Throwable) {
+                    error.addSuppressed(rollbackError)
+                    StorageOperationGate.requireRecovery(error)
+                    Log.error("BackupManager", "Rollback could not finish; recovery snapshot retained", error)
+                    throw BackupRecoveryRequiredException(error)
+                }
+            } else {
+                try {
+                    recovery.clearPending()
+                } catch (cleanupError: Throwable) {
+                    error.addSuppressed(cleanupError)
+                    StorageOperationGate.requireRecovery(error)
+                    throw BackupRecoveryRequiredException(error)
+                }
+            }
+            throw error
+        }
+    }
+
     private suspend fun restoreBackup(archive: ArchiveContents): ImportResult {
         val data = archive.data
-
         val uploadsDir = UploadedImageStore.directory(context)
         val replacements = buildMap<File, File?> {
             archive.keystore?.let { put(context.filesDir.resolve(IconPackBuilder.KEYSTORE_FILE_NAME), it) }
@@ -495,57 +763,61 @@ class BackupManager(
         }
         val incomingDataBytes = archive.staged.entries[DATA_ENTRY]?.length() ?: 0L
         ensureBackupRestoreSpace(context, incomingDataBytes)
-        BackupFileTransaction.prepare(context.filesDir, replacements).use { files ->
-            currentCoroutineContext().ensureActive()
-            ensureBackupRestoreSpace(context, incomingDataBytes)
-            withContext(NonCancellable) {
+        var snapshot = captureCurrentState()
+        try {
+            BackupFileTransaction.prepare(context.filesDir, replacements) { batch ->
+                snapshot = recovery.attachFileBatch(snapshot, batch)
+            }.use { files ->
+                currentCoroutineContext().ensureActive()
+                ensureRecoverySpace(snapshot, incomingDataBytes)
                 try {
-                    files.apply()
-                    packRepo.replaceEverything(
-                        data.profiles.map { it.profile },
-                        data.profiles.flatMap { it.icons }
-                    )
-                    watchRepo.replaceAllRules(data.profiles.flatMap { bp ->
-                        bp.watchRules.map { it.toImport(bp.profile.id) }
-                    })
-                    WatchChecker(context, iconPackCatalog, watchRepo).initializeMissingBaselines()
-                    // Replace-all, like everything else in a full restore. Archives written before saved
-                    // colours existed carry none, which correctly clears a library the user is replacing.
-                    packRepo.replaceColorPresets(
-                        data.colorPresets.map { ColorPreset(name = it.name, style = it.style, createdAt = it.createdAt) }
-                    )
-                    packRepo.replaceModifierPresets(
-                        data.modifierPresets.map {
-                            ModifierPreset(
-                                name = it.name,
-                                payload = it.payload,
-                                schemaVersion = it.schemaVersion,
-                                createdAt = it.createdAt,
-                                lastUsedAt = it.lastUsedAt
-                            )
-                        }
-                    )
-                    restorePrefs(data.prefs)
-                    // The verdict cache is per-device truth (which packs are owned/priced HERE), not part of
-                    // the backup — re-derive it from what's actually installed so a restored profile locks
-                    // exactly like a fresh import: packs not installed here stay locked until installed.
-                    packRepo.resetVerdictsToInstalled(
-                        runCatching { iconPackCatalog.installedIconPacks() }.getOrDefault(emptyList())
-                    )
-                    storePackLabels(data.packLabels)
-
+                    commitWithRecovery(snapshot) {
+                        clearWatchNotifications()
+                        UploadedImageStore.invalidatePendingTrash()
+                        mutableRestoreStage.value = RestoreStage.RESTORING_FILES
+                        files.apply()
+                        mutableRestoreStage.value = RestoreStage.RESTORING_DATA
+                        packRepo.replaceEverything(
+                            data.profiles.map { it.profile },
+                            data.profiles.flatMap { it.icons }
+                        )
+                        watchRepo.replaceAllRules(data.profiles.flatMap { bp ->
+                            bp.watchRules.map { it.toImport(bp.profile.id) }
+                        })
+                        WatchChecker(context, iconPackCatalog, watchRepo).initializeMissingBaselines()
+                        // Replace-all, like everything else in a full restore. Archives written before saved
+                        // colours existed carry none, which correctly clears a library the user is replacing.
+                        packRepo.replaceColorPresets(
+                            data.colorPresets.map { ColorPreset(name = it.name, style = it.style, createdAt = it.createdAt) }
+                        )
+                        packRepo.replaceModifierPresets(
+                            data.modifierPresets.map {
+                                ModifierPreset(
+                                    name = it.name,
+                                    payload = it.payload,
+                                    schemaVersion = it.schemaVersion,
+                                    createdAt = it.createdAt,
+                                    lastUsedAt = it.lastUsedAt
+                                )
+                            }
+                        )
+                        restorePrefs(data.prefs)
+                        // The verdict cache is per-device truth (which packs are owned/priced HERE), not part of
+                        // the backup — re-derive it from what's actually installed so a restored profile locks
+                        // exactly like a fresh import: packs not installed here stay locked until installed.
+                        packRepo.resetVerdictsToInstalled(
+                            runCatching { iconPackCatalog.installedIconPacks() }.getOrDefault(emptyList())
+                        )
+                        storePackLabels(data.packLabels)
+                        files.sync()
+                    }
                     files.finish()
                 } catch (error: Throwable) {
-                    try {
-                        files.rollback()
-                    } catch (rollbackError: Exception) {
-                        error.addSuppressed(rollbackError)
-                    }
+                    if (error !is BackupRecoveryRequiredException) files.finish()
                     throw error
                 }
             }
-        }
-
+        } finally { recovery.discard(snapshot) }
         return ImportResult(ImportKind.BACKUP, data.profiles.size, data.profiles.sumOf { it.icons.size })
     }
 
@@ -668,14 +940,14 @@ class BackupManager(
             appManager.appFilterDrawableName(packPackage, InstalledApplication(packageName, activityName, 0))
         }.getOrNull()
 
-    private suspend fun restorePrefs(prefs: Map<String, BackupPref>) {
+    private suspend fun restorePrefs(prefs: Map<String, BackupPref>, preserveDeviceLocal: Boolean = true) {
         context.dataStore.edit { store ->
-            val autoBackupInterval = store[AutoBackupIntervalKey]
-            val autoBackupTreeUri = store[AutoBackupTreeUriKey]
-            val lastAutoBackupAt = store[LastAutoBackupAtKey]
+            val autoBackupInterval = store[AutoBackupIntervalKey].takeIf { preserveDeviceLocal }
+            val autoBackupTreeUri = store[AutoBackupTreeUriKey].takeIf { preserveDeviceLocal }
+            val lastAutoBackupAt = store[LastAutoBackupAtKey].takeIf { preserveDeviceLocal }
             store.clear()
             for ((name, pref) in prefs) {
-                if (name in DEVICE_LOCAL_PREF_NAMES) continue
+                if (preserveDeviceLocal && name in DEVICE_LOCAL_PREF_NAMES) continue
                 when (pref.tag) {
                     BackupPref.BOOL -> store[booleanPreferencesKey(name)] = pref.value as Boolean
                     BackupPref.INT -> store[intPreferencesKey(name)] = pref.value as Int

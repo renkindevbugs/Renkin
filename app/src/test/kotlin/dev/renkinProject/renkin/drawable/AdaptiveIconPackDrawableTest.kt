@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.drawable
 
+import android.app.Application
+
 import android.graphics.Bitmap
 import android.graphics.Color
 import dev.renkinProject.renkin.extension.getBytes
@@ -16,7 +18,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
+@Config(application = Application::class, sdk = [33])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AdaptiveIconPackDrawableTest {
 

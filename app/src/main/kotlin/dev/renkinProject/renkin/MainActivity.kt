@@ -29,20 +29,14 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import dev.renkinProject.renkin.data.UploadedImageStore
+import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.data.StorageRecoveryState
 import dev.renkinProject.renkin.data.isDarkModeEnabled
-import dev.renkinProject.renkin.data.WatchCheckIntervalKey
-import dev.renkinProject.renkin.data.AutoBackupIntervalKey
-import dev.renkinProject.renkin.data.AUTO_BACKUP_INTERVAL_OFF
-import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
-import dev.renkinProject.renkin.data.getIntValue
-import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
-import dev.renkinProject.renkin.data.normalizeAutoBackupInterval
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.apk.ExternalInstallAwaiter
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.service.WatchWorker
-import dev.renkinProject.renkin.service.AutoBackupWorker
 import dev.renkinProject.renkin.util.CrashReporter
 import dev.renkinProject.renkin.ui.*
 import dev.renkinProject.renkin.ui.theme.RenkinTheme
@@ -50,7 +44,6 @@ import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import dagger.hilt.android.AndroidEntryPoint
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
@@ -92,28 +85,27 @@ class MainActivity : ComponentActivity() {
         handleWatchIntent(intent)
         handleSharedImage(intent)
 
-        // Icon-watch: schedule the periodic safety-net check (version-gated, so it's near-free
-        // when nothing changed). This is the only watch trigger — see WatchWorker.
         lifecycleScope.launch(Dispatchers.Default) {
-            // KEEP so an already-running interval timer isn't reset on every launch; the
-            // user's chosen interval is applied immediately (UPDATE) when they change it.
-            val intervalMinutes = applicationContext.dataStore.data.first()
-                .getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)
-                .let(::normalizeWatchCheckInterval)
-            WatchWorker.schedulePeriodic(applicationContext, intervalMinutes)
-            val autoBackupHours = applicationContext.dataStore.data.first()
-                .getIntValue(AutoBackupIntervalKey, AUTO_BACKUP_INTERVAL_OFF)
-                .let(::normalizeAutoBackupInterval)
-            AutoBackupWorker.schedule(
-                applicationContext,
-                autoBackupHours,
-                androidx.work.ExistingPeriodicWorkPolicy.KEEP
-            )
             // Drop crash logs older than the retention window (and migrate any legacy log).
             CrashReporter.prune(applicationContext)
         }
 
         setContent {
+            val recoveryState by StorageOperationGate.recoveryState.collectAsState()
+            val recoveryFailureReason by StorageOperationGate.recoveryFailureReason.collectAsState()
+            if (recoveryState != StorageRecoveryState.READY) {
+                RenkinTheme {
+                    BackupRecoveryScreen(
+                        state = recoveryState,
+                        failureReason = recoveryFailureReason,
+                        actionError = viewModel.recoveryActionError,
+                        busy = viewModel.storageRecoveryRetryRunning,
+                        onRetry = viewModel::retryStorageRecovery,
+                        onKeepCurrent = viewModel::abandonStorageRecovery
+                    )
+                }
+                return@setContent
+            }
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
             edgeToEdge(darkMode)
             // Pack resources must resolve values-night the way the UI displays, not the way

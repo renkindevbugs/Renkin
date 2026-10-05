@@ -2,6 +2,8 @@ package dev.renkinProject.renkin.data
 
 import android.content.Context
 import androidx.room.withTransaction
+import dev.renkinProject.renkin.data.transfer.BackupDatabaseSnapshot
+import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -15,10 +17,34 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
      * [RenkinPackDatabase] to the primary constructor instead. */
     constructor(context: Context) : this(RenkinPackDatabase.get(context))
 
+    private suspend fun <T> access(block: suspend () -> T): T = StorageOperationGate.run {
+        withContext(Dispatchers.Default) { block() }
+    }
+
+    private suspend fun <T> transaction(block: suspend () -> T): T = StorageOperationGate.run {
+        db.withTransaction { block() }
+    }
+
+    internal suspend fun writeRecoverySnapshot(file: File) = transaction {
+        BackupDatabaseSnapshot.write(db.openHelper.writableDatabase, file)
+    }
+
+    internal suspend fun restoreRecoverySnapshot(file: File) = transaction {
+        BackupDatabaseSnapshot.restore(db.openHelper.writableDatabase, file)
+    }
+
+    internal suspend fun checkRecoveryCompatibility(file: File) = access {
+        BackupDatabaseSnapshot.checkCompatibility(db.openHelper.writableDatabase, file)
+    }
+
+    internal suspend fun flushRecoveryWrites() = access {
+        BackupDatabaseSnapshot.flush(db.openHelper.writableDatabase)
+    }
+
     private val dao = db.renkinPackDao()
     private val profileDao = db.profileDao()
 
-    suspend fun getAll(profileId: Long): List<DbApplication> = withContext(Dispatchers.Default) {
+    suspend fun getAll(profileId: Long): List<DbApplication> = access {
         dao.getAll(profileId)
     }
 
@@ -26,13 +52,13 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
      * Replaces the stored set of [profileId] in one shot — atomically: a crash or error
      * between the delete and the insert must not leave the profile empty.
      */
-    suspend fun replaceAll(profileId: Long, apps: List<DbApplication>) = db.withTransaction {
+    suspend fun replaceAll(profileId: Long, apps: List<DbApplication>) = transaction {
         dao.deleteAllApplications(profileId)
         dao.insertAll(apps)
     }
 
     /** Every profile's stored icons in one read — backup export. */
-    suspend fun getAllProfilesApplications(): List<DbApplication> = withContext(Dispatchers.Default) {
+    suspend fun getAllProfilesApplications(): List<DbApplication> = access {
         dao.getAllProfiles()
     }
 
@@ -41,7 +67,7 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
      * the backup's profile ids (icons and watch rules reference them). Callers must have fully
      * parsed the incoming data first — a decode error must not run after the wipe.
      */
-    suspend fun replaceEverything(profiles: List<Profile>, apps: List<DbApplication>) = db.withTransaction {
+    suspend fun replaceEverything(profiles: List<Profile>, apps: List<DbApplication>) = transaction {
         dao.deleteEverything()
         profileDao.deleteEverything()
         profiles.forEach { profileDao.insert(it) }
@@ -52,12 +78,12 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
 
     private val builtIconDao = db.builtIconDao()
 
-    suspend fun builtIcons(profileId: Long): List<BuiltIcon> = withContext(Dispatchers.Default) {
+    suspend fun builtIcons(profileId: Long): List<BuiltIcon> = access {
         builtIconDao.get(profileId)
     }
 
     /** One transaction: a half-written record would read as "half the pack is unbuilt". */
-    suspend fun replaceBuiltIcons(profileId: Long, rows: List<BuiltIcon>) = db.withTransaction {
+    suspend fun replaceBuiltIcons(profileId: Long, rows: List<BuiltIcon>) = transaction {
         builtIconDao.deleteForProfile(profileId)
         builtIconDao.insertAll(rows)
     }
@@ -67,19 +93,19 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
     private val presetDao = db.colorPresetDao()
 
     /** Saved colours/gradients, oldest first — the order they appear in the picker. */
-    fun colorPresetsFlow(): Flow<List<ColorPreset>> = presetDao.getAllFlow()
+    fun colorPresetsFlow(): Flow<List<ColorPreset>> = StorageOperationGate.observe(presetDao.getAllFlow())
 
     suspend fun saveColorPreset(name: String, style: String): Long =
-        withContext(Dispatchers.Default) {
+        access {
             presetDao.insert(ColorPreset(name = name, style = style))
         }
 
-    suspend fun deleteColorPreset(id: Long) = withContext(Dispatchers.Default) {
+    suspend fun deleteColorPreset(id: Long) = access {
         presetDao.delete(id)
     }
 
     /** Backup export reads the library in one shot. */
-    suspend fun allColorPresets(): List<ColorPreset> = withContext(Dispatchers.Default) {
+    suspend fun allColorPresets(): List<ColorPreset> = access {
         presetDao.getAll()
     }
 
@@ -87,7 +113,7 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
      * Backup import: the saved colours belong to the device, not a profile, so a full restore
      * replaces the whole library the same way it replaces profiles.
      */
-    suspend fun replaceColorPresets(presets: List<ColorPreset>) = db.withTransaction {
+    suspend fun replaceColorPresets(presets: List<ColorPreset>) = transaction {
         presetDao.deleteEverything()
         presets.forEach { presetDao.insert(it) }
     }
@@ -97,38 +123,38 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
     private val modifierPresetDao = db.modifierPresetDao()
 
     /** Saved Modifier-tab recipes, most recently used first — the order the strip shows them. */
-    fun modifierPresetsFlow(): Flow<List<ModifierPreset>> = modifierPresetDao.getAllFlow()
+    fun modifierPresetsFlow(): Flow<List<ModifierPreset>> = StorageOperationGate.observe(modifierPresetDao.getAllFlow())
 
     suspend fun saveModifierPreset(name: String, payload: String, schemaVersion: Int): Long =
-        withContext(Dispatchers.Default) {
+        access {
             modifierPresetDao.insert(
                 ModifierPreset(name = name, payload = payload, schemaVersion = schemaVersion)
             )
         }
 
-    suspend fun renameModifierPreset(id: Long, name: String) = withContext(Dispatchers.Default) {
+    suspend fun renameModifierPreset(id: Long, name: String) = access {
         modifierPresetDao.rename(id, name)
     }
 
     suspend fun updateModifierPreset(id: Long, payload: String, schemaVersion: Int) =
-        withContext(Dispatchers.Default) {
+        access {
             modifierPresetDao.update(id, payload, schemaVersion, System.currentTimeMillis())
         }
 
     /** Loading a preset makes it the most recent one, which is what the strip is ordered by. */
-    suspend fun markModifierPresetUsed(id: Long) = withContext(Dispatchers.Default) {
+    suspend fun markModifierPresetUsed(id: Long) = access {
         modifierPresetDao.markUsed(id, System.currentTimeMillis())
     }
 
-    suspend fun deleteModifierPreset(id: Long) = withContext(Dispatchers.Default) {
+    suspend fun deleteModifierPreset(id: Long) = access {
         modifierPresetDao.delete(id)
     }
 
-    suspend fun allModifierPresets(): List<ModifierPreset> = withContext(Dispatchers.Default) {
+    suspend fun allModifierPresets(): List<ModifierPreset> = access {
         modifierPresetDao.getAll()
     }
 
-    suspend fun replaceModifierPresets(presets: List<ModifierPreset>) = db.withTransaction {
+    suspend fun replaceModifierPresets(presets: List<ModifierPreset>) = transaction {
         modifierPresetDao.deleteEverything()
         presets.forEach { modifierPresetDao.insert(it.copy(id = 0)) }
     }
@@ -137,15 +163,15 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
 
     private val verdictDao = db.packVerdictDao()
 
-    suspend fun verdicts(packages: List<String>): Map<String, PackVerdict> = withContext(Dispatchers.Default) {
+    suspend fun verdicts(packages: List<String>): Map<String, PackVerdict> = access {
         verdictDao.get(packages).associateBy { it.packageName }
     }
 
-    suspend fun allVerdicts(): List<PackVerdict> = withContext(Dispatchers.Default) {
+    suspend fun allVerdicts(): List<PackVerdict> = access {
         verdictDao.getAll()
     }
 
-    suspend fun upsertVerdicts(verdicts: List<PackVerdict>) = withContext(Dispatchers.Default) {
+    suspend fun upsertVerdicts(verdicts: List<PackVerdict>) = access {
         if (verdicts.isNotEmpty()) verdictDao.upsert(verdicts)
     }
 
@@ -155,7 +181,7 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
      * truth about which packs are owned/priced HERE and must not survive a restore that replaced
      * everything else — otherwise a pack the device no longer has installed would stay unlocked.
      */
-    suspend fun resetVerdictsToInstalled(installed: List<IconPack>) = withContext(Dispatchers.Default) {
+    suspend fun resetVerdictsToInstalled(installed: List<IconPack>) = access {
         verdictDao.deleteEverything()
         if (installed.isNotEmpty()) {
             verdictDao.upsert(installed.map {
@@ -165,38 +191,38 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
     }
 
     /** Every pack any stored icon (any profile) came from. */
-    suspend fun distinctSourcePacks(): List<String> = withContext(Dispatchers.Default) {
+    suspend fun distinctSourcePacks(): List<String> = access {
         dao.distinctSourcePacks()
     }
 
     // ---- Profiles -----------------------------------------------------------------
 
     /** All profiles, default first (ordered by id), as a reactive stream for the switcher UI. */
-    fun profilesFlow(): Flow<List<Profile>> = profileDao.getAllFlow()
+    fun profilesFlow(): Flow<List<Profile>> = StorageOperationGate.observe(profileDao.getAllFlow())
 
-    suspend fun profiles(): List<Profile> = withContext(Dispatchers.Default) { profileDao.getAll() }
+    suspend fun profiles(): List<Profile> = access { profileDao.getAll() }
 
-    suspend fun profile(id: Long): Profile? = withContext(Dispatchers.Default) { profileDao.get(id) }
+    suspend fun profile(id: Long): Profile? = access { profileDao.get(id) }
 
     /** Restores the undeletable default row without touching its icons or an existing profile. */
-    suspend fun ensureDefaultProfile(): Profile = withContext(Dispatchers.Default) {
+    suspend fun ensureDefaultProfile(): Profile = access {
         profileDao.insertIfMissing(
             Profile(id = DEFAULT_PROFILE_ID, name = "Renkin", packLabel = "Renkin Pack")
         )
         checkNotNull(profileDao.get(DEFAULT_PROFILE_ID))
     }
 
-    suspend fun createProfile(profile: Profile): Long = withContext(Dispatchers.Default) {
+    suspend fun createProfile(profile: Profile): Long = access {
         profileDao.insert(profile)
     }
 
-    suspend fun updateProfile(profile: Profile) = withContext(Dispatchers.Default) {
+    suspend fun updateProfile(profile: Profile) = access {
         profileDao.update(profile)
     }
 
     /** Deletes the profile and all of its stored icons. The default profile is never deleted. */
-    suspend fun deleteProfile(id: Long) = withContext(Dispatchers.Default) {
-        if (id == DEFAULT_PROFILE_ID) return@withContext
+    suspend fun deleteProfile(id: Long) = access {
+        if (id == DEFAULT_PROFILE_ID) return@access
         dao.deleteAllApplications(id)
         profileDao.delete(id)
     }

@@ -15,6 +15,7 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.constants.SuppressDeprecation
 import dev.renkinProject.renkin.constants.SuppressSameParameterValue
 import dev.renkinProject.renkin.data.InstalledApplication
+import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.drawable.InsetIconDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
@@ -162,7 +163,7 @@ class IconPackBuilder(
         return iconPackName
     }
 
-    fun buildAndSign(
+    suspend fun buildAndSign(
         themed: Boolean,
         iconColor: String,
         backgroundColor: String,
@@ -753,7 +754,7 @@ class IconPackBuilder(
         return Version(versionCode, versionName)
     }
 
-    private fun signApk(file: File, outFile: File) {
+    private suspend fun signApk(file: File, outFile: File): Unit = StorageOperationGate.run {
         val pwd = PackKeystore.password(ctx.filesDir)
 
         val dtl = ApkUtils.KeyStoreDetails(keyStoreFile, pwd, PackKeystore.KEY_ALIAS, pwd)

@@ -15,6 +15,7 @@ internal class BackupFileTransaction private constructor(
     private val directory: File,
     private val entries: List<Entry>
 ) : Closeable {
+    val batchName: String get() = directory.name
     private var canClean = true
 
     private class Entry(val target: File, val replacement: File?, val previous: File) {
@@ -63,15 +64,28 @@ internal class BackupFileTransaction private constructor(
         canClean = true
     }
 
+    fun sync() {
+        (entries.mapNotNull { it.target.parentFile } + directory).distinct().forEach { parent ->
+            if (!parent.isDirectory) throw IOException("Cannot sync file transaction directory")
+            val descriptor = Os.open(parent.absolutePath, OsConstants.O_RDONLY, 0)
+            try { Os.fsync(descriptor) } finally { Os.close(descriptor) }
+        }
+    }
+
     override fun close() {
-        // A failed rollback retains its old files. Durable crash recovery is phase 3B.
+        // Recovery owns retained originals until the full storage rollback finishes.
         BackupStaging.release(directory, delete = canClean)
     }
 
     companion object {
-        suspend fun prepare(filesDir: File, replacements: Map<File, File?>): BackupFileTransaction {
+        suspend fun prepare(
+            filesDir: File,
+            replacements: Map<File, File?>,
+            onDirectoryCreated: (String) -> Unit = {}
+        ): BackupFileTransaction {
             val directory = BackupStaging.create(filesDir, "backup-file-commit-")
             try {
+                onDirectoryCreated(directory.name)
                 ensureBackupSpace(filesDir)
                 val entries = replacements.entries.mapIndexed { index, (target, source) ->
                     currentCoroutineContext().ensureActive()

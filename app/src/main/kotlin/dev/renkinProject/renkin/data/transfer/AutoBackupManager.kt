@@ -8,6 +8,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.renkinProject.renkin.data.AUTO_BACKUP_INTERVAL_OFF
 import dev.renkinProject.renkin.data.AutoBackupIntervalKey
 import dev.renkinProject.renkin.data.AutoBackupTreeUriKey
+import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
 import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getLongValue
@@ -40,13 +41,13 @@ class AutoBackupManager @Inject constructor(
         it.getLongValue(LastAutoBackupAtKey)
     }
 
-    suspend fun setInterval(hours: Int) {
+    suspend fun setInterval(hours: Int): Unit = StorageOperationGate.run {
         val normalized = normalizeAutoBackupInterval(hours)
         context.dataStore.setIntValue(AutoBackupIntervalKey, normalized)
         AutoBackupWorker.schedule(context, normalized)
     }
 
-    suspend fun setFolder(uri: Uri, intervalHours: Int) {
+    suspend fun setFolder(uri: Uri, intervalHours: Int): Unit = StorageOperationGate.run {
         context.contentResolver.takePersistableUriPermission(
             uri,
             Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION

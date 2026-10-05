@@ -8,6 +8,7 @@ import java.io.IOException
 class BackupSpaceException : IOException("Not enough free storage for backup staging")
 class BackupSizeException : IOException("Backup exceeds supported size limits")
 class BackupMemoryException(cause: OutOfMemoryError) : IOException("Not enough memory to process this backup", cause)
+class BackupRecoveryRequiredException(cause: Throwable) : IOException("Storage recovery must finish before the app can continue", cause)
 
 internal fun ensureBackupSpace(directory: File, requiredBytes: Long = 0) {
     if (StatFs(directory.absolutePath).availableBytes < requiredBytes + 32L * 1024 * 1024) {

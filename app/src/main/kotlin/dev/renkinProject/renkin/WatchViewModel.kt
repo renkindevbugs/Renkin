@@ -10,6 +10,9 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.WatchCheckIntervalKey
+import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
+import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
 import dev.renkinProject.renkin.data.getPreferenceFlow
 import dev.renkinProject.renkin.data.setIntValue
@@ -21,6 +24,7 @@ import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.service.WatchChecker
 import dev.renkinProject.renkin.util.Log
@@ -78,10 +82,18 @@ class WatchViewModel @Inject constructor(
     /** Debug: change how often the periodic check runs and reschedule it immediately. */
     fun setCheckIntervalMinutes(minutes: Int) {
         viewModelScope.launch {
-            val app = getApplication<Application>()
-            val normalized = normalizeWatchCheckInterval(minutes)
-            app.dataStore.setIntValue(WatchCheckIntervalKey, normalized)
-            WatchWorker.schedulePeriodic(app, normalized, ExistingPeriodicWorkPolicy.UPDATE)
+            try {
+                StorageOperationGate.run {
+                    val app = getApplication<Application>()
+                    val normalized = normalizeWatchCheckInterval(minutes)
+                    app.dataStore.setIntValue(WatchCheckIntervalKey, normalized)
+                    WatchWorker.schedulePeriodic(app, normalized, ExistingPeriodicWorkPolicy.UPDATE)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.error("WatchViewModel", "Could not update the check interval", error)
+            }
         }
     }
 
@@ -104,16 +116,19 @@ class WatchViewModel @Inject constructor(
         if (isSavingRule) return
         isSavingRule = true
         val profileId = appProvider.activeProfileId
+        val expected = appProvider.sessionToken
         viewModelScope.launch {
             // Saving reads every selected pack; a broken one must surface as "not saved",
             // never as a crash out of viewModelScope.
             val savedId = try {
+                if (!appProvider.isCurrentSession(expected)) return@launch
                 WatchChecker(getApplication()).saveRule(
                     existingRuleId = existing?.rule?.id,
                     apps = apps,
                     watchAllPacks = watchAll,
                     packPackages = packs,
-                    profileId = profileId
+                    profileId = profileId,
+                    commit = { save -> if (appProvider.isCurrentSession(expected)) save() else 0L }
                 )
             } catch (error: CancellationException) {
                 throw error
@@ -128,23 +143,35 @@ class WatchViewModel @Inject constructor(
     }
 
     fun deleteRule(ruleId: Long) {
-        viewModelScope.launch { deleteRulesAndNotifications(listOf(ruleId)) }
+        val expected = appProvider.sessionToken
+        viewModelScope.launch { deleteRulesAndNotifications(listOf(ruleId), expected) }
     }
 
     fun deleteCompleted() {
+        val expected = appProvider.sessionToken
+        val ids = rules.value.filter { it.rule.completed }.map { it.rule.id }
         viewModelScope.launch {
-            deleteRulesAndNotifications(rules.value.filter { it.rule.completed }.map { it.rule.id })
+            deleteRulesAndNotifications(ids, expected)
         }
     }
 
-    private suspend fun deleteRulesAndNotifications(ruleIds: List<Long>) {
+    private suspend fun deleteRulesAndNotifications(ruleIds: List<Long>, expected: ProfileSessionToken) {
         if (ruleIds.isEmpty()) return
-        val removedSuggestions = repo.deleteRules(ruleIds)
-        RenkinNotifications().cancelIconAvailable(
-            context = getApplication(),
-            suggestionIds = removedSuggestions,
-            cancelSummary = repo.suggestionCount() == 0
-        )
+        try {
+            StorageOperationGate.run {
+                if (!appProvider.isCurrentSession(expected)) return@run
+                val removedSuggestions = repo.deleteRules(ruleIds)
+                RenkinNotifications().cancelIconAvailable(
+                    context = getApplication(),
+                    suggestionIds = removedSuggestions,
+                    cancelSummary = repo.suggestionCount() == 0
+                )
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.error("WatchViewModel", "Could not delete watch rules", error)
+        }
     }
 
     /** Runs a manual check; [onResult] receives the number of new suggestions found. */
@@ -153,20 +180,28 @@ class WatchViewModel @Inject constructor(
         viewModelScope.launch {
             isChecking = true
             // finally keeps the spinner from sticking when the checker throws.
-            val fired = try {
-                WatchChecker(getApplication()).runCheck(refreshCompletedSuggestions = true)
+            val count = try {
+                val app = getApplication<Application>()
+                val result = WatchChecker(app).runCheckResult(refreshCompletedSuggestions = true)
+                StorageOperationGate.run {
+                    if (!result.isCurrent()) return@run 0
+                    app.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())
+                    val prefs = app.dataStore.getPreferencesAfterPendingWrites()
+                    WatchWorker.schedulePeriodic(
+                        app, normalizeWatchCheckInterval(prefs.getIntValue(WatchCheckIntervalKey, WATCH_CHECK_INTERVAL_DEFAULT)),
+                        ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE
+                    )
+                    result.suggestions.size
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.error("WatchViewModel", "Manual watch check failed", error)
+                return@launch
             } finally {
                 isChecking = false
             }
-            // A manual check counts as a check: record it and re-enqueue the periodic
-            // safety-net so its next run (and the "Next check" label) move out by a full
-            // interval from now.
-            val app = getApplication<Application>()
-            app.dataStore.setLongValue(LastWatchCheckAtKey, System.currentTimeMillis())
-            WatchWorker.schedulePeriodic(
-                app, checkIntervalMinutes.value, ExistingPeriodicWorkPolicy.CANCEL_AND_REENQUEUE
-            )
-            onResult(fired.size)
+            onResult(count)
         }
     }
 
@@ -174,14 +209,23 @@ class WatchViewModel @Inject constructor(
      * full notify + deep-link path runs. */
     fun simulate() {
         viewModelScope.launch {
-            val ctx = getApplication<Application>()
-            WatchChecker(ctx).runCheck()
-            repo.debugStaleAllStates()
-            WatchWorker.runNow(ctx)
+            try {
+                val ctx = getApplication<Application>()
+                val result = WatchChecker(ctx).runCheckResult()
+                StorageOperationGate.run {
+                    if (!result.isCurrent()) return@run
+                    repo.debugStaleAllStates()
+                    WatchWorker.runNow(ctx)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.error("WatchViewModel", "Watch simulation failed", error)
+            }
         }
     }
 
     /** Loads a suggestion and its candidate icons for the apply modal. */
     suspend fun loadSuggestion(id: Long): Pair<IconSuggestion?, List<IconSuggestionCandidate>> =
-        repo.getSuggestion(id) to repo.getCandidates(id)
+        StorageOperationGate.run { repo.getSuggestion(id) to repo.getCandidates(id) }
 }

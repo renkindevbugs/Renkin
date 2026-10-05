@@ -2,6 +2,7 @@ package dev.renkinProject.renkin
 
 import android.app.ActivityManager
 import android.app.Application
+import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Process
@@ -9,7 +10,10 @@ import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
 import dagger.hilt.android.HiltAndroidApp
-import dev.renkinProject.renkin.data.transfer.BackupStaging
+import dev.renkinProject.renkin.data.transfer.BackupManagerEntryPoint
+import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.service.BackgroundWorkScheduler
+import dagger.hilt.android.EntryPointAccessors
 import dev.renkinProject.renkin.util.CrashReporter
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CoroutineScope
@@ -25,6 +29,18 @@ import kotlinx.coroutines.launch
 class RenkinApplication : Application() {
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    override fun attachBaseContext(base: Context) {
+        super.attachBaseContext(base)
+        if (isMainProcess()) {
+            // WorkManager's provider starts before onCreate. Install the barrier before any
+            // provider can launch a worker that touches persisted state.
+            StorageOperationGate.installRecovery {
+                EntryPointAccessors.fromApplication(this, BackupManagerEntryPoint::class.java)
+                    .backupManager().recoverPendingRestore()
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
         // Capture uncaught exceptions to a local file so the next launch can offer to email
@@ -34,9 +50,10 @@ class RenkinApplication : Application() {
         if (isMainProcess()) {
             applicationScope.launch {
                 try {
-                    BackupStaging.cleanAfterProcessStart(filesDir)
+                    StorageOperationGate.run { }
+                    BackgroundWorkScheduler.reconcile(this@RenkinApplication)
                 } catch (error: Exception) {
-                    Log.error("BackupStaging", "Could not clean abandoned backup staging", error)
+                    Log.error("RenkinApplication", "Could not finish recovery and startup maintenance", error)
                 }
             }
         }

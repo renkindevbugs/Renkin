@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.data
 
 import android.app.Application
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -22,7 +23,7 @@ class UploadedImageStoreTest {
     }
 
     @Test
-    fun trashHidesImageAndUndoRestoresIt() {
+    fun trashHidesImageAndUndoRestoresIt() = runBlocking {
         val image = UploadedImageStore.directory(context).resolve("image.png").apply {
             writeBytes(byteArrayOf(1, 2, 3))
         }
@@ -40,7 +41,7 @@ class UploadedImageStoreTest {
     }
 
     @Test
-    fun cleanupFinalizesInterruptedDeletion() {
+    fun cleanupFinalizesInterruptedDeletion() = runBlocking {
         val image = UploadedImageStore.directory(context).resolve("image.png").apply {
             writeBytes(byteArrayOf(1))
         }

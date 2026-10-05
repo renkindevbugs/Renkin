@@ -8,6 +8,7 @@ import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getDefaultBackgroundColor
 import dev.renkinProject.renkin.data.getDefaultIconColor
@@ -126,7 +127,6 @@ class IconPackBuildService internal constructor(
         var builtDirectory: File? = null
         try {
             return withContext(Dispatchers.Default) {
-                // Builds share a keystore; they serialize independently of active-profile edits.
                 buildOperations.withLock {
                     val preferences = prepared.preferences
                     val calendarData = iconPackRepository.calendarBuildData(prepared.calendarSelections)
@@ -138,7 +138,7 @@ class IconPackBuildService internal constructor(
                         iconPackCatalog = iconPackCatalog, apkDir = directory
                     )
                     val buildContext = currentCoroutineContext()
-                    val canBeInstalled = builder.canBeInstalled()
+                    val canBeInstalled = StorageOperationGate.run { builder.canBeInstalled() }
                     val apk = builder.buildAndSign(
                         preferences.getBooleanValue(ExportThemedKey),
                         preferences.getDefaultIconColor(context).toHexString(),

@@ -18,6 +18,8 @@ import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.OverrideIconKey
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.data.StorageOperationBusyException
 import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.data.GlobalApplyCustomKey
 import dev.renkinProject.renkin.data.GlobalApplyExistingKey
@@ -94,9 +96,19 @@ internal fun mergeGlobalRenders(
 internal class ProfileOperationGate {
     private val mutex = Mutex()
 
-    suspend fun <T> run(operation: suspend () -> T): T = mutex.withLock { operation() }
+    suspend fun <T> run(operation: suspend () -> T): T = StorageOperationGate.run {
+        mutex.withLock { operation() }
+    }
 
     suspend fun <T> runWithBoundedWait(operation: suspend () -> T): T {
+        try {
+            return StorageOperationGate.runWithBoundedWait { runWithBoundedProfileWait(operation) }
+        } catch (_: StorageOperationBusyException) {
+            throw ProfileOperationBusyException()
+        }
+    }
+
+    private suspend fun <T> runWithBoundedProfileWait(operation: suspend () -> T): T {
         var acquired = false
         try {
             // Limit only acquisition: canceling a preference write could leave a partial recipe.
@@ -286,15 +298,17 @@ class ApplicationProvider internal constructor(
      * also restores the last-built primary selection while profile operations are blocked, so an
      * early profile-switch tap cannot move those preferences into a different profile.
      */
-    suspend fun ensureInitialized() = initialLoadMutex.withLock {
-        if (!startupComplete) {
-            profileOperations.run {
-                if (!startupComplete) {
-                    val startupPrefs = context.dataStore.data.first()
-                    if (startupPrefs.contains(BuiltPrimarySourceKey)) {
-                        context.dataStore.restoreBuiltPrimarySource(startupPrefs)
+    suspend fun ensureInitialized() = StorageOperationGate.run {
+        initialLoadMutex.withLock {
+            if (!startupComplete) {
+                profileOperations.run {
+                    if (!startupComplete) {
+                        val startupPrefs = context.dataStore.data.first()
+                        if (startupPrefs.contains(BuiltPrimarySourceKey)) {
+                            context.dataStore.restoreBuiltPrimarySource(startupPrefs)
+                        }
+                        initialize()
                     }
-                    initialize()
                 }
             }
         }

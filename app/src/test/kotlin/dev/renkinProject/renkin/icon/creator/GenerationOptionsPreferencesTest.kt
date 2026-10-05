@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.icon.creator
 
+import android.app.Application
+
 import android.content.Context
 import androidx.compose.ui.graphics.Color
 import androidx.datastore.preferences.core.preferencesOf
@@ -32,7 +34,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [33])
+@Config(application = Application::class, sdk = [33])
 class GenerationOptionsPreferencesTest {
     private val context: Context = ApplicationProvider.getApplicationContext()
 

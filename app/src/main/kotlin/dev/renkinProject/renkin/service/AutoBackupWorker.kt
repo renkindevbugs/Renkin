@@ -12,10 +12,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
-import dagger.hilt.EntryPoint
-import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
-import dagger.hilt.components.SingletonComponent
 import dev.renkinProject.renkin.data.AUTO_BACKUP_INTERVAL_OFF
 import dev.renkinProject.renkin.data.AutoBackupTreeUriKey
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
@@ -23,6 +20,8 @@ import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.normalizeAutoBackupInterval
 import dev.renkinProject.renkin.data.setLongValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
+import dev.renkinProject.renkin.data.transfer.BackupManagerEntryPoint
+import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
@@ -36,15 +35,15 @@ class AutoBackupWorker(appContext: Context, params: WorkerParameters) :
     CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
-        val treeUri = applicationContext.dataStore.data.first()
-            .getStringValue(AutoBackupTreeUriKey)
-            .takeIf(String::isNotEmpty)
-            ?.let(Uri::parse)
-            ?: return Result.failure()
-
         var outputUri: Uri? = null
         return try {
-            EntryPointAccessors.fromApplication(applicationContext, AutoBackupEntryPoint::class.java)
+            StorageOperationGate.run { }
+            val treeUri = applicationContext.dataStore.data.first()
+                .getStringValue(AutoBackupTreeUriKey)
+                .takeIf(String::isNotEmpty)
+                ?.let(Uri::parse)
+                ?: return Result.failure()
+            EntryPointAccessors.fromApplication(applicationContext, BackupManagerEntryPoint::class.java)
                 .backupManager().exportBackup {
                     val createdUri = createBackupDocument(treeUri)
                     outputUri = createdUri
@@ -159,10 +158,4 @@ class AutoBackupWorker(appContext: Context, params: WorkerParameters) :
                 .enqueueUniqueWork(IMMEDIATE_WORK_NAME, ExistingWorkPolicy.REPLACE, request)
         }
     }
-}
-
-@EntryPoint
-@InstallIn(SingletonComponent::class)
-internal interface AutoBackupEntryPoint {
-    fun backupManager(): BackupManager
 }

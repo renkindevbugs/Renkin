@@ -561,6 +561,9 @@ fun MainColumn(iconPacks: List<IconPack>) {
         )
     }
 
+    val restoreStage by viewModel.backupRestoreStage.collectAsState()
+    if (viewModel.backupInProgress) BackupRestoreProgress(restoreStage)
+
     // Locked icons from a missing pack: prompted automatically once per profile per session
     // (unless the profile opted out); the top-bar badge and banner reopen it any time.
     if (viewModel.showMissingPacksDialog) {
@@ -696,7 +699,7 @@ fun ApplicationList(
     // thread. Hold the spinner until ALL of it is done: revealing the list earlier shows rows
     // whose icons pop in seconds later, because the per-row bitmap decodes queue behind the
     // pack/DB loading still running on the same worker pool.
-    if (!viewModel.startupComplete) {
+    if (!viewModel.startupComplete || viewModel.startupFailed) {
         if (viewModel.startupFailed) {
             EmptyState(
                 icon = Icons.Filled.Warning,
