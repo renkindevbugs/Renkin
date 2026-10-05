@@ -258,18 +258,8 @@ fun GenerationOptions.withModifierPreset(payload: ModifierPresetPayload): Genera
             edgeGaussianRadius = effect.edgeSmoothing,
             edgeContrastNormalized = effect.edgeContrast,
             bgRemovalTolerance = effect.backgroundTolerance,
-            color = effect.colorizerStyle.firstColor,
-            colorizeFlat = effect.colorizerStyle.flat,
-            colorizeLighten = effect.colorizerStyle.lighten,
-            colorizeMonochrome = effect.colorizerStyle.monochrome,
-            colorizeInverse = effect.colorizerStyle.inverse,
-            colorizerMode = effect.colorizerStyle.mode,
-            colorizerGradientType = effect.colorizerStyle.gradientType,
-            colorizerGradientColors = effect.colorizerStyle.gradientStops,
-            colorizerGradientPositions = effect.colorizerStyle.gradientPositions,
-            colorizerGradientAngle = effect.colorizerStyle.gradientAngle,
             colorizeLayers = emptyList()
-        )
+        ).withColorizerStyle(effect.colorizerStyle)
     }
     payload.iconScale?.let { result = result.copy(iconScale = it) }
     payload.shape?.let { shape ->

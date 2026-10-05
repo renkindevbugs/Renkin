@@ -9,6 +9,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
@@ -18,6 +19,7 @@ import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
 import dev.renkinProject.renkin.icon.creator.withModifierPreset
+import dev.renkinProject.renkin.icon.creator.withColorizerStyle
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -115,7 +117,7 @@ internal fun rememberModifierPreviews(
                 )
             },
             colorize = { style ->
-                currentRender(currentOptions.withColorizerStyle(style))
+                currentRender(currentOptions.asColorizePreview(style))
             },
             shape = { style ->
                 currentRender(currentOptions.withShapeStyle(style))
@@ -200,15 +202,6 @@ internal fun GenerationOptions.withModifierAdjustments(
     bgRemovalTolerance = adjustments.bgRemovalTolerance,
     iconOffsetX = adjustments.iconOffsetX,
     iconOffsetY = adjustments.iconOffsetY,
-    colorizeFlat = adjustments.colorizeFlat,
-    colorizeLighten = adjustments.colorizeLighten,
-    colorizeMonochrome = adjustments.colorizeMonochrome,
-    colorizeInverse = adjustments.colorizeInverse,
-    colorizerMode = adjustments.colorizerMode,
-    colorizerGradientType = adjustments.colorizerGradientType,
-    colorizerGradientColors = adjustments.colorizerGradientColors,
-    colorizerGradientPositions = adjustments.colorizerGradientPositions,
-    colorizerGradientAngle = adjustments.colorizerGradientAngle,
     // Layers only apply to the segment modifier; plain Colorize always paints the whole icon.
     colorizeLayers = if (imageEdit == ImageEdit.COLORIZE_SEGMENTS) {
         adjustments.colorizeLayers
@@ -238,23 +231,14 @@ internal fun GenerationOptions.withModifierAdjustments(
     shadowAllDirections = adjustments.shadowAllDirections,
     shadowStyle = adjustments.shadowStyle(),
     shadowOpacity = adjustments.shadowOpacity
-)
+).withColorizerStyle(adjustments.colorizerStyleWith(Color(color)))
 
-/** The options with [style] substituted for the colourize settings. */
-internal fun GenerationOptions.withColorizerStyle(style: ColorizerStyle): GenerationOptions = copy(
-    primaryImageEdit = ImageEdit.COLORIZE,
-    color = style.firstColor,
-    colorizeFlat = style.flat,
-    colorizeLighten = style.lighten,
-    colorizeMonochrome = style.monochrome,
-    colorizeInverse = style.inverse,
-    colorizerMode = style.mode,
-    colorizerGradientType = style.gradientType,
-    colorizerGradientColors = style.gradientStops,
-    colorizerGradientPositions = style.gradientPositions,
-    colorizerGradientAngle = style.gradientAngle,
-    colorizeLayers = emptyList()
-)
+/** Previews plain Colorize even when the editor currently selects a different image edit. */
+internal fun GenerationOptions.asColorizePreview(style: ColorizerStyle): GenerationOptions =
+    withColorizerStyle(style).copy(
+        primaryImageEdit = ImageEdit.COLORIZE,
+        colorizeLayers = emptyList()
+    )
 
 internal fun GenerationOptions.withShapeStyle(style: ColorizerStyle): GenerationOptions = copy(
     bgColor = style.firstColor,

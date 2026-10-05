@@ -13,6 +13,7 @@ import dev.renkinProject.renkin.data.IncludeVectorKey
 import dev.renkinProject.renkin.data.MonochromeKey
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
 import dev.renkinProject.renkin.data.OutlineAddKey
+import dev.renkinProject.renkin.data.ColorizerStyleKeys
 import dev.renkinProject.renkin.data.ColorStyleKeys
 import dev.renkinProject.renkin.data.BackgroundStyleKeys
 import dev.renkinProject.renkin.data.GlobalShapeStyleKeys
@@ -46,14 +47,8 @@ import dev.renkinProject.renkin.data.GlobalColorizeLightenKey
 import dev.renkinProject.renkin.data.GlobalColorizeInverseKey
 import dev.renkinProject.renkin.data.GlobalColorizeKey
 import dev.renkinProject.renkin.data.GlobalColorizeMonochromeKey
-import dev.renkinProject.renkin.data.ColorizerGradientAngleKey
-import dev.renkinProject.renkin.data.ColorizerGradientColorKey
-import dev.renkinProject.renkin.data.ColorizerGradientColorsKey
 import dev.renkinProject.renkin.data.getGradientStops
 import dev.renkinProject.renkin.data.getGradientPositions
-import dev.renkinProject.renkin.data.ColorizerGradientPositionsKey
-import dev.renkinProject.renkin.data.ColorizerGradientTypeKey
-import dev.renkinProject.renkin.data.ColorizerModeKey
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
 import dev.renkinProject.renkin.data.GlobalShapeCropKey
 import dev.renkinProject.renkin.data.GlobalShapeKey
@@ -234,24 +229,9 @@ data class GenerationOptions(
                 override = override,
                 fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
                 textFontPath = FontCatalog.usablePathOrDefault(preferences.getStringValue(TextFontKey)),
-                colorizerMode = preferences.getEnumValue(
-                    ColorizerModeKey, ColorizerMode.SINGLE_COLOR
-                ),
-                colorizerGradientType = preferences.getEnumValue(
-                    ColorizerGradientTypeKey, GradientType.LINEAR
-                ),
-                colorizerGradientColors = preferences.getGradientStops(
-                    ColorizerGradientColorsKey, ColorizerGradientColorKey
-                ),
-                colorizerGradientPositions = preferences.getGradientPositions(
-                    ColorizerGradientPositionsKey
-                ),
-                colorizerGradientAngle = normalizeGradientAngle(
-                    preferences.getIntValue(ColorizerGradientAngleKey).toFloat()
-                ),
                 // Only ADD exists pack-wide; RECOLOR stays a per-app Modifier-tab option.
                 outlineMode = OutlineMode.NONE
-            )
+            ).withColorizerStyle(preferences.colorStyle(ColorizerStyleKeys, iconColor))
         }
     }
 }
@@ -293,15 +273,6 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         materialYou = false,
         themed = false,
         override = true,
-        colorizeFlat = colorizerStyle.flat,
-        colorizeLighten = colorizerStyle.lighten,
-        colorizeMonochrome = colorizerStyle.monochrome,
-        colorizeInverse = colorizerStyle.inverse,
-        colorizerMode = colorizerStyle.mode,
-        colorizerGradientType = colorizerStyle.gradientType,
-        colorizerGradientColors = colorizerStyle.gradientStops,
-        colorizerGradientPositions = colorizerStyle.gradientPositions,
-        colorizerGradientAngle = colorizerStyle.gradientAngle,
         iconScale = normalizeGlobalScalePercent(
             preferences.getIntValue(GlobalIconScaleKey, 100)
         ) / 100f,
@@ -318,7 +289,7 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         ).toFloat(),
         outlineColor = outlineStyle.firstColor,
         outlineStyle = outlineStyle
-    )
+    ).withColorizerStyle(colorizerStyle)
 }
 
 /**
@@ -354,6 +325,20 @@ fun GenerationOptions.backgroundShader(width: Int, height: Int): android.graphic
         style.gradientPositions
     )
 }
+
+/** Transfers every colourize field together; callers decide the image edit and segment layers. */
+fun GenerationOptions.withColorizerStyle(style: ColorizerStyle): GenerationOptions = copy(
+    color = style.firstColor,
+    colorizeFlat = style.flat,
+    colorizeLighten = style.lighten,
+    colorizeMonochrome = style.monochrome,
+    colorizeInverse = style.inverse,
+    colorizerMode = style.mode,
+    colorizerGradientType = style.gradientType,
+    colorizerGradientColors = style.gradientStops,
+    colorizerGradientPositions = style.gradientPositions,
+    colorizerGradientAngle = style.gradientAngle
+)
 
 // The colourize settings gathered back into the style the editors and shaders work with.
 internal val GenerationOptions.colorizerStyle: ColorizerStyle

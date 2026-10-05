@@ -1,0 +1,209 @@
+package dev.renkinProject.renkin.ui
+
+import android.app.Application
+import androidx.compose.runtime.saveable.SaverScope
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import dev.renkinProject.renkin.data.ImageEdit
+import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.TextType
+import dev.renkinProject.renkin.icon.creator.ColorizerMode
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.GradientType
+import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.icon.creator.OutlineMode
+import dev.renkinProject.renkin.icon.creator.SegmentLayer
+import dev.renkinProject.renkin.icon.creator.colorizerStyle
+import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
+import dev.renkinProject.renkin.icon.creator.withColorizerStyle
+import dev.renkinProject.renkin.icon.creator.withModifierPreset
+import org.junit.Assert.*
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class, sdk = [33])
+class ModifierColorStyleTest {
+    private val scope = SaverScope { true }
+    private val gradient = ColorizerStyle(
+        mode = ColorizerMode.GRADIENT,
+        gradientType = GradientType.RADIAL,
+        firstColor = 0x80123456.toInt(),
+        gradientStops = listOf(0xFFABCDEF.toInt(), 0x40224466),
+        gradientPositions = listOf(0f, 0.35f, 0.9f),
+        gradientAngle = 247f,
+        flat = true,
+        lighten = true,
+        monochrome = true,
+        inverse = true
+    )
+
+    private fun options() = GenerationOptions(
+        primarySource = Source.APPLICATION_ICON,
+        primaryImageEdit = ImageEdit.REMOVE_BACKGROUND,
+        primaryTextType = TextType.FULL_NAME,
+        primaryIconPack = "",
+        color = Color.Red.toArgb(),
+        bgColor = Color.White.toArgb(),
+        vector = false,
+        materialYou = false,
+        themed = false,
+        override = true,
+        iconScale = 0.8f,
+        iconShape = IconShape.COOKIE,
+        outlineMode = OutlineMode.ADD,
+        shadowEnabled = true,
+        colorizeLayers = listOf(SegmentLayer(listOf(1, 2), style = gradient))
+    )
+
+    private fun roundTrip(state: AdjustmentState): AdjustmentState {
+        val saved = with(AdjustmentState.Saver) { scope.save(state) }
+        return requireNotNull(AdjustmentState.Saver.restore(requireNotNull(saved)))
+    }
+
+    @Test fun saverPreservesEveryFieldOfFourIndependentStylesAndSegmentLayers() {
+        val state = AdjustmentState().apply {
+            colorizerStyle = gradient
+            shapeColorStyle = gradient.copy(firstColor = Color.Blue.toArgb(), gradientAngle = 95f)
+            outlineColorStyle = gradient.copy(firstColor = Color.Green.toArgb(), gradientType = GradientType.LINEAR)
+            shadowColorStyle = gradient.copy(firstColor = Color.Yellow.toArgb(), gradientPositions = listOf(0f, 0.6f, 1f))
+            colorizeLayers = listOf(SegmentLayer(listOf(3, 5), 0.24f, gradient))
+            shadowEnabled = true
+            shadowBlur = 12f
+            shadowDistance = 8f
+            shadowAngle = 70f
+            shadowAllDirections = true
+            shadowOpacity = 0.4f
+        }
+        val restored = roundTrip(state)
+        assertEquals(state.colorizerStyle, restored.colorizerStyle)
+        assertEquals(state.shapeColorStyle, restored.shapeColorStyle)
+        assertEquals(state.outlineColorStyle, restored.outlineColorStyle)
+        assertEquals(state.shadowColorStyle, restored.shadowColorStyle)
+        assertEquals(state.colorizeLayers, restored.colorizeLayers)
+        assertTrue(restored.shadowEnabled)
+        assertEquals(state.shadowBlur, restored.shadowBlur)
+        assertEquals(state.shadowDistance, restored.shadowDistance)
+        assertEquals(state.shadowAngle, restored.shadowAngle)
+        assertEquals(state.shadowAllDirections, restored.shadowAllDirections)
+        assertEquals(state.shadowOpacity, restored.shadowOpacity)
+    }
+
+    @Test fun oldKeyedStylesRestoreWithoutLosingGradientPositionsOrFlags() {
+        val saved = arrayListOf<Any>(
+            "colorizerMode", 1, "colorizerGradientType", 1,
+            "colorizerGradientColor", Color.Blue.toArgb(), "colorizerGradientPositions", listOf(0f, 0.7f),
+            "colorizerGradientAngle", 180f, "colorizeFlat", true, "colorizeLighten", true,
+            "colorizeMonochrome", true, "colorizeInverse", true
+        )
+        for ((prefix, color) in listOf("shape" to Color.Red, "outline" to Color.Green, "shadow" to Color.Yellow)) {
+            saved.addAll(listOf(
+                "${prefix}Color", color.toArgb(), "${prefix}ColorizerMode", 1,
+                "${prefix}GradientType", 1, "${prefix}GradientColors", gradient.gradientStops,
+                "${prefix}GradientPositions", gradient.gradientPositions, "${prefix}GradientAngle", 247f
+            ))
+        }
+        val restored = requireNotNull(AdjustmentState.Saver.restore(saved))
+        assertEquals(gradient.copy(
+            firstColor = Color.White.toArgb(), gradientStops = listOf(Color.Blue.toArgb()),
+            gradientPositions = listOf(0f, 0.7f), gradientAngle = 180f
+        ), restored.colorizerStyle)
+        val fill = gradient.copy(flat = false, lighten = false, monochrome = false, inverse = false)
+        assertEquals(fill.copy(firstColor = Color.Red.toArgb()), restored.shapeColorStyle)
+        assertEquals(fill.copy(firstColor = Color.Green.toArgb()), restored.outlineColorStyle)
+        assertEquals(fill.copy(firstColor = Color.Yellow.toArgb()), restored.shadowColorStyle)
+    }
+
+    @Test fun newStyleTakesPrecedenceOverLegacyFieldsAndMalformedStylesFallBack() {
+        val saved = arrayListOf<Any>(
+            "shapeStyle", encodeColorizerStyle(gradient), "shapeColor", Color.Blue.toArgb(),
+            "outlineStyle", "damaged", "outlineColor", Color.Green.toArgb(),
+            "outlineColorizerMode", 1000, "outlineGradientType", -1,
+            "shadowStyle", "damaged"
+        )
+        val restored = requireNotNull(AdjustmentState.Saver.restore(saved))
+        assertEquals(gradient, restored.shapeColorStyle)
+        assertEquals(ColorizerStyle(firstColor = Color.Green.toArgb()), restored.outlineColorStyle)
+        assertEquals(ColorizerStyle(firstColor = Color.Black.toArgb()), restored.shadowColorStyle)
+    }
+
+    @Test fun changingOneControlPreservesTheRestOfItsStyleAndOtherGroups() {
+        val state = AdjustmentState().apply {
+            colorizerStyle = gradient
+            shapeColorStyle = gradient
+            outlineColorStyle = gradient
+            shadowColorStyle = gradient
+        }
+        state.shapeColor = Color.Blue
+        state.colorizeLighten = false
+        assertEquals(gradient.copy(firstColor = Color.Blue.toArgb()), state.shapeColorStyle)
+        assertEquals(gradient.copy(lighten = false), state.colorizerStyle)
+        assertEquals(gradient, state.outlineColorStyle)
+        assertEquals(gradient, state.shadowColorStyle)
+    }
+
+    @Test fun sharedGenerationAdapterPreservesSelectedEditLayersAndGeometry() {
+        val original = options()
+        val updated = original.withColorizerStyle(gradient)
+        assertEquals(gradient, updated.colorizerStyle)
+        assertEquals(original.primaryImageEdit, updated.primaryImageEdit)
+        assertEquals(original.colorizeLayers, updated.colorizeLayers)
+        assertEquals(original.iconShape, updated.iconShape)
+        assertEquals(original.iconScale, updated.iconScale)
+        assertEquals(original.outlineMode, updated.outlineMode)
+        assertEquals(original.shadowEnabled, updated.shadowEnabled)
+        assertEquals(original.bgColor, updated.bgColor)
+    }
+
+    @Test fun colorSheetPreviewForcesColorizeAndClearsSegmentsWithoutChangingOriginal() {
+        val original = options().copy(primaryImageEdit = ImageEdit.COLORIZE_SEGMENTS)
+        val updated = original.asColorizePreview(gradient)
+        assertEquals(ImageEdit.COLORIZE, updated.primaryImageEdit)
+        assertTrue(updated.colorizeLayers.isEmpty())
+        assertEquals(gradient, updated.colorizerStyle)
+        assertEquals(original.iconShape, updated.iconShape)
+        assertEquals(ImageEdit.COLORIZE_SEGMENTS, original.primaryImageEdit)
+        assertFalse(original.colorizeLayers.isEmpty())
+    }
+
+    @Test fun editorMappingUsesHoistedFirstColorAndKeepsSegmentsOnlyForTheirEdit() {
+        val state = AdjustmentState().apply {
+            colorizerStyle = gradient
+            colorizeLayers = options().colorizeLayers
+        }
+        val original = options()
+        val segmented = original.withModifierAdjustments(state, ImageEdit.COLORIZE_SEGMENTS, null)
+        assertEquals(gradient.copy(firstColor = original.color), segmented.colorizerStyle)
+        assertEquals(state.colorizeLayers, segmented.colorizeLayers)
+        assertTrue(original.withModifierAdjustments(state, ImageEdit.COLORIZE, null).colorizeLayers.isEmpty())
+    }
+
+    @Test fun presetRoundTripKeepsAllStylesAndDoesNotReplaceIconSpecificGeometry() {
+        val source = AdjustmentState().apply {
+            colorizerStyle = gradient
+            shapeColorStyle = gradient.copy(gradientAngle = 15f)
+            outlineColorStyle = gradient.copy(gradientAngle = 35f)
+            shadowColorStyle = gradient.copy(gradientAngle = 65f)
+            iconShape = IconShape.COOKIE
+            outlineMode = OutlineMode.ADD
+            shadowEnabled = true
+        }
+        val payload = captureModifierPreset(source, ImageEdit.COLORIZE, Color.Blue, ModifierPresetGroup.entries.toSet())
+        val target = AdjustmentState().apply { iconOffsetX = 0.2f; bgRemovalTargets = listOf(5, 7) }
+        val application = applyModifierPreset(payload, target)
+        assertEquals(Color.Blue, application.iconColor)
+        assertEquals(gradient.copy(firstColor = Color.Blue.toArgb()), target.colorizerStyle)
+        assertEquals(source.shapeColorStyle, target.shapeColorStyle)
+        assertEquals(source.outlineColorStyle, target.outlineColorStyle)
+        assertEquals(source.shadowColorStyle, target.shadowColorStyle)
+        assertEquals(0.2f, target.iconOffsetX)
+        assertEquals(listOf(5, 7), target.bgRemovalTargets)
+        val generated = options().withModifierPreset(payload)
+        assertEquals(target.colorizerStyle, generated.colorizerStyle)
+        assertEquals(source.outlineColorStyle, generated.outlineStyle)
+        assertEquals(source.shadowColorStyle, generated.shadowStyle)
+    }
+}

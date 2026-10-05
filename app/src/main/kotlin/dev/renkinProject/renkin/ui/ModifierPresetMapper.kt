@@ -137,83 +137,29 @@ internal fun ModifierPresetPayload.includedGroups(): Set<ModifierPresetGroup> = 
  * The colourize style as the pipeline sees it: the icon colour is its first stop, which is why the
  * dialog's [iconColor] has to be handed in rather than read from the adjustments.
  */
-internal fun AdjustmentState.colorizerStyleWith(iconColor: Color): ColorizerStyle = ColorizerStyle(
-    mode = colorizerMode,
-    gradientType = colorizerGradientType,
-    firstColor = iconColor.toArgb(),
-    gradientStops = colorizerGradientColors,
-    gradientPositions = colorizerGradientPositions,
-    gradientAngle = colorizerGradientAngle,
-    flat = colorizeFlat,
-    lighten = colorizeLighten,
-    monochrome = colorizeMonochrome,
-    inverse = colorizeInverse
-)
+internal fun AdjustmentState.colorizerStyleWith(iconColor: Color): ColorizerStyle =
+    colorizerStyle.copy(firstColor = iconColor.toArgb())
 
 internal fun AdjustmentState.applyColorizerStyle(style: ColorizerStyle) {
-    colorizerMode = style.mode
-    colorizerGradientType = style.gradientType
-    colorizerGradientColors = style.gradientStops
-    colorizerGradientPositions = style.gradientPositions
-    colorizerGradientAngle = style.gradientAngle
-    colorizeFlat = style.flat
-    colorizeLighten = style.lighten
-    colorizeMonochrome = style.monochrome
-    colorizeInverse = style.inverse
+    colorizerStyle = style
 }
 
-internal fun AdjustmentState.shapeStyle(): ColorizerStyle = ColorizerStyle(
-    mode = shapeColorizerMode,
-    gradientType = shapeGradientType,
-    firstColor = shapeColor.toArgb(),
-    gradientStops = shapeGradientColors,
-    gradientPositions = shapeGradientPositions,
-    gradientAngle = shapeGradientAngle
-)
+internal fun AdjustmentState.shapeStyle(): ColorizerStyle = shapeColorStyle
 
 internal fun AdjustmentState.applyShapeStyle(style: ColorizerStyle) {
-    shapeColorizerMode = style.mode
-    shapeGradientType = style.gradientType
-    shapeColor = Color(style.firstColor)
-    shapeGradientColors = style.gradientStops
-    shapeGradientPositions = style.gradientPositions
-    shapeGradientAngle = style.gradientAngle
+    shapeColorStyle = style
 }
 
-internal fun AdjustmentState.outlineStyle(): ColorizerStyle = ColorizerStyle(
-    mode = outlineColorizerMode,
-    gradientType = outlineGradientType,
-    firstColor = outlineColor.toArgb(),
-    gradientStops = outlineGradientColors,
-    gradientPositions = outlineGradientPositions,
-    gradientAngle = outlineGradientAngle
-)
+internal fun AdjustmentState.outlineStyle(): ColorizerStyle = outlineColorStyle
 
 internal fun AdjustmentState.applyOutlineStyle(style: ColorizerStyle) {
-    outlineColorizerMode = style.mode
-    outlineGradientType = style.gradientType
-    outlineColor = Color(style.firstColor)
-    outlineGradientColors = style.gradientStops
-    outlineGradientPositions = style.gradientPositions
-    outlineGradientAngle = style.gradientAngle
+    outlineColorStyle = style
 }
 
-internal fun AdjustmentState.shadowStyle(): ColorizerStyle = ColorizerStyle(
-    mode = shadowColorizerMode,
-    gradientType = shadowGradientType,
-    firstColor = shadowColor.toArgb(),
-    gradientStops = shadowGradientColors,
-    gradientPositions = shadowGradientPositions,
-    gradientAngle = shadowGradientAngle
-)
+internal fun AdjustmentState.shadowStyle(): ColorizerStyle = shadowColorStyle
 
 internal fun AdjustmentState.applyShadowStyle(style: ColorizerStyle) {
-    shadowColorizerMode = style.mode
-    shadowGradientType = style.gradientType
-    shadowColor = Color(style.firstColor)
-    shadowGradientColors = style.gradientStops
-    shadowGradientPositions = style.gradientPositions
-    shadowGradientAngle = style.gradientAngle
+    shadowColorStyle = style
 }
 
 internal fun AdjustmentState.shadowPreset(): ModifierPresetShadow = ModifierPresetShadow(

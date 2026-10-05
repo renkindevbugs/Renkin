@@ -3,7 +3,6 @@
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -30,7 +29,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.BorderStyle
-import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.FormatColorFill
 import androidx.compose.material.icons.filled.Gesture
 import androidx.compose.material.icons.filled.KeyboardArrowDown
@@ -79,14 +77,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.CardShape
@@ -97,24 +93,15 @@ import dev.renkinProject.renkin.data.getImageEditLabels
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconShapes
-import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
-import dev.renkinProject.renkin.icon.creator.SegmentLayer
-import dev.renkinProject.renkin.icon.creator.decodeSegmentLayer
 import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
 import dev.renkinProject.renkin.drawable.MaterialYouPackEditState
 import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
-import dev.renkinProject.renkin.icon.creator.encode
-import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
-import dev.renkinProject.renkin.icon.creator.SHADOW_ANGLE_DEFAULT
-import dev.renkinProject.renkin.icon.creator.SHADOW_BLUR_DEFAULT
 import dev.renkinProject.renkin.icon.creator.SHADOW_BLUR_MAX
 import dev.renkinProject.renkin.icon.creator.SHADOW_BLUR_MIN
-import dev.renkinProject.renkin.icon.creator.SHADOW_DISTANCE_DEFAULT
 import dev.renkinProject.renkin.icon.creator.SHADOW_DISTANCE_MAX
 import dev.renkinProject.renkin.icon.creator.SHADOW_DISTANCE_MIN
-import dev.renkinProject.renkin.icon.creator.SHADOW_OPACITY_DEFAULT
 import dev.renkinProject.renkin.icon.creator.SHADOW_OPACITY_MAX
 import dev.renkinProject.renkin.icon.creator.SHADOW_OPACITY_MIN
 import dev.renkinProject.renkin.icon.creator.decodeModifierPreset
@@ -123,279 +110,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
-
-/**
- * The Modifier tab's per-icon adjustment state (edge tuning, background-removal tolerance, scale,
- * position), bundled so it travels as one object instead of eight value+callback parameter pairs.
- * Plain Compose state; [Saver] keeps it across process death.
- */
-@Stable
-internal class AdjustmentState {
-    var edgeThreshold by mutableFloatStateOf(2.5f)
-    var edgeSmoothing by mutableFloatStateOf(2f)
-    var edgeContrast by mutableStateOf(false)
-    // Colorize as a flat fill (SRC_IN) instead of the default multiply blend, so the picked
-    // colour lands exactly — a green icon tinted blue no longer muddies to a green/blue mix.
-    var colorizeFlat by mutableStateOf(false)
-    var colorizeLighten by mutableStateOf(false)
-    var colorizeMonochrome by mutableStateOf(false)
-    var colorizeInverse by mutableStateOf(false)
-    var colorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
-    var colorizerGradientType by mutableStateOf(GradientType.LINEAR)
-    var colorizerGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
-    var colorizerGradientPositions by mutableStateOf(emptyList<Float>())
-    var colorizerGradientAngle by mutableFloatStateOf(0f)
-    // Per-region colourize steps of the Colorize segments modifier, applied in order.
-    var colorizeLayers by mutableStateOf(emptyList<SegmentLayer>())
-    var iconScale by mutableFloatStateOf(1f)
-    // Colours the user picked to drop; empty leaves the automatic border flood in charge.
-    var bgRemovalTargets by mutableStateOf(emptyList<Int>())
-    var bgRemovalTolerance by mutableFloatStateOf(0.1f)
-    // Auto-center is UI state only: switching it on computes the offsets below (the pipeline's
-    // single source of truth for position); dragging a position slider switches it back off.
-    var autoCenter by mutableStateOf(false)
-    var iconOffsetX by mutableFloatStateOf(0f)
-    var iconOffsetY by mutableFloatStateOf(0f)
-    // Icon shape (applied as the last generation step): the shape, crop-vs-plate mode
-    // (crop is the default — most icons are full-bleed), the icon's size relative to
-    // the shape, and the plate's fill colour.
-    var iconShape by mutableStateOf(IconShape.NONE)
-    var shapeCrop by mutableStateOf(true)
-    var shapeScale by mutableFloatStateOf(1f)
-    var shapeColor by mutableStateOf(Color.White)
-    // The plate carries its own colour style, so it can be a gradient like Colorize.
-    var shapeColorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
-    var shapeGradientType by mutableStateOf(GradientType.LINEAR)
-    var shapeGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
-    var shapeGradientPositions by mutableStateOf(emptyList<Float>())
-    var shapeGradientAngle by mutableFloatStateOf(0f)
-    // Outline: add a contour around the silhouette, or recolor the icon's existing one.
-    var outlineMode by mutableStateOf(OutlineMode.NONE)
-    var outlineWidth by mutableFloatStateOf(6f)
-    var outlineColor by mutableStateOf(Color.Black)
-    // The outline carries its own colour style, so it can be a gradient like Colorize.
-    var outlineColorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
-    var outlineGradientType by mutableStateOf(GradientType.LINEAR)
-    var outlineGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
-    var outlineGradientPositions by mutableStateOf(emptyList<Float>())
-    var outlineGradientAngle by mutableFloatStateOf(0f)
-    var shadowEnabled by mutableStateOf(false)
-    var shadowBlur by mutableFloatStateOf(SHADOW_BLUR_DEFAULT)
-    var shadowDistance by mutableFloatStateOf(SHADOW_DISTANCE_DEFAULT)
-    var shadowAngle by mutableFloatStateOf(SHADOW_ANGLE_DEFAULT)
-    var shadowAllDirections by mutableStateOf(false)
-    var shadowColor by mutableStateOf(Color.Black)
-    var shadowColorizerMode by mutableStateOf(ColorizerMode.SINGLE_COLOR)
-    var shadowGradientType by mutableStateOf(GradientType.LINEAR)
-    var shadowGradientColors by mutableStateOf(listOf(android.graphics.Color.BLACK))
-    var shadowGradientPositions by mutableStateOf(emptyList<Float>())
-    var shadowGradientAngle by mutableFloatStateOf(0f)
-    var shadowOpacity by mutableFloatStateOf(SHADOW_OPACITY_DEFAULT)
-    // Eraser strokes masking where the outline must not apply. Deliberately NOT in [Saver]:
-    // they're transient per-app geometry, and holding them out keeps the saver list flat.
-    var eraseStrokes by mutableStateOf<List<BrushStroke>>(emptyList())
-    // Hand corrections to the background removal, same reasoning: transient per-app geometry.
-    var backgroundBrushStrokes by mutableStateOf<List<BrushStroke>>(emptyList())
-
-    companion object {
-        // Keep the keyed representation, but accept the positional list emitted by older builds.
-        // mapSaver itself cannot do that because it casts every even list item to String before
-        // calling restore, which would crash on the legacy list's first Float value.
-        val Saver = Saver<AdjustmentState, Any>(
-            save = {
-                arrayListOf(
-                    "edgeThreshold", it.edgeThreshold,
-                    "edgeSmoothing", it.edgeSmoothing,
-                    "edgeContrast", it.edgeContrast,
-                    "iconScale", it.iconScale,
-                    "bgRemovalTolerance", it.bgRemovalTolerance,
-                    "bgRemovalTargets", it.bgRemovalTargets,
-                    "autoCenter", it.autoCenter,
-                    "iconOffsetX", it.iconOffsetX,
-                    "iconOffsetY", it.iconOffsetY,
-                    "colorizeFlat", it.colorizeFlat,
-                    "colorizeLighten", it.colorizeLighten,
-                    "colorizeMonochrome", it.colorizeMonochrome,
-                    "colorizeInverse", it.colorizeInverse,
-                    "colorizerMode", it.colorizerMode.ordinal,
-                    "colorizerGradientType", it.colorizerGradientType.ordinal,
-                    "colorizerGradientColors", it.colorizerGradientColors,
-                    "colorizerGradientPositions", it.colorizerGradientPositions,
-                    "colorizerGradientAngle", it.colorizerGradientAngle,
-                    "colorizeLayers", it.colorizeLayers.map(SegmentLayer::encode),
-                    "iconShape", it.iconShape.ordinal,
-                    "shapeCrop", it.shapeCrop,
-                    "shapeColor", it.shapeColor.toArgb(),
-                    "shapeColorizerMode", it.shapeColorizerMode.ordinal,
-                    "shapeGradientType", it.shapeGradientType.ordinal,
-                    "shapeGradientColors", it.shapeGradientColors,
-                    "shapeGradientPositions", it.shapeGradientPositions,
-                    "shapeGradientAngle", it.shapeGradientAngle,
-                    "shapeScale", it.shapeScale,
-                    "outlineMode", it.outlineMode.ordinal,
-                    "outlineWidth", it.outlineWidth,
-                    "outlineColor", it.outlineColor.toArgb(),
-                    "outlineColorizerMode", it.outlineColorizerMode.ordinal,
-                    "outlineGradientType", it.outlineGradientType.ordinal,
-                    "outlineGradientColors", it.outlineGradientColors,
-                    "outlineGradientPositions", it.outlineGradientPositions,
-                    "outlineGradientAngle", it.outlineGradientAngle,
-                    "shadowEnabled", it.shadowEnabled,
-                    "shadowBlur", it.shadowBlur,
-                    "shadowDistance", it.shadowDistance,
-                    "shadowAngle", it.shadowAngle,
-                    "shadowAllDirections", it.shadowAllDirections,
-                    "shadowColor", it.shadowColor.toArgb(),
-                    "shadowColorizerMode", it.shadowColorizerMode.ordinal,
-                    "shadowGradientType", it.shadowGradientType.ordinal,
-                    "shadowGradientColors", it.shadowGradientColors,
-                    "shadowGradientPositions", it.shadowGradientPositions,
-                    "shadowGradientAngle", it.shadowGradientAngle,
-                    "shadowOpacity", it.shadowOpacity
-                )
-            },
-            restore = ::restoreAdjustmentState
-        )
-
-        private fun restoreAdjustmentState(saved: Any): AdjustmentState? {
-            val values = saved as? List<*> ?: return null
-            return if (values.firstOrNull() is String) {
-                val keyed = buildMap<String, Any?> {
-                    var index = 0
-                    while (index + 1 < values.size) {
-                        val key = values[index] as? String ?: break
-                        put(key, values[index + 1])
-                        index += 2
-                    }
-                }
-                restoreKeyed(keyed)
-            } else {
-                restoreLegacy(values)
-            }
-        }
-
-        private fun restoreKeyed(saved: Map<String, Any?>) = AdjustmentState().apply {
-            edgeThreshold = saved["edgeThreshold"] as? Float ?: edgeThreshold
-            edgeSmoothing = saved["edgeSmoothing"] as? Float ?: edgeSmoothing
-            edgeContrast = saved["edgeContrast"] as? Boolean ?: edgeContrast
-            iconScale = saved["iconScale"] as? Float ?: iconScale
-            bgRemovalTolerance = saved["bgRemovalTolerance"] as? Float ?: bgRemovalTolerance
-            (saved["bgRemovalTargets"] as? List<*>)?.filterIsInstance<Int>()?.let {
-                bgRemovalTargets = it
-            }
-            autoCenter = saved["autoCenter"] as? Boolean ?: autoCenter
-            iconOffsetX = saved["iconOffsetX"] as? Float ?: iconOffsetX
-            iconOffsetY = saved["iconOffsetY"] as? Float ?: iconOffsetY
-            colorizeFlat = saved["colorizeFlat"] as? Boolean ?: colorizeFlat
-            colorizeLighten = saved["colorizeLighten"] as? Boolean ?: colorizeLighten
-            colorizeMonochrome = saved["colorizeMonochrome"] as? Boolean ?: colorizeMonochrome
-            colorizeInverse = saved["colorizeInverse"] as? Boolean ?: colorizeInverse
-            colorizerMode = ColorizerMode.entries.getOrElse(
-                saved["colorizerMode"] as? Int ?: ColorizerMode.SINGLE_COLOR.ordinal
-            ) { ColorizerMode.SINGLE_COLOR }
-            colorizerGradientType = GradientType.entries.getOrElse(
-                saved["colorizerGradientType"] as? Int ?: GradientType.LINEAR.ordinal
-            ) { GradientType.LINEAR }
-            // Older saved states carried a single second colour; both shapes restore.
-            (saved["colorizerGradientColors"] as? List<*>)
-                ?.filterIsInstance<Int>()
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { colorizerGradientColors = it }
-                ?: (saved["colorizerGradientColor"] as? Int)?.let {
-                    colorizerGradientColors = listOf(it)
-                }
-            (saved["colorizerGradientPositions"] as? List<*>)
-                ?.filterIsInstance<Float>()
-                ?.let { colorizerGradientPositions = it }
-            colorizerGradientAngle =
-                saved["colorizerGradientAngle"] as? Float ?: colorizerGradientAngle
-            (saved["colorizeLayers"] as? List<*>)?.let { encoded ->
-                colorizeLayers = encoded.filterIsInstance<String>()
-                    .mapNotNull(::decodeSegmentLayer)
-            }
-            iconShape = IconShape.entries.getOrElse(saved["iconShape"] as? Int ?: 0) { IconShape.NONE }
-            shapeCrop = saved["shapeCrop"] as? Boolean ?: shapeCrop
-            (saved["shapeColor"] as? Int)?.let { shapeColor = Color(it) }
-            shapeColorizerMode = ColorizerMode.entries.getOrElse(
-                saved["shapeColorizerMode"] as? Int ?: ColorizerMode.SINGLE_COLOR.ordinal
-            ) { ColorizerMode.SINGLE_COLOR }
-            shapeGradientType = GradientType.entries.getOrElse(
-                saved["shapeGradientType"] as? Int ?: GradientType.LINEAR.ordinal
-            ) { GradientType.LINEAR }
-            (saved["shapeGradientColors"] as? List<*>)
-                ?.filterIsInstance<Int>()
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { shapeGradientColors = it }
-            (saved["shapeGradientPositions"] as? List<*>)
-                ?.filterIsInstance<Float>()
-                ?.let { shapeGradientPositions = it }
-            shapeGradientAngle = saved["shapeGradientAngle"] as? Float ?: shapeGradientAngle
-            shapeScale = saved["shapeScale"] as? Float ?: shapeScale
-            outlineMode = OutlineMode.entries.getOrElse(saved["outlineMode"] as? Int ?: 0) { OutlineMode.NONE }
-            outlineWidth = saved["outlineWidth"] as? Float ?: outlineWidth
-            (saved["outlineColor"] as? Int)?.let { outlineColor = Color(it) }
-            outlineColorizerMode = ColorizerMode.entries.getOrElse(
-                saved["outlineColorizerMode"] as? Int ?: ColorizerMode.SINGLE_COLOR.ordinal
-            ) { ColorizerMode.SINGLE_COLOR }
-            outlineGradientType = GradientType.entries.getOrElse(
-                saved["outlineGradientType"] as? Int ?: GradientType.LINEAR.ordinal
-            ) { GradientType.LINEAR }
-            (saved["outlineGradientColors"] as? List<*>)
-                ?.filterIsInstance<Int>()
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { outlineGradientColors = it }
-            (saved["outlineGradientPositions"] as? List<*>)
-                ?.filterIsInstance<Float>()
-                ?.let { outlineGradientPositions = it }
-            outlineGradientAngle =
-                saved["outlineGradientAngle"] as? Float ?: outlineGradientAngle
-            shadowEnabled = saved["shadowEnabled"] as? Boolean ?: shadowEnabled
-            shadowBlur = saved["shadowBlur"] as? Float ?: shadowBlur
-            shadowDistance = saved["shadowDistance"] as? Float ?: shadowDistance
-            shadowAngle = saved["shadowAngle"] as? Float ?: shadowAngle
-            shadowAllDirections =
-                saved["shadowAllDirections"] as? Boolean ?: shadowAllDirections
-            (saved["shadowColor"] as? Int)?.let { shadowColor = Color(it) }
-            shadowColorizerMode = ColorizerMode.entries.getOrElse(
-                saved["shadowColorizerMode"] as? Int ?: ColorizerMode.SINGLE_COLOR.ordinal
-            ) { ColorizerMode.SINGLE_COLOR }
-            shadowGradientType = GradientType.entries.getOrElse(
-                saved["shadowGradientType"] as? Int ?: GradientType.LINEAR.ordinal
-            ) { GradientType.LINEAR }
-            (saved["shadowGradientColors"] as? List<*>)
-                ?.filterIsInstance<Int>()
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { shadowGradientColors = it }
-            (saved["shadowGradientPositions"] as? List<*>)
-                ?.filterIsInstance<Float>()
-                ?.let { shadowGradientPositions = it }
-            shadowGradientAngle =
-                saved["shadowGradientAngle"] as? Float ?: shadowGradientAngle
-            shadowOpacity = saved["shadowOpacity"] as? Float ?: shadowOpacity
-        }
-
-        private fun restoreLegacy(saved: List<*>) = AdjustmentState().apply {
-            edgeThreshold = saved.getOrNull(0) as? Float ?: edgeThreshold
-            edgeSmoothing = saved.getOrNull(1) as? Float ?: edgeSmoothing
-            edgeContrast = saved.getOrNull(2) as? Boolean ?: edgeContrast
-            iconScale = saved.getOrNull(3) as? Float ?: iconScale
-            bgRemovalTolerance = saved.getOrNull(4) as? Float ?: bgRemovalTolerance
-            autoCenter = saved.getOrNull(5) as? Boolean ?: autoCenter
-            iconOffsetX = saved.getOrNull(6) as? Float ?: iconOffsetX
-            iconOffsetY = saved.getOrNull(7) as? Float ?: iconOffsetY
-            colorizeFlat = saved.getOrNull(8) as? Boolean ?: colorizeFlat
-            iconShape = IconShape.entries.getOrElse(saved.getOrNull(9) as? Int ?: 0) { IconShape.NONE }
-            shapeCrop = saved.getOrNull(10) as? Boolean ?: shapeCrop
-            (saved.getOrNull(11) as? Int)?.let { shapeColor = Color(it) }
-            shapeScale = saved.getOrNull(12) as? Float ?: shapeScale
-            outlineMode = OutlineMode.entries.getOrElse(saved.getOrNull(13) as? Int ?: 0) { OutlineMode.NONE }
-            outlineWidth = saved.getOrNull(14) as? Float ?: outlineWidth
-            (saved.getOrNull(15) as? Int)?.let { outlineColor = Color(it) }
-            colorizeMonochrome = saved.getOrNull(16) as? Boolean ?: colorizeMonochrome
-            colorizeInverse = saved.getOrNull(17) as? Boolean ?: colorizeInverse
-        }
-    }
-}
 
 /** Saved-state value read back as a style, tolerating the plain ARGB int older builds wrote. */
 private fun Any?.toColorizerStyle(fallback: ColorizerStyle): ColorizerStyle = when (this) {

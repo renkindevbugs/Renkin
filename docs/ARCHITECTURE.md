@@ -401,6 +401,18 @@ identically and none of them re-implements the maths.
   the artwork's RGB through its alpha, the default Multiply blend darkens/tints it, and Lighten
   uses Screen (`source + tint - source*tint`) for pastel results without Plus-mode clipping while
   retaining each source pixel's alpha, so transparent canvas space never becomes a colour fill.
+- **`ui/AdjustmentState.kt`** owns one immutable style per editor colour group: Colorize,
+  Shape, Outline and Shadow. Individual control accessors read/copy those styles rather than
+  keeping independent Compose fields. Loading a palette or preset replaces the whole group.
+  Colorize's first stop still comes from the dialog's shared icon colour, which also drives
+  the Create tab. The saver encodes each complete style as a primitive string through the
+  existing style codec; older keyed and positional saved states remain readable.
+- **`GenerationOptions.withColorizerStyle`** is the common transfer into generation for
+  preferences, global modifiers, editor adjustments and reusable presets. It changes all colour
+  fields together and preserves the caller's image-edit choice and segment layers. The editor's
+  `asColorizePreview` explicitly selects plain Colorize and clears segments. GenerationOptions
+  still exposes its existing flat constructor in this first increment; moving that boundary to
+  typed modifier groups belongs to the next increment.
 - **`ColorizerShader.kt`** builds the actual `Shader` and is called by BOTH `IconGenerator` and
   the editor preview — a second implementation in the UI would drift from the built output.
 - **`ui/ColorStyleSheet.kt`** is the one editor UI: a bottom sheet with a docked live preview
