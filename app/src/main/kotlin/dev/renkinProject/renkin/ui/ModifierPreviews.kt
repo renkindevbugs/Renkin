@@ -197,7 +197,7 @@ internal fun GenerationOptions.withModifierAdjustments(
 ): GenerationOptions {
     // The generated Material You background remains source-owned unless a shape plate replaces it.
     val plateStyle = if (adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop) {
-        adjustments.shapeStyle()
+        adjustments.shapeStyle
     } else export.background.style
     return withExport { copy(background = background.copy(style = plateStyle)) }
         .withModifiers {

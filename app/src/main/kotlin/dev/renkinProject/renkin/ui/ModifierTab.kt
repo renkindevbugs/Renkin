@@ -392,7 +392,7 @@ internal fun ModifierTab(
                                             renderPreview = previews?.colorize,
                                             onDismiss = { colorizeSheetOpen = false },
                                             onApply = { style ->
-                                                adjustments.applyColorizerStyle(style)
+                                                adjustments.colorizerStyle = style
                                                 onColorChange(Color(style.firstColor))
                                                 colorizeSheetOpen = false
                                             }
@@ -707,7 +707,7 @@ private fun IconShapeSection(
                     ruler = percentRuler()
                 )
                 if (!adjustments.shapeCrop) {
-                    val shapeStyle = adjustments.shapeStyle()
+                    val shapeStyle = adjustments.shapeStyle
                     ColorStyleCard(
                         label = stringResource(R.string.shapeColor),
                         style = shapeStyle,
@@ -722,7 +722,7 @@ private fun IconShapeSection(
                             showSingleColorEffects = false,
                             onDismiss = { colorSheetOpen = false },
                             onApply = { style ->
-                                adjustments.applyShapeStyle(style)
+                                adjustments.shapeStyle = style
                                 colorSheetOpen = false
                             }
                         )
@@ -778,7 +778,7 @@ private fun OutlineSection(
                         ruler = pixelRuler()
                     )
                 }
-                val outlineStyle = adjustments.outlineStyle()
+                val outlineStyle = adjustments.outlineStyle
                 ColorStyleCard(
                     label = stringResource(R.string.outlineColor),
                     style = outlineStyle,
@@ -793,7 +793,7 @@ private fun OutlineSection(
                         renderPreview = renderPreview,
                         onDismiss = { colorSheetOpen = false },
                         onApply = { style ->
-                            adjustments.applyOutlineStyle(style)
+                            adjustments.outlineStyle = style
                             colorSheetOpen = false
                         }
                     )
@@ -1178,7 +1178,7 @@ private fun ShadowEditorControls(
                 ruler = percentRuler()
             )
         }
-        val shadowStyle = adjustments.shadowStyle()
+        val shadowStyle = adjustments.shadowStyle
         ColorStyleCard(
             label = stringResource(R.string.shadowColor),
             style = shadowStyle,
@@ -1189,13 +1189,13 @@ private fun ShadowEditorControls(
     if (colorSheetOpen) {
         ColorStyleSheet(
             title = stringResource(R.string.shadowColor),
-            initialStyle = adjustments.shadowStyle(),
+            initialStyle = adjustments.shadowStyle,
             sampleBitmap = null,
             showSingleColorEffects = false,
             renderPreview = renderPreview,
             onDismiss = { colorSheetOpen = false },
             onApply = {
-                adjustments.applyShadowStyle(it)
+                adjustments.shadowStyle = it
                 colorSheetOpen = false
             }
         )

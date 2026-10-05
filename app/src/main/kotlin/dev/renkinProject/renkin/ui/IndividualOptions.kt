@@ -496,7 +496,7 @@ fun OptionsDialog(
         swapGeneratedCustomColors -> iconColor
         isMaterialYouVariant && !isCustomScheme -> scheme!!.second
         isMaterialYouVariant -> customBgColor
-        adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop -> adjustments.shapeColor
+        adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop -> Color(adjustments.shapeStyle.firstColor)
         else -> Color.Transparent
     }
     // Styles only exist for the Custom scheme: a wallpaper scheme is two flat colours by

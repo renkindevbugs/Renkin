@@ -96,9 +96,9 @@ class ModifierColorStyleTest {
     @Test fun saverPreservesEveryFieldOfFourIndependentStylesAndSegmentLayers() {
         val state = AdjustmentState().apply {
             colorizerStyle = gradient
-            shapeColorStyle = gradient.copy(firstColor = Color.Blue.toArgb(), gradientAngle = 95f)
-            outlineColorStyle = gradient.copy(firstColor = Color.Green.toArgb(), gradientType = GradientType.LINEAR)
-            shadowColorStyle = gradient.copy(firstColor = Color.Yellow.toArgb(), gradientPositions = listOf(0f, 0.6f, 1f))
+            shapeStyle = gradient.copy(firstColor = Color.Blue.toArgb(), gradientAngle = 95f)
+            outlineStyle = gradient.copy(firstColor = Color.Green.toArgb(), gradientType = GradientType.LINEAR)
+            shadowStyle = gradient.copy(firstColor = Color.Yellow.toArgb(), gradientPositions = listOf(0f, 0.6f, 1f))
             colorizeLayers = listOf(SegmentLayer(listOf(3, 5), 0.24f, gradient))
             shadowEnabled = true
             shadowBlur = 12f
@@ -109,9 +109,9 @@ class ModifierColorStyleTest {
         }
         val restored = roundTrip(state)
         assertEquals(state.colorizerStyle, restored.colorizerStyle)
-        assertEquals(state.shapeColorStyle, restored.shapeColorStyle)
-        assertEquals(state.outlineColorStyle, restored.outlineColorStyle)
-        assertEquals(state.shadowColorStyle, restored.shadowColorStyle)
+        assertEquals(state.shapeStyle, restored.shapeStyle)
+        assertEquals(state.outlineStyle, restored.outlineStyle)
+        assertEquals(state.shadowStyle, restored.shadowStyle)
         assertEquals(state.colorizeLayers, restored.colorizeLayers)
         assertTrue(restored.shadowEnabled)
         assertEquals(state.shadowBlur, restored.shadowBlur)
@@ -141,9 +141,14 @@ class ModifierColorStyleTest {
             gradientPositions = listOf(0f, 0.7f), gradientAngle = 180f
         ), restored.colorizerStyle)
         val fill = gradient.copy(flat = false, lighten = false, monochrome = false, inverse = false)
-        assertEquals(fill.copy(firstColor = Color.Red.toArgb()), restored.shapeColorStyle)
-        assertEquals(fill.copy(firstColor = Color.Green.toArgb()), restored.outlineColorStyle)
-        assertEquals(fill.copy(firstColor = Color.Yellow.toArgb()), restored.shadowColorStyle)
+        assertEquals(fill.copy(firstColor = Color.Red.toArgb()), restored.shapeStyle)
+        assertEquals(fill.copy(firstColor = Color.Green.toArgb()), restored.outlineStyle)
+        assertEquals(fill.copy(firstColor = Color.Yellow.toArgb()), restored.shadowStyle)
+        val restoredAgain = roundTrip(restored)
+        assertEquals(restored.colorizerStyle, restoredAgain.colorizerStyle)
+        assertEquals(restored.shapeStyle, restoredAgain.shapeStyle)
+        assertEquals(restored.outlineStyle, restoredAgain.outlineStyle)
+        assertEquals(restored.shadowStyle, restoredAgain.shadowStyle)
     }
 
     @Test fun newStyleTakesPrecedenceOverLegacyFieldsAndMalformedStylesFallBack() {
@@ -154,24 +159,24 @@ class ModifierColorStyleTest {
             "shadowStyle", "damaged"
         )
         val restored = requireNotNull(AdjustmentState.Saver.restore(saved))
-        assertEquals(gradient, restored.shapeColorStyle)
-        assertEquals(ColorizerStyle(firstColor = Color.Green.toArgb()), restored.outlineColorStyle)
-        assertEquals(ColorizerStyle(firstColor = Color.Black.toArgb()), restored.shadowColorStyle)
+        assertEquals(gradient, restored.shapeStyle)
+        assertEquals(ColorizerStyle(firstColor = Color.Green.toArgb()), restored.outlineStyle)
+        assertEquals(ColorizerStyle(firstColor = Color.Black.toArgb()), restored.shadowStyle)
     }
 
     @Test fun changingOneControlPreservesTheRestOfItsStyleAndOtherGroups() {
         val state = AdjustmentState().apply {
             colorizerStyle = gradient
-            shapeColorStyle = gradient
-            outlineColorStyle = gradient
-            shadowColorStyle = gradient
+            shapeStyle = gradient
+            outlineStyle = gradient
+            shadowStyle = gradient
         }
-        state.shapeColor = Color.Blue
-        state.colorizeLighten = false
-        assertEquals(gradient.copy(firstColor = Color.Blue.toArgb()), state.shapeColorStyle)
+        state.shapeStyle = state.shapeStyle.copy(firstColor = Color.Blue.toArgb())
+        state.colorizerStyle = state.colorizerStyle.copy(lighten = false)
+        assertEquals(gradient.copy(firstColor = Color.Blue.toArgb()), state.shapeStyle)
         assertEquals(gradient.copy(lighten = false), state.colorizerStyle)
-        assertEquals(gradient, state.outlineColorStyle)
-        assertEquals(gradient, state.shadowColorStyle)
+        assertEquals(gradient, state.outlineStyle)
+        assertEquals(gradient, state.shadowStyle)
     }
 
     @Test fun sharedGenerationAdapterPreservesSelectedEditLayersAndGeometry() {
@@ -216,9 +221,9 @@ class ModifierColorStyleTest {
     @Test fun presetRoundTripKeepsAllStylesAndDoesNotReplaceIconSpecificGeometry() {
         val source = AdjustmentState().apply {
             colorizerStyle = gradient
-            shapeColorStyle = gradient.copy(gradientAngle = 15f)
-            outlineColorStyle = gradient.copy(gradientAngle = 35f)
-            shadowColorStyle = gradient.copy(gradientAngle = 65f)
+            shapeStyle = gradient.copy(gradientAngle = 15f)
+            outlineStyle = gradient.copy(gradientAngle = 35f)
+            shadowStyle = gradient.copy(gradientAngle = 65f)
             iconShape = IconShape.COOKIE
             outlineMode = OutlineMode.ADD
             shadowEnabled = true
@@ -228,15 +233,15 @@ class ModifierColorStyleTest {
         val application = applyModifierPreset(payload, target)
         assertEquals(Color.Blue, application.iconColor)
         assertEquals(gradient.copy(firstColor = Color.Blue.toArgb()), target.colorizerStyle)
-        assertEquals(source.shapeColorStyle, target.shapeColorStyle)
-        assertEquals(source.outlineColorStyle, target.outlineColorStyle)
-        assertEquals(source.shadowColorStyle, target.shadowColorStyle)
+        assertEquals(source.shapeStyle, target.shapeStyle)
+        assertEquals(source.outlineStyle, target.outlineStyle)
+        assertEquals(source.shadowStyle, target.shadowStyle)
         assertEquals(0.2f, target.iconOffsetX)
         assertEquals(listOf(5, 7), target.bgRemovalTargets)
         val generated = options().withModifierPreset(payload)
         assertEquals(target.colorizerStyle, generated.modifiers.effect.colorizer)
-        assertEquals(source.outlineColorStyle, generated.modifiers.outline?.fill?.style)
-        assertEquals(source.shadowColorStyle, generated.modifiers.shadow?.style)
+        assertEquals(source.outlineStyle, generated.modifiers.outline?.fill?.style)
+        assertEquals(source.shadowStyle, generated.modifiers.shadow?.style)
     }
     @Test fun editorAdjustmentsAndPortablePresetsRetainPackSpecificControls() {
         val pack = MaterialYouPackModifier(

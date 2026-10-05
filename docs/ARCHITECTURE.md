@@ -401,12 +401,17 @@ identically and none of them re-implements the maths.
   the artwork's RGB through its alpha, the default Multiply blend darkens/tints it, and Lighten
   uses Screen (`source + tint - source*tint`) for pastel results without Plus-mode clipping while
   retaining each source pixel's alpha, so transparent canvas space never becomes a colour fill.
-- **`ui/AdjustmentState.kt`** owns one immutable style per editor colour group: Colorize,
-  Shape, Outline and Shadow. Individual control accessors read/copy those styles rather than
-  keeping independent Compose fields. Loading a palette or preset replaces the whole group.
+- **`ui/AdjustmentState.kt`** owns four immutable styles: `colorizerStyle`, `shapeStyle`,
+  `outlineStyle` and `shadowStyle`. Editor controls and preset mapping read/replace these groups
+  directly; per-colour getters/setters and forwarding apply/read functions have been removed.
   Colorize's first stop still comes from the dialog's shared icon colour, which also drives
-  the Create tab. The saver encodes each complete style as a primitive string through the
-  existing style codec; older keyed and positional saved states remain readable.
+  the Create tab. `colorizerStyleWith` applies that hoisted colour when capturing a preset;
+  generation applies the same first-stop rule when mapping editor adjustments into the stack.
+  **`ui/AdjustmentStateSaver.kt`** owns saved-state encoding and restoration independently of
+  the mutable state. `AdjustmentState.Saver` remains the `rememberSaveable` entry point. It
+  encodes complete styles through the existing shared style codec with the same keys and value
+  order; older keyed and positional saved states remain readable. Brush masks and strokes stay
+  transient and are never serialized.
 - **`GenerationOptions.withColorizerStyle`** is the common transfer into generation for
   callers replacing a colour style. It replaces the complete effect colour group and preserves
   the caller's image-edit choice and segment layers. The editor's
@@ -424,8 +429,8 @@ identically and none of them re-implements the maths.
   only the stack's effect group. Other groups are retained unchanged. There is no flat generation
   constructor or read-only flat modifier/source/export API.
 - **`ModifierStack`** groups image effects (colour style, segments, edge detection and background
-  removal), transform, shape, outline, shadow and pack-specific `MaterialYouPackModifier`. `GenerationOptions` owns the stack as a
-  constructor field; source-only `copy()` calls retain it rather than rebuilding a flat mapping.
+  removal), transform, shape, outline, shadow and pack-specific `MaterialYouPackModifier`.
+  `GenerationOptions` owns the stack as a constructor field; source-only `copy()` calls retain it rather than rebuilding a flat mapping.
   Editor adjustments, global preferences and preset application construct or replace groups
   directly. Editor adjustment mapping copies only its owned groups into the existing stack,
   retaining Material You pack controls edited in their separate state. Pack restyling is applied
@@ -449,8 +454,8 @@ identically and none of them re-implements the maths.
   The renderer receives the inherited background explicitly; it never guesses a fallback colour.
   New modifiers belong in their groups. Data-class equality includes every source, modifier and
   export group. Preferences, preset payloads and editor saved-state codecs keep their existing
-  formats. The next step is to remove the editor state's remaining per-colour compatibility
-  accessors and consolidate recipe codecs before adding persistent non-destructive recipes.
+  formats. The editor now uses the grouped colour API throughout. The next step is to consolidate
+  portable recipe codecs before adding persistent non-destructive recipes.
   Equality deliberately retains inactive configuration; a visual-only cache key may later
   normalize disabled groups, but session/recipe comparisons must continue distinguishing their
   full configuration.

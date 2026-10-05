@@ -42,6 +42,11 @@ class AdjustmentStateSaverTest {
         val restored = AdjustmentState.Saver.restore(legacy)
 
         assertState(restored)
+        val savedAgain = with(AdjustmentState.Saver) { saveableScope.save(requireNotNull(restored)) }
+        val restoredAgain = AdjustmentState.Saver.restore(requireNotNull(savedAgain))
+        assertState(restoredAgain)
+        assertEquals(ColorizerMode.SINGLE_COLOR, requireNotNull(restoredAgain).shapeStyle.mode)
+        assertFalse(restoredAgain.shadowEnabled)
     }
 
     @Test
@@ -105,21 +110,21 @@ class AdjustmentStateSaverTest {
         autoCenter = true
         iconOffsetX = -0.2f
         iconOffsetY = 0.15f
-        colorizeFlat = true
-        colorizeMonochrome = true
-        colorizeInverse = true
+        colorizerStyle = colorizerStyle.copy(flat = true, monochrome = true, inverse = true)
         iconShape = IconShape.COOKIE
         shapeCrop = false
-        shapeColor = Color.Magenta
         shapeScale = 1.2f
         outlineMode = OutlineMode.RECOLOR
         outlineWidth = 9f
-        outlineColor = Color.Cyan
-        shapeColorizerMode = ColorizerMode.GRADIENT
-        shapeGradientType = GradientType.RADIAL
-        shapeGradientColors = listOf(Color.Green.toArgb())
-        shapeGradientPositions = listOf(0f, 0.4f)
-        shapeGradientAngle = 210f
+        outlineStyle = outlineStyle.copy(firstColor = Color.Cyan.toArgb())
+        shapeStyle = ColorizerStyle(
+            firstColor = Color.Magenta.toArgb(),
+            mode = ColorizerMode.GRADIENT,
+            gradientType = GradientType.RADIAL,
+            gradientStops = listOf(Color.Green.toArgb()),
+            gradientPositions = listOf(0f, 0.4f),
+            gradientAngle = 210f
+        )
     }
 
     private fun assertState(state: AdjustmentState?) {
@@ -133,24 +138,24 @@ class AdjustmentStateSaverTest {
         assertTrue(state.autoCenter)
         assertEquals(-0.2f, state.iconOffsetX)
         assertEquals(0.15f, state.iconOffsetY)
-        assertTrue(state.colorizeFlat)
-        assertTrue(state.colorizeMonochrome)
-        assertTrue(state.colorizeInverse)
+        assertTrue(state.colorizerStyle.flat)
+        assertTrue(state.colorizerStyle.monochrome)
+        assertTrue(state.colorizerStyle.inverse)
         assertEquals(IconShape.COOKIE, state.iconShape)
         assertFalse(state.shapeCrop)
-        assertEquals(Color.Magenta, state.shapeColor)
+        assertEquals(Color.Magenta.toArgb(), state.shapeStyle.firstColor)
         assertEquals(1.2f, state.shapeScale)
         assertEquals(OutlineMode.RECOLOR, state.outlineMode)
         assertEquals(9f, state.outlineWidth)
-        assertEquals(Color.Cyan, state.outlineColor)
+        assertEquals(Color.Cyan.toArgb(), state.outlineStyle.firstColor)
     }
 
     /** The plate's gradient, which the legacy positional state never carried. */
     private fun assertShapeGradient(state: AdjustmentState) {
-        assertEquals(ColorizerMode.GRADIENT, state.shapeColorizerMode)
-        assertEquals(GradientType.RADIAL, state.shapeGradientType)
-        assertEquals(listOf(Color.Green.toArgb()), state.shapeGradientColors)
-        assertEquals(listOf(0f, 0.4f), state.shapeGradientPositions)
-        assertEquals(210f, state.shapeGradientAngle)
+        assertEquals(ColorizerMode.GRADIENT, state.shapeStyle.mode)
+        assertEquals(GradientType.RADIAL, state.shapeStyle.gradientType)
+        assertEquals(listOf(Color.Green.toArgb()), state.shapeStyle.gradientStops)
+        assertEquals(listOf(0f, 0.4f), state.shapeStyle.gradientPositions)
+        assertEquals(210f, state.shapeStyle.gradientAngle)
     }
 }

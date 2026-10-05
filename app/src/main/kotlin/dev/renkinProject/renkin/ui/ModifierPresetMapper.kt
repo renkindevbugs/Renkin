@@ -60,14 +60,14 @@ internal fun captureModifierPreset(
             shape = adjustments.iconShape,
             crop = adjustments.shapeCrop,
             scale = adjustments.shapeScale,
-            style = adjustments.shapeStyle()
+            style = adjustments.shapeStyle
         )
     } else null,
     outline = if (ModifierPresetGroup.OUTLINE in groups) {
         ModifierPresetOutline(
             mode = adjustments.outlineMode,
             width = adjustments.outlineWidth,
-            style = adjustments.outlineStyle()
+            style = adjustments.outlineStyle
         )
     } else null,
     shadow = if (ModifierPresetGroup.SHADOW in groups) adjustments.shadowPreset() else null
@@ -88,7 +88,7 @@ internal fun applyModifierPreset(
         adjustments.edgeSmoothing = effect.edgeSmoothing
         adjustments.edgeContrast = effect.edgeContrast
         adjustments.bgRemovalTolerance = effect.backgroundTolerance
-        adjustments.applyColorizerStyle(effect.colorizerStyle)
+        adjustments.colorizerStyle = effect.colorizerStyle
         application = application.copy(
             imageEdit = effect.imageEdit,
             iconColor = Color(effect.colorizerStyle.firstColor)
@@ -99,12 +99,12 @@ internal fun applyModifierPreset(
         adjustments.iconShape = shape.shape
         adjustments.shapeCrop = shape.crop
         adjustments.shapeScale = shape.scale
-        adjustments.applyShapeStyle(shape.style)
+        adjustments.shapeStyle = shape.style
     }
     payload.outline?.let { outline ->
         adjustments.outlineMode = outline.mode
         adjustments.outlineWidth = outline.width
-        adjustments.applyOutlineStyle(outline.style)
+        adjustments.outlineStyle = outline.style
     }
     payload.shadow?.let(adjustments::applyShadowPreset)
     return application
@@ -140,35 +140,13 @@ internal fun ModifierPresetPayload.includedGroups(): Set<ModifierPresetGroup> = 
 internal fun AdjustmentState.colorizerStyleWith(iconColor: Color): ColorizerStyle =
     colorizerStyle.copy(firstColor = iconColor.toArgb())
 
-internal fun AdjustmentState.applyColorizerStyle(style: ColorizerStyle) {
-    colorizerStyle = style
-}
-
-internal fun AdjustmentState.shapeStyle(): ColorizerStyle = shapeColorStyle
-
-internal fun AdjustmentState.applyShapeStyle(style: ColorizerStyle) {
-    shapeColorStyle = style
-}
-
-internal fun AdjustmentState.outlineStyle(): ColorizerStyle = outlineColorStyle
-
-internal fun AdjustmentState.applyOutlineStyle(style: ColorizerStyle) {
-    outlineColorStyle = style
-}
-
-internal fun AdjustmentState.shadowStyle(): ColorizerStyle = shadowColorStyle
-
-internal fun AdjustmentState.applyShadowStyle(style: ColorizerStyle) {
-    shadowColorStyle = style
-}
-
 internal fun AdjustmentState.shadowPreset(): ModifierPresetShadow = ModifierPresetShadow(
     enabled = shadowEnabled,
     blur = shadowBlur,
     distance = shadowDistance,
     angle = shadowAngle,
     allDirections = shadowAllDirections,
-    style = shadowStyle(),
+    style = shadowStyle,
     opacity = shadowOpacity
 )
 
@@ -178,7 +156,7 @@ internal fun AdjustmentState.applyShadowPreset(shadow: ModifierPresetShadow) {
     shadowDistance = shadow.distance
     shadowAngle = shadow.angle
     shadowAllDirections = shadow.allDirections
-    applyShadowStyle(shadow.style)
+    shadowStyle = shadow.style
     shadowOpacity = shadow.opacity
 }
 

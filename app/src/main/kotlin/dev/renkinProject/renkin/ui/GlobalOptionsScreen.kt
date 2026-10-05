@@ -1397,7 +1397,7 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
             themed = false,
             background = ColorFill(
                 color = if (adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop) {
-                    adjustments.shapeColor.toArgb()
+                    adjustments.shapeStyle.firstColor
                 } else android.graphics.Color.TRANSPARENT
             )
         ),

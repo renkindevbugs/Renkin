@@ -24,7 +24,7 @@ class ModifierPresetMapperTest {
                 shape = IconShape.PEBBLE,
                 crop = true,
                 scale = 0.75f,
-                style = adjustments.shapeStyle()
+                style = adjustments.shapeStyle
             )
         )
 
