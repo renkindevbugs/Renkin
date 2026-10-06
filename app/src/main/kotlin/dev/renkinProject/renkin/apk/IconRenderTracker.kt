@@ -6,7 +6,6 @@ import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.ProfilePrefKeys
 import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
-import dev.renkinProject.renkin.data.GlobalApplyCustomKey
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.globalModifierOptions
@@ -57,7 +56,3 @@ internal fun sameRenderPreferences(first: Preferences, second: Preferences, cont
     GenerationOptions.fromPreferences(first, context) == GenerationOptions.fromPreferences(second, context) &&
         globalModifierOptions(first) == globalModifierOptions(second) &&
         first.getBooleanValue(GlobalApplyGeneratedKey, true) == second.getBooleanValue(GlobalApplyGeneratedKey, true)
-
-internal fun sameCustomRenderPreferences(first: Preferences, second: Preferences): Boolean =
-    globalModifierOptions(first) == globalModifierOptions(second) &&
-        first.getBooleanValue(GlobalApplyCustomKey) == second.getBooleanValue(GlobalApplyCustomKey)

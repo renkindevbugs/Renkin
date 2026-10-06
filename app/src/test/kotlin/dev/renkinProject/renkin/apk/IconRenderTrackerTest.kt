@@ -7,9 +7,6 @@ import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.CalendarIconsKey
 import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
-import dev.renkinProject.renkin.data.GlobalColorizeKey
-import dev.renkinProject.renkin.data.PrimarySourceKey
-import dev.renkinProject.renkin.data.Source
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -90,10 +87,8 @@ class IconRenderTrackerTest {
     }
 
     @Test
-    fun customRenderIgnoresSourceButRejectsModifierChanges() {
+    fun generatedTargetChangesInvalidatePendingRefresh() {
         val empty = emptyPreferences()
-        assertTrue(sameCustomRenderPreferences(empty, preferencesOf(PrimarySourceKey to Source.APPLICATION_NAME.ordinal)))
-        assertFalse(sameCustomRenderPreferences(empty, preferencesOf(GlobalColorizeKey to true)))
         assertFalse(sameRenderPreferences(empty, preferencesOf(GlobalApplyGeneratedKey to false),
             RuntimeEnvironment.getApplication()))
     }

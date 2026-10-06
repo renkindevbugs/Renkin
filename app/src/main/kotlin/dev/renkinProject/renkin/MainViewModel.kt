@@ -1051,7 +1051,7 @@ class MainViewModel @Inject constructor(
     }
 
     /**
-     * The provider owns provenance, rendering and the live-row edit under its session gate.
+     * The provider owns provenance and commits the reviewed icon under its session gate.
      * Bookkeeping uses the same token after returning to Main, before a local switch can run.
      */
     private fun applyPickedIcon(
@@ -1064,7 +1064,6 @@ class MainViewModel @Inject constructor(
         launchProfileOperation(expected, serialize = false) {
             when (appProvider.applyPickedIcon(expected, app, icon, sourcePackName, edit)) {
                 IconApplyOutcome.APPLIED -> markUpdated(expected, app, icon)
-                IconApplyOutcome.CONFLICT -> _toastEvents.trySend(R.string.profileOperationSuperseded)
                 IconApplyOutcome.LOCKED -> _toastEvents.trySend(R.string.iconOriginLocked)
                 IconApplyOutcome.PROFILE_CHANGED -> _toastEvents.trySend(expected.expiredSessionMessage(sessionToken))
                 IconApplyOutcome.TARGET_GONE -> _toastEvents.trySend(R.string.iconEditTargetGone)

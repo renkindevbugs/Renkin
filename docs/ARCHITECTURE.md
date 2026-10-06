@@ -104,8 +104,10 @@ Switcher = the top-bar title dropdown.
   `ProfileSessionToken` before launching work; the provider checks it after acquiring the gate.
   Tokens include the profile, session revision and provider instance, so leaving and returning to
   the same profile or recreating the process cannot revive a stale edit. Switch, full restore,
-  app-list reload and clearing all icons invalidate the session. Refresh, hand-picked icons and
-  Global Save capture their inputs under the gate, render outside it, and reacquire it to commit.
+  app-list reload and clearing all icons invalidate the session. Refresh and Global Save capture
+  their inputs under the gate, render outside it, and reacquire it to commit. Hand-picked icons
+  commit the already reviewed editor/watch draft in one critical section, without reapplying
+  saved global modifiers. This mutation invalidates older render requests for that target.
   Each target has a render-request ticket and a mutation revision: a newer request, reset or edit
   prevents an older result from replacing it. Commits also compare the captured profile recipe
   with the current effective generation/modifier options. Bulk refresh commits batches of at
@@ -160,7 +162,13 @@ Switcher = the top-bar title dropdown.
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
   rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the
   Global options UI, only unsaved refresh output is Generated; saved/built non-custom rows are
-  Existing and have their own apply toggle. Global
+  Existing and have their own apply toggle. Individual Apply stores exactly the reviewed draft
+  as both base and current render. The Custom target toggle controls an explicit Global Options
+  Apply; it does not automatically restyle later editor or watch picks. Custom reference rows
+  also materialize without the global layer, including after their source pack becomes usable.
+  Saved rendered payloads retain any previously confirmed Global Apply. Generated icons continue
+  using the saved Generated setting on refresh; the Custom setting selects only current targets
+  of Global Apply. Global
   modifiers are a derived render layer, never destructively baked into the stored base. The
   rendered payload remains in exports for backward compatibility. `sourceUrl` is the attribution
   reference for icons picked from an online FOSS library (informational only — never fed into

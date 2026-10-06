@@ -506,7 +506,7 @@ class GlobalOptionsViewModel @Inject constructor(
 
     /**
      * Stores a hand-tuned icon from the per-icon modifier dialog: the same origin gate and
-     * custom-render as MainViewModel.applyIcon, but the updated-keys bookkeeping stays local
+     * reviewed-icon commit as MainViewModel.applyIcon, but the updated-keys bookkeeping stays local
      * and travels back via the activity result. Returns false when the pick is locked.
      */
     suspend fun applyEditedIcon(
@@ -531,10 +531,6 @@ class GlobalOptionsViewModel @Inject constructor(
                     }.also { committed ->
                         if (!committed) _toastEvents.trySend(expiredSessionNotice)
                     }
-                IconApplyOutcome.CONFLICT -> {
-                    _toastEvents.trySend(R.string.profileOperationSuperseded)
-                    false
-                }
                 IconApplyOutcome.LOCKED -> {
                     _toastEvents.trySend(R.string.iconOriginLocked)
                     false

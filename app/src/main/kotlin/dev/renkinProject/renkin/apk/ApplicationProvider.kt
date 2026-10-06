@@ -21,7 +21,6 @@ import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.StorageOperationBusyException
 import dev.renkinProject.renkin.data.FallbackSource
-import dev.renkinProject.renkin.data.GlobalApplyCustomKey
 import dev.renkinProject.renkin.data.GlobalApplyExistingKey
 import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
 import dev.renkinProject.renkin.data.getBooleanValue
@@ -580,8 +579,6 @@ class ApplicationProvider internal constructor(
         )
     }
 
-    private data class PickedIconPlan(val preferences: Preferences, val ticket: IconRenderTicket)
-
     suspend fun applyPickedIcon(
         expected: ProfileSessionToken,
         application: PackageInfoStruct,
@@ -589,34 +586,16 @@ class ApplicationProvider internal constructor(
         sourcePackName: String?,
         edit: (PackageInfoStruct, String?, IconPackDrawable?) -> PackageInfoStruct
     ): IconApplyOutcome = withContext(Dispatchers.Default) {
-        var rejection = IconApplyOutcome.PROFILE_CHANGED
-        val plan = profileOperations.run {
-            if (!isCurrentSession(expected)) return@run null
-            currentCoroutineContext().ensureActive()
-            val (_, locked) = lockManager.resolvePickedSource(application.key, if (icon == null) null else sourcePackName)
-            if (icon != null && locked) {
-                rejection = IconApplyOutcome.LOCKED
-                return@run null
-            }
-            if (applicationList.none { it.key == application.key }) {
-                rejection = IconApplyOutcome.TARGET_GONE
-                return@run null
-            }
-            PickedIconPlan(context.dataStore.getPreferencesAfterPendingWrites(), renderTracker.reserve(application.key))
-        } ?: return@withContext rejection
-        val rendered = icon?.let { renderCustomIcon(it, plan.preferences) }
         profileOperations.run {
             if (!isCurrentSession(expected)) return@run IconApplyOutcome.PROFILE_CHANGED
             currentCoroutineContext().ensureActive()
             val index = applicationList.indexOfFirst { it.key == application.key }
             if (index < 0) return@run IconApplyOutcome.TARGET_GONE
-            if (!renderTracker.isCurrent(plan.ticket) ||
-                !sameCustomRenderPreferences(plan.preferences, context.dataStore.getPreferencesAfterPendingWrites())) {
-                return@run IconApplyOutcome.CONFLICT
-            }
             val (origin, locked) = lockManager.resolvePickedSource(application.key, if (icon == null) null else sourcePackName)
             if (icon != null && locked) return@run IconApplyOutcome.LOCKED
-            val updated = edit(applicationList[index], origin, rendered)
+            // The caller already rendered the reviewed draft. Global Options applies its
+            // layer explicitly; stored global preferences must not change a confirmed pick.
+            val updated = edit(applicationList[index], origin, icon)
             require(updated.key == application.key)
             editApplication(index, updated)
             IconApplyOutcome.APPLIED
@@ -652,9 +631,6 @@ class ApplicationProvider internal constructor(
     /** Applies the modifier from [options] to an already-built icon (e.g. a hand-edited vector). */
     suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =
         iconGenService.applyModifier(icon, options)
-
-    suspend fun renderCustomIcon(base: IconPackDrawable, preferences: Preferences): IconPackDrawable =
-        renderGlobal(base, preferences, preferences.getBooleanValue(GlobalApplyCustomKey))
 
     private data class EmptyIconSources(
         val generation: IconGenerationSources,
@@ -1012,15 +988,11 @@ class ApplicationProvider internal constructor(
                 // defaults to false): a refresh won't replace it.
                 storedIcon != null -> {
                     val baseIcon = entry.baseIcon ?: storedIcon
-                    val rendered = if (isReference) {
+                    val rendered = if (isReference && !entry.isCustom) {
                         renderGlobal(
                             storedIcon,
                             prefs,
-                            if (entry.isCustom) {
-                                prefs.getBooleanValue(GlobalApplyCustomKey)
-                            } else {
-                                prefs.getBooleanValue(GlobalApplyExistingKey)
-                            }
+                            prefs.getBooleanValue(GlobalApplyExistingKey)
                         )
                     } else storedIcon
                     app.changeExport(
@@ -1134,15 +1106,11 @@ class ApplicationProvider internal constructor(
             val isReference = entry.icon == null && entry.row.drawable.isEmpty() && entry.sourcePackName != null
             val storedIcon = entry.icon ?: materializeReference(app, entry, prefs) ?: continue
             val baseIcon = entry.baseIcon ?: storedIcon
-            val rendered = if (isReference) {
+            val rendered = if (isReference && !entry.isCustom) {
                 renderGlobal(
                     storedIcon,
                     prefs,
-                    if (entry.isCustom) {
-                        prefs.getBooleanValue(GlobalApplyCustomKey)
-                    } else {
-                        prefs.getBooleanValue(GlobalApplyExistingKey)
-                    }
+                    prefs.getBooleanValue(GlobalApplyExistingKey)
                 )
             } else storedIcon
             editApplication(

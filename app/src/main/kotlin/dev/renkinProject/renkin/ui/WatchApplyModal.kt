@@ -243,7 +243,6 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                                                 onDismiss()
                                             }
                                             IconApplyOutcome.LOCKED -> toaster.show(lockedToast)
-                                            IconApplyOutcome.CONFLICT,
                                             IconApplyOutcome.TARGET_GONE,
                                             IconApplyOutcome.PROFILE_CHANGED,
                                             IconApplyOutcome.FAILED -> toaster.show(applyFailedToast)

@@ -5,6 +5,5 @@ enum class IconApplyOutcome {
     LOCKED,
     TARGET_GONE,
     PROFILE_CHANGED,
-    CONFLICT,
     FAILED
 }
