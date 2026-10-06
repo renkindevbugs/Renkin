@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.ui
 
 import android.app.Application
+import android.graphics.Bitmap
 import androidx.compose.runtime.saveable.SaverScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -8,6 +9,9 @@ import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.icon.creator.ColorFill
+import dev.renkinProject.renkin.icon.creator.BackgroundBrushOperation
+import dev.renkinProject.renkin.icon.creator.BrushAction
+import dev.renkinProject.renkin.icon.creator.ModifierRecipeCodec
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.EffectModifier
@@ -91,6 +95,23 @@ class ModifierColorStyleTest {
     private fun roundTrip(state: AdjustmentState): AdjustmentState {
         val saved = with(AdjustmentState.Saver) { scope.save(state) }
         return requireNotNull(AdjustmentState.Saver.restore(requireNotNull(saved)))
+    }
+
+    @Test fun recipeOmitsSessionMasksAndStrictGuardRejectsThemSeparately() {
+        val bitmap = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)
+        val original = options().modifiers
+        val maskedStacks = listOf(
+            original.copy(outline = original.outline!!.copy(eraseMask = bitmap)),
+            original.copy(effect = original.effect.copy(backgroundRemoval =
+                original.effect.backgroundRemoval.copy(brushOperations =
+                    listOf(BackgroundBrushOperation(BrushAction.ERASE, bitmap)))))
+        )
+        for (masked in maskedStacks) {
+            assertEquals(original, ModifierRecipeCodec.decodeSavedState(ModifierRecipeCodec.encode(masked)))
+            assertThrows(IllegalArgumentException::class.java) { ModifierRecipeCodec.requireEncodable(masked) }
+        }
+        ModifierRecipeCodec.requireEncodable(original)
+        bitmap.recycle()
     }
 
     @Test fun saverPreservesEveryFieldOfFourIndependentStylesAndSegmentLayers() {

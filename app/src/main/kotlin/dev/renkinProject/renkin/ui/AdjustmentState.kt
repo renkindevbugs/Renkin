@@ -105,3 +105,49 @@ internal fun AdjustmentState.applyToModifierStack(
 internal fun AdjustmentState.shadowModifier(): ShadowModifier = ShadowModifier(
     shadowBlur, shadowDistance, shadowAngle, shadowAllDirections, shadowStyle, shadowOpacity, shadowEnabled
 )
+
+internal fun AdjustmentState.savedModifierStack(): ModifierStack {
+    val stack = applyToModifierStack(
+        ModifierStack(EffectModifier(ImageEdit.NONE, colorizerStyle)),
+        ImageEdit.NONE, colorizerStyle.firstColor, null, emptyList()
+    )
+    // Save inactive segments too. A plate's editor colour is saved explicitly, but generation
+    // still uses the inherited presentation background and the dialog's hoisted first colour.
+    return stack.copy(
+        effect = stack.effect.copy(segments = colorizeLayers),
+        shape = stack.shape?.copy(fill = ColorFill(shapeStyle.firstColor, shapeStyle))
+    )
+}
+
+internal fun AdjustmentState.restoreSavedModifiers(stack: ModifierStack) {
+    colorizerStyle = stack.effect.colorizer
+    edgeThreshold = stack.effect.edges.lowThreshold
+    edgeSmoothing = stack.effect.edges.smoothing
+    edgeContrast = stack.effect.edges.normalizeContrast
+    colorizeLayers = stack.effect.segments
+    bgRemovalTargets = stack.effect.backgroundRemoval.targets
+    bgRemovalTolerance = stack.effect.backgroundRemoval.tolerance
+    iconScale = stack.transform.scale
+    iconOffsetX = stack.transform.offsetX
+    iconOffsetY = stack.transform.offsetY
+    stack.shape?.let {
+        iconShape = it.shape
+        shapeCrop = it.crop
+        shapeScale = it.scale
+        it.fill?.let { fill -> shapeStyle = fill.style ?: ColorizerStyle(firstColor = fill.color) }
+    }
+    stack.outline?.let {
+        outlineMode = it.mode
+        outlineWidth = it.width
+        outlineStyle = it.fill.style ?: ColorizerStyle(firstColor = it.fill.color)
+    }
+    stack.shadow?.let {
+        shadowEnabled = it.enabled
+        shadowBlur = it.blur
+        shadowDistance = it.distance
+        shadowAngle = it.angle
+        shadowAllDirections = it.allDirections
+        shadowStyle = it.style
+        shadowOpacity = it.opacity
+    }
+}

@@ -8,9 +8,11 @@ import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.OutlineMode
+import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -27,6 +29,35 @@ class AdjustmentStateSaverTest {
 
         assertState(restored)
         assertShapeGradient(requireNotNull(restored))
+    }
+
+    @Test
+    fun saver_restoresEncodedStylesFromPreRecipeKeyedFormat() {
+        val expected = populatedState()
+        val legacy = arrayListOf<Any>(
+            "edgeThreshold", 1.25f, "edgeSmoothing", 3.5f, "edgeContrast", true,
+            "iconScale", 1.4f, "bgRemovalTolerance", 0.3f, "autoCenter", true,
+            "iconOffsetX", -0.2f, "iconOffsetY", 0.15f,
+            "colorizerStyle", encodeColorizerStyle(expected.colorizerStyle),
+            "iconShape", IconShape.COOKIE.ordinal, "shapeCrop", false, "shapeScale", 1.2f,
+            "shapeStyle", encodeColorizerStyle(expected.shapeStyle),
+            "outlineMode", OutlineMode.RECOLOR.ordinal, "outlineWidth", 9f,
+            "outlineStyle", encodeColorizerStyle(expected.outlineStyle),
+            "shadowStyle", encodeColorizerStyle(expected.shadowStyle)
+        )
+        val restored = requireNotNull(AdjustmentState.Saver.restore(legacy))
+        assertState(restored)
+        assertShapeGradient(restored)
+        val savedAgain = requireNotNull(with(AdjustmentState.Saver) { saveableScope.save(restored) })
+        assertEquals("modifiers", (savedAgain as List<*>)[0])
+        val restoredAgain = requireNotNull(AdjustmentState.Saver.restore(savedAgain))
+        assertState(restoredAgain)
+        assertShapeGradient(restoredAgain)
+    }
+
+    @Test
+    fun saver_rejectsDamagedRecipeInsteadOfRestoringPartialEditorState() {
+        assertNull(AdjustmentState.Saver.restore(arrayListOf<Any>("modifiers", "damaged", "autoCenter", true)))
     }
 
     @Test

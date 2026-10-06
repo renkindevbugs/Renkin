@@ -409,9 +409,12 @@ identically and none of them re-implements the maths.
   generation applies the same first-stop rule when mapping editor adjustments into the stack.
   **`ui/AdjustmentStateSaver.kt`** owns saved-state encoding and restoration independently of
   the mutable state. `AdjustmentState.Saver` remains the `rememberSaveable` entry point. It
-  encodes complete styles through the existing shared style codec with the same keys and value
-  order; older keyed and positional saved states remain readable. Brush masks and strokes stay
-  transient and are never serialized.
+  now stores a versioned modifier recipe plus UI-only auto-center state. Older keyed states
+  (both encoded styles and decomposed colour fields) and positional lists remain readable through
+  restore-only adapters. Brush masks and strokes stay transient and are never serialized.
+  The saved recipe retains inactive segment layers and the shape editor's own colour. Rendering
+  still inherits the presentation background and replaces Colorize's first stop with the dialog's
+  shared colour; those save-time values do not change the generation contract.
 - **`GenerationOptions.withColorizerStyle`** is the common transfer into generation for
   callers replacing a colour style. It replaces the complete effect colour group and preserves
   the caller's image-edit choice and segment layers. The editor's
@@ -454,13 +457,41 @@ identically and none of them re-implements the maths.
   The renderer receives the inherited background explicitly; it never guesses a fallback colour.
   New modifiers belong in their groups. Data-class equality includes every source, modifier and
   export group. Preferences, preset payloads and editor saved-state codecs keep their existing
-  formats. The editor now uses the grouped colour API throughout. The next step is to consolidate
-  portable recipe codecs before adding persistent non-destructive recipes.
+  formats at the persistence boundaries; editor saved state has the new recipe envelope described
+  above. The editor now uses the grouped colour API throughout. Persistent non-destructive recipes
+  and direct ownership of geometry groups in the editor remain follow-ups.
   Equality deliberately retains inactive configuration; a visual-only cache key may later
   normalize disabled groups, but session/recipe comparisons must continue distinguishing their
   full configuration.
   `OutlineModifier.eraseMask` retains bitmap reference equality; do not treat stack equality as
   a comparison of mask pixels when designing cache keys.
+- **`ModifierRecipeCodec`** owns the shared effect, shape, outline and shadow field definitions
+  for full `ModifierStack` recipes and partial portable presets. Full recipes include transform,
+  picked removal colours, ordered segment layers and Material You pack controls. They use named
+  keys and enum names, including nested colour styles, with an explicit recipe version. Missing
+  optional groups remain absent; present inactive groups retain their configuration. A shape's
+  inherited fill remains distinct from an explicit fill, whose flat fallback colour may differ
+  from its style's first stop. The compatible version range starts at v1; future versions may
+  extend it only when the older wire schema remains readable, otherwise they need an adapter.
+  Unsupported versions and duplicate keys are rejected.
+  `decode` is the untrusted-input boundary: it caps documents at 1 Mi characters / 8192 fields and
+  128 segment layers, clamps geometry, tolerances, opacity and line weight to supported ranges,
+  and limits target lists to 256 colours and gradients to 10 stops including the first colour.
+  Numeric/list parsing uses finite values and bounded sequences. Empty imported gradient-stop
+  lists get a black fallback; positions are bounded, monotonic and must match the stop count.
+  `decodeSavedState` is reserved for our own Bundle data and retains finite editor values and
+  collection sizes without these import limits. The Saver uses only this trusted entry point.
+  `encode` omits session erase masks and background brush operations without throwing. Callers
+  must store these separately; `requireEncodable` offers an explicit strict check for persistence
+  contracts and tests that require a complete mask-free recipe.
+  Preset v1 delegates to the same group readers/writers through a compatibility policy: its wire
+  keys, inline legacy style encoding, missing-group semantics, numeric limits and fallback colours
+  remain unchanged. It continues excluding icon-specific position, targets, segments, masks and
+  pack controls. Existing colour presets, adaptive payloads and preference style strings retain
+  their older colour codec; there is no Room or portable-backup format migration in this step.
+  The full recipe currently serves editor saved state, not the icon database. Source/export choices
+  and the editor's hoisted image edit/first colour retain their existing ownership. The individual
+  editor saves those controls separately; Global Options' per-icon controls remain remember-only.
 - **`ColorizerShader.kt`** builds the actual `Shader` and is called by BOTH `IconGenerator` and
   the editor preview — a second implementation in the UI would drift from the built output.
 - **`ui/ColorStyleSheet.kt`** is the one editor UI: a bottom sheet with a docked live preview

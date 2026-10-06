@@ -5,45 +5,19 @@ import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.icon.creator.ModifierRecipeCodec
 import dev.renkinProject.renkin.icon.creator.OutlineMode
-import dev.renkinProject.renkin.icon.creator.SegmentLayer
 import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.decodeSegmentLayer
-import dev.renkinProject.renkin.icon.creator.encode
-import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 
 internal object AdjustmentStateSaver {
-    // Keep the keyed representation, but accept the positional list emitted by older builds.
-    // mapSaver itself cannot do that because it casts every even list item to String before
-    // calling restore, which would crash on the legacy list's first Float value.
+    // Keep a keyed envelope for UI-only state and accept both older keyed and positional lists.
+    // mapSaver cannot read the positional form because its first item is a Float, not a key.
     val saver = Saver<AdjustmentState, Any>(
         save = {
             arrayListOf(
-                "edgeThreshold", it.edgeThreshold,
-                "edgeSmoothing", it.edgeSmoothing,
-                "edgeContrast", it.edgeContrast,
-                "iconScale", it.iconScale,
-                "bgRemovalTolerance", it.bgRemovalTolerance,
-                "bgRemovalTargets", it.bgRemovalTargets,
-                "autoCenter", it.autoCenter,
-                "iconOffsetX", it.iconOffsetX,
-                "iconOffsetY", it.iconOffsetY,
-                "colorizerStyle", encodeColorizerStyle(it.colorizerStyle),
-                "colorizeLayers", it.colorizeLayers.map(SegmentLayer::encode),
-                "iconShape", it.iconShape.ordinal,
-                "shapeCrop", it.shapeCrop,
-                "shapeStyle", encodeColorizerStyle(it.shapeStyle),
-                "shapeScale", it.shapeScale,
-                "outlineMode", it.outlineMode.ordinal,
-                "outlineWidth", it.outlineWidth,
-                "outlineStyle", encodeColorizerStyle(it.outlineStyle),
-                "shadowEnabled", it.shadowEnabled,
-                "shadowBlur", it.shadowBlur,
-                "shadowDistance", it.shadowDistance,
-                "shadowAngle", it.shadowAngle,
-                "shadowAllDirections", it.shadowAllDirections,
-                "shadowStyle", encodeColorizerStyle(it.shadowStyle),
-                "shadowOpacity", it.shadowOpacity
+                "modifiers", ModifierRecipeCodec.encode(it.savedModifierStack()),
+                "autoCenter", it.autoCenter
             )
         },
         restore = ::restoreAdjustmentState
@@ -66,7 +40,18 @@ internal object AdjustmentStateSaver {
         }
     }
 
-    private fun restoreKeyed(saved: Map<String, Any?>) = AdjustmentState().apply {
+    private fun restoreKeyed(saved: Map<String, Any?>): AdjustmentState? {
+        (saved["modifiers"] as? String)?.let { encoded ->
+            val stack = ModifierRecipeCodec.decodeSavedState(encoded) ?: return null
+            return AdjustmentState().apply {
+                restoreSavedModifiers(stack)
+                autoCenter = saved["autoCenter"] as? Boolean ?: false
+            }
+        }
+        return restoreLegacyKeyed(saved)
+    }
+
+    private fun restoreLegacyKeyed(saved: Map<String, Any?>) = AdjustmentState().apply {
         edgeThreshold = saved["edgeThreshold"] as? Float ?: edgeThreshold
         edgeSmoothing = saved["edgeSmoothing"] as? Float ?: edgeSmoothing
         edgeContrast = saved["edgeContrast"] as? Boolean ?: edgeContrast
