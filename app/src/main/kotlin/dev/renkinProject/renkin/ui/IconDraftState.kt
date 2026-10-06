@@ -9,6 +9,7 @@ import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.IconGenerationResult
 import dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe
 import dev.renkinProject.renkin.icon.creator.IconModifierInput
 import dev.renkinProject.renkin.icon.creator.ModifierInputOrigin
@@ -207,23 +208,23 @@ internal class IconDraftState(
         val generation = ++createGeneration
         val generated = trackGeneration {
             when {
-                custom != null -> builder.previewIcon(app, options, custom)
+                custom != null -> builder.previewIconWithInput(app, options, custom)
                 // Icon-pack source with no new pick: apply the modifier to the already saved icon
                 // rather than pulling a fresh one from the first pack (which would swap the icon
                 // out from under the user). Null until a tap if none.
                 options.source.primarySource == Source.ICON_PACK ->
-                    (app.baseIcon ?: app.createdIcon)?.let { builder.applyModifier(it, options) }
-                else -> builder.previewIcon(app, options, null)
+                    IconGenerationResult(request.base?.let { builder.applyModifier(it, options) })
+                else -> builder.previewIconWithInput(app, options, null)
             }
         }
         if (generation == createGeneration) {
-            createIcon = generated
-            createRecipe = if (generated != null) StoredIconModifierRecipe.fromRenderedOptions(options) else null
-            // Only this branch applies the complete local stage to a known input. A newly
-            // generated source needs its own pre-modifier capture before it can be replayed.
-            createInput = if (generated != null && custom == null && options.source.primarySource == Source.ICON_PACK) {
-                request.base?.let { modifierInputForResult(it, options, ModifierInputOrigin.EXISTING_ICON) }
+            createIcon = generated.icon
+            createRecipe = if (generated.icon != null) {
+                StoredIconModifierRecipe.fromRenderedOptions(generated.renderedOptions ?: options)
             } else null
+            createInput = if (generated.icon != null && custom == null && options.source.primarySource == Source.ICON_PACK) {
+                request.base?.let { modifierInputForResult(it, options, ModifierInputOrigin.EXISTING_ICON) }
+            } else generated.modifierInput.takeIf { generated.icon != null }
             completedCreate = request
         }
     }

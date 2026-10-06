@@ -220,16 +220,37 @@ Switcher = the top-bar title dropdown.
   older local edits baked into that input. The input boundary is after upload cropping/zoom or
   vector hand edits, before the shared local modifiers; it does not reconstruct those tools'
   source-file history or missing gallery files.
-  Capture currently covers upload/vector modifier calls and modifications of an existing icon
+  Capture covers upload/vector modifier calls and modifications of an existing icon
   without a new pack pick. The latter baseline is conservatively marked as containing prior
-  baked edits. A fresh Create-source render still has no trustworthy pre-modifier input; it
-  keeps its v19 metadata without an input document. The stored input is not a replay instruction
-  yet: this phase leaves generation and initial controls unchanged. Reopening without a new
+  baked edits. Phase 5C2a also captures fresh Create sources through `IconSourceStage`: pack
+  picks (including calendar artwork selected by the editor), application-icon variants and text.
+  Source creation returns the actual immutable input and the kind of local render stage; the
+  preview renders that stage once and publishes its result/input pair only when it wins the
+  draft's generation check. It does not reconstruct input from the completed image or generate
+  a second neutral preview. Source-specific text colour, app-icon monochrome/Material You
+  construction, normalization and export wrapping happen before this boundary. These are
+  source choices, not recoverable raw glyphs, font files or application resources.
+  Adaptive pack layers use image editing followed by adjustments. Generic modified sources
+  retain the actual canonical bitmap passed to bitmap image editing; untouched generic sources
+  retain their vector/inset/bitmap presentation. Text retains its existing adjustments-only
+  contract; its completed-stage options and v19 recipe record `ImageEdit.NONE`, even if the
+  editor supplied an unused image effect. `IconGenerationResult` carries those effective options
+  independently of optional input capture, so capture failure cannot publish the ignored effect.
+  A generator reuses one lazy stage renderer and its image/adjustment pipelines across primary,
+  secondary and fallback output; bulk rendering does not copy effective stage options per icon.
+  The pipeline kind preserves these differences instead of guessing that all paths
+  use the same vector recolour or rasterization rules. Material You pack restyling performed
+  during resource parsing (especially vector stroke width) is not reversible from captured PNG
+  layers, so fresh pack picks with active pack restyling retain only their baked result and v19
+  recipe for now. Brush geometry remains unsupported. Bulk refresh/fallback and watch keep
+  their existing persistence contract; this step does not add retained input to generated rows.
+  The stored input is not an enabled editor replay instruction yet: initial controls remain
+  unchanged. Reopening without a new
   render preserves the retained pair; a completed new stage replaces it with that stage's
   actual input, never an older source paired with a newer cumulative result. New artwork,
   reset and unsupported brush geometry discard it; derived global renders, undo, calendar and
   save/build locking preserve it. Optional corrupt metadata cannot discard usable artwork.
-  `modifierInput` contains only a bounded v2 document (64 KiB in characters and UTF-8 bytes),
+  `modifierInput` contains only a bounded v3 document (64 KiB in characters and UTF-8 bytes),
   settings and a SHA-256 artwork hash. Artwork is stored once per hash in
   `filesDir/icon-inputs/<hash>.input`, capped at 32 MiB per file. It retains the existing drawable
   serialization, outside Room rows and portable/recovery JSON. Loading a profile reads only
@@ -250,8 +271,27 @@ Switcher = the top-bar title dropdown.
   it queries metadata alone, rather than loading all profiles' artwork. Runtime saves do not
   collect files that an unsaved draft/undo entry may still use. Retained recovery snapshots own
   independent copies, unaffected by input-file collection.
-  Phase 5C2 must unify fresh source generation with pre-modifier capture and enable replay from
-  retained inputs before restoring editor controls. It must decode the retained artwork and
+  Metadata v3 adds the explicit render pipeline and bitmap preview scale; existing v2 documents
+  remain readable as the shared modifier pipeline with the former default scale of 1. No Room
+  schema changes are needed; the database stays at v20. Optional capture/codec failure preserves
+  the rendered artwork. Full backups/recovery retain the metadata through the common codec;
+  shared profiles continue omitting all input documents and source files.
+  Returning to a 5C1 build is not metadata-preserving: its v2-only reader discards v3 optional
+  input references on save, and startup collection can remove their unreferenced files. Baked
+  artwork remains usable, but development builds should not alternate across that boundary.
+  The codec rejects known incompatible stage/source/origin and representation flags: canonical
+  bitmap editing requires a plain bitmap with scale 1; text's adjustments-only stage requires
+  non-adaptive XML and a disabled image effect; XML artwork cannot carry bitmap preview scale.
+  Replay must still decode the file and verify the actual drawable type/adaptive representation
+  against these flags before rendering. Metadata validation does not establish payload validity.
+  Retained Material You application artwork freezes the confirmed source colours, including a
+  wallpaper palette resolved during creation. Replay must preserve that snapshot after a
+  wallpaper change. Explicit source reselection starts a new pair using the current palette;
+  it must never happen silently during reopening or modifier preview. The next editor-restoration
+  slice must make this distinction clear in the source controls; it adds no automatic recolouring.
+  The next 5C2 slice must enable replay from retained inputs before restoring editor controls,
+  resolve source-dependent controls and the remaining pack-restyling boundary, and verify
+  equivalence across pipeline/export types. It must decode the retained artwork and
   verify that replay matches the confirmed base before offering editable restoration. Structural
   metadata validity alone does not establish image/pipeline equivalence. It must not reapply a
   recipe onto baked base.

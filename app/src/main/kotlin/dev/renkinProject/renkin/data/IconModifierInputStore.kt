@@ -31,7 +31,10 @@ internal class IconModifierInputStore(private val context: Context) {
             val artwork = retained?.takeIf { exists(it) } ?: live?.let { input ->
                 val payload = input.toDbString()
                 if (payload.isEmpty() || payload.length > MAX_ARTWORK_BYTES) return@withContext null
-                StoredModifierArtwork(write(payload), input !is BitmapIconDrawable, input.isAdaptiveIcon())
+                StoredModifierArtwork(
+                    write(payload), input !is BitmapIconDrawable, input.isAdaptiveIcon(),
+                    (input as? BitmapIconDrawable)?.previewScale ?: 1f
+                )
             } ?: return@withContext null
             val encoded = StoredIconModifierInput.encode(state, artwork) ?: return@withContext null
             Prepared(encoded, artwork)

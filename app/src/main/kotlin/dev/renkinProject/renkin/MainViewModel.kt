@@ -31,6 +31,7 @@ import dev.renkinProject.renkin.apk.ShizukuSupport
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.apk.IconApplyOutcome
 import dev.renkinProject.renkin.icon.creator.IconModifierInput
+import dev.renkinProject.renkin.icon.creator.IconGenerationResult
 import dev.renkinProject.renkin.apk.IconUndoStep
 import dev.renkinProject.renkin.apk.ProfileReloadFailedException
 import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
@@ -117,6 +118,12 @@ interface IconPreviewBuilder {
         options: GenerationOptions,
         customIcon: ResourceDrawable?
     ): IconPackDrawable?
+
+    suspend fun previewIconWithInput(
+        app: PackageInfoStruct,
+        options: GenerationOptions,
+        customIcon: ResourceDrawable?
+    ): IconGenerationResult = IconGenerationResult(previewIcon(app, options, customIcon))
 
     suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable
 }
@@ -1196,6 +1203,12 @@ class MainViewModel @Inject constructor(
         options: GenerationOptions,
         customIcon: ResourceDrawable?
     ): IconPackDrawable? = appProvider.getIcon(app, options, customIcon)
+
+    override suspend fun previewIconWithInput(
+        app: PackageInfoStruct,
+        options: GenerationOptions,
+        customIcon: ResourceDrawable?
+    ): IconGenerationResult = appProvider.getIconPreview(app, options, customIcon)
 
     /** Applies the modifier from [options] to an already-built icon (e.g. a hand-edited vector). */
     override suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =

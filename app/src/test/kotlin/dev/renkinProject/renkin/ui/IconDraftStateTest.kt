@@ -17,6 +17,9 @@ import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.EffectModifier
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.IconGenerationResult
+import dev.renkinProject.renkin.icon.creator.ModifierInputPipeline
+import dev.renkinProject.renkin.icon.creator.ModifierRecipeCodec
 import dev.renkinProject.renkin.icon.creator.ColorFill
 import dev.renkinProject.renkin.icon.creator.IconExportOptions
 import dev.renkinProject.renkin.icon.creator.IconSourceOptions
@@ -49,6 +52,46 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33])
 class IconDraftStateTest {
+    @Test fun freshCreatePublishesOnlyTheWinningArtworkInputAndEffectiveRecipe() = runBlocking {
+        val draft = IconDraftState(null)
+        draft.skipInitialGate(FakeBuilder())
+        val firstOptions = options(source = Source.APPLICATION_ICON, iconScale = 1.2f)
+        val firstInput = checkNotNull(modifierInputForResult(FakeIcon(), firstOptions,
+            ModifierInputOrigin.FRESH_SOURCE, ModifierInputPipeline.IMAGE_EDIT))
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val pending = launch {
+            draft.regenerateCreate(FakeBuilder(freshResult = IconGenerationResult(FakeIcon(), firstInput, firstOptions),
+                previewStarted = started, previewRelease = release), app(), firstOptions, emptyList())
+        }
+        started.await()
+        assertNull(draft.modifierInputToConfirm)
+        val winningOptions = options(source = Source.APPLICATION_ICON, iconScale = 1.5f)
+        val winningIcon = FakeIcon()
+        val winningInput = checkNotNull(modifierInputForResult(FakeIcon(), winningOptions,
+            ModifierInputOrigin.FRESH_SOURCE, ModifierInputPipeline.IMAGE_EDIT))
+        draft.regenerateCreate(FakeBuilder(freshResult = IconGenerationResult(winningIcon, winningInput, winningOptions)),
+            app(), winningOptions, emptyList())
+        release.complete(Unit)
+        pending.join()
+        assertSame(winningIcon, draft.iconToConfirm)
+        assertSame(winningInput, draft.modifierInputToConfirm)
+        assertEquals(1.5f, ModifierRecipeCodec.decode(draft.modifierRecipeToConfirm!!)!!.transform.scale)
+    }
+
+    @Test fun textRecipeUsesCompletedEffectiveOptionsWhenInputIsUnavailable() = runBlocking {
+        val draft = IconDraftState(null)
+        draft.skipInitialGate(FakeBuilder())
+        val requested = options(source = Source.APPLICATION_NAME, imageEdit = ImageEdit.COLORIZE)
+        val effective = options(source = Source.APPLICATION_NAME, imageEdit = ImageEdit.NONE)
+        val icon = FakeIcon()
+        draft.regenerateCreate(FakeBuilder(freshResult = IconGenerationResult(icon, renderedOptions = effective)),
+            app(), requested, emptyList())
+        assertSame(icon, draft.iconToConfirm)
+        assertNull(draft.modifierInputToConfirm)
+        assertEquals(ImageEdit.NONE, ModifierRecipeCodec.decode(draft.modifierRecipeToConfirm!!)!!.effect.imageEdit)
+    }
+
 
     @Test fun initialMetadataIsRetainedUntilACompletedRenderAndClearedWithItsSource() = runBlocking {
         val original = FakeIcon()
@@ -105,8 +148,20 @@ class IconDraftStateTest {
         private val previewResult: IconPackDrawable? = null,
         private val modifierResult: IconPackDrawable? = null,
         private val modifierStarted: CompletableDeferred<Unit>? = null,
-        private val modifierRelease: CompletableDeferred<Unit>? = null
+        private val modifierRelease: CompletableDeferred<Unit>? = null,
+        private val freshResult: IconGenerationResult? = null,
+        private val previewStarted: CompletableDeferred<Unit>? = null,
+        private val previewRelease: CompletableDeferred<Unit>? = null
     ) : IconPreviewBuilder {
+        override suspend fun previewIconWithInput(
+            app: PackageInfoStruct, options: GenerationOptions, customIcon: ResourceDrawable?
+        ): IconGenerationResult {
+            if (freshResult == null) return super.previewIconWithInput(app, options, customIcon)
+            previewStarted?.complete(Unit)
+            previewRelease?.await()
+            return freshResult
+        }
+
         var previewCalls = 0
         var applyCalls = 0
         var lastCustom: ResourceDrawable? = null

@@ -36,6 +36,7 @@ import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.IconGenerationResult
 import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.icon.creator.withModifiers
 import dev.renkinProject.renkin.icon.creator.withExport
@@ -604,6 +605,13 @@ class ApplicationProvider internal constructor(
 
     suspend fun getIcon(application: PackageInfoStruct, options: GenerationOptions, customIcon: ResourceDrawable? = null): IconPackDrawable? =
         iconGenService.getIcon(application, options, customIcon)
+
+    suspend fun getIconPreview(
+        application: PackageInfoStruct,
+        options: GenerationOptions,
+        customIcon: ResourceDrawable?
+    ): IconGenerationResult =
+        iconGenService.getIconPreview(application, options, customIcon)
 
     /**
      * Builds the icon a specific pack provides for an app, by drawable name — used by the

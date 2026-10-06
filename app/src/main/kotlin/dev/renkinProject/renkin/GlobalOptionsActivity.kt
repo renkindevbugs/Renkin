@@ -38,6 +38,7 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.IconGenerationResult
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.GlobalOptionsScreen
 import dev.renkinProject.renkin.ui.LocalToaster
@@ -363,6 +364,12 @@ class GlobalOptionsViewModel @Inject constructor(
         options: GenerationOptions,
         customIcon: ResourceDrawable?
     ): IconPackDrawable? = appProvider.getIcon(app, options, customIcon)
+
+    override suspend fun previewIconWithInput(
+        app: PackageInfoStruct,
+        options: GenerationOptions,
+        customIcon: ResourceDrawable?
+    ): IconGenerationResult = appProvider.getIconPreview(app, options, customIcon)
 
     override suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =
         appProvider.applyModifier(icon, options)

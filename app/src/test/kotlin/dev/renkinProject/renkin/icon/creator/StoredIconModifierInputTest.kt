@@ -16,6 +16,58 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33])
 class StoredIconModifierInputTest {
+    @Test fun v2DocumentsUpgradeToTheSharedPipelineWithoutLosingSettings() {
+        val original = state()
+        val legacy = JSONObject(checkNotNull(StoredIconModifierInput.encode(original, artwork)))
+            .put("version", 2).apply { remove("pipeline"); remove("previewScale") }.toString()
+        val restored = checkNotNull(StoredIconModifierInput.readState(legacy))
+        assertEquals(original.options, restored.options)
+        assertEquals(ModifierInputPipeline.SHARED, restored.pipeline)
+        assertEquals(1f, restored.storedInput!!.previewScale)
+        val normalized = checkNotNull(StoredIconModifierInput.normalize(legacy))
+        assertEquals(3, JSONObject(normalized).getInt("version"))
+        assertEquals(artwork, StoredIconModifierInput.artwork(normalized))
+    }
+
+    @Test fun freshPipelinesRoundTripWithTheirArtworkRepresentation() {
+        for (pipeline in ModifierInputPipeline.entries.filter { it != ModifierInputPipeline.SHARED }) {
+            val options = modifierInputTestOptions().withSource {
+                copy(primarySource = if (pipeline == ModifierInputPipeline.ADJUSTMENTS_ONLY) Source.APPLICATION_NAME else Source.APPLICATION_ICON)
+            }
+            val source = IconModifierInput(options, false, ModifierInputOrigin.FRESH_SOURCE, pipeline = pipeline)
+            val representation = when (pipeline) {
+                ModifierInputPipeline.ADJUSTMENTS_ONLY -> artwork.copy(isAdaptive = false)
+                ModifierInputPipeline.BITMAP_IMAGE_EDIT -> artwork.copy(isXml = false, isAdaptive = false)
+                else -> artwork.copy(isXml = false, previewScale = 1.5f)
+            }
+            val encoded = checkNotNull(StoredIconModifierInput.encode(source, representation))
+            val restored = checkNotNull(StoredIconModifierInput.readState(encoded))
+            assertEquals(pipeline, restored.pipeline)
+            assertEquals(source.options, restored.options)
+            assertEquals(representation, restored.storedInput)
+        }
+    }
+
+    @Test fun incompatibleStageFlagsAreRejectedOnReadAndWrite() {
+        val source = IconModifierInput(modifierInputTestOptions(), false, ModifierInputOrigin.FRESH_SOURCE,
+            pipeline = ModifierInputPipeline.BITMAP_IMAGE_EDIT)
+        val bitmap = artwork.copy(isXml = false, isAdaptive = false)
+        val encoded = checkNotNull(StoredIconModifierInput.encode(source, bitmap))
+        for (invalid in listOf(bitmap.copy(isXml = true), bitmap.copy(isAdaptive = true), bitmap.copy(previewScale = 1.5f))) {
+            assertNull(StoredIconModifierInput.encode(source, invalid))
+        }
+        for (mutate in listOf<(JSONObject) -> Unit>(
+            { it.put("xml", true) }, { it.put("adaptive", true) }, { it.put("previewScale", 1.5) },
+            { it.put("origin", "UPLOAD") }, { it.put("pipeline", "UNKNOWN") },
+            { it.put("pipeline", "SHARED") }, { it.put("bakedModifiers", true) },
+            { it.put("pipeline", "ADJUSTMENTS_ONLY") }
+        )) {
+            val invalid = JSONObject(encoded).also(mutate).toString()
+            assertNull(StoredIconModifierInput.readState(invalid))
+            assertNull(StoredIconModifierInput.normalize(invalid))
+        }
+    }
+
     private val artwork = StoredModifierArtwork("a".repeat(64), isXml = true, isAdaptive = true)
 
     private fun state(options: GenerationOptions = modifierInputTestOptions()) =

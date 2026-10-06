@@ -8,6 +8,7 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.IconGenerationResult
 import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.icon.creator.withModifiers
 import dev.renkinProject.renkin.icon.creator.withEffect
@@ -50,8 +51,21 @@ class IconGenerationService(
         application: PackageInfoStruct,
         options: GenerationOptions,
         customIcon: ResourceDrawable? = null
-    ): IconPackDrawable? = withContext(Dispatchers.Default) {
-        var icon: IconPackDrawable? = null
+    ): IconPackDrawable? = generatePreview(application, options, customIcon, retainInput = false).icon
+
+    suspend fun getIconPreview(
+        application: PackageInfoStruct,
+        options: GenerationOptions,
+        customIcon: ResourceDrawable?
+    ): IconGenerationResult = generatePreview(application, options, customIcon, retainInput = true)
+
+    private suspend fun generatePreview(
+        application: PackageInfoStruct,
+        options: GenerationOptions,
+        customIcon: ResourceDrawable?,
+        retainInput: Boolean
+    ): IconGenerationResult = withContext(Dispatchers.Default) {
+        currentCoroutineContext().ensureActive()
 
         val installedApplication = application.toInstalledApplication()
         val appDrawable = if (options.source.primarySource == Source.ICON_PACK && customIcon == null) {
@@ -70,13 +84,9 @@ class IconGenerationService(
             pack2,
             iconPackCatalog = iconPackCatalog
         )
-        builder.generateIcon(application, customIcon) { _, newIcon ->
-            icon = newIcon
-        }
-        // Note: this single-pack preview path keeps the 2-arg callback (no source pack tracking)
-        // because its result is a transient preview, never persisted.
-
-        icon
+        val preview = builder.generatePreview(application, customIcon, retainInput)
+        currentCoroutineContext().ensureActive()
+        preview
     }
 
     /** Resolves a pack's drawable by name and builds the icon it provides for [application]. */

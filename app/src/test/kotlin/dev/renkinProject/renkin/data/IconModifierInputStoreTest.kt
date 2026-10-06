@@ -25,6 +25,21 @@ import org.robolectric.shadows.ShadowStatFs
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 class IconModifierInputStoreTest {
+    @Test fun freshAdaptiveBitmapRetainsItsPipelineAndPreviewScaleAcrossSaveAndLoad() = runBlocking {
+        val bitmap = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.RED) }
+        val input = BitmapIconDrawable(context.resources, bitmap, exportAsAdaptiveIcon = true, previewScale = 1.5f)
+        val state = checkNotNull(modifierInputForResult(input, modifierInputTestOptions(),
+            ModifierInputOrigin.FRESH_SOURCE, ModifierInputPipeline.IMAGE_EDIT))
+        store.save(1, listOf(app(state)))
+        val restored = checkNotNull(store.load(1, Color.Black).values.single().modifierInput)
+        assertEquals(ModifierInputPipeline.IMAGE_EDIT, restored.pipeline)
+        assertEquals(ModifierInputOrigin.FRESH_SOURCE, restored.origin)
+        assertEquals(1.5f, restored.storedInput!!.previewScale)
+        assertTrue(restored.storedInput!!.isAdaptive)
+        assertFalse(restored.storedInput!!.isXml)
+        assertNull(restored.liveInput)
+    }
+
     private lateinit var context: Context
     private lateinit var database: RenkinPackDatabase
     private lateinit var repo: RenkinPackRepository

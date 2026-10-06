@@ -8,7 +8,7 @@ import dev.renkinProject.renkin.util.Log
 import org.json.JSONObject
 
 internal object StoredIconModifierInput {
-    private const val VERSION = 2
+    private const val VERSION = 3
     internal const val MAX_DOCUMENT_CHARS = 64 * 1024
     private const val MAX_TEXT_CHARS = 8192
     private const val MAX_STYLE_CHARS = 16384
@@ -17,18 +17,22 @@ internal object StoredIconModifierInput {
         val hash: String,
         val isXml: Boolean,
         val isAdaptive: Boolean,
+        val previewScale: Float,
         val options: GenerationOptions,
         val containsBakedModifierEdits: Boolean,
-        val origin: ModifierInputOrigin
+        val origin: ModifierInputOrigin,
+        val pipeline: ModifierInputPipeline
     )
 
     fun encode(state: IconModifierInput, artwork: StoredModifierArtwork): String? {
-        if (!supportsOptions(state.options) || !validHash(artwork.hash)) return null
+        if (!supportsOptions(state.options) || !validHash(artwork.hash) ||
+            !validPreviewScale(artwork.previewScale)) return null
         return try {
             val document = Document(
-                artwork.hash, artwork.isXml, artwork.isAdaptive,
-                state.options, state.containsBakedModifierEdits, state.origin
+                artwork.hash, artwork.isXml, artwork.isAdaptive, artwork.previewScale,
+                state.options, state.containsBakedModifierEdits, state.origin, state.pipeline
             )
+            if (!document.hasSupportedStage()) return null
             writeBounded(document)
         } catch (error: Exception) {
             Log.error("StoredIconModifierInput", "Cannot retain optional modifier input", error)
@@ -50,12 +54,31 @@ internal object StoredIconModifierInput {
         val document = read(encoded) ?: return null
         return IconModifierInput(
             document.options, document.containsBakedModifierEdits, document.origin,
-            storedInput = StoredModifierArtwork(document.hash, document.isXml, document.isAdaptive)
+            storedInput = document.artwork(),
+            pipeline = document.pipeline
         )
     }
 
     fun artwork(encoded: String?): StoredModifierArtwork? = read(encoded)?.let {
-        StoredModifierArtwork(it.hash, it.isXml, it.isAdaptive)
+        it.artwork()
+    }
+
+    private fun Document.artwork() = StoredModifierArtwork(hash, isXml, isAdaptive, previewScale)
+
+    private fun validPreviewScale(scale: Float): Boolean = scale.isFinite() && scale in 0.1f..10f
+
+    private fun Document.hasSupportedStage(): Boolean {
+        if (isXml && previewScale != 1f) return false
+        if (pipeline == ModifierInputPipeline.SHARED) return origin != ModifierInputOrigin.FRESH_SOURCE
+        if (origin != ModifierInputOrigin.FRESH_SOURCE || containsBakedModifierEdits) return false
+        if (pipeline == ModifierInputPipeline.ADJUSTMENTS_ONLY) {
+            return isXml && !isAdaptive && options.source.primarySource == Source.APPLICATION_NAME &&
+                options.modifiers.effect.imageEdit == ImageEdit.NONE
+        }
+        if (options.source.primarySource != Source.ICON_PACK &&
+            options.source.primarySource != Source.APPLICATION_ICON) return false
+        if (options.source.primarySource == Source.ICON_PACK && options.modifiers.materialYouPack.hasRestyling) return false
+        return pipeline != ModifierInputPipeline.BITMAP_IMAGE_EDIT || (!isXml && !isAdaptive && previewScale == 1f)
     }
 
     fun validHash(hash: String): Boolean = hash.length == 64 && hash.all { it in '0'..'9' || it in 'a'..'f' }
@@ -74,14 +97,19 @@ internal object StoredIconModifierInput {
         return try {
             require(encoded.toByteArray(Charsets.UTF_8).size <= MAX_DOCUMENT_CHARS)
             val json = JSONObject(encoded)
-            require(json.getInt("version") == VERSION)
+            val version = json.getInt("version")
+            require(version in 2..VERSION)
             val hash = json.getString("artworkHash")
             require(validHash(hash))
+            val previewScale = if (version == 2) 1f else json.getDouble("previewScale").toFloat()
+            require(validPreviewScale(previewScale))
             Document(
-                hash, json.getBoolean("xml"), json.getBoolean("adaptive"),
+                hash, json.getBoolean("xml"), json.getBoolean("adaptive"), previewScale,
                 readOptions(json.getJSONObject("options")), json.getBoolean("bakedModifiers"),
-                enumValueOf<ModifierInputOrigin>(json.getString("origin"))
-            )
+                enumValueOf<ModifierInputOrigin>(json.getString("origin")),
+                if (version == 2) ModifierInputPipeline.SHARED
+                else enumValueOf<ModifierInputPipeline>(json.getString("pipeline"))
+            ).also { require(it.hasSupportedStage()) }
         } catch (_: Exception) {
             null
         } catch (error: OutOfMemoryError) {
@@ -99,8 +127,10 @@ internal object StoredIconModifierInput {
         .put("artworkHash", document.hash)
         .put("xml", document.isXml)
         .put("adaptive", document.isAdaptive)
+        .put("previewScale", document.previewScale)
         .put("bakedModifiers", document.containsBakedModifierEdits)
         .put("origin", document.origin.name)
+        .put("pipeline", document.pipeline.name)
         .put("options", writeOptions(document.options, ModifierRecipeCodec.encode(document.options.modifiers)))
         .toString()
 
