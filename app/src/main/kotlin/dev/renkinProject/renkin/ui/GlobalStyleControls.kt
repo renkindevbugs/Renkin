@@ -54,6 +54,8 @@ import dev.renkinProject.renkin.data.getSourceLabels
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.IconShape
+import dev.renkinProject.renkin.ui.modifier.ShapeSwatch
+import dev.renkinProject.renkin.ui.modifier.shapeLabel
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import kotlin.math.roundToInt

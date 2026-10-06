@@ -528,6 +528,16 @@ identically and none of them re-implements the maths.
 - **`ui/ColorStyleSheet.kt`** is the one editor UI: a bottom sheet with a docked live preview
   (rendered through the caller's real generation pipeline, debounced), the mode pill, the stop
   list and the angle dial. `ColorStyleCard` is the row that opens it.
+- **`ui/ModifierTab.kt`** composes the modifier editor and coordinates its preview/brush jobs,
+  preset scroll anchor and host-dialog visibility. Sections live in the `ui.modifier` package:
+  Material You pack styling, scale/position, shape, outline, shadow and external-editor actions.
+  `ModifierDialogHost` presents the colour, position and brush dialogs through the same host callbacks.
+  Each section retains its own transient sheet state; values stay in `AdjustmentState`, and preview
+  callbacks still come from `ModifierPreviews`. Shadow's encoded Cancel snapshot remains local to
+  its section. `IconShapeSection.kt` also supplies the shared geometry-based `ShapeSwatch` and
+  `shapeLabel` used by Global Options and preset summaries.
+  `ui/MaterialYouPackAdjustmentState.kt` owns the pack-specific draft, compatible Saver and centred
+  line-weight slider mapping; its package and saved format are unchanged.
 - **Segments** (`icon/creator/ColorSegments.kt`) cluster an icon into colour regions (k-means over
   RGB). A pick is stored as COLOURS plus a tolerance, never a pixel mask, so it survives
   regeneration and rescaling. `ImageEdit.COLORIZE_SEGMENTS` stacks `SegmentLayer`s — each layer's

@@ -69,6 +69,7 @@ import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
 import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.decodeModifierPreset
 import dev.renkinProject.renkin.icon.creator.encodeModifierPreset
+import dev.renkinProject.renkin.ui.modifier.shapeLabel
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.ui.theme.InnerShape
