@@ -139,12 +139,10 @@ fun globalModifierOptions(preferences: Preferences): GenerationOptions {
         GlobalColorizerStyleKeys, androidx.compose.ui.graphics.Color.White
     ).copy(
         flat = preferences.getBooleanValue(GlobalColorizeFlatKey),
-        lighten = preferences.getBooleanValue(GlobalColorizeLightenKey) &&
-            !preferences.getBooleanValue(GlobalColorizeFlatKey) &&
-            !preferences.getBooleanValue(GlobalColorizeMonochromeKey),
+        lighten = preferences.getBooleanValue(GlobalColorizeLightenKey),
         monochrome = preferences.getBooleanValue(GlobalColorizeMonochromeKey),
         inverse = preferences.getBooleanValue(GlobalColorizeInverseKey)
-    )
+    ).normalizedFlags()
     val shapeStyle = if (shape != IconShape.NONE && !shapeCrop) {
         preferences.colorStyle(GlobalShapeStyleKeys, androidx.compose.ui.graphics.Color.White)
     } else null

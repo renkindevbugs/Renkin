@@ -489,9 +489,32 @@ identically and none of them re-implements the maths.
   remain unchanged. It continues excluding icon-specific position, targets, segments, masks and
   pack controls. Existing colour presets, adaptive payloads and preference style strings retain
   their older colour codec; there is no Room or portable-backup format migration in this step.
-  The full recipe currently serves editor saved state, not the icon database. Source/export choices
+  The full recipe currently serves editor and staged Global Options saved state, not the icon database. Source/export choices
   and the editor's hoisted image edit/first colour retain their existing ownership. The individual
   editor saves those controls separately; Global Options' per-icon controls remain remember-only.
+- **`ui/GlobalModifierState.kt`** owns Global Options' staged `ModifierStack`; its controls update
+  immutable effect, transform, shape and outline groups. Disabled groups retain their settings.
+  Shape and outline keep explicit styled fills in this draft. Preview and Save build their options
+  with `globalModifierOptions(overlay(emptyPreferences()))`, using the same global preference
+  reader as refresh, empty-slot generation and profile reload. This applies the persisted precision
+  (whole scale percentages, outline widths and gradient degrees) before rendering, and retains the
+  shared inherited-background contract for plates.
+  Source selection and target-category flags remain separate from modifiers.
+  `GlobalModifierSnapshot` carries the same stack, rounding scale percentages, outline width and
+  gradient angles at the existing preference precision for the dirty check. The preference overlay
+  is the only writer of legacy global keys; seeding uses the shared global-generation reader and
+  also retains the inactive plate style. `ColorizerStyle.normalizedFlags()` enforces monochrome →
+  flat → lighten precedence at both global preference boundaries, effect updates and snapshot
+  comparisons. Restoring either the draft or its baseline applies the same normalization to old
+  conflicting flags, preventing a false dirty state after rotation. Colours, gradients, inverse and
+  disabled groups' configuration remain intact. The individual editor and full recipe codec retain
+  their existing complete-style semantics; this normalization belongs only to the global colourizer.
+  `GlobalModifierStateSaver.kt` encodes this snapshot with the trusted recipe codec for both the
+  draft and its dirty-check baseline. It still reads the older keyed style snapshot and positional
+  pipe-delimited snapshots. Malformed recipes reset the draft. Valid recipes with missing shape
+  or outline groups get the configured disabled defaults in both draft and baseline restoration;
+  fills without a style retain their colour in a new single-colour style. Direct restoration and
+  group updates enforce the same invariant, so the controls always have both configured groups.
 - **`ColorizerShader.kt`** builds the actual `Shader` and is called by BOTH `IconGenerator` and
   the editor preview — a second implementation in the UI would drift from the built output.
 - **`ui/ColorStyleSheet.kt`** is the one editor UI: a bottom sheet with a docked live preview
