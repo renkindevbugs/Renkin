@@ -1119,8 +1119,8 @@ fun OpenAppOptions(
         onDismiss()
     }
 
-    OptionsDialog(iconPacks, session, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, modifierRecipe ->
-        viewModel.applyIcon(session.application, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, expected, modifierRecipe)
+    OptionsDialog(iconPacks, session, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, modifierRecipe, modifierInput ->
+        viewModel.applyIcon(session.application, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, expected, modifierRecipe, modifierInput)
         closeEditor()
     }, closeEditor) {
         closeEditor()

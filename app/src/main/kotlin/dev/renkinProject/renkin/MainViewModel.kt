@@ -30,6 +30,7 @@ import dev.renkinProject.renkin.apk.InstallerSelection
 import dev.renkinProject.renkin.apk.ShizukuSupport
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.apk.IconApplyOutcome
+import dev.renkinProject.renkin.icon.creator.IconModifierInput
 import dev.renkinProject.renkin.apk.IconUndoStep
 import dev.renkinProject.renkin.apk.ProfileReloadFailedException
 import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
@@ -1045,11 +1046,13 @@ class MainViewModel @Inject constructor(
         // Attribution reference when the icon came from an online FOSS library (vector tab).
         sourceUrl: String? = null,
         expected: ProfileSessionToken,
-        modifierRecipe: String? = null
+        modifierRecipe: String? = null,
+        modifierInput: IconModifierInput? = null
     ) = applyPickedIcon(expected, app, icon, sourcePackName) { live, origin, rendered ->
         live.changeExport(
             rendered, sourcePackName = origin, isRefreshMade = false, isCustom = true,
-            isLegacy = false, baseIcon = icon, sourceUrl = sourceUrl, modifierRecipe = modifierRecipe
+            isLegacy = false, baseIcon = icon, sourceUrl = sourceUrl,
+            modifierRecipe = modifierRecipe, modifierInput = modifierInput
         ).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
     }
 

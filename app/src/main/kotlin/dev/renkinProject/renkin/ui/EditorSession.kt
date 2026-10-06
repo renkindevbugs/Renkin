@@ -47,7 +47,9 @@ internal class EditorSession(
     var materialYouBackgroundStyle by mutableStateOf(ColorizerStyle(firstColor = customBgColor.toArgb()))
     var iconPack by mutableStateOf(initialPack)
     var customIconList by mutableStateOf<List<ResourceDrawable>>(emptyList())
-    val draft = IconDraftState(application.baseIcon ?: application.createdIcon, application.modifierRecipe)
+    val draft = IconDraftState(
+        application.baseIcon ?: application.createdIcon, application.modifierRecipe, application.modifierInput
+    )
     val vectorEditState = VectorEditState()
     val upload = UploadEditorState()
     val adjustments = AdjustmentState()

@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.data.transfer
 
+import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -27,7 +28,7 @@ internal object BackupArchiveLimits {
         when (name) {
             "manifest.json" -> MAX_MANIFEST_BYTES
             "data.json" -> MAX_DATA_BYTES
-            else -> MAX_ENTRY_BYTES
+            else -> if (name.startsWith("${IconModifierInputStore.ARCHIVE_DIR}/")) IconModifierInputStore.MAX_ARTWORK_BYTES else MAX_ENTRY_BYTES
         }
 
     fun validateName(name: String) {

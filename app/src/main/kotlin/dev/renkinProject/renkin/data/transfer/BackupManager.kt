@@ -18,6 +18,7 @@ import dev.renkinProject.renkin.data.AutoBackupIntervalKey
 import dev.renkinProject.renkin.data.AutoBackupTreeUriKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.LastWatchCheckAtKey
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
@@ -39,6 +40,7 @@ import dev.renkinProject.renkin.data.watch.SuggestionImport
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchRuleImport
 import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.service.WatchChecker
@@ -85,6 +87,7 @@ class BackupManager(
     private val watchRepo: WatchRepository,
     private val iconPackCatalog: IconPackCatalog = IconPackCatalog(context)
 ) {
+    private var inputCleanupComplete = false
     private val appManager by lazy { ApplicationManager(context) }
     private val operations = Mutex()
     private val recovery = BackupRecoveryStore(context)
@@ -305,7 +308,11 @@ class BackupManager(
                 put("$UPLOADS_DIR/${file.name}", file)
             }
         }
-        exportArchive(KIND_BACKUP, BackupValidator.prepare(data, ImportKind.BACKUP), files)
+        val availableInputs = IconModifierInputStore.directory(context).listFiles().orEmpty()
+            .filter { it.isFile && IconModifierInputStore.validName(it.name) }.associateBy { it.name }
+        val (exportData, inputFiles) = prepareModifierInputs(data, availableInputs)
+        exportArchive(KIND_BACKUP, BackupValidator.prepare(exportData, ImportKind.BACKUP), files +
+            inputFiles.mapKeys { (name, _) -> "${IconModifierInputStore.ARCHIVE_DIR}/$name" })
     }
 
     /**
@@ -330,7 +337,9 @@ class BackupManager(
             .map { it.toBackupRule() }
 
         val sourcePacks = icons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet()
-        val exportIcons = icons.map { icon ->
+        val exportIcons = icons.map { saved ->
+            // Sharing carries the reviewed image, never a hidden pre-edit upload/source.
+            val icon = saved.copy(modifierInput = "")
             if (icon.sourcePackName.isNotEmpty() && icon.sourceDrawableName.isEmpty()) {
                 icon.copy(
                     // Bulk-refresh icons are exactly the appfilter-mapped ones, so this
@@ -574,7 +583,7 @@ class BackupManager(
             if (format > BackupCodec.FORMAT_VERSION) throw IOException("File was made by a newer app version")
             val kind = kindOf(manifest)
             val dataFile = staged.entries[DATA_ENTRY] ?: throw IOException("File has no data entry")
-            val data = BackupValidator.prepare(dataFile.reader(Charsets.UTF_8).use { readBackupData(it) }, kind)
+            val parsedData = BackupValidator.prepare(dataFile.reader(Charsets.UTF_8).use { readBackupData(it) }, kind)
             val uploads = staged.entries.filterKeys { name -> name.startsWith("$UPLOADS_DIR/") }.map { (name, file) ->
                 val filename = name.removePrefix("$UPLOADS_DIR/")
                 if ('/' in filename || !filename.endsWith(".png")) throw IOException("Invalid uploaded image entry")
@@ -582,16 +591,49 @@ class BackupManager(
             }.toMap()
             val keystore = staged.entries[KEYSTORE_ENTRY]
             val password = staged.entries[KEYSTORE_PASSWORD_ENTRY]
+            val inputs = staged.entries.filterKeys { it.startsWith("${IconModifierInputStore.ARCHIVE_DIR}/") }
+                .map { (name, file) ->
+                    val filename = name.removePrefix("${IconModifierInputStore.ARCHIVE_DIR}/")
+                    if (!IconModifierInputStore.validName(filename)) throw IOException("Invalid modifier input entry")
+                    filename to file
+                }.toMap()
             if (password != null && keystore == null) throw IOException("Keystore password has no keystore")
-            if (kind == ImportKind.PROFILE && (uploads.isNotEmpty() || keystore != null || password != null)) {
+            if (kind == ImportKind.PROFILE && (uploads.isNotEmpty() || inputs.isNotEmpty() || keystore != null || password != null)) {
                 throw IOException("Shared profile contains device files")
             }
-            return ArchiveContents(staged, manifest, data, uploads, keystore, password)
+            val (data, inputFiles) = prepareModifierInputs(parsedData, if (kind == ImportKind.BACKUP) inputs else emptyMap())
+            return ArchiveContents(staged, manifest, data, uploads, keystore, password, inputFiles)
         } catch (error: Throwable) {
             if (error is OutOfMemoryError) Log.error("BackupManager", "Out of memory decoding; dataBytes=${staged.entries[DATA_ENTRY]?.length()}", error)
             staged.close()
             throw error
         }
+    }
+
+    private suspend fun prepareModifierInputs(
+        data: BackupData,
+        available: Map<String, File>
+    ): Pair<BackupData, Map<String, File>> {
+        val verified = mutableMapOf<String, Boolean>()
+        val files = mutableMapOf<String, File>()
+        val profiles = data.profiles.map { profile ->
+            profile.copy(icons = profile.icons.map { icon ->
+                val artwork = StoredIconModifierInput.artwork(icon.modifierInput)
+                val name = artwork?.let { "${it.hash}.input" }
+                val source = name?.let(available::get)
+                val valid = if (artwork == null || name == null || source == null) false else {
+                    verified[name] ?: IconModifierInputStore.validFile(source, artwork.hash).also { verified[name] = it }
+                }
+                if (valid) {
+                    files[requireNotNull(name)] = requireNotNull(source)
+                    icon
+                } else {
+                    if (icon.modifierInput.isNotEmpty()) Log.info("BackupManager", "Discarded missing or invalid optional modifier input")
+                    icon.copy(modifierInput = "")
+                }
+            })
+        }
+        return data.copy(profiles = profiles) to files
     }
 
     private class ArchiveContents(
@@ -600,7 +642,8 @@ class BackupManager(
         val data: BackupData,
         val uploadedImages: Map<String, File>,
         val keystore: File?,
-        val password: File?
+        val password: File?,
+        val modifierInputs: Map<String, File>
     ) : Closeable {
         val fingerprint: String get() = staged.fingerprint
         override fun close() = staged.close()
@@ -625,6 +668,10 @@ class BackupManager(
         recovery.syncMetadata()
         recovery.cleanup()
         BackupStaging.cleanAfterProcessStart(context.filesDir)
+        if (!inputCleanupComplete) {
+            IconModifierInputStore.cleanupAfterProcessStart(context, packRepo.modifierInputDocuments())
+            inputCleanupComplete = true
+        }
         refreshAbandonedRecoveryAvailability()
         try {
             refreshPreviousStateAvailability()
@@ -704,7 +751,8 @@ class BackupManager(
 
     private fun ensureRecoverySpace(snapshot: BackupRecoveryStore.Snapshot, incomingDataBytes: Long) {
         val databaseBytes = snapshot.directory.resolve("pack.json").length() + snapshot.directory.resolve("watch.json").length()
-        val largestFile = snapshot.files.filter { it.startsWith("gallery/") || it.startsWith("signing/") }
+        val largestFile = snapshot.files.filter { it.startsWith("gallery/") || it.startsWith("signing/") ||
+            it.startsWith("${IconModifierInputStore.ARCHIVE_DIR}/") }
             .maxOfOrNull { File(snapshot.directory, it).length() } ?: 0L
         ensureBackupSpace(context.filesDir, databaseBytes + incomingDataBytes + largestFile)
     }
@@ -793,12 +841,20 @@ class BackupManager(
     ): ImportResult {
         val data = archive.data
         val uploadsDir = UploadedImageStore.directory(context)
+        val inputsDir = IconModifierInputStore.directory(context)
+        if (archive.modifierInputs.isNotEmpty() && !inputsDir.isDirectory && !inputsDir.mkdirs()) {
+            throw IOException("Cannot create modifier input restore storage")
+        }
         val replacements = buildMap<File, File?> {
             archive.keystore?.let { put(context.filesDir.resolve(IconPackBuilder.KEYSTORE_FILE_NAME), it) }
             if (archive.keystore != null) put(PackKeystore.passwordFile(context.filesDir), archive.password)
             for ((name, file) in archive.uploadedImages) put(File(uploadsDir, name), file)
             for (file in UploadedImageStore.list(context)) {
                 if (file.name !in archive.uploadedImages) put(file, null)
+            }
+            for ((name, file) in archive.modifierInputs) put(File(inputsDir, name), file)
+            for (file in inputsDir.listFiles().orEmpty()) {
+                if (file.isFile && IconModifierInputStore.validName(file.name) && file.name !in archive.modifierInputs) put(file, null)
             }
         }
         val incomingDataBytes = archive.staged.entries[DATA_ENTRY]?.length() ?: 0L

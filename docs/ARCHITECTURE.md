@@ -183,7 +183,7 @@ Switcher = the top-bar title dropdown.
 - **DataStore Preferences** (`data/DataPreferences.kt`) — all settings. Typed accessors:
   Composable `DataStore.getXValue()` for reading in composition; `Preferences.getXValue()`
   for reading a captured snapshot off the main thread.
-- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v19) — profiles + rendered and base icons
+- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v20) — profiles + rendered and base icons
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
   rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the
   Global options UI, only unsaved refresh output is Generated; saved/built non-custom rows are
@@ -214,7 +214,48 @@ Switcher = the top-bar title dropdown.
   clearing a base drops its old recipe unless new matching metadata is supplied; global render,
   calendar changes, save/build locking and undo retain it. Metadata does not enter the shipped
   icon fingerprint because it changes no exported pixels.
-  The next persistent-editor phase will store an immutable input drawable from before local
+  Phase 5C1 appends `DbApplication.modifierInput` (v20, empty for existing rows). It retains
+  the input to a known, completed local modifier stage, its complete source/export settings,
+  a bounded modifier recipe, its origin (existing icon/upload/vector) and an explicit flag for
+  older local edits baked into that input. The input boundary is after upload cropping/zoom or
+  vector hand edits, before the shared local modifiers; it does not reconstruct those tools'
+  source-file history or missing gallery files.
+  Capture currently covers upload/vector modifier calls and modifications of an existing icon
+  without a new pack pick. The latter baseline is conservatively marked as containing prior
+  baked edits. A fresh Create-source render still has no trustworthy pre-modifier input; it
+  keeps its v19 metadata without an input document. The stored input is not a replay instruction
+  yet: this phase leaves generation and initial controls unchanged. Reopening without a new
+  render preserves the retained pair; a completed new stage replaces it with that stage's
+  actual input, never an older source paired with a newer cumulative result. New artwork,
+  reset and unsupported brush geometry discard it; derived global renders, undo, calendar and
+  save/build locking preserve it. Optional corrupt metadata cannot discard usable artwork.
+  `modifierInput` contains only a bounded v2 document (64 KiB in characters and UTF-8 bytes),
+  settings and a SHA-256 artwork hash. Artwork is stored once per hash in
+  `filesDir/icon-inputs/<hash>.input`, capped at 32 MiB per file. It retains the existing drawable
+  serialization, outside Room rows and portable/recovery JSON. Loading a profile reads only
+  small metadata and checks file presence; no input artwork string or second bitmap is loaded.
+  Future replay must load and verify that one file off Main when the editor needs it.
+  Input encoding is pure. The persistence owner writes, fsyncs and atomically renames source files
+  under the storage gate before committing rows. Only after successful row persistence does it
+  cache the file reference and release the live source; pixels used elsewhere are never recycled.
+  Codec/file failures discard only optional metadata. Obsolete inline-input metadata from
+  pre-release v20 builds is removed on database open, before row queries, and during recovery
+  restore; baked artwork and the v19 last-stage recipe remain intact. The DB version stays 20.
+  Full backups carry referenced files as separate `icon-inputs/` ZIP entries, validate filenames,
+  size and SHA-256, and clear missing/corrupt optional references without dropping baked icons.
+  Recovery captures the referenced files and restores their exact set alongside DB and prefs.
+  Shared profiles carry the reviewed baked image and last-stage recipe, without pre-edit inputs:
+  sharing must not implicitly reveal hidden source uploads. Startup collects unreferenced input
+  files and interrupted temporary writes only after recovery and before live drafts/undo exist;
+  it queries metadata alone, rather than loading all profiles' artwork. Runtime saves do not
+  collect files that an unsaved draft/undo entry may still use. Retained recovery snapshots own
+  independent copies, unaffected by input-file collection.
+  Phase 5C2 must unify fresh source generation with pre-modifier capture and enable replay from
+  retained inputs before restoring editor controls. It must decode the retained artwork and
+  verify that replay matches the confirmed base before offering editable restoration. Structural
+  metadata validity alone does not establish image/pipeline equivalence. It must not reapply a
+  recipe onto baked base.
+  The complete persistent-editor feature will use an immutable input drawable from before local
   modifiers, together with the complete source/export settings and local modifier state. Pack
   and drawable references are provenance, not a substitute for retained input artwork: reopening
   must work without the original pack, uploaded file or online resource. Every preview and Apply
@@ -301,8 +342,8 @@ payloads; very large imports can still exceed a device's heap. A future format w
 icon entries and a streaming storage commit remains necessary for bounded payload memory.
 
 Both export and import cap archives at 10,000 entries, 64 KiB for the manifest, 512 MiB for
-`data.json`, 64 MiB per other file and 1 GiB total uncompressed. Import also caps the source
-ZIP at 1088 MiB. These are transport limits, not a guarantee that every supported file fits
+`data.json`, 32 MiB per modifier-input file, 64 MiB per other file and 1 GiB total uncompressed.
+Import also caps the source ZIP at 1088 MiB. These are transport limits, not a guarantee that every supported file fits
 every device's heap. A fraction of `maxMemory()` cannot reliably predict the live heap,
 JSON object overhead or the number of distinct payload strings; it is not used as an
 additional compatibility cutoff. Export streams the JSON into a bounded temporary file before opening
@@ -411,7 +452,7 @@ cover process death after the durable storage commit but before rescheduling. In
 setters also hold the storage gate through submitting their WorkManager update.
 
 The import/undo dialog centers its indicator and labels the current operation. During capture
-it distinguishes icons/profiles, watch rules, preferences, uploaded files and verification.
+it distinguishes icons/profiles, watch rules, preferences, files and verification.
 Preparation can be cancelled from the button or Back; outside taps do not dismiss it. Accepted
 cancellation and the transition into the durable commit share one synchronized boundary, so a
 Cancel accepted while preparing cannot later enter the non-cancellable mutation phase. The
@@ -431,14 +472,16 @@ Recovery needs additional disk space for immutable snapshots and SQLite writes. 
 checks free space while streaming database rows and before copying files; commit reserves
 both snapshot database sizes, incoming JSON, the largest file to restore, and 32 MiB. This
 remains an estimate against other apps consuming storage. One retained snapshot can occupy
-roughly the saved databases plus gallery and signing files.
+roughly the saved databases plus referenced modifier inputs, gallery and signing files.
 
 Internal database recovery requires identical schemas except for explicitly supported
-snapshot migrations. Renkin v18 snapshots can restore into v19: all old tables/columns must
-still match exactly, and only the appended `DbApplication.modifierRecipe` is omitted from
-inserts so its SQL default supplies an empty string. Old row identities, preferences, artwork,
-watch data, gallery and signing state are preserved. This supports both pending startup recovery
-and retained previous-state snapshots from v18. Every future Room schema bump must add
+snapshot migrations. Audited metadata additions (18 → 19 and 19 → 20) compose to support
+v18 → v19, v18 → v20 and v19 → v20 without enumerating every pair: all old
+tables/columns must still match exactly, and only the explicitly appended metadata columns
+`modifierRecipe` and/or `modifierInput` are omitted from inserts so their SQL defaults supply
+empty strings, with the expected TEXT/NOT NULL/empty-string defaults checked. Old row identities,
+preferences, artwork, watch data, gallery and signing state are preserved. This supports both pending startup recovery
+and retained previous-state snapshots from v18/v19. Every future Room schema bump must add
 compatible recovery handling before shipping: a pending snapshot from the preceding version
 must not strand startup behind a schema mismatch.
 Matching column-name prefixes and SQL defaults alone do not authorize snapshot compatibility.
@@ -743,6 +786,15 @@ Renkin cannot reproduce that launcher-only selection through the standard resour
   added fields. Recovery tests must cover both the supported preceding-version snapshot and
   rejection of unsupported schema changes; column-name compatibility alone is insufficient.
   Follow the device-confirmation checkpoint in CLAUDE.md before creating/running these tests.
+- v20 input-storage coverage must include v19 migration with unchanged artwork/recipe,
+  v18/v19 recovery adapters, source/export option round-trips, invalid/oversized optional
+  documents, matching completed-render ownership, reset/undo, full-backup file round-trips and
+  shared-profile source exclusion. Cover pure encoding, failed-save live-source retention,
+  deduplicated files, missing/corrupt references, recovery file replacement, startup-only orphan
+  collection and obsolete inline v20 metadata cleanup. Loaded inputs must retain only small file
+  references; repeated saves must reuse retained artwork. Large original drawable/base columns
+  still have their existing CursorWindow/JSON heap limits; externalizing optional inputs does
+  not externalize those older columns.
 - Recovery/Application tests in a shared JVM must call `StorageOperationGate.resetForTests()`
   between isolated scenarios, only after all gate owners/jobs have stopped. Production still
   rejects installing two recovery callbacks.

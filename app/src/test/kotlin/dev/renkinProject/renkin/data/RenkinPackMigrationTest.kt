@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.data
 
 import android.app.Application
 import android.content.Context
+import dev.renkinProject.renkin.icon.creator.*
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -43,9 +44,56 @@ class RenkinPackMigrationTest {
 
     @Test
     fun everyReleasedSchemaMigratesToCurrent() {
-        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18).forEach { version ->
+        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19).forEach { version ->
             RenkinPackDatabase.open(context, historical(version, "from-$version")).useDatabase { database ->
                 database.openHelper.writableDatabase
+            }
+        }
+    }
+
+    @Test fun version19AddsEmptyInputAndPreservesEveryExistingColumn() {
+        var expected = emptyMap<String, String?>()
+        val name = historical(19, "v19-input") { db ->
+            db.execSQL("INSERT INTO DbApplication " +
+                "(packageName, activityName, isAdaptiveIcon, isXml, drawable, baseDrawable, modifierRecipe, " +
+                "sourcePackName, sourceDrawableName, isCustomIcon, isFallbackIcon, calendarEnabled, calendarPrefix, profileId) " +
+                "VALUES ('com.custom', 'Main', 1, 1, 'rendered', 'base', 'kept recipe', 'pack.source', 'alternate', 1, 1, 1, 'day_', 1)")
+            db.query("SELECT * FROM DbApplication").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                expected = cursor.columnNames.associateWith { cursor.getString(cursor.getColumnIndexOrThrow(it)) }
+            }
+        }
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            database.openHelper.writableDatabase.query("SELECT * FROM DbApplication").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                expected.forEach { (column, value) -> assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column))) }
+                assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("modifierInput")))
+                assertFalse(cursor.moveToNext())
+            }
+        }
+    }
+
+    @Test fun version20OpenClearsObsoleteInlineAndOversizedInputsWithoutTouchingArtworkOrRecipe() {
+        val state = IconModifierInput(modifierInputTestOptions(), false, ModifierInputOrigin.UPLOAD)
+        val valid = checkNotNull(StoredIconModifierInput.encode(state, StoredModifierArtwork("a".repeat(64), false, false)))
+        val oversized = org.json.JSONObject(valid).put("unknown", "汉".repeat(23_000)).toString()
+        val name = historical(20, "v20-inline") { db ->
+            for ((key, input) in listOf("inline" to "{\"version\":1,\"input\":\"legacy\"}", "oversized" to oversized, "valid" to valid)) {
+                db.execSQL("INSERT INTO DbApplication (packageName, activityName, isAdaptiveIcon, isXml, drawable, baseDrawable, modifierRecipe, modifierInput) " +
+                    "VALUES (?, 'Main', 0, 0, 'rendered', 'base', 'kept recipe', ?)", arrayOf(key, input))
+            }
+        }
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            database.openHelper.writableDatabase.query("SELECT packageName, drawable, baseDrawable, modifierRecipe, modifierInput FROM DbApplication").use { cursor ->
+                var rows = 0
+                while (cursor.moveToNext()) {
+                    rows++
+                    assertEquals("rendered", cursor.getString(1))
+                    assertEquals("base", cursor.getString(2))
+                    assertEquals("kept recipe", cursor.getString(3))
+                    assertEquals(if (cursor.getString(0) == "valid") valid else "", cursor.getString(4))
+                }
+                assertEquals(3, rows)
             }
         }
     }

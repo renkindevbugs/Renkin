@@ -10,6 +10,9 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe
+import dev.renkinProject.renkin.icon.creator.IconModifierInput
+import dev.renkinProject.renkin.icon.creator.ModifierInputOrigin
+import dev.renkinProject.renkin.icon.creator.modifierInputForResult
 import dev.renkinProject.renkin.icon.creator.hasIconAdjustments
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 
@@ -21,7 +24,11 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
  * / [generating] back out, instead of carrying a dozen loose `remember`s plus the generation
  * effects inline.
  */
-internal class IconDraftState(initialIcon: IconPackDrawable?, initialRecipe: String? = null) {
+internal class IconDraftState(
+    initialIcon: IconPackDrawable?,
+    initialRecipe: String? = null,
+    initialInput: IconModifierInput? = null
+) {
     // Icon from the Create tab (pack pick / text / app-icon source). Starts as the icon the
     // app already has so it stays visible (e.g. when only the modifier is being changed).
     var createIcon by mutableStateOf(initialIcon)
@@ -41,6 +48,9 @@ internal class IconDraftState(initialIcon: IconPackDrawable?, initialRecipe: Str
     private var createRecipe by mutableStateOf(initialRecipe.takeIf { initialIcon != null })
     private var uploadRecipe by mutableStateOf<String?>(null)
     private var vectorRecipe by mutableStateOf<String?>(null)
+    private var createInput by mutableStateOf(initialInput.takeIf { initialIcon != null })
+    private var uploadInput by mutableStateOf<IconModifierInput?>(null)
+    private var vectorInput by mutableStateOf<IconModifierInput?>(null)
 
     var origin by mutableStateOf(IconOrigin.CREATE)
 
@@ -82,6 +92,12 @@ internal class IconDraftState(initialIcon: IconPackDrawable?, initialRecipe: Str
         IconOrigin.CREATE -> createRecipe
     }
 
+    val modifierInputToConfirm: IconModifierInput? get() = when (origin) {
+        IconOrigin.UPLOAD -> uploadInput
+        IconOrigin.VECTOR -> vectorInput
+        IconOrigin.CREATE -> createInput
+    }
+
     /**
      * Activates the Create pipeline and drops drafts owned by the other source tabs.
      * The caller is responsible for clearing their UI-only selection state.
@@ -94,6 +110,8 @@ internal class IconDraftState(initialIcon: IconPackDrawable?, initialRecipe: Str
         modifiedVector = null
         uploadRecipe = null
         vectorRecipe = null
+        uploadInput = null
+        vectorInput = null
         origin = IconOrigin.CREATE
     }
 
@@ -107,6 +125,9 @@ internal class IconDraftState(initialIcon: IconPackDrawable?, initialRecipe: Str
         createRecipe = null
         uploadRecipe = null
         vectorRecipe = null
+        createInput = null
+        uploadInput = null
+        vectorInput = null
         origin = IconOrigin.UPLOAD
     }
 
@@ -115,6 +136,7 @@ internal class IconDraftState(initialIcon: IconPackDrawable?, initialRecipe: Str
         uploadBase = null
         uploadIcon = null
         uploadRecipe = null
+        uploadInput = null
     }
 
     fun selectVector(icon: IconPackDrawable) {
@@ -127,6 +149,9 @@ internal class IconDraftState(initialIcon: IconPackDrawable?, initialRecipe: Str
         createRecipe = null
         uploadRecipe = null
         vectorRecipe = null
+        createInput = null
+        uploadInput = null
+        vectorInput = null
         origin = IconOrigin.VECTOR
     }
 
@@ -135,6 +160,7 @@ internal class IconDraftState(initialIcon: IconPackDrawable?, initialRecipe: Str
         vectorIcon = null
         modifiedVector = null
         vectorRecipe = null
+        vectorInput = null
     }
 
     /** Keeps the shared loading state correct across overlapping and cancelled effects. */
@@ -193,6 +219,11 @@ internal class IconDraftState(initialIcon: IconPackDrawable?, initialRecipe: Str
         if (generation == createGeneration) {
             createIcon = generated
             createRecipe = if (generated != null) StoredIconModifierRecipe.fromRenderedOptions(options) else null
+            // Only this branch applies the complete local stage to a known input. A newly
+            // generated source needs its own pre-modifier capture before it can be replayed.
+            createInput = if (generated != null && custom == null && options.source.primarySource == Source.ICON_PACK) {
+                request.base?.let { modifierInputForResult(it, options, ModifierInputOrigin.EXISTING_ICON) }
+            } else null
             completedCreate = request
         }
     }
@@ -210,6 +241,9 @@ internal class IconDraftState(initialIcon: IconPackDrawable?, initialRecipe: Str
         if (generation == vectorGeneration) {
             modifiedVector = generated
             vectorRecipe = if (generated != null) StoredIconModifierRecipe.fromRenderedOptions(options) else null
+            vectorInput = if (generated != null && base != null) {
+                modifierInputForResult(base, options, ModifierInputOrigin.VECTOR)
+            } else null
         }
     }
 
@@ -223,6 +257,9 @@ internal class IconDraftState(initialIcon: IconPackDrawable?, initialRecipe: Str
         if (generation == uploadGeneration) {
             uploadIcon = generated
             uploadRecipe = if (generated != null) StoredIconModifierRecipe.fromRenderedOptions(options) else null
+            uploadInput = if (generated != null && base != null) {
+                modifierInputForResult(base, options, ModifierInputOrigin.UPLOAD)
+            } else null
         }
     }
 }

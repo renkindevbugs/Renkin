@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.packages
 import android.graphics.drawable.Drawable
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.icon.creator.IconModifierInput
 import java.text.Normalizer
 
 class PackageInfoStruct(
@@ -53,7 +54,8 @@ class PackageInfoStruct(
      */
     val sourceUrl: String? = null,
     /** Last local modifier stage for [baseIcon]. Informational; never applied onto that base. */
-    val modifierRecipe: String? = null
+    val modifierRecipe: String? = null,
+    val modifierInput: IconModifierInput? = null
 ) : Comparable<PackageInfoStruct> {
     private val normalizedSortName by lazy {
         Normalizer.normalize(appName, Normalizer.Form.NFD)
@@ -90,9 +92,10 @@ class PackageInfoStruct(
         isLegacy: Boolean = this.isLegacy,
         baseIcon: IconPackDrawable? = this.baseIcon,
         sourceUrl: String? = this.sourceUrl,
-        modifierRecipe: String? = this.modifierRecipe
+        modifierRecipe: String? = this.modifierRecipe,
+        modifierInput: IconModifierInput? = this.modifierInput
     ): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon, sourceUrl, modifierRecipe)
+        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon, sourceUrl, modifierRecipe, modifierInput)
 
     // Clearing the icon (createdIcon == null) also drops the recorded source pack and the
     // refresh-made flag, so a removed icon never lingers in the usage counts.
@@ -108,7 +111,8 @@ class PackageInfoStruct(
         // reference travels explicitly with each new icon (null unless it came from a library).
         sourceUrl: String? = null,
         // Replacing the base drops metadata unless it explicitly travels with the new artwork.
-        modifierRecipe: String? = null
+        modifierRecipe: String? = null,
+        modifierInput: IconModifierInput? = null
     ): PackageInfoStruct =
         copyWith(
             createdIcon = createdIcon,
@@ -119,7 +123,8 @@ class PackageInfoStruct(
             isLegacy = if (createdIcon == null) false else isLegacy,
             baseIcon = if (createdIcon == null) null else baseIcon,
             sourceUrl = if (createdIcon == null) null else sourceUrl,
-            modifierRecipe = if (createdIcon == null || baseIcon == null) null else modifierRecipe
+            modifierRecipe = if (createdIcon == null || baseIcon == null) null else modifierRecipe,
+            modifierInput = if (createdIcon == null || baseIcon == null) null else modifierInput
         )
 
     /** Replaces only the derived global render and keeps the persisted base untouched. */

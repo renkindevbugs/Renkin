@@ -6,6 +6,7 @@ import android.system.OsConstants
 import android.util.AtomicFile
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.apk.PackKeystore
+import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.StorageOperationGate
@@ -14,6 +15,7 @@ import dev.renkinProject.renkin.data.StorageRecoverySnapshotException
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -122,6 +124,13 @@ internal class BackupRecoveryStore(private val context: Context) {
             gallery.walkTopDown().filter { it.isFile }.forEach { source ->
                 val relative = source.relativeTo(gallery).invariantSeparatorsPath
                 copySynced(source, File(directory, "gallery/$relative"))
+            }
+            val inputHashes = pack.modifierInputDocuments().mapNotNull { StoredIconModifierInput.artwork(it)?.hash }.toSet()
+            for (hash in inputHashes) {
+                val source = IconModifierInputStore.file(context, hash)
+                if (source.isFile) {
+                    copySynced(source, File(directory, "${IconModifierInputStore.ARCHIVE_DIR}/${source.name}"))
+                }
             }
             for (name in listOf(PackKeystore.FILE_NAME, PackKeystore.PASSWORD_FILE_NAME)) {
                 context.filesDir.resolve(name).takeIf { it.isFile }?.let { copySynced(it, File(directory, "signing/$name")) }
@@ -260,6 +269,18 @@ internal class BackupRecoveryStore(private val context: Context) {
                 throw IOException("Cannot remove gallery file during recovery")
             }
         }
+        val inputs = IconModifierInputStore.directory(context)
+        val wantedInputs = snapshot.files.filter { it.startsWith("${IconModifierInputStore.ARCHIVE_DIR}/") }
+            .map { it.removePrefix("${IconModifierInputStore.ARCHIVE_DIR}/") }.toSet()
+        for (name in wantedInputs) copyReplacing(
+            File(snapshot.directory, "${IconModifierInputStore.ARCHIVE_DIR}/$name"), File(inputs, name)
+        )
+        for (file in inputs.listFiles().orEmpty()) {
+            if (file.isFile && IconModifierInputStore.validName(file.name) && file.name !in wantedInputs && !file.delete()) {
+                throw IOException("Cannot remove modifier input during recovery")
+            }
+        }
+        if (inputs.isDirectory) syncDirectory(inputs)
         for (name in listOf(PackKeystore.FILE_NAME, PackKeystore.PASSWORD_FILE_NAME)) {
             val source = File(snapshot.directory, "signing/$name")
             val target = File(context.filesDir, name)
@@ -331,7 +352,10 @@ internal class BackupRecoveryStore(private val context: Context) {
             files.forEach { name ->
                 BackupArchiveLimits.validateName(name)
                 if (name !in listOf("pack.json", "watch.json", "prefs.json") &&
-                    !name.startsWith("gallery/") && name !in listOf("signing/${PackKeystore.FILE_NAME}", "signing/${PackKeystore.PASSWORD_FILE_NAME}")) {
+                    !name.startsWith("gallery/") &&
+                    !(name.startsWith("${IconModifierInputStore.ARCHIVE_DIR}/") &&
+                        IconModifierInputStore.validName(name.removePrefix("${IconModifierInputStore.ARCHIVE_DIR}/"))) &&
+                    name !in listOf("signing/${PackKeystore.FILE_NAME}", "signing/${PackKeystore.PASSWORD_FILE_NAME}")) {
                     throw StorageRecoverySnapshotException("Invalid recovery file")
                 }
             }

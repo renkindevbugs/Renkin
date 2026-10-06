@@ -8,6 +8,7 @@ import android.util.JsonWriter
 import androidx.sqlite.db.SupportSQLiteDatabase
 import dev.renkinProject.renkin.data.StorageRecoverySchemaException
 import dev.renkinProject.renkin.data.StorageRecoverySnapshotException
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import java.io.File
@@ -25,7 +26,7 @@ internal object BackupDatabaseSnapshot {
                 val snapshotVersion = reader.nextInt()
                 requireField(reader, "tables")
                 val expected = tables(db).toSet()
-                val addsModifierRecipe = addsModifierRecipe(snapshotVersion, db.version, expected)
+                val omittedColumns = supportedOmittedColumns(snapshotVersion, db.version, expected)
                 val found = mutableSetOf<String>()
                 reader.beginArray()
                 while (reader.hasNext()) {
@@ -39,7 +40,7 @@ internal object BackupDatabaseSnapshot {
                     reader.beginArray()
                     while (reader.hasNext()) columns.add(reader.nextString())
                     reader.endArray()
-                    checkColumns(db, table, columns, addsModifierRecipe)
+                    checkColumns(db, table, columns, omittedColumns)
                     requireField(reader, "rows")
                     reader.skipValue()
                     reader.endObject()
@@ -112,7 +113,7 @@ internal object BackupDatabaseSnapshot {
                 val snapshotVersion = reader.nextInt()
                 requireField(reader, "tables")
                 val expected = tables(db).toSet()
-                val addsModifierRecipe = addsModifierRecipe(snapshotVersion, db.version, expected)
+                val omittedColumns = supportedOmittedColumns(snapshotVersion, db.version, expected)
                 db.execSQL("PRAGMA defer_foreign_keys = ON")
                 expected.forEach { db.execSQL("DELETE FROM ${quoted(it)}") }
                 val restored = mutableSetOf<String>()
@@ -129,9 +130,9 @@ internal object BackupDatabaseSnapshot {
                     reader.beginArray()
                     while (reader.hasNext()) columns.add(reader.nextString())
                     reader.endArray()
-                    checkColumns(db, table, columns, addsModifierRecipe)
-                    // A v18 snapshot omits only modifierRecipe. The v19 SQL default restores
-                    // that metadata as empty while preserving all previous values and IDs.
+                    checkColumns(db, table, columns, omittedColumns)
+                    // Supported older snapshots omit only explicitly added metadata columns.
+                    // Their SQL defaults preserve the old artwork and local row identities.
                     val sql = "INSERT INTO ${quoted(table)} (${columns.joinToString(",", transform = ::quoted)}) " +
                         "VALUES (${columns.joinToString(",") { "?" }})"
                     requireField(reader, "rows")
@@ -139,13 +140,18 @@ internal object BackupDatabaseSnapshot {
                     while (reader.hasNext()) {
                         currentCoroutineContext().ensureActive()
                         reader.beginArray()
-                        val values = Array<Any?>(columns.size) {
+                        val values = Array<Any?>(columns.size) { column ->
                             reader.beginArray()
                             val value = when (reader.nextInt()) {
                                 Cursor.FIELD_TYPE_NULL -> { reader.nextNull(); null }
                                 Cursor.FIELD_TYPE_INTEGER -> reader.nextLong()
                                 Cursor.FIELD_TYPE_FLOAT -> reader.nextDouble()
-                                Cursor.FIELD_TYPE_STRING -> reader.nextString()
+                                Cursor.FIELD_TYPE_STRING -> reader.nextString().let { text ->
+                                    if (table == "DbApplication" && columns[column] == "modifierInput") {
+                                        // Obsolete inline v20 metadata must not reintroduce huge rows.
+                                        StoredIconModifierInput.normalize(text).orEmpty()
+                                    } else text
+                                }
                                 Cursor.FIELD_TYPE_BLOB -> Base64.decode(reader.nextString(), Base64.NO_WRAP)
                                 else -> throw StorageRecoverySnapshotException("Invalid recovery value")
                             }
@@ -165,27 +171,44 @@ internal object BackupDatabaseSnapshot {
         }
     }
 
-    private fun addsModifierRecipe(snapshotVersion: Int, currentVersion: Int, tables: Set<String>): Boolean {
-        if (snapshotVersion == currentVersion) return false
-        if (snapshotVersion == 18 && currentVersion == 19 && "DbApplication" in tables) return true
-        throw StorageRecoverySchemaException("Recovery database schema has changed")
+    private fun supportedOmittedColumns(snapshotVersion: Int, currentVersion: Int, tables: Set<String>): List<String> {
+        if (snapshotVersion == currentVersion) return emptyList()
+        if (snapshotVersion > currentVersion || "DbApplication" !in tables) {
+            throw StorageRecoverySchemaException("Recovery database schema has changed")
+        }
+        // Compose only audited metadata-only ADD COLUMN migrations. A prefix/default
+        // match cannot prove compatibility with migrations that backfill or reinterpret data.
+        val metadataAdditions = mapOf(18 to listOf("modifierRecipe"), 19 to listOf("modifierInput"))
+        return (snapshotVersion until currentVersion).flatMap { version ->
+            metadataAdditions[version] ?: throw StorageRecoverySchemaException("Recovery database schema has changed")
+        }
     }
 
     private fun checkColumns(
         db: SupportSQLiteDatabase,
         table: String,
         columns: List<String>,
-        addsModifierRecipe: Boolean
+        omittedColumns: List<String>
     ) {
         db.query("SELECT * FROM ${quoted(table)} LIMIT 0").use { cursor ->
             val current = cursor.columnNames.toList()
-            val expected = if (addsModifierRecipe && table == "DbApplication") {
-                if (current.lastOrNull() != "modifierRecipe") {
+            val expected = if (omittedColumns.isNotEmpty() && table == "DbApplication") {
+                if (current.takeLast(omittedColumns.size) != omittedColumns) {
                     throw StorageRecoverySchemaException("Recovery columns have changed")
                 }
-                current.dropLast(1)
+                current.dropLast(omittedColumns.size)
             } else current
             if (columns != expected) throw StorageRecoverySchemaException("Recovery columns have changed")
+        }
+        if (table == "DbApplication" && omittedColumns.isNotEmpty()) {
+            val validDefaults = mutableSetOf<String>()
+            db.query("PRAGMA table_info(${quoted(table)})").use { cursor ->
+                while (cursor.moveToNext()) {
+                    if (cursor.getString(1) in omittedColumns && cursor.getString(2).equals("TEXT", ignoreCase = true) &&
+                        cursor.getInt(3) == 1 && cursor.getString(4) == "''") validDefaults.add(cursor.getString(1))
+                }
+            }
+            if (validDefaults != omittedColumns.toSet()) throw StorageRecoverySchemaException("Recovery metadata defaults have changed")
         }
     }
 

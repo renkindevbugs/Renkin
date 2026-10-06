@@ -62,6 +62,8 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         dao.getAllProfiles()
     }
 
+    internal suspend fun modifierInputDocuments(): List<String> = access { dao.modifierInputDocuments() }
+
     /**
      * Backup import: replaces every profile and every stored icon in one transaction, keeping
      * the backup's profile ids (icons and watch rules reference them). Callers must have fully

@@ -4,11 +4,15 @@ import android.content.Context
 import androidx.compose.ui.graphics.Color
 import dev.renkinProject.renkin.data.BuiltIcon
 import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.drawable.ADAPTIVE_ICON_SCALE
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.extension.bitmapFromBase64
+import dev.renkinProject.renkin.icon.creator.IconModifierInput
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
 import dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe
 import dev.renkinProject.renkin.icon.parser.XmlNodeParser
 import dev.renkinProject.renkin.packages.PackageInfoStruct
@@ -29,6 +33,7 @@ class RenkinPackStore(
     private val repo: RenkinPackRepository
 ) {
     constructor(context: Context) : this(context, RenkinPackRepository(context))
+    private val inputStore = IconModifierInputStore(context)
 
     data class SavedEntry(
         val icon: IconPackDrawable?,
@@ -47,7 +52,8 @@ class RenkinPackStore(
         // True when the row HAS stored artwork that would not decode. The icon is unusable, but
         // the row must not be quietly dropped by the next save — a future build may read it.
         val decodeFailed: Boolean = false,
-        val modifierRecipe: String? = null
+        val modifierRecipe: String? = null,
+        val modifierInput: IconModifierInput? = null
     )
 
     /** Loads [profileId]'s saved icons + calendar flags, keyed by "package/activity". */
@@ -108,7 +114,10 @@ class RenkinPackStore(
             dbApp,
             decodeFailed,
             // A rendered fallback cannot inherit metadata for a base that failed to decode.
-            if (baseIcon != null) StoredIconModifierRecipe.normalize(dbApp.modifierRecipe) else null
+            if (baseIcon != null) StoredIconModifierRecipe.normalize(dbApp.modifierRecipe) else null,
+            if (baseIcon != null) StoredIconModifierInput.readState(dbApp.modifierInput)?.takeIf { state ->
+                state.storedInput?.let(inputStore::exists) == true
+            } else null
         )
     }
 
@@ -122,14 +131,24 @@ class RenkinPackStore(
         profileId: Long,
         apps: List<PackageInfoStruct>,
         preservedRows: Collection<DbApplication> = emptyList()
-    ) = withContext(Dispatchers.Default) {
-        repo.replaceAll(profileId, encodeRows(profileId, apps, preservedRows))
+    ) = StorageOperationGate.run {
+        withContext(Dispatchers.Default) {
+            val preparedInputs = mutableMapOf<IconModifierInput, IconModifierInputStore.Prepared>()
+            for (app in apps) {
+                val state = app.modifierInput ?: continue
+                if (app.createdIcon == null || state in preparedInputs) continue
+                inputStore.prepare(state)?.let { preparedInputs[state] = it }
+            }
+            repo.replaceAll(profileId, encodeRows(profileId, apps, preservedRows, preparedInputs))
+            preparedInputs.forEach { (state, prepared) -> inputStore.accept(state, prepared) }
+        }
     }
 
     private fun encodeRows(
         profileId: Long,
         apps: List<PackageInfoStruct>,
-        preservedRows: Collection<DbApplication>
+        preservedRows: Collection<DbApplication>,
+        preparedInputs: Map<IconModifierInput, IconModifierInputStore.Prepared> = emptyMap()
     ): List<DbApplication> {
         val dbApps = apps.mapNotNull { app ->
             val rendered = app.createdIcon
@@ -156,7 +175,8 @@ class RenkinPackStore(
                 baseIsXml = base != null && base !is BitmapIconDrawable,
                 sourceUrl = app.sourceUrl ?: "",
                 isFallbackIcon = app.isFallback,
-                modifierRecipe = if (base != null) app.modifierRecipe.orEmpty() else ""
+                modifierRecipe = if (base != null) app.modifierRecipe.orEmpty() else "",
+                modifierInput = if (base != null) app.modifierInput?.let { preparedInputs[it]?.document }.orEmpty() else ""
             )
         }
         val liveKeys = dbApps.map { "${it.packageName}/${it.activityName}" }.toSet()

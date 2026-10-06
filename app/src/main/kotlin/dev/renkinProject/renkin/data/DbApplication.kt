@@ -14,6 +14,7 @@ import androidx.room.RoomDatabase
 import androidx.room.Update
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
 
 /** The always-present default profile: undeletable, builds the base Renkin pack package. */
 const val DEFAULT_PROFILE_ID = 1L
@@ -83,7 +84,9 @@ data class DbApplication(
     @ColumnInfo(defaultValue = "0") val isFallbackIcon: Boolean = false,
     // Last local modifier stage that produced baseDrawable, not a recipe to apply onto it.
     // Empty for older icons or edits containing brush geometry outside the portable codec.
-    @ColumnInfo(defaultValue = "") val modifierRecipe: String = ""
+    @ColumnInfo(defaultValue = "") val modifierRecipe: String = "",
+    // Bounded settings and content hash; source artwork lives in filesDir/icon-inputs.
+    @ColumnInfo(defaultValue = "") val modifierInput: String = ""
 )
 
 /**
@@ -236,6 +239,9 @@ interface PackVerdictDao {
 
 @Dao
 interface RenkinPackDao {
+    @Query("SELECT modifierInput FROM DbApplication WHERE modifierInput != ''")
+    fun modifierInputDocuments(): List<String>
+
     @Query("SELECT * FROM DbApplication WHERE profileId = :profileId")
     fun getAll(profileId: Long): List<DbApplication>
 
@@ -314,7 +320,7 @@ interface ProfileDao {
         BuiltIcon::class,
         ModifierPreset::class
     ],
-    version = 19
+    version = 20
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -550,6 +556,12 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_19_20 = object : Migration(19, 20) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN modifierInput TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -568,7 +580,8 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_15_16,
             MIGRATION_16_17,
             MIGRATION_17_18,
-            MIGRATION_18_19
+            MIGRATION_18_19,
+            MIGRATION_19_20
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {
@@ -587,6 +600,12 @@ abstract class RenkinPackDatabase : RoomDatabase() {
 
             override fun onOpen(db: SupportSQLiteDatabase) {
                 insertDefaultProfile(db)
+                // Pre-release v20 builds embedded optional source artwork in this column.
+                // Remove that obsolete representation before SELECT * can fill a CursorWindow.
+                if (db.version >= 20) db.execSQL(
+                    "UPDATE DbApplication SET modifierInput = '' WHERE length(CAST(modifierInput AS BLOB)) > " +
+                        StoredIconModifierInput.MAX_DOCUMENT_CHARS + " OR instr(modifierInput, '\"input\":') > 0"
+                )
             }
         }
 

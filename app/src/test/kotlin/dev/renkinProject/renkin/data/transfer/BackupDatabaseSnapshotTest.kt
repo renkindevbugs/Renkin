@@ -6,6 +6,11 @@ import androidx.room.withTransaction
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.StorageRecoverySchemaException
 import dev.renkinProject.renkin.data.createDatabaseFromExportedSchema
+import dev.renkinProject.renkin.icon.creator.IconModifierInput
+import dev.renkinProject.renkin.icon.creator.ModifierInputOrigin
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
+import dev.renkinProject.renkin.icon.creator.StoredModifierArtwork
+import dev.renkinProject.renkin.icon.creator.modifierInputTestOptions
 import kotlinx.coroutines.runBlocking
 import org.json.JSONObject
 import org.junit.Assert.*
@@ -49,6 +54,7 @@ class BackupDatabaseSnapshotTest {
                     assertTrue(cursor.moveToFirst())
                     expected.forEach { (column, value) -> assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column))) }
                     assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("modifierRecipe")))
+                    assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("modifierInput")))
                 }
                 val document = JSONObject(file.readText())
                 document.put("version", 17)
@@ -64,5 +70,61 @@ class BackupDatabaseSnapshotTest {
                 assertTrue(runCatching { BackupDatabaseSnapshot.checkCompatibility(sql, file) }.exceptionOrNull() is StorageRecoverySchemaException)
             } finally { database.close() }
         } finally { context.deleteDatabase(name); file.delete() }
+    }
+
+    @Test fun version19SnapshotPreservesRecipeAndDefaultsOnlyInput() = runBlocking {
+        val context: Application = RuntimeEnvironment.getApplication()
+        ShadowStatFs.registerStats(context.filesDir, 1_000_000, 1_000_000, 1_000_000)
+        val file = context.filesDir.resolve("v19-snapshot.json")
+        val name = "snapshot-v19"
+        try {
+            createDatabaseFromExportedSchema(context, RenkinPackDatabase::class.java.canonicalName!!, 19, name) { db ->
+                db.execSQL("INSERT INTO Profile (id, name) VALUES (1, 'Original')")
+                db.execSQL("INSERT INTO DbApplication (packageName, activityName, isAdaptiveIcon, isXml, drawable, baseDrawable, modifierRecipe) " +
+                    "VALUES ('app.one', 'Main', 0, 0, 'rendered', 'base', 'original recipe')")
+                db.version = 19
+                runBlocking { BackupDatabaseSnapshot.write(db, file) }
+            }
+            val database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java).allowMainThreadQueries().build()
+            try {
+                val sql = database.openHelper.writableDatabase
+                BackupDatabaseSnapshot.checkCompatibility(sql, file)
+                database.withTransaction { BackupDatabaseSnapshot.restore(sql, file) }
+                val row = database.renkinPackDao().getAll(1).single()
+                assertEquals("rendered", row.drawable)
+                assertEquals("base", row.baseDrawable)
+                assertEquals("original recipe", row.modifierRecipe)
+                assertEquals("", row.modifierInput)
+            } finally { database.close() }
+        } finally { context.deleteDatabase(name); file.delete() }
+    }
+
+    @Test fun currentSnapshotRestoresSmallReferencesAndDropsObsoleteInlineInputOnly() = runBlocking {
+        val context: Application = RuntimeEnvironment.getApplication()
+        ShadowStatFs.registerStats(context.filesDir, 1_000_000, 1_000_000, 1_000_000)
+        val file = context.filesDir.resolve("v20-snapshot.json")
+        val database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java).allowMainThreadQueries().build()
+        try {
+            val sql = database.openHelper.writableDatabase
+            sql.execSQL("INSERT INTO Profile (id, name) VALUES (1, 'Original')")
+            val valid = checkNotNull(StoredIconModifierInput.encode(
+                IconModifierInput(modifierInputTestOptions(), false, ModifierInputOrigin.UPLOAD),
+                StoredModifierArtwork("a".repeat(64), false, false)
+            ))
+            for ((name, document) in mapOf("valid" to valid, "inline" to "{\"version\":1,\"input\":\"old pixels\"}")) {
+                sql.execSQL("INSERT INTO DbApplication (packageName, activityName, isAdaptiveIcon, isXml, drawable, baseDrawable, modifierRecipe, modifierInput) " +
+                    "VALUES (?, 'Main', 0, 0, 'rendered', 'base', 'original recipe', ?)", arrayOf(name, document))
+            }
+            BackupDatabaseSnapshot.write(sql, file)
+            database.withTransaction { BackupDatabaseSnapshot.restore(sql, file) }
+            val rows = database.renkinPackDao().getAll(1).associateBy { it.packageName }
+            assertEquals(valid, rows.getValue("valid").modifierInput)
+            assertEquals("", rows.getValue("inline").modifierInput)
+            rows.values.forEach {
+                assertEquals("rendered", it.drawable)
+                assertEquals("base", it.baseDrawable)
+                assertEquals("original recipe", it.modifierRecipe)
+            }
+        } finally { database.close(); file.delete() }
     }
 }

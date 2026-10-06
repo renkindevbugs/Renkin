@@ -1003,7 +1003,8 @@ class ApplicationProvider internal constructor(
                         isLegacy = entry.isLegacy,
                         baseIcon = baseIcon,
                         sourceUrl = entry.sourceUrl,
-                        modifierRecipe = entry.modifierRecipe
+                        modifierRecipe = entry.modifierRecipe,
+                        modifierInput = entry.modifierInput
                     ).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
                 }
                 else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
@@ -1124,7 +1125,8 @@ class ApplicationProvider internal constructor(
                     isLegacy = entry.isLegacy,
                     baseIcon = baseIcon,
                     sourceUrl = entry.sourceUrl,
-                    modifierRecipe = entry.modifierRecipe
+                    modifierRecipe = entry.modifierRecipe,
+                    modifierInput = entry.modifierInput
                 )
                     .changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName),
                 trackUnsaved = false
@@ -1144,6 +1146,7 @@ class ApplicationProvider internal constructor(
         first.createdIcon === second.createdIcon && first.baseIcon === second.baseIcon &&
             first.sourcePackName == second.sourcePackName && first.sourceUrl == second.sourceUrl &&
             first.modifierRecipe == second.modifierRecipe &&
+            first.modifierInput == second.modifierInput &&
             first.calendarEnabled == second.calendarEnabled && first.calendarPrefix == second.calendarPrefix &&
             first.calendarPackName == second.calendarPackName && first.isCustom == second.isCustom &&
             first.isLegacy == second.isLegacy && first.isFallback == second.isFallback

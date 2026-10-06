@@ -117,6 +117,7 @@ import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import dev.renkinProject.renkin.icon.creator.EffectModifier
+import dev.renkinProject.renkin.icon.creator.IconModifierInput
 import dev.renkinProject.renkin.icon.creator.ModifierStack
 
 internal enum class IconOrigin { CREATE, UPLOAD, VECTOR }
@@ -146,7 +147,11 @@ internal fun OptionsDialog(
     iconPacks: List<IconPack>,
     session: EditorSession,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?, sourceUrl: String?, modifierRecipe: String?) -> Unit,
+    onConfirm: (
+        icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?,
+        calendarPackName: String?, sourcePackName: String?, sourceUrl: String?,
+        modifierRecipe: String?, modifierInput: IconModifierInput?
+    ) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
@@ -439,7 +444,10 @@ internal fun OptionsDialog(
             IconOrigin.UPLOAD -> onlineImageUrl
             else -> null
         }
-        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, sourcePackToPersist, sourceUrlToPersist, draft.modifierRecipeToConfirm)
+        onConfirm(
+            draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName,
+            sourcePackToPersist, sourceUrlToPersist, draft.modifierRecipeToConfirm, draft.modifierInputToConfirm
+        )
     }
 
     val adaptiveLayoutInfo = LocalAdaptiveLayoutInfo.current

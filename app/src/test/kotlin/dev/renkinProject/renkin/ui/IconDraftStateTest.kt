@@ -22,6 +22,8 @@ import dev.renkinProject.renkin.icon.creator.IconExportOptions
 import dev.renkinProject.renkin.icon.creator.IconSourceOptions
 import dev.renkinProject.renkin.icon.creator.ModifierStack
 import dev.renkinProject.renkin.icon.creator.TransformModifier
+import dev.renkinProject.renkin.icon.creator.ModifierInputOrigin
+import dev.renkinProject.renkin.icon.creator.modifierInputForResult
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.cancelAndJoin
@@ -50,15 +52,23 @@ class IconDraftStateTest {
 
     @Test fun initialMetadataIsRetainedUntilACompletedRenderAndClearedWithItsSource() = runBlocking {
         val original = FakeIcon()
-        val draft = IconDraftState(original, "initial metadata")
+        val originalInput = checkNotNull(modifierInputForResult(original, options(), ModifierInputOrigin.EXISTING_ICON))
+        val draft = IconDraftState(original, "initial metadata", originalInput)
         assertEquals("initial metadata", draft.modifierRecipeToConfirm)
+        assertSame(originalInput, draft.modifierInputToConfirm)
         val base = FakeIcon()
         draft.selectUpload(base)
         assertNull(draft.modifierRecipeToConfirm)
+        assertNull(draft.modifierInputToConfirm)
         val firstOptions = options(iconScale = 1.2f)
         val firstResult = FakeIcon()
         draft.regenerateUpload(FakeBuilder(modifierResult = firstResult), firstOptions)
         val firstRecipe = draft.modifierRecipeToConfirm
+        val firstInput = checkNotNull(draft.modifierInputToConfirm)
+        assertSame(base, firstInput.liveInput)
+        assertEquals(ModifierInputOrigin.UPLOAD, firstInput.origin)
+        assertEquals(firstOptions, firstInput.options)
+        assertFalse(firstInput.containsBakedModifierEdits)
         assertEquals(dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe.fromRenderedOptions(firstOptions), firstRecipe)
         val started = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
@@ -68,11 +78,14 @@ class IconDraftStateTest {
         started.await()
         assertSame(firstResult, draft.iconToConfirm)
         assertEquals(firstRecipe, draft.modifierRecipeToConfirm)
+        assertSame(firstInput, draft.modifierInputToConfirm)
         pending.cancelAndJoin()
         assertEquals(firstRecipe, draft.modifierRecipeToConfirm)
+        assertSame(firstInput, draft.modifierInputToConfirm)
         draft.clearUpload()
         assertNull(draft.iconToConfirm)
         assertNull(draft.modifierRecipeToConfirm)
+        assertNull(draft.modifierInputToConfirm)
     }
 
     /** A no-op [IconPackDrawable] used as a distinguishable sentinel. */

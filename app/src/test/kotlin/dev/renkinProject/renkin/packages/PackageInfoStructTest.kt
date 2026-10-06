@@ -9,6 +9,9 @@ import android.graphics.drawable.ColorDrawable
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.icon.creator.ModifierInputOrigin
+import dev.renkinProject.renkin.icon.creator.modifierInputForResult
+import dev.renkinProject.renkin.icon.creator.modifierInputTestOptions
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -24,12 +27,18 @@ class PackageInfoStructTest {
 
     @Test fun derivedChangesKeepRecipeAndReplacingOrClearingArtworkDropsIt() {
         val base = FakeIcon()
-        val application = app(base).changeExport(base, modifierRecipe = "recipe")
+        val input = checkNotNull(modifierInputForResult(base, modifierInputTestOptions(), ModifierInputOrigin.EXISTING_ICON))
+        val application = app(base).changeExport(base, modifierRecipe = "recipe", modifierInput = input)
         assertEquals("recipe", application.changeRenderedIcon(FakeIcon()).modifierRecipe)
         assertEquals("recipe", application.changeCalendar(true, "day_").modifierRecipe)
         assertEquals("recipe", application.locked().modifierRecipe)
         assertNull(application.changeExport(FakeIcon()).modifierRecipe)
         assertNull(application.changeExport(null, modifierRecipe = "recipe").modifierRecipe)
+        assertSame(input, application.changeRenderedIcon(FakeIcon()).modifierInput)
+        assertSame(input, application.changeCalendar(true, "day_").modifierInput)
+        assertSame(input, application.locked().modifierInput)
+        assertNull(application.changeExport(FakeIcon()).modifierInput)
+        assertNull(application.changeExport(null, modifierInput = input).modifierInput)
     }
 
     private class FakeIcon : IconPackDrawable() {

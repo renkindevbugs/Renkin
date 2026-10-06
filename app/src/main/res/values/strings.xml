@@ -540,7 +540,7 @@
     <string name="backupSavingIcons">Saving icons and profiles…</string>
     <string name="backupSavingWatchRules">Saving watched icons…</string>
     <string name="backupSavingSettings">Saving settings…</string>
-    <string name="backupSavingFiles">Saving uploaded images…</string>
+    <string name="backupSavingFiles">Saving files…</string>
     <string name="backupVerifyingSavedState">Verifying the saved copy…</string>
     <string name="backupRestorePreparingHint">You can cancel before any saved data is changed.</string>
     <string name="backupRestoreCommittingHint">Keep Renkin open until the restore finishes.</string>
