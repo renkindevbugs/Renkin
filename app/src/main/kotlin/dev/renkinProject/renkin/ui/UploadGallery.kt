@@ -14,11 +14,9 @@ import androidx.compose.material3.SnackbarResult
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
@@ -36,19 +34,19 @@ import kotlinx.coroutines.withContext
 const val MIME_TYPE_IMAGE = "image/*"
 
 @Composable
-fun UploadColumn(
+internal fun UploadColumn(
     snackbarHostState: SnackbarHostState,
-    initialSelectedPath: String? = null,
+    state: UploadEditorState,
     onChange: (icon: IconPackDrawable?, path: String?) -> Unit
 ) {
-    var asAdaptiveIcon by rememberSaveable { mutableStateOf(false) }
-    var zoomLevel by rememberSaveable { mutableFloatStateOf(1f) }
-    var selectedImagePath by rememberSaveable(initialSelectedPath) {
-        mutableStateOf(initialSelectedPath)
-    }
+    var asAdaptiveIcon by state::asAdaptiveIcon
+    var zoomLevel by state::zoomLevel
+    var selectedImagePath by state::selectedImagePath
+    var hadSelectedImage by remember { mutableStateOf(selectedImagePath != null) }
     var savedImages by remember { mutableStateOf<List<File>>(emptyList()) }
     var uploadedImage by remember { mutableStateOf<Bitmap?>(null) }
     var mask by remember { mutableStateOf<Bitmap?>(null) }
+    var loadedPath by remember { mutableStateOf<String?>(null) }
     var selection by remember { mutableStateOf(GallerySelection()) }
     var isUploading by remember { mutableStateOf(false) }
 
@@ -137,13 +135,17 @@ fun UploadColumn(
         if (path == null) {
             uploadedImage = null
             mask = null
-            onChange(null, null)
+            loadedPath = null
+            if (hadSelectedImage) onChange(null, null)
+            hadSelectedImage = false
             return@LaunchedEffect
         }
+        hadSelectedImage = true
         val bitmap = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path) }
         if (bitmap == null) {
             uploadedImage = null
             mask = null
+            loadedPath = null
             selectedImagePath = null
             onChange(null, null)
             toaster.show(uploadErrorMessage)
@@ -151,6 +153,7 @@ fun UploadColumn(
             val squared = squareBitmap(bitmap)
             uploadedImage = squared
             mask = createMask(squared)
+            loadedPath = path
         }
     }
 
@@ -161,8 +164,8 @@ fun UploadColumn(
     Box(Modifier.fillMaxSize()) {
         UploadGalleryContent(
             savedImages = savedImages,
-            uploadedImage = uploadedImage,
-            mask = mask,
+            uploadedImage = uploadedImage.takeIf { selectedImagePath != null && loadedPath == selectedImagePath },
+            mask = mask.takeIf { selectedImagePath != null && loadedPath == selectedImagePath },
             asAdaptiveIcon = asAdaptiveIcon,
             zoomLevel = zoomLevel,
             selectedImagePath = selectedImagePath,
@@ -174,7 +177,9 @@ fun UploadColumn(
             onZoomChange = { zoomLevel = it },
             onSelectedImageChange = { selectedImagePath = it },
             onSelectionChange = { selection = it },
-            onChange = onChange
+            onChange = { icon, path ->
+                if (path != null && path == selectedImagePath) onChange(icon, path)
+            }
         )
         UploadGalleryActions(
             savedImages = savedImages,

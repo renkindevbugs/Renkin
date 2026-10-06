@@ -1,6 +1,10 @@
 package dev.renkinProject.renkin.ui
 
 import android.content.Intent
+import dev.renkinProject.renkin.EditorSessionViewModel
+import dev.renkinProject.renkin.expiredSessionMessage
+import dev.renkinProject.renkin.data.TextFontKey
+import java.util.UUID
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -1064,20 +1068,55 @@ fun OpenAppOptions(
     onDismiss: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
-
+    val editorViewModel: EditorSessionViewModel = hiltViewModel()
+    val activity = getCurrentMainActivity()
+    val toaster = LocalToaster.current
+    val sessionId = rememberSaveable(app.key) { UUID.randomUUID().toString() }
+    var sessionAttached by rememberSaveable(app.key) { mutableStateOf(false) }
     val profileId = rememberSaveable(app.key) { viewModel.sessionToken.profileId }
     val revision = rememberSaveable(app.key) { viewModel.sessionToken.revision }
     val providerInstance = rememberSaveable(app.key) { viewModel.sessionToken.providerInstanceId }
     val expected = ProfileSessionToken(profileId, revision, providerInstance)
+    val current = viewModel.sessionToken
 
-    OptionsDialog(iconPacks, app, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl ->
-        viewModel.applyIcon(app, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, expected)
+    if (expected != current) {
+        LaunchedEffect(expected, current) {
+            editorViewModel.release(sessionId)
+            toaster.show(activity.getString(expected.expiredSessionMessage(current)))
+            onDismiss()
+        }
+        return
+    }
+
+    val preferences = getPreferences()
+    val savedFont by remember(preferences) {
+        preferences.data.map { it[TextFontKey] ?: "" }
+    }.collectAsState(initial = null)
+    val initialFont = savedFont ?: return
+    val session = editorViewModel.getOrCreate(
+        sessionId, expected, app, iconPacks.firstOrNull()?.packageName ?: "", initialFont,
+        allowCreate = !sessionAttached
+    )
+    if (session == null) {
+        LaunchedEffect(sessionId) {
+            editorViewModel.release(sessionId)
+            toaster.show(activity.getString(R.string.editorDraftLost))
+            onDismiss()
+        }
+        return
+    }
+    SideEffect { sessionAttached = true }
+    val closeEditor: () -> Unit = {
+        editorViewModel.release(sessionId)
         onDismiss()
-    }, {
-        onDismiss()
-    }) {
-        onDismiss()
-        viewModel.resetIcon(app, expected)
+    }
+
+    OptionsDialog(iconPacks, session, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl ->
+        viewModel.applyIcon(session.application, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, expected)
+        closeEditor()
+    }, closeEditor) {
+        closeEditor()
+        viewModel.resetIcon(session.application, expected)
     }
 }
 

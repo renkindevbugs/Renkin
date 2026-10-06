@@ -342,6 +342,82 @@ class IconDraftStateTest {
         assertNull(confirmedSourcePack(IconOrigin.CREATE, Source.APPLICATION_NAME, null, "pack.old"))
     }
 
+    @Test
+    fun unchangedReattachmentDoesNotReinterpretInitialIcon() = runBlocking {
+        val initial = FakeIcon()
+        val target = app(initial)
+        val draft = IconDraftState(initial)
+        val builder = FakeBuilder(modifierResult = FakeIcon())
+        repeat(2) { draft.regenerateCreate(builder, target, options(), emptyList()) }
+        assertEquals(0, builder.applyCalls)
+        assertSame(initial, draft.iconToConfirm)
+    }
+
+    @Test
+    fun completedCreateRenderIsRetainedAcrossReattachment() = runBlocking {
+        val draft = IconDraftState(null)
+        val built = FakeIcon()
+        val builder = FakeBuilder(previewResult = built)
+        draft.skipInitialGate(builder)
+        repeat(2) { draft.regenerateCreate(builder, app(), options(), listOf(customPick)) }
+        assertEquals(1, builder.previewCalls)
+        assertSame(built, draft.iconToConfirm)
+    }
+
+    @Test
+    fun cancelledCreateRenderCanRetryWithSameInputs() = runBlocking {
+        val target = app(FakeIcon())
+        val draft = IconDraftState(target.createdIcon)
+        draft.regenerateCreate(FakeBuilder(), target, options(), emptyList())
+        val started = CompletableDeferred<Unit>()
+        val blocked = FakeBuilder(modifierStarted = started, modifierRelease = CompletableDeferred())
+        val updated = options(iconScale = 0.8f)
+        val job = launch { draft.regenerateCreate(blocked, target, updated, emptyList()) }
+        started.await()
+        job.cancelAndJoin()
+        assertFalse(draft.generating)
+        val finished = FakeIcon()
+        val retry = FakeBuilder(modifierResult = finished)
+        draft.regenerateCreate(retry, target, updated, emptyList())
+        assertEquals(1, retry.applyCalls)
+        assertSame(finished, draft.iconToConfirm)
+    }
+
+    @Test
+    fun inactiveSourceEffectsCannotChangeUploadDraft() = runBlocking {
+        val upload = FakeIcon()
+        val draft = IconDraftState(null)
+        draft.skipInitialGate(FakeBuilder())
+        draft.selectUpload(upload)
+        draft.regenerateUpload(FakeBuilder(), options())
+        val builder = FakeBuilder(previewResult = FakeIcon(), modifierResult = FakeIcon())
+        draft.regenerateCreate(builder, app(), options(), listOf(customPick))
+        draft.regenerateVector(builder, options(iconScale = 0.8f))
+        assertEquals(0, builder.previewCalls)
+        assertEquals(0, builder.applyCalls)
+        assertEquals(IconOrigin.UPLOAD, draft.origin)
+        assertSame(upload, draft.iconToConfirm)
+    }
+
+    @Test
+    fun returningToCompletedInputsInvalidatesOlderPendingRender() = runBlocking {
+        val target = app(FakeIcon())
+        val draft = IconDraftState(target.createdIcon)
+        draft.regenerateCreate(FakeBuilder(), target, options(), emptyList())
+        val completed = FakeIcon()
+        val approved = options(iconScale = 0.8f)
+        draft.regenerateCreate(FakeBuilder(modifierResult = completed), target, approved, emptyList())
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val pending = FakeBuilder(modifierResult = FakeIcon(), modifierStarted = started, modifierRelease = release)
+        val job = launch { draft.regenerateCreate(pending, target, options(iconScale = 0.9f), emptyList()) }
+        started.await()
+        draft.regenerateCreate(FakeBuilder(), target, approved, emptyList())
+        release.complete(Unit)
+        job.join()
+        assertSame(completed, draft.iconToConfirm)
+    }
+
     /** Runs the once-only initial gate so the next regenerateCreate actually builds. */
     private suspend fun IconDraftState.skipInitialGate(builder: IconPreviewBuilder) {
         regenerateCreate(builder, app(), options(), customIconList = emptyList())

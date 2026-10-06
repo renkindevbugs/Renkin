@@ -5,20 +5,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.drawable.MaterialYouPackEditState
-import dev.renkinProject.renkin.icon.creator.ColorizerStyle
-import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
-import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import kotlin.math.roundToInt
-
-/** Saved-state value read back as a style, tolerating the plain ARGB int older builds wrote. */
-private fun Any?.toColorizerStyle(fallback: ColorizerStyle): ColorizerStyle = when (this) {
-    is String -> decodeColorizerStyle(this)
-    is Int -> ColorizerStyle(firstColor = this)
-    else -> null
-} ?: fallback
 
 @Stable
 internal class MaterialYouPackAdjustmentState(initial: MaterialYouPackEditState? = null) {
@@ -38,37 +27,6 @@ internal class MaterialYouPackAdjustmentState(initial: MaterialYouPackEditState?
         customForeground = MaterialYouPackEditState.DEFAULT_FOREGROUND
         customBackground = MaterialYouPackEditState.DEFAULT_BACKGROUND
         strokeScale = 1f
-    }
-
-    companion object {
-        val Saver = Saver<MaterialYouPackAdjustmentState, Any>(
-            save = {
-                arrayListOf(
-                    it.selectedScheme,
-                    encodeColorizerStyle(it.customForeground),
-                    encodeColorizerStyle(it.customBackground),
-                    it.strokeScale
-                )
-            },
-            restore = { saved ->
-                val values = saved as? List<*>
-                if (values == null) {
-                    MaterialYouPackAdjustmentState()
-                } else {
-                    MaterialYouPackAdjustmentState().apply {
-                        selectedScheme = values.getOrNull(0) as? Int ?: -1
-                        // Older saved states stored plain ARGB ints; both shapes restore.
-                        customForeground = values.getOrNull(1).toColorizerStyle(
-                            MaterialYouPackEditState.DEFAULT_FOREGROUND
-                        )
-                        customBackground = values.getOrNull(2).toColorizerStyle(
-                            MaterialYouPackEditState.DEFAULT_BACKGROUND
-                        )
-                        strokeScale = values.getOrNull(3) as? Float ?: 1f
-                    }
-                }
-            }
-        )
     }
 }
 

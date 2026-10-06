@@ -33,6 +33,7 @@ Composables (ui/)                         ← stateless-ish views, read VM state
         │  hiltViewModel()
         ▼
 MainViewModel / WatchViewModel            ← @HiltViewModel; own session/UI state, orchestrate
+EditorSessionViewModel                   ← owns the individual editor's live draft and controls
         │                                    operations on viewModelScope
         ▼
 ApplicationProvider (apk/)                ← orchestrator: owns the app list, profiles, refresh,
@@ -152,6 +153,30 @@ Switcher = the top-bar title dropdown.
 - Global-options modifier previews use ViewModel-scoped, shared jobs and a byte-bounded bitmap
   LRU. Lazy-grid disposal therefore does not discard an in-flight/current preview, while a new
   modifier configuration cancels obsolete work. Cache misses drive the shared `WavyLoadingBar`.
+- Individual editing is owned by `EditorSessionViewModel`, keyed by a primitive saved session
+  identifier and `ProfileSessionToken`. The owner retains at most one active editor; opening
+  another replaces any orphan left by a configuration change. `ui/EditorSession.kt` retains the
+  captured application, source selection, active editor tab, draft artwork, vector paths,
+  upload path/zoom/adaptive choice, attribution, calendar selection, adjustment controls and
+  transient brush strokes together. Only browsing and layout state remains local to the dialog.
+  Configuration-driven Activity recreation retains its ViewModel; explicit dismissal, Apply,
+  reset and ViewModel clearing release the draft. Composition disposal alone does not discard
+  it, so reattaching a lazy item or rebuilding the layout can retain the same live owner.
+  Saved state includes a primitive attachment marker as well as the session identifier and
+  profile token. Reattaching an already
+  opened editor requires its live draft to exist: an Activity destroyed without configuration
+  retention cannot silently create a default replacement. A missing draft closes with a notice;
+  a changed profile/provider token closes with the existing session-expired notice before
+  displaying controls. Activity-only destruction and process death have no draft persistence in
+  this phase. Keeping the draft across composition disposal does not extend the Activity's
+  ViewModel lifetime after non-configuration destruction.
+  Source defaults are captured once, after the configured font preference has loaded.
+  `ui/IconDraftState.kt` renders only the active source and remembers completed Create inputs,
+  so reattaching an unchanged editor does not reinterpret the initial saved icon as a new edit.
+  Composition-scoped render effects still cancel on disposal and retry unfinished work on
+  reattachment; this is live-state ownership, not a persistent source/recipe database migration.
+  Upload selection remains owned above the tab, with decoded artwork matched to its selected
+  path before publication. An online raster import opens Upload and retains its attribution.
 
 ## Persistence
 
@@ -415,14 +440,13 @@ identically and none of them re-implements the maths.
   Colorize's first stop still comes from the dialog's shared icon colour, which also drives
   the Create tab. `colorizerStyleWith` applies that hoisted colour when capturing a preset;
   generation applies the same first-stop rule when mapping editor adjustments into the stack.
-  **`ui/AdjustmentStateSaver.kt`** owns saved-state encoding and restoration independently of
-  the mutable state. `AdjustmentState.Saver` remains the `rememberSaveable` entry point. It
-  now stores a versioned modifier recipe plus UI-only auto-center state. Older keyed states
-  (both encoded styles and decomposed colour fields) and positional lists remain readable through
-  restore-only adapters. Brush masks and strokes stay transient and are never serialized.
-  The saved recipe retains inactive segment layers and the shape editor's own colour. Rendering
-  still inherits the presentation background and replaces Colorize's first stop with the dialog's
-  shared colour; those save-time values do not change the generation contract.
+  Individual adjustment and Material You pack state now belong to the live editor session.
+  Their unused Bundle Savers, legacy restoration adapters and Saver-only projections have been
+  removed; they are not placeholders for database recipes. Global Options' per-icon state stays
+  remember-only. Brush masks and strokes are live geometry rather than portable recipe fields.
+  Rendering still inherits the presentation background and replaces Colorize's first stop with
+  the dialog's shared colour. `ModifierRecipeCodec` and `GlobalModifierStateSaver` remain active;
+  this removal changes neither portable presets nor Global Options' saved-state compatibility.
 - **`GenerationOptions.withColorizerStyle`** is the common transfer into generation for
   callers replacing a colour style. It replaces the complete effect colour group and preserves
   the caller's image-edit choice and segment layers. The editor's
@@ -488,7 +512,7 @@ identically and none of them re-implements the maths.
   Numeric/list parsing uses finite values and bounded sequences. Empty imported gradient-stop
   lists get a black fallback; positions are bounded, monotonic and must match the stop count.
   `decodeSavedState` is reserved for our own Bundle data and retains finite editor values and
-  collection sizes without these import limits. The Saver uses only this trusted entry point.
+  collection sizes without these import limits. `GlobalModifierStateSaver` uses this trusted entry point.
   `encode` omits session erase masks and background brush operations without throwing. Callers
   must store these separately; `requireEncodable` offers an explicit strict check for persistence
   contracts and tests that require a complete mask-free recipe.
@@ -497,9 +521,10 @@ identically and none of them re-implements the maths.
   remain unchanged. It continues excluding icon-specific position, targets, segments, masks and
   pack controls. Existing colour presets, adaptive payloads and preference style strings retain
   their older colour codec; there is no Room or portable-backup format migration in this step.
-  The full recipe currently serves editor and staged Global Options saved state, not the icon database. Source/export choices
-  and the editor's hoisted image edit/first colour retain their existing ownership. The individual
-  editor saves those controls separately; Global Options' per-icon controls remain remember-only.
+  The full recipe currently serves saved-state codecs and staged Global Options, not the icon
+  database. The individual editor now retains source/export choices, image edit, first colour
+  and adjustment state together in its live editor session; it does not serialize a partial
+  draft into saved state. Global Options' per-icon controls remain remember-only.
 - **`ui/GlobalModifierState.kt`** owns Global Options' staged `ModifierStack`; its controls update
   immutable effect, transform, shape and outline groups. Disabled groups retain their settings.
   Shape and outline keep explicit styled fills in this draft. Preview and Save build their options
@@ -655,6 +680,12 @@ Renkin cannot reproduce that launcher-only selection through the standard resour
 - Recovery/Application tests in a shared JVM must call `StorageOperationGate.resetForTests()`
   between isolated scenarios, only after all gate owners/jobs have stopped. Production still
   rejects installing two recovery callbacks.
+- MainActivity handles orientation and size changes through `configChanges`. Rotation checks
+  layout continuity, but does not exercise ViewModel retention across Activity recreation.
+  Changing system font size exercises recreation because `fontScale` is not handled in the
+  manifest. Keep "Don't keep activities" disabled for configuration-retention checks; enabling
+  it tests Activity destruction and ViewModel loss instead. Use fixed colours when comparing
+  artwork, as dark-mode or wallpaper changes may legitimately change dynamic colours.
 
 ## Gotchas (don't relearn these the hard way)
 

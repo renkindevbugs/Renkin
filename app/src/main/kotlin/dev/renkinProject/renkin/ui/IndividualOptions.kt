@@ -24,9 +24,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -39,11 +36,9 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
-import dev.renkinProject.renkin.IconPreviewBuilder
 import dev.renkinProject.renkin.OnlineImageImport
 import android.graphics.Bitmap
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
-import dev.renkinProject.renkin.icon.creator.SegmentLayer
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.calendarPrefixOrNull
@@ -53,10 +48,6 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
-import dev.renkinProject.renkin.data.TextFontKey
-import dev.renkinProject.renkin.data.TextType
-import dev.renkinProject.renkin.data.getStringValue
-import dev.renkinProject.renkin.icon.creator.TextCase
 import android.graphics.drawable.AdaptiveIconDrawable
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
@@ -65,7 +56,6 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.haveMonochrome
 import dev.renkinProject.renkin.drawable.isAdaptiveIconDrawable
 import dev.renkinProject.renkin.packages.supportDynamicColors
-import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.withModifiers
@@ -75,9 +65,7 @@ import dev.renkinProject.renkin.icon.creator.ColorFill
 import dev.renkinProject.renkin.icon.creator.IconSourceOptions
 import dev.renkinProject.renkin.icon.creator.IconExportOptions
 import dev.renkinProject.renkin.icon.creator.MaterialYouPackModifier
-import dev.renkinProject.renkin.icon.creator.hasIconAdjustments
 import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
-import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import androidx.compose.foundation.background
@@ -153,207 +141,36 @@ private fun topFraction(firstVisibleItemIndex: Int, firstVisibleItemScrollOffset
     if (firstVisibleItemIndex > 0) 0f
     else (1f - firstVisibleItemScrollOffset / 120f).coerceIn(0f, 1f)
 
-/**
- * Holds the draft icon being built in the options dialog and the logic that (re)generates
- * its preview from the chosen options. Every field is plain Compose state — the drafts hold
- * live, non-Parcelable [IconPackDrawable]s, so they can't be saveable anyway. The dialog
- * feeds user input in through the `regenerate*` calls and reads [iconToConfirm] / [hasIcon]
- * / [generating] back out, instead of carrying a dozen loose `remember`s plus the generation
- * effects inline.
- */
-internal class IconDraftState(initialIcon: IconPackDrawable?) {
-    // Icon from the Create tab (pack pick / text / app-icon source). Starts as the icon the
-    // app already has so it stays visible (e.g. when only the modifier is being changed).
-    var createIcon by mutableStateOf(initialIcon)
-        private set
-
-    // Raw uploaded icon (zoom/adaptive applied) before the shared modifier; the modifier is
-    // applied here so it previews live even from the Modifier tab.
-    var uploadBase by mutableStateOf<IconPackDrawable?>(null)
-        private set
-    private var uploadIcon by mutableStateOf<IconPackDrawable?>(null)
-
-    // Hand-edited vector and the same vector with the shared modifier applied.
-    var vectorIcon by mutableStateOf<IconPackDrawable?>(null)
-        private set
-    private var modifiedVector by mutableStateOf<IconPackDrawable?>(null)
-
-    var origin by mutableStateOf(IconOrigin.CREATE)
-
-    var generating by mutableStateOf(false)
-        private set
-    private var activeGenerations = 0
-    private var createGeneration = 0
-    private var uploadGeneration = 0
-    private var vectorGeneration = 0
-
-    // Keep the existing icon on the first pass — only regenerate once the user actually
-    // changes a source, modifier or selects an icon.
-    private var initialized = false
-
-    val hasIcon: Boolean get() = createIcon != null || uploadBase != null || vectorIcon != null
-
-    /**
-     * The icon Confirm would store. It follows whichever source produced it, not the open
-     * tab, so visiting the Modifier tab never silently drops an upload/vector.
-     */
-    val iconToConfirm: IconPackDrawable? get() = when (origin) {
-        IconOrigin.UPLOAD -> uploadIcon
-        IconOrigin.VECTOR -> modifiedVector
-        IconOrigin.CREATE -> createIcon
-    }
-
-    /**
-     * Activates the Create pipeline and drops drafts owned by the other source tabs.
-     * The caller is responsible for clearing their UI-only selection state.
-     */
-    fun selectCreate() {
-        invalidateGenerations()
-        uploadBase = null
-        uploadIcon = null
-        vectorIcon = null
-        modifiedVector = null
-        origin = IconOrigin.CREATE
-    }
-
-    fun selectUpload(icon: IconPackDrawable) {
-        invalidateGenerations()
-        createIcon = null
-        vectorIcon = null
-        modifiedVector = null
-        uploadBase = icon
-        uploadIcon = null
-        origin = IconOrigin.UPLOAD
-    }
-
-    fun clearUpload() {
-        uploadGeneration++
-        uploadBase = null
-        uploadIcon = null
-    }
-
-    fun selectVector(icon: IconPackDrawable) {
-        invalidateGenerations()
-        createIcon = null
-        uploadBase = null
-        uploadIcon = null
-        vectorIcon = icon
-        modifiedVector = null
-        origin = IconOrigin.VECTOR
-    }
-
-    fun clearVector() {
-        vectorGeneration++
-        vectorIcon = null
-        modifiedVector = null
-    }
-
-    /** Keeps the shared loading state correct across overlapping and cancelled effects. */
-    private suspend fun <T> trackGeneration(block: suspend () -> T): T {
-        activeGenerations++
-        generating = true
-        return try {
-            block()
-        } finally {
-            activeGenerations--
-            generating = activeGenerations > 0
-        }
-    }
-
-    private fun invalidateGenerations() {
-        createGeneration++
-        uploadGeneration++
-        vectorGeneration++
-    }
-
-    suspend fun regenerateCreate(
-        builder: IconPreviewBuilder,
-        app: PackageInfoStruct,
-        options: GenerationOptions,
-        customIconList: List<ResourceDrawable>
-    ) {
-        if (!initialized) {
-            initialized = true
-            return
-        }
-        val custom = customIconList.firstOrNull()
-        // previewIcon / applyModifier hop to Dispatchers.Default internally, so this no
-        // longer blocks the main thread; show the spinner for the duration.
-        val generation = ++createGeneration
-        val generated = trackGeneration {
-            when {
-                custom != null -> builder.previewIcon(app, options, custom)
-                // Icon-pack source with no new pick: apply the modifier to the already saved icon
-                // rather than pulling a fresh one from the first pack (which would swap the icon
-                // out from under the user). Null until a tap if none.
-                options.source.primarySource == Source.ICON_PACK ->
-                    (app.baseIcon ?: app.createdIcon)?.let { builder.applyModifier(it, options) }
-                else -> builder.previewIcon(app, options, null)
-            }
-        }
-        if (generation == createGeneration) createIcon = generated
-    }
-
-    suspend fun regenerateVector(builder: IconPreviewBuilder, options: GenerationOptions) {
-        val base = vectorIcon
-        val generation = ++vectorGeneration
-        val generated = when {
-            base == null -> null
-            // Adjustments without an image edit still go through applyModifier.
-            options.modifiers.effect.imageEdit == ImageEdit.NONE && !options.hasIconAdjustments() -> base
-            else -> trackGeneration { builder.applyModifier(base, options) }
-        }
-        if (generation == vectorGeneration) modifiedVector = generated
-    }
-
-    suspend fun regenerateUpload(builder: IconPreviewBuilder, options: GenerationOptions) {
-        val base = uploadBase
-        val generation = ++uploadGeneration
-        val generated = if (base == null) null else trackGeneration {
-            builder.applyModifier(base, options)
-        }
-        if (generation == uploadGeneration) uploadIcon = generated
-    }
-}
-
 @Composable
-fun OptionsDialog(
+internal fun OptionsDialog(
     iconPacks: List<IconPack>,
-    app: PackageInfoStruct,
+    session: EditorSession,
     themed: Boolean,
     onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?, sourceUrl: String?) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
+    val app = session.application
 
-    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
-    var source by rememberSaveable { mutableStateOf(Source.ICON_PACK) }
-    var imageEdit by rememberSaveable { mutableStateOf(ImageEdit.NONE) }
-    var textType by rememberSaveable { mutableStateOf(TextType.FULL_NAME) }
-    var customText by rememberSaveable { mutableStateOf(app.appName) }
-    var textCase by rememberSaveable { mutableStateOf(TextCase.AS_IS) }
-    val globalFontPath = getPreferences().getStringValue(TextFontKey)
-    var textFontPath by rememberSaveable(globalFontPath) { mutableStateOf(globalFontPath) }
-    var useVector by rememberSaveable { mutableStateOf(false) }
-    var applicationIconVariant by rememberSaveable { mutableStateOf(ApplicationIconVariant.DEFAULT) }
-    var useFullApplicationIcon by rememberSaveable { mutableStateOf(false) }
-    var invertMonochrome by rememberSaveable { mutableStateOf(false) }
-    var materialYouScheme by rememberSaveable { mutableIntStateOf(0) }
-    var iconColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.White) }
-    var customBgColor by rememberSaveable(saver = colorSaver()) { mutableStateOf(Color.Black) }
-    // The Custom scheme's full styles. The flat colours above stay their first stop, because the
-    // pack's own Material You layers and the vector export can only take one colour.
-    var materialYouForegroundStyle by rememberSaveable(stateSaver = colorizerStyleSaver()) {
-        mutableStateOf(ColorizerStyle(firstColor = iconColor.toArgb()))
-    }
-    var materialYouBackgroundStyle by rememberSaveable(stateSaver = colorizerStyleSaver()) {
-        mutableStateOf(ColorizerStyle(firstColor = customBgColor.toArgb()))
-    }
-    var iconPack by rememberSaveable { mutableStateOf(iconPacks.firstOrNull()?.packageName ?: "") }
-    // remember (not rememberSaveable): ResourceDrawable holds a live Drawable that isn't
-    // Parcelable, so saving the list on stop crashes.
-    var customIconList by remember { mutableStateOf<List<ResourceDrawable>>(listOf()) }
+    var selectedTab by session::selectedTab
+    var source by session::source
+    var imageEdit by session::imageEdit
+    var textType by session::textType
+    var customText by session::customText
+    var textCase by session::textCase
+    var textFontPath by session::textFontPath
+    var useVector by session::useVector
+    var applicationIconVariant by session::applicationIconVariant
+    var useFullApplicationIcon by session::useFullApplicationIcon
+    var invertMonochrome by session::invertMonochrome
+    var materialYouScheme by session::materialYouScheme
+    var iconColor by session::iconColor
+    var customBgColor by session::customBgColor
+    var materialYouForegroundStyle by session::materialYouForegroundStyle
+    var materialYouBackgroundStyle by session::materialYouBackgroundStyle
+    var iconPack by session::iconPack
+    var customIconList by session::customIconList
     // The Create tab's icon search. Hoisted here (not inside CreateTab) so it survives leaving
     // and returning to the tab; it starts at the app's non-localized name and resets per dialog
     // (i.e. per edit) — icon packs name drawables in English, so the localized label rarely matches.
@@ -363,14 +180,10 @@ fun OptionsDialog(
     var createBusy by remember { mutableStateOf(false) }
     var packUsage by remember { mutableStateOf<Map<String, Int>>(emptyMap()) }
     LaunchedEffect(Unit) { packUsage = viewModel.packUsageCounts() }
-    val draft = remember { IconDraftState(app.baseIcon ?: app.createdIcon) }
-    val vectorEditState = remember { VectorEditState() }
-    // Attribution URL for an online icon imported "as image" (it lands in the upload draft,
-    // not the vector editor) and the gallery file it was saved as. The attribution is
-    // dropped as soon as the gallery selects any other picture.
-    var onlineImageUrl by remember { mutableStateOf<String?>(null) }
-    var onlineImagePath by remember { mutableStateOf<String?>(null) }
-    var uploadSelectionVersion by rememberSaveable { mutableIntStateOf(0) }
+    val draft = session.draft
+    val vectorEditState = session.vectorEditState
+    var onlineImageUrl by session::onlineImageUrl
+    var onlineImagePath by session::onlineImagePath
     var showConfirmClear by remember { mutableStateOf(false) }
     val headerScrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     // The pack list and the single-pack grid states + which pack is expanded, hoisted so the header
@@ -392,58 +205,17 @@ fun OptionsDialog(
     // The global "Add outline" preference is deliberately NOT seeded here: it applies to the
     // bulk refresh's own (hero-source) icons only, never to hand-picked ones. Per-app outline
     // stays an explicit choice in the Modifier tab.
-    val adjustments = rememberSaveable(saver = AdjustmentState.Saver) { AdjustmentState() }
-    val storedMaterialYouPackState = remember(app.baseIcon, app.createdIcon) {
-        ((app.baseIcon ?: app.createdIcon) as? AdaptiveIconPackDrawable)?.materialYouEditState
-    }
-    val materialYouPackAdjustments = rememberSaveable(
-        storedMaterialYouPackState,
-        saver = MaterialYouPackAdjustmentState.Saver
-    ) { MaterialYouPackAdjustmentState(storedMaterialYouPackState) }
-
-    // Browsing a calendar icon must not persist its rotation choice until Apply.
-    var calendarEnabled by rememberSaveable { mutableStateOf(app.calendarEnabled) }
-    var calendarPrefix by remember { mutableStateOf(app.calendarPrefix) }
-    var calendarPackName by remember { mutableStateOf(app.calendarPackName) }
+    val adjustments = session.adjustments
+    val storedMaterialYouPackState = session.storedMaterialYouPackState
+    val materialYouPackAdjustments = session.materialYouPackAdjustments
+    var calendarEnabled by session::calendarEnabled
+    var calendarPrefix by session::calendarPrefix
+    var calendarPackName by session::calendarPackName
     val calendarPackLabel = iconPacks.find { it.packageName == (calendarPackName ?: iconPack) }?.applicationName ?: ""
 
-    /** A real selection in another source invalidates all UI state owned by Create. */
-    val clearCreateSelection: () -> Unit = {
-        customIconList = emptyList()
-        materialYouPackAdjustments.reset()
-        calendarEnabled = false
-        calendarPrefix = null
-        calendarPackName = null
-    }
-
-    /** Switches to Create only after the user changes a Create option or picks a Create icon. */
-    val activateCreate: () -> Unit = {
-        if (draft.origin != IconOrigin.CREATE) {
-            draft.selectCreate()
-            vectorEditState.reset()
-            onlineImageUrl = null
-            onlineImagePath = null
-            uploadSelectionVersion++
-        }
-    }
-
-    val activateUpload: (IconPackDrawable) -> Unit = { icon ->
-        if (draft.origin != IconOrigin.UPLOAD) {
-            clearCreateSelection()
-            vectorEditState.reset()
-        }
-        draft.selectUpload(icon)
-    }
-
-    val activateVector: (IconPackDrawable) -> Unit = { icon ->
-        if (draft.origin != IconOrigin.VECTOR) {
-            clearCreateSelection()
-            onlineImageUrl = null
-            onlineImagePath = null
-            uploadSelectionVersion++
-        }
-        draft.selectVector(icon)
-    }
+    val activateCreate = session::activateCreate
+    val activateUpload = session::activateUpload
+    val activateVector = session::activateVector
 
     val dialogTransition = remember { MutableTransitionState(false).apply { targetState = true } }
     LaunchedEffect(dialogTransition.targetState, dialogTransition.isIdle) {
@@ -621,13 +393,13 @@ fun OptionsDialog(
         render = renderPreviewWith
     )
 
-    LaunchedEffect(generatingOptions, customIconList) {
+    LaunchedEffect(draft.origin, generatingOptions, customIconList) {
         draft.regenerateCreate(viewModel, app, generatingOptions, customIconList)
     }
-    LaunchedEffect(draft.vectorIcon, generatingOptions) {
+    LaunchedEffect(draft.origin, draft.vectorIcon, generatingOptions) {
         draft.regenerateVector(viewModel, generatingOptions)
     }
-    LaunchedEffect(draft.uploadBase, generatingOptions) {
+    LaunchedEffect(draft.origin, draft.uploadBase, generatingOptions) {
         draft.regenerateUpload(viewModel, generatingOptions)
     }
 
@@ -848,9 +620,8 @@ fun OptionsDialog(
                             )
                             1 -> UploadOptionsTab(
                                 contentPadding = headerPadding,
-                                selectionVersion = uploadSelectionVersion,
                                 snackbarHostState = snackbarHostState,
-                                initialSelectedPath = onlineImagePath,
+                                state = session.upload,
                                 onSelection = { icon, path ->
                                     if (icon == null) {
                                         draft.clearUpload()
@@ -911,6 +682,8 @@ fun OptionsDialog(
                                     activateUpload(BitmapIconDrawable(imported.bitmap, false))
                                     onlineImageUrl = url
                                     onlineImagePath = imported.galleryPath
+                                    session.upload.selectImported(imported.galleryPath)
+                                    selectedTab = 1
                                 },
                                 onIconChange = {
                                     if (it == null) draft.clearVector() else activateVector(it)
@@ -1026,19 +799,16 @@ private data class OptionsPreview(
 @Composable
 private fun UploadOptionsTab(
     contentPadding: PaddingValues,
-    selectionVersion: Int,
     snackbarHostState: SnackbarHostState,
-    initialSelectedPath: String?,
+    state: UploadEditorState,
     onSelection: (IconPackDrawable?, String?) -> Unit
 ) {
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
-        key(selectionVersion) {
-            UploadColumn(
-                snackbarHostState = snackbarHostState,
-                initialSelectedPath = initialSelectedPath,
-                onChange = onSelection
-            )
-        }
+        UploadColumn(
+            snackbarHostState = snackbarHostState,
+            state = state,
+            onChange = onSelection
+        )
     }
 }
 
