@@ -3,7 +3,9 @@ package dev.renkinProject.renkin.ui
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
@@ -20,11 +22,14 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.StorageRecoveryState
 import dev.renkinProject.renkin.data.StorageRecoveryFailureReason
 import dev.renkinProject.renkin.data.transfer.BackupManager
+import dev.renkinProject.renkin.data.transfer.BackupSnapshotStage
 
 @Composable
 fun BackupRecoveryScreen(
@@ -84,7 +89,13 @@ fun BackupRecoveryScreen(
 }
 
 @Composable
-fun BackupRestoreProgress(stage: BackupManager.RestoreStage) {
+fun BackupRestoreProgress(
+    stage: BackupManager.RestoreStage,
+    snapshotStage: BackupSnapshotStage?,
+    cancellable: Boolean,
+    cancelling: Boolean,
+    onCancel: () -> Unit
+) {
     if (stage == BackupManager.RestoreStage.IDLE) return
     val message = when (stage) {
         BackupManager.RestoreStage.VALIDATING_SAVED_STATE -> R.string.backupValidatingSavedState
@@ -93,9 +104,43 @@ fun BackupRestoreProgress(stage: BackupManager.RestoreStage) {
         BackupManager.RestoreStage.RESTORING_FILES -> R.string.backupRestoringFiles
         BackupManager.RestoreStage.IDLE -> return
     }
+    val detail = when (snapshotStage) {
+        BackupSnapshotStage.ICONS -> R.string.backupSavingIcons
+        BackupSnapshotStage.WATCH_RULES -> R.string.backupSavingWatchRules
+        BackupSnapshotStage.SETTINGS -> R.string.backupSavingSettings
+        BackupSnapshotStage.FILES -> R.string.backupSavingFiles
+        BackupSnapshotStage.VERIFYING -> R.string.backupVerifyingSavedState
+        null -> null
+    }
     RenkinAlertDialog(
-        onDismissRequest = {},
-        title = { Text(stringResource(message)) },
-        text = { CircularProgressIndicator() }
+        onDismissRequest = { if (cancellable) onCancel() },
+        properties = DialogProperties(dismissOnBackPress = cancellable, dismissOnClickOutside = false),
+        icon = { CircularProgressIndicator(modifier = Modifier.size(40.dp), strokeWidth = 3.dp) },
+        title = { Text(stringResource(R.string.backupRestoreProgressTitle), textAlign = TextAlign.Center) },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    stringResource(if (cancelling) R.string.backupPreparationCancelling else message),
+                    style = MaterialTheme.typography.titleMedium,
+                    textAlign = TextAlign.Center
+                )
+                if (!cancelling && stage == BackupManager.RestoreStage.SAVING_CURRENT_STATE && detail != null) {
+                    Text(stringResource(detail), textAlign = TextAlign.Center)
+                }
+                Text(
+                    stringResource(if (cancellable || cancelling) R.string.backupRestorePreparingHint else R.string.backupRestoreCommittingHint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                )
+            }
+        },
+        dismissButton = if (cancellable) {
+            { TextButton(onClick = onCancel) { Text(stringResource(R.string.colorizeCancel)) } }
+        } else null
     )
 }

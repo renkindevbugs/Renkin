@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.data.transfer
 
 import android.app.Application
 import android.content.Context
+import android.net.Uri
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.room.Room
@@ -11,6 +12,11 @@ import dev.renkinProject.renkin.data.watch.*
 import dev.renkinProject.renkin.dataStore
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -77,6 +83,98 @@ class BackupRecoveryTest {
     }
 
     private suspend fun capture() = StorageOperationGate.run { store.capture(pack, watch) }
+
+    private suspend fun preparedBackup(): BackupManager.PreparedImport {
+        seed("Incoming")
+        val output = ByteArrayOutputStream()
+        manager.exportBackup { output }
+        val file = context.cacheDir.resolve("restore-test.renkin")
+        file.writeBytes(output.toByteArray())
+        return manager.prepareImport(Uri.fromFile(file))
+    }
+
+    @Test fun cancellingFullImportPreparationNeverEntersSessionReplacement() = runBlocking {
+        val prepared = preparedBackup()
+        val currentId = seed("Current")
+        val epoch = StorageOperationGate.epoch
+        var replacements = 0
+        var accepted = false
+        val restore = async(start = CoroutineStart.LAZY) {
+            manager.importPrepared(prepared) { commit -> replacements++; commit() }
+        }
+        val observer = launch(Dispatchers.Unconfined) {
+            manager.snapshotStage.first { it != null }
+            accepted = manager.requestRestorePreparationCancellation()
+            restore.cancel()
+        }
+        withTimeout(10_000) { restore.start(); restore.join(); observer.join() }
+        assertTrue(accepted)
+        assertTrue(restore.isCancelled)
+        assertEquals(0, replacements)
+        assertEquals(epoch, StorageOperationGate.epoch)
+        assertState("Current", currentId)
+        assertNull(store.pendingSnapshot())
+        assertFalse(manager.restoreCancellable.value)
+        assertEquals(BackupManager.RestoreStage.IDLE, manager.restoreStage.value)
+        assertTrue(prepared.closed)
+        assertFalse(prepared.staged.entries.getValue("data.json").exists())
+    }
+
+    @Test fun cancellingPreviousStatePreparationNeverEntersSessionReplacement() = runBlocking {
+        seed("Original")
+        store.complete(capture())
+        val currentId = seed("Current")
+        var replacements = 0
+        val restore = async(start = CoroutineStart.LAZY) {
+            manager.restorePreviousState { commit -> replacements++; commit() }
+        }
+        val observer = launch(Dispatchers.Unconfined) {
+            manager.snapshotStage.first { it != null }
+            assertTrue(manager.requestRestorePreparationCancellation())
+            restore.cancel()
+        }
+        withTimeout(10_000) { restore.start(); restore.join(); observer.join() }
+        assertTrue(restore.isCancelled)
+        assertEquals(0, replacements)
+        assertState("Current", currentId)
+        assertNotNull(store.previousSnapshot())
+        assertNull(store.pendingSnapshot())
+    }
+
+    @Test fun snapshotSpaceFailurePreservesSessionAndCurrentStores() = runBlocking {
+        val prepared = preparedBackup()
+        val currentId = seed("Current")
+        var replacements = 0
+        val observer = launch(Dispatchers.Unconfined) {
+            manager.snapshotStage.first { it == BackupSnapshotStage.ICONS }
+            ShadowStatFs.registerStats(context.filesDir, 1_000_000, 0, 0)
+        }
+        val error = withTimeout(10_000) {
+            runCatching { manager.importPrepared(prepared) { commit -> replacements++; commit() } }.exceptionOrNull()
+        }
+        observer.join()
+        assertTrue(error is BackupSpaceException)
+        assertEquals(0, replacements)
+        assertState("Current", currentId)
+        assertNull(store.pendingSnapshot())
+        assertFalse(prepared.staged.entries.getValue("data.json").exists())
+    }
+
+    @Test fun commitRefusesCancellationBeforeReplacingSessionAndCompletesRestore() = runBlocking {
+        val prepared = preparedBackup()
+        seed("Current")
+        var replacements = 0
+        manager.importPrepared(prepared) { commit ->
+            replacements++
+            assertEquals(BackupManager.RestoreStage.RESTORING_DATA, manager.restoreStage.value)
+            assertFalse(manager.requestRestorePreparationCancellation())
+            commit()
+        }
+        assertEquals(1, replacements)
+        assertEquals("Incoming", pack.profiles().single().name)
+        assertNull(store.pendingSnapshot())
+        assertNotNull(store.previousSnapshot())
+    }
 
     private suspend fun assertState(name: String, ruleId: Long) {
         assertEquals(name, pack.profiles().single().name)

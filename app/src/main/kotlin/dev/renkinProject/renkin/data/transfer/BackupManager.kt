@@ -97,17 +97,48 @@ class BackupManager(
     enum class RestoreStage { IDLE, VALIDATING_SAVED_STATE, SAVING_CURRENT_STATE, RESTORING_DATA, RESTORING_FILES }
     private val mutableRestoreStage = MutableStateFlow(RestoreStage.IDLE)
     val restoreStage = mutableRestoreStage.asStateFlow()
+    private val mutableSnapshotStage = MutableStateFlow<BackupSnapshotStage?>(null)
+    val snapshotStage = mutableSnapshotStage.asStateFlow()
+    private val restoreCancellationLock = Any()
+    private var restoreCancellationRequested = false
+    private val mutableRestoreCancellable = MutableStateFlow(false)
+    val restoreCancellable = mutableRestoreCancellable.asStateFlow()
+
+    fun requestRestorePreparationCancellation(): Boolean = synchronized(restoreCancellationLock) {
+        if (!mutableRestoreCancellable.value) return@synchronized false
+        restoreCancellationRequested = true
+        mutableRestoreCancellable.value = false
+        true
+    }
+
+    private fun allowRestorePreparationCancellation() = synchronized(restoreCancellationLock) {
+        if (restoreCancellationRequested) throw CancellationException("Restore preparation cancelled")
+        mutableRestoreCancellable.value = true
+    }
+
+    private fun beginRestoreCommit() = synchronized(restoreCancellationLock) {
+        if (restoreCancellationRequested) throw CancellationException("Restore preparation cancelled")
+        // Cancellation and the first durable mutation have one boundary: an accepted Cancel
+        // cannot race into a non-cancellable commit after the button was tapped.
+        mutableRestoreCancellable.value = false
+        mutableRestoreStage.value = RestoreStage.RESTORING_DATA
+    }
 
     private suspend fun <T> runOperation(block: suspend () -> T): T =
         withContext(Dispatchers.IO) {
             StorageOperationGate.run {
                 operations.withLock {
+                    synchronized(restoreCancellationLock) { restoreCancellationRequested = false }
                     try {
                         block()
                     } catch (error: OutOfMemoryError) {
                         Log.error("BackupManager", "Backup exceeded heap; maxHeapBytes=${Runtime.getRuntime().maxMemory()}", error)
                         throw BackupMemoryException(error)
-                    } finally { mutableRestoreStage.value = RestoreStage.IDLE }
+                    } finally {
+                        synchronized(restoreCancellationLock) { mutableRestoreCancellable.value = false }
+                        mutableSnapshotStage.value = null
+                        mutableRestoreStage.value = RestoreStage.IDLE
+                    }
                 }
             }
         }
@@ -517,18 +548,15 @@ class BackupManager(
         commit: suspend (suspend () -> ImportResult) -> ImportResult
     ): ImportResult {
         currentCoroutineContext().ensureActive()
-        return commit {
-            currentCoroutineContext().ensureActive()
-            when (kindOf(archive.manifest)) {
-                ImportKind.BACKUP -> restoreBackup(archive)
-                ImportKind.PROFILE -> {
-                    val snapshot = captureCurrentState()
-                    try {
-                        currentCoroutineContext().ensureActive()
-                        ensureRecoverySpace(snapshot, archive.staged.entries[DATA_ENTRY]?.length() ?: 0L)
-                        commitWithRecovery(snapshot) { importProfile(archive.data) }
-                    } finally { recovery.discard(snapshot) }
-                }
+        return when (kindOf(archive.manifest)) {
+            ImportKind.BACKUP -> restoreBackup(archive, commit)
+            ImportKind.PROFILE -> {
+                val snapshot = captureCurrentState()
+                try {
+                    currentCoroutineContext().ensureActive()
+                    ensureRecoverySpace(snapshot, archive.staged.entries[DATA_ENTRY]?.length() ?: 0L)
+                    commitWithRecovery(snapshot, commit) { importProfile(archive.data) }
+                } finally { recovery.discard(snapshot) }
             }
         }
     }
@@ -609,18 +637,17 @@ class BackupManager(
     }
 
     suspend fun restorePreviousState(commit: suspend (suspend () -> Unit) -> Unit) = runOperation {
+        allowRestorePreparationCancellation()
         mutableRestoreStage.value = RestoreStage.VALIDATING_SAVED_STATE
         val previous = recovery.previousSnapshot() ?: throw IOException("No previous saved state")
         recovery.validate(previous)
         checkSnapshotCompatibility(previous)
-        commit {
-            val snapshot = captureCurrentState()
-            try {
-                currentCoroutineContext().ensureActive()
-                ensureRecoverySpace(snapshot, 0)
-                commitWithRecovery(snapshot) { restoreSnapshot(previous) }
-            } finally { recovery.discard(snapshot) }
-        }
+        val snapshot = captureCurrentState()
+        try {
+            currentCoroutineContext().ensureActive()
+            ensureRecoverySpace(snapshot, 0)
+            commitWithRecovery(snapshot, commit) { restoreSnapshot(previous) }
+        } finally { recovery.discard(snapshot) }
     }
 
     suspend fun abandonPendingRecovery() = runOperation {
@@ -665,8 +692,9 @@ class BackupManager(
     }
 
     private suspend fun captureCurrentState(): BackupRecoveryStore.Snapshot {
+        allowRestorePreparationCancellation()
         mutableRestoreStage.value = RestoreStage.SAVING_CURRENT_STATE
-        return recovery.capture(packRepo, watchRepo)
+        return recovery.capture(packRepo, watchRepo) { mutableSnapshotStage.value = it }
     }
 
     private suspend fun checkSnapshotCompatibility(snapshot: BackupRecoveryStore.Snapshot) {
@@ -710,47 +738,59 @@ class BackupManager(
 
     private suspend fun <T> commitWithRecovery(
         snapshot: BackupRecoveryStore.Snapshot,
+        commit: suspend (suspend () -> T) -> T,
         operation: suspend () -> T
-    ): T = withContext(NonCancellable) {
-        var activated = false
-        try {
-            recovery.activate(snapshot)
-            activated = true
-            StorageOperationGate.markStorageReplaced()
-            mutableRestoreStage.value = RestoreStage.RESTORING_DATA
-            val result = operation()
-            packRepo.flushRecoveryWrites()
-            watchRepo.flushRecoveryWrites()
-            recovery.complete(snapshot)
-            mutablePreviousStateStored.value = true
-            mutablePreviousStateAvailable.value = true
-            result
-        } catch (error: Throwable) {
-            if (activated) {
+    ): T {
+        currentCoroutineContext().ensureActive()
+        beginRestoreCommit()
+        return withContext(NonCancellable) {
+            // Only the durable phase may invalidate the live profile session. Preparation
+            // and an accepted Cancel must leave in-memory icons, tokens and undo untouched.
+            commit {
+                var activated = false
                 try {
-                    recovery.ensurePending(snapshot)
-                    restoreSnapshot(snapshot)
-                    recovery.clearPending()
-                } catch (rollbackError: Throwable) {
-                    error.addSuppressed(rollbackError)
-                    StorageOperationGate.requireRecovery(error)
-                    Log.error("BackupManager", "Rollback could not finish; recovery snapshot retained", error)
-                    throw BackupRecoveryRequiredException(error)
-                }
-            } else {
-                try {
-                    recovery.clearPending()
-                } catch (cleanupError: Throwable) {
-                    error.addSuppressed(cleanupError)
-                    StorageOperationGate.requireRecovery(error)
-                    throw BackupRecoveryRequiredException(error)
+                    recovery.activate(snapshot)
+                    activated = true
+                    StorageOperationGate.markStorageReplaced()
+                    mutableRestoreStage.value = RestoreStage.RESTORING_DATA
+                    val result = operation()
+                    packRepo.flushRecoveryWrites()
+                    watchRepo.flushRecoveryWrites()
+                    recovery.complete(snapshot)
+                    mutablePreviousStateStored.value = true
+                    mutablePreviousStateAvailable.value = true
+                    result
+                } catch (error: Throwable) {
+                    if (activated) {
+                        try {
+                            recovery.ensurePending(snapshot)
+                            restoreSnapshot(snapshot)
+                            recovery.clearPending()
+                        } catch (rollbackError: Throwable) {
+                            error.addSuppressed(rollbackError)
+                            StorageOperationGate.requireRecovery(error)
+                            Log.error("BackupManager", "Rollback could not finish; recovery snapshot retained", error)
+                            throw BackupRecoveryRequiredException(error)
+                        }
+                    } else {
+                        try {
+                            recovery.clearPending()
+                        } catch (cleanupError: Throwable) {
+                            error.addSuppressed(cleanupError)
+                            StorageOperationGate.requireRecovery(error)
+                            throw BackupRecoveryRequiredException(error)
+                        }
+                    }
+                    throw error
                 }
             }
-            throw error
         }
     }
 
-    private suspend fun restoreBackup(archive: ArchiveContents): ImportResult {
+    private suspend fun restoreBackup(
+        archive: ArchiveContents,
+        commit: suspend (suspend () -> ImportResult) -> ImportResult
+    ): ImportResult {
         val data = archive.data
         val uploadsDir = UploadedImageStore.directory(context)
         val replacements = buildMap<File, File?> {
@@ -764,14 +804,14 @@ class BackupManager(
         val incomingDataBytes = archive.staged.entries[DATA_ENTRY]?.length() ?: 0L
         ensureBackupRestoreSpace(context, incomingDataBytes)
         var snapshot = captureCurrentState()
-        try {
+        return try {
             BackupFileTransaction.prepare(context.filesDir, replacements) { batch ->
                 snapshot = recovery.attachFileBatch(snapshot, batch)
             }.use { files ->
                 currentCoroutineContext().ensureActive()
                 ensureRecoverySpace(snapshot, incomingDataBytes)
                 try {
-                    commitWithRecovery(snapshot) {
+                    val result = commitWithRecovery(snapshot, commit) {
                         clearWatchNotifications()
                         UploadedImageStore.invalidatePendingTrash()
                         mutableRestoreStage.value = RestoreStage.RESTORING_FILES
@@ -810,15 +850,16 @@ class BackupManager(
                         )
                         storePackLabels(data.packLabels)
                         files.sync()
+                        ImportResult(ImportKind.BACKUP, data.profiles.size, data.profiles.sumOf { it.icons.size })
                     }
                     files.finish()
+                    result
                 } catch (error: Throwable) {
                     if (error !is BackupRecoveryRequiredException) files.finish()
                     throw error
                 }
             }
         } finally { recovery.discard(snapshot) }
-        return ImportResult(ImportKind.BACKUP, data.profiles.size, data.profiles.sumOf { it.icons.size })
     }
 
     /** A shared profile always lands as a NEW profile — imports never overwrite anything. */

@@ -71,7 +71,7 @@ private suspend fun readJsonValue(reader: JsonReader, depth: Int): Any {
 }
 
 internal suspend fun writeBackupData(data: BackupData, output: Writer) {
-    val writer = JsonWriter(output)
+    val writer = JsonWriter(output.buffered())
     writeJsonValue(writer, BackupCodec.encodeJson(data))
     writer.flush()
 }

@@ -1475,6 +1475,19 @@ class MainViewModel @Inject constructor(
     val previousStateStored = backupManager.previousStateStored
     val abandonedRecoveryAvailable = backupManager.abandonedRecoveryAvailable
     val backupRestoreStage = backupManager.restoreStage
+    val backupSnapshotStage = backupManager.snapshotStage
+    val backupRestoreCancellable = backupManager.restoreCancellable
+    private var backupJob: Job? = null
+    var backupCancellationRequested by mutableStateOf(false)
+        private set
+
+    fun cancelBackupPreparation() {
+        val job = backupJob ?: return
+        if (backupManager.requestRestorePreparationCancellation()) {
+            backupCancellationRequested = true
+            job.cancel(CancellationException("Restore preparation cancelled by user"))
+        }
+    }
     var storageRecoveryRetryRunning by mutableStateOf(false)
         private set
     var recoveryActionError by mutableStateOf<Int?>(null)
@@ -1572,11 +1585,12 @@ class MainViewModel @Inject constructor(
         if (backupInProgress) return
         backupInProgress = true
         val expected = sessionToken
-        viewModelScope.launch {
+        backupJob = viewModelScope.launch {
             try {
                 if (serializeProfile) profileSessionOperations.withLock { op(expected) }
                 else op(expected)
             } catch (e: CancellationException) {
+                if (backupCancellationRequested) _toastEvents.trySend(R.string.backupPreparationCancelled)
                 throw e
             } catch (e: ProfileSessionChangedException) {
                 _toastEvents.trySend(e.userMessage())
@@ -1591,9 +1605,11 @@ class MainViewModel @Inject constructor(
                     else -> failureToast
                 })
             } finally {
+                backupJob = null
+                backupCancellationRequested = false
                 backupInProgress = false
             }
-        }.invokeOnCompletion { onCompletion() }
+        }.also { job -> job.invokeOnCompletion { onCompletion() } }
     }
 
     /**

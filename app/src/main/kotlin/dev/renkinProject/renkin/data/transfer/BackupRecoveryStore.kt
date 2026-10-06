@@ -4,6 +4,7 @@ import android.content.Context
 import android.system.Os
 import android.system.OsConstants
 import android.util.AtomicFile
+import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.apk.PackKeystore
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
@@ -25,6 +26,8 @@ import java.io.IOException
 import java.io.OutputStreamWriter
 import java.security.MessageDigest
 import java.util.UUID
+
+enum class BackupSnapshotStage { ICONS, WATCH_RULES, SETTINGS, FILES, VERIFYING }
 
 internal class BackupRecoveryStore(private val context: Context) {
     private val root get() = File(context.filesDir, "backup-recovery")
@@ -82,15 +85,29 @@ internal class BackupRecoveryStore(private val context: Context) {
         if (!file.delete()) throw IOException("Cannot delete abandoned recovery files")
     }
 
-    suspend fun capture(pack: RenkinPackRepository, watch: WatchRepository): Snapshot {
+    suspend fun capture(
+        pack: RenkinPackRepository,
+        watch: WatchRepository,
+        onProgress: (BackupSnapshotStage) -> Unit = {}
+    ): Snapshot {
         if (!root.isDirectory && !root.mkdirs()) throw IOException("Cannot create recovery storage")
         syncDirectory(context.filesDir)
         val directory = File(root, UUID.randomUUID().toString())
         if (!directory.mkdirs()) throw IOException("Cannot create recovery snapshot")
+        val started = android.os.SystemClock.elapsedRealtime()
+        fun report(stage: BackupSnapshotStage) {
+            if (BuildConfig.DEBUG) {
+                Log.debug("BackupRecoveryStore", "Snapshot stage=$stage elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
+            }
+            onProgress(stage)
+        }
         try {
             ensureBackupSpace(root)
+            report(BackupSnapshotStage.ICONS)
             pack.writeRecoverySnapshot(File(directory, "pack.json"))
+            report(BackupSnapshotStage.WATCH_RULES)
             watch.writeRecoverySnapshot(File(directory, "watch.json"))
+            report(BackupSnapshotStage.SETTINGS)
             val prefs = context.dataStore.getPreferencesAfterPendingWrites().asMap().map { (key, value) ->
                 key.name to (BackupPref.of(value) ?: throw IOException("Unsupported local recovery preference type"))
             }.toMap()
@@ -100,6 +117,7 @@ internal class BackupRecoveryStore(private val context: Context) {
                 writer.flush()
                 output.fd.sync()
             }
+            report(BackupSnapshotStage.FILES)
             val gallery = UploadedImageStore.directory(context)
             gallery.walkTopDown().filter { it.isFile }.forEach { source ->
                 val relative = source.relativeTo(gallery).invariantSeparatorsPath
@@ -108,6 +126,7 @@ internal class BackupRecoveryStore(private val context: Context) {
             for (name in listOf(PackKeystore.FILE_NAME, PackKeystore.PASSWORD_FILE_NAME)) {
                 context.filesDir.resolve(name).takeIf { it.isFile }?.let { copySynced(it, File(directory, "signing/$name")) }
             }
+            report(BackupSnapshotStage.VERIFYING)
             val files = mutableListOf<JSONObject>()
             for (file in directory.walkTopDown()) {
                 if (!file.isFile) continue
@@ -120,6 +139,7 @@ internal class BackupRecoveryStore(private val context: Context) {
             writeAtomic(AtomicFile(File(directory, "snapshot.json")), metadata)
             syncDirectory(directory)
             syncDirectory(root)
+            Log.info("BackupRecoveryStore", "Snapshot saved elapsedMs=${android.os.SystemClock.elapsedRealtime() - started}")
             return Snapshot(directory, files.map { it.getString("path") })
         } catch (error: Throwable) {
             directory.deleteRecursively()

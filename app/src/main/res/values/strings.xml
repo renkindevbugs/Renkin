@@ -536,6 +536,16 @@
     <string name="previousStateDiscarded">Previous saved state discarded</string>
     <string name="previousStateDiscardFailed">Could not discard the previous saved state</string>
     <string name="backupSavingCurrentState">Saving current state…</string>
+    <string name="backupRestoreProgressTitle">Restoring saved data</string>
+    <string name="backupSavingIcons">Saving icons and profiles…</string>
+    <string name="backupSavingWatchRules">Saving watched icons…</string>
+    <string name="backupSavingSettings">Saving settings…</string>
+    <string name="backupSavingFiles">Saving uploaded images…</string>
+    <string name="backupVerifyingSavedState">Verifying the saved copy…</string>
+    <string name="backupRestorePreparingHint">You can cancel before any saved data is changed.</string>
+    <string name="backupRestoreCommittingHint">Keep Renkin open until the restore finishes.</string>
+    <string name="backupPreparationCancelling">Stopping preparation…</string>
+    <string name="backupPreparationCancelled">Restore preparation cancelled. Saved data was not changed.</string>
     <string name="backupValidatingSavedState">Checking saved data…</string>
     <string name="backupRestoringData">Restoring saved data…</string>
     <string name="backupRestoringFiles">Restoring images and signing credentials…</string>

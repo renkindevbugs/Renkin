@@ -67,7 +67,9 @@ internal object BackupDatabaseSnapshot {
                     bytesUntilSpaceCheck -= count
                 }
             }
-            val writer = JsonWriter(OutputStreamWriter(checked, Charsets.UTF_8))
+            // Android JsonWriter emits strings character by character. Buffer before UTF-8
+            // encoding so large icon payloads do not cause millions of encoder calls.
+            val writer = JsonWriter(OutputStreamWriter(checked, Charsets.UTF_8).buffered())
             writer.beginObject().name("version").value(db.version.toLong()).name("tables").beginArray()
             for (table in tables(db)) {
                 currentCoroutineContext().ensureActive()

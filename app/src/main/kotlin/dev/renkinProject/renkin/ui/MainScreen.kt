@@ -566,7 +566,15 @@ fun MainColumn(iconPacks: List<IconPack>) {
     }
 
     val restoreStage by viewModel.backupRestoreStage.collectAsState()
-    if (viewModel.backupInProgress) BackupRestoreProgress(restoreStage)
+    val snapshotStage by viewModel.backupSnapshotStage.collectAsState()
+    val restoreCancellable by viewModel.backupRestoreCancellable.collectAsState()
+    if (viewModel.backupInProgress) BackupRestoreProgress(
+        stage = restoreStage,
+        snapshotStage = snapshotStage,
+        cancellable = restoreCancellable,
+        cancelling = viewModel.backupCancellationRequested,
+        onCancel = viewModel::cancelBackupPreparation
+    )
 
     // Locked icons from a missing pack: prompted automatically once per profile per session
     // (unless the profile opted out); the top-bar badge and banner reopen it any time.

@@ -410,8 +410,24 @@ automatic-backup jobs with the restored preferences. Startup repeats that reconc
 cover process death after the durable storage commit but before rescheduling. Interval
 setters also hold the storage gate through submitting their WorkManager update.
 
-The import/undo UI reports saving current state, restoring data, and restoring files instead
-of showing an unexplained wait. Recovery needs additional disk space for immutable snapshots and SQLite writes. Capture
+The import/undo dialog centers its indicator and labels the current operation. During capture
+it distinguishes icons/profiles, watch rules, preferences, uploaded files and verification.
+Preparation can be cancelled from the button or Back; outside taps do not dismiss it. Accepted
+cancellation and the transition into the durable commit share one synchronized boundary, so a
+Cancel accepted while preparing cannot later enter the non-cancellable mutation phase. The
+ViewModel cancels the owning job and retains the busy UI until cleanup releases staged state.
+Snapshot capture, file preparation and space checks hold the storage gate without entering
+the provider session gate. The cancellation boundary closes before entering the replacement
+callback; its whole commit/reload runs non-cancellably. Cancelling or failing during preparation
+therefore preserves live unsaved icons, profile tokens and undo, for both full import and
+previous-state restore. Only a durable restore replaces the live profile session.
+After commit begins the cancel action is unavailable; rollback/recovery must finish normally.
+Database snapshots and portable JSON buffer character output before UTF-8 encoding: Android's
+JsonWriter emits strings one character at a time, so an unbuffered OutputStreamWriter makes
+large base64 icon payloads appear stuck while the encoder consumes CPU. Debug builds log stage
+timings without payloads to distinguish slow work from blocked operations; release builds log
+only the total successful capture time.
+Recovery needs additional disk space for immutable snapshots and SQLite writes. Capture
 checks free space while streaming database rows and before copying files; commit reserves
 both snapshot database sizes, incoming JSON, the largest file to restore, and 32 MiB. This
 remains an estimate against other apps consuming storage. One retained snapshot can occupy
