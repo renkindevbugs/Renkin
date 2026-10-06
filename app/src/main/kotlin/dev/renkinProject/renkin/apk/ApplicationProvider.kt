@@ -1002,7 +1002,8 @@ class ApplicationProvider internal constructor(
                         isCustom = entry.isCustom,
                         isLegacy = entry.isLegacy,
                         baseIcon = baseIcon,
-                        sourceUrl = entry.sourceUrl
+                        sourceUrl = entry.sourceUrl,
+                        modifierRecipe = entry.modifierRecipe
                     ).changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
                 }
                 else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
@@ -1122,7 +1123,8 @@ class ApplicationProvider internal constructor(
                     isCustom = entry.isCustom,
                     isLegacy = entry.isLegacy,
                     baseIcon = baseIcon,
-                    sourceUrl = entry.sourceUrl
+                    sourceUrl = entry.sourceUrl,
+                    modifierRecipe = entry.modifierRecipe
                 )
                     .changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName),
                 trackUnsaved = false
@@ -1141,6 +1143,7 @@ class ApplicationProvider internal constructor(
     private fun sameIconState(first: PackageInfoStruct, second: PackageInfoStruct): Boolean =
         first.createdIcon === second.createdIcon && first.baseIcon === second.baseIcon &&
             first.sourcePackName == second.sourcePackName && first.sourceUrl == second.sourceUrl &&
+            first.modifierRecipe == second.modifierRecipe &&
             first.calendarEnabled == second.calendarEnabled && first.calendarPrefix == second.calendarPrefix &&
             first.calendarPackName == second.calendarPackName && first.isCustom == second.isCustom &&
             first.isLegacy == second.isLegacy && first.isFallback == second.isFallback

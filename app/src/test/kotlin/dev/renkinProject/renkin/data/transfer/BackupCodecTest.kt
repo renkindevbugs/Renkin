@@ -21,6 +21,28 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [33])
 class BackupCodecTest {
 
+    @Test fun recipeRoundTripsAndBadOrMissingMetadataDoesNotDiscardArtwork() {
+        val recipe = dev.renkinProject.renkin.icon.creator.ModifierRecipeCodec.encode(
+            dev.renkinProject.renkin.icon.creator.ModifierStack(
+                dev.renkinProject.renkin.icon.creator.EffectModifier(
+                    dev.renkinProject.renkin.data.ImageEdit.NONE,
+                    dev.renkinProject.renkin.icon.creator.ColorizerStyle(firstColor = 0xff000000.toInt())
+                )
+            )
+        )
+        val data = sampleData()
+        val profile = data.profiles.first()
+        val icon = profile.icons.first().copy(modifierRecipe = recipe)
+        val encoded = BackupCodec.encode(data.copy(profiles = listOf(profile.copy(icons = listOf(icon)))))
+        assertEquals(icon, BackupCodec.decode(encoded).profiles.single().icons.single())
+        val json = JSONObject(encoded)
+        val storedIcon = json.getJSONArray("profiles").getJSONObject(0).getJSONArray("icons").getJSONObject(0)
+        storedIcon.put("modifierRecipe", "recipe.version=999")
+        assertEquals(icon.copy(modifierRecipe = ""), BackupCodec.decode(json.toString()).profiles.single().icons.single())
+        storedIcon.remove("modifierRecipe")
+        assertEquals(icon.copy(modifierRecipe = ""), BackupCodec.decode(json.toString()).profiles.single().icons.single())
+    }
+
     private fun sampleData(): BackupData {
         val defaultProfile = Profile(
             id = DEFAULT_PROFILE_ID,

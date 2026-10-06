@@ -1044,10 +1044,13 @@ class MainViewModel @Inject constructor(
         sourcePackName: String?,
         // Attribution reference when the icon came from an online FOSS library (vector tab).
         sourceUrl: String? = null,
-        expected: ProfileSessionToken
+        expected: ProfileSessionToken,
+        modifierRecipe: String? = null
     ) = applyPickedIcon(expected, app, icon, sourcePackName) { live, origin, rendered ->
-        live.changeExport(rendered, sourcePackName = origin, isRefreshMade = false, isCustom = true, isLegacy = false, baseIcon = icon, sourceUrl = sourceUrl)
-            .changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
+        live.changeExport(
+            rendered, sourcePackName = origin, isRefreshMade = false, isCustom = true,
+            isLegacy = false, baseIcon = icon, sourceUrl = sourceUrl, modifierRecipe = modifierRecipe
+        ).changeCalendar(calendarEnabled, calendarPrefix, calendarPackName)
     }
 
     /**

@@ -22,6 +22,16 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [33])
 class PackageInfoStructTest {
 
+    @Test fun derivedChangesKeepRecipeAndReplacingOrClearingArtworkDropsIt() {
+        val base = FakeIcon()
+        val application = app(base).changeExport(base, modifierRecipe = "recipe")
+        assertEquals("recipe", application.changeRenderedIcon(FakeIcon()).modifierRecipe)
+        assertEquals("recipe", application.changeCalendar(true, "day_").modifierRecipe)
+        assertEquals("recipe", application.locked().modifierRecipe)
+        assertNull(application.changeExport(FakeIcon()).modifierRecipe)
+        assertNull(application.changeExport(null, modifierRecipe = "recipe").modifierRecipe)
+    }
+
     private class FakeIcon : IconPackDrawable() {
         @Composable override fun getPainter(): Painter = throw UnsupportedOperationException()
         override fun toBitmap(): Bitmap = throw UnsupportedOperationException()

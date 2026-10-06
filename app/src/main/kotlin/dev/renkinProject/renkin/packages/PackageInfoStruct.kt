@@ -45,13 +45,15 @@ class PackageInfoStruct(
     val isCustom: Boolean = false,
     /** Existing row whose generated-vs-custom origin predates the persisted classification. */
     val isLegacy: Boolean = false,
-    /** Unmodified icon persisted to Room; [createdIcon] is its current global render. */
+    /** Icon with local edits baked in; [createdIcon] is its current global render. */
     val baseIcon: IconPackDrawable? = createdIcon,
     /**
      * Attribution reference for icons picked from an online FOSS library: the source file's
      * public URL. Informational only — the drawable itself is stored; this records origin.
      */
-    val sourceUrl: String? = null
+    val sourceUrl: String? = null,
+    /** Last local modifier stage for [baseIcon]. Informational; never applied onto that base. */
+    val modifierRecipe: String? = null
 ) : Comparable<PackageInfoStruct> {
     private val normalizedSortName by lazy {
         Normalizer.normalize(appName, Normalizer.Form.NFD)
@@ -87,9 +89,10 @@ class PackageInfoStruct(
         isCustom: Boolean = this.isCustom,
         isLegacy: Boolean = this.isLegacy,
         baseIcon: IconPackDrawable? = this.baseIcon,
-        sourceUrl: String? = this.sourceUrl
+        sourceUrl: String? = this.sourceUrl,
+        modifierRecipe: String? = this.modifierRecipe
     ): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon, sourceUrl)
+        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon, sourceUrl, modifierRecipe)
 
     // Clearing the icon (createdIcon == null) also drops the recorded source pack and the
     // refresh-made flag, so a removed icon never lingers in the usage counts.
@@ -103,7 +106,9 @@ class PackageInfoStruct(
         baseIcon: IconPackDrawable? = createdIcon,
         // A replaced icon must not inherit the previous one's online attribution, so the
         // reference travels explicitly with each new icon (null unless it came from a library).
-        sourceUrl: String? = null
+        sourceUrl: String? = null,
+        // Replacing the base drops metadata unless it explicitly travels with the new artwork.
+        modifierRecipe: String? = null
     ): PackageInfoStruct =
         copyWith(
             createdIcon = createdIcon,
@@ -113,7 +118,8 @@ class PackageInfoStruct(
             isCustom = if (createdIcon == null) false else isCustom,
             isLegacy = if (createdIcon == null) false else isLegacy,
             baseIcon = if (createdIcon == null) null else baseIcon,
-            sourceUrl = if (createdIcon == null) null else sourceUrl
+            sourceUrl = if (createdIcon == null) null else sourceUrl,
+            modifierRecipe = if (createdIcon == null || baseIcon == null) null else modifierRecipe
         )
 
     /** Replaces only the derived global render and keeps the persisted base untouched. */

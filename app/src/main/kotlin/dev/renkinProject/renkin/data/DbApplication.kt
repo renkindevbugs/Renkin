@@ -80,7 +80,10 @@ data class DbApplication(
     // icon with the pack's fallback styling. Persisted so the home card's fallback count and
     // the Fallback list filter survive profile switches and restarts (the flag can't be
     // re-derived from the stored bitmap).
-    @ColumnInfo(defaultValue = "0") val isFallbackIcon: Boolean = false
+    @ColumnInfo(defaultValue = "0") val isFallbackIcon: Boolean = false,
+    // Last local modifier stage that produced baseDrawable, not a recipe to apply onto it.
+    // Empty for older icons or edits containing brush geometry outside the portable codec.
+    @ColumnInfo(defaultValue = "") val modifierRecipe: String = ""
 )
 
 /**
@@ -301,6 +304,7 @@ interface ProfileDao {
 // added: fingerprints are derived from the stored rows instead, and the rebuild makes both
 // shapes of 16 (with and without the column) end up identical.
 // Version 18 adds the ModifierPreset table (saved Modifier-tab recipes, shared by every profile).
+// Version 19 adds optional per-icon modifier metadata without changing the baked artwork.
 @Database(
     entities = [
         DbApplication::class,
@@ -310,7 +314,7 @@ interface ProfileDao {
         BuiltIcon::class,
         ModifierPreset::class
     ],
-    version = 18
+    version = 19
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -540,6 +544,12 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE DbApplication ADD COLUMN modifierRecipe TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -557,7 +567,8 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_14_15,
             MIGRATION_15_16,
             MIGRATION_16_17,
-            MIGRATION_17_18
+            MIGRATION_17_18,
+            MIGRATION_18_19
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {

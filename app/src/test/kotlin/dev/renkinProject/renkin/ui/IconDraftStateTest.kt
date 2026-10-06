@@ -48,6 +48,33 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [33])
 class IconDraftStateTest {
 
+    @Test fun initialMetadataIsRetainedUntilACompletedRenderAndClearedWithItsSource() = runBlocking {
+        val original = FakeIcon()
+        val draft = IconDraftState(original, "initial metadata")
+        assertEquals("initial metadata", draft.modifierRecipeToConfirm)
+        val base = FakeIcon()
+        draft.selectUpload(base)
+        assertNull(draft.modifierRecipeToConfirm)
+        val firstOptions = options(iconScale = 1.2f)
+        val firstResult = FakeIcon()
+        draft.regenerateUpload(FakeBuilder(modifierResult = firstResult), firstOptions)
+        val firstRecipe = draft.modifierRecipeToConfirm
+        assertEquals(dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe.fromRenderedOptions(firstOptions), firstRecipe)
+        val started = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val pending = launch {
+            draft.regenerateUpload(FakeBuilder(modifierResult = FakeIcon(), modifierStarted = started, modifierRelease = release), options(iconScale = 1.5f))
+        }
+        started.await()
+        assertSame(firstResult, draft.iconToConfirm)
+        assertEquals(firstRecipe, draft.modifierRecipeToConfirm)
+        pending.cancelAndJoin()
+        assertEquals(firstRecipe, draft.modifierRecipeToConfirm)
+        draft.clearUpload()
+        assertNull(draft.iconToConfirm)
+        assertNull(draft.modifierRecipeToConfirm)
+    }
+
     /** A no-op [IconPackDrawable] used as a distinguishable sentinel. */
     private class FakeIcon : IconPackDrawable() {
         @Composable override fun getPainter(): Painter = throw UnsupportedOperationException()

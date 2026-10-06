@@ -22,9 +22,10 @@ internal object BackupDatabaseSnapshot {
             JsonReader(input).use { reader ->
                 reader.beginObject()
                 requireField(reader, "version")
-                if (reader.nextInt() != db.version) throw StorageRecoverySchemaException("Recovery database schema has changed")
+                val snapshotVersion = reader.nextInt()
                 requireField(reader, "tables")
                 val expected = tables(db).toSet()
+                val addsModifierRecipe = addsModifierRecipe(snapshotVersion, db.version, expected)
                 val found = mutableSetOf<String>()
                 reader.beginArray()
                 while (reader.hasNext()) {
@@ -38,9 +39,7 @@ internal object BackupDatabaseSnapshot {
                     reader.beginArray()
                     while (reader.hasNext()) columns.add(reader.nextString())
                     reader.endArray()
-                    db.query("SELECT * FROM ${quoted(table)} LIMIT 0").use { cursor ->
-                        if (columns != cursor.columnNames.toList()) throw StorageRecoverySchemaException("Recovery columns have changed")
-                    }
+                    checkColumns(db, table, columns, addsModifierRecipe)
                     requireField(reader, "rows")
                     reader.skipValue()
                     reader.endObject()
@@ -108,9 +107,10 @@ internal object BackupDatabaseSnapshot {
             JsonReader(input).use { reader ->
                 reader.beginObject()
                 requireField(reader, "version")
-                if (reader.nextInt() != db.version) throw StorageRecoverySchemaException("Recovery database schema has changed")
+                val snapshotVersion = reader.nextInt()
                 requireField(reader, "tables")
                 val expected = tables(db).toSet()
+                val addsModifierRecipe = addsModifierRecipe(snapshotVersion, db.version, expected)
                 db.execSQL("PRAGMA defer_foreign_keys = ON")
                 expected.forEach { db.execSQL("DELETE FROM ${quoted(it)}") }
                 val restored = mutableSetOf<String>()
@@ -127,9 +127,9 @@ internal object BackupDatabaseSnapshot {
                     reader.beginArray()
                     while (reader.hasNext()) columns.add(reader.nextString())
                     reader.endArray()
-                    db.query("SELECT * FROM ${quoted(table)} LIMIT 0").use { cursor ->
-                        if (columns != cursor.columnNames.toList()) throw StorageRecoverySchemaException("Recovery columns have changed")
-                    }
+                    checkColumns(db, table, columns, addsModifierRecipe)
+                    // A v18 snapshot omits only modifierRecipe. The v19 SQL default restores
+                    // that metadata as empty while preserving all previous values and IDs.
                     val sql = "INSERT INTO ${quoted(table)} (${columns.joinToString(",", transform = ::quoted)}) " +
                         "VALUES (${columns.joinToString(",") { "?" }})"
                     requireField(reader, "rows")
@@ -160,6 +160,30 @@ internal object BackupDatabaseSnapshot {
                 reader.endObject()
                 if (restored != expected || reader.peek() != JsonToken.END_DOCUMENT) throw StorageRecoverySnapshotException("Incomplete recovery snapshot")
             }
+        }
+    }
+
+    private fun addsModifierRecipe(snapshotVersion: Int, currentVersion: Int, tables: Set<String>): Boolean {
+        if (snapshotVersion == currentVersion) return false
+        if (snapshotVersion == 18 && currentVersion == 19 && "DbApplication" in tables) return true
+        throw StorageRecoverySchemaException("Recovery database schema has changed")
+    }
+
+    private fun checkColumns(
+        db: SupportSQLiteDatabase,
+        table: String,
+        columns: List<String>,
+        addsModifierRecipe: Boolean
+    ) {
+        db.query("SELECT * FROM ${quoted(table)} LIMIT 0").use { cursor ->
+            val current = cursor.columnNames.toList()
+            val expected = if (addsModifierRecipe && table == "DbApplication") {
+                if (current.lastOrNull() != "modifierRecipe") {
+                    throw StorageRecoverySchemaException("Recovery columns have changed")
+                }
+                current.dropLast(1)
+            } else current
+            if (columns != expected) throw StorageRecoverySchemaException("Recovery columns have changed")
         }
     }
 

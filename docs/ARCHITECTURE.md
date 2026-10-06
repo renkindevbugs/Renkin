@@ -183,7 +183,7 @@ Switcher = the top-bar title dropdown.
 - **DataStore Preferences** (`data/DataPreferences.kt`) — all settings. Typed accessors:
   Composable `DataStore.getXValue()` for reading in composition; `Preferences.getXValue()`
   for reading a captured snapshot off the main thread.
-- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v18) — profiles + rendered and base icons
+- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v19) — profiles + rendered and base icons
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
   rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the
   Global options UI, only unsaved refresh output is Generated; saved/built non-custom rows are
@@ -198,6 +198,39 @@ Switcher = the top-bar title dropdown.
   rendered payload remains in exports for backward compatibility. `sourceUrl` is the attribution
   reference for icons picked from an online FOSS library (informational only — never fed into
   the verdict/lock logic). Loaded into the app list.
+  `DbApplication.modifierRecipe` (v19) is optional metadata describing the last confirmed local
+  modifier stage. Existing rows migrate with an empty string and keep both artwork payloads.
+  `baseDrawable` already contains local edits; this recipe must never be applied onto it or
+  used to seed live editor controls that would render those edits again. It is not a source
+  snapshot, a complete edit history, or persisted recovery of an unsaved editor draft.
+  Non-destructive re-editing still needs a separate original source and source/export settings.
+  `StoredIconModifierRecipe` captures the resolved shape fill and retains only stages that
+  round-trip exactly through the bounded codec. Brush masks/operations cannot be represented;
+  those edits retain their baked image with no recipe. Invalid/unsupported imported metadata
+  is discarded independently of the artwork. Backup format 2 and shared-profile JSON carry the
+  optional field; older files omit it and older readers can still use the baked drawable.
+  `IconDraftState` publishes metadata with its winning completed render, never from pending
+  control values. Initial Apply without an edit retains the existing recipe. Replacing or
+  clearing a base drops its old recipe unless new matching metadata is supplied; global render,
+  calendar changes, save/build locking and undo retain it. Metadata does not enter the shipped
+  icon fingerprint because it changes no exported pixels.
+  The next persistent-editor phase will store an immutable input drawable from before local
+  modifiers, together with the complete source/export settings and local modifier state. Pack
+  and drawable references are provenance, not a substitute for retained input artwork: reopening
+  must work without the original pack, uploaded file or online resource. Every preview and Apply
+  must render the full current state from that immutable input, not from the previous baked
+  result. Apply updates the baked base/current payloads for compatibility; a later Global Apply
+  remains a separate derived layer. Choosing a new source starts a new input/state pair.
+  A v19 recipe alone cannot enable this mode, even when non-empty: it describes only the last
+  stage over a possibly cumulative base. Older icons, invalid/missing recipes and unsupported
+  brush geometry keep their baked result and must never be presented as recoverable original
+  artwork. They can adopt that result as a new immutable starting point with neutral controls,
+  making only subsequent edits reversible. The editor must state that previous edits are baked
+  in. Restoring their actual original requires explicitly choosing the source again. Fully
+  persistent brush editing requires separately serialized geometry; omitting masks from the
+  recipe must not imply that the whole edit can be reopened. Availability of retained input,
+  settings and all required geometry, rather than recipe presence alone, determines whether
+  the complete editable state can be restored.
   **Never lower the version once any build was installed** — schema-identical bump +
   migration instead (see the v5/v6/v7 history in `DbApplication.kt`).
 - **`ColorPreset` table** (same database, added in v15) — the saved colour/gradient library.
@@ -384,14 +417,25 @@ both snapshot database sizes, incoming JSON, the largest file to restore, and 32
 remains an estimate against other apps consuming storage. One retained snapshot can occupy
 roughly the saved databases plus gallery and signing files.
 
-Internal database recovery currently requires identical schema versions and columns. Every
-future Room schema bump must add compatible recovery handling before shipping: a pending
-snapshot from the preceding version must not strand startup behind a schema mismatch.
+Internal database recovery requires identical schemas except for explicitly supported
+snapshot migrations. Renkin v18 snapshots can restore into v19: all old tables/columns must
+still match exactly, and only the appended `DbApplication.modifierRecipe` is omitted from
+inserts so its SQL default supplies an empty string. Old row identities, preferences, artwork,
+watch data, gallery and signing state are preserved. This supports both pending startup recovery
+and retained previous-state snapshots from v18. Every future Room schema bump must add
+compatible recovery handling before shipping: a pending snapshot from the preceding version
+must not strand startup behind a schema mismatch.
+Matching column-name prefixes and SQL defaults alone do not authorize snapshot compatibility.
+An additive Room migration may backfill new fields from old values or change existing row
+semantics: v11 → v12, for example, copies drawable fields into the new base fields and marks
+old generated rows as legacy. Restoring those rows with empty/false defaults would skip that
+migration's meaning. Each supported version transition therefore needs an explicit adapter
+and regression coverage; future transitions must compose the required transformations rather
+than accept older versions just because inserts succeed.
 Both database schemas are preflighted before either database is mutated. A mismatch fails
 closed and preserves the snapshot, with the explicit abandon option above. Portable backup DTOs
 are not substituted for exact local recovery: they normalize data and do not preserve every ID
-or local column. Schema-aware snapshot migrations are still required for automatic recovery
-across future updates. Large portable JSON payload memory, byte transfer progress and image/keystore semantic validation remain separate
+or local column. Unsupported schema changes still require new snapshot adapters. Large portable JSON payload memory, byte transfer progress and image/keystore semantic validation remain separate
 follow-ups; CRC verifies transport integrity only.
 
 ## UI conventions
@@ -488,10 +532,11 @@ identically and none of them re-implements the maths.
   colour preview updates that override without changing the presentation background.
   The renderer receives the inherited background explicitly; it never guesses a fallback colour.
   New modifiers belong in their groups. Data-class equality includes every source, modifier and
-  export group. Preferences, preset payloads and editor saved-state codecs keep their existing
-  formats at the persistence boundaries; editor saved state has the new recipe envelope described
-  above. The editor now uses the grouped colour API throughout. Persistent non-destructive recipes
-  and direct ownership of geometry groups in the editor remain follow-ups.
+  export group. Preferences and preset payloads keep their existing boundary formats; Global
+  Options retains its recipe envelope in saved state. The individual editor uses a live session
+  and the grouped colour API throughout. Stored per-icon recipes describe the last baked stage;
+  persistent non-destructive source/recipe replay and direct ownership of geometry groups in
+  the editor remain follow-ups.
   Equality deliberately retains inactive configuration; a visual-only cache key may later
   normalize disabled groups, but session/recipe comparisons must continue distinguishing their
   full configuration.
@@ -521,8 +566,8 @@ identically and none of them re-implements the maths.
   remain unchanged. It continues excluding icon-specific position, targets, segments, masks and
   pack controls. Existing colour presets, adaptive payloads and preference style strings retain
   their older colour codec; there is no Room or portable-backup format migration in this step.
-  The full recipe currently serves saved-state codecs and staged Global Options, not the icon
-  database. The individual editor now retains source/export choices, image edit, first colour
+  The full recipe serves Global Options saved state and optional per-icon metadata in Room v19.
+  The individual editor retains source/export choices, image edit, first colour
   and adjustment state together in its live editor session; it does not serialize a partial
   draft into saved state. Global Options' per-icon controls remain remember-only.
 - **`ui/GlobalModifierState.kt`** owns Global Options' staged `ModifierStack`; its controls update
@@ -648,7 +693,7 @@ foreground/background when recolouring changed them. Reopening the per-app edito
 restores both the adaptive type and its highlighted editing controls, and Original can restore
 the source layers without the source pack being installed. Version 1 layered payloads remain
 readable. `XmlNodeParser` validates the format before ordinary vector or inset decoding. Room
-stays at v18 because no columns or relational meaning change. Backup
+did not need a schema change for the adaptive payload itself; v19 adds only local modifier metadata. Backup
 format 2 prevents older importers from silently losing this new drawable type; format 1
 archives remain readable. Already-flattened saved icons cannot recover their missing layers:
 the user must select their source again.
@@ -677,6 +722,11 @@ Renkin cannot reproduce that launcher-only selection through the standard resour
 - **Robolectric** tests for the data layer with an in-memory Room database
   (`WatchRepositoryTest`, `RenkinPackRepositoryTest`). They use a plain `Application` and a
   pinned `@Config(sdk = [33])` to stay off Hilt and the very new `compileSdk`.
+- Every Room version bump must commit the schema JSON generated by Room for that version.
+  Migration tests must retain representative old row values and verify defaults/backfills of
+  added fields. Recovery tests must cover both the supported preceding-version snapshot and
+  rejection of unsupported schema changes; column-name compatibility alone is insufficient.
+  Follow the device-confirmation checkpoint in CLAUDE.md before creating/running these tests.
 - Recovery/Application tests in a shared JVM must call `StorageOperationGate.resetForTests()`
   between isolated scenarios, only after all gate owners/jobs have stopped. Production still
   rejects installing two recovery callbacks.

@@ -146,7 +146,7 @@ internal fun OptionsDialog(
     iconPacks: List<IconPack>,
     session: EditorSession,
     themed: Boolean,
-    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?, sourceUrl: String?) -> Unit,
+    onConfirm: (icon: IconPackDrawable?, calendarEnabled: Boolean, calendarPrefix: String?, calendarPackName: String?, sourcePackName: String?, sourceUrl: String?, modifierRecipe: String?) -> Unit,
     onDismiss: () -> Unit,
     onIconClear: () -> Unit
 ) {
@@ -439,7 +439,7 @@ internal fun OptionsDialog(
             IconOrigin.UPLOAD -> onlineImageUrl
             else -> null
         }
-        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, sourcePackToPersist, sourceUrlToPersist)
+        onConfirm(draft.iconToConfirm, calendarEnabled, calendarPrefix, calendarPackName, sourcePackToPersist, sourceUrlToPersist, draft.modifierRecipeToConfirm)
     }
 
     val adaptiveLayoutInfo = LocalAdaptiveLayoutInfo.current

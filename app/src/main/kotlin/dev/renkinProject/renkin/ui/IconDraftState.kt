@@ -9,6 +9,7 @@ import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe
 import dev.renkinProject.renkin.icon.creator.hasIconAdjustments
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 
@@ -20,7 +21,7 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
  * / [generating] back out, instead of carrying a dozen loose `remember`s plus the generation
  * effects inline.
  */
-internal class IconDraftState(initialIcon: IconPackDrawable?) {
+internal class IconDraftState(initialIcon: IconPackDrawable?, initialRecipe: String? = null) {
     // Icon from the Create tab (pack pick / text / app-icon source). Starts as the icon the
     // app already has so it stays visible (e.g. when only the modifier is being changed).
     var createIcon by mutableStateOf(initialIcon)
@@ -36,6 +37,10 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
     var vectorIcon by mutableStateOf<IconPackDrawable?>(null)
         private set
     private var modifiedVector by mutableStateOf<IconPackDrawable?>(null)
+
+    private var createRecipe by mutableStateOf(initialRecipe.takeIf { initialIcon != null })
+    private var uploadRecipe by mutableStateOf<String?>(null)
+    private var vectorRecipe by mutableStateOf<String?>(null)
 
     var origin by mutableStateOf(IconOrigin.CREATE)
 
@@ -70,6 +75,13 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         IconOrigin.CREATE -> createIcon
     }
 
+    // Publish recipe and artwork from the same completed render, even while a newer job runs.
+    val modifierRecipeToConfirm: String? get() = when (origin) {
+        IconOrigin.UPLOAD -> uploadRecipe
+        IconOrigin.VECTOR -> vectorRecipe
+        IconOrigin.CREATE -> createRecipe
+    }
+
     /**
      * Activates the Create pipeline and drops drafts owned by the other source tabs.
      * The caller is responsible for clearing their UI-only selection state.
@@ -80,6 +92,8 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         uploadIcon = null
         vectorIcon = null
         modifiedVector = null
+        uploadRecipe = null
+        vectorRecipe = null
         origin = IconOrigin.CREATE
     }
 
@@ -90,6 +104,9 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         modifiedVector = null
         uploadBase = icon
         uploadIcon = null
+        createRecipe = null
+        uploadRecipe = null
+        vectorRecipe = null
         origin = IconOrigin.UPLOAD
     }
 
@@ -97,6 +114,7 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         uploadGeneration++
         uploadBase = null
         uploadIcon = null
+        uploadRecipe = null
     }
 
     fun selectVector(icon: IconPackDrawable) {
@@ -106,6 +124,9 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         uploadIcon = null
         vectorIcon = icon
         modifiedVector = null
+        createRecipe = null
+        uploadRecipe = null
+        vectorRecipe = null
         origin = IconOrigin.VECTOR
     }
 
@@ -113,6 +134,7 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         vectorGeneration++
         vectorIcon = null
         modifiedVector = null
+        vectorRecipe = null
     }
 
     /** Keeps the shared loading state correct across overlapping and cancelled effects. */
@@ -170,6 +192,7 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         }
         if (generation == createGeneration) {
             createIcon = generated
+            createRecipe = if (generated != null) StoredIconModifierRecipe.fromRenderedOptions(options) else null
             completedCreate = request
         }
     }
@@ -184,7 +207,10 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
             options.modifiers.effect.imageEdit == ImageEdit.NONE && !options.hasIconAdjustments() -> base
             else -> trackGeneration { builder.applyModifier(base, options) }
         }
-        if (generation == vectorGeneration) modifiedVector = generated
+        if (generation == vectorGeneration) {
+            modifiedVector = generated
+            vectorRecipe = if (generated != null) StoredIconModifierRecipe.fromRenderedOptions(options) else null
+        }
     }
 
     suspend fun regenerateUpload(builder: IconPreviewBuilder, options: GenerationOptions) {
@@ -194,6 +220,9 @@ internal class IconDraftState(initialIcon: IconPackDrawable?) {
         val generated = if (base == null) null else trackGeneration {
             builder.applyModifier(base, options)
         }
-        if (generation == uploadGeneration) uploadIcon = generated
+        if (generation == uploadGeneration) {
+            uploadIcon = generated
+            uploadRecipe = if (generated != null) StoredIconModifierRecipe.fromRenderedOptions(options) else null
+        }
     }
 }

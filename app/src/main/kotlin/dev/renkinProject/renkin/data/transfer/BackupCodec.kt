@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.data.transfer
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.watch.AppComponent
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -163,6 +164,7 @@ object BackupCodec {
                         .put("baseIsXml", icon.baseIsXml)
                         .put("sourceUrl", icon.sourceUrl)
                         .put("isFallbackIcon", icon.isFallbackIcon)
+                        .put("modifierRecipe", StoredIconModifierRecipe.normalize(icon.modifierRecipe).orEmpty())
                 )
             }
             p.put("icons", icons)
@@ -329,7 +331,9 @@ object BackupCodec {
                         // Absent in pre-v13 files — no online attribution to carry.
                         sourceUrl = icon.optString("sourceUrl"),
                         // Absent in pre-v14 files — safe default: not fallback-styled.
-                        isFallbackIcon = icon.optBoolean("isFallbackIcon")
+                        isFallbackIcon = icon.optBoolean("isFallbackIcon"),
+                        // Optional metadata must never prevent restoration of valid artwork.
+                        modifierRecipe = StoredIconModifierRecipe.normalize(icon.optString("modifierRecipe")).orEmpty()
                     )
                 )
             }

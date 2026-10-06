@@ -9,6 +9,7 @@ import dev.renkinProject.renkin.drawable.ADAPTIVE_ICON_SCALE
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.extension.bitmapFromBase64
+import dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe
 import dev.renkinProject.renkin.icon.parser.XmlNodeParser
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.xml.XmlDecoder
@@ -45,7 +46,8 @@ class RenkinPackStore(
         val row: DbApplication,
         // True when the row HAS stored artwork that would not decode. The icon is unusable, but
         // the row must not be quietly dropped by the next save — a future build may read it.
-        val decodeFailed: Boolean = false
+        val decodeFailed: Boolean = false,
+        val modifierRecipe: String? = null
     )
 
     /** Loads [profileId]'s saved icons + calendar flags, keyed by "package/activity". */
@@ -104,7 +106,9 @@ class RenkinPackStore(
             dbApp.sourceUrl.ifEmpty { null },
             dbApp.isFallbackIcon,
             dbApp,
-            decodeFailed
+            decodeFailed,
+            // A rendered fallback cannot inherit metadata for a base that failed to decode.
+            if (baseIcon != null) StoredIconModifierRecipe.normalize(dbApp.modifierRecipe) else null
         )
     }
 
@@ -151,7 +155,8 @@ class RenkinPackStore(
                 baseIsAdaptiveIcon = base?.isAdaptiveIcon() ?: false,
                 baseIsXml = base != null && base !is BitmapIconDrawable,
                 sourceUrl = app.sourceUrl ?: "",
-                isFallbackIcon = app.isFallback
+                isFallbackIcon = app.isFallback,
+                modifierRecipe = if (base != null) app.modifierRecipe.orEmpty() else ""
             )
         }
         val liveKeys = dbApps.map { "${it.packageName}/${it.activityName}" }.toSet()

@@ -43,9 +43,36 @@ class RenkinPackMigrationTest {
 
     @Test
     fun everyReleasedSchemaMigratesToCurrent() {
-        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17).forEach { version ->
+        listOf(1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18).forEach { version ->
             RenkinPackDatabase.open(context, historical(version, "from-$version")).useDatabase { database ->
                 database.openHelper.writableDatabase
+            }
+        }
+    }
+
+    @Test
+    fun version18AddsEmptyRecipeAndPreservesEveryExistingIconColumn() {
+        var expected = emptyMap<String, String?>()
+        val name = historical(18, "v18-recipe") { db ->
+            db.execSQL("INSERT INTO DbApplication " +
+                "(packageName, activityName, isAdaptiveIcon, isXml, drawable, baseDrawable, " +
+                "baseIsAdaptiveIcon, calendarEnabled, calendarPrefix, calendarPackName, " +
+                "sourcePackName, sourceUrl, isCustomIcon, isFallbackIcon, profileId) " +
+                "VALUES ('com.custom', 'Main', 1, 0, 'rendered', 'base', 1, 1, 'day_', " +
+                "'pack.calendar', 'pack.source', 'https://example.com/icon', 1, 1, 1)")
+            db.query("SELECT * FROM DbApplication").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                expected = cursor.columnNames.associateWith { cursor.getString(cursor.getColumnIndexOrThrow(it)) }
+            }
+        }
+        RenkinPackDatabase.open(context, name).useDatabase { database ->
+            database.openHelper.writableDatabase.query("SELECT * FROM DbApplication").use { cursor ->
+                assertTrue(cursor.moveToFirst())
+                assertEquals("", cursor.getString(cursor.getColumnIndexOrThrow("modifierRecipe")))
+                expected.forEach { (column, value) ->
+                    assertEquals(column, value, cursor.getString(cursor.getColumnIndexOrThrow(column)))
+                }
+                assertFalse(cursor.moveToNext())
             }
         }
     }
