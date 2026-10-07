@@ -227,7 +227,7 @@ class GlobalOptionsViewModel @Inject constructor(
 
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
     val iconPackState = appProvider.iconPackState
-    val lockedIconKeys: Set<String> get() = appProvider.lockedIconKeys
+    val lockedIconKeysState = appProvider.lockedIconKeysState
 
     private val previewCache = GlobalPreviewBitmapCache()
     private val previewLock = Any()

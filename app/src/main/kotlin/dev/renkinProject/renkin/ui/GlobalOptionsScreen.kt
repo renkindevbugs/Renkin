@@ -222,9 +222,10 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     val previewRefreshing = !showBefore &&
         (previewDebouncing || previewJobs > 0 || viewModel.initialLoadRunning)
 
-    val categories by remember(viewModel) {
+    val lockedIconKeys by viewModel.lockedIconKeysState.collectAsStateWithLifecycle()
+    val categories by remember(viewModel, lockedIconKeys) {
         derivedStateOf {
-            categorizeGlobalIcons(viewModel.applicationList, viewModel.lockedIconKeys)
+            categorizeGlobalIcons(viewModel.applicationList, lockedIconKeys)
         }
     }
     val generated = categories.generated

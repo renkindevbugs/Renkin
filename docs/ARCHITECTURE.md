@@ -143,6 +143,37 @@ before STARTED, zero source subscriptions while stopped, retained displayed valu
 and absent-key defaults after restarting. It also restarts UI during failed recovery, verifying
 that recovery status updates while preference data stays paused until recovery completes.
 
+Phase 7B3 moves the active profile's published lock-key set out of Compose state.
+`IconLockManager` owns `lockedIconKeysState`, a read-only StateFlow of snapshot sets. `lock`
+and `release` still stage held-row changes; existing batch boundaries call `publish`. Discard,
+replacement and clear still publish immediately. The mutable held/orphan maps, provenance and
+verdict policy remain private and keep their existing storage/profile-gate serialization.
+Operation-time policy reads continue using the held rows, without waiting for UI emissions.
+
+Provider and ViewModels expose the same flow without a second writable copy. Main filters,
+hero statistics and Global options categories collect it with lifecycle awareness. The app list
+collects once and passes each row its lock flag; rows do not subscribe individually. Derived
+lists/categories include the collected key set in their remembered inputs, so a lock-only update
+recomputes them. Manager/provider synchronous getters are action-only snapshots. Preserved
+rows, missing-pack verification/unlocking, refresh exclusions, exact Apply and profile/session
+ownership retain their behavior. No persistence formats change. Device confirmation precedes
+tests, compilation and commit under CLAUDE.md.
+
+`IconLockManagerTest` covers staged publication, retained snapshot stability, selective replacement,
+orphan preservation, profile clear and late collection after background publication.
+`IconLockLifecycleComposeTest` exercises lock-only changes against the production filter, hero
+statistics and Global options categorization, including reset and lifecycle stop/resume. These
+checks verify settled values, not same-frame atomicity with the still separate application list.
+
+During this checkpoint the application list remains Compose state while lock keys reach UI
+through a lifecycle collector. Their displayed snapshots can temporarily disagree during reset,
+unlocking or profile loading; collection does not guarantee delivery in the same frame. The old
+mutation paths did not explicitly group these writes in a single mutable Compose snapshot either.
+The later application-list migration must publish applications and lock keys in one coherent UI
+snapshot; two independent StateFlows alone would still allow mixed revisions. Device checks should
+watch reset/filter transitions for flicker and verify that rows, lock counts and filters settle
+consistently. Held-row policy and persistence continue reading under the existing gates.
+
 The UI layer never constructs repositories by hand; view models receive them through
 Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only for genuine
 Activity operations (`finish()`, starting services, permission requests).
@@ -391,7 +422,9 @@ checkpoint, keep the current paired writes and the documented format-4 compatibi
   (`withContext`). View models call them from `viewModelScope` (Main) safely.
 - `lifecycleScope.launch` is the Main dispatcher — never touch Room / PackageManager from it
   directly; go through a suspend function with `withContext(Default)` inside.
-- Loaded lists / flags are Compose `mutableStateOf` so the UI recomposes when they change.
+- Installed-pack readiness and published lock keys use read-only StateFlow with lifecycle-aware
+  UI collection. The live application list and remaining provider flags still use Compose state
+  until their own 7B checkpoints; preserve their current update and session semantics.
 - Active-profile mutations run through the provider's profile-operation gate. Callers capture a
   `ProfileSessionToken` before launching work; the provider checks it after acquiring the gate.
   Tokens include the profile, session revision and provider instance, so leaving and returning to

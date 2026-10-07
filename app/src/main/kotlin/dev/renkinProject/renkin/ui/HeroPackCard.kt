@@ -195,6 +195,7 @@ fun HeroPackCard(
     val viewModel: MainViewModel = hiltViewModel()
     val prefs = getPreferences()
     val preferences = prefs.getPreferencesValue()
+    val lockedIconKeys by viewModel.lockedIconKeysState.collectAsStateWithLifecycle()
 
     val source = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     val packName = preferences.getStringValue(PrimaryIconPackKey)
@@ -202,10 +203,10 @@ fun HeroPackCard(
 
     // Completion progress (moved here from the options card): blue = already built, green =
     // added since (pending build), red = removed since.
-    val stats by remember(viewModel) {
+    val stats by remember(viewModel, lockedIconKeys) {
         derivedStateOf {
             calculateHeroPackStats(
-                viewModel.applicationList, viewModel.builtKeys, viewModel.lockedIconKeys
+                viewModel.applicationList, viewModel.builtKeys, lockedIconKeys
             )
         }
     }

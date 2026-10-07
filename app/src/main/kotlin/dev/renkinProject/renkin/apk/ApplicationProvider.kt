@@ -166,7 +166,8 @@ class ApplicationProvider internal constructor(
     var startupComplete: Boolean by mutableStateOf(false)
         private set
 
-    /** Keys of the active profile's icons currently locked behind a missing pack. */
+    val lockedIconKeysState get() = lockManager.lockedIconKeysState
+    /** Action-time snapshot only; composables collect [lockedIconKeysState]. */
     val lockedIconKeys: Set<String> get() = lockManager.lockedIconKeys
 
     /** The profile whose icons/preferences are active. Set before the saved pack loads. */

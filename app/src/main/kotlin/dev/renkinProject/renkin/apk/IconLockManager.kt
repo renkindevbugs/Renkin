@@ -1,15 +1,14 @@
 package dev.renkinProject.renkin.apk
 
 import android.content.Context
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.VERDICT_UNKNOWN
 import dev.renkinProject.renkin.data.transfer.PackVerdictManager
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.withContext
 
 /**
@@ -34,10 +33,11 @@ class IconLockManager(
     private val lockedRows = mutableMapOf<String, DbApplication>()
     private val orphanRows = mutableMapOf<String, DbApplication>()
 
-    /** Keys of the active profile's icons currently locked behind a missing pack. Compose
-     * state (snapshot of the internal map) so the list rows/badges react to lock changes. */
-    var lockedIconKeys: Set<String> by mutableStateOf(emptySet())
-        private set
+    private val mutableLockedIconKeys = MutableStateFlow<Set<String>>(emptySet())
+    val lockedIconKeysState = mutableLockedIconKeys.asStateFlow()
+
+    /** Action-time snapshot only; composables collect [lockedIconKeysState]. */
+    val lockedIconKeys: Set<String> get() = lockedIconKeysState.value
 
     /** Live keys of the held-back rows (refresh must not silently refill those slots). */
     val lockedKeys: Set<String> get() = lockedRows.keys
@@ -80,9 +80,9 @@ class IconLockManager(
         publish()
     }
 
-    /** Pushes the current locked-key set into Compose state (call after a batch of changes). */
+    /** Publishes a snapshot after a batch of held-row changes. */
     fun publish() {
-        lockedIconKeys = lockedRows.keys.toSet()
+        mutableLockedIconKeys.value = lockedRows.keys.toSet()
     }
 
     // ---- Provenance -----------------------------------------------------------------

@@ -1093,7 +1093,7 @@ class MainViewModel @Inject constructor(
     }
 
     /** Keys of the active profile's icons locked behind a missing pack (marks the rows). */
-    val lockedIconKeys: Set<String> get() = appProvider.lockedIconKeys
+    val lockedIconKeysState = appProvider.lockedIconKeysState
 
     /** The active profile's locked icons grouped by missing pack — badge, banner, dialog. */
     var missingPackSummary by mutableStateOf<List<IconLockManager.MissingPack>>(emptyList())

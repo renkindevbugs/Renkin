@@ -249,6 +249,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
 
     val prefs = getPreferences()
     val viewModel: MainViewModel = hiltViewModel()
+    val lockedIconKeys by viewModel.lockedIconKeysState.collectAsStateWithLifecycle()
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
     val storedFilterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
     // Mirror the persisted filter locally so switching the hero buttons updates the list in
@@ -499,7 +500,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
                     filterNoIcon = filterNoIcon,
                     filterFallback = filterFallback,
                     filterLocked = filterLocked,
-                    showLockedFilter = viewModel.lockedIconKeys.isNotEmpty() || filterLocked,
+                    showLockedFilter = lockedIconKeys.isNotEmpty() || filterLocked,
                     onSortChange = viewModel::setAppSortOrder,
                     onFilterChange = { setProblemFilter(AppProblemFilter.MISSING, it) },
                     onFallbackFilterChange = { setProblemFilter(AppProblemFilter.FALLBACK, it) },
@@ -643,6 +644,7 @@ fun ApplicationList(
     val viewModel: MainViewModel = hiltViewModel()
     val optionsViewModel: OptionsViewModel = hiltViewModel()
     val applications = viewModel.applicationList
+    val lockedIconKeys by viewModel.lockedIconKeysState.collectAsStateWithLifecycle()
 
     // Read preferences once for the whole list — a DataStore subscription per row
     // causes visible scroll jank
@@ -668,14 +670,16 @@ fun ApplicationList(
     // derivedStateOf so it recomputes when the list's contents change (applicationList is a
     // SnapshotStateList edited in place, so its instance identity never changes) while still
     // caching across unrelated recompositions. Recreated when the sort/filter inputs change.
-    val displayList by remember(sortOrder, filterNoIcon, filterFallback, filterLocked, filter, installTimes) {
+    val displayList by remember(
+        sortOrder, filterNoIcon, filterFallback, filterLocked, filter, installTimes, lockedIconKeys
+    ) {
         derivedStateOf {
             // withIndex() first so each app keeps its original position; the shared pipeline then
             // filters and sorts the wrappers (selector pulls the app out of each IndexedValue).
             applications.withIndex().toList()
                 .sortedFilteredApps(
                     filter, filterNoIcon, filterFallback, sortOrder, installTimes,
-                    filterLocked, viewModel.lockedIconKeys
+                    filterLocked, lockedIconKeys
                 ) { it.value }
         }
     }
@@ -814,7 +818,8 @@ fun ApplicationList(
                 } else Modifier
                 ApplicationItem(
                     iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue,
-                    Modifier.animateItem().then(introModifier)
+                    isLocked = indexedApp.value.createdIcon == null && indexedApp.value.key in lockedIconKeys,
+                    modifier = Modifier.animateItem().then(introModifier)
                 )
             }
         }
@@ -851,6 +856,7 @@ fun ApplicationItem(
     index: Int,
     themed: Boolean,
     bgColorValue: Color,
+    isLocked: Boolean,
     modifier: Modifier = Modifier
 ) {
     val viewModel: MainViewModel = hiltViewModel()
@@ -944,7 +950,6 @@ fun ApplicationItem(
             // Crossfade the trailing slot so assigning or clearing an icon fades
             // between the preview and the edit bubble instead of popping
             Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
-                val isLocked = app.createdIcon == null && app.key in viewModel.lockedIconKeys
                 // Rasterised at the row's size: a vector painter grows into place over the first
                 // frames, which read as the icon jumping after it appeared.
                 val createdBitmap = rememberCreatedIconBitmap(app, 56.dp)
