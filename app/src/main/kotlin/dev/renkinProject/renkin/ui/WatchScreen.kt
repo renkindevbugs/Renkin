@@ -66,6 +66,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -114,7 +115,8 @@ fun WatchScreen(
     val apps = viewModel.applicationList
     // Renkin's own generated packs can't be watched (the checker ignores them), so don't
     // offer them in the rule editor's pack picker either.
-    val packs = viewModel.iconPacks.filterNot { IconPackBuilder.isOwnPack(it.packageName) }
+    val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()
+    val packs = iconPackState.packs.filterNot { IconPackBuilder.isOwnPack(it.packageName) }
 
     // Icon-watch is the only feature that posts notifications now, so ask for the permission
     // here (it used to be requested by the removed package-added setting).

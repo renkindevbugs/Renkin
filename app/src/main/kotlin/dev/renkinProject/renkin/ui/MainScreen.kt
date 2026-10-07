@@ -885,7 +885,7 @@ fun ApplicationItem(
                 role = Role.Button,
                 onClick = {
                     view.performTapHaptic()
-                    if (viewModel.iconPackLoaded) {
+                    if (viewModel.iconPackState.value.loaded) {
                         openAppOptions = true
                     } else {
                         toaster.show(syncWarning)

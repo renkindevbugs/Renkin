@@ -133,9 +133,7 @@ class MainViewModel @Inject constructor(
 
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
 
-    val iconPacks: List<IconPack> get() = appProvider.iconPacks
-
-    val iconPackLoaded: Boolean get() = appProvider.iconPackLoaded
+    val iconPackState = appProvider.iconPackState
 
     val applicationsLoaded: Boolean get() = appProvider.applicationsLoaded
 

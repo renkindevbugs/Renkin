@@ -2,9 +2,6 @@ package dev.renkinProject.renkin.apk
 
 import android.content.Context
 import android.graphics.drawable.Drawable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.IconPackFallback
 import dev.renkinProject.renkin.data.InstalledApplication
@@ -22,7 +19,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.withContext
+
+data class IconPackState(
+    val packs: List<IconPack> = emptyList(),
+    val loaded: Boolean = false
+)
 
 internal suspend fun loadIsolatedAppFilters(
     packs: List<IconPack>,
@@ -58,18 +64,19 @@ internal fun indexAppDrawableNames(elements: List<RawElement>): Map<String, Stri
  * the per-app drawables resolved from them, and the calendar icons derived from them.
  * [ApplicationProvider] delegates here; icon generation and pack building query it.
  *
- * [iconPacks] / [iconPackLoaded] are Compose state so the UI re-reads them once packs
- * finish loading (e.g. the edit dialog's icon-pack browser) instead of capturing the
- * empty initial list.
+ * [state] publishes pack discovery and readiness independently of Compose. UI collectors
+ * receive the latest snapshot when they resume; action code reads the current value.
  */
 class IconPackRepository(
     private val context: Context,
     private val iconPackCatalog: IconPackCatalog
 ) {
-    var iconPacks: List<IconPack> by mutableStateOf(listOf())
-        private set
-    var iconPackLoaded: Boolean by mutableStateOf(false)
-        private set
+    private val mutableState = MutableStateFlow(IconPackState())
+    val state: StateFlow<IconPackState> = mutableState.asStateFlow()
+    /** Action-time snapshot only; UI collects [state] to observe loading and pack changes. */
+    val iconPacks: List<IconPack> get() = state.value.packs
+    /** Action-time snapshot only; UI collects [state] to observe loading and pack changes. */
+    val iconPackLoaded: Boolean get() = state.value.loaded
 
     private var appFilterElements: Map<IconPack, List<RawElement>> = emptyMap()
     private var appFilterElementsByPackage: Map<String, List<RawElement>> = emptyMap()
@@ -84,24 +91,36 @@ class IconPackRepository(
      * [installedApps] comes from the caller's already-loaded app list — re-scanning the
      * launcher here used to repeat the whole per-app label/icon work a second time at startup.
      */
-    suspend fun load(installedApps: List<InstalledApplication>) = withContext(Dispatchers.Default) {
-        iconPackLoaded = false
+    suspend fun load(installedApps: List<InstalledApplication>) = load(
+        installedApps,
+        discover = iconPackCatalog::installedIconPacks,
+        loadElements = { pack, apps -> appManager.getAppFilterRawElements(pack.packageName, apps) }
+    )
+
+    internal suspend fun load(
+        installedApps: List<InstalledApplication>,
+        discover: () -> List<IconPack>,
+        loadElements: (IconPack, List<InstalledApplication>) -> List<RawElement>
+    ) = withContext(Dispatchers.Default) {
+        mutableState.update { it.copy(loaded = false) }
         synchronized(fallbackCache) { fallbackCache.clear() }
         // Drop our own generated pack — it only ever holds icons we just built, so offering
         // it as an icon source (or a watch target) is pointless and just clutters the lists.
         // startsWith: profile packs share the base package with a ".p<id>" suffix.
-        iconPacks = iconPackCatalog.installedIconPacks()
+        val discovered = discover()
             .filter { !it.packageName.startsWith(IconPackBuilder.PACKAGE_NAME) }
-        loadAppFilterElements(installedApps)
+        mutableState.update { it.copy(packs = discovered) }
+        loadAppFilterElements(installedApps, loadElements)
     }
 
-    private suspend fun loadAppFilterElements(installedApps: List<InstalledApplication>) {
+    private suspend fun loadAppFilterElements(
+        installedApps: List<InstalledApplication>,
+        loadElements: (IconPack, List<InstalledApplication>) -> List<RawElement>
+    ) {
         installedApplications = installedApps
         appFilterElements = loadIsolatedAppFilters(
             iconPacks,
-            loader = { pack ->
-                appManager.getAppFilterRawElements(pack.packageName, installedApplications)
-            },
+            loader = { pack -> loadElements(pack, installedApplications) },
             onFailure = { pack, error ->
                 Log.error("IconPackRepository", "Skipping malformed appfilter: ${pack.packageName}", error)
             }
@@ -112,7 +131,7 @@ class IconPackRepository(
         appDrawableNamesByPackage = appFilterElementsByPackage.mapValues { (_, elements) ->
             indexAppDrawableNames(elements)
         }
-        iconPackLoaded = true
+        mutableState.update { it.copy(loaded = true) }
     }
 
     /** The pack's classic fallback styling (iconback/mask/upon/scale) for unthemed apps. */

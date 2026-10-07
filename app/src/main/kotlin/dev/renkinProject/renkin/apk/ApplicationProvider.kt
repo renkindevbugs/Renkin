@@ -154,10 +154,11 @@ class ApplicationProvider internal constructor(
     // old copy-per-edit made it O(n²). Exposed read-only as List; the UI still observes it.
     private val _applicationList = mutableStateListOf<PackageInfoStruct>()
     val applicationList: List<PackageInfoStruct> get() = _applicationList
-    // Icon-pack data (packs, app-filter elements, calendar icons) lives in
-    // IconPackRepository; iconPacks / iconPackLoaded delegate to it so existing UI reads
-    // stay reactive (the repo backs them with Compose state).
+    // UI observes the repository flow; synchronous getters serve operation snapshots.
+    val iconPackState get() = iconPackRepo.state
+    /** Action-time snapshot only; composables collect [iconPackState]. */
     val iconPacks: List<IconPack> get() = iconPackRepo.iconPacks
+    /** Action-time snapshot only; composables collect [iconPackState]. */
     val iconPackLoaded: Boolean get() = iconPackRepo.iconPackLoaded
     var applicationsLoaded: Boolean by mutableStateOf(false)
         private set

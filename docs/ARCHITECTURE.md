@@ -41,7 +41,7 @@ ApplicationProvider (apk/)                ← orchestrator: owns the app list, p
         ├── InstalledAppCatalog            ← launcher activities, labels and application icons
         ├── IconPackCatalog                ← installed icon-pack discovery and package metadata
         ├── IconPackRepository             ← installed packs, app-filter elements, per-app
-        │     │                              drawables, calendar icons (Compose-state backed)
+        │     │                              drawables, calendar icons (pack StateFlow)
         │     └── ApplicationManager        ← icon-pack resources and appfilter XML only
         ├── IconGenerationService          ← runs IconGenerator to produce icons
         ├── IconPackBuildService           ← assembles/signs APKs and runs install/replace
@@ -97,6 +97,30 @@ the same. Success toasts come from the library owner after the write. Write fail
 and reported with a failure toast; cancellation still propagates. Profile changes do not own or
 reset this device-wide library. AppModule owns the repository binding and the factories that
 compose domain collaborators.
+
+Phase 7B1 moves installed-pack discovery/readiness out of Compose state. `IconPackRepository`
+owns a read-only `StateFlow<IconPackState>` containing the pack list and loaded flag. Loading
+publishes not-ready, then discovered packs, and ready only after appfilter/calendar indexes are
+constructed. Repository/provider synchronous getters are documented as action-time snapshots;
+they do not trigger recomposition. MainViewModel exposes only the flow, and action handlers read
+`iconPackState.value` explicitly. There is no separately writable UI copy. `ApplicationProvider`,
+MainViewModel and the Global options ViewModel expose the repository flow directly. MainActivity,
+Global options, the watch
+screen and watch Apply collect it with `collectAsStateWithLifecycle`; resumed screens receive
+the latest state even if loading finished while they were stopped. Pack lists passed to stateless
+editor/source widgets come from those collected snapshots. Tap-time readiness and foreground
+installed-pack checks still read the current domain value.
+
+The lifecycle runtime Compose dependency uses the existing lifecycle version. Pack exclusion,
+isolated parallel appfilter parsing, cancellation, cache clearing and refresh/profile ownership
+are unchanged. The live application list, provider/profile scalar state and remaining UI flows
+keep their existing behavior until subsequent 7B checkpoints. No persistence format changes.
+After device confirmation, eight new regression cases cover the public catalog load, empty/own
+packs, discovery before readiness with completed indexes, late collection/reload, discovery
+failure/retry, isolated malformed appfilters, parser cancellation/retry and lifecycle stop/resume.
+`IconPackLifecycleComposeTest` verifies a stopped screen retains its displayed snapshot and
+receives the latest completed repository state on resume. The public load method and controlled
+discovery/parser tests use the same internal loading pipeline.
 
 The UI layer never constructs repositories by hand; view models receive them through
 Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only for genuine
@@ -328,6 +352,19 @@ assert raw DataStore stays application-only after full/shared/legacy imports and
 state bootstrap, while exported format-4 data and format-3 recovery retain derived profile values.
 
 ## Threading & state
+
+The remaining primary roadmap phases are **7B** (domain StateFlow and lifecycle-aware UI reads),
+**7C** (durable unsaved drafts with ownership checks after process death), and **7D** (incremental
+feature-package moves). Each may need several independently confirmed checkpoints; 7B1 starts
+with the installed-pack state rather than changing every domain collection at once.
+
+A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
+dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
+typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.
+Before removing the column, explicitly design its replacement recovery behavior, conversion of
+unconverted active/inactive rows, portable legacy adapters and non-additive snapshot migration.
+Do not couple that Room version bump to the StateFlow migration. Until its own reviewed/device
+checkpoint, keep the current paired writes and the documented format-4 compatibility field.
 
 - Heavy work lives in `suspend` functions that hop to `Dispatchers.Default` internally
   (`withContext`). View models call them from `viewModelScope` (Main) safely.

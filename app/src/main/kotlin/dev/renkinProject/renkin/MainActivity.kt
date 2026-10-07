@@ -18,6 +18,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,8 +71,8 @@ class MainActivity : ComponentActivity() {
 
         // Instantiate the view model now, on the main thread, before setContent. This forces
         // its ApplicationProvider — and the Compose snapshot state that provider holds
-        // (iconPacks, applicationsLoaded, …) — to be created in the global snapshot. If the
-        // first touch instead happened while reading viewModel.iconPacks during the initial
+        // (applicationList, applicationsLoaded, …) — to be created in the global snapshot. If the
+        // first touch instead happened while reading view model state during the initial
         // composition, Compose throws "Reading a state that was created after the snapshot
         // was taken or in a snapshot that has not yet been applied".
         viewModel
@@ -93,6 +94,7 @@ class MainActivity : ComponentActivity() {
         }
 
         setContent {
+            val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()
             val recoveryState by StorageOperationGate.recoveryState.collectAsState()
             val recoveryFailureReason by StorageOperationGate.recoveryFailureReason.collectAsState()
             if (recoveryState != StorageRecoveryState.READY) {
@@ -148,7 +150,7 @@ class MainActivity : ComponentActivity() {
                                     color = MaterialTheme.colorScheme.background
                                 ) {
                                     ToastHost(toaster)
-                                    MainColumn(viewModel.iconPacks)
+                                    MainColumn(iconPackState.packs)
 
                                     if (crashPending) {
                                         CrashReportDialog(
@@ -191,9 +193,9 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.Default) {
             // Skip until the initial pack load finished, otherwise every installed pack
             // looks "new" against the still-empty loaded list on first launch.
-            if (!viewModel.iconPackLoaded) return@launch
+            if (!viewModel.iconPackState.value.loaded) return@launch
             val installed = iconPackCatalog.installedIconPacks()
-            val loaded = viewModel.iconPacks.map { it.packageName }.toSet()
+            val loaded = viewModel.iconPackState.value.packs.map { it.packageName }.toSet()
             val newPack = installed.firstOrNull {
                 !IconPackBuilder.isOwnPack(it.packageName) && it.packageName !in loaded
             } ?: return@launch

@@ -53,6 +53,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -231,7 +232,8 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     val custom = categories.custom
     val existing = categories.existing
     val iconless = categories.iconless
-    val iconPacks = viewModel.iconPacks
+    val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()
+    val iconPacks = iconPackState.packs
 
     val targetCount by remember(state, categories) {
         derivedStateOf {

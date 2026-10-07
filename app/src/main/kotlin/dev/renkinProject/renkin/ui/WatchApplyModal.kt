@@ -46,6 +46,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.apk.IconApplyOutcome
 import dev.renkinProject.renkin.MainViewModel
@@ -72,6 +73,7 @@ import kotlinx.coroutines.withContext
 fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     val context = getCurrentContext()
     val viewModel: MainViewModel = hiltViewModel()
+    val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()
     val watchViewModel: WatchViewModel = hiltViewModel()
     val prefs = getPreferences()
     val view = LocalView.current
@@ -135,7 +137,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     if (!loaded || suggestion == null) return
     // When opened cold from a notification the app list / packs may still be
     // loading; wait so the modal shows real icons instead of empty placeholders.
-    if (!viewModel.applicationsLoaded || !viewModel.iconPackLoaded) return
+    if (!viewModel.applicationsLoaded || !iconPackState.loaded) return
 
     RenkinAlertDialog(
         onDismissRequest = { if (!applying) onDismiss() },
@@ -173,7 +175,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     candidates.forEach { candidate ->
-                        val pack = packsName(viewModel.iconPacks, candidate.iconPackPackage)
+                        val pack = packsName(iconPackState.packs, candidate.iconPackPackage)
                         FilterChip(
                             selected = selectedPack == candidate.iconPackPackage,
                             onClick = { selectedPack = candidate.iconPackPackage },

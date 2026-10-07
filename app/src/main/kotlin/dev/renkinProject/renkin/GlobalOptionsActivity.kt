@@ -31,7 +31,6 @@ import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
-import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.isDarkModeEnabled
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
@@ -227,7 +226,7 @@ class GlobalOptionsViewModel @Inject constructor(
     val toastEvents = _toastEvents.receiveAsFlow()
 
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
-    val iconPacks: List<IconPack> get() = appProvider.iconPacks
+    val iconPackState = appProvider.iconPackState
     val lockedIconKeys: Set<String> get() = appProvider.lockedIconKeys
 
     private val previewCache = GlobalPreviewBitmapCache()
