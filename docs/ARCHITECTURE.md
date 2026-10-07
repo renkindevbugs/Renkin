@@ -157,7 +157,18 @@ Complete/unique classification and per-key value round-trips are required test c
 shipping; schema initialization does not assert against the registry in production.
 The strict version-1 `ProfileStyleCodec` is bounded to 256 KiB in characters and UTF-8 bytes;
 it is prepared for the later storage migration and does not write new DB or backup documents.
-Room remains at v20, portable backup format at 3 and DataStore owns the active settings.
+At that checkpoint Room remains at v20, portable backup format at 3 and DataStore owns the
+active settings.
+
+Phase 7A3 appends `Profile.profileStyle` as TEXT NOT NULL with an empty-string default in
+Room v21. Migration 20 → 21 only reserves the column; existing rows, new profiles and portable
+imports leave it empty. Active settings remain in DataStore and inactive settings in
+`prefsSnapshot`, with no bootstrap or independent typed writes before the authority cutover.
+Recovery adapters compose audited additions by table: v18/v19/v20 snapshots restored into v21
+default the new Profile column to empty, while v21 snapshots preserve it exactly. The exported
+v21 Room schema is checked in with migration/recovery coverage for preserved values, defaults,
+rejected schema changes, Previous state/redo and pending startup recovery. Portable backups
+remain at format 3.
 
 ## Threading & state
 
@@ -248,7 +259,7 @@ Room remains at v20, portable backup format at 3 and DataStore owns the active s
 - **DataStore Preferences** (`data/DataPreferences.kt`) — all settings. Typed accessors:
   Composable `DataStore.getXValue()` for reading in composition; `Preferences.getXValue()`
   for reading a captured snapshot off the main thread.
-- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v20) — profiles + rendered and base icons
+- **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v21) — profiles + rendered and base icons
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
   rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the
   Global options UI, only unsaved refresh output is Generated; saved/built non-custom rows are
@@ -334,7 +345,8 @@ Room remains at v20, portable backup format at 3 and DataStore owns the active s
   cache the file reference and release the live source; pixels used elsewhere are never recycled.
   Codec/file failures discard only optional metadata. Obsolete inline-input metadata from
   pre-release v20 builds is removed on database open, before row queries, and during recovery
-  restore; baked artwork and the v19 last-stage recipe remain intact. The DB version stays 20.
+  restore; baked artwork and the v19 last-stage recipe remain intact. That input-storage change
+  used DB version 20 without another schema bump.
   Full backups carry referenced files as separate `icon-inputs/` ZIP entries, validate filenames,
   size and SHA-256, and clear missing/corrupt optional references without dropping baked icons.
   Recovery captures the referenced files and restores their exact set alongside DB and prefs.
@@ -346,7 +358,7 @@ Room remains at v20, portable backup format at 3 and DataStore owns the active s
   independent copies, unaffected by input-file collection.
   Metadata v3 adds the explicit render pipeline and bitmap preview scale; existing v2 documents
   remain readable as the shared modifier pipeline with the former default scale of 1. No Room
-  schema changes are needed; the database stays at v20. Optional capture/codec failure preserves
+  schema changes were needed for that metadata update. Optional capture/codec failure preserves
   the rendered artwork. Full backups/recovery retain the metadata through the common codec;
   shared profiles continue omitting all input documents and source files.
   Returning to a 5C1 build is not metadata-preserving: its v2-only reader discards v3 optional
@@ -615,13 +627,15 @@ remains an estimate against other apps consuming storage. One retained snapshot 
 roughly the saved databases plus referenced modifier inputs, gallery and signing files.
 
 Internal database recovery requires identical schemas except for explicitly supported
-snapshot migrations. Audited metadata additions (18 → 19 and 19 → 20) compose to support
-v18 → v19, v18 → v20 and v19 → v20 without enumerating every pair: all old
-tables/columns must still match exactly, and only the explicitly appended metadata columns
-`modifierRecipe` and/or `modifierInput` are omitted from inserts so their SQL defaults supply
-empty strings, with the expected TEXT/NOT NULL/empty-string defaults checked. Old row identities,
+snapshot migrations. Audited additions (18 → 19, 19 → 20 and 20 → 21) compose by table to
+support v18/v19/v20 snapshots on the current schema without enumerating every pair. All old
+tables/columns must still match exactly. Only the explicitly appended `DbApplication.modifierRecipe`,
+`DbApplication.modifierInput` and `Profile.profileStyle` columns applicable to that version chain
+are omitted from inserts so their SQL defaults supply empty strings, with the expected
+TEXT/NOT NULL/empty-string defaults checked. Restoring an older snapshot replaces Profile rows,
+so it cannot retain a newer typed style alongside restored legacy preferences. Old row identities,
 preferences, artwork, watch data, gallery and signing state are preserved. This supports both pending startup recovery
-and retained previous-state snapshots from v18/v19. Every future Room schema bump must add
+and retained previous-state snapshots from v18/v19/v20. Every future Room schema bump must add
 compatible recovery handling before shipping: a pending snapshot from the preceding version
 must not strand startup behind a schema mismatch.
 Matching column-name prefixes and SQL defaults alone do not authorize snapshot compatibility.

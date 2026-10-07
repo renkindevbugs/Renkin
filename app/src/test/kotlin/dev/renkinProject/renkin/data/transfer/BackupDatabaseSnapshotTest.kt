@@ -24,6 +24,119 @@ import org.robolectric.shadows.ShadowStatFs
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33])
 class BackupDatabaseSnapshotTest {
+    private suspend fun oldSnapshot(version: Int, file: java.io.File) {
+        val context = RuntimeEnvironment.getApplication()
+        ShadowStatFs.registerStats(context.filesDir, 1_000_000, 1_000_000, 1_000_000)
+        val name = "snapshot-old-$version"
+        try {
+            createDatabaseFromExportedSchema(context, RenkinPackDatabase::class.java.canonicalName!!, version, name) { db ->
+                db.execSQL("INSERT INTO Profile (id, name, description, packLabel, prefsSnapshot, hasUnbuiltChanges, hideMissingPackWarning) " +
+                    "VALUES (7, 'Original', 'description', 'Pack', 'legacy preferences', 1, 1)")
+                db.execSQL("INSERT INTO DbApplication (packageName, activityName, isAdaptiveIcon, isXml, drawable, baseDrawable, profileId) " +
+                    "VALUES ('app.one', 'Main', 0, 0, 'rendered', 'base', 7)")
+                if (version >= 19) db.execSQL("UPDATE DbApplication SET modifierRecipe = 'kept recipe'")
+                db.version = version
+                runBlocking { BackupDatabaseSnapshot.write(db, file) }
+            }
+        } finally { context.deleteDatabase(name) }
+    }
+
+    @Test fun allAuditedOlderSnapshotsReplaceProfilesAndDefaultOnlyTheirMissingColumns() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        val file = context.filesDir.resolve("old-profile-snapshot.json")
+        val database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java).allowMainThreadQueries().build()
+        try {
+            val sql = database.openHelper.writableDatabase
+            for (version in listOf(18, 19, 20)) {
+                oldSnapshot(version, file)
+                sql.execSQL("DELETE FROM Profile")
+                sql.execSQL("INSERT INTO Profile (id, name, profileStyle) VALUES (7, 'Newer', 'must not survive')")
+                BackupDatabaseSnapshot.checkCompatibility(sql, file)
+                database.withTransaction { BackupDatabaseSnapshot.restore(sql, file) }
+                val profile = database.profileDao().get(7)!!
+                assertEquals("v$version", "", profile.profileStyle)
+                assertEquals("Original", profile.name)
+                assertEquals("description", profile.description)
+                assertEquals("Pack", profile.packLabel)
+                assertEquals("legacy preferences", profile.prefsSnapshot)
+                assertTrue(profile.hasUnbuiltChanges)
+                assertTrue(profile.hideMissingPackWarning)
+                val icon = database.renkinPackDao().getAll(7).single()
+                assertEquals("rendered", icon.drawable)
+                assertEquals("base", icon.baseDrawable)
+                assertEquals(if (version >= 19) "kept recipe" else "", icon.modifierRecipe)
+                assertEquals("", icon.modifierInput)
+                val next = database.profileDao().insert(dev.renkinProject.renkin.data.Profile(name = "Next"))
+                assertEquals(8L, next)
+            }
+        } finally { database.close(); file.delete() }
+    }
+
+    @Test fun currentSnapshotRestoresProfileStyleExactlyWithoutLegacyFallback() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        ShadowStatFs.registerStats(context.filesDir, 1_000_000, 1_000_000, 1_000_000)
+        val file = context.filesDir.resolve("v21-style-snapshot.json")
+        val database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java).allowMainThreadQueries().build()
+        try {
+            val sql = database.openHelper.writableDatabase
+            sql.execSQL("INSERT INTO Profile (id, name, prefsSnapshot, profileStyle) VALUES (7, 'Original', 'legacy', 'exact typed document')")
+            BackupDatabaseSnapshot.write(sql, file)
+            sql.execSQL("UPDATE Profile SET profileStyle = 'changed', prefsSnapshot = 'changed'")
+            BackupDatabaseSnapshot.checkCompatibility(sql, file)
+            database.withTransaction { BackupDatabaseSnapshot.restore(sql, file) }
+            assertEquals("exact typed document", database.profileDao().get(7)!!.profileStyle)
+            assertEquals("legacy", database.profileDao().get(7)!!.prefsSnapshot)
+        } finally { database.close(); file.delete() }
+    }
+
+    @Test fun profileAdapterRejectsUnexpectedDefaultsTypesNullabilityAndAdditionalColumns() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        val file = context.filesDir.resolve("profile-schema-check.json")
+        oldSnapshot(20, file)
+        try {
+            val invalidColumns = listOf(
+                "profileStyle TEXT NOT NULL DEFAULT 'wrong'", "profileStyle TEXT DEFAULT ''",
+                "profileStyle INTEGER NOT NULL DEFAULT ''", "profileStyle TEXT NOT NULL DEFAULT '', unexpected TEXT",
+                "wrongName TEXT NOT NULL DEFAULT ''"
+            )
+            for ((index, columns) in invalidColumns.withIndex()) {
+                val name = "invalid-profile-$index"
+                try {
+                    createDatabaseFromExportedSchema(context, RenkinPackDatabase::class.java.canonicalName!!, 21, name) { db ->
+                        db.execSQL("DROP TABLE Profile")
+                        db.execSQL("CREATE TABLE Profile (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, " +
+                            "description TEXT NOT NULL DEFAULT '', packLabel TEXT NOT NULL DEFAULT '', prefsSnapshot TEXT NOT NULL DEFAULT '', " +
+                            "hasUnbuiltChanges INTEGER NOT NULL DEFAULT 0, hideMissingPackWarning INTEGER NOT NULL DEFAULT 0, $columns)")
+                        db.version = 21
+                        val error = runBlocking { runCatching { BackupDatabaseSnapshot.checkCompatibility(db, file) }.exceptionOrNull() }
+                        assertTrue(columns, error is StorageRecoverySchemaException)
+                    }
+                } finally { context.deleteDatabase(name) }
+            }
+        } finally { file.delete() }
+    }
+
+    @Test fun unauditedVersionTransitionsAndProfileColumnRenamesAreRejected() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        val file = context.filesDir.resolve("unaudited-profile.json")
+        oldSnapshot(20, file)
+        val database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java).allowMainThreadQueries().build()
+        try {
+            val sql = database.openHelper.writableDatabase
+            sql.version = 22
+            assertTrue(runCatching { BackupDatabaseSnapshot.checkCompatibility(sql, file) }.exceptionOrNull() is StorageRecoverySchemaException)
+            sql.version = 21
+            val root = JSONObject(file.readText())
+            val tables = root.getJSONArray("tables")
+            for (index in 0 until tables.length()) {
+                val table = tables.getJSONObject(index)
+                if (table.getString("name") == "Profile") table.getJSONArray("columns").put(1, "renamed")
+            }
+            file.writeText(root.toString())
+            assertTrue(runCatching { BackupDatabaseSnapshot.checkCompatibility(sql, file) }.exceptionOrNull() is StorageRecoverySchemaException)
+        } finally { database.close(); file.delete() }
+    }
+
     @Test fun version18SnapshotRestoresAllOldColumnsAndDefaultsRecipeInCurrentDatabase() = runBlocking {
         val context = RuntimeEnvironment.getApplication()
         ShadowStatFs.registerStats(context.filesDir, 1_000_000, 1_000_000, 1_000_000)

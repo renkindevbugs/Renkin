@@ -1,8 +1,8 @@
 # Profile style migration — phase 7A
 
-## Current boundary: 7A2
+## Current boundary: 7A3
 
-Room remains at version 20. `Profile.prefsSnapshot` is an unversioned JSON object containing
+Room is version 21. `Profile.prefsSnapshot` is an unversioned JSON object containing
 the registered `ProfilePrefKeys`. DataStore remains authoritative for the active profile;
 inactive profiles use their Room snapshots. Phase 7A1 isolated the existing wire format
 in `LegacyProfilePreferences`, without changing its fields, defaults, locking or consumers.
@@ -12,7 +12,26 @@ Phase 7A2 adds an immutable `ProfileStyle`, `ProfileStylePreferences` and a vers
 `ProfileStyleCodec`. Snapshot creation now captures stored preferences into that model and
 projects them back through the legacy encoder. No new document is persisted: profile switches,
 builds and exports still write the same unversioned legacy JSON. Replacement and inactive-profile
-baseline patches retain the 7A1 adapter. Room remains at 20 and portable backups remain at 3.
+baseline patches retain the 7A1 adapter. The 7A2 checkpoint kept Room at 20 and portable backups at 3.
+
+Phase 7A3 appends `Profile.profileStyle` as TEXT NOT NULL DEFAULT ''. Migration 20 → 21
+does no backfill: existing profiles and all current creation/import paths leave the column empty.
+No typed document is authoritative or written yet; DataStore and `prefsSnapshot` retain their
+existing ownership. Portable export stays at format 3. The later shared bootstrap and routing
+of every style writer remain one separate authority-cutover checkpoint.
+
+Internal recovery composes explicit per-table additions for 18 → 19, 19 → 20 and 20 → 21.
+Restoring a v18/v19/v20 snapshot into v21 inserts the restored Profile rows with an empty
+`profileStyle`, even if the replaced rows previously carried a value. Same-version v21 recovery
+preserves the column exactly. Checks still require exact table/column order and audited
+TEXT/NOT NULL/empty-string defaults; unknown version transitions and unrelated additions fail.
+The unchanged Watch database uses the same checker without receiving the Profile exception.
+
+Room's exported 21.json accompanies the migration. `RenkinPackMigrationTest` covers v20 and
+earlier upgrades, preserving all profile values and defaulting the new column without backfill.
+`BackupDatabaseSnapshotTest` covers v18/v19/v20 → v21, exact v21 restore, and rejection of
+wrong/default/extra columns or unaudited transitions. `BackupRecoveryTest` covers v20 Previous
+state, v21 redo and pending v20 recovery before the first writer through the shared store.
 
 `ProfileStyleSchema` assigns all 64 registered keys to typed fields and wire paths. The same
 descriptors drive legacy projection and versioned encoding/decoding. Complete, unique key and
@@ -183,13 +202,20 @@ Full backup must capture the active and inactive authoritative styles; shared pr
 exclude library presets and pre-modifier source files. Dynamic values remain unresolved in both
 kinds of export.
 
-Recovery snapshots describe the actual Room columns. The current 18 → 19 → 20 compatibility
-adapter only permits audited additions to `DbApplication`; a Profile column needs its own
-table-specific adapter. Restoring a supported v20 snapshot into v21 must clear the new column
+Recovery snapshots describe the actual Room columns. The 18 → 19 → 20 → 21 compatibility
+adapter permits only audited additions to their specific tables, including `Profile.profileStyle`.
+Restoring a supported v20 snapshot into v21 must clear the new column
 for restored rows and then bootstrap from the restored DB plus restored preferences. Extend
 the audited 18/19 chains deliberately. A v21 snapshot restores its typed documents exactly.
 Previous state, pending rollback and abandoned-recovery handling must use the same rules.
 Do not generalize compatibility to arbitrary ADD COLUMN migrations.
+
+At the authority-cutover checkpoint, explicitly test Previous state → bootstrap in a running
+process: start with converted profiles, restore a retained v20 snapshot and its preferences,
+then require the shared bootstrap to convert the restored rows before readers/writers resume.
+The active profile must use restored DataStore preferences, inactive profiles their restored
+legacy snapshots, and no typed style from before the restore may survive. Restart must preserve
+the converted restored state without repeating conversion from an obsolete preference projection.
 
 Keep storage → provider/profile lock ordering, preference serialization, cancellation and the
 restore preparation/commit boundary. Long render/build/watch jobs capture an immutable typed

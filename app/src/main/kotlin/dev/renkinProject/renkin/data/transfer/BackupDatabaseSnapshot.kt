@@ -40,7 +40,7 @@ internal object BackupDatabaseSnapshot {
                     reader.beginArray()
                     while (reader.hasNext()) columns.add(reader.nextString())
                     reader.endArray()
-                    checkColumns(db, table, columns, omittedColumns)
+                    checkColumns(db, table, columns, omittedColumns[table].orEmpty())
                     requireField(reader, "rows")
                     reader.skipValue()
                     reader.endObject()
@@ -130,9 +130,9 @@ internal object BackupDatabaseSnapshot {
                     reader.beginArray()
                     while (reader.hasNext()) columns.add(reader.nextString())
                     reader.endArray()
-                    checkColumns(db, table, columns, omittedColumns)
-                    // Supported older snapshots omit only explicitly added metadata columns.
-                    // Their SQL defaults preserve the old artwork and local row identities.
+                    checkColumns(db, table, columns, omittedColumns[table].orEmpty())
+                    // Only audited additions can be omitted. SQL defaults retain old artwork
+                    // and leave pre-v21 profiles unconverted for the later shared bootstrap.
                     val sql = "INSERT INTO ${quoted(table)} (${columns.joinToString(",", transform = ::quoted)}) " +
                         "VALUES (${columns.joinToString(",") { "?" }})"
                     requireField(reader, "rows")
@@ -171,17 +171,28 @@ internal object BackupDatabaseSnapshot {
         }
     }
 
-    private fun supportedOmittedColumns(snapshotVersion: Int, currentVersion: Int, tables: Set<String>): List<String> {
-        if (snapshotVersion == currentVersion) return emptyList()
-        if (snapshotVersion > currentVersion || "DbApplication" !in tables) {
+    private fun supportedOmittedColumns(snapshotVersion: Int, currentVersion: Int, tables: Set<String>): Map<String, List<String>> {
+        if (snapshotVersion == currentVersion) return emptyMap()
+        if (snapshotVersion > currentVersion) {
             throw StorageRecoverySchemaException("Recovery database schema has changed")
         }
-        // Compose only audited metadata-only ADD COLUMN migrations. A prefix/default
+        // Compose only audited, table-specific ADD COLUMN migrations. A prefix/default
         // match cannot prove compatibility with migrations that backfill or reinterpret data.
-        val metadataAdditions = mapOf(18 to listOf("modifierRecipe"), 19 to listOf("modifierInput"))
-        return (snapshotVersion until currentVersion).flatMap { version ->
-            metadataAdditions[version] ?: throw StorageRecoverySchemaException("Recovery database schema has changed")
+        val auditedAdditions = mapOf(
+            18 to mapOf("DbApplication" to listOf("modifierRecipe")),
+            19 to mapOf("DbApplication" to listOf("modifierInput")),
+            20 to mapOf("Profile" to listOf("profileStyle"))
+        )
+        val omitted = mutableMapOf<String, List<String>>()
+        for (version in snapshotVersion until currentVersion) {
+            val additions = auditedAdditions[version]
+                ?: throw StorageRecoverySchemaException("Recovery database schema has changed")
+            for ((table, columns) in additions) {
+                if (table !in tables) throw StorageRecoverySchemaException("Recovery database schema has changed")
+                omitted[table] = omitted[table].orEmpty() + columns
+            }
         }
+        return omitted
     }
 
     private fun checkColumns(
@@ -192,7 +203,7 @@ internal object BackupDatabaseSnapshot {
     ) {
         db.query("SELECT * FROM ${quoted(table)} LIMIT 0").use { cursor ->
             val current = cursor.columnNames.toList()
-            val expected = if (omittedColumns.isNotEmpty() && table == "DbApplication") {
+            val expected = if (omittedColumns.isNotEmpty()) {
                 if (current.takeLast(omittedColumns.size) != omittedColumns) {
                     throw StorageRecoverySchemaException("Recovery columns have changed")
                 }
@@ -200,7 +211,7 @@ internal object BackupDatabaseSnapshot {
             } else current
             if (columns != expected) throw StorageRecoverySchemaException("Recovery columns have changed")
         }
-        if (table == "DbApplication" && omittedColumns.isNotEmpty()) {
+        if (omittedColumns.isNotEmpty()) {
             val validDefaults = mutableSetOf<String>()
             db.query("PRAGMA table_info(${quoted(table)})").use { cursor ->
                 while (cursor.moveToNext()) {

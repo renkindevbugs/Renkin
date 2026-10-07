@@ -84,6 +84,67 @@ class BackupRecoveryTest {
 
     private suspend fun capture() = StorageOperationGate.run { store.capture(pack, watch) }
 
+    private fun version20Fixture(snapshot: BackupRecoveryStore.Snapshot) {
+        val file = snapshot.directory.resolve("pack.json")
+        val root = org.json.JSONObject(file.readText()).put("version", 20)
+        val tables = root.getJSONArray("tables")
+        for (index in 0 until tables.length()) {
+            val table = tables.getJSONObject(index)
+            if (table.getString("name") != "Profile") continue
+            val columns = table.getJSONArray("columns")
+            assertEquals("profileStyle", columns.getString(columns.length() - 1))
+            columns.remove(columns.length() - 1)
+            val rows = table.getJSONArray("rows")
+            for (row in 0 until rows.length()) {
+                val values = rows.getJSONArray(row)
+                values.remove(values.length() - 1)
+            }
+        }
+        file.writeText(root.toString())
+        val manifest = snapshot.directory.resolve("snapshot.json")
+        val metadata = org.json.JSONObject(manifest.readText())
+        val entries = metadata.getJSONArray("files")
+        for (index in 0 until entries.length()) {
+            val entry = entries.getJSONObject(index)
+            if (entry.getString("path") == "pack.json") {
+                val digest = java.security.MessageDigest.getInstance("SHA-256").digest(file.readBytes())
+                entry.put("size", file.length()).put("sha256", digest.joinToString("") { "%02x".format(it) })
+            }
+        }
+        manifest.writeText(metadata.toString())
+    }
+
+    @Test fun version20PreviousStateRestoresAllStoresClearsNewStyleAndCanRedoVersion21() = runBlocking {
+        val originalId = seed("Original")
+        val snapshot = capture()
+        version20Fixture(snapshot)
+        store.complete(snapshot)
+        val currentId = seed("Current")
+        pack.updateProfile(pack.profile(1)!!.copy(profileStyle = "current typed document"))
+        manager.restorePreviousState { it() }
+        assertState("Original", originalId)
+        assertEquals("", pack.profile(1)!!.profileStyle)
+        manager.restorePreviousState { it() }
+        assertState("Current", currentId)
+        assertEquals("current typed document", pack.profile(1)!!.profileStyle)
+    }
+
+    @Test fun pendingVersion20RecoveryFinishesBeforeWriterWithNoRetainedNewerStyle() = runBlocking {
+        val originalId = seed("Original")
+        val snapshot = capture()
+        version20Fixture(snapshot)
+        store.activate(snapshot)
+        seed("Partial")
+        pack.updateProfile(pack.profile(1)!!.copy(profileStyle = "newer style must disappear"))
+        StorageOperationGate.installRecovery { manager.recoverPendingRestore() }
+        StorageOperationGate.run {
+            assertState("Original", originalId)
+            assertEquals("", pack.profile(1)!!.profileStyle)
+        }
+        assertNull(store.pendingSnapshot())
+        assertEquals(StorageRecoveryState.READY, StorageOperationGate.recoveryState.value)
+    }
+
     private suspend fun preparedBackup(): BackupManager.PreparedImport {
         seed("Incoming")
         val output = ByteArrayOutputStream()

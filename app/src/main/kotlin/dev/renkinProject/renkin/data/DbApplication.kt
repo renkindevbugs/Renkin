@@ -38,7 +38,9 @@ data class Profile(
     // into the pack APK since — the UI marks these so the save isn't mistaken for a build.
     @ColumnInfo(defaultValue = "0") val hasUnbuiltChanges: Boolean = false,
     // "Don't show again" for the missing-icon-packs dialog, chosen per profile.
-    @ColumnInfo(defaultValue = "0") val hideMissingPackWarning: Boolean = false
+    @ColumnInfo(defaultValue = "0") val hideMissingPackWarning: Boolean = false,
+    // Empty until the shared bootstrap and all style writers switch ownership together.
+    @ColumnInfo(defaultValue = "") val profileStyle: String = ""
 )
 
 @Entity(primaryKeys = ["packageName", "activityName", "profileId"])
@@ -311,6 +313,9 @@ interface ProfileDao {
 // shapes of 16 (with and without the column) end up identical.
 // Version 18 adds the ModifierPreset table (saved Modifier-tab recipes, shared by every profile).
 // Version 19 adds optional per-icon modifier metadata without changing the baked artwork.
+// Version 20 adds a reference to the retained input for local modifier replay.
+// Version 21 reserves Profile.profileStyle; DataStore still owns active settings until cutover.
+// Recovery 20→21 is audited in BackupDatabaseSnapshot.supportedOmittedColumns; review it on every bump.
 @Database(
     entities = [
         DbApplication::class,
@@ -320,7 +325,7 @@ interface ProfileDao {
         BuiltIcon::class,
         ModifierPreset::class
     ],
-    version = 20
+    version = 21
 )
 abstract class RenkinPackDatabase : RoomDatabase() {
     abstract fun renkinPackDao(): RenkinPackDao
@@ -562,6 +567,12 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             }
         }
 
+        internal val MIGRATION_20_21 = object : Migration(20, 21) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE Profile ADD COLUMN profileStyle TEXT NOT NULL DEFAULT ''")
+            }
+        }
+
         internal val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -581,7 +592,8 @@ abstract class RenkinPackDatabase : RoomDatabase() {
             MIGRATION_16_17,
             MIGRATION_17_18,
             MIGRATION_18_19,
-            MIGRATION_19_20
+            MIGRATION_19_20,
+            MIGRATION_20_21
         )
 
         private fun insertDefaultProfile(db: SupportSQLiteDatabase) {
