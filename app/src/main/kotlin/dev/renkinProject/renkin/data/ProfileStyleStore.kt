@@ -3,7 +3,6 @@ package dev.renkinProject.renkin.data
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
@@ -29,7 +28,7 @@ import kotlinx.coroutines.withContext
 
 internal data class ProfileStyleUpdate(val profileId: Long, val document: String, val legacySnapshot: String)
 
-/** Room supplies profile values to readers; DataStore retains a compatibility projection. */
+/** Room owns profile styles; DataStore persists application settings and the active profile id. */
 class ProfileStyleStore internal constructor(
     private val repository: RenkinPackRepository,
     private val preferences: DataStore<Preferences>
@@ -85,7 +84,7 @@ class ProfileStyleStore internal constructor(
                 candidate.document != profile.profileStyle || candidate.legacySnapshot != profile.prefsSnapshot
             }.map { it.first }
             if (changed.isNotEmpty()) repository.writeProfileStyles(changed)
-            publishProjection(candidates.single { it.profileId == activeId }.legacySnapshot, activeId, blockOnFailure = false)
+            persistApplicationPreferences(activeId, blockOnFailure = false)
             initializedEpoch = StorageOperationGate.epoch
         }
     }
@@ -140,31 +139,31 @@ class ProfileStyleStore internal constructor(
         val target = before.toMutablePreferences().apply(transform)
         val activeId = before[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         val requestedId = target[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
-        val current = checkNotNull(repository.profile(activeId)) { "Active profile no longer exists" }
+        val selected = checkNotNull(repository.profile(requestedId)) { "Target profile no longer exists" }
         val desired = if (requestedId == activeId) ProfileStylePreferences.capture(target) else {
             require(ProfileStylePreferences.capture(before) == ProfileStylePreferences.capture(target)) {
                 "A profile switch cannot edit the departing style"
             }
-            decode(checkNotNull(repository.profile(requestedId)) { "Target profile no longer exists" })
+            decode(selected)
         }
-        val unchanged = requestedId == activeId && desired == ProfileStylePreferences.capture(before)
-        val change = update(requestedId, desired, current.profileStyle.takeIf { unchanged })
-        val writesRoom = requestedId != activeId || current.profileStyle != change.document || current.prefsSnapshot != change.legacySnapshot
+        val unchanged = requestedId != activeId || desired == ProfileStylePreferences.capture(before)
+        val change = update(requestedId, desired, selected.profileStyle.takeIf { unchanged })
+        val writesRoom = selected.profileStyle != change.document || selected.prefsSnapshot != change.legacySnapshot
         currentCoroutineContext().ensureActive()
         withContext(NonCancellable) {
             if (writesRoom) {
                 repository.writeProfileStyles(listOf(change))
             }
-            publishProjection(change.legacySnapshot, requestedId, target, blockOnFailure = writesRoom)
+            persistApplicationPreferences(requestedId, target, blockOnFailure = writesRoom)
         }
     }
 
     internal suspend fun switchTo(profileId: Long) = access {
         initialize()
         val profile = checkNotNull(repository.profile(profileId)) { "Target profile no longer exists" }
-        val change = update(profileId, decode(profile), profile.profileStyle)
+        decode(profile)
         currentCoroutineContext().ensureActive()
-        withContext(NonCancellable) { publishProjection(change.legacySnapshot, profileId, blockOnFailure = false) }
+        withContext(NonCancellable) { persistApplicationPreferences(profileId, blockOnFailure = false) }
     }
 
     /** Only the confirmed keep-current recovery action may replace a non-empty invalid document. */
@@ -203,8 +202,6 @@ class ProfileStyleStore internal constructor(
         currentCoroutineContext().ensureActive()
         withContext(NonCancellable) {
             repository.writeProfileStyles(listOf(change))
-            val activeId = preferences.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
-            if (activeId == profileId) publishProjection(change.legacySnapshot, activeId)
         }
     }
 
@@ -224,22 +221,24 @@ class ProfileStyleStore internal constructor(
         ProfileStyleUpdate(id, originalDocument ?: ProfileStyleCodec.encode(style),
             ProfileStylePreferences.toPreferences(style).snapshotProfilePrefs())
 
-    private suspend fun publishProjection(
-        snapshot: String, activeId: Long, applicationValues: Preferences? = null, blockOnFailure: Boolean = true
+    private suspend fun persistApplicationPreferences(
+        activeId: Long, applicationValues: Preferences? = null, blockOnFailure: Boolean = true
     ) {
         try {
-            preferences.edit { target ->
-                if (applicationValues != null) {
-                    target.clear()
-                    target += applicationValues
-                }
-                target.replaceProfilePrefs(snapshot)
-                target[ActiveProfileIdKey] = activeId
-            }
+            val stored = preferences.data.first()
+            val target = (applicationValues ?: stored).toMutablePreferences().apply {
+                ProfilePrefKeys.forEach { remove(it) }
+                this[ActiveProfileIdKey] = activeId
+            }.toPreferences()
+            // Style-only commits wake the shared Room observer without a DataStore write.
+            if (target == stored) return
+            // All writers, including restore, hold the storage gate across this read and update.
+            // The transform intentionally uses that frozen target instead of DataStore's current value.
+            preferences.updateData { target }
         } catch (error: CancellationException) { throw error }
         catch (error: Exception) {
-            // Room may already have committed. Block readers/writers until startup recovery
-            // re-projects that authoritative row instead of exposing an obsolete UI cache.
+            // A combined style/application edit may already have committed Room. Keep that
+            // partial operation behind recovery, where Room remains authoritative.
             if (blockOnFailure) {
                 initializedEpoch = null
                 StorageOperationGate.requireRecovery(error)

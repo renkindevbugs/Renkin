@@ -13,6 +13,7 @@ import dev.renkinProject.renkin.dataStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
 import org.json.JSONObject
 import org.junit.After
 import org.junit.Assert.*
@@ -78,6 +79,10 @@ class ProfileStyleArchiveTest {
 
     private suspend fun export(): ByteArray = ByteArrayOutputStream().also { manager.exportBackup { it } }.toByteArray()
 
+    private suspend fun assertApplicationOnly() {
+        assertTrue(context.dataStore.data.first().asMap().keys.none { it in ProfilePrefKeys })
+    }
+
     private fun entries(bytes: ByteArray): Map<String, String> = buildMap {
         ZipInputStream(ByteArrayInputStream(bytes)).use { zip ->
             while (true) {
@@ -103,10 +108,13 @@ class ProfileStyleArchiveTest {
         val contents = entries(bytes)
         assertEquals(4, JSONObject(contents.getValue("manifest.json")).getInt("format"))
         val data = BackupCodec.decode(contents.getValue("data.json"), 4)
+        assertApplicationOnly()
+        assertEquals(86, data.prefs.getValue(GlobalIconScaleKey.name).value)
         assertEquals(expected.map { it.profileStyle }, data.profiles.map { it.profile.profileStyle })
         context.dataStore.setIntValue(GlobalIconScaleKey, 42)
         manager.importBackup { ByteArrayInputStream(bytes) }
         assertEquals(expected, pack.profiles())
+        assertApplicationOnly()
         assertEquals(86, context.dataStore.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
         ProfileStyleStore(pack, context.dataStore).initialize()
         assertEquals(expected, pack.profiles())
@@ -125,6 +133,7 @@ class ProfileStyleArchiveTest {
         assertEquals(original.profileStyle, row.profileStyle)
         assertEquals(original.prefsSnapshot, row.prefsSnapshot)
         assertEquals(before, context.dataStore.getPreferencesAfterPendingWrites())
+        assertApplicationOnly()
     }
 
     @Test fun legacyArchivesBootstrapEveryProfileBeforeResumingReaders() = runBlocking {
@@ -138,6 +147,7 @@ class ProfileStyleArchiveTest {
             context.dataStore.setIntValue(GlobalIconScaleKey, 42)
             manager.importBackup { ByteArrayInputStream(bytes) }
             assertEquals(86, context.dataStore.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
+            assertApplicationOnly()
             for (profile in pack.profiles()) {
                 assertEquals(ProfileStylePreferences.decodeLegacySnapshot(profile.prefsSnapshot),
                     ProfileStyleCodec.decode(profile.profileStyle))
@@ -190,5 +200,6 @@ class ProfileStyleArchiveTest {
         assertEquals(context.dataStore.getPreferencesAfterPendingWrites()[GlobalIconScaleKey],
             BackupCodec.decode(prefs, RECOVERY_PREFS_FORMAT).prefs.getValue(GlobalIconScaleKey.name).value)
         assertFalse(prefs.contains("profileStyle"))
+        assertApplicationOnly()
     }
 }

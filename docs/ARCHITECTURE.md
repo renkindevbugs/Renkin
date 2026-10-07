@@ -134,8 +134,8 @@ whole provider and all persistence state is shared deliberately.
 ## Profiles
 
 Multiple named icon sets. Each profile owns its icons (`DbApplication.profileId`), its
-configured style (`Profile.profileStyle`, with legacy/UI projections of `ProfilePrefKeys`
-from `DataPreferences.kt`), its watch rules, and
+configured style (`Profile.profileStyle`, with a legacy Room snapshot and an in-memory preference
+projection of `ProfilePrefKeys` from `DataPreferences.kt`), its watch rules, and
 builds its own pack APK under its own package (see Naming). The default profile (id = 1) is
 undeletable; deleting a profile also deletes its watch rules, and a watch notification whose
 profile has since been deleted shows an explanation instead of applying to the wrong profile.
@@ -293,6 +293,40 @@ profile switching, application settings, 17 subscribers sharing one upstream and
 slow consumers during writes, subscriber stop/restart, snapshot/source failure and retry in the
 same collector, and fresh snapshots without intermediate values after storage replacement.
 
+Phase 7A7 retires the persisted active-profile DataStore projection. After validating and
+converting all Room styles, bootstrap removes every `ProfilePrefKeys` entry from the settings
+DataStore and retains application settings, unknown application keys and `ActiveProfileIdKey`.
+An empty legacy active row still captures its incoming DataStore values before this cleanup;
+an existing typed document always wins. A failed validation leaves the incoming preferences
+available for recovery. The epoch/bootstrap barrier applies equally to startup and restored data.
+
+Normal edits continue capturing an immutable combined preference view, but split persistence:
+the typed document and derived `prefsSnapshot` commit together in Room, and only application
+values plus active selection may persist to DataStore. An unchanged application snapshot skips
+the DataStore update entirely. Style-only and built-primary commits therefore notify readers
+through the shared Room flow. Both profile-selection paths preserve the selected document's exact
+text and avoid rewriting a consistent Room pair. A combined style/application operation that
+commits Room and then fails writing DataStore still requires recovery; an application-only or
+selection failure without a Room write propagates without blocking storage. Accepted commits
+remain non-cancellable under the gate.
+The application-preference read, equality check and `updateData` share the storage gate with all
+other writers, including restore. The update transform deliberately uses the captured target;
+it must not be used outside that ownership boundary.
+
+Portable format-4 exports and local format-3 recovery snapshots deliberately retain their derived
+active-profile preference values: both read `getPreferencesAfterPendingWrites`, not raw DataStore.
+Restore may temporarily write those legacy-compatible values under the paused storage gate, then
+forced bootstrap validates/converts the restored rows and removes the profile keys again before
+observers resume. Standalone/staged DataStores retain their existing full preference behavior.
+Room stays at 21, portable backups at 4 and recovery preferences at 3. The Room legacy column and
+its dual writes remain until a separate schema-retirement checkpoint. The confirmed 7A7 tests
+verify cleanup of all 64 profile keys, restart idempotence and preserved application/unknown keys,
+every owner setter and staged Global Save, style-only and built-primary updates without DataStore
+writes, exact document preservation on both selection paths, concurrent application/style edits,
+combined-write failure/retry and cancellation after Room commit. Archive/recovery tests additionally
+assert raw DataStore stays application-only after full/shared/legacy imports and v20 Previous
+state bootstrap, while exported format-4 data and format-3 recovery retain derived profile values.
+
 ## Threading & state
 
 - Heavy work lives in `suspend` functions that hop to `Dispatchers.Default` internally
@@ -379,7 +413,8 @@ same collector, and fresh snapshots without intermediate values after storage re
 
 ## Persistence
 
-- **DataStore Preferences** (`data/DataPreferences.kt`) — all settings. Typed accessors:
+- **DataStore Preferences** (`data/DataPreferences.kt`) — persists application settings and active
+  profile selection; the shared owner overlays Room profile values for readers. Typed accessors:
   Composable `DataStore.getXValue()` for reading in composition; `Preferences.getXValue()`
   for reading a captured snapshot off the main thread.
 - **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v21) — profiles + rendered and base icons

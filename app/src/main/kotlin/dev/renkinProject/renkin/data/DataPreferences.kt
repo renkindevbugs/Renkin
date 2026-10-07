@@ -38,7 +38,7 @@ private suspend fun <T> withPreferenceAccess(block: suspend () -> T): T = Storag
     preferenceAccessMutex.withLock { block() }
 }
 
-/** Settings writes must use this owner under the storage gate; direct DataStore edits are reserved for restore/projection. */
+/** Settings writes use the owner under the storage gate; direct DataStore writes are reserved for restore and application settings. */
 private suspend fun DataStore<Preferences>.editOwnedPreferences(transform: (MutablePreferences) -> Unit) {
     val owner = ProfileStyleAccess.ownerFor(this)
     if (owner != null) owner.edit(transform) else edit { transform(it) }

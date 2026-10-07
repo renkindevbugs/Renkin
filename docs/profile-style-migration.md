@@ -1,12 +1,12 @@
 # Profile style migration — phase 7A
 
-## Current boundary: 7A6
+## Current boundary: 7A7
 
 Room is version 21. `Profile.prefsSnapshot` is an unversioned JSON object containing
 the registered `ProfilePrefKeys`. `Profile.profileStyle` becomes authoritative after the shared
-bootstrap; DataStore holds application settings plus a derived active-profile UI projection.
-7A6 readers now derive their profile values from the active Room document; the persisted DataStore
-projection remains only for compatibility until its separate retirement checkpoint.
+bootstrap; DataStore holds application settings and the active profile id. The combined preference
+view is derived in memory from Room plus DataStore. 7A6 routed readers through the active Room
+document; 7A7 removes the persisted DataStore profile projection after validated bootstrap.
 Phase 7A1 isolated the existing wire format
 in `LegacyProfilePreferences`, without changing its fields, defaults, locking or consumers.
 `DataPreferences` retains the typed key registry and the storage/preference write boundaries.
@@ -31,7 +31,7 @@ transaction. Metadata-only repository updates preserve that pair from the curren
 After pending recovery, bootstrap captures one active id/preference snapshot, validates all
 candidate documents, then commits only changed rows. An empty active row uses live DataStore
 values; empty inactive rows use legacy snapshots. Non-empty documents remain authoritative,
-including on restart. The active UI projection is derived from the winning Room document.
+including on restart. The active UI projection is derived in memory from the winning Room document.
 Absent values, disabled settings and unrecognized legacy ordinals retain their stored form.
 Conversion validates the actual complete encoded size before any style row is written; oversized
 or invalid input blocks initialization and preserves the original data for a reported failure.
@@ -47,11 +47,11 @@ Normal startup, recovery retry and imports never automatically fall back to a le
 
 Normal preference edits, source/colour bundles, Global Save, new profiles, switches and captured
 built-primary updates use this owner. Codecs and repository calls run off Main under the existing
-storage boundary; accepted Room/projection commits finish non-cancellably. A failed projection
-after a normal style write marks recovery required so stale values cannot remain available.
+storage boundary; accepted Room/application-setting commits finish non-cancellably. A failed
+application-setting write after a combined style/application edit marks recovery required.
 Application-only edits and profile selections that did not write Room propagate DataStore failures
-without blocking the application. The initialization cache is invalidated after a committed style's
-projection failure so retry really re-projects the authoritative Room state.
+without blocking the application. A partial combined commit invalidates the initialization cache
+so retry validates the authoritative Room state before resuming consumers.
 Bootstrap inside import/recovery lets the existing rollback/retry boundary handle its failure.
 
 Application, UI/provider snapshots, WatchWorker and AutoBackupWorker share the early recovery
@@ -64,10 +64,14 @@ the current composition, dialogs, scroll and phased restore progress; only actua
 uses the recovery screen. The outer gate resumes observers after successful commit or rollback.
 
 Room remains at 21. The 7A4 checkpoint exported format-3 full/shared archives through the derived
-legacy representation. The 7A5 checkpoint enables format 4; removal of the compatibility
-projection remains later work. A 7A3 build can open Room 21 but cannot keep
-typed documents current when editing settings; switching back to 7A4 trusts those documents.
-Use a forward fix or an explicit legacy-backup import to carry such older-build edits across.
+legacy representation. The 7A5 checkpoint enables format 4; 7A7 removes only the persisted
+DataStore projection, while Room still maintains the legacy snapshot. Do not install a 7A3 build
+over 7A7 data: although it can open Room 21, it reads DataStore directly and will show profile
+defaults after the profile keys have been removed. A profile switch can then save an empty legacy
+snapshot. Surviving typed documents remain authoritative and 7A7 bootstrap repairs their legacy
+copies, but 7A3 edits cannot keep those documents current. Use a forward fix or an explicit
+legacy-backup import to carry older-build edits across. Builds from 7A4–7A6 have the shared owner
+and recreate their DataStore projection from authoritative typed documents during bootstrap.
 
 After device confirmation, `ProfileStyleStoreTest` installs the bridge with real Room storage and
 injectable preference writes. It covers active live values versus stale snapshots, every registered
@@ -145,8 +149,8 @@ StateFlow: operations use the direct `getPreferencesAfterPendingWrites` snapshot
 reads await only raw DataStore, and MainViewModel waits for READY before acquiring the gate.
 Future gate-owned operations must preserve this distinction and never await shared UI emissions.
 
-DataStore still receives the compatibility projection on writes, and Room still dual-writes the
-legacy snapshot. Their separate retirement follows confirmation of these readers. Room remains 21,
+At the 7A6 checkpoint DataStore still received the compatibility projection on writes, and Room
+still dual-wrote the legacy snapshot. Their retirement follows confirmation of these readers. Room remains 21,
 portable export 4 and internal recovery preferences 3. After device confirmation, eight additional
 `ProfileStyleStoreTest` cases verify stale DataStore values and missing Room fields, direct reads
 under an existing gate owner, Room-only invalidation, profile switching, application settings,
@@ -154,6 +158,38 @@ under an existing gate owner, Room-only invalidation, profile switching, applica
 stop/restart, snapshot/source failure and retry in the same collector, and replacement resumption
 with fresh settings instead of intermediate restored values. The existing import/recovery suites
 exercise the same installed owner through the direct snapshot boundary.
+
+7A7 removes the persisted DataStore profile projection after the confirmed Room-backed reader
+checkpoint. Bootstrap validates all candidates, commits converted typed/legacy Room pairs, then
+removes all registered profile keys from DataStore while retaining application values and active
+selection. Legacy active values are captured before removal; no invalid typed document can cause
+their premature deletion. An initialized typed row remains authoritative over incoming legacy
+values. Every normal owner write also filters the profile keys out of its DataStore target.
+
+Style-only edits skip the DataStore update when application values and active selection are
+unchanged. Built-primary updates now persist only the owning Room pair, including inactive
+profiles. Profile selection writes the active id and preserves the target document exactly; the
+generic preference setter's selection path also compares against the target row instead of
+rewriting it just because the active id changed. Room-only invalidations drive the shared flow.
+`persistApplicationPreferences` reads and compares DataStore before `updateData`; its transform
+intentionally uses the captured target. Every writer, including `restorePrefs`, must hold the same
+storage gate across that read/update interval so another write cannot be overwritten.
+
+Full/shared archive formats and recovery remain unchanged. Exports and recovery snapshots still
+capture the combined owner snapshot, retaining the active profile preference values required by
+their existing validation and legacy bootstrap. Restore writes these values only while observers
+are paused, then forced bootstrap removes them after all restored rows validate or convert.
+Standalone/staged stores still support full profile preferences, including staged Global options.
+Room remains 21, portable export 4 and recovery preferences 3. Legacy `prefsSnapshot` dual writes
+and the Room column remain for a separate schema-retirement checkpoint. After device confirmation,
+four additional owner tests cover all-key bootstrap cleanup/restart, application and unknown-key
+preservation, style-only and active built-baseline notifications without DataStore writes, exact
+documents on both selection paths without Room updates, and concurrent application/style edits.
+Existing setter and staged-Save tests now assert Room-backed values separately from application-only
+raw storage. Failure and cancellation tests exercise combined style/application commits; bootstrap
+cleanup failure preserves incoming legacy values until retry. Archive/recovery tests assert the
+raw store remains application-only after full/shared/legacy imports and v20 Previous state, while
+portable exports and local recovery snapshots continue carrying derived profile preferences.
 
 Internal recovery composes explicit per-table additions for 18 → 19, 19 → 20 and 20 → 21.
 Restoring a v18/v19/v20 snapshot into v21 inserts the restored Profile rows with an empty

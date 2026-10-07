@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.preferencesOf
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.room.Room
 import dev.renkinProject.renkin.apk.ProfileManager
 import kotlinx.coroutines.*
@@ -71,6 +72,10 @@ class ProfileStyleStoreTest {
         assertEquals(expected.snapshotProfilePrefs(), row.prefsSnapshot)
     }
 
+    private fun assertApplicationOnly() {
+        assertTrue(prefs.values.value.asMap().keys.none { it in ProfilePrefKeys })
+    }
+
     @Test fun bootstrapUsesLiveActiveValuesAndInactiveSnapshotsWithoutNormalizingConfiguration() = runBlocking {
         val active = preferencesOf(GlobalIconScaleKey to 73, GlobalColorizeKey to false,
             GlobalColorizeColorKey to "configured theme colour", PrimarySourceKey to -17,
@@ -84,6 +89,7 @@ class ProfileStyleStoreTest {
         assertEquals(DarkMode.DARK.ordinal, snapshot[DarkModeKey])
         assertEquals(1L, snapshot[ActiveProfileIdKey])
         assertEquals(StorageRecoveryState.READY, StorageOperationGate.recoveryState.value)
+        assertApplicationOnly()
     }
 
     @Test fun bootstrapRepairsInvalidActiveIdAndMissingDefaultWithoutDeletingIcons() = runBlocking {
@@ -154,12 +160,17 @@ class ProfileStyleStoreTest {
     @Test fun everyRegisteredProfileKeyPersistsThroughExistingPreferenceSetter() = runBlocking {
         seed(emptyPreferences(), emptyPreferences())
         owner.initialize()
+        val writes = prefs.successfulWrites
         for ((index, key) in ProfilePrefKeys.withIndex()) {
             val value = listOf<Any>(index % 2 == 0, -500 - index, "${key.name}:$index")
                 .single { isValidPersistedPreference(key.name, it) }
             @Suppress("UNCHECKED_CAST")
             prefs.setPreferenceValue(key as Preferences.Key<Any>, value)
-            assertStyle(1, prefs.values.value)
+            val observed = prefs.getPreferencesAfterPendingWrites()
+            assertEquals(value, observed[key])
+            assertStyle(1, observed)
+            assertApplicationOnly()
+            assertEquals(writes, prefs.successfulWrites)
         }
         owner = ProfileStyleStore(repo, prefs)
         assertStyle(1, prefs.getPreferencesAfterPendingWrites())
@@ -169,23 +180,24 @@ class ProfileStyleStoreTest {
     @Test fun bundledSourceColourAndGlobalSaveWritersUseTheSameOwner() = runBlocking {
         seed()
         prefs.setPrimarySource(Source.ICON_PACK, "pack.one")
-        assertStyle(1, prefs.values.value)
+        assertStyle(1, prefs.getPreferencesAfterPendingWrites())
         prefs.setColorStyle(OutlineStyleKeys, 1, 0, 37, Color.Red, listOf(0xff123456.toInt()), listOf(0f, 1f))
-        assertStyle(1, prefs.values.value)
+        assertStyle(1, prefs.getPreferencesAfterPendingWrites())
         val staged = preferencesOf(PrimarySourceKey to Source.APPLICATION_NAME.ordinal,
             PrimaryIconPackKey to "", GlobalIconScaleKey to 91, GlobalColorizeKey to false,
             GlobalColorizeInverseKey to true, OutlineAddKey to true, OutlineWidthKey to 6)
         prefs.persistGlobalStylePrefs(staged)
-        assertStyle(1, prefs.values.value)
-        assertEquals(91, prefs.values.value[GlobalIconScaleKey])
+        assertStyle(1, prefs.getPreferencesAfterPendingWrites())
+        assertEquals(91, prefs.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
         prefs.persistGlobalModifierPrefs(staged.toMutablePreferences().apply { this[GlobalIconScaleKey] = 82 })
-        assertEquals(82, prefs.values.value[GlobalIconScaleKey])
-        assertStyle(1, prefs.values.value)
+        assertEquals(82, prefs.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
+        assertStyle(1, prefs.getPreferencesAfterPendingWrites())
         prefs.persistBuiltPrimaryPrefs(staged)
-        prefs.restoreBuiltPrimarySource(prefs.values.value)
-        assertStyle(1, prefs.values.value)
+        prefs.restoreBuiltPrimarySource(prefs.getPreferencesAfterPendingWrites())
+        assertStyle(1, prefs.getPreferencesAfterPendingWrites())
         prefs.restoreProfilePrefs(preferencesOf(GlobalIconScaleKey to 101).snapshotProfilePrefs())
         assertStyle(1, preferencesOf(GlobalIconScaleKey to 101))
+        assertApplicationOnly()
     }
 
     @Test fun switchesIgnoreStaleTargetArgumentsAndNeverSaveLeavingCache() = runBlocking {
@@ -194,9 +206,9 @@ class ProfileStyleStoreTest {
         var leavingCalled = false
         prefs.switchProfilePrefs("{}", 2) { leavingCalled = true }
         assertFalse(leavingCalled)
-        assertEquals(121, prefs.values.value[GlobalIconScaleKey])
+        assertEquals(121, prefs.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
         prefs.switchProfilePrefs("{}", 1) { leavingCalled = true }
-        assertEquals(88, prefs.values.value[GlobalIconScaleKey])
+        assertEquals(88, prefs.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
         assertStyle(1, preferencesOf(GlobalIconScaleKey to 88))
     }
 
@@ -270,32 +282,40 @@ class ProfileStyleStoreTest {
         assertEquals(2L, prefs.values.value[ActiveProfileIdKey])
     }
 
-    @Test fun committedStyleProjectionFailureBlocksAccessUntilRetryReprojectsRoom() = runBlocking {
+    @Test fun committedCombinedEditFailureBlocksAccessUntilRetryReadsRoomAndKeepsOldApplicationValues() = runBlocking {
         seed()
         installBarrier()
         prefs.getPreferencesAfterPendingWrites()
         prefs.failWrites = true
-        assertTrue(runCatching { prefs.setPreferenceValue(GlobalIconScaleKey, 92) }.exceptionOrNull() is IOException)
-        assertEquals(73, prefs.values.value[GlobalIconScaleKey])
+        assertTrue(runCatching { owner.edit {
+            it[GlobalIconScaleKey] = 92
+            it[DarkModeKey] = DarkMode.DARK.ordinal
+        } }.exceptionOrNull() is IOException)
+        assertNull(prefs.values.value[GlobalIconScaleKey])
+        assertNull(prefs.values.value[DarkModeKey])
         assertEquals(StorageRecoveryState.FAILED, StorageOperationGate.recoveryState.value)
         assertTrue(runCatching { prefs.getPreferencesAfterPendingWrites() }.exceptionOrNull() is StorageRecoveryUnavailableException)
         prefs.failWrites = false
         StorageOperationGate.retryRecovery { }
         assertEquals(92, prefs.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
         assertStyle(1, preferencesOf(GlobalIconScaleKey to 92))
+        assertNull(prefs.getPreferencesAfterPendingWrites()[DarkModeKey])
+        assertApplicationOnly()
     }
 
-    @Test fun bootstrapProjectionFailureRetriesAlreadyConvertedRoomRows() = runBlocking {
+    @Test fun bootstrapCleanupFailureRetriesAlreadyConvertedRoomRowsWithoutLosingLegacyInput() = runBlocking {
         seed()
         installBarrier()
         prefs.failWrites = true
         assertTrue(runCatching { prefs.getPreferencesAfterPendingWrites() }.exceptionOrNull() is IOException)
         val document = db.profileDao().get(1)!!.profileStyle
         assertTrue(document.isNotEmpty())
+        assertEquals(73, prefs.values.value[GlobalIconScaleKey])
         prefs.failWrites = false
         StorageOperationGate.retryRecovery { }
         assertEquals(document, repo.profile(1)!!.profileStyle)
-        assertEquals(73, prefs.values.value[GlobalIconScaleKey])
+        assertEquals(73, prefs.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
+        assertApplicationOnly()
     }
 
     @Test fun cancellationBeforeAcceptanceLeavesBothStoresUnchanged() = runBlocking {
@@ -306,23 +326,28 @@ class ProfileStyleStoreTest {
         edit.join()
         assertTrue(edit.isCancelled)
         assertEquals(before, repo.profiles())
-        assertEquals(73, prefs.values.value[GlobalIconScaleKey])
+        assertEquals(73, prefs.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
     }
 
-    @Test fun cancellationAfterRoomCommitStillFinishesProjection() = runBlocking {
+    @Test fun cancellationAfterRoomCommitStillFinishesCombinedApplicationWrite() = runBlocking {
         seed()
         owner.initialize()
         val entered = CompletableDeferred<Unit>()
         val release = CompletableDeferred<Unit>()
         prefs.beforeCommit = { entered.complete(Unit); release.await() }
-        val edit = async { prefs.setPreferenceValue(GlobalIconScaleKey, 87) }
+        val edit = async { owner.edit {
+            it[GlobalIconScaleKey] = 87
+            it[DarkModeKey] = DarkMode.DARK.ordinal
+        } }
         withTimeout(5000) { entered.await() }
         edit.cancel()
         release.complete(Unit)
         withTimeout(5000) { edit.join() }
         assertTrue(edit.isCancelled)
         assertStyle(1, preferencesOf(GlobalIconScaleKey to 87))
-        assertEquals(87, prefs.values.value[GlobalIconScaleKey])
+        assertEquals(87, prefs.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
+        assertEquals(DarkMode.DARK.ordinal, prefs.values.value[DarkModeKey])
+        assertApplicationOnly()
     }
 
     @Test fun explicitRepairPreservesOriginalsAndKeepsUnknownOrdinalsAndValidDocuments() = runBlocking {
@@ -375,6 +400,85 @@ class ProfileStyleStoreTest {
         assertEquals(before, repo.profiles())
     }
 
+    @Test fun bootstrapRetiresEveryProfileKeyAndRestartKeepsApplicationValuesAndExactDocuments() = runBlocking {
+        val legacy = androidx.datastore.preferences.core.mutablePreferencesOf()
+        for ((index, key) in ProfilePrefKeys.withIndex()) {
+            val value = listOf<Any>(index % 2 == 0, -700 - index, "${key.name}:$index")
+                .single { isValidPersistedPreference(key.name, it) }
+            @Suppress("UNCHECKED_CAST")
+            legacy[key as Preferences.Key<Any>] = value
+        }
+        val unknown = stringPreferencesKey("future_application_setting")
+        legacy[unknown] = "preserved"
+        legacy[DarkModeKey] = DarkMode.DARK.ordinal
+        seed(legacy)
+        owner.initialize()
+        assertApplicationOnly()
+        assertStyle(1, legacy)
+        assertEquals("preserved", prefs.values.value[unknown])
+        assertEquals(DarkMode.DARK.ordinal, prefs.values.value[DarkModeKey])
+        val rows = repo.profiles()
+        val writes = prefs.successfulWrites
+        owner = ProfileStyleStore(repo, prefs)
+        assertEquals(legacy.asMap().filterKeys { it in ProfilePrefKeys },
+            prefs.getPreferencesAfterPendingWrites().asMap().filterKeys { it in ProfilePrefKeys })
+        assertEquals(rows, repo.profiles())
+        assertEquals(writes, prefs.successfulWrites)
+        assertApplicationOnly()
+    }
+
+    @Test fun styleAndActiveBuiltBaselineWritesNotifyReadersWithoutAttemptingDataStoreWrites() = runBlocking {
+        seed()
+        owner.initialize()
+        val writes = prefs.successfulWrites
+        prefs.failWrites = true
+        withObserved { events ->
+            events.next()
+            prefs.setPreferenceValue(GlobalIconScaleKey, 83)
+            assertEquals(83, events.next()[GlobalIconScaleKey])
+            owner.recordBuiltPrimary(1, preferencesOf(PrimarySourceKey to Source.ICON_PACK.ordinal,
+                PrimaryIconPackKey to "built.pack"))
+            val built = events.next()
+            assertEquals(Source.ICON_PACK.ordinal, built[BuiltPrimarySourceKey])
+            assertEquals("built.pack", built[BuiltPrimaryIconPackKey])
+        }
+        assertEquals(writes, prefs.successfulWrites)
+        assertApplicationOnly()
+        assertEquals(StorageRecoveryState.READY, StorageOperationGate.recoveryState.value)
+    }
+
+    @Test fun bothSelectionPathsPreserveExactDocumentsWithoutWritingRoom() = runBlocking {
+        seed()
+        owner.initialize()
+        val row = repo.profile(2)!!
+        db.profileDao().update(row.copy(profileStyle = " \n${row.profileStyle}\n"))
+        val before = repo.profiles()
+        db.openHelper.writableDatabase.execSQL("CREATE TRIGGER reject_profile_update BEFORE UPDATE ON Profile " +
+            "BEGIN SELECT RAISE(ABORT, 'selection must not write profiles'); END")
+        owner.switchTo(2)
+        assertEquals(121, prefs.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
+        prefs.setPreferenceValue(ActiveProfileIdKey, 1L)
+        assertEquals(73, prefs.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
+        prefs.setPreferenceValue(ActiveProfileIdKey, 2L)
+        assertEquals(before, repo.profiles())
+        assertApplicationOnly()
+    }
+
+    @Test fun concurrentApplicationAndStyleEditsCannotOverwriteOtherApplicationKeys() = runBlocking {
+        seed()
+        owner.initialize()
+        val keys = List(20) { stringPreferencesKey("application_$it") }
+        withTimeout(10000) {
+            keys.mapIndexed { index, key -> async(Dispatchers.Default) {
+                prefs.setPreferenceValue(key, "value_$index")
+                prefs.setPreferenceValue(GlobalIconScaleKey, 80 + index)
+            } }.awaitAll()
+        }
+        keys.forEachIndexed { index, key -> assertEquals("value_$index", prefs.values.value[key]) }
+        assertApplicationOnly()
+        assertStyle(1, prefs.getPreferencesAfterPendingWrites())
+    }
+
     @Test fun snapshotsIgnoreStaleProjectionAndPreserveAbsentRoomValuesInsideGate() = runBlocking {
         seed()
         owner.initialize()
@@ -419,7 +523,7 @@ class ProfileStyleStoreTest {
             events.next()
             replaceStyle(1, 88)
             assertEquals(88, events.next()[GlobalIconScaleKey])
-            assertEquals(73, prefs.values.value[GlobalIconScaleKey])
+            assertApplicationOnly()
             owner.switchTo(2)
             val switched = events.next()
             assertEquals(2L, switched[ActiveProfileIdKey])

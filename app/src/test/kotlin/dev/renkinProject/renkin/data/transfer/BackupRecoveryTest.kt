@@ -433,6 +433,7 @@ class BackupRecoveryTest {
 
     private suspend fun assertScales(active: Int, inactive: Int) {
         assertEquals(active, context.dataStore.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
+        assertTrue(context.dataStore.data.first().asMap().keys.none { it in ProfilePrefKeys })
         for ((id, expected) in listOf(1L to active, 2L to inactive)) {
             val profile = pack.profile(id)!!
             val values = ProfileStylePreferences.toPreferences(ProfileStyleCodec.decode(profile.profileStyle))
