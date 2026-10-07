@@ -65,7 +65,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -111,7 +110,7 @@ fun WatchScreen(
     val watchViewModel: WatchViewModel = hiltViewModel()
     val toaster = LocalToaster.current
 
-    val rules by watchViewModel.rules.collectAsState()
+    val rules by watchViewModel.rules.collectAsStateWithLifecycle()
     val apps = viewModel.applicationList
     // Renkin's own generated packs can't be watched (the checker ignores them), so don't
     // offer them in the rule editor's pack picker either.
@@ -484,8 +483,8 @@ private fun WatchRuleList(
 private fun WatchCheckScheduleRow() {
     val watchViewModel: WatchViewModel = hiltViewModel()
     val context = getCurrentContext()
-    val nextCheck by watchViewModel.nextCheckAt.collectAsState()
-    val intervalMinutes by watchViewModel.checkIntervalMinutes.collectAsState()
+    val nextCheck by watchViewModel.nextCheckAt.collectAsStateWithLifecycle()
+    val intervalMinutes by watchViewModel.checkIntervalMinutes.collectAsStateWithLifecycle()
 
     Row(
         modifier = Modifier

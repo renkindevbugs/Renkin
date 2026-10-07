@@ -52,7 +52,6 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -182,7 +181,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     }
 
     val applying = viewModel.globalApplyProgress != null
-    val previewJobs by viewModel.previewJobs.collectAsState()
+    val previewJobs by viewModel.previewJobs.collectAsStateWithLifecycle()
     val dirty by remember(state) {
         derivedStateOf { baseline != null && baseline != state.snapshot() }
     }

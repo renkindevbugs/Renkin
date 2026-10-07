@@ -40,7 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -256,7 +256,7 @@ fun BuildPackPreviewContent(
     // Warn (before building) about calendar apps whose source pack lacks some 1..31 day
     // drawables — those days fall back to a repeated icon instead of rotating.
     val optionsViewModel: OptionsViewModel = hiltViewModel()
-    val preferences by optionsViewModel.preferenceSnapshot.collectAsState()
+    val preferences by optionsViewModel.preferenceSnapshot.collectAsStateWithLifecycle()
     val themed = preferences.getBooleanValue(ExportThemedKey)
     val context = LocalContext.current
     val themedBackground = when {

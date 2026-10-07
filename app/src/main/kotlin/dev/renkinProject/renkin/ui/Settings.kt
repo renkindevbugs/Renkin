@@ -51,7 +51,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -116,10 +116,10 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     var showInstallerPicker by rememberSaveable { mutableStateOf(false) }
     var backupCheckInProgress by remember { mutableStateOf(false) }
     var confirmRestorePreviousState by rememberSaveable { mutableStateOf(false) }
-    val previousStateAvailable by viewModel.previousStateAvailable.collectAsState()
-    val previousStateStored by viewModel.previousStateStored.collectAsState()
+    val previousStateAvailable by viewModel.previousStateAvailable.collectAsStateWithLifecycle()
+    val previousStateStored by viewModel.previousStateStored.collectAsStateWithLifecycle()
     var confirmDiscardPreviousState by rememberSaveable { mutableStateOf(false) }
-    val abandonedRecoveryAvailable by viewModel.abandonedRecoveryAvailable.collectAsState()
+    val abandonedRecoveryAvailable by viewModel.abandonedRecoveryAvailable.collectAsStateWithLifecycle()
     var confirmDiscardAbandonedRecovery by rememberSaveable { mutableStateOf(false) }
     var pendingAutoBackupInterval by rememberSaveable { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
@@ -128,9 +128,9 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
     val installerLabel by produceState<String?>(null, installerSelection) {
         value = viewModel.installerLabel(installerSelection)
     }
-    val autoBackupInterval by viewModel.autoBackupIntervalHours.collectAsState()
-    val autoBackupTreeUri by viewModel.autoBackupTreeUri.collectAsState()
-    val lastAutoBackupAt by viewModel.lastAutoBackupAt.collectAsState()
+    val autoBackupInterval by viewModel.autoBackupIntervalHours.collectAsStateWithLifecycle()
+    val autoBackupTreeUri by viewModel.autoBackupTreeUri.collectAsStateWithLifecycle()
+    val lastAutoBackupAt by viewModel.lastAutoBackupAt.collectAsStateWithLifecycle()
     val autoBackupFolderName by produceState<String?>(null, autoBackupTreeUri) {
         value = autoBackupTreeUri?.let { viewModel.autoBackupFolderName(it) }
     }

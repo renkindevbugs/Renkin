@@ -29,7 +29,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,7 +67,7 @@ private const val MAX_PACK_LABEL = 30
 @Composable
 fun ProfileSwitcherTitle() {
     val viewModel: MainViewModel = hiltViewModel()
-    val profiles by viewModel.profiles.collectAsState(initial = emptyList())
+    val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
     val activeId = viewModel.activeProfileId
     val active = profiles.find { it.id == activeId }
 

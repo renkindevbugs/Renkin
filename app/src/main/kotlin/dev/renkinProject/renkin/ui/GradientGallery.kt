@@ -30,7 +30,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -68,7 +68,7 @@ internal fun GradientGalleryDialog(
     onDismiss: () -> Unit
 ) {
     val viewModel: OptionsViewModel = hiltViewModel()
-    val presets by viewModel.gradientPresets.collectAsState()
+    val presets by viewModel.gradientPresets.collectAsStateWithLifecycle()
     LaunchedEffect(viewModel) { viewModel.loadGradientPresets() }
     var query by rememberSaveable { mutableStateOf("") }
     var family by rememberSaveable { mutableStateOf<GradientFamily?>(null) }

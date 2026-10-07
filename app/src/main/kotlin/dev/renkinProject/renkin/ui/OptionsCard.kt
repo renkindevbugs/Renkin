@@ -25,7 +25,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -227,7 +227,7 @@ private data class AdvancedOptionsState(
 @Composable
 private fun advancedOptionsState(viewModel: OptionsViewModel): AdvancedOptionsState {
     val store = getPreferences()
-    val prefs by viewModel.preferenceSnapshot.collectAsState()
+    val prefs by viewModel.preferenceSnapshot.collectAsStateWithLifecycle()
     val iconColor = store.getIconColor()
     return AdvancedOptionsState(
         primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT),

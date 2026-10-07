@@ -26,7 +26,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -67,7 +67,7 @@ internal fun AppQuickActionsSheet(
     val hasIcon = app.createdIcon != null
     // Rules of the ACTIVE profile only (the flow is per-profile), so another profile watching
     // the same app never makes this one look watched.
-    val rules by watchViewModel.rules.collectAsState()
+    val rules by watchViewModel.rules.collectAsStateWithLifecycle()
     val existingRule = remember(rules, app.key) { watchRuleFor(rules, app) }
     var openWatchScreen by remember { mutableStateOf(false) }
 

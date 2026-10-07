@@ -19,7 +19,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -95,8 +94,8 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()
-            val recoveryState by StorageOperationGate.recoveryState.collectAsState()
-            val recoveryFailureReason by StorageOperationGate.recoveryFailureReason.collectAsState()
+            val recoveryState by StorageOperationGate.recoveryState.collectAsStateWithLifecycle()
+            val recoveryFailureReason by StorageOperationGate.recoveryFailureReason.collectAsStateWithLifecycle()
             if (recoveryState != StorageRecoveryState.READY) {
                 RenkinTheme {
                     BackupRecoveryScreen(
@@ -120,8 +119,8 @@ class MainActivity : ComponentActivity() {
             // manual reporting (copy / email / GitHub) — nothing is sent automatically.
             var crashPending by remember { mutableStateOf(CrashReporter.hasNewCrash(this@MainActivity)) }
 
-            val colorPresets by presetsViewModel.colorPresets.collectAsState()
-            val modifierPresets by presetsViewModel.modifierPresets.collectAsState()
+            val colorPresets by presetsViewModel.colorPresets.collectAsStateWithLifecycle()
+            val modifierPresets by presetsViewModel.modifierPresets.collectAsStateWithLifecycle()
             LaunchedEffect(presetsViewModel) {
                 presetsViewModel.toastEvents.collect { resId -> toaster.show(getString(resId)) }
             }

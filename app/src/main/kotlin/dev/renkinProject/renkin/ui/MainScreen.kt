@@ -76,7 +76,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
@@ -535,7 +535,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // app list because it points at a real row, and starts from the top where every target sits.
     val onboardingSeen by remember {
         prefs.observePreferences().map { it.getBooleanValue(OnboardingSeenKey) }
-    }.collectAsState(initial = true)
+    }.collectAsStateWithLifecycle(initialValue = true)
     if (!onboardingSeen && viewModel.startupComplete) {
         LaunchedEffect(Unit) {
             listState.scrollToItem(0)
@@ -567,9 +567,9 @@ fun MainColumn(iconPacks: List<IconPack>) {
         )
     }
 
-    val restoreStage by viewModel.backupRestoreStage.collectAsState()
-    val snapshotStage by viewModel.backupSnapshotStage.collectAsState()
-    val restoreCancellable by viewModel.backupRestoreCancellable.collectAsState()
+    val restoreStage by viewModel.backupRestoreStage.collectAsStateWithLifecycle()
+    val snapshotStage by viewModel.backupSnapshotStage.collectAsStateWithLifecycle()
+    val restoreCancellable by viewModel.backupRestoreCancellable.collectAsStateWithLifecycle()
     if (viewModel.backupInProgress) BackupRestoreProgress(
         stage = restoreStage,
         snapshotStage = snapshotStage,
@@ -648,7 +648,7 @@ fun ApplicationList(
     // causes visible scroll jank
     val prefs = getPreferences()
     val bgColorValue = prefs.getBackgroundColor()
-    val preferenceSnapshot by optionsViewModel.preferenceSnapshot.collectAsState()
+    val preferenceSnapshot by optionsViewModel.preferenceSnapshot.collectAsStateWithLifecycle()
     val themed = preferenceSnapshot.getBooleanValue(ExportThemedKey)
 
     // Install times refresh whenever the set of packages changes — keying on size alone missed
@@ -1101,7 +1101,7 @@ fun OpenAppOptions(
     val preferences = getPreferences()
     val savedFont by remember(preferences) {
         preferences.observePreferences().map { it[TextFontKey] ?: "" }
-    }.collectAsState(initial = null)
+    }.collectAsStateWithLifecycle(initialValue = null)
     val initialFont = savedFont ?: return
     val session = editorViewModel.getOrCreate(
         sessionId, expected, app, iconPacks.firstOrNull()?.packageName ?: "", initialFont,
@@ -1167,7 +1167,7 @@ fun TitleBar(
     var openWatch by rememberSaveable { mutableStateOf(false) }
 
     val watchViewModel: WatchViewModel = hiltViewModel()
-    val completedCount by watchViewModel.completedCount.collectAsState()
+    val completedCount by watchViewModel.completedCount.collectAsStateWithLifecycle()
     val mainViewModel: MainViewModel = hiltViewModel()
 
     LargeFlexibleTopAppBar(

@@ -4,7 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -400,7 +400,7 @@ internal fun MutablePreferences.replaceProfilePrefs(snapshot: String) {
 
 @Composable
 fun DataStore<Preferences>.getPreferencesValue(): Preferences {
-    return remember(this) { observePreferences() }.collectAsState(initial = emptyPreferences()).value
+    return remember(this) { observePreferences() }.collectAsStateWithLifecycle(initialValue = emptyPreferences()).value
 }
 
 @Composable
@@ -749,7 +749,7 @@ fun <T : Any> DataStore<Preferences>.getPreferenceFlow(key: Preferences.Key<T>):
 
 @Composable
 fun <T : Any> DataStore<Preferences>.getPreferenceValue(key: Preferences.Key<T>, default: T): T {
-    return remember(this, key) { getPreferenceFlow(key) }.collectAsState(initial = default).value ?: default
+    return remember(this, key) { getPreferenceFlow(key) }.collectAsStateWithLifecycle(initialValue = default).value ?: default
 }
 
 suspend fun <T> DataStore<Preferences>.setPreferenceValue(key: Preferences.Key<T>, value: T) {

@@ -113,14 +113,35 @@ installed-pack checks still read the current domain value.
 
 The lifecycle runtime Compose dependency uses the existing lifecycle version. Pack exclusion,
 isolated parallel appfilter parsing, cancellation, cache clearing and refresh/profile ownership
-are unchanged. The live application list, provider/profile scalar state and remaining UI flows
-keep their existing behavior until subsequent 7B checkpoints. No persistence format changes.
+are unchanged. The live application list and provider/profile scalar state keep their existing
+behavior until subsequent 7B checkpoints. No persistence format changes.
 After device confirmation, eight new regression cases cover the public catalog load, empty/own
 packs, discovery before readiness with completed indexes, late collection/reload, discovery
 failure/retry, isolated malformed appfilters, parser cancellation/retry and lifecycle stop/resume.
 `IconPackLifecycleComposeTest` verifies a stopped screen retains its displayed snapshot and
 receives the latest completed repository state on resume. The public load method and controlled
 discovery/parser tests use the same internal loading pipeline.
+
+Phase 7B2 moves the remaining UI Flow/StateFlow reads to `collectAsStateWithLifecycle`,
+including the remembered preference helpers, profile lists, preset libraries, watch rules and
+scheduling, backup progress/recovery availability and startup recovery state. Collection uses
+the host's lifecycle and the default STARTED threshold: it stops below STARTED and restarts
+when the screen becomes active. Existing initial values and remembered flow identities stay
+the same. A stopped composition retains its displayed value; after restarting, StateFlow
+delivers its current value and cold flows resume their source subscriptions. Lifecycle collection
+does not make an asynchronous source read synchronous or remove its existing loading defaults.
+
+ViewModel/repository sharing policies remain with their owners. In particular, the eager options
+snapshot still retains preferences across sheet/dialog reopening, and watch flows retain their
+existing subscription timeout. Build/install, backup, preview and worker jobs keep their existing
+scopes, cancellation and session checks; stopping UI collection does not cancel those operations.
+One-shot toast/event collectors and operation-time preference snapshots retain their contracts.
+Code holding the storage gate continues reading the owner directly rather than awaiting UI flows.
+Room remains v21, portable backup format 4 and recovery preferences format 3.
+`PreferencesLifecycleComposeTest` exercises both production preference helpers: initial defaults
+before STARTED, zero source subscriptions while stopped, retained displayed values, latest values
+and absent-key defaults after restarting. It also restarts UI during failed recovery, verifying
+that recovery status updates while preference data stays paused until recovery completes.
 
 The UI layer never constructs repositories by hand; view models receive them through
 Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only for genuine

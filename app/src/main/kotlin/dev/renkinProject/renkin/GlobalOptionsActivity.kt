@@ -13,7 +13,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -106,8 +106,8 @@ class GlobalOptionsActivity : ComponentActivity() {
             val viewModel: GlobalOptionsViewModel = hiltViewModel()
             val optionsViewModel: OptionsViewModel = hiltViewModel()
             val presetsViewModel: PresetLibraryViewModel = hiltViewModel()
-            val colorPresets by presetsViewModel.colorPresets.collectAsState()
-            val modifierPresets by presetsViewModel.modifierPresets.collectAsState()
+            val colorPresets by presetsViewModel.colorPresets.collectAsStateWithLifecycle()
+            val modifierPresets by presetsViewModel.modifierPresets.collectAsStateWithLifecycle()
 
             // The screen is bound to the profile it opened with (see GlobalOptionsViewModel):
             // if that changes underneath, close and hand back what was already applied rather

@@ -55,7 +55,7 @@ import androidx.compose.material3.ToggleButton
 import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -223,7 +223,7 @@ fun HeroPackCard(
     }
 
     // Saved-but-not-built marker for the active profile (set by the save-before-switch flow).
-    val profiles by viewModel.profiles.collectAsState(initial = emptyList())
+    val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
     val activeProfile = profiles.find { it.id == viewModel.activeProfileId }
     val progressAnimationKey = heroProgressAnimationKey(
         activeProfileId = viewModel.activeProfileId,
