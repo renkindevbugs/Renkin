@@ -22,7 +22,9 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.extension.toNullableColor
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -42,7 +44,11 @@ private suspend fun DataStore<Preferences>.editOwnedPreferences(transform: (Muta
     if (owner != null) owner.edit(transform) else edit { transform(it) }
 }
 
-fun DataStore<Preferences>.observePreferences(): Flow<Preferences> = StorageOperationGate.observe(data)
+/** Operations holding the storage gate use [getPreferencesAfterPendingWrites], never await shared UI emissions. */
+fun DataStore<Preferences>.observePreferences(): Flow<Preferences> = StorageOperationGate.observe(flow {
+    val owner = ProfileStyleAccess.ownerFor(this@observePreferences)
+    emitAll(owner?.observe() ?: this@observePreferences.data)
+})
 
 private const val DARK_MODE_NAME = "NIGHT_THEME"
 private const val INSTALL_METHOD_NAME = "INSTALL_METHOD"

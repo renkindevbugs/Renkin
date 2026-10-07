@@ -7,21 +7,57 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.withContext
 
 internal data class ProfileStyleUpdate(val profileId: Long, val document: String, val legacySnapshot: String)
 
-/** Room owns profile values; DataStore retains a derived projection for existing UI readers. */
+/** Room supplies profile values to readers; DataStore retains a compatibility projection. */
 class ProfileStyleStore internal constructor(
     private val repository: RenkinPackRepository,
     private val preferences: DataStore<Preferences>
 ) {
     private var initializedEpoch: Long? = null
+    private data class StyleProjection(val document: String, val values: Preferences)
+    private var cachedProjection: StyleProjection? = null
+    private data class ObservedPreferences(val epoch: Long, val values: Preferences)
+    // This singleton's sharing scope belongs to the application, not to an individual collector.
+    private val observationScope = lazy { CoroutineScope(SupervisorJob() + Dispatchers.Default) }
+    private val observations by lazy {
+        val snapshots = combine(repository.profilesFlow(), preferences.data) { _, _ -> Unit }
+            .conflate()
+            .mapNotNull { snapshotForObservation() }
+            .distinctUntilChanged()
+            .catch { error ->
+                if (error is CancellationException || error !is Exception) throw error
+                if (error !is StorageRecoveryUnavailableException) {
+                    Log.error("ProfileStyleStore", "Cannot observe profile settings", error)
+                    StorageOperationGate.requireRecovery(error)
+                }
+            }
+        StorageOperationGate.observe(snapshots).conflate().shareIn(
+            observationScope.value,
+            SharingStarted.WhileSubscribed(stopTimeoutMillis = 0, replayExpirationMillis = 0),
+            replay = 1
+        )
+    }
 
     private suspend fun <T> access(operation: suspend () -> T): T = StorageOperationGate.run {
         withContext(Dispatchers.Default) { operation() }
@@ -56,7 +92,47 @@ class ProfileStyleStore internal constructor(
 
     internal suspend fun snapshot(): Preferences = access {
         initialize()
-        preferences.data.first()
+        val stored = preferences.data.first()
+        val activeId = stored[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
+        val profile = repository.profile(activeId)
+            ?: throw StorageRecoverySnapshotException("Active profile $activeId does not exist")
+        val values = profilePreferences(profile)
+        stored.toMutablePreferences().apply {
+            ProfilePrefKeys.forEach { remove(it) }
+            this += values
+            this[ActiveProfileIdKey] = activeId
+        }.toPreferences()
+    }
+
+    internal fun observe(): Flow<Preferences> = StorageOperationGate.observe(observations)
+        .filter { it.epoch == StorageOperationGate.epoch }
+        .map { it.values }
+        .distinctUntilChanged()
+
+    private suspend fun snapshotForObservation(): ObservedPreferences? = access {
+        try {
+            ObservedPreferences(StorageOperationGate.epoch, snapshot())
+        } catch (error: CancellationException) { throw error }
+        catch (error: Exception) {
+            // Report while still holding the gate so a later successful restore cannot be
+            // marked failed by an exception from an older read.
+            initializedEpoch = null
+            Log.error("ProfileStyleStore", "Cannot read observed profile settings", error)
+            StorageOperationGate.requireRecovery(error)
+            null
+        }
+    }
+
+    internal fun closeObservations() {
+        if (observationScope.isInitialized()) observationScope.value.cancel()
+    }
+
+    private fun profilePreferences(profile: Profile): Preferences {
+        // Cache only the pure conversion. Every read still resolves the current row under the gate.
+        cachedProjection?.takeIf { it.document == profile.profileStyle }?.let { return it.values }
+        return ProfileStylePreferences.toPreferences(decode(profile)).also {
+            cachedProjection = StyleProjection(profile.profileStyle, it)
+        }
     }
 
     internal suspend fun edit(transform: (MutablePreferences) -> Unit) = access {
@@ -190,5 +266,8 @@ internal object ProfileStyleAccess {
         resolve?.invoke()?.repairInvalidDocuments(preserveOriginals)
     }
 
-    internal fun resetForTests() { resolve = null }
+    internal fun resetForTests() {
+        resolve?.invoke()?.closeObservations()
+        resolve = null
+    }
 }

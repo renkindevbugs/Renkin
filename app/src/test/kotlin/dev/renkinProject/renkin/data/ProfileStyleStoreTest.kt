@@ -11,6 +11,10 @@ import dev.renkinProject.renkin.apk.ProfileManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.junit.After
@@ -22,6 +26,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import java.io.IOException
+import java.util.concurrent.atomic.AtomicInteger
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33])
@@ -42,6 +47,8 @@ class ProfileStyleStoreTest {
     }
 
     @After fun cleanup() {
+        owner.closeObservations()
+        runBlocking { runCatching { StorageOperationGate.run { } } }
         StorageOperationGate.resetForTests()
         db.close()
     }
@@ -368,9 +375,167 @@ class ProfileStyleStoreTest {
         assertEquals(before, repo.profiles())
     }
 
+    @Test fun snapshotsIgnoreStaleProjectionAndPreserveAbsentRoomValuesInsideGate() = runBlocking {
+        seed()
+        owner.initialize()
+        prefs.values.value = preferencesOf(ActiveProfileIdKey to 1L, GlobalIconScaleKey to 999,
+            OutlineAddKey to true, DarkModeKey to DarkMode.DARK.ordinal)
+        val snapshot = withTimeout(5000) {
+            StorageOperationGate.run { prefs.getPreferencesAfterPendingWrites() }
+        }
+        assertEquals(73, snapshot[GlobalIconScaleKey])
+        assertNull(snapshot[OutlineAddKey])
+        assertEquals(DarkMode.DARK.ordinal, snapshot[DarkModeKey])
+        prefs.setPreferenceValue(OutlineWidthKey, 4)
+        assertStyle(1, preferencesOf(GlobalIconScaleKey to 73, OutlineWidthKey to 4))
+    }
+
+    @Test fun manySubscribersShareOneUpstreamAndOneSnapshotPerInvalidation() = runBlocking {
+        seed()
+        owner.initialize()
+        withObserved { first ->
+            assertEquals(73, first.next()[GlobalIconScaleKey])
+            val reads = prefs.dataCollections.get()
+            val others = List(16) { Channel<Preferences>(Channel.UNLIMITED) }
+            val jobs = others.map { events -> launch { prefs.observePreferences().collect { events.send(it) } } }
+            try {
+                others.forEach { assertEquals(73, it.next()[GlobalIconScaleKey]) }
+                assertEquals(reads, prefs.dataCollections.get())
+                assertEquals(1, prefs.activeCollections.get())
+                prefs.values.value = prefs.values.value.toMutablePreferences().apply {
+                    this[DarkModeKey] = DarkMode.DARK.ordinal
+                }.toPreferences()
+                assertEquals(DarkMode.DARK.ordinal, first.next()[DarkModeKey])
+                others.forEach { assertEquals(DarkMode.DARK.ordinal, it.next()[DarkModeKey]) }
+                assertEquals(reads + 1, prefs.dataCollections.get())
+            } finally { jobs.forEach { it.cancelAndJoin() } }
+        }
+    }
+
+    @Test fun roomOnlyUpdatesAndProfileSwitchesReachReadersWithoutTrustingUiCopy() = runBlocking {
+        seed()
+        owner.initialize()
+        withObserved { events ->
+            events.next()
+            replaceStyle(1, 88)
+            assertEquals(88, events.next()[GlobalIconScaleKey])
+            assertEquals(73, prefs.values.value[GlobalIconScaleKey])
+            owner.switchTo(2)
+            val switched = events.next()
+            assertEquals(2L, switched[ActiveProfileIdKey])
+            assertEquals(121, switched[GlobalIconScaleKey])
+        }
+    }
+
+    @Test fun corruptObservedDocumentPausesReadersAndRetryRestartsSameCollector() = runBlocking {
+        seed()
+        installBarrier()
+        owner.initialize()
+        withObserved { events ->
+            events.next()
+            val original = db.profileDao().get(1)!!
+            db.profileDao().update(original.copy(profileStyle = "broken"))
+            withTimeout(5000) { StorageOperationGate.recoveryState.first { it == StorageRecoveryState.FAILED } }
+            assertEquals(StorageRecoveryFailureReason.CORRUPT_SNAPSHOT, StorageOperationGate.recoveryFailureReason.value)
+            assertTrue(events.tryReceive().isFailure)
+            db.profileDao().update(original)
+            StorageOperationGate.retryRecovery { }
+            assertEquals(73, events.next()[GlobalIconScaleKey])
+            replaceStyle(1, 91)
+            assertEquals(91, events.next()[GlobalIconScaleKey])
+        }
+    }
+
+    @Test fun sourceFailureEntersRecoveryAndRetryRestartsUpstream() = runBlocking {
+        seed()
+        installBarrier()
+        owner.initialize()
+        prefs.sourceFailure = IOException("Injected observation read failure")
+        withObserved { events ->
+            withTimeout(5000) { StorageOperationGate.recoveryState.first { it == StorageRecoveryState.FAILED } }
+            assertEquals(StorageRecoveryFailureReason.IO, StorageOperationGate.recoveryFailureReason.value)
+            assertTrue(events.tryReceive().isFailure)
+            prefs.sourceFailure = null
+            StorageOperationGate.retryRecovery { }
+            assertEquals(73, events.next()[GlobalIconScaleKey])
+        }
+    }
+
+    @Test fun subscriberCancellationStopsUpstreamAndRestartReadsCurrentRow() = runBlocking {
+        seed()
+        owner.initialize()
+        withObserved { assertEquals(73, it.next()[GlobalIconScaleKey]) }
+        withTimeout(5000) { while (prefs.activeCollections.get() != 0) delay(5) }
+        assertEquals(StorageRecoveryState.READY, StorageOperationGate.recoveryState.value)
+        replaceStyle(1, 96)
+        withObserved { assertEquals(96, it.next()[GlobalIconScaleKey]) }
+    }
+
+    @Test fun replacementRejectsOldReplayAndHidesIntermediateRestoredValues() = runBlocking {
+        seed()
+        owner.initialize()
+        withObserved { events ->
+            events.next()
+            StorageOperationGate.run {
+                StorageOperationGate.markStorageReplaced()
+                replaceStyle(1, 44)
+                prefs.values.value = preferencesOf(ActiveProfileIdKey to 2L, GlobalIconScaleKey to 999)
+                owner.initialize(force = true)
+                assertTrue(events.tryReceive().isFailure)
+            }
+            val restored = events.next()
+            assertEquals(2L, restored[ActiveProfileIdKey])
+            assertEquals(121, restored[GlobalIconScaleKey])
+        }
+    }
+
+    @Test fun slowSubscriberDoesNotBlockWritesOrOtherSubscribers() = runBlocking {
+        seed()
+        owner.initialize()
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val slow = launch { prefs.observePreferences().collect { entered.complete(Unit); release.await() } }
+        try {
+            withTimeout(5000) { entered.await() }
+            withObserved { events ->
+                events.next()
+                for (scale in 80..90) {
+                    withTimeout(5000) { prefs.setPreferenceValue(GlobalIconScaleKey, scale) }
+                }
+                withTimeout(5000) { while (events.next()[GlobalIconScaleKey] != 90) Unit }
+                assertEquals(90, prefs.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
+            }
+        } finally { release.complete(Unit); slow.cancelAndJoin() }
+    }
+
+    private suspend fun replaceStyle(id: Long, scale: Int) {
+        val row = db.profileDao().get(id)!!
+        val values = preferencesOf(GlobalIconScaleKey to scale)
+        db.profileDao().update(row.copy(profileStyle = ProfileStyleCodec.encode(ProfileStylePreferences.capture(values)),
+            prefsSnapshot = values.snapshotProfilePrefs()))
+    }
+
+    private suspend fun Channel<Preferences>.next(): Preferences = withTimeout(5000) { receive() }
+
+    private suspend fun withObserved(block: suspend CoroutineScope.(Channel<Preferences>) -> Unit) = coroutineScope {
+        val events = Channel<Preferences>(Channel.UNLIMITED)
+        val collector = launch { prefs.observePreferences().collect { events.send(it) } }
+        try { block(events) } finally { collector.cancelAndJoin(); events.close() }
+    }
+
     private class FaultInjectingPreferences : DataStore<Preferences> {
         val values = MutableStateFlow(emptyPreferences())
-        override val data: Flow<Preferences> = values
+        val dataCollections = AtomicInteger()
+        val activeCollections = AtomicInteger()
+        @Volatile var sourceFailure: IOException? = null
+        override val data: Flow<Preferences> = flow {
+            dataCollections.incrementAndGet()
+            activeCollections.incrementAndGet()
+            try {
+                sourceFailure?.let { throw it }
+                values.collect { emit(it) }
+            } finally { activeCollections.decrementAndGet() }
+        }
         private val mutex = Mutex()
         var failWrites = false
         var successfulWrites = 0

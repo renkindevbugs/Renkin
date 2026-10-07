@@ -255,6 +255,44 @@ snapshot, rollback, previous-state and modifier-input suites retain their covera
 and SAF document management are unchanged; the background test exercises the export backend.
 Invalid typed styles stop export and log the owning profile id for diagnosis.
 
+Phase 7A6 routes settings snapshots and UI/background preference flows through Room-backed reads.
+`ProfileStyleStore.snapshot` resolves the active id and current Profile row under the storage gate,
+removes every profile key from the DataStore snapshot and overlays the typed document's present
+values. Missing values remain missing. Application settings and active selection still come from
+DataStore. Action snapshots, render-staleness checks, builds and backups therefore read the Room
+owner even when the persisted compatibility projection is obsolete. The bounded single-document
+cache stores only a pure decoded preference projection; every read still queries the owning row.
+
+`observePreferences` selects the shared owner when collection starts. The application singleton
+owns one lazy sharing scope and one `shareIn` upstream with `WhileSubscribed`, immediate stop and
+replay expiration, and one replayed snapshot. Room/DataStore invalidations and slow-consumer output
+are conflated. Subscribers share the gated Room read instead of each queuing their own snapshot.
+Unchanged results are suppressed. Replayed snapshots carry their storage epoch; each subscriber
+rejects an old epoch even if resubscription races the replay reset after an import or rollback.
+A Room style update can wake readers without a DataStore write; intermediate Room/projection commits
+cannot be read across the existing storage boundary. Startup/import/recovery pause both the shared
+upstream and subscribers. The test reset closes the singleton's sharing scope. Standalone/staged
+DataStores retain their direct flow behavior. Room remains 21, portable backups 4 and local recovery
+preferences 3.
+
+Observation failures never emit empty/default settings. Snapshot failures invalidate initialization
+and report recovery while still holding the gate, preserving their diagnostic cause. Source failures
+also enter recovery; cancellation propagates. The gated upstream stays restartable after retry or
+confirmed repair instead of letting an exception escape into UI collectors or killing sharing.
+Operations holding the storage gate must use `getPreferencesAfterPendingWrites`, which reads in
+the caller's owner context; they must not wait for the separately scoped shared flow. The current
+first/single-call audit found only raw DataStore reads inside the owner and standalone adapter.
+`MainViewModel.loadWhatsNewState` waits for READY before acquiring the gate. OptionsViewModel's
+`preferenceSnapshot` is consumed by UI collectors, with no gate-owned first-emission waits.
+
+This checkpoint retains the dual-written `prefsSnapshot` and persisted DataStore compatibility
+projection. Removing their writes and cleaning up their storage is a later checkpoint, after these
+Room-backed readers are confirmed. The confirmed 7A6 regression tests cover obsolete DataStore
+values and absent Room values, snapshots inside an existing gate owner, Room-only invalidation,
+profile switching, application settings, 17 subscribers sharing one upstream and snapshot read,
+slow consumers during writes, subscriber stop/restart, snapshot/source failure and retry in the
+same collector, and fresh snapshots without intermediate values after storage replacement.
+
 ## Threading & state
 
 - Heavy work lives in `suspend` functions that hop to `Dispatchers.Default` internally

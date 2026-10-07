@@ -1,10 +1,12 @@
 # Profile style migration — phase 7A
 
-## Current boundary: 7A5
+## Current boundary: 7A6
 
 Room is version 21. `Profile.prefsSnapshot` is an unversioned JSON object containing
 the registered `ProfilePrefKeys`. `Profile.profileStyle` becomes authoritative after the shared
 bootstrap; DataStore holds application settings plus a derived active-profile UI projection.
+7A6 readers now derive their profile values from the active Room document; the persisted DataStore
+projection remains only for compatibility until its separate retirement checkpoint.
 Phase 7A1 isolated the existing wire format
 in `LegacyProfilePreferences`, without changing its fields, defaults, locking or consumers.
 `DataPreferences` retains the typed key registry and the storage/preference write boundaries.
@@ -116,6 +118,42 @@ before storage mutation. It checks profile-id diagnostics, background export thr
 used by AutoBackupWorker without an Activity, and the explicit legacy recovery preference format.
 Worker scheduling/SAF management is unchanged and remains a device check. Existing Previous state,
 pending/rollback/repair and source-file coverage remains in the recovery and modifier-input suites.
+
+7A6 moves snapshot/flow reads onto the Room owner before retiring either compatibility copy.
+The owner reads application values and active id from DataStore, resolves the current Profile row
+under the storage gate, removes all registered profile keys and overlays the typed document's
+present values. It never fills missing values from the old projection. A single-document cache
+avoids repeated decoding; it caches only pure projection values and never replaces the row lookup.
+Provider action snapshots, render commit comparisons, builds, workers and backups already use
+`getPreferencesAfterPendingWrites`, so they receive this authoritative merged snapshot.
+
+UI/background `observePreferences` collections share one lazy upstream in the singleton's
+application-lifetime scope. `shareIn` uses `WhileSubscribed` with immediate stop/replay expiration
+and replay 1. Invalidations and slow-consumer output are conflated. Each shared trigger reads a
+fresh gated snapshot instead of each collector queuing a Room query. Unchanged snapshots are
+suppressed; replayed snapshots are tagged with the storage epoch so an old epoch cannot reappear
+after an import or rollback even if replay reset races resubscription. The test reset closes the
+sharing scope. This sharing boundary is needed for Room-backed reads; the broader provider/domain
+StateFlow migration remains in phase 7B.
+
+Snapshot failures invalidate initialization and enter recovery under the gate; source failures
+also report recovery. No invalid/default snapshot is emitted and cancellation propagates. The
+gated upstream can resume after retry/repair. Startup/import/recovery pause the shared upstream
+and subscribers. Standalone and staged DataStores retain their direct preference flow.
+The first/single-call audit found no gate-owned wait on preference flows or OptionsViewModel's
+StateFlow: operations use the direct `getPreferencesAfterPendingWrites` snapshot, owner/standalone
+reads await only raw DataStore, and MainViewModel waits for READY before acquiring the gate.
+Future gate-owned operations must preserve this distinction and never await shared UI emissions.
+
+DataStore still receives the compatibility projection on writes, and Room still dual-writes the
+legacy snapshot. Their separate retirement follows confirmation of these readers. Room remains 21,
+portable export 4 and internal recovery preferences 3. After device confirmation, eight additional
+`ProfileStyleStoreTest` cases verify stale DataStore values and missing Room fields, direct reads
+under an existing gate owner, Room-only invalidation, profile switching, application settings,
+17 subscribers sharing one upstream and snapshot read, slow consumers during writes, subscriber
+stop/restart, snapshot/source failure and retry in the same collector, and replacement resumption
+with fresh settings instead of intermediate restored values. The existing import/recovery suites
+exercise the same installed owner through the direct snapshot boundary.
 
 Internal recovery composes explicit per-table additions for 18 → 19, 19 → 20 and 20 → 21.
 Restoring a v18/v19/v20 snapshot into v21 inserts the restored Profile rows with an empty
