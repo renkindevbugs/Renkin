@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.ui
 
 import android.content.Intent
 import dev.renkinProject.renkin.EditorSessionViewModel
+import dev.renkinProject.renkin.InstallerChoiceReason
 import dev.renkinProject.renkin.expiredSessionMessage
 import dev.renkinProject.renkin.data.TextFontKey
 import java.util.UUID
@@ -342,7 +343,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     viewModel.installerPromptReason?.let { reason ->
         InstallerPromptDialog(
             selected = prefs.getPreferencesValue().installerSelection(),
-            explainSavedChoice = reason == MainViewModel.InstallerPromptReason.FIRST_CHOICE,
+            explainSavedChoice = reason == InstallerChoiceReason.FIRST_CHOICE,
             onSelect = viewModel::confirmInstallerSelection,
             onDismiss = viewModel::dismissInstallerSelection
         )

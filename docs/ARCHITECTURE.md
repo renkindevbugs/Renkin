@@ -51,6 +51,30 @@ ApplicationProvider (apk/)                ← orchestrator: owns the app list, p
 WatchRepository (data/watch/)             ← icon-watch rules/suggestions on WatchDatabase
 ```
 
+`MainViewModel` owns a `BuildInstallCoordinator` for its lifetime. The coordinator owns the
+build/install job, APK handoffs and one sealed `BuildInstallState`: Idle, Building,
+ChoosingInstaller, Installing, Conflict, Done or Failed. Progress and pending artifacts belong
+to their applicable state; the existing MainViewModel UI properties are read-only projections,
+not independently writable flags. Installer catalog/preferences and Shizuku settings remain
+with MainViewModel for this extraction. MainViewModel validates the active session before
+starting and owns the app-list/diff/undo baseline callbacks; provider/build services retain the
+snapshot, profile/storage gates, epoch checks, installer backends and artifact reservations.
+Installer confirmation claims Installing synchronously. Operation ownership rejects late progress
+and terminal publication, while pending choice/conflict states retain the APK. Cancellation and
+ViewModel clearing release unclaimed artifacts outside cancellation; dismissing the picker finishes
+the captured build without installing and synchronizes the owning profile's build baseline.
+Installer outcomes are published before best-effort UI synchronization. A changed session or
+failed baseline/missing-pack refresh is logged without reclassifying a successful installation,
+losing a conflict prompt or replacing the installer's failure report. Cancellation still propagates.
+Toast-only failures return to Idle; Failed always carries a dismissible report. A replacement that
+still conflicts explicitly releases its APK as completed, so the next build can prune it. Build
+progress uses one Main collector over conflated complete snapshots rather than a job per tick.
+The picker and conflict-dismiss paths update the diff to reflect the already committed build.
+This synchronization follows the captured pack and the baseline callback's profile/session checks,
+so starting another build does not skip it. Dismissing a pending prompt or clearing the ViewModel
+claims artifact cleanup before changing state; the previous job cannot release that APK as
+unfinished while its completion cleanup is still running.
+
 The UI layer never constructs repositories by hand; view models receive them through
 Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only for genuine
 Activity operations (`finish()`, starting services, permission requests).

@@ -14,9 +14,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
-import dev.renkinProject.renkin.apk.ApkInstallOutcome
-import dev.renkinProject.renkin.apk.ApkInstallBackend
-import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.PackChange
@@ -47,10 +44,7 @@ import dev.renkinProject.renkin.data.AppSortOrderKey
 import dev.renkinProject.renkin.data.DarkMode
 import dev.renkinProject.renkin.data.DarkModeKey
 import dev.renkinProject.renkin.data.InstallMethod
-import dev.renkinProject.renkin.data.InstallMethodKey
-import dev.renkinProject.renkin.data.ExternalInstallerComponentKey
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
-import dev.renkinProject.renkin.data.InstallerChoiceConfirmedKey
 import dev.renkinProject.renkin.data.HideProfileShareWarningKey
 import dev.renkinProject.renkin.data.OnboardingSeenKey
 import dev.renkinProject.renkin.data.LastSeenWhatsNewVersionKey
@@ -62,7 +56,6 @@ import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setIntValue
-import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.data.transfer.BackupSpaceException
 import dev.renkinProject.renkin.data.transfer.BackupSizeException
@@ -620,12 +613,6 @@ class MainViewModel @Inject constructor(
         persistInstallerSelection(InstallerSelection(method, externalComponent))
     }
 
-    private suspend fun DataStore<Preferences>.persistInstallerSelection(selection: InstallerSelection) {
-        setEnumValue(InstallMethodKey, selection.method)
-        setStringValue(ExternalInstallerComponentKey, selection.externalComponent)
-        setBooleanValue(InstallerChoiceConfirmedKey, true)
-    }
-
     fun setAskInstallerEveryTime(enabled: Boolean) = updatePreferences {
         setBooleanValue(AskInstallerEveryTimeKey, enabled)
     }
@@ -658,12 +645,7 @@ class MainViewModel @Inject constructor(
     override fun onCleared() {
         cancelBackupImport()
         shizukuObservation.close()
-        val pendingPacks = listOfNotNull(pendingInstallerSelection?.pack, pendingInstallFallback?.pack)
-        pendingInstallerSelection = null
-        pendingInstallFallback = null
-        if (pendingPacks.isNotEmpty()) viewModelScope.launch(NonCancellable) {
-            pendingPacks.forEach { appProvider.releaseBuiltArtifacts(it) }
-        }
+        buildCoordinator.close()
         super.onCleared()
     }
 
@@ -676,16 +658,6 @@ class MainViewModel @Inject constructor(
     ) {
         viewModelScope.launch { getApplication<Application>().dataStore.block() }
     }
-
-    var buildStep by mutableStateOf<String?>(null)
-        private set
-
-    /**
-     * (done, total) while the builder writes the per-app icons — the long phase — so the build
-     * dialog can show a determinate bar; null during the other (indeterminate) steps.
-     */
-    var buildProgress by mutableStateOf<Pair<Int, Int>?>(null)
-        private set
 
     /**
      * First-install timestamps (epoch millis) for [packageNames] — the data behind the
@@ -700,109 +672,49 @@ class MainViewModel @Inject constructor(
             }
         }
 
-    private suspend fun isIconPackInstalled(packageName: String): Boolean = runCatching {
-        getApplication<Application>().packageManager.getPackageInfo(packageName, 0)
-    }.isSuccess
+    private val buildCoordinator = BuildInstallCoordinator(
+        application = getApplication(),
+        provider = appProvider,
+        scope = viewModelScope,
+        syncBaselines = ::syncBuildBaselines,
+        refreshMissingPacks = { refreshMissingPacks(prompt = false) },
+        notify = { _toastEvents.trySend(it) }
+    )
+
+    internal val buildState: BuildInstallState get() = buildCoordinator.state
+    val buildStep: String? get() = when (val current = buildState) {
+        is BuildInstallState.Building -> current.step
+        is BuildInstallState.Installing -> getApplication<Application>().getString(when {
+            current.replacing -> R.string.buildReplacing
+            current.request.wasUpdate -> R.string.buildUpdating
+            else -> R.string.buildInstalling
+        })
+        else -> null
+    }
+    val buildProgress: Pair<Int, Int>? get() = (buildState as? BuildInstallState.Building)?.progress
 
     enum class BuildOutcome { FIRST_INSTALL, UPDATE }
     data class BuildOutcomeInfo(val outcome: BuildOutcome, val packLabel: String)
-    var buildOutcome by mutableStateOf<BuildOutcomeInfo?>(null)
-        private set
-
-    fun dismissBuildOutcome() { buildOutcome = null }
+    val buildOutcome: BuildOutcomeInfo? get() = (buildState as? BuildInstallState.Done)?.let {
+        BuildOutcomeInfo(if (it.wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL, it.packLabel)
+    }
+    fun dismissBuildOutcome() = buildCoordinator.dismissBuildOutcome()
 
     data class InstallFailureInfo(val summary: String, val report: String)
-    var installFailure by mutableStateOf<InstallFailureInfo?>(null)
-        private set
-
-    fun dismissInstallFailure() { installFailure = null }
-
-    private data class PendingPackInstall(
-        val pack: BuiltIconPack,
-        val wasUpdate: Boolean,
-        val packLabel: String,
-        val selection: InstallerSelection
-    ) {
-        val failedMessage: Int
-            get() = if (wasUpdate) R.string.iconPackUpdateFailed else R.string.iconPackInstallFailed
+    val installFailure: InstallFailureInfo? get() = (buildState as? BuildInstallState.Failed)?.let {
+        InstallFailureInfo(it.summary, it.report)
     }
+    fun dismissInstallFailure() = buildCoordinator.dismissInstallFailure()
 
-    private var pendingInstallFallback: PendingPackInstall? = null
-    var installFallbackPending by mutableStateOf(false)
-        private set
-
-    fun dismissInstallFallback() {
-        val pending = pendingInstallFallback
-        pendingInstallFallback = null
-        installFallbackPending = false
-        if (pending != null) viewModelScope.launch { appProvider.releaseBuiltArtifacts(pending.pack) }
-    }
-
-    fun confirmInstallFallback() {
-        val pending = pendingInstallFallback ?: return
-        pendingInstallFallback = null
-        installFallbackPending = false
-        viewModelScope.launch {
-            try {
-                buildStep = getApplication<Application>().getString(R.string.buildReplacing)
-                handleInstallOutcome(
-                    outcome = appProvider.replaceIconPack(pending.pack, pending.selection),
-                    pending = pending,
-                    offerReplacement = false
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.error("MainViewModel", "Icon pack replacement failed", e)
-                _toastEvents.trySend(R.string.iconPackInstallFailed)
-            } finally {
-                releaseUnclaimedBuild(pending.pack)
-                buildStep = null
-                buildProgress = null
-            }
-        }
-    }
-
-    private var pendingInstallerSelection: PendingPackInstall? = null
-    enum class InstallerPromptReason { FIRST_CHOICE, ASK_EVERY_TIME }
-
-    var installerPromptReason by mutableStateOf<InstallerPromptReason?>(null)
-        private set
-
-    fun confirmInstallerSelection(selection: InstallerSelection) {
-        val pending = pendingInstallerSelection ?: return
-        val rememberSelection = installerPromptReason == InstallerPromptReason.FIRST_CHOICE
-        pendingInstallerSelection = null
-        installerPromptReason = null
-        val selectedPending = pending.copy(selection = selection)
-        viewModelScope.launch {
-            try {
-                if (rememberSelection) {
-                    getApplication<Application>().dataStore.persistInstallerSelection(selection)
-                }
-                installBuiltPack(selectedPending)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.error("MainViewModel", "Selected installer failed", e)
-                _toastEvents.trySend(selectedPending.failedMessage)
-            } finally {
-                releaseUnclaimedBuild(selectedPending.pack)
-                buildStep = null
-                buildProgress = null
-            }
-        }
-    }
-
-    fun dismissInstallerSelection() {
-        val pending = pendingInstallerSelection ?: return
-        pendingInstallerSelection = null
-        installerPromptReason = null
-        viewModelScope.launch { appProvider.finishWithoutInstallation(pending.pack) }
-    }
+    val installerPromptReason: InstallerChoiceReason? get() = (buildState as? BuildInstallState.ChoosingInstaller)?.reason
+    fun confirmInstallerSelection(selection: InstallerSelection) = buildCoordinator.confirmInstallerSelection(selection)
+    fun dismissInstallerSelection() = buildCoordinator.dismissInstallerSelection()
+    val installFallbackPending: Boolean get() = buildState is BuildInstallState.Conflict
+    fun confirmInstallFallback() = buildCoordinator.confirmInstallFallback()
+    fun dismissInstallFallback() = buildCoordinator.dismissInstallFallback()
 
     fun build(expected: ProfileSessionToken) {
-        if (buildStep != null || pendingInstallerSelection != null || pendingInstallFallback != null) return
+        if (buildCoordinator.busy) return
         if (longOperationRunning) {
             _toastEvents.trySend(R.string.profileRenderBusy)
             return
@@ -815,150 +727,7 @@ class MainViewModel @Inject constructor(
             _toastEvents.trySend(expected.expiredSessionMessage(sessionToken))
             return
         }
-        // Claim the operation synchronously so the preview result cannot enqueue it twice.
-        buildStep = ""
-        viewModelScope.launch {
-            var builtPack: BuiltIconPack? = null
-            try {
-                val preferences = getApplication<Application>().dataStore
-                    .getPreferencesAfterPendingWrites()
-                val pack = appProvider.buildAndSignIconPack(
-                    expected,
-                    preferences,
-                    // A new step ends the per-app phase, so the bar goes back to indeterminate.
-                    textMethod = { buildStep = it; buildProgress = null },
-                    progressMethod = { done, total -> buildProgress = done to total }
-                )
-                builtPack = pack
-                val wasUpdate = isIconPackInstalled(pack.packageName)
-                val selection = preferences.installerSelection()
-                val pending = PendingPackInstall(pack, wasUpdate, pack.packLabel, selection)
-                val promptReason = installerPromptReason(
-                    askEveryTime = preferences.getBooleanValue(AskInstallerEveryTimeKey),
-                    choiceConfirmed = preferences.getBooleanValue(InstallerChoiceConfirmedKey)
-                )
-                if (promptReason != null) {
-                    pendingInstallerSelection = pending
-                    installerPromptReason = promptReason
-                    return@launch
-                }
-                installBuiltPack(pending)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: ProfileOperationBusyException) {
-                _toastEvents.trySend(R.string.profileRenderBusy)
-            } catch (e: ProfileOperationSupersededException) {
-                _toastEvents.trySend(R.string.profileOperationSuperseded)
-            } catch (e: ProfileSessionChangedException) {
-                _toastEvents.trySend(e.userMessage())
-            } catch (e: Exception) {
-                // A build/sign failure must surface and still release the UI, not leave the
-                // (non-dismissable) progress dialog stuck on screen.
-                Log.error("MainViewModel", "Icon pack build failed", e)
-                _toastEvents.trySend(R.string.iconPackBuildFailed)
-            } finally {
-                builtPack?.let { releaseUnclaimedBuild(it) }
-                buildStep = null
-                buildProgress = null
-            }
-        }
-    }
-
-    private suspend fun releaseUnclaimedBuild(pack: BuiltIconPack) {
-        if (pendingInstallerSelection?.pack === pack || pendingInstallFallback?.pack === pack) return
-        withContext(NonCancellable) { appProvider.releaseBuiltArtifacts(pack, completed = false) }
-    }
-
-    private suspend fun installBuiltPack(pending: PendingPackInstall) {
-        buildStep = getApplication<Application>().getString(
-            if (pending.wasUpdate) R.string.buildUpdating else R.string.buildInstalling
-        )
-        handleInstallOutcome(
-            outcome = appProvider.installIconPack(pending.pack, pending.selection),
-            pending = pending,
-            offerReplacement = true
-        )
-    }
-
-    private suspend fun handleInstallOutcome(
-        outcome: ApkInstallOutcome,
-        pending: PendingPackInstall,
-        offerReplacement: Boolean
-    ) {
-        when (outcome.result) {
-            ApkInstallResult.SUCCESS -> {
-                if (outcome.requestedMethod == InstallMethod.SHIZUKU &&
-                    outcome.attempts.any {
-                        it.backend == ApkInstallBackend.SHIZUKU &&
-                            it.result != ApkInstallResult.SUCCESS
-                    }
-                ) {
-                    _toastEvents.trySend(R.string.shizukuSystemFallback)
-                }
-                completeSuccessfulInstall(pending)
-            }
-            ApkInstallResult.CONFLICT -> if (offerReplacement) {
-                pendingInstallFallback = pending
-                installFallbackPending = true
-            } else {
-                appProvider.releaseBuiltArtifacts(pending.pack)
-                syncBuildBaselines(pending.pack)
-                _toastEvents.trySend(pending.failedMessage)
-                showInstallFailure(outcome, pending.pack)
-            }
-            ApkInstallResult.ABORTED -> {
-                syncBuildBaselines(pending.pack)
-                _toastEvents.trySend(pending.failedMessage)
-            }
-            else -> {
-                // The pack was built and saved; only Android's installation step failed.
-                syncBuildBaselines(pending.pack)
-                _toastEvents.trySend(pending.failedMessage)
-                showInstallFailure(outcome, pending.pack)
-            }
-        }
-    }
-
-    private fun showInstallFailure(outcome: ApkInstallOutcome, pack: BuiltIconPack) {
-        val detail = outcome.detail?.trim().takeUnless { it.isNullOrEmpty() }
-            ?: "No additional details were provided by Android."
-        val summaryDetail = detail.lineSequence().first().take(300)
-        installFailure = InstallFailureInfo(
-            summary = "${outcome.result.name}: $summaryDetail",
-            report = buildString {
-                appendLine("Renkin icon pack installation report")
-                appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                appendLine("Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
-                appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
-                appendLine("Pack: ${pack.packageName}")
-                appendLine("Requested installer: ${outcome.requestedMethod.name}")
-                appendLine("Result: ${outcome.result.name}")
-                if (outcome.attempts.isNotEmpty()) {
-                    appendLine("Routes attempted: " + outcome.attempts.joinToString(" → ") {
-                        "${it.backend.diagnosticName} (${it.result.name})"
-                    })
-                }
-                appendLine()
-                append(detail)
-            }
-        )
-    }
-
-    private suspend fun completeSuccessfulInstall(pending: PendingPackInstall) {
-        // The pack now ships what is on screen; undoing a refresh from before the build would
-        // silently disagree with the installed icons.
-        // The next-steps dialog replaces the old "installed!" toast: what to do in
-        // the launcher differs between a first install and an update.
-        buildOutcome = BuildOutcomeInfo(
-            if (pending.wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL,
-            pending.packLabel
-        )
-        // A watch deep link can switch profiles while the system installer is in front. Never
-        // replace that profile's UI baseline with the pack that finished in the background.
-        syncBuildBaselines(pending.pack)
-        // The save dropped locked originals the user replaced by hand — the
-        // missing-pack warning must not keep counting them after a build.
-        refreshMissingPacks(prompt = false)
+        buildCoordinator.build(expected)
     }
 
     // Records that [app] was hand-edited this session (so the build preview marks it "changed").
@@ -1112,6 +881,10 @@ class MainViewModel @Inject constructor(
 
     /** Per-pack usage by TRUE origin (locked icons included) for the stats dialog. */
     suspend fun packUsageEntries(): List<ApplicationProvider.PackUsage> = appProvider.packUsageEntries()
+
+    private suspend fun isIconPackInstalled(packageName: String): Boolean = withContext(Dispatchers.IO) {
+        runCatching { getApplication<Application>().packageManager.getPackageInfo(packageName, 0) }.isSuccess
+    }
 
     /**
      * Uninstalls the app's own generated icon pack. Emits a toast event for the outcome
@@ -1787,13 +1560,4 @@ class MainViewModel @Inject constructor(
     suspend fun dynamicClockDrawables(packPackageName: String): Set<String> =
         appProvider.dynamicClockDrawables(packPackageName)
 
-}
-
-internal fun installerPromptReason(
-    askEveryTime: Boolean,
-    choiceConfirmed: Boolean
-): MainViewModel.InstallerPromptReason? = when {
-    askEveryTime -> MainViewModel.InstallerPromptReason.ASK_EVERY_TIME
-    !choiceConfirmed -> MainViewModel.InstallerPromptReason.FIRST_CHOICE
-    else -> null
 }
