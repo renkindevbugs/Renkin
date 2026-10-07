@@ -340,7 +340,8 @@ suspend fun DataStore<Preferences>.persistBuiltPrimaryPrefs(source: Preferences)
 }
 
 /** Serializes the profile-scoped preferences into a JSON snapshot (see [ProfilePrefKeys]). */
-fun Preferences.snapshotProfilePrefs(): String = legacyProfilePreferences.encode(this)
+fun Preferences.snapshotProfilePrefs(): String =
+    legacyProfilePreferences.encode(ProfileStylePreferences.toPreferences(ProfileStylePreferences.capture(this)))
 
 internal fun String.withBuiltPrimaryPrefs(source: Preferences): String =
     legacyProfilePreferences.withBuiltPrimary(this, source)

@@ -1,12 +1,46 @@
 # Profile style migration — phase 7A
 
-## Current boundary: 7A1
+## Current boundary: 7A2
 
 Room remains at version 20. `Profile.prefsSnapshot` is an unversioned JSON object containing
 the registered `ProfilePrefKeys`. DataStore remains authoritative for the active profile;
-inactive profiles use their Room snapshots. This first step isolates the existing wire format
+inactive profiles use their Room snapshots. Phase 7A1 isolated the existing wire format
 in `LegacyProfilePreferences`, without changing its fields, defaults, locking or consumers.
 `DataPreferences` retains the typed key registry and the storage/preference write boundaries.
+
+Phase 7A2 adds an immutable `ProfileStyle`, `ProfileStylePreferences` and a version-1
+`ProfileStyleCodec`. Snapshot creation now captures stored preferences into that model and
+projects them back through the legacy encoder. No new document is persisted: profile switches,
+builds and exports still write the same unversioned legacy JSON. Replacement and inactive-profile
+baseline patches retain the 7A1 adapter. Room remains at 20 and portable backups remain at 3.
+
+`ProfileStyleSchema` assigns all 64 registered keys to typed fields and wire paths. The same
+descriptors drive legacy projection and versioned encoding/decoding. Complete, unique key and
+path coverage is a test-time obligation, without assertions in the production object initializer.
+`ProfileStylePreferencesTest` checks classification and a `Preferences -> capture -> toPreferences`
+round-trip for every registered key with distinct integer/string values and isolated true/false
+Boolean cases. Each key's presence is checked independently as well as in a populated profile,
+so swapped or omitted getters cannot hide behind matching key sets or identical test values.
+Coverage includes missing values, disabled configuration, capture immutability, byte-identical
+legacy encoding and every known enum value plus unknown ordinals. Future registry changes must
+pass these tests before shipping. `ProfileStyleCodecTest` covers strict parsing, Unicode,
+canonical enum forms, deep foreign trees and exact character/UTF-8 size boundaries.
+
+The version-1 codec requires the five root groups and an integer version. Absent scalar fields
+remain absent; explicit null, wrong types, duplicate names, dotted-name aliases, unknown fields,
+unknown enum names, trailing content and unsupported versions fail. Known enum values use names;
+unrecognized legacy ordinals use a tagged `legacyOrdinal` object. The parser follows only known
+schema paths, limiting nesting before arbitrary JSON trees can be allocated, and caps fields
+at 256. It requires valid Unicode and limits both input/output to 262,144 UTF-16 code units and
+262,144 UTF-8 bytes. Encoding checks cumulative string size before creating the complete JSON.
+The limits coincide for ASCII; UTF-8 bytes are stricter for multibyte text, while the character
+check rejects oversized strings before encoding allocations.
+
+A schema-based populated size estimate with all 64 fields, ten-stop gradients, a 512-character
+font filename and 255-character pack strings is 3,861 ASCII bytes. The 256 KiB ceiling provides
+headroom while bounding foreign documents. Existing legacy snapshots remain unbounded by this
+codec in 7A2; inspect real snapshot sizes before storage cutover. An oversized legacy profile
+must remain available with a reported conversion failure, rather than being truncated or dropped.
 
 Snapshot encoding includes only present registered profile keys. Replacement clears missing,
 malformed or wrongly typed profile values and leaves application preferences untouched. Boolean
@@ -15,7 +49,7 @@ Unknown keys are ignored on replacement. Updating an inactive profile's built pr
 patches only its two baseline fields and preserves every other JSON field, including unknown ones.
 This distinction is part of the existing compatibility contract.
 
-The sections below describe subsequent work; they do not enable typed storage in 7A1.
+The sections below describe the storage rollout beyond this model/codec boundary.
 
 ## Stored model
 
@@ -53,8 +87,8 @@ execution projection uses the existing enum fallback. Retain stored numeric valu
 the existing render/UI normalization at projection time. Do not silently normalize a profile
 merely by opening or switching it.
 
-The document has an explicit version and bounded character/UTF-8 size. Select the final bound
-from representative snapshots before rollout. Unsupported versions and oversized or invalid
+The document has an explicit version and bounded character/UTF-8 size. Confirm the codec ceiling
+against real existing snapshots before storage rollout. Unsupported versions and oversized or invalid
 documents must report a storage/import failure and preserve the original data; they must never
 silently become an empty profile. Local malformed legacy snapshots retain today's clear-to-default
 behaviour; backup validation remains stricter and rejects wrongly typed profile fields.

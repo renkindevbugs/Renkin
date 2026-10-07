@@ -147,6 +147,18 @@ DataStore operations remain in `DataPreferences.kt`; Room stays at v20 and the a
 still uses DataStore. The [profile style migration design](profile-style-migration.md) describes
 the proposed typed model, active-profile bootstrap and portable/recovery compatibility rollout.
 
+Phase 7A2 introduces an immutable `ProfileStyle` with stored source, generation/global modifier,
+export, policy and built-baseline groups. Nullable fields preserve absence and inactive values;
+colours and font paths remain configured strings, and unknown legacy enum ordinals remain
+explicit values. `ProfileStylePreferences` captures those values without renderer normalization.
+Snapshot creation projects this model back into the existing legacy JSON. `ProfileStyleSchema`
+classifies all registered profile keys and drives legacy projection plus the versioned codec.
+Complete/unique classification and per-key value round-trips are required test checks before
+shipping; schema initialization does not assert against the registry in production.
+The strict version-1 `ProfileStyleCodec` is bounded to 256 KiB in characters and UTF-8 bytes;
+it is prepared for the later storage migration and does not write new DB or backup documents.
+Room remains at v20, portable backup format at 3 and DataStore owns the active settings.
+
 ## Threading & state
 
 - Heavy work lives in `suspend` functions that hop to `Dispatchers.Default` internally
