@@ -1122,10 +1122,14 @@ fun OpenAppOptions(
     OptionsDialog(iconPacks, session, themed, { icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, modifierRecipe, modifierInput ->
         viewModel.applyIcon(session.application, icon, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, sourceUrl, expected, modifierRecipe, modifierInput)
         closeEditor()
-    }, closeEditor) {
+    }, closeEditor, onIconClear = {
         closeEditor()
         viewModel.resetIcon(session.application, expected)
-    }
+    }, onRestoreModifiers = {
+        editorViewModel.restoreModifiers(sessionId) { state ->
+            viewModel.prepareModifierReplay(state.application, state.owner)
+        }
+    }, onCancelModifierRestore = { editorViewModel.cancelModifierRestore(sessionId) })
 }
 
 @Composable

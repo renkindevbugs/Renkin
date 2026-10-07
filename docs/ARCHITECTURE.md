@@ -244,8 +244,8 @@ Switcher = the top-bar title dropdown.
   layers, so fresh pack picks with active pack restyling retain only their baked result and v19
   recipe for now. Brush geometry remains unsupported. Bulk refresh/fallback and watch keep
   their existing persistence contract; this step does not add retained input to generated rows.
-  The stored input is not an enabled editor replay instruction yet: initial controls remain
-  unchanged. Reopening without a new
+  Initial controls remain neutral until the user requests verified restoration in the Modifier
+  tab. Reopening without a new
   render preserves the retained pair; a completed new stage replaces it with that stage's
   actual input, never an older source paired with a newer cumulative result. New artwork,
   reset and unsupported brush geometry discard it; derived global renders, undo, calendar and
@@ -255,7 +255,15 @@ Switcher = the top-bar title dropdown.
   `filesDir/icon-inputs/<hash>.input`, capped at 32 MiB per file. It retains the existing drawable
   serialization, outside Room rows and portable/recovery JSON. Loading a profile reads only
   small metadata and checks file presence; no input artwork string or second bitmap is loaded.
-  Future replay must load and verify that one file off Main when the editor needs it.
+  Replay loads only that file off Main when the editor requests it, checks the bounded byte
+  stream and SHA-256, and validates the decoded drawable's XML/adaptive flags and preview scale.
+  The storage gate protects only the read/hash snapshot; decoding that immutable byte buffer
+  and verifying the replay happen outside the gate. Reading allocates one bounded byte array,
+  rather than a growing byte stream followed by a full Base64 string copy.
+  Optional replay decoding also caps bitmap artwork at 16 megapixels and XML at 100,000 nodes
+  with depth 64; XML limits are enforced before nodes/attributes enter the parsed tree. Adaptive
+  PNG layers retain the existing exact 750 x 750 bounds validation in `AdaptiveIconPayload`.
+  Sources exceeding these limits remain usable through their baked result.
   Input encoding is pure. The persistence owner writes, fsyncs and atomically renames source files
   under the storage gate before committing rows. Only after successful row persistence does it
   cache the file reference and release the live source; pixels used elsewhere are never recycled.
@@ -282,20 +290,47 @@ Switcher = the top-bar title dropdown.
   The codec rejects known incompatible stage/source/origin and representation flags: canonical
   bitmap editing requires a plain bitmap with scale 1; text's adjustments-only stage requires
   non-adaptive XML and a disabled image effect; XML artwork cannot carry bitmap preview scale.
-  Replay must still decode the file and verify the actual drawable type/adaptive representation
-  against these flags before rendering. Metadata validation does not establish payload validity.
+  Replay decodes the file and verifies the actual drawable type/adaptive representation against
+  these flags before rendering. Metadata validation does not establish payload validity.
   Retained Material You application artwork freezes the confirmed source colours, including a
   wallpaper palette resolved during creation. Replay must preserve that snapshot after a
   wallpaper change. Explicit source reselection starts a new pair using the current palette;
-  it must never happen silently during reopening or modifier preview. The next editor-restoration
-  slice must make this distinction clear in the source controls; it adds no automatic recolouring.
-  The next 5C2 slice must enable replay from retained inputs before restoring editor controls,
-  resolve source-dependent controls and the remaining pack-restyling boundary, and verify
-  equivalence across pipeline/export types. It must decode the retained artwork and
-  verify that replay matches the confirmed base before offering editable restoration. Structural
-  metadata validity alone does not establish image/pipeline equivalence. It must not reapply a
-  recipe onto baked base.
-  The complete persistent-editor feature will use an immutable input drawable from before local
+  it never happens silently during reopening or modifier preview. The restored-editor hint
+  explains that source reselection replaces the captured artwork and refreshes its colours.
+  Phase 5C2b offers **Restore saved modifiers** only before the editor starts a new stage. Its
+  cancellable job belongs to `EditorSessionViewModel`, survives configuration changes and is
+  invalidated by release, replacement or a newer restore request. The provider checks the profile
+  session, storage epoch and base/input identity before loading and after off-Main verification;
+  publication rechecks the epoch and untouched-draft ownership. Rendering holds no profile gate.
+  `VerifiedModifierInput` requires matching concrete/export type and bitmap preview scale. Bitmap
+  pixels must match exactly; XML must match exactly as well as rasterized presentation, covering
+  adaptive/monochrome layers, vector geometry and resolved reference colours. Conservative
+  mismatches leave the baked editor usable and explain that saved modifiers are unavailable.
+  An input containing earlier baked edits restores only its last stage, with an explicit hint.
+  Active Material You pack restyling remains unsupported; its original vector stroke semantics
+  cannot be reconstructed from captured PNGs. Text restoration disables image effects and retains
+  the adjustments-only pipeline; text/font/colours are frozen source artwork, not editable glyphs.
+  `EditorModifierReplay` seeds the existing controls and preserves original source/export settings
+  and values not represented exactly by those controls until their corresponding control changes.
+  It captures the UI projection baseline during restoration, without writes during composition.
+  Create initially shows a neutral **Saved source** panel and source pills. During replay, opening
+  the pack browser changes only the browsing source; the active source, current draft and replay
+  remain unchanged until an artwork is picked. Outside replay, the Icon pack pill still activates
+  the saved artwork without requiring a new pick. App-icon/text selection and actual upload/pack
+  picks begin a new stage; leaving the neutral source restores a valid Create source selection.
+  Once verified, the raw saved artwork remains the session's baseline for returning to an unpicked
+  Icon pack source or seeding vector tools, even after another source ends replay. Neither path
+  reapplies restored controls onto the baked base. Vector edits inherit the baseline's earlier-baked
+  flag; replacing the paths with an imported vector drops that flag and the seed's inset wrapper.
+  Unchanged seed publications cannot detach replay:
+  the editor compares complete input snapshots, and publishes only a still-current snapshot.
+  Shape fills remain separate from the source background. All modifier-sheet previews and the
+  completed draft use the same verified input and full current stage. Replacing the source detaches
+  replay, invalidates outstanding renders and starts a new pair. Apply retains source attribution
+  and publishes the input/settings from the winning completed render alongside its artwork.
+  A failed replay preview retains the last completed artwork/metadata, reports the failure and
+  disables Apply until a successful render or return to the last completed controls.
+  The persistent-editor feature uses an immutable input drawable from before local
   modifiers, together with the complete source/export settings and local modifier state. Pack
   and drawable references are provenance, not a substitute for retained input artwork: reopening
   must work without the original pack, uploaded file or online resource. Every preview and Apply

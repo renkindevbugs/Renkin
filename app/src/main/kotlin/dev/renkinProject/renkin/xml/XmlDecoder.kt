@@ -16,6 +16,13 @@ class XmlDecoder {
     }
 
     companion object {
+        fun fromBase64(base64: ByteArray, maxNodes: Int, maxDepth: Int, checkActive: () -> Unit): XmlNode {
+            val bytes = Base64.decode(base64, Base64.NO_WRAP)
+            val parser = Xml.newPullParser()
+            parser.setInput(ByteArrayInputStream(bytes), "UTF-8")
+            return parser.toXmlNode(maxNodes, maxDepth, checkActive)
+        }
+
         fun fromBase64(base64: String, base64Flag: Int = Base64.NO_WRAP): XmlNode {
             return XmlDecoder().fromBase64(base64, base64Flag)
         }

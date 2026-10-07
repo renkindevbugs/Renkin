@@ -25,6 +25,37 @@ import org.robolectric.shadows.ShadowStatFs
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 class IconModifierInputStoreTest {
+    @Test fun readSnapshotCanDecodeAfterSourceFileDisappears() = runBlocking {
+        val input = BitmapIconDrawable(context.resources, Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(android.graphics.Color.RED)
+        })
+        val state = checkNotNull(modifierInputForResult(input, modifierInputTestOptions(), ModifierInputOrigin.UPLOAD))
+        store.save(1, listOf(app(state)))
+        val loader = IconModifierInputStore(context)
+        val snapshot = checkNotNull(loader.read(state))
+        assertTrue(IconModifierInputStore.file(context, state.storedInput!!.hash).delete())
+        val decoded = checkNotNull(loader.decode(snapshot))
+        assertEquals(android.graphics.Color.RED, decoded.toBitmap().getPixel(3, 3))
+        assertNull(loader.read(state))
+    }
+
+    @Test fun readRejectsCorruptContentBeforeDecode() = runBlocking {
+        val state = state()
+        store.save(1, listOf(app(state)))
+        IconModifierInputStore.file(context, state.storedInput!!.hash).writeText("corrupt")
+        assertNull(IconModifierInputStore(context).read(state))
+    }
+
+    @Test fun decodeRejectsRepresentationMismatchAndOversizedPixels() = runBlocking {
+        val input = BitmapIconDrawable(Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888))
+        val payload = input.toDbString().toByteArray()
+        val descriptor = StoredModifierArtwork("a".repeat(64), isXml = true, isAdaptive = false, previewScale = 1f)
+        val loader = IconModifierInputStore(context)
+        assertNull(loader.decode(IconModifierInputStore.ReadInput.Stored(payload, descriptor)))
+        val wide = BitmapIconDrawable(Bitmap.createBitmap(8192, 2049, Bitmap.Config.ARGB_8888)).toDbString().toByteArray()
+        assertNull(loader.decode(IconModifierInputStore.ReadInput.Stored(wide, descriptor.copy(isXml = false))))
+    }
+
     @Test fun freshAdaptiveBitmapRetainsItsPipelineAndPreviewScaleAcrossSaveAndLoad() = runBlocking {
         val bitmap = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888).apply { eraseColor(android.graphics.Color.RED) }
         val input = BitmapIconDrawable(context.resources, bitmap, exportAsAdaptiveIcon = true, previewScale = 1.5f)

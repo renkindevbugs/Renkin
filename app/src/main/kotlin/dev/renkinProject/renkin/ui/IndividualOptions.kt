@@ -20,6 +20,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -60,6 +62,7 @@ import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.withModifiers
 import dev.renkinProject.renkin.icon.creator.withExport
+import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.icon.creator.withEffect
 import dev.renkinProject.renkin.icon.creator.ColorFill
 import dev.renkinProject.renkin.icon.creator.IconSourceOptions
@@ -153,13 +156,16 @@ internal fun OptionsDialog(
         modifierRecipe: String?, modifierInput: IconModifierInput?
     ) -> Unit,
     onDismiss: () -> Unit,
-    onIconClear: () -> Unit
+    onIconClear: () -> Unit,
+    onRestoreModifiers: () -> Unit,
+    onCancelModifierRestore: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val app = session.application
 
     var selectedTab by session::selectedTab
     var source by session::source
+    val browserSource = session.createSourceToDisplay
     var imageEdit by session::imageEdit
     var textType by session::textType
     var customText by session::customText
@@ -201,7 +207,7 @@ internal fun OptionsDialog(
     val labelExpand by remember {
         derivedStateOf {
             when {
-                selectedTab != 0 || source != Source.ICON_PACK -> 1f
+                selectedTab != 0 || session.createSourceToDisplay != Source.ICON_PACK -> 1f
                 expandedPack != null -> topFraction(iconGridState.firstVisibleItemIndex, iconGridState.firstVisibleItemScrollOffset)
                 else -> topFraction(iconListState.firstVisibleItemIndex, iconListState.firstVisibleItemScrollOffset)
             }
@@ -248,7 +254,7 @@ internal fun OptionsDialog(
     val isMaterialYouVariant = source == Source.APPLICATION_ICON &&
         applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU
     val materialYouSchemes = rememberMaterialYouSchemes()
-    val selectedMaterialYouPackIcon = draft.origin == IconOrigin.CREATE &&
+    val selectedMaterialYouPackIcon = session.modifierReplay == null && draft.origin == IconOrigin.CREATE &&
         source == Source.ICON_PACK &&
         (if (customIconList.isEmpty()) {
             storedMaterialYouPackState != null
@@ -315,7 +321,7 @@ internal fun OptionsDialog(
     val backgroundBrushOperations = remember(adjustments.backgroundBrushStrokes) {
         buildBackgroundBrushOperations(adjustments.backgroundBrushStrokes)
     }
-    val generatingOptions = GenerationOptions(
+    val uiOptions = GenerationOptions(
         source = IconSourceOptions(
             primarySource = source,
             primaryTextType = textType,
@@ -329,7 +335,8 @@ internal fun OptionsDialog(
         ),
         export = IconExportOptions(
             vector = useVector,
-            materialYou = applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
+            materialYou = if (session.modifierReplay != null) session.replayMaterialYou
+                else applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
             themed = themed,
             foregroundStyle = effectiveForegroundStyle,
             background = ColorFill(
@@ -357,10 +364,12 @@ internal fun OptionsDialog(
         outlineEraseMask = outlineEraseMask,
         backgroundBrushOperations = backgroundBrushOperations
     )
+    val generatingOptions = session.modifierReplay?.optionsFor(uiOptions) ?: uiOptions
     // Pack rows describe the source artwork, not its themed export. The launcher applies the
     // adaptive viewport to themed output; applying that inset directly to these flat browser
     // tiles made every candidate look half-sized until a modifier happened to flatten it.
-    val browserOptions = generatingOptions
+    val browserOptions = uiOptions
+        .withSource { copy(primarySource = browserSource) }
         .withExport { copy(themed = false) }
         .withModifiers { copy(materialYouPack = MaterialYouPackModifier()) }
 
@@ -368,7 +377,8 @@ internal fun OptionsDialog(
     // generation pipeline with the draft substituted in — anything cheaper (colouring the app's
     // current icon) would show a different icon than the one Apply produces.
     val renderPreviewWith: suspend (GenerationOptions) -> Bitmap? = { previewOptions ->
-        val rendered = when (draft.origin) {
+        val replay = draft.replay
+        val rendered = if (replay != null) viewModel.renderModifierReplay(replay, previewOptions).icon else when (draft.origin) {
             IconOrigin.UPLOAD -> draft.uploadBase?.let { viewModel.applyModifier(it, previewOptions) }
             IconOrigin.VECTOR -> draft.vectorIcon?.let { viewModel.applyModifier(it, previewOptions) }
             IconOrigin.CREATE -> {
@@ -376,7 +386,7 @@ internal fun OptionsDialog(
                 when {
                     custom != null -> viewModel.previewIcon(app, previewOptions, custom)
                     previewOptions.source.primarySource == Source.ICON_PACK ->
-                        (app.baseIcon ?: app.createdIcon)?.let {
+                        (session.restoredIconSource ?: app.baseIcon ?: app.createdIcon)?.let {
                             viewModel.applyModifier(it, previewOptions)
                         }
                     else -> viewModel.previewIcon(app, previewOptions, null)
@@ -388,18 +398,18 @@ internal fun OptionsDialog(
     val modifierPreviews = rememberModifierPreviews(
         options = generatingOptions,
         adjustments = adjustments,
-        sourceKey = when (draft.origin) {
+        sourceKey = draft.replay?.input ?: when (draft.origin) {
             IconOrigin.UPLOAD -> draft.uploadBase
             IconOrigin.VECTOR -> draft.vectorIcon
             IconOrigin.CREATE -> customIconList.firstOrNull()?.let {
                 iconPack to it.resourceId
-            } ?: (app.baseIcon ?: app.createdIcon ?: app.icon)
+            } ?: (session.restoredIconSource ?: app.baseIcon ?: app.createdIcon ?: app.icon)
         },
         render = renderPreviewWith
     )
 
-    LaunchedEffect(draft.origin, generatingOptions, customIconList) {
-        draft.regenerateCreate(viewModel, app, generatingOptions, customIconList)
+    LaunchedEffect(draft.origin, draft.replay, generatingOptions, customIconList) {
+        draft.regenerateCreate(viewModel, app, generatingOptions, customIconList, viewModel::renderModifierReplay)
     }
     LaunchedEffect(draft.origin, draft.vectorIcon, generatingOptions) {
         draft.regenerateVector(viewModel, generatingOptions)
@@ -421,7 +431,7 @@ internal fun OptionsDialog(
         // Leaving the icon-pack list re-expands the app bar (other tabs barely scroll).
         if (selectedTab != 0) headerScrollBehavior.state.heightOffset = 0f
         // Modifiers live only in the Modifier tab — leaving it starts the next visit clean
-        if (selectedTab != 2) {
+        if (selectedTab != 2 && session.modifierReplay == null) {
             imageEdit = ImageEdit.NONE
         }
     }
@@ -430,7 +440,7 @@ internal fun OptionsDialog(
         // Credit the icon to a pack only when it actually came from one: the Create
         // tab's Icon Pack source. A fresh pick uses the picked pack; keeping the
         // existing icon keeps its stored source. Upload/vector/text/app-icon = none.
-        val sourcePackToPersist = confirmedSourcePack(
+        val sourcePackToPersist = if (session.modifierReplay != null) app.sourcePackName else confirmedSourcePack(
             origin = draft.origin,
             source = source,
             pickedPack = iconPack.takeIf { customIconList.isNotEmpty() },
@@ -439,7 +449,7 @@ internal fun OptionsDialog(
         // Online-library attribution follows how the icon was imported: a
         // confirmed vector carries the vector tab's URL, an "as image"
         // import the upload draft's; other origins have no online source.
-        val sourceUrlToPersist = when (draft.origin) {
+        val sourceUrlToPersist = if (session.modifierReplay != null) app.sourceUrl else when (draft.origin) {
             IconOrigin.VECTOR -> vectorEditState.sourceUrl
             IconOrigin.UPLOAD -> onlineImageUrl
             else -> null
@@ -493,7 +503,7 @@ internal fun OptionsDialog(
                         else Modifier.nestedScroll(headerScrollBehavior.nestedScrollConnection)
                     )
             ) {
-                val packBrowsing = selectedTab == 0 && source == Source.ICON_PACK
+                val packBrowsing = selectedTab == 0 && browserSource == Source.ICON_PACK
                 val tabContent: @Composable (PaddingValues) -> Unit = { headerPadding ->
                     AnimatedContent(
                         targetState = selectedTab,
@@ -506,8 +516,16 @@ internal fun OptionsDialog(
                         label = "tabContent"
                     ) { tab ->
                         when (tab) {
-                            0 -> CreateTab(
-                                source = source,
+                            0 -> if (session.modifierReplay != null && browserSource == Source.NONE) {
+                                Column(
+                                    Modifier.fillMaxSize().padding(headerPadding).padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
+                                    Text(stringResource(R.string.savedModifierSource), style = MaterialTheme.typography.titleMedium)
+                                    Text(stringResource(R.string.savedModifierSourceDescription))
+                                }
+                            } else CreateTab(
+                                source = browserSource,
                                 contentPadding = headerPadding,
                                 iconPacks = iconPacks,
                                 options = browserOptions,
@@ -527,6 +545,7 @@ internal fun OptionsDialog(
                                     app.toInstalledApplication()
                                 } else null,
                                 onIconSelect = { res, pack, drawableName ->
+                                    source = Source.ICON_PACK
                                     if (customIconList.firstOrNull()?.resourceId != res.resourceId ||
                                         iconPack != pack.packageName
                                     ) {
@@ -640,12 +659,17 @@ internal fun OptionsDialog(
                                 }
                             )
                             2 -> ModifierOptionsTab(
+                                leadingContent = {
+                                    ModifierReplayControls(session, onRestoreModifiers)
+                                },
+                                allowImageEdits = session.modifierReplay?.allowsImageEdits != false,
                                 contentPadding = headerPadding,
-                                source = source,
+                                source = if (session.modifierReplay != null) Source.ICON_PACK else source,
                                 imageEdit = imageEdit,
                                 iconColor = iconColor,
                                 useVector = useVector,
-                                useMaterialYou = applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
+                                useMaterialYou = if (session.modifierReplay != null) session.replayMaterialYou
+                                    else applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
                                 adjustments = adjustments,
                                 centerPreview = remember(draft.iconToConfirm) {
                                     draft.iconToConfirm?.toModifierBitmap()
@@ -656,12 +680,15 @@ internal fun OptionsDialog(
                                 materialYouPackAdjustments =
                                     materialYouPackAdjustments.takeIf { selectedMaterialYouPackIcon },
                                 materialYouSchemes = materialYouSchemes,
-                                onImageEditChange = { imageEdit = it },
+                                onImageEditChange = {
+                                    imageEdit = if (session.modifierReplay?.allowsImageEdits == false) ImageEdit.NONE else it
+                                },
                                 onColorChange = { iconColor = it },
                                 onVectorChange = { useVector = it },
                                 onMaterialYouChange = {
-                                    applicationIconVariant = if (it) ApplicationIconVariant.MATERIAL_YOU
-                                    else ApplicationIconVariant.DEFAULT
+                                    if (session.modifierReplay != null) session.replayMaterialYou = it
+                                    else applicationIconVariant = if (it) ApplicationIconVariant.MATERIAL_YOU
+                                        else ApplicationIconVariant.DEFAULT
                                 },
                                 onEditExternally = { toolbox ->
                                     val icon = draft.iconToConfirm
@@ -683,6 +710,8 @@ internal fun OptionsDialog(
                                 }
                             )
                             else -> VectorOptionsTab(
+                                keepRetainedStage = session.modifierReplay != null,
+                                sourceIcon = session.restoredIconSource ?: (app.baseIcon ?: app.createdIcon),
                                 contentPadding = headerPadding,
                                 app = app,
                                 state = vectorEditState,
@@ -703,11 +732,10 @@ internal fun OptionsDialog(
 
                 val bottomSection: @Composable () -> Unit = {
                     AnimatedVisibility(visible = selectedTab == 0) {
-                        SourcePills(source = source) { newSource ->
-                            source = newSource
-                            customIconList = listOf()
-                            activateCreate()
-                        }
+                        SourcePills(
+                            source = browserSource.takeIf { session.modifierReplay == null },
+                            onSourceChange = session::selectCreateSource
+                        )
                     }
                     HorizontalDivider()
                     OptionsBottomBar(
@@ -724,7 +752,8 @@ internal fun OptionsDialog(
                     heroBitmap = heroBitmap,
                     appName = app.appName,
                     icon = draft.iconToConfirm,
-                    loading = draft.generating
+                    loading = draft.generating,
+                    canConfirm = !draft.generating && !draft.replayRenderFailed
                 )
                 val actions = OptionsPreviewActions(
                     onDismiss = startClose,
@@ -795,13 +824,55 @@ internal fun OptionsDialog(
             }
         )
     }
+    if (session.restoringModifiers) {
+        RenkinAlertDialog(
+            onDismissRequest = onCancelModifierRestore,
+            title = { Text(stringResource(R.string.restoreSavedModifiers)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    Text(stringResource(R.string.verifyingSavedModifiers))
+                    WavyLoadingBar(Modifier.fillMaxWidth())
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = onCancelModifierRestore) { Text(stringResource(R.string.colorizeCancel)) }
+            }
+        )
+    }
+}
+
+@Composable
+private fun ModifierReplayControls(session: EditorSession, onRestore: () -> Unit) {
+    when {
+        session.modifierReplay != null -> {
+            Text(stringResource(R.string.savedModifiersRestored), style = MaterialTheme.typography.bodyMedium)
+            if (session.draft.replayRenderFailed) {
+                Text(stringResource(R.string.savedModifiersPreviewFailed), color = MaterialTheme.colorScheme.error)
+            }
+            if (session.modifierReplay?.verified?.retained?.containsBakedModifierEdits == true) {
+                Text(stringResource(R.string.savedModifiersBakedBaseline), style = MaterialTheme.typography.bodySmall)
+            }
+            if (session.modifierReplay?.allowsImageEdits == false) {
+                Text(stringResource(R.string.savedTextModifiersLimit), style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        session.modifierRestoreFailed -> Text(
+            stringResource(R.string.savedModifiersUnavailable),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        session.draft.canRestore -> OutlinedButton(onClick = onRestore) {
+            Text(stringResource(R.string.restoreSavedModifiers))
+        }
+    }
 }
 
 private data class OptionsPreview(
     val heroBitmap: Bitmap?,
     val appName: String,
     val icon: IconPackDrawable?,
-    val loading: Boolean
+    val loading: Boolean,
+    val canConfirm: Boolean = !loading
 )
 
 @Composable
@@ -822,6 +893,8 @@ private fun UploadOptionsTab(
 
 @Composable
 private fun ModifierOptionsTab(
+    leadingContent: @Composable () -> Unit,
+    allowImageEdits: Boolean,
     contentPadding: PaddingValues,
     source: Source,
     imageEdit: ImageEdit,
@@ -843,6 +916,8 @@ private fun ModifierOptionsTab(
 ) {
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
         ModifierTab(
+            leadingContent = leadingContent,
+            allowImageEdits = allowImageEdits,
             source = source,
             imageEdit = imageEdit,
             iconColor = iconColor,
@@ -866,6 +941,8 @@ private fun ModifierOptionsTab(
 
 @Composable
 private fun VectorOptionsTab(
+    keepRetainedStage: Boolean,
+    sourceIcon: IconPackDrawable?,
     contentPadding: PaddingValues,
     app: PackageInfoStruct,
     state: VectorEditState,
@@ -875,9 +952,12 @@ private fun VectorOptionsTab(
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
         PrepareEditVector(
             app = app,
+            sourceIcon = sourceIcon,
             state = state,
             onImportedImage = onImportedImage,
-            onChange = onIconChange
+            onChange = {
+                if (!keepRetainedStage || state.hasChangesFromSeed) onIconChange(it)
+            }
         )
     }
 }
@@ -925,7 +1005,7 @@ private fun WideOptionsLayout(
             appName = preview.appName,
             previewIcon = preview.icon,
             previewLoading = preview.loading,
-            confirmEnabled = !preview.loading,
+            confirmEnabled = preview.canConfirm,
             onDismiss = actions.onDismiss,
             onClear = actions.onClear,
             onConfirm = actions.onConfirm,
@@ -979,7 +1059,7 @@ private fun PhoneOptionsLayout(
                         appName = preview.appName,
                         previewIcon = preview.icon,
                         previewLoading = preview.loading,
-                        confirmEnabled = !preview.loading,
+                        confirmEnabled = preview.canConfirm,
                         onDismiss = actions.onDismiss,
                         onClear = actions.onClear,
                         onConfirm = actions.onConfirm,
@@ -1208,7 +1288,7 @@ private fun CalendarCard(
 
 @Composable
 private fun SourcePills(
-    source: Source,
+    source: Source?,
     onSourceChange: (Source) -> Unit
 ) {
     SingleChoiceSegmentedButtonRow(

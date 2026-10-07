@@ -44,14 +44,15 @@ internal fun modifierInputForResult(
     input: IconPackDrawable,
     options: GenerationOptions,
     origin: ModifierInputOrigin,
-    pipeline: ModifierInputPipeline = ModifierInputPipeline.SHARED
+    pipeline: ModifierInputPipeline = ModifierInputPipeline.SHARED,
+    containsBakedModifierEdits: Boolean = origin == ModifierInputOrigin.EXISTING_ICON
 ): IconModifierInput? {
     val recipe = StoredIconModifierRecipe.fromRenderedOptions(options) ?: return null
     val modifiers = ModifierRecipeCodec.decode(recipe) ?: return null
     val resolved = options.copy(modifiers = modifiers)
     if (!StoredIconModifierInput.supportsOptions(resolved)) return null
     return IconModifierInput(
-        resolved, containsBakedModifierEdits = origin == ModifierInputOrigin.EXISTING_ICON,
+        resolved, containsBakedModifierEdits = containsBakedModifierEdits,
         origin = origin, liveInput = input, pipeline = pipeline
     )
 }

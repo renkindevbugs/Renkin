@@ -790,4 +790,13 @@
     <string name="refreshCancelled">Refresh was cancelled.</string>
     <string name="refreshTargetsGone">Some apps are no longer available and were skipped.</string>
     <string name="refreshProgress">Processing icons: %1$d/%2$d</string>
+    <string name="restoreSavedModifiers">Restore saved modifiers</string>
+    <string name="verifyingSavedModifiers">Checking the saved source against this icon…</string>
+    <string name="savedModifiersRestored">Saved modifiers restored. Changes use the saved source. Select a source again to replace it or refresh its colors.</string>
+    <string name="savedModifiersBakedBaseline">Earlier edits are part of the saved source. Only the last modifier stage can be changed.</string>
+    <string name="savedTextModifiersLimit">Text and its colors are part of the saved source. Scale, position, shape, outline and shadow remain editable.</string>
+    <string name="savedModifiersUnavailable">Saved modifiers could not be restored. You can still edit the current image.</string>
+    <string name="savedModifiersPreviewFailed">The preview could not be updated. Change a modifier or select a smaller source before applying.</string>
+    <string name="savedModifierSource">Saved source</string>
+    <string name="savedModifierSourceDescription">This icon uses its saved artwork. Choose a source below to replace it. Browsing icon packs keeps the current source until you select an icon.</string>
 </resources>

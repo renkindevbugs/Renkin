@@ -18,6 +18,7 @@ import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.TextCase
+import dev.renkinProject.renkin.icon.creator.VerifiedModifierInput
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 
 // Live artwork and brush geometry belong to the same owner as their controls. Only the
@@ -31,6 +32,8 @@ internal class EditorSession(
 ) {
     var selectedTab by mutableIntStateOf(0)
     var source by mutableStateOf(Source.ICON_PACK)
+    var browsingIconPacks by mutableStateOf(false)
+    val createSourceToDisplay: Source get() = if (browsingIconPacks) Source.ICON_PACK else source
     var imageEdit by mutableStateOf(ImageEdit.NONE)
     var textType by mutableStateOf(TextType.FULL_NAME)
     var customText by mutableStateOf(application.appName)
@@ -51,6 +54,10 @@ internal class EditorSession(
         application.baseIcon ?: application.createdIcon, application.modifierRecipe, application.modifierInput
     )
     val vectorEditState = VectorEditState()
+    // Returning to the saved artwork must keep the raw baseline even after replay ends.
+    var restoredIconSource by mutableStateOf<IconPackDrawable?>(null)
+        private set
+    private var restoredSourceContainsBakedModifierEdits = false
     val upload = UploadEditorState()
     val adjustments = AdjustmentState()
     val storedMaterialYouPackState =
@@ -61,6 +68,28 @@ internal class EditorSession(
     var calendarEnabled by mutableStateOf(application.calendarEnabled)
     var calendarPrefix by mutableStateOf(application.calendarPrefix)
     var calendarPackName by mutableStateOf(application.calendarPackName)
+    var modifierReplay by mutableStateOf<EditorModifierReplay?>(null)
+        private set
+    var restoringModifiers by mutableStateOf(false)
+    var modifierRestoreFailed by mutableStateOf(false)
+    var replayMaterialYou by mutableStateOf(false)
+
+    fun restoreModifiers(verified: VerifiedModifierInput) {
+        browsingIconPacks = false
+        restoredIconSource = verified.input
+        restoredSourceContainsBakedModifierEdits = verified.retained.containsBakedModifierEdits
+        vectorEditState.reset(restoredSourceContainsBakedModifierEdits)
+        modifierReplay = EditorModifierReplay(verified).also { it.restoreControls(this) }
+        draft.restore(verified)
+        modifierRestoreFailed = false
+    }
+
+    private fun selectNewSource() {
+        if (source == Source.NONE) source = Source.ICON_PACK
+        modifierReplay = null
+        modifierRestoreFailed = false
+        draft.selectNewSource()
+    }
 
     private fun clearCreateSelection() {
         customIconList = emptyList()
@@ -70,10 +99,24 @@ internal class EditorSession(
         calendarPackName = null
     }
 
+    fun selectCreateSource(newSource: Source) {
+        if (newSource == Source.ICON_PACK && modifierReplay != null) {
+            browsingIconPacks = true
+        } else {
+            source = newSource
+            customIconList = emptyList()
+            activateCreate()
+        }
+    }
+
     fun activateCreate() {
+        // Browsing a pack is not a replacement source until an artwork is picked.
+        if (modifierReplay != null && source == Source.ICON_PACK && customIconList.isEmpty()) return
+        browsingIconPacks = false
+        selectNewSource()
+        vectorEditState.reset(restoredSourceContainsBakedModifierEdits)
         if (draft.origin != IconOrigin.CREATE) {
             draft.selectCreate()
-            vectorEditState.reset()
             onlineImageUrl = null
             onlineImagePath = null
             upload.reset()
@@ -81,21 +124,25 @@ internal class EditorSession(
     }
 
     fun activateUpload(icon: IconPackDrawable) {
+        browsingIconPacks = false
+        selectNewSource()
         if (draft.origin != IconOrigin.UPLOAD) {
             clearCreateSelection()
-            vectorEditState.reset()
+            vectorEditState.reset(restoredSourceContainsBakedModifierEdits)
         }
         draft.selectUpload(icon)
     }
 
     fun activateVector(icon: IconPackDrawable) {
+        browsingIconPacks = false
+        selectNewSource()
         if (draft.origin != IconOrigin.VECTOR) {
             clearCreateSelection()
             onlineImageUrl = null
             onlineImagePath = null
             upload.reset()
         }
-        draft.selectVector(icon)
+        draft.selectVector(icon, vectorEditState.containsBakedModifierEdits)
     }
 }
 

@@ -79,6 +79,8 @@ private class PresetScrollAnchor {
 
 @Composable
 internal fun ModifierTab(
+    leadingContent: @Composable () -> Unit = {},
+    allowImageEdits: Boolean = true,
     source: Source,
     imageEdit: ImageEdit,
     iconColor: Color,
@@ -105,6 +107,7 @@ internal fun ModifierTab(
 ) {
     val colorizeBaseBitmap = previews?.colorizeBase
     val editLabels = getImageEditLabels(includeSegments = colorizeBaseBitmap != null)
+        .filterKeys { allowImageEdits || it == ImageEdit.NONE }
     var colorPickerOpen by remember { mutableStateOf(false) }
     var colorizeSheetOpen by rememberSaveable { mutableStateOf(false) }
     var eraseDialogOpen by remember { mutableStateOf(false) }
@@ -138,6 +141,7 @@ internal fun ModifierTab(
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
+        leadingContent()
         materialYouPackAdjustments?.let {
             MaterialYouPackSection(
                 adjustments = it,

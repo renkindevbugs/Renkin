@@ -84,13 +84,13 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun PrepareEditVector(
     app: PackageInfoStruct,
+    sourceIcon: IconPackDrawable? = app.baseIcon ?: app.createdIcon,
     state: VectorEditState,
     // An online icon the editor can't model as paths, imported as a full-size picture
     // instead — the dialog routes it into the upload draft.
     onImportedImage: (OnlineImageImport, sourceUrl: String) -> Unit,
     onChange: (icon: IconPackDrawable?) -> Unit
 ) {
-    val sourceIcon = app.baseIcon ?: app.createdIcon
     val editedVector = remember(sourceIcon) { when (sourceIcon) {
         is ImageVectorDrawable -> sourceIcon.deepCopy().applyAndRemoveGroup().toImageVector()
         is InsetIconDrawable -> {
@@ -103,7 +103,7 @@ internal fun PrepareEditVector(
     } }
 
     EditVectorColumn(editedVector, state, onImportedImage) {
-        if (sourceIcon is InsetIconDrawable && it != null) {
+        if (sourceIcon is InsetIconDrawable && state.viewportOverride == null && it != null) {
             onChange(InsetIconDrawable(it, sourceIcon.dimensions, sourceIcon.fractions))
         } else {
             onChange(it)
@@ -124,10 +124,22 @@ internal data class PathEntry(val path: VectorPath, val filled: Boolean, val bas
  * user's paths. Seeded once from the source vector via [initialized].
  */
 internal class VectorEditState {
+    data class Inputs(
+        val entries: List<PathEntry>, val thickness: Float, val automaticallyCenter: Boolean,
+        val viewport: Pair<Float, Float>?, val sourceUrl: String?, val containsBakedModifierEdits: Boolean
+    )
+    private var initialInputs: Inputs? = null
+    fun inputs() = Inputs(entries, thickness, automaticallyCenter, viewportOverride, sourceUrl, containsBakedModifierEdits)
+    val hasChangesFromSeed: Boolean get() = initialInputs?.let { it != inputs() } == true
+
+    fun captureSeed() {
+        if (initialInputs == null) initialInputs = inputs()
+    }
     var entries: List<PathEntry> by mutableStateOf(listOf())
     var thickness: Float by mutableStateOf(1f)
     var automaticallyCenter: Boolean by mutableStateOf(true)
     var initialized: Boolean by mutableStateOf(false)
+    var containsBakedModifierEdits: Boolean by mutableStateOf(false)
 
     // Set by "Import SVG": the imported document's coordinate space replaces the template
     // vector's viewport, so the imported paths keep their proportions (a 24-unit heroicon
@@ -140,13 +152,15 @@ internal class VectorEditState {
     var sourceUrl: String? by mutableStateOf(null)
 
     /** Drops the previous vector selection when another editor source is chosen. */
-    fun reset() {
+    fun reset(containsBakedModifierEdits: Boolean = false) {
+        initialInputs = null
         entries = emptyList()
         thickness = 1f
         automaticallyCenter = true
         initialized = false
         viewportOverride = null
         sourceUrl = null
+        this.containsBakedModifierEdits = containsBakedModifierEdits
     }
 }
 
@@ -217,6 +231,8 @@ internal fun EditVectorColumn(
                 }
             }
             state.entries = initial.toList()
+            if (initial.isEmpty()) state.containsBakedModifierEdits = false
+            state.captureSeed()
             state.initialized = true
         }
 
@@ -275,6 +291,7 @@ internal fun EditVectorColumn(
         // and stroke widths as authored). White like every editor path — the Modifier
         // tab recolors. [sourceUrl] records the online origin (null for local files).
         val applyImported: (SvgVectorImporter.ImportedSvg, String?) -> Unit = { imported, sourceUrl ->
+            state.containsBakedModifierEdits = false
             state.viewportOverride = imported.viewportWidth to imported.viewportHeight
             val importStroke = (imported.viewportHeight / 48f).takeIf { it > 0f } ?: 1f
             state.entries = imported.paths.mapNotNull { spec ->
@@ -391,9 +408,11 @@ internal fun EditVectorColumn(
         }
 
         // Publish only when editor inputs change, never as a side effect of composition itself.
-        LaunchedEffect(state.initialized, editedVector, state.entries.isEmpty()) {
-            if (state.initialized) {
-                currentOnChange(if (state.entries.isEmpty()) null else editedVector)
+        val initialized = state.initialized
+        val publishedInputs = state.inputs()
+        LaunchedEffect(initialized, editedVector, publishedInputs) {
+            if (initialized && publishedInputs == state.inputs()) {
+                currentOnChange(if (publishedInputs.entries.isEmpty()) null else editedVector)
             }
         }
     }

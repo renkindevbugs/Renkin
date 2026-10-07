@@ -15,6 +15,7 @@ import dev.renkinProject.renkin.icon.creator.IconModifierInput
 import dev.renkinProject.renkin.icon.creator.ModifierInputOrigin
 import dev.renkinProject.renkin.icon.creator.modifierInputForResult
 import dev.renkinProject.renkin.icon.creator.hasIconAdjustments
+import dev.renkinProject.renkin.icon.creator.VerifiedModifierInput
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 
 /**
@@ -52,6 +53,9 @@ internal class IconDraftState(
     private var createInput by mutableStateOf(initialInput.takeIf { initialIcon != null })
     private var uploadInput by mutableStateOf<IconModifierInput?>(null)
     private var vectorInput by mutableStateOf<IconModifierInput?>(null)
+    private var vectorContainsBakedModifierEdits = false
+    // Source switching may end replay while its controls still describe this raw input.
+    private var restoredExistingInput: VerifiedModifierInput? = null
 
     var origin by mutableStateOf(IconOrigin.CREATE)
 
@@ -66,6 +70,30 @@ internal class IconDraftState(
     // changes a source, modifier or selects an icon.
     private var initialized = false
     private var completedCreate: CreateRequest? = null
+    var canRestore by mutableStateOf(initialInput != null && initialIcon != null)
+        private set
+    var replay by mutableStateOf<VerifiedModifierInput?>(null)
+        private set
+    var replayRenderFailed by mutableStateOf(false)
+        private set
+
+    fun restore(verified: VerifiedModifierInput) {
+        invalidateGenerations()
+        replay = verified
+        restoredExistingInput = verified
+        replayRenderFailed = false
+        createInput = verified.retained
+        createRecipe = StoredIconModifierRecipe.fromRenderedOptions(verified.retained.options)
+        initialized = false
+        canRestore = false
+    }
+
+    fun selectNewSource() {
+        replay = null
+        replayRenderFailed = false
+        canRestore = false
+        invalidateGenerations()
+    }
 
     private data class CreateRequest(
         val app: PackageInfoStruct,
@@ -104,7 +132,7 @@ internal class IconDraftState(
      * The caller is responsible for clearing their UI-only selection state.
      */
     fun selectCreate() {
-        invalidateGenerations()
+        selectNewSource()
         uploadBase = null
         uploadIcon = null
         vectorIcon = null
@@ -117,7 +145,7 @@ internal class IconDraftState(
     }
 
     fun selectUpload(icon: IconPackDrawable) {
-        invalidateGenerations()
+        selectNewSource()
         createIcon = null
         vectorIcon = null
         modifiedVector = null
@@ -140,12 +168,13 @@ internal class IconDraftState(
         uploadInput = null
     }
 
-    fun selectVector(icon: IconPackDrawable) {
-        invalidateGenerations()
+    fun selectVector(icon: IconPackDrawable, containsBakedModifierEdits: Boolean = false) {
+        selectNewSource()
         createIcon = null
         uploadBase = null
         uploadIcon = null
         vectorIcon = icon
+        vectorContainsBakedModifierEdits = containsBakedModifierEdits
         modifiedVector = null
         createRecipe = null
         uploadRecipe = null
@@ -187,11 +216,15 @@ internal class IconDraftState(
         builder: IconPreviewBuilder,
         app: PackageInfoStruct,
         options: GenerationOptions,
-        customIconList: List<ResourceDrawable>
+        customIconList: List<ResourceDrawable>,
+        renderReplay: suspend (VerifiedModifierInput, GenerationOptions) -> IconGenerationResult = { input, settings ->
+            input.render(settings)
+        }
     ) {
         if (origin != IconOrigin.CREATE) return
         val custom = customIconList.firstOrNull()
-        val request = CreateRequest(app, app.baseIcon ?: app.createdIcon, options, custom)
+        val existing = restoredExistingInput
+        val request = CreateRequest(app, existing?.input ?: app.baseIcon ?: app.createdIcon, options, custom)
         if (!initialized) {
             initialized = true
             completedCreate = request
@@ -200,14 +233,19 @@ internal class IconDraftState(
         // A recreated composition must not reinterpret the untouched saved icon as a new edit.
         // Record only completed renders, so a cancelled effect can retry with the same inputs.
         if (request == completedCreate) {
+            replayRenderFailed = false
             createGeneration++
             return
         }
         // previewIcon / applyModifier hop to Dispatchers.Default internally, so this no
         // longer blocks the main thread; show the spinner for the duration.
         val generation = ++createGeneration
+        canRestore = false
+        val retainedReplay = replay
+        replayRenderFailed = false
         val generated = trackGeneration {
             when {
+                retainedReplay != null -> renderReplay(retainedReplay, options)
                 custom != null -> builder.previewIconWithInput(app, options, custom)
                 // Icon-pack source with no new pick: apply the modifier to the already saved icon
                 // rather than pulling a fresh one from the first pack (which would swap the icon
@@ -218,12 +256,19 @@ internal class IconDraftState(
             }
         }
         if (generation == createGeneration) {
+            if (retainedReplay != null && generated.icon == null) {
+                replayRenderFailed = true
+                return
+            }
             createIcon = generated.icon
             createRecipe = if (generated.icon != null) {
                 StoredIconModifierRecipe.fromRenderedOptions(generated.renderedOptions ?: options)
             } else null
-            createInput = if (generated.icon != null && custom == null && options.source.primarySource == Source.ICON_PACK) {
-                request.base?.let { modifierInputForResult(it, options, ModifierInputOrigin.EXISTING_ICON) }
+            createInput = if (retainedReplay == null && generated.icon != null && custom == null && options.source.primarySource == Source.ICON_PACK) {
+                request.base?.let {
+                    modifierInputForResult(it, options, ModifierInputOrigin.EXISTING_ICON,
+                        containsBakedModifierEdits = existing?.retained?.containsBakedModifierEdits ?: true)
+                }
             } else generated.modifierInput.takeIf { generated.icon != null }
             completedCreate = request
         }
@@ -232,6 +277,7 @@ internal class IconDraftState(
     suspend fun regenerateVector(builder: IconPreviewBuilder, options: GenerationOptions) {
         if (origin != IconOrigin.VECTOR) return
         val base = vectorIcon
+        val containsBakedModifierEdits = vectorContainsBakedModifierEdits
         val generation = ++vectorGeneration
         val generated = when {
             base == null -> null
@@ -243,7 +289,8 @@ internal class IconDraftState(
             modifiedVector = generated
             vectorRecipe = if (generated != null) StoredIconModifierRecipe.fromRenderedOptions(options) else null
             vectorInput = if (generated != null && base != null) {
-                modifierInputForResult(base, options, ModifierInputOrigin.VECTOR)
+                modifierInputForResult(base, options, ModifierInputOrigin.VECTOR,
+                    containsBakedModifierEdits = containsBakedModifierEdits)
             } else null
         }
     }

@@ -31,6 +31,7 @@ import dev.renkinProject.renkin.apk.ShizukuSupport
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.apk.IconApplyOutcome
 import dev.renkinProject.renkin.icon.creator.IconModifierInput
+import dev.renkinProject.renkin.icon.creator.VerifiedModifierInput
 import dev.renkinProject.renkin.icon.creator.IconGenerationResult
 import dev.renkinProject.renkin.apk.IconUndoStep
 import dev.renkinProject.renkin.apk.ProfileReloadFailedException
@@ -1209,6 +1210,14 @@ class MainViewModel @Inject constructor(
         options: GenerationOptions,
         customIcon: ResourceDrawable?
     ): IconGenerationResult = appProvider.getIconPreview(app, options, customIcon)
+
+    internal suspend fun prepareModifierReplay(app: PackageInfoStruct, expected: ProfileSessionToken) =
+        appProvider.prepareModifierReplay(app, expected)
+
+    internal suspend fun renderModifierReplay(
+        replay: VerifiedModifierInput,
+        options: GenerationOptions
+    ): IconGenerationResult = replay.render(options)
 
     /** Applies the modifier from [options] to an already-built icon (e.g. a hand-edited vector). */
     override suspend fun applyModifier(icon: IconPackDrawable, options: GenerationOptions): IconPackDrawable =

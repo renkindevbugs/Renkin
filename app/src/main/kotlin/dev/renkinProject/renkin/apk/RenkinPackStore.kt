@@ -35,6 +35,10 @@ class RenkinPackStore(
     constructor(context: Context) : this(context, RenkinPackRepository(context))
     private val inputStore = IconModifierInputStore(context)
 
+    internal suspend fun readModifierInput(state: IconModifierInput) = inputStore.read(state)
+
+    internal suspend fun decodeModifierInput(input: IconModifierInputStore.ReadInput) = inputStore.decode(input)
+
     data class SavedEntry(
         val icon: IconPackDrawable?,
         val baseIcon: IconPackDrawable?,

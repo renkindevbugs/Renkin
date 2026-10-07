@@ -37,6 +37,8 @@ import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconGenerationResult
+import dev.renkinProject.renkin.icon.creator.PreparedModifierReplay
+import dev.renkinProject.renkin.icon.creator.VerifiedModifierInput
 import dev.renkinProject.renkin.icon.creator.withSource
 import dev.renkinProject.renkin.icon.creator.withModifiers
 import dev.renkinProject.renkin.icon.creator.withExport
@@ -612,6 +614,32 @@ class ApplicationProvider internal constructor(
         customIcon: ResourceDrawable?
     ): IconGenerationResult =
         iconGenService.getIconPreview(application, options, customIcon)
+
+    internal suspend fun prepareModifierReplay(
+        application: PackageInfoStruct,
+        expected: ProfileSessionToken
+    ): PreparedModifierReplay? {
+        val retained = application.modifierInput ?: return null
+        val base = application.baseIcon ?: application.createdIcon ?: return null
+        fun stillOwnsBase(): Boolean = applicationList.firstOrNull { it.key == application.key }?.let {
+            (it.baseIcon ?: it.createdIcon) === base && it.modifierInput === retained
+        } == true
+        val epoch = runProfileOperation(expected) {
+            if (stillOwnsBase()) StorageOperationGate.epoch else null
+        } ?: return null
+        val source = StorageOperationGate.run {
+            if (StorageOperationGate.epoch == epoch) renkinPackStore.readModifierInput(retained) else null
+        } ?: return null
+        val input = renkinPackStore.decodeModifierInput(source) ?: return null
+        val verified = VerifiedModifierInput.verify(
+            context.resources, input, retained, base
+        ) ?: return null
+        return runProfileOperation(expected) {
+            if (StorageOperationGate.epoch == epoch && stillOwnsBase()) {
+                PreparedModifierReplay(verified, epoch)
+            } else null
+        }
+    }
 
     /**
      * Builds the icon a specific pack provides for an app, by drawable name — used by the
