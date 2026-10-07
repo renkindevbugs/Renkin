@@ -1,7 +1,5 @@
 package dev.renkinProject.renkin.data
 
-import android.util.JsonReader
-import android.util.JsonToken
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
@@ -15,8 +13,6 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
-import org.json.JSONObject
-import java.io.StringReader
 
 internal data class ProfileStyleUpdate(val profileId: Long, val document: String, val legacySnapshot: String)
 
@@ -103,7 +99,7 @@ class ProfileStyleStore internal constructor(
                 null
             } catch (error: StorageRecoverySnapshotException) {
                 Log.error("ProfileStyleStore", "Repairing invalid style for profile ${profile.id} from its saved legacy copy", error)
-                update(profile.id, validatedLegacyStyle(profile.prefsSnapshot))
+                update(profile.id, ProfileStylePreferences.decodeLegacySnapshot(profile.prefsSnapshot))
             }
         }
         if (repairs.isEmpty()) return@access
@@ -147,35 +143,6 @@ class ProfileStyleStore internal constructor(
         ProfileStylePreferences.capture(mutablePreferencesOf().apply {
             replaceProfilePrefs(snapshot)
         })
-
-    private fun validatedLegacyStyle(snapshot: String): ProfileStyle {
-        require(snapshot.length <= ProfileStyleCodec.MAX_DOCUMENT_CHARS) { "Legacy style is too large" }
-        snapshot.requireProfileUnicode()
-        require(snapshot.toByteArray(Charsets.UTF_8).size <= ProfileStyleCodec.MAX_DOCUMENT_BYTES) { "Legacy style is too large" }
-        val values = JSONObject()
-        val keys = ProfilePrefKeys.map { it.name }.toSet()
-        JsonReader(StringReader(snapshot)).use { reader ->
-            reader.isLenient = false
-            reader.beginObject()
-            val seen = mutableSetOf<String>()
-            while (reader.hasNext()) {
-                val name = reader.nextName()
-                require(seen.add(name)) { "Duplicate legacy style field" }
-                require(name in keys) { "Unknown legacy style field" }
-                val value: Any = when (reader.peek()) {
-                    JsonToken.BOOLEAN -> reader.nextBoolean()
-                    JsonToken.NUMBER -> reader.profileInt(name)
-                    JsonToken.STRING -> reader.nextString()
-                    else -> throw IllegalArgumentException("Invalid legacy style value")
-                }
-                require(isValidPersistedPreference(name, value)) { "Invalid legacy style type" }
-                values.put(name, value)
-            }
-            reader.endObject()
-            require(reader.peek() == JsonToken.END_DOCUMENT) { "Trailing legacy style content" }
-        }
-        return legacyStyle(values.toString())
-    }
 
     private fun update(id: Long, style: ProfileStyle, originalDocument: String? = null): ProfileStyleUpdate =
         ProfileStyleUpdate(id, originalDocument ?: ProfileStyleCodec.encode(style),

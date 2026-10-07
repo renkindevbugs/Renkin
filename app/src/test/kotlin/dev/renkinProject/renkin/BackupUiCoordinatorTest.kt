@@ -7,6 +7,7 @@ import androidx.room.Room
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.Profile
+import dev.renkinProject.renkin.data.ProfileStyleStore
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.StorageOperationGate
@@ -76,6 +77,7 @@ class BackupUiCoordinatorTest {
             .allowMainThreadQueries().build()
         repository = RenkinPackRepository(packDb)
         repository.replaceEverything(listOf(Profile(id = 1, name = "Default"), Profile(id = 4, name = "Other")), emptyList())
+        ProfileStyleStore(repository, application.dataStore).initialize()
         val catalog = AppModule.provideIconPackCatalog(application)
         val icons = AppModule.provideIconPackRepository(application, catalog)
         val locks = AppModule.provideIconLockManager(application, repository)

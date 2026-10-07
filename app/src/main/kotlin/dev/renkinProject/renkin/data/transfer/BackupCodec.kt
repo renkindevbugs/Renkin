@@ -116,12 +116,14 @@ data class BackupPref(val tag: String, val value: Any) {
  * round-trip is unit-testable; [BackupManager] owns the surrounding ZIP and stores.
  */
 object BackupCodec {
-    // Version 3 preserves watch baselines and pending completed suggestions.
-    const val FORMAT_VERSION = 3
+    // Version 4 carries authoritative profile styles alongside their legacy projections.
+    const val FORMAT_VERSION = 4
+    internal const val LEGACY_FORMAT_VERSION = 3
 
-    fun encode(data: BackupData): String = encodeJson(data).toString()
+    fun encode(data: BackupData, formatVersion: Int): String = encodeJson(data, formatVersion).toString()
 
-    internal fun encodeJson(data: BackupData): JSONObject {
+    internal fun encodeJson(data: BackupData, formatVersion: Int): JSONObject {
+        ProfileStyleBackup.requireSupportedFormat(formatVersion)
         val root = JSONObject()
 
         val prefs = JSONObject()
@@ -143,6 +145,10 @@ object BackupCodec {
                 .put("prefsSnapshot", bp.profile.prefsSnapshot)
                 .put("hasUnbuiltChanges", bp.profile.hasUnbuiltChanges)
                 .put("hideMissingPackWarning", bp.profile.hideMissingPackWarning)
+            if (formatVersion > LEGACY_FORMAT_VERSION) {
+                ProfileStyleBackup.validatedStyle(bp.profile)
+                p.put("profileStyle", bp.profile.profileStyle)
+            }
 
             val icons = JSONArray()
             for (icon in bp.icons) {
@@ -257,15 +263,17 @@ object BackupCodec {
         return root
     }
 
-    /** Throws (JSONException) on malformed input — callers surface that as a failed import. */
-    fun decode(json: String): BackupData = decodeJson(parseBackupJson(json))
+    /** Archive callers pass the manifest version; malformed input is surfaced as a failed import. */
+    fun decode(json: String, formatVersion: Int): BackupData = decodeJson(parseBackupJson(json), formatVersion)
 
-    internal fun decodeJson(root: JSONObject): BackupData {
+    internal fun decodeJson(root: JSONObject, formatVersion: Int): BackupData {
+        ProfileStyleBackup.requireSupportedFormat(formatVersion)
 
         val prefs = mutableMapOf<String, BackupPref>()
         val prefsJson = root.getJSONObject("prefs")
         for (name in prefsJson.keys()) {
             val entry = prefsJson.getJSONObject(name)
+            if (formatVersion > LEGACY_FORMAT_VERSION) ProfileStyleBackup.validateRawPreference(name, entry)
             // Unknown tags (a future format extension) are skipped, not fatal.
             val pref = when (entry.getString("t")) {
                 BackupPref.BOOL -> BackupPref(BackupPref.BOOL, entry.getBoolean("v"))
@@ -295,7 +303,8 @@ object BackupCodec {
                 packLabel = p.optString("packLabel"),
                 prefsSnapshot = p.optString("prefsSnapshot"),
                 hasUnbuiltChanges = p.optBoolean("hasUnbuiltChanges"),
-                hideMissingPackWarning = p.optBoolean("hideMissingPackWarning")
+                hideMissingPackWarning = p.optBoolean("hideMissingPackWarning"),
+                profileStyle = ProfileStyleBackup.readDocument(p, formatVersion)
             )
 
             val icons = mutableListOf<DbApplication>()

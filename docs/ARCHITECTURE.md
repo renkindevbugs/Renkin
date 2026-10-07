@@ -220,6 +220,41 @@ directory is moved. The diagnostic `profiles.json` contains only the Profile tab
 columns and values without copying icon payloads; it is not a complete restorable snapshot.
 Explicit abandoned-copy deletion remains the cleanup path.
 
+Phase 7A5 enables portable backup format 4 for full and shared-profile exports. Every profile
+carries the exact versioned style document as a required JSON string in `profileStyle`; the
+legacy `prefsSnapshot` remains a separate derived field. `ProfileStyleBackup` validates the
+bounded typed document and its strictly parsed legacy copy, rejecting semantic mismatches.
+Full backups also validate the active preference projection against the active typed style.
+The shared strict legacy reader lives in `ProfileStylePreferences`, reused by explicit recovery
+repair. Its size budget includes flat key-name overhead; the typed document still has its own
+256 KiB character/UTF-8 limits. Absent/disabled values, theme colours and unknown ordinals
+remain configured values, without renderer normalization.
+
+The manifest version is passed through stream decoding and validation before preparing an import.
+Codec, stream and validator APIs require an explicit format; none supplies a default.
+Formats 1–3 keep legacy decoding and shared bootstrap; they cannot smuggle a `profileStyle` field
+past the format check. Format 4 requires a valid document and matching copy; a missing, invalid or
+unsupported document never falls back. Known profile preference tags/primitive types and the
+active identity are checked before JSONObject coercion. Full import retains exact style documents;
+shared import assigns a fresh id without changing the document or the active style. Older builds
+supporting only formats 1–3 reject format 4 entirely. Manual and automatic exports use the same
+format-4 path. Room remains v21; the typed version remains 1 and no schema migration is needed.
+
+Local recovery database snapshots and `prefs.json` are independent of the portable manifest:
+the preference-only JSON explicitly uses `RECOVERY_PREFS_FORMAT` (legacy format 3), while Room
+snapshots retain their existing audited schema handling. Previous state, pending rollback and repair
+are unchanged.
+Legacy/UI projections remain until their separate retirement checkpoint. Legacy test fixtures pass
+their format explicitly; current export fixtures bootstrap their typed documents before exporting.
+`ProfileStyleBackupTest` covers format 4, exact text and configured-value preservation, strict raw
+types, invalid/missing documents, projection mismatches, explicit legacy formats and near-limit
+multibyte compatibility copies. `ProfileStyleArchiveTest` covers full/shared archives, fresh ids,
+restart, legacy bootstrap, rejection before storage changes, profile-id diagnostics, background
+export through the worker's shared backend and the unchanged local recovery format. Existing
+snapshot, rollback, previous-state and modifier-input suites retain their coverage. Worker scheduling
+and SAF document management are unchanged; the background test exercises the export backend.
+Invalid typed styles stop export and log the owning profile id for diagnosis.
+
 ## Threading & state
 
 - Heavy work lives in `suspend` functions that hop to `Dispatchers.Default` internally
@@ -526,7 +561,8 @@ and reads it with `ZipFile`, requiring the central directory. Every entry, inclu
 ones, is read to verify its actual size and CRC before any persistent store changes. Paths,
 duplicate entries, format versions, profile identities, active-profile ownership, icon
 uniqueness, known preference types and preset decodability are validated. Formats 1–3 remain
-supported; older optional fields keep their codec defaults. JSON nesting is capped at 64.
+supported; format 4 additionally requires typed profile documents and matching compatibility
+projections. Older optional fields keep their codec defaults. JSON nesting is capped at 64.
 
 Watch data is normalized on both export and import, without changing the exporting DB.
 Invalid or duplicate app/pack children, stale baselines, orphan suggestions and unusable

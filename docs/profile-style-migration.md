@@ -1,6 +1,6 @@
 # Profile style migration — phase 7A
 
-## Current boundary: 7A4
+## Current boundary: 7A5
 
 Room is version 21. `Profile.prefsSnapshot` is an unversioned JSON object containing
 the registered `ProfilePrefKeys`. `Profile.profileStyle` becomes authoritative after the shared
@@ -17,8 +17,8 @@ baseline patches retain the 7A1 adapter. The 7A2 checkpoint kept Room at 20 and 
 
 Phase 7A3 appends `Profile.profileStyle` as TEXT NOT NULL DEFAULT ''. Migration 20 → 21
 does no backfill. At that checkpoint existing profiles and creation/import paths left the column
-empty, and DataStore/`prefsSnapshot` retained their previous ownership. Portable export stays
-at format 3. The shared bootstrap and routing of every style writer now form the 7A4 checkpoint.
+empty, and DataStore/`prefsSnapshot` retained their previous ownership. Portable export stayed
+at format 3 through 7A4, which introduced shared bootstrap and routed every style writer.
 
 `ProfileStyleStore` is the singleton owner, composed by Hilt from the shared repository and
 settings DataStore. The early `ProfileStyleAccess` adapter routes existing DataPreferences
@@ -61,9 +61,9 @@ The observer-pause signal is independent of the recovery-screen state. A normal 
 the current composition, dialogs, scroll and phased restore progress; only actual startup/recovery
 uses the recovery screen. The outer gate resumes observers after successful commit or rollback.
 
-Room remains at 21, and format-3 full/shared exports use the derived legacy representation.
-Only existing representable fields are introduced in this checkpoint. Format 4 and removal of
-the compatibility projection remain later work. A 7A3 build can open Room 21 but cannot keep
+Room remains at 21. The 7A4 checkpoint exported format-3 full/shared archives through the derived
+legacy representation. The 7A5 checkpoint enables format 4; removal of the compatibility
+projection remains later work. A 7A3 build can open Room 21 but cannot keep
 typed documents current when editing settings; switching back to 7A4 trusts those documents.
 Use a forward fix or an explicit legacy-backup import to carry such older-build edits across.
 
@@ -78,6 +78,44 @@ after successful operations/rollback, plus blocking after rollback failure. `Bac
 installs the production bridge for full/shared imports, cold worker-first v20 recovery, Previous
 state → bootstrap → restart → redo, typed-style rollback and Profile-only retained diagnostics/deletion.
 Existing adapter tests retain regression coverage for the standalone-store path.
+
+7A5 exports both full backups and shared profiles with manifest `format = 4`. Each profile's
+dedicated `profileStyle` field is the exact versioned document stored as a JSON string, while
+`prefsSnapshot` remains a separate legacy projection. `ProfileStyleBackup` checks the typed codec
+and strict legacy reader for every row, comparing stored values rather than JSON ordering or
+whitespace. Full backups additionally require active profile preferences to match the active
+typed document. Known profile preference tags/types and active identity are checked before
+JSONObject can coerce wire values. Projection checking does not resolve colours, fonts or effects.
+
+Import propagates the manifest version through `readBackupData`, `BackupCodec` and validation
+before preview/commit. Formats 1–3 retain legacy defaults and bootstrap. A typed field under a
+legacy manifest is rejected. Format 4 requires a non-empty supported document and matching legacy
+copy; there is no fallback or partial import. Full restore preserves each exact document; shared
+import assigns a new profile id without changing its style or the active style. Older readers
+supporting at most format 3 reject the entire new archive. Automatic backups use the same exporter.
+
+The strict compatibility-copy decoder moved from the repair owner into `ProfileStylePreferences`
+for reuse by export/import validation. It accepts only known unique keys with their exact primitive
+types, bounded integer values, valid Unicode and complete JSON. Its byte/character cap includes
+registered flat key-name overhead so a valid typed document near its 256 KiB limit can retain its
+longer legacy representation. Encoding/decoding the typed document still enforces the original
+256 KiB limits. Explicit repair keeps validation, original preservation and its transaction boundary.
+
+Portable format 4 does not change internal recovery formats. Codec, stream and validator APIs
+require an explicit format. Manifest-less local `prefs.json` uses `RECOVERY_PREFS_FORMAT` (legacy
+format 3); portable exports and imports pass the actual manifest version. Invalid typed styles stop
+export and log the owning profile id. Raw Room recovery continues to preserve documents and use
+the audited v18/v19/v20 → v21 adapters. Room stays at 21 and the typed document version stays at 1.
+
+After 7A5 device confirmation, `ProfileStyleBackupTest` covers format-4 codec/stream validation and
+explicit format-1/2/3 fixtures, missing/null/wrong-type/unsupported/duplicate/oversized documents,
+legacy and active-projection mismatches, invalid primitive tags, exact typed text preservation,
+unknown ordinals, disabled/theme values and multibyte bounds near the limit. `ProfileStyleArchiveTest`
+covers full/shared archives, fresh ids, restart, legacy bootstrap and downgraded-manifest rejection
+before storage mutation. It checks profile-id diagnostics, background export through the backend
+used by AutoBackupWorker without an Activity, and the explicit legacy recovery preference format.
+Worker scheduling/SAF management is unchanged and remains a device check. Existing Previous state,
+pending/rollback/repair and source-file coverage remains in the recovery and modifier-input suites.
 
 Internal recovery composes explicit per-table additions for 18 → 19, 19 → 20 and 20 → 21.
 Restoring a v18/v19/v20 snapshot into v21 inserts the restored Profile rows with an empty
@@ -244,8 +282,8 @@ an explicit cross-process initialization protocol before that process accesses p
 
 ## Backup, recovery and operation ownership
 
-The current portable backup format is **3**, including watch state. Enable **format 4** with
-typed-style export for both full backups and shared profiles. Format 4 carries the versioned
+The current portable backup format is **4**, including watch state and typed-style export for
+both full backups and shared profiles. Format 4 carries the versioned
 typed document in a dedicated `profileStyle` field; retain the current legacy `prefsSnapshot`
 projection only until the retirement gate above. Readers supporting formats 1–3 must reject the entire
 format-4 archive through the manifest version check, as the current reader already does for

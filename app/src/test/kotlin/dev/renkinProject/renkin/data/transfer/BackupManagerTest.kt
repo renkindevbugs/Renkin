@@ -9,6 +9,9 @@ import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.Profile
+import dev.renkinProject.renkin.data.ProfileStyleStore
+import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
@@ -61,6 +64,7 @@ class BackupManagerTest {
 
     @Before
     fun setUp() {
+        StorageOperationGate.resetForTests()
         context = RuntimeEnvironment.getApplication()
         ShadowStatFs.registerStats(context.filesDir, 1_000_000, 1_000_000, 1_000_000)
         srcPackDb = inMemoryPackDb()
@@ -71,10 +75,16 @@ class BackupManagerTest {
 
     @After
     fun tearDown() {
+        StorageOperationGate.resetForTests()
         srcPackDb.close()
         srcWatchDb.close()
         tgtPackDb.close()
         tgtWatchDb.close()
+    }
+
+    private suspend fun sourceManager(pack: RenkinPackRepository, watch: WatchRepository): BackupManager {
+        ProfileStyleStore(pack, context.dataStore).initialize(force = true)
+        return BackupManager(context, pack, watch)
     }
 
     private fun inMemoryPackDb() = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java)
@@ -163,7 +173,7 @@ class BackupManagerTest {
         )
 
         val out = ByteArrayOutputStream()
-        BackupManager(context, srcPackRepo, srcWatchRepo).exportBackup { out }
+        sourceManager(srcPackRepo, srcWatchRepo).exportBackup { out }
         val bytes = out.toByteArray()
 
         val tgtPackRepo = RenkinPackRepository(tgtPackDb)
@@ -241,7 +251,7 @@ class BackupManagerTest {
         upload.writeBytes(byteArrayOf(1, 2, 3))
         try {
             val out = ByteArrayOutputStream()
-            BackupManager(context, packRepo, watchRepo).exportBackup { out }
+            sourceManager(packRepo, watchRepo).exportBackup { out }
 
             val inspection = BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb))
                 .inspectFile { ByteArrayInputStream(out.toByteArray()) }
@@ -282,7 +292,7 @@ class BackupManagerTest {
             listOf(DbApplication("com.app", "A", isAdaptiveIcon = false, isXml = false, drawable = "data", sourcePackName = "pack.free", profileId = DEFAULT_PROFILE_ID))
         )
         val out = ByteArrayOutputStream()
-        BackupManager(context, srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
+        sourceManager(srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
 
         // Target device wrongly still "owns" pack.free from an earlier install (seenInstalled),
         // though nothing is installed now (Robolectric). A restore must not inherit that.
@@ -321,7 +331,7 @@ class BackupManagerTest {
         srcPackRepo.upsertVerdicts(listOf(PackVerdict("pack.paid", label = "Paid Icons", seenInstalled = true)))
 
         val out = ByteArrayOutputStream()
-        BackupManager(context, srcPackRepo, srcWatchRepo).exportProfile(3L) { out }
+        sourceManager(srcPackRepo, srcWatchRepo).exportProfile(3L) { out }
         val bytes = out.toByteArray()
 
         val tgtPackRepo = RenkinPackRepository(tgtPackDb)
@@ -366,7 +376,7 @@ class BackupManagerTest {
             val srcPackRepo = RenkinPackRepository(srcPackDb)
             srcPackRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
             val out = ByteArrayOutputStream()
-            BackupManager(context, srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
+            sourceManager(srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
 
             PackKeystore.keystoreFile(filesDir).delete()
             PackKeystore.passwordFile(filesDir).delete()
@@ -391,7 +401,7 @@ class BackupManagerTest {
             val srcPackRepo = RenkinPackRepository(srcPackDb)
             srcPackRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
             val out = ByteArrayOutputStream()
-            BackupManager(context, srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
+            sourceManager(srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
 
             // A longer keystore already on the device: restore goes through a temp file and a
             // rename, so the result must be the backup's bytes exactly — never a mix of both.
@@ -418,7 +428,7 @@ class BackupManagerTest {
             val srcPackRepo = RenkinPackRepository(srcPackDb)
             srcPackRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
             val out = ByteArrayOutputStream()
-            BackupManager(context, srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
+            sourceManager(srcPackRepo, WatchRepository(srcWatchDb)).exportBackup { out }
 
             // The device meanwhile has a random-password keystore — restoring the legacy
             // backup must not leave that password behind (it would lock the keystore out).
@@ -447,7 +457,7 @@ class BackupManagerTest {
             emptyList()
         )
         val out = ByteArrayOutputStream()
-        BackupManager(context, srcPackRepo, srcWatchRepo).exportProfile(2L) { out }
+        sourceManager(srcPackRepo, srcWatchRepo).exportProfile(2L) { out }
         val bytes = out.toByteArray()
 
         val tgtPackRepo = RenkinPackRepository(tgtPackDb)
@@ -492,7 +502,7 @@ class BackupManagerTest {
         ZipOutputStream(output).use { zip ->
             val entries = linkedMapOf(
                 "manifest.json" to "{\"format\":$format,\"kind\":\"backup\"}",
-                "data.json" to BackupCodec.encode(data)
+                "data.json" to BackupCodec.encode(data, BackupCodec.LEGACY_FORMAT_VERSION)
             ).apply { putAll(extras) }
             for ((name, content) in entries) {
                 zip.putNextEntry(ZipEntry(name))
@@ -513,7 +523,7 @@ class BackupManagerTest {
         val keystore = PackKeystore.keystoreFile(files).apply { writeText("original") }
         try {
             val invalid = listOf(
-                archive(data, format = 4), archive(data, format = 0),
+                archive(data, format = 5), archive(data, format = 0),
                 archive(data.copy(profiles = listOf(profile, profile))),
                 archive(data.copy(profiles = listOf(profile.copy(profile = profile.profile.copy(id = 2))))),
                 archive(data, extras = mapOf("uploads/nested/image.png" to "invalid")),
@@ -576,7 +586,7 @@ class BackupManagerTest {
         pack.saveColorPreset("Broken", "invalid")
         var opened = false
         val error = runCatching {
-            BackupManager(context, pack, WatchRepository(srcWatchDb)).exportBackup {
+            sourceManager(pack, WatchRepository(srcWatchDb)).exportBackup {
                 opened = true
                 ByteArrayOutputStream()
             }
@@ -597,7 +607,7 @@ class BackupManagerTest {
         // Insert after the normal prune path to exercise an older database's orphan state.
         watch.upsertState(WatchState(active, "removed.app", "Main", "pack.one", 1, null, null, 1))
         val output = ByteArrayOutputStream()
-        BackupManager(context, pack, watch).exportBackup { output }
+        sourceManager(pack, watch).exportBackup { output }
         assertEquals(2, watch.getAllRules().size)
         assertEquals(1, watch.getStatesForRule(active).size)
         val target = WatchRepository(tgtWatchDb)
@@ -607,10 +617,10 @@ class BackupManagerTest {
         assertTrue(target.getStatesForRule(target.getAllRules().single().rule.id).isEmpty())
     }
 
-    @Test fun legacyFormatsOneAndTwoRemainImportable() = runBlocking {
+    @Test fun legacyFormatsOneThroughThreeRemainImportable() = runBlocking {
         val pack = RenkinPackRepository(tgtPackDb)
         val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb))
-        for (format in 1..2) {
+        for (format in 1..3) {
             manager.importBackup { ByteArrayInputStream(archive(minimalData("Legacy $format"), format)) }
             assertEquals("Legacy $format", pack.profiles().single().name)
         }

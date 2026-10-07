@@ -33,14 +33,14 @@ class BackupCodecTest {
         val data = sampleData()
         val profile = data.profiles.first()
         val icon = profile.icons.first().copy(modifierRecipe = recipe)
-        val encoded = BackupCodec.encode(data.copy(profiles = listOf(profile.copy(icons = listOf(icon)))))
-        assertEquals(icon, BackupCodec.decode(encoded).profiles.single().icons.single())
+        val encoded = BackupCodec.encode(data.copy(profiles = listOf(profile.copy(icons = listOf(icon)))), BackupCodec.LEGACY_FORMAT_VERSION)
+        assertEquals(icon, BackupCodec.decode(encoded, BackupCodec.LEGACY_FORMAT_VERSION).profiles.single().icons.single())
         val json = JSONObject(encoded)
         val storedIcon = json.getJSONArray("profiles").getJSONObject(0).getJSONArray("icons").getJSONObject(0)
         storedIcon.put("modifierRecipe", "recipe.version=999")
-        assertEquals(icon.copy(modifierRecipe = ""), BackupCodec.decode(json.toString()).profiles.single().icons.single())
+        assertEquals(icon.copy(modifierRecipe = ""), BackupCodec.decode(json.toString(), BackupCodec.LEGACY_FORMAT_VERSION).profiles.single().icons.single())
         storedIcon.remove("modifierRecipe")
-        assertEquals(icon.copy(modifierRecipe = ""), BackupCodec.decode(json.toString()).profiles.single().icons.single())
+        assertEquals(icon.copy(modifierRecipe = ""), BackupCodec.decode(json.toString(), BackupCodec.LEGACY_FORMAT_VERSION).profiles.single().icons.single())
     }
 
     private fun sampleData(): BackupData {
@@ -123,22 +123,22 @@ class BackupCodecTest {
         // Files written before the colour library existed simply have no entry for it.
         val json = """{"prefs":{},"profiles":[]}"""
 
-        assertTrue(BackupCodec.decode(json).colorPresets.isEmpty())
-        assertTrue(BackupCodec.decode(json).modifierPresets.isEmpty())
+        assertTrue(BackupCodec.decode(json, BackupCodec.LEGACY_FORMAT_VERSION).colorPresets.isEmpty())
+        assertTrue(BackupCodec.decode(json, BackupCodec.LEGACY_FORMAT_VERSION).modifierPresets.isEmpty())
     }
 
     @Test
     fun roundTrip_preservesEverything() {
         val original = sampleData()
 
-        val decoded = BackupCodec.decode(BackupCodec.encode(original))
+        val decoded = BackupCodec.decode(BackupCodec.encode(original, BackupCodec.LEGACY_FORMAT_VERSION), BackupCodec.LEGACY_FORMAT_VERSION)
 
         assertEquals(original, decoded)
     }
 
     @Test
     fun decode_longsSurviveIntRange() {
-        val decoded = BackupCodec.decode(BackupCodec.encode(sampleData()))
+        val decoded = BackupCodec.decode(BackupCodec.encode(sampleData(), BackupCodec.LEGACY_FORMAT_VERSION), BackupCodec.LEGACY_FORMAT_VERSION)
 
         // A Long above Int.MAX_VALUE must come back as a Long, not overflow through an Int path.
         assertEquals(7_000_000_000L, decoded.prefs.getValue("SOME_LONG").value)
@@ -148,7 +148,7 @@ class BackupCodecTest {
     fun decode_skipsUnknownPrefTags() {
         val json = """{"prefs":{"FUTURE":{"t":"quantum","v":1},"OK":{"t":"int","v":3}},"profiles":[]}"""
 
-        val decoded = BackupCodec.decode(json)
+        val decoded = BackupCodec.decode(json, BackupCodec.LEGACY_FORMAT_VERSION)
 
         assertEquals(setOf("OK"), decoded.prefs.keys)
     }
@@ -157,39 +157,39 @@ class BackupCodecTest {
     fun decode_malformedInputThrows() {
         val garbage = "not json at all"
 
-        assertTrue(runCatching { BackupCodec.decode(garbage) }.isFailure)
+        assertTrue(runCatching { BackupCodec.decode(garbage, BackupCodec.LEGACY_FORMAT_VERSION) }.isFailure)
     }
 
     @Test
     fun decode_iconsCarryTheirProfileId() {
-        val decoded = BackupCodec.decode(BackupCodec.encode(sampleData()))
+        val decoded = BackupCodec.decode(BackupCodec.encode(sampleData(), BackupCodec.LEGACY_FORMAT_VERSION), BackupCodec.LEGACY_FORMAT_VERSION)
 
         assertTrue(decoded.profiles.first().icons.all { it.profileId == DEFAULT_PROFILE_ID })
     }
 
     @Test
     fun decode_preClassificationIconsKeepHistoricalOriginMarker() {
-        val root = JSONObject(BackupCodec.encode(sampleData()))
+        val root = JSONObject(BackupCodec.encode(sampleData(), BackupCodec.LEGACY_FORMAT_VERSION))
         val icon = root.getJSONArray("profiles").getJSONObject(0)
             .getJSONArray("icons").getJSONObject(0)
         icon.remove("isCustomIcon")
         icon.remove("isLegacyIcon")
 
-        val decoded = BackupCodec.decode(root.toString())
+        val decoded = BackupCodec.decode(root.toString(), BackupCodec.LEGACY_FORMAT_VERSION)
 
         assertTrue(decoded.profiles.first().icons.first().isLegacyIcon)
     }
 
     @Test
     fun decode_preBasePayloadUsesRenderedIconAsSafeBase() {
-        val root = JSONObject(BackupCodec.encode(sampleData()))
+        val root = JSONObject(BackupCodec.encode(sampleData(), BackupCodec.LEGACY_FORMAT_VERSION))
         val icon = root.getJSONArray("profiles").getJSONObject(0)
             .getJSONArray("icons").getJSONObject(0)
         icon.remove("baseDrawable")
         icon.remove("baseIsAdaptiveIcon")
         icon.remove("baseIsXml")
 
-        val decoded = BackupCodec.decode(root.toString()).profiles.first().icons.first()
+        val decoded = BackupCodec.decode(root.toString(), BackupCodec.LEGACY_FORMAT_VERSION).profiles.first().icons.first()
 
         assertEquals(decoded.drawable, decoded.baseDrawable)
         assertEquals(decoded.isAdaptiveIcon, decoded.baseIsAdaptiveIcon)

@@ -11,7 +11,7 @@ import java.io.IOException
 import java.io.Reader
 import java.io.Writer
 
-internal suspend fun readBackupData(input: Reader): BackupData {
+internal suspend fun readBackupData(input: Reader, formatVersion: Int): BackupData {
     val context = currentCoroutineContext()
     val cancellable = object : Reader() {
         override fun read(buffer: CharArray, offset: Int, count: Int): Int {
@@ -23,7 +23,7 @@ internal suspend fun readBackupData(input: Reader): BackupData {
     return JsonReader(cancellable).use { reader ->
         val root = readJsonValue(reader, 0) as? JSONObject ?: throw IOException("Backup data must be an object")
         if (reader.peek() != JsonToken.END_DOCUMENT) throw IOException("Trailing backup JSON content")
-        BackupCodec.decodeJson(root)
+        BackupCodec.decodeJson(root, formatVersion)
     }
 }
 
@@ -70,9 +70,11 @@ private suspend fun readJsonValue(reader: JsonReader, depth: Int): Any {
     }
 }
 
-internal suspend fun writeBackupData(data: BackupData, output: Writer) {
+internal suspend fun writeBackupData(
+    data: BackupData, output: Writer, formatVersion: Int
+) {
     val writer = JsonWriter(output.buffered())
-    writeJsonValue(writer, BackupCodec.encodeJson(data))
+    writeJsonValue(writer, BackupCodec.encodeJson(data, formatVersion))
     writer.flush()
 }
 

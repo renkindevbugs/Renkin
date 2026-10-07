@@ -31,6 +31,9 @@ import java.util.UUID
 
 enum class BackupSnapshotStage { ICONS, WATCH_RULES, SETTINGS, FILES, VERIFYING }
 
+// Local prefs.json has no portable manifest and keeps its existing preference-only format.
+internal const val RECOVERY_PREFS_FORMAT = BackupCodec.LEGACY_FORMAT_VERSION
+
 internal class BackupRecoveryStore(private val context: Context) {
     private val root get() = File(context.filesDir, "backup-recovery")
     private val pending get() = AtomicFile(File(root, "pending.json"))
@@ -124,7 +127,7 @@ internal class BackupRecoveryStore(private val context: Context) {
             }.toMap()
             FileOutputStream(File(directory, "prefs.json")).use { output ->
                 val writer = OutputStreamWriter(output, Charsets.UTF_8)
-                writeBackupData(BackupData(emptyList(), prefs), writer)
+                writeBackupData(BackupData(emptyList(), prefs), writer, RECOVERY_PREFS_FORMAT)
                 writer.flush()
                 output.fd.sync()
             }

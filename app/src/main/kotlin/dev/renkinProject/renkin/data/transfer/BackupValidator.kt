@@ -13,12 +13,14 @@ import dev.renkinProject.renkin.util.Log
 import java.io.IOException
 
 internal object BackupValidator {
-    fun prepare(data: BackupData, kind: BackupManager.ImportKind): BackupData {
+    fun prepare(
+        data: BackupData, kind: BackupManager.ImportKind, formatVersion: Int
+    ): BackupData {
         val prepared = data.copy(profiles = data.profiles.map { profile ->
             profile.copy(watchRules = profile.watchRules.mapNotNull(::cleanRule))
         })
         if (prepared != data) logDiscardedWatchData(data, prepared)
-        validate(prepared, kind)
+        validate(prepared, kind, formatVersion)
         return prepared
     }
 
@@ -56,7 +58,10 @@ internal object BackupValidator {
             .takeUnless { it.completed && suggestions.isEmpty() }
     }
 
-    fun validate(data: BackupData, kind: BackupManager.ImportKind) {
+    fun validate(
+        data: BackupData, kind: BackupManager.ImportKind, formatVersion: Int
+    ) {
+        ProfileStyleBackup.requireSupportedFormat(formatVersion)
         for ((name, pref) in data.prefs) {
             requireValid(isValidPersistedPreference(name, pref.value), "Invalid preference type")
         }
@@ -72,7 +77,9 @@ internal object BackupValidator {
         }
         for (profile in data.profiles) {
             requireValid(profile.profile.name.isNotBlank(), "Profile has no name")
-            if (profile.profile.prefsSnapshot.isNotBlank()) {
+            if (formatVersion > BackupCodec.LEGACY_FORMAT_VERSION) {
+                ProfileStyleBackup.validatedStyle(profile.profile)
+            } else if (profile.profile.prefsSnapshot.isNotBlank()) {
                 val snapshot = parseBackupJson(profile.profile.prefsSnapshot)
                 for (key in ProfilePrefKeys) {
                     if (snapshot.has(key.name)) {
@@ -85,6 +92,9 @@ internal object BackupValidator {
             requireValid(components.all(::validComponent), "Invalid icon component")
             requireValid(profile.icons.all { it.profileId == profile.profile.id }, "Icon belongs to another profile")
             profile.watchRules.forEach(::validateRule)
+        }
+        if (formatVersion > BackupCodec.LEGACY_FORMAT_VERSION && kind == BackupManager.ImportKind.BACKUP) {
+            ProfileStyleBackup.validateActiveProjection(data)
         }
         for (preset in data.colorPresets) {
             requireValid(validStyle(decodeColorizerStyle(preset.style)), "Invalid saved colour style")

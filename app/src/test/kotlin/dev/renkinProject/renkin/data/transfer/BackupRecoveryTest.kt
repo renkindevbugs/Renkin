@@ -148,6 +148,7 @@ class BackupRecoveryTest {
     private suspend fun preparedBackup(): BackupManager.PreparedImport {
         seed("Incoming")
         val output = ByteArrayOutputStream()
+        ProfileStyleStore(pack, context.dataStore).initialize(force = true)
         manager.exportBackup { output }
         val file = context.cacheDir.resolve("restore-test.renkin")
         file.writeBytes(output.toByteArray())
@@ -374,6 +375,7 @@ class BackupRecoveryTest {
         seed("Captured")
         val output = ByteArrayOutputStream()
         withTimeout(10_000) {
+            ProfileStyleStore(pack, context.dataStore).initialize(force = true)
             manager.exportBackup {
                 runBlocking { seed("Changed while uploading") }
                 output
@@ -383,7 +385,7 @@ class BackupRecoveryTest {
         ZipInputStream(ByteArrayInputStream(output.toByteArray())).use { zip ->
             while (true) { val entry = zip.nextEntry ?: break; entries[entry.name] = zip.readBytes() }
         }
-        val data = BackupCodec.decode(entries.getValue("data.json").toString(Charsets.UTF_8))
+        val data = BackupCodec.decode(entries.getValue("data.json").toString(Charsets.UTF_8), BackupCodec.FORMAT_VERSION)
         assertEquals("Captured", data.profiles.single().profile.name)
         assertEquals("Captured", entries.getValue("uploads/image.png").toString(Charsets.UTF_8))
         assertEquals("Captured", entries.getValue("keystore/${PackKeystore.FILE_NAME}").toString(Charsets.UTF_8))
@@ -392,6 +394,7 @@ class BackupRecoveryTest {
 
     @Test fun outputFailureAlwaysDiscardsPreparedExport() = runBlocking {
         seed("Captured")
+        ProfileStyleStore(pack, context.dataStore).initialize(force = true)
         val prepared = manager.prepareBackupExport()
         assertTrue(prepared.archive.exists())
         assertTrue(runCatching { manager.writePreparedExport(prepared) { throw IOException("SAF failed") } }.isFailure)
@@ -471,6 +474,7 @@ class BackupRecoveryTest {
         seedStyles("Incoming", 94, 122)
         installStyleOwner()
         val output = ByteArrayOutputStream()
+        ProfileStyleStore(pack, context.dataStore).initialize(force = true)
         manager.exportBackup { output }
         seedStyles("Current", 67, 118)
         val file = context.cacheDir.resolve("typed-styles-full.renkin").apply { writeBytes(output.toByteArray()) }
@@ -485,7 +489,7 @@ class BackupRecoveryTest {
         assertScales(94, 122)
     }
 
-    @Test fun sharedLegacyProfileImportsConvertedStyleWithoutChangingActiveProjection() = runBlocking {
+    @Test fun sharedTypedProfileImportsExactStyleWithoutChangingActiveProjection() = runBlocking {
         seedStyles("Current", 81, 119)
         installStyleOwner()
         val output = ByteArrayOutputStream()

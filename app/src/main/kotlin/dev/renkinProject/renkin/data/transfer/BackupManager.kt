@@ -312,7 +312,7 @@ class BackupManager(
         val availableInputs = IconModifierInputStore.directory(context).listFiles().orEmpty()
             .filter { it.isFile && IconModifierInputStore.validName(it.name) }.associateBy { it.name }
         val (exportData, inputFiles) = prepareModifierInputs(data, availableInputs)
-        exportArchive(KIND_BACKUP, BackupValidator.prepare(exportData, ImportKind.BACKUP), files +
+        exportArchive(KIND_BACKUP, BackupValidator.prepare(exportData, ImportKind.BACKUP, BackupCodec.FORMAT_VERSION), files +
             inputFiles.mapKeys { (name, _) -> "${IconModifierInputStore.ARCHIVE_DIR}/$name" })
     }
 
@@ -356,7 +356,7 @@ class BackupManager(
             packLabels = packLabelsFor(sourcePacks)
         )
 
-        exportArchive(KIND_PROFILE, BackupValidator.prepare(data, ImportKind.PROFILE))
+        exportArchive(KIND_PROFILE, BackupValidator.prepare(data, ImportKind.PROFILE, BackupCodec.FORMAT_VERSION))
     }
 
     private suspend fun exportArchive(
@@ -386,7 +386,7 @@ class BackupManager(
                     }
                 }
                 val writer = OutputStreamWriter(bounded, Charsets.UTF_8).buffered()
-                writeBackupData(data, writer)
+                writeBackupData(data, writer, BackupCodec.FORMAT_VERSION)
                 writer.flush()
                 output.fd.sync()
             }
@@ -584,7 +584,9 @@ class BackupManager(
             if (format > BackupCodec.FORMAT_VERSION) throw IOException("File was made by a newer app version")
             val kind = kindOf(manifest)
             val dataFile = staged.entries[DATA_ENTRY] ?: throw IOException("File has no data entry")
-            val parsedData = BackupValidator.prepare(dataFile.reader(Charsets.UTF_8).use { readBackupData(it) }, kind)
+            val parsedData = BackupValidator.prepare(
+                dataFile.reader(Charsets.UTF_8).use { readBackupData(it, format) }, kind, format
+            )
             val uploads = staged.entries.filterKeys { name -> name.startsWith("$UPLOADS_DIR/") }.map { (name, file) ->
                 val filename = name.removePrefix("$UPLOADS_DIR/")
                 if ('/' in filename || !filename.endsWith(".png")) throw IOException("Invalid uploaded image entry")
@@ -772,7 +774,9 @@ class BackupManager(
         clearWatchNotifications()
         packRepo.restoreRecoverySnapshot(File(snapshot.directory, "pack.json"))
         watchRepo.restoreRecoverySnapshot(File(snapshot.directory, "watch.json"))
-        val prefs = File(snapshot.directory, "prefs.json").reader(Charsets.UTF_8).use { readBackupData(it).prefs }
+        val prefs = File(snapshot.directory, "prefs.json").reader(Charsets.UTF_8).use {
+            readBackupData(it, RECOVERY_PREFS_FORMAT).prefs
+        }
         restorePrefs(prefs, preserveDeviceLocal = false)
         ProfileStyleAccess.initialize(force = true)
         mutableRestoreStage.value = RestoreStage.RESTORING_FILES

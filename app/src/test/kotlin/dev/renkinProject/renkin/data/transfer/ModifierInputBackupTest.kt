@@ -62,6 +62,7 @@ class ModifierInputBackupTest {
         val row = DbApplication("app.one", "Main", false, false, "baked-$name", baseDrawable = "base-$name",
             modifierRecipe = checkNotNull(StoredIconModifierRecipe.fromRenderedOptions(state.options)), modifierInput = prepared.document)
         pack.replaceEverything(listOf(Profile(id = 1, name = name)), listOf(row))
+        ProfileStyleStore(pack, context.dataStore).initialize(force = true)
         row
     }
 
@@ -103,7 +104,7 @@ class ModifierInputBackupTest {
         manager.exportProfile(1) { output }
         val entries = entries(output.toByteArray())
         assertFalse(entries.keys.any { it.startsWith("icon-inputs/") })
-        val data = BackupCodec.decode(entries.getValue("data.json").toString(Charsets.UTF_8))
+        val data = BackupCodec.decode(entries.getValue("data.json").toString(Charsets.UTF_8), BackupCodec.FORMAT_VERSION)
         assertEquals("", data.profiles.single().icons.single().modifierInput)
         assertEquals(original.drawable, data.profiles.single().icons.single().drawable)
         assertEquals(original.modifierRecipe, data.profiles.single().icons.single().modifierRecipe)
@@ -121,7 +122,7 @@ class ModifierInputBackupTest {
             if (missing) assertTrue(inputFile(original).delete()) else inputFile(original).writeText("corrupt")
             val entries = entries(export())
             assertFalse(entries.keys.any { it.startsWith("icon-inputs/") })
-            val icon = BackupCodec.decode(entries.getValue("data.json").toString(Charsets.UTF_8)).profiles.single().icons.single()
+            val icon = BackupCodec.decode(entries.getValue("data.json").toString(Charsets.UTF_8), BackupCodec.FORMAT_VERSION).profiles.single().icons.single()
             assertEquals(original.drawable, icon.drawable)
             assertEquals(original.baseDrawable, icon.baseDrawable)
             assertEquals("", icon.modifierInput)

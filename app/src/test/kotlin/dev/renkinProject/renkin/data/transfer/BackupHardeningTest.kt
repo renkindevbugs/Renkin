@@ -141,15 +141,15 @@ class BackupHardeningTest {
     @Test fun stream_roundTripPreservesPayloadAndSharesIdenticalBases() = runBlocking {
         val original = sampleData().copy(prefs = mapOf("LONG" to BackupPref(BackupPref.LONG, 7_000_000_000L)))
         val output = StringWriter()
-        writeBackupData(original, output)
-        val decoded = readBackupData(output.toString().reader())
+        writeBackupData(original, output, BackupCodec.LEGACY_FORMAT_VERSION)
+        val decoded = readBackupData(output.toString().reader(), BackupCodec.LEGACY_FORMAT_VERSION)
         assertEquals(original, decoded)
         val icon = decoded.profiles.single().icons.single()
         assertSame(icon.drawable, icon.baseDrawable)
     }
 
     @Test fun stream_rejectsDuplicateFieldsDepthNonfiniteNumbersAndTrailingContent() = runBlocking {
-        val valid = BackupCodec.encode(sampleData())
+        val valid = BackupCodec.encode(sampleData(), BackupCodec.LEGACY_FORMAT_VERSION)
         val malformed = listOf(
             "{\"prefs\":{},\"prefs\":{},\"profiles\":[]}",
             "{\"unknown\":{\"a\":1,\"\\u0061\":2},\"prefs\":{},\"profiles\":[]}",
@@ -157,7 +157,7 @@ class BackupHardeningTest {
             "{\"unknown\":1e999,\"prefs\":{},\"profiles\":[]}",
             "$valid {}"
         )
-        for (json in malformed) assertTrue(runCatching { readBackupData(json.reader()) }.isFailure)
+        for (json in malformed) assertTrue(runCatching { readBackupData(json.reader(), BackupCodec.LEGACY_FORMAT_VERSION) }.isFailure)
     }
 
     @Test fun validator_rejectsCoreIdentityAndPreferenceErrors() {
@@ -170,7 +170,7 @@ class BackupHardeningTest {
             data.copy(profiles = listOf(profile.copy(profile = profile.profile.copy(id = 0)))),
             data.copy(profiles = listOf(profile.copy(profile = profile.profile.copy(prefsSnapshot = "{\"PRIMARY_SOURCE\":\"bad\"}"))))
         )
-        invalid.forEach { assertTrue(runCatching { BackupValidator.prepare(it, BackupManager.ImportKind.BACKUP) }.exceptionOrNull() is IOException) }
+        invalid.forEach { assertTrue(runCatching { BackupValidator.prepare(it, BackupManager.ImportKind.BACKUP, BackupCodec.LEGACY_FORMAT_VERSION) }.exceptionOrNull() is IOException) }
     }
 
     @Test fun validator_discardsStaleWatchChildrenAndCompletedRuleCascade() {
@@ -185,7 +185,7 @@ class BackupHardeningTest {
         val completed = rule.copy(completed = true, suggestions = listOf(
             BackupWatchSuggestion(app.packageName, app.activityName, 3, listOf(valid.copy(iconHash = "")))
         ))
-        val cleaned = BackupValidator.prepare(sampleData(listOf(rule, completed)), BackupManager.ImportKind.BACKUP)
+        val cleaned = BackupValidator.prepare(sampleData(listOf(rule, completed)), BackupManager.ImportKind.BACKUP, BackupCodec.LEGACY_FORMAT_VERSION)
         val remaining = cleaned.profiles.single().watchRules.single()
         assertTrue(remaining.baselines.isEmpty())
         assertEquals(listOf(valid), remaining.suggestions.single().candidates)
