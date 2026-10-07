@@ -12,7 +12,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import kotlinx.coroutines.flow.stateIn
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -107,8 +106,9 @@ class GlobalOptionsActivity : ComponentActivity() {
 
             val viewModel: GlobalOptionsViewModel = hiltViewModel()
             val optionsViewModel: OptionsViewModel = hiltViewModel()
-            val colorPresets by viewModel.colorPresets.collectAsState()
-            val modifierPresets by viewModel.modifierPresets.collectAsState()
+            val presetsViewModel: PresetLibraryViewModel = hiltViewModel()
+            val colorPresets by presetsViewModel.colorPresets.collectAsState()
+            val modifierPresets by presetsViewModel.modifierPresets.collectAsState()
 
             // The screen is bound to the profile it opened with (see GlobalOptionsViewModel):
             // if that changes underneath, close and hand back what was already applied rather
@@ -133,21 +133,24 @@ class GlobalOptionsActivity : ComponentActivity() {
             LaunchedEffect(optionsViewModel) {
                 optionsViewModel.toastEvents.collect { resId -> toaster.show(getString(resId)) }
             }
+            LaunchedEffect(presetsViewModel) {
+                presetsViewModel.toastEvents.collect { resId -> toaster.show(getString(resId)) }
+            }
 
             ProvideAdaptiveLayoutInfo(this@GlobalOptionsActivity) {
                 CompositionLocalProvider(LocalToaster provides toaster) {
                     ProvideColorPresets(
                         presets = colorPresets,
-                        onSave = viewModel::saveColorPreset,
-                        onDelete = viewModel::deleteColorPreset
+                        onSave = presetsViewModel::saveColorPreset,
+                        onDelete = presetsViewModel::deleteColorPreset
                     ) {
                         ProvideModifierPresets(
                             presets = modifierPresets,
-                            onSave = viewModel::saveModifierPreset,
-                            onUpdate = viewModel::updateModifierPreset,
-                            onRename = viewModel::renameModifierPreset,
-                            onMarkUsed = viewModel::markModifierPresetUsed,
-                            onDelete = viewModel::deleteModifierPreset
+                            onSave = presetsViewModel::saveModifierPreset,
+                            onUpdate = presetsViewModel::updateModifierPreset,
+                            onRename = presetsViewModel::renameModifierPreset,
+                            onMarkUsed = presetsViewModel::markModifierPresetUsed,
+                            onDelete = presetsViewModel::deleteModifierPreset
                         ) {
                             RenkinTheme(darkMode) {
                                 GlobalOptionsScreen(onClose = { editedKeys, applied ->
@@ -216,71 +219,12 @@ class GlobalOptionsViewModel @Inject constructor(
     private val savedStateHandle: SavedStateHandle
 ) : AndroidViewModel(application), IconPreviewBuilder {
 
-    /** Saved colours/gradients, the same library the main screen's sheets use. */
-    val colorPresets: kotlinx.coroutines.flow.StateFlow<List<dev.renkinProject.renkin.data.ColorPreset>> =
-        appProvider.colorPresets().stateIn(
-            viewModelScope,
-            kotlinx.coroutines.flow.SharingStarted.Eagerly,
-            emptyList()
-        )
-
     // One-shot toast events (string resource ids), collected by the activity. Same contract as
     // MainViewModel's: the message fires after the write, never optimistically from the UI.
     private val _toastEvents = kotlinx.coroutines.channels.Channel<Int>(
         kotlinx.coroutines.channels.Channel.BUFFERED
     )
     val toastEvents = _toastEvents.receiveAsFlow()
-
-    fun saveColorPreset(name: String, style: String) {
-        viewModelScope.launch {
-            appProvider.saveColorPreset(name, style)
-            _toastEvents.trySend(R.string.savedColorsAdded)
-        }
-    }
-
-    fun deleteColorPreset(id: Long) {
-        viewModelScope.launch {
-            appProvider.deleteColorPreset(id)
-            _toastEvents.trySend(R.string.savedColorsRemoved)
-        }
-    }
-
-    /** The same Modifier-preset library the edit dialog on the home screen uses. */
-    val modifierPresets: kotlinx.coroutines.flow.StateFlow<List<dev.renkinProject.renkin.data.ModifierPreset>> =
-        appProvider.modifierPresets().stateIn(
-            viewModelScope,
-            kotlinx.coroutines.flow.SharingStarted.Eagerly,
-            emptyList()
-        )
-
-    fun saveModifierPreset(name: String, payload: String, schemaVersion: Int) {
-        viewModelScope.launch {
-            appProvider.saveModifierPreset(name, payload, schemaVersion)
-            _toastEvents.trySend(R.string.modifierPresetSaved)
-        }
-    }
-
-    fun renameModifierPreset(id: Long, name: String) {
-        viewModelScope.launch { appProvider.renameModifierPreset(id, name) }
-    }
-
-    fun updateModifierPreset(id: Long, payload: String, schemaVersion: Int) {
-        viewModelScope.launch {
-            appProvider.updateModifierPreset(id, payload, schemaVersion)
-            _toastEvents.trySend(R.string.modifierPresetUpdated)
-        }
-    }
-
-    fun markModifierPresetUsed(id: Long) {
-        viewModelScope.launch { appProvider.markModifierPresetUsed(id) }
-    }
-
-    fun deleteModifierPreset(id: Long) {
-        viewModelScope.launch {
-            appProvider.deleteModifierPreset(id)
-            _toastEvents.trySend(R.string.modifierPresetRemoved)
-        }
-    }
 
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
     val iconPacks: List<IconPack> get() = appProvider.iconPacks

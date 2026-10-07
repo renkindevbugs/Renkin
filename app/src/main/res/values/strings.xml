@@ -206,6 +206,7 @@
     <string name="modifierPresetSaved">Preset saved</string>
     <string name="modifierPresetUpdated">Preset updated</string>
     <string name="modifierPresetRemoved">Preset deleted</string>
+    <string name="presetLibraryWriteFailed">Could not update saved colors or modifier presets. Please try again.</string>
     <string name="savedColorsSearch">Search saved colors</string>
     <string name="savedColorsNoMatch">No saved color matches that search.</string>
     <string name="savedColorsSort">Sort saved colors</string>

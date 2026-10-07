@@ -88,6 +88,16 @@ commit cancellation boundary, archive format and recovery snapshots are unchange
 profile import remains additive and does not reload the active profile. Cancellation propagates
 through automatic-backup updates and post-import verdict verification.
 
+`PresetLibraryViewModel` owns the device-wide colour and modifier libraries for each activity.
+MainActivity and GlobalOptionsActivity obtain it through Hilt and use the same library UI callbacks.
+It receives the singleton RenkinPackRepository through constructor injection and reads and writes
+the library directly. MainViewModel and GlobalOptionsViewModel retain profile and editor operations.
+Repository storage gates, recovery-aware Room flows, preset ordering and persisted formats remain
+the same. Success toasts come from the library owner after the write. Write failures are logged
+and reported with a failure toast; cancellation still propagates. Profile changes do not own or
+reset this device-wide library. AppModule owns the repository binding and the factories that
+compose domain collaborators.
+
 The UI layer never constructs repositories by hand; view models receive them through
 Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only for genuine
 Activity operations (`finish()`, starting services, permission requests).

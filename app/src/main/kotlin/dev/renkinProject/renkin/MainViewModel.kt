@@ -77,7 +77,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
@@ -133,63 +132,6 @@ class MainViewModel @Inject constructor(
     private val profileSessionOperations = Mutex()
 
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
-
-    val colorPresets: kotlinx.coroutines.flow.StateFlow<List<dev.renkinProject.renkin.data.ColorPreset>> =
-        appProvider.colorPresets().stateIn(
-            viewModelScope,
-            kotlinx.coroutines.flow.SharingStarted.Eagerly,
-            emptyList()
-        )
-
-    fun saveColorPreset(name: String, style: String) {
-        viewModelScope.launch {
-            appProvider.saveColorPreset(name, style)
-            _toastEvents.trySend(R.string.savedColorsAdded)
-        }
-    }
-
-    fun deleteColorPreset(id: Long) {
-        viewModelScope.launch {
-            appProvider.deleteColorPreset(id)
-            _toastEvents.trySend(R.string.savedColorsRemoved)
-        }
-    }
-
-    val modifierPresets: kotlinx.coroutines.flow.StateFlow<List<dev.renkinProject.renkin.data.ModifierPreset>> =
-        appProvider.modifierPresets().stateIn(
-            viewModelScope,
-            kotlinx.coroutines.flow.SharingStarted.Eagerly,
-            emptyList()
-        )
-
-    fun saveModifierPreset(name: String, payload: String, schemaVersion: Int) {
-        viewModelScope.launch {
-            appProvider.saveModifierPreset(name, payload, schemaVersion)
-            _toastEvents.trySend(R.string.modifierPresetSaved)
-        }
-    }
-
-    fun renameModifierPreset(id: Long, name: String) {
-        viewModelScope.launch { appProvider.renameModifierPreset(id, name) }
-    }
-
-    fun updateModifierPreset(id: Long, payload: String, schemaVersion: Int) {
-        viewModelScope.launch {
-            appProvider.updateModifierPreset(id, payload, schemaVersion)
-            _toastEvents.trySend(R.string.modifierPresetUpdated)
-        }
-    }
-
-    fun markModifierPresetUsed(id: Long) {
-        viewModelScope.launch { appProvider.markModifierPresetUsed(id) }
-    }
-
-    fun deleteModifierPreset(id: Long) {
-        viewModelScope.launch {
-            appProvider.deleteModifierPreset(id)
-            _toastEvents.trySend(R.string.modifierPresetRemoved)
-        }
-    }
 
     val iconPacks: List<IconPack> get() = appProvider.iconPacks
 

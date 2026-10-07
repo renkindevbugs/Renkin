@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.collectAsState
@@ -56,6 +57,7 @@ class MainActivity : ComponentActivity() {
     lateinit var iconPackCatalog: IconPackCatalog
 
     private val viewModel: MainViewModel by viewModels()
+    private val presetsViewModel: PresetLibraryViewModel by viewModels()
     private var consumedSharedImageUri: String? = null
 
     // Activity-scoped (not remember-ed in composition) so non-compose code — e.g. the share
@@ -116,8 +118,11 @@ class MainActivity : ComponentActivity() {
             // manual reporting (copy / email / GitHub) — nothing is sent automatically.
             var crashPending by remember { mutableStateOf(CrashReporter.hasNewCrash(this@MainActivity)) }
 
-            val colorPresets by viewModel.colorPresets.collectAsState()
-            val modifierPresets by viewModel.modifierPresets.collectAsState()
+            val colorPresets by presetsViewModel.colorPresets.collectAsState()
+            val modifierPresets by presetsViewModel.modifierPresets.collectAsState()
+            LaunchedEffect(presetsViewModel) {
+                presetsViewModel.toastEvents.collect { resId -> toaster.show(getString(resId)) }
+            }
 
             ProvideAdaptiveLayoutInfo(this@MainActivity) {
                 CompositionLocalProvider(
@@ -126,16 +131,16 @@ class MainActivity : ComponentActivity() {
                 ) {
                     ProvideColorPresets(
                         presets = colorPresets,
-                        onSave = viewModel::saveColorPreset,
-                        onDelete = viewModel::deleteColorPreset
+                        onSave = presetsViewModel::saveColorPreset,
+                        onDelete = presetsViewModel::deleteColorPreset
                     ) {
                         ProvideModifierPresets(
                             presets = modifierPresets,
-                            onSave = viewModel::saveModifierPreset,
-                            onUpdate = viewModel::updateModifierPreset,
-                            onRename = viewModel::renameModifierPreset,
-                            onMarkUsed = viewModel::markModifierPresetUsed,
-                            onDelete = viewModel::deleteModifierPreset
+                            onSave = presetsViewModel::saveModifierPreset,
+                            onUpdate = presetsViewModel::updateModifierPreset,
+                            onRename = presetsViewModel::renameModifierPreset,
+                            onMarkUsed = presetsViewModel::markModifierPresetUsed,
+                            onDelete = presetsViewModel::deleteModifierPreset
                         ) {
                             RenkinTheme(darkMode) {
                                 Surface(
