@@ -63,6 +63,15 @@ internal class BackupRecoveryStore(private val context: Context) {
 
     fun hasAbandonedRecovery(): Boolean = abandonedDirectories().isNotEmpty()
 
+    suspend fun preserveCurrentProfileStyles(pack: RenkinPackRepository) {
+        val retained = File(context.filesDir, "backup-recovery-abandoned-${UUID.randomUUID()}")
+        if (!retained.mkdirs()) throw IOException("Cannot preserve damaged profile styles")
+        // Keep the exact original documents and their legacy copies before explicit repair.
+        pack.writeProfileStyleDiagnostics(File(retained, "profiles.json"))
+        syncDirectory(retained)
+        syncDirectory(context.filesDir)
+    }
+
     fun discardAbandonedRecovery() {
         for (directory in abandonedDirectories()) {
             deleteAbandonedTree(directory)

@@ -27,6 +27,7 @@ enum class StorageRecoveryFailureReason { SCHEMA_CHANGED, CORRUPT_SNAPSHOT, IO, 
 object StorageOperationGate {
     private val mutex = Mutex()
     private val mutableRecoveryState = MutableStateFlow(StorageRecoveryState.READY)
+    private val mutableObserversPaused = MutableStateFlow(false)
     val recoveryState = mutableRecoveryState.asStateFlow()
     private val mutableFailureReason = MutableStateFlow<StorageRecoveryFailureReason?>(null)
     val recoveryFailureReason = mutableFailureReason.asStateFlow()
@@ -38,15 +39,19 @@ object StorageOperationGate {
     suspend fun markStorageReplaced() {
         check(currentCoroutineContext()[Owner]?.active == true)
         epoch++
+        // Suspend observers until restore/bootstrap and the outer storage operation finish.
+        mutableObserversPaused.value = true
     }
 
     internal fun resetForTests() {
         check(!mutex.isLocked)
         recovery = null
+        ProfileStyleAccess.resetForTests()
         recoveryRequired = false
         mutableFailureReason.value = null
         epoch = 0L
         mutableRecoveryState.value = StorageRecoveryState.READY
+        mutableObserversPaused.value = false
     }
 
     private class Owner : AbstractCoroutineContextElement(Key) {
@@ -60,6 +65,7 @@ object StorageOperationGate {
         recoveryRequired = true
         mutableFailureReason.value = null
         mutableRecoveryState.value = StorageRecoveryState.CHECKING
+        mutableObserversPaused.value = true
     }
 
     fun reportRecoveryRunning() {
@@ -69,6 +75,7 @@ object StorageOperationGate {
 
     fun requireRecovery(error: Throwable? = null) {
         recoveryRequired = true
+        mutableObserversPaused.value = true
         if (error != null) mutableFailureReason.value = failureReason(error)
         else if (mutableFailureReason.value == null) mutableFailureReason.value = StorageRecoveryFailureReason.UNKNOWN
         mutableRecoveryState.value = StorageRecoveryState.FAILED
@@ -100,8 +107,8 @@ object StorageOperationGate {
         acquire(null, operation, abandonRecovery = true)
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    fun <T> observe(source: Flow<T>): Flow<T> = recoveryState.flatMapLatest {
-        if (it == StorageRecoveryState.READY) source else emptyFlow()
+    fun <T> observe(source: Flow<T>): Flow<T> = mutableObserversPaused.flatMapLatest { paused ->
+        if (paused) emptyFlow() else source
     }.buffer(0)
 
     private suspend fun <T> acquire(timeoutMillis: Long?, operation: suspend () -> T, allowRecoveryRetry: Boolean = false, abandonRecovery: Boolean = false): T {
@@ -157,6 +164,7 @@ object StorageOperationGate {
                             mutableFailureReason.value = null
                             mutableRecoveryState.value = StorageRecoveryState.READY
                         }
+                        if (!recoveryRequired) mutableObserversPaused.value = false
                     }
                 }
             } finally { owner.active = false }

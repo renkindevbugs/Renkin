@@ -409,4 +409,138 @@ class BackupRecoveryTest {
         assertFalse(abandoned.exists())
         assertState("Current", current)
     }
+
+    private fun installStyleOwner() {
+        val owner = ProfileStyleStore(pack, context.dataStore)
+        ProfileStyleAccess.install { owner }
+        StorageOperationGate.installRecovery {
+            manager.recoverPendingRestore()
+            ProfileStyleAccess.initialize()
+        }
+    }
+
+    private suspend fun seedStyles(name: String, activeScale: Int, inactiveScale: Int) = StorageOperationGate.run {
+        StorageOperationGate.markStorageReplaced()
+        seed(name)
+        context.dataStore.edit { it[ActiveProfileIdKey] = 1L; it[GlobalIconScaleKey] = activeScale }
+        pack.createProfile(Profile(id = 2, name = "$name inactive",
+            prefsSnapshot = androidx.datastore.preferences.core.preferencesOf(GlobalIconScaleKey to inactiveScale).snapshotProfilePrefs()))
+        ProfileStyleAccess.initialize(force = true)
+    }
+
+    private suspend fun assertScales(active: Int, inactive: Int) {
+        assertEquals(active, context.dataStore.getPreferencesAfterPendingWrites()[GlobalIconScaleKey])
+        for ((id, expected) in listOf(1L to active, 2L to inactive)) {
+            val profile = pack.profile(id)!!
+            val values = ProfileStylePreferences.toPreferences(ProfileStyleCodec.decode(profile.profileStyle))
+            assertEquals(expected, values[GlobalIconScaleKey])
+            assertEquals(values.snapshotProfilePrefs(), profile.prefsSnapshot)
+        }
+    }
+
+    @Test fun version20PreviousStateBootstrapsRestoredLiveAndInactiveStylesThenRestartAndRedoKeepThem() = runBlocking {
+        seedStyles("Original", 84, 126)
+        val snapshot = capture()
+        version20Fixture(snapshot)
+        store.complete(snapshot)
+        seedStyles("Current", 93, 115)
+        installStyleOwner()
+        context.dataStore.getPreferencesAfterPendingWrites()
+        manager.restorePreviousState { it() }
+        assertScales(84, 126)
+        ProfileStyleStore(pack, context.dataStore).initialize()
+        assertScales(84, 126)
+        manager.restorePreviousState { it() }
+        assertScales(93, 115)
+    }
+
+    @Test fun pendingVersion20RecoveryBootstrapsBeforeColdWorkerSnapshotWithoutActivity() = runBlocking {
+        seedStyles("Original", 84, 126)
+        val snapshot = capture()
+        version20Fixture(snapshot)
+        store.activate(snapshot)
+        seedStyles("Partial", 34, 41)
+        installStyleOwner()
+        val worker = async(Dispatchers.Default) { context.dataStore.getPreferencesAfterPendingWrites() }
+        assertEquals(84, withTimeout(10_000) { worker.await() }[GlobalIconScaleKey])
+        assertScales(84, 126)
+        assertNull(store.pendingSnapshot())
+    }
+
+    @Test fun fullPortableBackupImportsCurrentStylesForEveryProfileAndKeepsRestoreProgressReady() = runBlocking {
+        seedStyles("Incoming", 94, 122)
+        installStyleOwner()
+        val output = ByteArrayOutputStream()
+        manager.exportBackup { output }
+        seedStyles("Current", 67, 118)
+        val file = context.cacheDir.resolve("typed-styles-full.renkin").apply { writeBytes(output.toByteArray()) }
+        val prepared = manager.prepareImport(Uri.fromFile(file))
+        manager.importPrepared(prepared) { commit ->
+            val result = commit()
+            assertEquals(StorageRecoveryState.READY, StorageOperationGate.recoveryState.value)
+            result
+        }
+        assertScales(94, 122)
+        ProfileStyleStore(pack, context.dataStore).initialize()
+        assertScales(94, 122)
+    }
+
+    @Test fun sharedLegacyProfileImportsConvertedStyleWithoutChangingActiveProjection() = runBlocking {
+        seedStyles("Current", 81, 119)
+        installStyleOwner()
+        val output = ByteArrayOutputStream()
+        manager.exportProfile(2) { output }
+        val file = context.cacheDir.resolve("typed-styles-shared.renkin").apply { writeBytes(output.toByteArray()) }
+        val before = context.dataStore.getPreferencesAfterPendingWrites()
+        val prepared = manager.prepareImport(Uri.fromFile(file))
+        val result = manager.importPrepared(prepared) { it() }
+        val imported = pack.profile(result.importedProfileId!!)!!
+        val values = ProfileStylePreferences.toPreferences(ProfileStyleCodec.decode(imported.profileStyle))
+        assertEquals(119, values[GlobalIconScaleKey])
+        assertEquals(before, context.dataStore.getPreferencesAfterPendingWrites())
+        assertScales(81, 119)
+    }
+
+    @Test fun failedFileRestoreRollsBackTypedStylesAsWellAsLegacyProjection() = runBlocking {
+        seedStyles("Original", 84, 126)
+        installStyleOwner()
+        context.dataStore.getPreferencesAfterPendingWrites()
+        store.complete(capture())
+        seedStyles("Current", 93, 115)
+        var injected = false
+        BackupOsShadow.rejectRename = { source, _ ->
+            if (!injected && source.endsWith(".image.png.recovery-tmp")) { injected = true; true } else false
+        }
+        assertTrue(runCatching { manager.restorePreviousState { it() } }.isFailure)
+        assertTrue(injected)
+        assertScales(93, 115)
+        assertEquals(StorageRecoveryState.READY, StorageOperationGate.recoveryState.value)
+    }
+
+    @Test fun explicitStyleRepairWithoutPendingImportPreservesOnlyProfileRowsAndDisablesPreviousState() = runBlocking {
+        seedStyles("Original", 84, 126)
+        store.complete(capture())
+        val legacy = androidx.datastore.preferences.core.preferencesOf(GlobalIconScaleKey to 84).snapshotProfilePrefs()
+        packDb.profileDao().update(pack.profile(1)!!.copy(profileStyle = "broken original document", prefsSnapshot = legacy))
+        installStyleOwner()
+        assertTrue(runCatching { context.dataStore.getPreferencesAfterPendingWrites() }.exceptionOrNull() is StorageRecoverySnapshotException)
+        StorageOperationGate.abandonRecovery { manager.abandonPendingRecovery() }
+        assertScales(84, 126)
+        assertFalse(store.hasPreviousState())
+        assertFalse(manager.previousStateStored.value)
+        val diagnostic = context.filesDir.listFiles()!!.filter { it.name.startsWith("backup-recovery-abandoned-") }
+            .map { it.resolve("profiles.json") }.single { it.isFile }
+        val root = org.json.JSONObject(diagnostic.readText())
+        val tables = root.getJSONArray("tables")
+        assertEquals(1, tables.length())
+        val table = tables.getJSONObject(0)
+        assertEquals("Profile", table.getString("name"))
+        val columns = table.getJSONArray("columns")
+        val styleColumn = (0 until columns.length()).single { columns.getString(it) == "profileStyle" }
+        assertEquals("broken original document", table.getJSONArray("rows").getJSONArray(0).getJSONArray(styleColumn).getString(1))
+        assertTrue(runCatching { pack.checkRecoveryCompatibility(diagnostic) }.exceptionOrNull() is StorageRecoverySnapshotException)
+        manager.discardAbandonedRecovery()
+        assertFalse(diagnostic.exists())
+        assertScales(84, 126)
+    }
 }

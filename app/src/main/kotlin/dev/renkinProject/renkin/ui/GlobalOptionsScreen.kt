@@ -2,6 +2,8 @@
 
 package dev.renkinProject.renkin.ui
 
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
+
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -99,7 +101,6 @@ import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.ui.theme.IconShape as IconTileShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import dev.renkinProject.renkin.icon.creator.ColorFill
@@ -174,7 +175,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
     }
     LaunchedEffect(Unit) {
         if (!state.initialized) {
-            state.seedFrom(prefs.data.first())
+            state.seedFrom(prefs.getPreferencesAfterPendingWrites())
             baseline = state.snapshot()
         }
     }

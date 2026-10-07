@@ -11,17 +11,19 @@ import dev.renkinProject.renkin.data.setPreferenceValue
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.ProfileStyleAccess
+import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.persistBuiltPrimaryPrefs
 import dev.renkinProject.renkin.data.switchProfilePrefs
 import dev.renkinProject.renkin.data.withBuiltPrimaryPrefs
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.dataStore
-import kotlinx.coroutines.flow.first
 
 /**
  * Owns which profile is active and everything stored ABOUT profiles: CRUD, the per-profile
- * preference snapshots (each profile freezes the generation prefs it was left with), and the
- * per-profile pack package name. Swapping the in-memory icon set on a switch stays in
+ * style selection and the per-profile pack package name. The shared ProfileStyleStore owns
+ * typed style persistence and the transitional preference projection. Swapping the live icons stays in
  * [ApplicationProvider] — it owns the app list; this class flips the persistent state.
  */
 class ProfileManager internal constructor(
@@ -56,7 +58,10 @@ class ProfileManager internal constructor(
 
     /** Creates a profile and returns its id. */
     suspend fun createProfile(name: String, description: String, packLabel: String): Long =
-        packRepo.createProfile(Profile(name = name, description = description, packLabel = packLabel))
+        StorageOperationGate.run {
+            val profile = Profile(name = name, description = description, packLabel = packLabel)
+            ProfileStyleAccess.ownerFor(store)?.createProfile(profile) ?: packRepo.createProfile(profile)
+        }
 
     /**
      * Updates [id]'s user-facing details. The pack label only takes effect on the next build
@@ -91,6 +96,10 @@ class ProfileManager internal constructor(
      * otherwise leak the result into whichever profile the user switched to during install.
      */
     suspend fun recordBuiltPrimary(profileId: Long, source: Preferences) {
+        ProfileStyleAccess.ownerFor(store)?.let {
+            it.recordBuiltPrimary(profileId, source)
+            return
+        }
         if (profileId == activeProfileId) {
             store.persistBuiltPrimaryPrefs(source)
             return
@@ -107,8 +116,8 @@ class ProfileManager internal constructor(
     }
 
     /**
-     * Flips the persistent side of a profile switch: snapshots the leaving profile's
-     * generation preferences, restores the target's, and records the new active id.
+     * Selects the target's persisted style and records its id. Unconverted standalone stores
+     * retain the legacy snapshot/swap path through switchProfilePrefs.
      * Returns false when nothing changed (same id, or the target doesn't exist) — the
      * caller only swaps the in-memory icons on true.
      */
@@ -132,7 +141,7 @@ class ProfileManager internal constructor(
      */
     suspend fun reloadActiveId() {
         packRepo.ensureDefaultProfile()
-        val storedId = store.data.first()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
+        val storedId = store.getPreferencesAfterPendingWrites()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
         activeProfileId = if (packRepo.profile(storedId) != null) storedId else DEFAULT_PROFILE_ID
         if (activeProfileId != storedId) {
             store.setPreferenceValue(ActiveProfileIdKey, activeProfileId)

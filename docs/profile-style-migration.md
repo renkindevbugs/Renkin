@@ -1,10 +1,11 @@
 # Profile style migration — phase 7A
 
-## Current boundary: 7A3
+## Current boundary: 7A4
 
 Room is version 21. `Profile.prefsSnapshot` is an unversioned JSON object containing
-the registered `ProfilePrefKeys`. DataStore remains authoritative for the active profile;
-inactive profiles use their Room snapshots. Phase 7A1 isolated the existing wire format
+the registered `ProfilePrefKeys`. `Profile.profileStyle` becomes authoritative after the shared
+bootstrap; DataStore holds application settings plus a derived active-profile UI projection.
+Phase 7A1 isolated the existing wire format
 in `LegacyProfilePreferences`, without changing its fields, defaults, locking or consumers.
 `DataPreferences` retains the typed key registry and the storage/preference write boundaries.
 
@@ -15,10 +16,68 @@ builds and exports still write the same unversioned legacy JSON. Replacement and
 baseline patches retain the 7A1 adapter. The 7A2 checkpoint kept Room at 20 and portable backups at 3.
 
 Phase 7A3 appends `Profile.profileStyle` as TEXT NOT NULL DEFAULT ''. Migration 20 → 21
-does no backfill: existing profiles and all current creation/import paths leave the column empty.
-No typed document is authoritative or written yet; DataStore and `prefsSnapshot` retain their
-existing ownership. Portable export stays at format 3. The later shared bootstrap and routing
-of every style writer remain one separate authority-cutover checkpoint.
+does no backfill. At that checkpoint existing profiles and creation/import paths left the column
+empty, and DataStore/`prefsSnapshot` retained their previous ownership. Portable export stays
+at format 3. The shared bootstrap and routing of every style writer now form the 7A4 checkpoint.
+
+`ProfileStyleStore` is the singleton owner, composed by Hilt from the shared repository and
+settings DataStore. The early `ProfileStyleAccess` adapter routes existing DataPreferences
+setters to it for that settings instance; standalone/staged DataStores retain their own behavior.
+All typed/legacy pairs are written atomically through `ProfileDao.updateStyle` in one Room
+transaction. Metadata-only repository updates preserve that pair from the current row.
+
+After pending recovery, bootstrap captures one active id/preference snapshot, validates all
+candidate documents, then commits only changed rows. An empty active row uses live DataStore
+values; empty inactive rows use legacy snapshots. Non-empty documents remain authoritative,
+including on restart. The active UI projection is derived from the winning Room document.
+Absent values, disabled settings and unrecognized legacy ordinals retain their stored form.
+Conversion validates the actual complete encoded size before any style row is written; oversized
+or invalid input blocks initialization and preserves the original data for a reported failure.
+The confirmed keep-current action is the explicit escape for a damaged non-empty style document:
+validate its legacy snapshot strictly (known unique keys, correct primitive types, integer and size
+limits, Unicode and complete JSON), encode every replacement, then preserve the exact current
+Profile rows in abandoned recovery storage before writing repairs in one transaction. The diagnostic
+`profiles.json` uses the raw column/value writer but omits icon tables; full-snapshot compatibility
+and restore continue to require every table. The keep-current confirmation also explains that moving
+the recovery directory makes Previous state unavailable. Valid typed
+documents are untouched. If the legacy copy is also invalid, repair fails without clearing values.
+Normal startup, recovery retry and imports never automatically fall back to a legacy copy.
+
+Normal preference edits, source/colour bundles, Global Save, new profiles, switches and captured
+built-primary updates use this owner. Codecs and repository calls run off Main under the existing
+storage boundary; accepted Room/projection commits finish non-cancellably. A failed projection
+after a normal style write marks recovery required so stale values cannot remain available.
+Application-only edits and profile selections that did not write Room propagate DataStore failures
+without blocking the application. The initialization cache is invalidated after a committed style's
+projection failure so retry really re-projects the authoritative Room state.
+Bootstrap inside import/recovery lets the existing rollback/retry boundary handle its failure.
+
+Application, UI/provider snapshots, WatchWorker and AutoBackupWorker share the early recovery
+barrier. UI preference flows pause whenever storage is unavailable. Full/shared import, rollback,
+Previous state and recovery abandonment force initialization after restoring rows/preferences,
+before releasing the gate. Storage replacement changes the epoch and pauses observers until
+the outer operation finishes; initialization is never assumed to be startup-only.
+The observer-pause signal is independent of the recovery-screen state. A normal import keeps
+the current composition, dialogs, scroll and phased restore progress; only actual startup/recovery
+uses the recovery screen. The outer gate resumes observers after successful commit or rollback.
+
+Room remains at 21, and format-3 full/shared exports use the derived legacy representation.
+Only existing representable fields are introduced in this checkpoint. Format 4 and removal of
+the compatibility projection remain later work. A 7A3 build can open Room 21 but cannot keep
+typed documents current when editing settings; switching back to 7A4 trusts those documents.
+Use a forward fix or an explicit legacy-backup import to carry such older-build edits across.
+
+After device confirmation, `ProfileStyleStoreTest` installs the bridge with real Room storage and
+injectable preference writes. It covers active live values versus stale snapshots, every registered
+setter, all-or-nothing validation/Room failure, restarts, cancellation before/after acceptance,
+projection failure/retry, metadata copies, new profiles and concurrent worker/Application first access.
+It verifies application-only changes never update Room, failed application settings/selection do not
+require recovery, and repair preserves originals and unknown ordinals while rejecting invalid legacy
+copies or failed preservation. `StorageOperationGateTest` covers observer-only pauses and resumption
+after successful operations/rollback, plus blocking after rollback failure. `BackupRecoveryTest`
+installs the production bridge for full/shared imports, cold worker-first v20 recovery, Previous
+state → bootstrap → restart → redo, typed-style rollback and Profile-only retained diagnostics/deletion.
+Existing adapter tests retain regression coverage for the standalone-store path.
 
 Internal recovery composes explicit per-table additions for 18 → 19, 19 → 20 and 20 → 21.
 Restoring a v18/v19/v20 snapshot into v21 inserts the restored Profile rows with an empty

@@ -19,12 +19,12 @@ import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.WATCH_CHECK_INTERVAL_DEFAULT
 import dev.renkinProject.renkin.data.transfer.PackVerdictManager
 import dev.renkinProject.renkin.data.getLongValue
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.normalizeWatchCheckInterval
 import dev.renkinProject.renkin.data.setLongValue
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import java.util.concurrent.TimeUnit
 
@@ -93,7 +93,7 @@ class WatchWorker(appContext: Context, params: WorkerParameters) : CoroutineWork
         val intervalMinutes = normalizeWatchCheckInterval(
             inputData.getInt(KEY_INTERVAL_MINUTES, WATCH_CHECK_INTERVAL_DEFAULT)
         )
-        val last = applicationContext.dataStore.data.first().getLongValue(LastWatchCheckAtKey, 0L)
+        val last = applicationContext.dataStore.getPreferencesAfterPendingWrites().getLongValue(LastWatchCheckAtKey, 0L)
         if (last == 0L) return true
         val elapsed = System.currentTimeMillis() - last
         // Clock moved backwards (manual change / timezone) → don't trust it, allow the run.

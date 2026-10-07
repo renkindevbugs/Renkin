@@ -5,6 +5,7 @@ import dev.renkinProject.renkin.EditorSessionViewModel
 import dev.renkinProject.renkin.InstallerChoiceReason
 import dev.renkinProject.renkin.expiredSessionMessage
 import dev.renkinProject.renkin.data.TextFontKey
+import dev.renkinProject.renkin.data.observePreferences
 import java.util.UUID
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -533,7 +534,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // to bring it back. Initial=true so nothing flashes while the DataStore loads. It waits for the
     // app list because it points at a real row, and starts from the top where every target sits.
     val onboardingSeen by remember {
-        prefs.data.map { it.getBooleanValue(OnboardingSeenKey) }
+        prefs.observePreferences().map { it.getBooleanValue(OnboardingSeenKey) }
     }.collectAsState(initial = true)
     if (!onboardingSeen && viewModel.startupComplete) {
         LaunchedEffect(Unit) {
@@ -1099,7 +1100,7 @@ fun OpenAppOptions(
 
     val preferences = getPreferences()
     val savedFont by remember(preferences) {
-        preferences.data.map { it[TextFontKey] ?: "" }
+        preferences.observePreferences().map { it[TextFontKey] ?: "" }
     }.collectAsState(initial = null)
     val initialFont = savedFont ?: return
     val session = editorViewModel.getOrCreate(

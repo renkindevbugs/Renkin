@@ -17,6 +17,7 @@ import dev.renkinProject.renkin.data.AUTO_BACKUP_INTERVAL_OFF
 import dev.renkinProject.renkin.data.AutoBackupTreeUriKey
 import dev.renkinProject.renkin.data.LastAutoBackupAtKey
 import dev.renkinProject.renkin.data.getStringValue
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.normalizeAutoBackupInterval
 import dev.renkinProject.renkin.data.setLongValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
@@ -25,7 +26,6 @@ import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.flow.first
 import java.io.IOException
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -38,7 +38,7 @@ class AutoBackupWorker(appContext: Context, params: WorkerParameters) :
         var outputUri: Uri? = null
         return try {
             StorageOperationGate.run { }
-            val treeUri = applicationContext.dataStore.data.first()
+            val treeUri = applicationContext.dataStore.getPreferencesAfterPendingWrites()
                 .getStringValue(AutoBackupTreeUriKey)
                 .takeIf(String::isNotEmpty)
                 ?.let(Uri::parse)

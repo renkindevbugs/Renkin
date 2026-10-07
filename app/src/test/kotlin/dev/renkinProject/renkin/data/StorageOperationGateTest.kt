@@ -7,6 +7,8 @@ import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
@@ -132,5 +134,82 @@ class StorageOperationGateTest {
         release.complete(Unit)
         owner.join()
         assertEquals("next", withTimeout(2000) { StorageOperationGate.run { "next" } })
+    }
+
+    @Test fun hotReplacementPausesObserversWithoutLeavingReadyAndNestedCallsDoNotResumeThem() = runBlocking {
+        val source = MutableStateFlow(1)
+        val paused = CompletableDeferred<Unit>()
+        val values = Channel<Int>(Channel.UNLIMITED)
+        val observed = flow {
+            try { emitAll(source) } finally { paused.complete(Unit) }
+        }
+        val subscription = launch { StorageOperationGate.observe(observed).collect { values.send(it) } }
+        try {
+            assertEquals(1, withTimeout(2000) { values.receive() })
+            val epoch = StorageOperationGate.epoch
+            StorageOperationGate.run {
+                StorageOperationGate.markStorageReplaced()
+                withTimeout(2000) { paused.await() }
+                assertEquals(StorageRecoveryState.READY, StorageOperationGate.recoveryState.value)
+                assertEquals(epoch + 1, StorageOperationGate.epoch)
+                source.value = 2
+                StorageOperationGate.run { source.value = 3 }
+                yield()
+                assertTrue(values.tryReceive().isFailure)
+            }
+            assertEquals(3, withTimeout(2000) { values.receive() })
+        } finally { subscription.cancelAndJoin(); values.close() }
+    }
+
+    @Test fun rollbackFailureKeepsObserversPausedUntilExplicitRecoveryCompletes() = runBlocking {
+        val source = MutableStateFlow(1)
+        val paused = CompletableDeferred<Unit>()
+        val values = Channel<Int>(Channel.UNLIMITED)
+        val subscription = launch {
+            StorageOperationGate.observe(flow {
+                try { emitAll(source) } finally { paused.complete(Unit) }
+            }).collect { values.send(it) }
+        }
+        try {
+            assertEquals(1, withTimeout(2000) { values.receive() })
+            runCatching {
+                StorageOperationGate.run {
+                    StorageOperationGate.markStorageReplaced()
+                    withTimeout(2000) { paused.await() }
+                    StorageOperationGate.requireRecovery(IOException("rollback failed"))
+                    throw IOException("restore failed")
+                }
+            }
+            source.value = 2
+            yield()
+            assertEquals(StorageRecoveryState.FAILED, StorageOperationGate.recoveryState.value)
+            assertTrue(values.tryReceive().isFailure)
+            StorageOperationGate.abandonRecovery { }
+            assertEquals(2, withTimeout(2000) { values.receive() })
+        } finally { subscription.cancelAndJoin(); values.close() }
+    }
+
+    @Test fun failedHotOperationWithCompletedRollbackResumesObserversWithoutRecoveryScreen() = runBlocking {
+        val source = MutableStateFlow(1)
+        val paused = CompletableDeferred<Unit>()
+        val values = Channel<Int>(Channel.UNLIMITED)
+        val subscription = launch {
+            StorageOperationGate.observe(flow {
+                try { emitAll(source) } finally { paused.complete(Unit) }
+            }).collect { values.send(it) }
+        }
+        try {
+            assertEquals(1, withTimeout(2000) { values.receive() })
+            assertTrue(runCatching {
+                StorageOperationGate.run {
+                    StorageOperationGate.markStorageReplaced()
+                    withTimeout(2000) { paused.await() }
+                    source.value = 2
+                    throw IOException("import failed after rollback completed")
+                }
+            }.isFailure)
+            assertEquals(StorageRecoveryState.READY, StorageOperationGate.recoveryState.value)
+            assertEquals(2, withTimeout(2000) { values.receive() })
+        } finally { subscription.cancelAndJoin(); values.close() }
     }
 }

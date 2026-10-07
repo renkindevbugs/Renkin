@@ -8,4 +8,5 @@ import dagger.hilt.components.SingletonComponent
 @InstallIn(SingletonComponent::class)
 internal interface BackupManagerEntryPoint {
     fun backupManager(): BackupManager
+    fun profileStyleStore(): dev.renkinProject.renkin.data.ProfileStyleStore
 }

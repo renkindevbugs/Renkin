@@ -29,6 +29,10 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         BackupDatabaseSnapshot.write(db.openHelper.writableDatabase, file)
     }
 
+    internal suspend fun writeProfileStyleDiagnostics(file: File) = transaction {
+        BackupDatabaseSnapshot.writeProfileDiagnostics(db.openHelper.writableDatabase, file)
+    }
+
     internal suspend fun restoreRecoverySnapshot(file: File) = transaction {
         BackupDatabaseSnapshot.restore(db.openHelper.writableDatabase, file)
     }
@@ -219,7 +223,20 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
     }
 
     suspend fun updateProfile(profile: Profile) = access {
-        profileDao.update(profile)
+        val current = profileDao.get(profile.id)
+        // Metadata updates can carry a row captured before a style write. Only the style
+        // owner may replace the document and its projection once that row is converted.
+        profileDao.update(if (current?.profileStyle?.isNotEmpty() == true) {
+            profile.copy(profileStyle = current.profileStyle, prefsSnapshot = current.prefsSnapshot)
+        } else profile)
+    }
+
+    internal suspend fun writeProfileStyles(styles: List<ProfileStyleUpdate>) = transaction {
+        for (style in styles) {
+            check(profileDao.updateStyle(style.profileId, style.document, style.legacySnapshot) == 1) {
+                "Profile disappeared during style persistence"
+            }
+        }
     }
 
     /** Deletes the profile and all of its stored icons. The default profile is never deleted. */

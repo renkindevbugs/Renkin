@@ -531,7 +531,7 @@
     <string name="abandonedRecoveryDiscardFailed">Could not delete all abandoned recovery copies. Remaining copies have been kept.</string>
     <string name="backupRecoveryRetry">Try recovery again</string>
     <string name="backupRecoveryKeepCurrent">Keep current data and abandon recovery</string>
-    <string name="backupRecoveryKeepCurrentConfirmation">Current data may contain only part of an interrupted import. Keeping it can leave profiles, images and signing credentials inconsistent. Automatic recovery will stop. The original recovery snapshot will be preserved on this device for troubleshooting, and will continue to use storage. Continue only if recovery cannot finish.</string>
+    <string name="backupRecoveryKeepCurrentConfirmation">Current data may contain only part of an interrupted import. Keeping it can leave profiles, images and signing credentials inconsistent. Damaged profile styles will be rebuilt from their last saved copies when those copies are valid. Automatic recovery will stop. Restore previous state will no longer be available. Original recovery data and any styles replaced during repair will be preserved on this device for troubleshooting, and will continue to use storage. Continue only if recovery cannot finish.</string>
     <string name="discardPreviousState">Discard previous saved state</string>
     <string name="discardPreviousStateConfirmation">Delete the saved state from before the last import or restore to free storage? You will no longer be able to undo that operation. Current data will be kept.</string>
     <string name="previousStateDiscarded">Previous saved state discarded</string>

@@ -57,7 +57,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -273,7 +272,7 @@ class ApplicationProvider internal constructor(
             if (!startupComplete) {
                 profileOperations.run {
                     if (!startupComplete) {
-                        val startupPrefs = context.dataStore.data.first()
+                        val startupPrefs = context.dataStore.getPreferencesAfterPendingWrites()
                         if (startupPrefs.contains(BuiltPrimarySourceKey)) {
                             context.dataStore.restoreBuiltPrimarySource(startupPrefs)
                         }
@@ -940,7 +939,7 @@ class ApplicationProvider internal constructor(
 
     private suspend fun loadRenkinPack(profileId: Long) {
         lockManager.clear()
-        val prefs = context.dataStore.data.first()
+        val prefs = context.dataStore.getPreferencesAfterPendingWrites()
         // Saved vectors may contain theme references. Resolve their fallback from the user's
         // explicit theme choice every time a profile is loaded, not from stale system state.
         val defaultColor = prefs.getDefaultIconColor(context)
@@ -1098,7 +1097,7 @@ class ApplicationProvider internal constructor(
     private suspend fun refreshLockedIcons() = withContext(Dispatchers.Default) {
         if (lockManager.isEmpty()) return@withContext
         val stillLocked = lockManager.lockedPacksAmong(lockManager.lockedSourcePacks().toSet())
-        val prefs = context.dataStore.data.first()
+        val prefs = context.dataStore.getPreferencesAfterPendingWrites()
         val defaultColor = prefs.getDefaultIconColor(context)
         for ((key, row) in lockManager.lockedRowsSnapshot()) {
             currentCoroutineContext().ensureActive()

@@ -40,6 +40,7 @@ import dev.renkinProject.renkin.data.SecondaryTextTypeKey
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextFontKey
 import dev.renkinProject.renkin.data.TextType
+import dev.renkinProject.renkin.data.observePreferences
 import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.setColorStyle
 import dev.renkinProject.renkin.data.setColorValue
@@ -87,7 +88,7 @@ class OptionsViewModel @Inject constructor(
      * reopened; that made enabled switches briefly appear off while their persisted value was
      * still on. StateFlow retains the last real snapshot across those UI transitions.
      */
-    val preferenceSnapshot = preferences.data.stateIn(
+    val preferenceSnapshot = preferences.observePreferences().stateIn(
         viewModelScope,
         SharingStarted.Eagerly,
         emptyPreferences()

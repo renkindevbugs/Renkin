@@ -14,6 +14,8 @@ import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ProfileManager
 import dev.renkinProject.renkin.apk.RenkinPackStore
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.ProfileStyleStore
+import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.packages.ApplicationManager
@@ -29,6 +31,11 @@ import javax.inject.Singleton
 @Module
 @InstallIn(SingletonComponent::class)
 object AppModule {
+
+    @Provides
+    @Singleton
+    fun provideProfileStyleStore(@ApplicationContext context: Context, repository: RenkinPackRepository): ProfileStyleStore =
+        ProfileStyleStore(repository, context.dataStore)
 
     @Provides
     @Singleton

@@ -28,6 +28,7 @@ import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.data.ProfileStyleAccess
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import dev.renkinProject.renkin.data.snapshotProfilePrefs
@@ -702,6 +703,10 @@ class BackupManager(
             recovery.preserveAbandonedRecovery()
             refreshAbandonedRecoveryAvailability()
             StorageOperationGate.markStorageReplaced()
+            try {
+                ProfileStyleAccess.repairInvalidDocuments { recovery.preserveCurrentProfileStyles(packRepo) }
+            } finally { refreshAbandonedRecoveryAvailability() }
+            ProfileStyleAccess.initialize(force = true)
             mutablePreviousStateAvailable.value = false
             mutablePreviousStateStored.value = false
         }
@@ -769,6 +774,7 @@ class BackupManager(
         watchRepo.restoreRecoverySnapshot(File(snapshot.directory, "watch.json"))
         val prefs = File(snapshot.directory, "prefs.json").reader(Charsets.UTF_8).use { readBackupData(it).prefs }
         restorePrefs(prefs, preserveDeviceLocal = false)
+        ProfileStyleAccess.initialize(force = true)
         mutableRestoreStage.value = RestoreStage.RESTORING_FILES
         recovery.restoreFiles(snapshot)
         packRepo.flushRecoveryWrites()
@@ -802,6 +808,7 @@ class BackupManager(
                     StorageOperationGate.markStorageReplaced()
                     mutableRestoreStage.value = RestoreStage.RESTORING_DATA
                     val result = operation()
+                    ProfileStyleAccess.initialize(force = true)
                     packRepo.flushRecoveryWrites()
                     watchRepo.flushRecoveryWrites()
                     recovery.complete(snapshot)

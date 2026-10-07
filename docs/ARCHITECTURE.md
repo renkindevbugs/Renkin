@@ -134,8 +134,8 @@ whole provider and all persistence state is shared deliberately.
 ## Profiles
 
 Multiple named icon sets. Each profile owns its icons (`DbApplication.profileId`), its
-generation preferences (JSON snapshot in the Profile row, swapped through the shared
-DataStore on switch — see `ProfilePrefKeys` in `DataPreferences.kt`), its watch rules, and
+configured style (`Profile.profileStyle`, with legacy/UI projections of `ProfilePrefKeys`
+from `DataPreferences.kt`), its watch rules, and
 builds its own pack APK under its own package (see Naming). The default profile (id = 1) is
 undeletable; deleting a profile also deletes its watch rules, and a watch notification whose
 profile has since been deleted shows an explanation instead of applying to the wrong profile.
@@ -169,6 +169,56 @@ default the new Profile column to empty, while v21 snapshots preserve it exactly
 v21 Room schema is checked in with migration/recovery coverage for preserved values, defaults,
 rejected schema changes, Previous state/redo and pending startup recovery. Portable backups
 remain at format 3.
+
+Phase 7A4 makes `ProfileStyleStore` the application-scoped style owner. Hilt supplies the
+shared repository and settings DataStore. `ProfileStyleAccess` is installed in
+`RenkinApplication.attachBaseContext`, before WorkManager providers; it routes the existing
+preference APIs to that owner only for the real settings store, leaving staged/standalone
+stores independent. The recovery callback finishes pending rollback and then bootstrap before
+READY. Workers, provider snapshots and UI observers use the same storage boundary.
+
+Bootstrap validates every profile before a single Room transaction writes converted documents
+and their derived `prefsSnapshot`. A legacy active row uses one live DataStore snapshot; other
+legacy rows use their stored snapshots. Non-empty documents are authoritative and validated,
+never automatically replaced from the preference cache. Missing/default/disabled configuration remains
+unresolved. The active DataStore projection is synchronized afterwards. Conversion, encoding
+and repository access run off Main; accepted Room/projection commits finish outside cancellation.
+
+Every production profile preference setter delegates to the owner. Style and legacy projection
+commit together; switching selects the target without saving a leaving preference cache.
+New profiles start converted. Built-primary updates target the captured profile, including an
+inactive one. Metadata updates preserve the current typed/legacy pair even if their incoming
+row was captured before a style edit. Application settings remain in DataStore. UI reads its
+derived active projection through recovery-aware flows; operation snapshots retain the existing
+profile token, storage epoch and immutable preference checks. Exact icon Apply is unchanged.
+
+Full/shared imports, Previous state, rollback and recovery abandonment run bootstrap after
+restoring rows/preferences and before releasing storage. Storage replacement invalidates the
+bootstrap epoch and pauses observers until the outer operation finishes; failed bootstrap cannot
+publish usable data. Observer availability is separate from recovery-screen state: normal imports
+keep MainScreen and its restore progress composed. The outer operation resumes observers after
+successful commit or rollback; startup/recovery failures keep them paused. A projection failure
+after a normal style commit blocks access for recovery to re-project the authoritative row. A
+failed application-only setting or profile selection that did not write Room propagates without
+requiring recovery. During restore, initialization errors remain within the existing
+rollback boundary. Room stays at v21 and portable exports at format 3, using the current legacy
+projection for every profile. Format 4 and retirement of compatibility projections are separate
+checkpoints. `ProfileStyleStoreTest` exercises the installed bridge with real Room transactions,
+all 64 setters, startup/restart, cancellation, projection failure/retry and explicit repair.
+`StorageOperationGateTest` covers observer-only pauses and successful/failed rollback boundaries.
+`BackupRecoveryTest` covers worker-first recovery, v20 Previous state/bootstrap/restart/redo,
+full/shared imports, typed-style rollback and Profile-only retained diagnostics.
+
+The confirmed keep-current recovery action can explicitly repair invalid non-empty style documents
+from their atomically maintained legacy snapshots. All replacement copies must pass strict bounded
+JSON/type/encoding validation before any repair writes. Original Profile rows are durably retained
+in abandoned recovery storage before the single repair transaction. Valid documents stay unchanged;
+invalid legacy copies prevent repair rather than clearing the profile. Startup, retry and imported
+documents retain strict validation without automatic fallback. Existing recovery confirmation explains
+this repair and preservation, including the loss of the Previous state action when its recovery
+directory is moved. The diagnostic `profiles.json` contains only the Profile table, preserving raw
+columns and values without copying icon payloads; it is not a complete restorable snapshot.
+Explicit abandoned-copy deletion remains the cleanup path.
 
 ## Threading & state
 

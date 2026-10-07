@@ -52,7 +52,13 @@ internal object BackupDatabaseSnapshot {
         }
     }
 
-    suspend fun write(db: SupportSQLiteDatabase, file: File) {
+    suspend fun write(db: SupportSQLiteDatabase, file: File) = writeTables(db, file, tables(db))
+
+    // Diagnostic-only copy. Compatibility and restore still require the complete table set.
+    suspend fun writeProfileDiagnostics(db: SupportSQLiteDatabase, file: File) =
+        writeTables(db, file, listOf("Profile"))
+
+    private suspend fun writeTables(db: SupportSQLiteDatabase, file: File, tableNames: List<String>) {
         FileOutputStream(file).use { output ->
             val snapshotContext = currentCoroutineContext()
             val checked = object : OutputStream() {
@@ -72,7 +78,7 @@ internal object BackupDatabaseSnapshot {
             // encoding so large icon payloads do not cause millions of encoder calls.
             val writer = JsonWriter(OutputStreamWriter(checked, Charsets.UTF_8).buffered())
             writer.beginObject().name("version").value(db.version.toLong()).name("tables").beginArray()
-            for (table in tables(db)) {
+            for (table in tableNames) {
                 currentCoroutineContext().ensureActive()
                 db.query("SELECT * FROM ${quoted(table)}").use { cursor ->
                     writer.beginObject().name("name").value(table).name("columns").beginArray()

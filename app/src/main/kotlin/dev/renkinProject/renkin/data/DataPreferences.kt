@@ -5,6 +5,7 @@ import android.content.res.Configuration
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.res.stringResource
@@ -34,6 +35,14 @@ private val preferenceAccessMutex = Mutex()
 private suspend fun <T> withPreferenceAccess(block: suspend () -> T): T = StorageOperationGate.run {
     preferenceAccessMutex.withLock { block() }
 }
+
+/** Settings writes must use this owner under the storage gate; direct DataStore edits are reserved for restore/projection. */
+private suspend fun DataStore<Preferences>.editOwnedPreferences(transform: (MutablePreferences) -> Unit) {
+    val owner = ProfileStyleAccess.ownerFor(this)
+    if (owner != null) owner.edit(transform) else edit { transform(it) }
+}
+
+fun DataStore<Preferences>.observePreferences(): Flow<Preferences> = StorageOperationGate.observe(data)
 
 private const val DARK_MODE_NAME = "NIGHT_THEME"
 private const val INSTALL_METHOD_NAME = "INSTALL_METHOD"
@@ -206,8 +215,7 @@ val LastSeenWhatsNewVersionKey = intPreferencesKey("LAST_SEEN_WHATS_NEW_VERSION"
 val HideProfileShareWarningKey = booleanPreferencesKey("HIDE_PROFILE_SHARE_WARNING")
 
 /**
- * The generation preferences that belong to a profile — captured into [Profile.prefsSnapshot]
- * when switching away and restored when switching back, so profiles don't influence each other.
+ * Profile fields represented by the typed style and its [Profile.prefsSnapshot]/UI projections.
  * App-level settings (dark mode, watch interval, sort/filter) intentionally stay global.
  */
 private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
@@ -270,14 +278,14 @@ internal fun isValidPersistedPreference(name: String, value: Any): Boolean =
 /** Commits only the staged Global options keys from [source], under the shared write mutex. */
 suspend fun DataStore<Preferences>.persistGlobalModifierPrefs(source: Preferences) {
     withPreferenceAccess {
-        edit { target -> target.copyGlobalModifierPrefsFrom(source) }
+        editOwnedPreferences { target -> target.copyGlobalModifierPrefsFrom(source) }
     }
 }
 
 /** Commits the staged sources and modifiers as one profile-scoped Global style transaction. */
 suspend fun DataStore<Preferences>.persistGlobalStylePrefs(source: Preferences) {
     withPreferenceAccess {
-        edit { target ->
+        editOwnedPreferences { target ->
             target[PrimarySourceKey] = source.getIntValue(
                 PrimarySourceKey, SOURCE_DEFAULT.ordinal
             )
@@ -330,7 +338,7 @@ private fun MutablePreferences.copyGlobalModifierPrefsFrom(source: Preferences) 
 /** Records the hero source that a successful build actually used as one atomic profile write. */
 suspend fun DataStore<Preferences>.persistBuiltPrimaryPrefs(source: Preferences) {
     withPreferenceAccess {
-        edit { target ->
+        editOwnedPreferences { target ->
             target[BuiltPrimarySourceKey] = source.getIntValue(
                 PrimarySourceKey, SOURCE_DEFAULT.ordinal
             )
@@ -352,14 +360,13 @@ internal fun String.withBuiltPrimaryPrefs(source: Preferences): String =
  */
 suspend fun DataStore<Preferences>.restoreProfilePrefs(snapshot: String) {
     withPreferenceAccess {
-        edit { it.replaceProfilePrefs(snapshot) }
+        editOwnedPreferences { it.replaceProfilePrefs(snapshot) }
     }
 }
 
 /**
- * Snapshots the leaving profile, persists that snapshot, restores the target and records its id
- * while ordinary preference setters are blocked. Without one lock around the whole sequence, a
- * UI write can land after the leaving snapshot but before the target restore and be silently lost.
+ * Selects the owner's target style while ordinary setters are blocked. Standalone stores keep
+ * the legacy snapshot/swap contract under the same mutex, so an edit cannot cross a switch.
  */
 suspend fun DataStore<Preferences>.switchProfilePrefs(
     targetSnapshot: String,
@@ -367,6 +374,11 @@ suspend fun DataStore<Preferences>.switchProfilePrefs(
     persistLeavingSnapshot: suspend (String) -> Unit
 ) {
     withPreferenceAccess {
+        val owner = ProfileStyleAccess.ownerFor(this)
+        if (owner != null) {
+            owner.switchTo(newProfileId)
+            return@withPreferenceAccess
+        }
         persistLeavingSnapshot(data.first().snapshotProfilePrefs())
         edit { target ->
             target.replaceProfilePrefs(targetSnapshot)
@@ -382,7 +394,7 @@ internal fun MutablePreferences.replaceProfilePrefs(snapshot: String) {
 
 @Composable
 fun DataStore<Preferences>.getPreferencesValue(): Preferences {
-    return data.collectAsState(initial = emptyPreferences()).value
+    return remember(this) { observePreferences() }.collectAsState(initial = emptyPreferences()).value
 }
 
 @Composable
@@ -566,7 +578,7 @@ fun DataStore<Preferences>.getGradientStops(
  */
 suspend fun DataStore<Preferences>.setPrimarySource(source: Source, packageName: String?) {
     withPreferenceAccess {
-        edit { target ->
+        editOwnedPreferences { target ->
             target[PrimarySourceKey] = source.ordinal
             packageName?.let { target[PrimaryIconPackKey] = it }
         }
@@ -576,7 +588,7 @@ suspend fun DataStore<Preferences>.setPrimarySource(source: Source, packageName:
 /** Startup restore of the last BUILT source/pack — same atomicity requirement. */
 suspend fun DataStore<Preferences>.restoreBuiltPrimarySource(snapshot: Preferences) {
     withPreferenceAccess {
-        edit { target ->
+        editOwnedPreferences { target ->
             target[PrimarySourceKey] = snapshot.getIntValue(
                 BuiltPrimarySourceKey, SOURCE_DEFAULT.ordinal
             )
@@ -661,7 +673,7 @@ suspend fun DataStore<Preferences>.setColorStyle(
     gradientPositions: List<Float> = emptyList()
 ) {
     withPreferenceAccess {
-        edit { target ->
+        editOwnedPreferences { target ->
             target.setColorStyle(
                 keys, mode, gradientType, gradientAngle,
                 firstColor, gradientStops, gradientPositions
@@ -724,19 +736,19 @@ inline fun <reified T: Enum<T>> Preferences.getEnumValue(
 
 //Common
 fun <T : Any> DataStore<Preferences>.getPreferenceFlow(key: Preferences.Key<T>): Flow<T?> {
-    return data.map { settings ->
+    return observePreferences().map { settings ->
         settings[key]
     }
 }
 
 @Composable
 fun <T : Any> DataStore<Preferences>.getPreferenceValue(key: Preferences.Key<T>, default: T): T {
-    return getPreferenceFlow(key).collectAsState(initial = default).value ?: default
+    return remember(this, key) { getPreferenceFlow(key) }.collectAsState(initial = default).value ?: default
 }
 
 suspend fun <T> DataStore<Preferences>.setPreferenceValue(key: Preferences.Key<T>, value: T) {
     withPreferenceAccess {
-        edit { settings ->
+        editOwnedPreferences { settings ->
             settings[key] = value
         }
     }
@@ -744,7 +756,7 @@ suspend fun <T> DataStore<Preferences>.setPreferenceValue(key: Preferences.Key<T
 
 /** Reads a snapshot only after every preference write that started before it has completed. */
 suspend fun DataStore<Preferences>.getPreferencesAfterPendingWrites(): Preferences =
-    withPreferenceAccess { data.first() }
+    withPreferenceAccess { ProfileStyleAccess.ownerFor(this)?.snapshot() ?: data.first() }
 
 //Labels
 @Composable

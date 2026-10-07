@@ -22,8 +22,8 @@ const val DEFAULT_PROFILE_ID = 1L
 /**
  * A named icon set. Every profile owns its own icon assignments ([DbApplication.profileId]),
  * builds its own icon pack APK (a per-profile package name, so several packs can be installed
- * side by side) and keeps its own generation preferences ([prefsSnapshot], swapped in/out of
- * the shared DataStore when the active profile changes).
+ * side by side). [profileStyle] owns configured settings after bootstrap; [prefsSnapshot] and
+ * the active DataStore values are compatibility projections.
  */
 @Entity
 data class Profile(
@@ -32,14 +32,14 @@ data class Profile(
     @ColumnInfo(defaultValue = "") val description: String = "",
     // Launcher-visible label of this profile's built pack (e.g. "Renkin Dark").
     @ColumnInfo(defaultValue = "") val packLabel: String = "",
-    // JSON snapshot of the generation preferences, captured when switching away.
+    // Legacy JSON projection, atomically updated with profileStyle by the style owner.
     @ColumnInfo(defaultValue = "") val prefsSnapshot: String = "",
     // True when the profile's icons were saved (e.g. before switching away) but not built
     // into the pack APK since — the UI marks these so the save isn't mistaken for a build.
     @ColumnInfo(defaultValue = "0") val hasUnbuiltChanges: Boolean = false,
     // "Don't show again" for the missing-icon-packs dialog, chosen per profile.
     @ColumnInfo(defaultValue = "0") val hideMissingPackWarning: Boolean = false,
-    // Empty until the shared bootstrap and all style writers switch ownership together.
+    // Empty only for unconverted legacy rows; bootstrap fills it before storage becomes ready.
     @ColumnInfo(defaultValue = "") val profileStyle: String = ""
 )
 
@@ -267,6 +267,9 @@ interface RenkinPackDao {
 
 @Dao
 interface ProfileDao {
+    @Query("UPDATE Profile SET profileStyle = :document, prefsSnapshot = :legacySnapshot WHERE id = :id")
+    fun updateStyle(id: Long, document: String, legacySnapshot: String): Int
+
     @Query("SELECT * FROM Profile ORDER BY id")
     fun getAllFlow(): kotlinx.coroutines.flow.Flow<List<Profile>>
 
