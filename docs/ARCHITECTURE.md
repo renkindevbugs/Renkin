@@ -141,6 +141,12 @@ undeletable; deleting a profile also deletes its watch rules, and a watch notifi
 profile has since been deleted shows an explanation instead of applying to the wrong profile.
 Switcher = the top-bar title dropdown.
 
+Phase 7A1 isolates the existing JSON snapshot encoder, replacement rules and inactive-profile
+built-source patch in `data/LegacyProfilePreferences.kt`. The registered keys and synchronized
+DataStore operations remain in `DataPreferences.kt`; Room stays at v20 and the active profile
+still uses DataStore. The [profile style migration design](profile-style-migration.md) describes
+the proposed typed model, active-profile bootstrap and portable/recovery compatibility rollout.
+
 ## Threading & state
 
 - Heavy work lives in `suspend` functions that hop to `Dispatchers.Default` internally

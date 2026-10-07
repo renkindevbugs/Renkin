@@ -8,18 +8,12 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
 import dev.renkinProject.renkin.data.setPreferenceValue
-import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
-import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
-import dev.renkinProject.renkin.data.PrimaryIconPackKey
-import dev.renkinProject.renkin.data.PrimarySourceKey
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.RenkinPackRepository
-import dev.renkinProject.renkin.data.SOURCE_DEFAULT
-import dev.renkinProject.renkin.data.getIntValue
-import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.data.persistBuiltPrimaryPrefs
 import dev.renkinProject.renkin.data.switchProfilePrefs
+import dev.renkinProject.renkin.data.withBuiltPrimaryPrefs
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.dataStore
 import kotlinx.coroutines.flow.first
@@ -102,17 +96,7 @@ class ProfileManager internal constructor(
             return
         }
         val profile = packRepo.profile(profileId) ?: return
-        val snapshot = runCatching { org.json.JSONObject(profile.prefsSnapshot) }
-            .getOrDefault(org.json.JSONObject())
-        snapshot.put(
-            BuiltPrimarySourceKey.name,
-            source.getIntValue(PrimarySourceKey, SOURCE_DEFAULT.ordinal)
-        )
-        snapshot.put(
-            BuiltPrimaryIconPackKey.name,
-            source.getStringValue(PrimaryIconPackKey)
-        )
-        packRepo.updateProfile(profile.copy(prefsSnapshot = snapshot.toString()))
+        packRepo.updateProfile(profile.copy(prefsSnapshot = profile.prefsSnapshot.withBuiltPrimaryPrefs(source)))
     }
 
     /** Persists the active profile's "don't show the missing-packs dialog again" choice. */

@@ -245,6 +245,10 @@ private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
 val ProfilePrefKeys: List<Preferences.Key<*>> =
     ProfileBooleanPrefKeys + ProfileIntPrefKeys + ProfileStringPrefKeys
 
+private val legacyProfilePreferences = LegacyProfilePreferences(
+    ProfileBooleanPrefKeys, ProfileIntPrefKeys, ProfileStringPrefKeys
+)
+
 private val persistedPreferenceTypes: Map<String, (Any) -> Boolean> = buildMap {
     for (key in ProfileBooleanPrefKeys + listOf(
         AskInstallerEveryTimeKey, InstallerChoiceConfirmedKey, AppFilterNoIconKey,
@@ -336,13 +340,10 @@ suspend fun DataStore<Preferences>.persistBuiltPrimaryPrefs(source: Preferences)
 }
 
 /** Serializes the profile-scoped preferences into a JSON snapshot (see [ProfilePrefKeys]). */
-fun Preferences.snapshotProfilePrefs(): String {
-    val json = org.json.JSONObject()
-    for (key in ProfilePrefKeys) {
-        this[key]?.let { json.put(key.name, it) }
-    }
-    return json.toString()
-}
+fun Preferences.snapshotProfilePrefs(): String = legacyProfilePreferences.encode(this)
+
+internal fun String.withBuiltPrimaryPrefs(source: Preferences): String =
+    legacyProfilePreferences.withBuiltPrimary(this, source)
 
 /**
  * Restores a [snapshotProfilePrefs] JSON into the store: present keys are written back, absent
@@ -375,26 +376,7 @@ suspend fun DataStore<Preferences>.switchProfilePrefs(
 
 /** Replaces every profile key, removing missing, malformed and wrongly typed values. */
 internal fun MutablePreferences.replaceProfilePrefs(snapshot: String) {
-    // A corrupt/unparsable snapshot starts from defaults. Crucially, an invalid value must
-    // remove the previous profile's value instead of leaking it into the target profile.
-    val json = runCatching { org.json.JSONObject(snapshot) }.getOrDefault(org.json.JSONObject())
-
-    for (key in ProfileBooleanPrefKeys) {
-        val value = json.opt(key.name)
-        if (value is Boolean) this[key] = value else remove(key)
-    }
-    for (key in ProfileIntPrefKeys) {
-        val value = when (val raw = json.opt(key.name)) {
-            is Int -> raw
-            is Long -> raw.takeIf { it in Int.MIN_VALUE..Int.MAX_VALUE }?.toInt()
-            else -> null
-        }
-        if (value != null) this[key] = value else remove(key)
-    }
-    for (key in ProfileStringPrefKeys) {
-        val value = json.opt(key.name)
-        if (value is String) this[key] = value else remove(key)
-    }
+    legacyProfilePreferences.replace(this, snapshot)
 }
 
 @Composable
