@@ -2,7 +2,6 @@ package dev.renkinProject.renkin
 
 import android.app.Application
 import android.net.Uri
-import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -57,9 +56,6 @@ import dev.renkinProject.renkin.data.setBooleanValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
-import dev.renkinProject.renkin.data.transfer.BackupSpaceException
-import dev.renkinProject.renkin.data.transfer.BackupSizeException
-import dev.renkinProject.renkin.data.transfer.BackupMemoryException
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.StorageRecoveryState
 import dev.renkinProject.renkin.service.BackgroundWorkScheduler
@@ -78,7 +74,6 @@ import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.delay
@@ -128,7 +123,7 @@ class MainViewModel @Inject constructor(
     private val appProvider: ApplicationProvider,
     private val watchRepo: WatchRepository,
     private val backupManager: BackupManager,
-    private val autoBackupManager: AutoBackupManager
+    autoBackupManager: AutoBackupManager
 ) : AndroidViewModel(application), IconPreviewBuilder {
     private val installerCatalog = InstallerCatalog(application)
     /**
@@ -643,7 +638,7 @@ class MainViewModel @Inject constructor(
     fun openShizukuManager(): Boolean = ShizukuSupport.openManager(getApplication<Application>())
 
     override fun onCleared() {
-        cancelBackupImport()
+        backupCoordinator.close()
         shizukuObservation.close()
         buildCoordinator.close()
         super.onCleared()
@@ -1225,67 +1220,36 @@ class MainViewModel @Inject constructor(
         return activeProfileUsesIps || backupManager.otherProfilesUseIconPackStudio(activeProfileId)
     }
 
-    /** True while a backup export/import runs — Settings ignores further taps meanwhile. */
-    var backupInProgress by mutableStateOf(false)
-        private set
-
-    val autoBackupIntervalHours = autoBackupManager.intervalHours.stateIn(
-        viewModelScope,
-        kotlinx.coroutines.flow.SharingStarted.Eagerly,
-        0
-    )
-    val autoBackupTreeUri = autoBackupManager.treeUri.stateIn(
-        viewModelScope,
-        kotlinx.coroutines.flow.SharingStarted.Eagerly,
-        null
-    )
-    val lastAutoBackupAt = autoBackupManager.lastBackupAt.stateIn(
-        viewModelScope,
-        kotlinx.coroutines.flow.SharingStarted.Eagerly,
-        0L
+    private val backupCoordinator = BackupUiCoordinator(
+        provider = appProvider,
+        backupManager = backupManager,
+        autoBackupManager = autoBackupManager,
+        scope = viewModelScope,
+        profileSessionOperations = profileSessionOperations,
+        saveBeforeExport = ::saveBeforeBackupExport,
+        onRestored = ::onBackupRestored,
+        onVerdictsUpdated = ::onBackupVerdictsUpdated,
+        notify = { _toastEvents.trySend(it) }
     )
 
-    fun setAutoBackupInterval(hours: Int) {
-        viewModelScope.launch {
-            runCatching { autoBackupManager.setInterval(hours) }
-                .onFailure {
-                    Log.error("MainViewModel", "Could not update automatic backup interval", it)
-                    _toastEvents.trySend(R.string.autoBackupSetupFailed)
-                }
-        }
-    }
+    val backupInProgress: Boolean get() = backupCoordinator.backupInProgress
+    val autoBackupIntervalHours get() = backupCoordinator.autoBackupIntervalHours
+    val autoBackupTreeUri get() = backupCoordinator.autoBackupTreeUri
+    val lastAutoBackupAt get() = backupCoordinator.lastAutoBackupAt
+    val previousStateAvailable get() = backupCoordinator.previousStateAvailable
+    val previousStateStored get() = backupCoordinator.previousStateStored
+    val abandonedRecoveryAvailable get() = backupCoordinator.abandonedRecoveryAvailable
+    val backupRestoreStage get() = backupCoordinator.backupRestoreStage
+    val backupSnapshotStage get() = backupCoordinator.backupSnapshotStage
+    val backupRestoreCancellable get() = backupCoordinator.backupRestoreCancellable
+    val backupCancellationRequested: Boolean get() = backupCoordinator.backupCancellationRequested
+    val pendingBackupImport: BackupImportPreview? get() = backupCoordinator.pendingBackupImport
 
-    fun setAutoBackupFolder(uri: Uri, intervalHours: Int) {
-        viewModelScope.launch {
-            runCatching { autoBackupManager.setFolder(uri, intervalHours) }
-                .onFailure {
-                    Log.error("MainViewModel", "Could not access automatic backup folder", it)
-                    _toastEvents.trySend(R.string.autoBackupSetupFailed)
-                }
-        }
-    }
+    fun setAutoBackupInterval(hours: Int) = backupCoordinator.setAutoBackupInterval(hours)
+    fun setAutoBackupFolder(uri: Uri, intervalHours: Int) = backupCoordinator.setAutoBackupFolder(uri, intervalHours)
+    suspend fun autoBackupFolderName(uri: Uri): String? = backupCoordinator.autoBackupFolderName(uri)
+    fun cancelBackupPreparation() = backupCoordinator.cancelBackupPreparation()
 
-    suspend fun autoBackupFolderName(uri: Uri): String? = withContext(Dispatchers.IO) {
-        runCatching { autoBackupManager.folderName(uri) }.getOrNull()
-    }
-
-    val previousStateAvailable = backupManager.previousStateAvailable
-    val previousStateStored = backupManager.previousStateStored
-    val abandonedRecoveryAvailable = backupManager.abandonedRecoveryAvailable
-    val backupRestoreStage = backupManager.restoreStage
-    val backupSnapshotStage = backupManager.snapshotStage
-    val backupRestoreCancellable = backupManager.restoreCancellable
-    private var backupJob: Job? = null
-    var backupCancellationRequested by mutableStateOf(false)
-        private set
-
-    fun cancelBackupPreparation() {
-        val job = backupJob ?: return
-        if (backupManager.requestRestorePreparationCancellation()) {
-            backupCancellationRequested = true
-            job.cancel(CancellationException("Restore preparation cancelled by user"))
-        }
-    }
     var storageRecoveryRetryRunning by mutableStateOf(false)
         private set
     var recoveryActionError by mutableStateOf<Int?>(null)
@@ -1352,190 +1316,38 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun discardPreviousState() = runBackupOp(R.string.previousStateDiscardFailed) {
-        backupManager.discardPreviousState()
-        _toastEvents.trySend(R.string.previousStateDiscarded)
-    }
+    fun discardPreviousState() = backupCoordinator.discardPreviousState()
+    fun discardAbandonedRecovery() = backupCoordinator.discardAbandonedRecovery()
+    fun restorePreviousState() = backupCoordinator.restorePreviousState()
+    fun exportBackup(uri: Uri) = backupCoordinator.exportBackup(uri)
+    fun exportProfile(profileId: Long, uri: Uri) = backupCoordinator.exportProfile(profileId, uri)
+    fun confirmBackupImport() = backupCoordinator.confirmBackupImport()
+    fun cancelBackupImport() = backupCoordinator.cancelBackupImport()
+    fun importFile(uri: Uri) = backupCoordinator.importFile(uri)
 
-    fun discardAbandonedRecovery() = runBackupOp(R.string.abandonedRecoveryDiscardFailed) {
-        backupManager.discardAbandonedRecovery()
-        _toastEvents.trySend(R.string.abandonedRecoveryDiscarded)
-    }
-
-    fun restorePreviousState() = runBackupOp(R.string.previousStateRestoreFailed) {
-        backupManager.restorePreviousState { restore -> appProvider.replaceProfileSession { restore() } }
-        refreshBackgroundSchedules()
-        resetChangeBaselines()
-        refreshMissingPacks()
-        _toastEvents.trySend(R.string.previousStateRestored)
-    }
-
-    /**
-     * Runs one backup/import operation at a time: the shared busy flag gates re-entry, a
-     * failure logs and toasts [failureToast], cancellation propagates.
-     */
-    private fun runBackupOp(
-        @StringRes failureToast: Int,
-        onCompletion: () -> Unit = {},
-        serializeProfile: Boolean = true,
-        op: suspend (ProfileSessionToken) -> Unit
-    ) {
-        if (backupInProgress) return
-        backupInProgress = true
-        val expected = sessionToken
-        backupJob = viewModelScope.launch {
-            try {
-                if (serializeProfile) profileSessionOperations.withLock { op(expected) }
-                else op(expected)
-            } catch (e: CancellationException) {
-                if (backupCancellationRequested) _toastEvents.trySend(R.string.backupPreparationCancelled)
-                throw e
-            } catch (e: ProfileSessionChangedException) {
-                _toastEvents.trySend(e.userMessage())
-            } catch (e: Exception) {
-                Log.error("MainViewModel", "Backup operation failed", e)
-                _toastEvents.trySend(when (e) {
-                    is BackupSpaceException -> if (failureToast == R.string.backupImportFailed) {
-                        R.string.backupImportInsufficientStorage
-                    } else R.string.backupInsufficientStorage
-                    is BackupSizeException -> R.string.backupSizeLimitExceeded
-                    is BackupMemoryException -> R.string.backupInsufficientMemory
-                    else -> failureToast
-                })
-            } finally {
-                backupJob = null
-                backupCancellationRequested = false
-                backupInProgress = false
-            }
-        }.also { job -> job.invokeOnCompletion { onCompletion() } }
-    }
-
-    /**
-     * Writes the full backup (all profiles, settings, watch rules, uploads, keystore) to
-     * [uri]. Unsaved work is saved first, the same way the save-before-switch prompt would —
-     * exporting a backup that silently lacks what's on screen would be worse.
-     */
-    fun exportBackup(uri: Uri) = runBackupOp(R.string.backupExportFailed, serializeProfile = false) { expected ->
-        var prepared: BackupManager.PreparedExport? = null
-        try {
-            profileSessionOperations.withLock {
-                if (hasUnsavedChanges()) {
-                    appProvider.saveActiveProfileIcons(expected)
-                    loadChangeBaselines(expected)
-                    refreshMissingPacks(prompt = false)
-                }
-                prepared = backupManager.prepareBackupExport()
-            }
-            backupManager.writePreparedExport(checkNotNull(prepared), uri)
-            _toastEvents.trySend(R.string.backupExported)
-        } finally { prepared?.let { backupManager.discardExport(it) } }
-    }
-
-    fun exportProfile(profileId: Long, uri: Uri) = runBackupOp(R.string.profileExportFailed, serializeProfile = false) { expected ->
-        var prepared: BackupManager.PreparedExport? = null
-        try {
-            profileSessionOperations.withLock {
-                if (profileId == activeProfileId && hasUnsavedChanges()) {
-                    appProvider.saveActiveProfileIcons(expected)
-                    loadChangeBaselines(expected)
-                    refreshMissingPacks(prompt = false)
-                }
-                prepared = backupManager.prepareProfileExport(profileId)
-            }
-            backupManager.writePreparedExport(checkNotNull(prepared), uri)
-            _toastEvents.trySend(R.string.profileExported)
-        } finally { prepared?.let { backupManager.discardExport(it) } }
-    }
-
-    // A picked full-backup file waiting for the "replace everything?" confirmation.
-    // (Profile files import right away — they only add a new profile.)
-    data class PendingBackupImport(
-        val prepared: BackupManager.PreparedImport,
-        val preview: BackupManager.BackupPreview
-    )
-
-    var pendingBackupImport by mutableStateOf<PendingBackupImport?>(null)
-        private set
-
-    fun confirmBackupImport() {
-        if (backupInProgress) return
-        val pending = pendingBackupImport ?: return
-        pendingBackupImport = null
-        runBackupOp(R.string.backupImportFailed, onCompletion = { releasePreparedImport(pending.prepared) }) {
-            performImport(pending.prepared)
-        }
-    }
-
-    fun cancelBackupImport() {
-        val pending = pendingBackupImport
-        pendingBackupImport = null
-        pending?.let { releasePreparedImport(it.prepared) }
-    }
-
-    private fun releasePreparedImport(prepared: BackupManager.PreparedImport) {
-        viewModelScope.launch(NonCancellable + Dispatchers.IO) { backupManager.discardImport(prepared) }
-    }
-
-    /**
-     * Entry point for a picked `.renkin` file: full backups are destructive, so they stop at
-     * a confirmation ([pendingBackupImport]); shared profiles are additive and import now.
-     */
-    fun importFile(uri: Uri) = runBackupOp(R.string.backupImportFailed) {
-        cancelBackupImport()
-        val prepared = backupManager.prepareImport(uri)
-        var handedOff = false
-        try {
-            when (prepared.inspection.kind) {
-                BackupManager.ImportKind.BACKUP -> {
-                    pendingBackupImport = PendingBackupImport(prepared, checkNotNull(prepared.inspection.backup))
-                    handedOff = true
-                }
-                BackupManager.ImportKind.PROFILE -> performImport(prepared)
-            }
-        } finally {
-            if (!handedOff) backupManager.discardImport(prepared)
-        }
-    }
-
-    private suspend fun performImport(prepared: BackupManager.PreparedImport) {
-        val result = backupManager.importPrepared(prepared) { commit ->
-            if (prepared.inspection.kind == BackupManager.ImportKind.BACKUP) {
-                appProvider.replaceProfileSession { commit() }
-            } else commit()
-        }
-        when (result.kind) {
-            BackupManager.ImportKind.BACKUP -> {
-                refreshBackgroundSchedules()
-                // Everything was replaced — reload the in-memory state in place.
-                resetChangeBaselines()
-                // A restored profile counts as freshly entered for the prompt.
-                missingPacksPrompted.remove(appProvider.activeProfileId)
-                refreshMissingPacks()
-                _toastEvents.trySend(R.string.backupImported)
-            }
-            BackupManager.ImportKind.PROFILE -> {
-                // Additive: the active profile is untouched; the new one is in the switcher
-                // (its missing-pack prompt fires when the user switches to it).
-                _toastEvents.trySend(R.string.profileImported)
-            }
-        }
-        // Classify any packs the import referenced (quiet best effort — retried later at
-        // app start and by the periodic watch worker when offline now). Free verdicts
-        // unlock icons, so reload when something got decided.
-        if (runCatching { appProvider.verifyPendingVerdicts() }.getOrDefault(false)) {
-            when (result.kind) {
-                // The backup already replaced everything, so there is no session to keep.
-                BackupManager.ImportKind.BACKUP -> {
-                    appProvider.reloadActiveProfile()
-                    resetChangeBaselines()
-                }
-                // A shared profile lands beside the active one. Its verdicts matter when that
-                // profile is entered; reloading the current session here would risk discarding
-                // or cross-merging unrelated unsaved work.
-                BackupManager.ImportKind.PROFILE -> Unit
-            }
+    // Called while the coordinator holds the shared profile-session mutex.
+    private suspend fun saveBeforeBackupExport(expected: ProfileSessionToken, profileId: Long?) {
+        if ((profileId == null || profileId == activeProfileId) && hasUnsavedChanges()) {
+            appProvider.saveActiveProfileIcons(expected)
+            loadChangeBaselines(expected)
             refreshMissingPacks(prompt = false)
         }
+    }
+
+    private suspend fun onBackupRestored(resetMissingPackPrompt: Boolean) {
+        refreshBackgroundSchedules()
+        resetChangeBaselines()
+        if (resetMissingPackPrompt) missingPacksPrompted.remove(appProvider.activeProfileId)
+        refreshMissingPacks()
+    }
+
+    private suspend fun onBackupVerdictsUpdated(kind: BackupManager.ImportKind) {
+        if (kind == BackupManager.ImportKind.BACKUP) {
+            appProvider.reloadActiveProfile()
+            resetChangeBaselines()
+        }
+        // A shared profile must not reload or discard edits in the active profile.
+        refreshMissingPacks(prompt = false)
     }
 
     private suspend fun refreshBackgroundSchedules() {

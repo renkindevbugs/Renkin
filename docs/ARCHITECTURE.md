@@ -75,6 +75,19 @@ so starting another build does not skip it. Dismissing a pending prompt or clear
 claims artifact cleanup before changing state; the previous job cannot release that APK as
 unfinished while its completion cleanup is still running.
 
+`MainViewModel` also owns a `BackupUiCoordinator`. It owns backup/export/import jobs, the
+pending prepared import, confirmation metadata, cancellation presentation, service progress
+projections and automatic-backup settings flows. UI receives only the import preview; the staged
+file handle stays private to the coordinator and is released on dismissal, completion or clearing.
+MainViewModel retains live profile saves, baseline/missing-pack bookkeeping and startup recovery
+actions. Both use the same profile-session mutex: exports save and prepare their immutable archive
+under it, then copy to SAF outside it. Import preparation and the pre-restore snapshot still happen
+before the provider's session replacement callback; only durable commit replaces the session.
+BackupManager, AutoBackupManager and recovery remain shared domain services. Their storage gates,
+commit cancellation boundary, archive format and recovery snapshots are unchanged. A shared
+profile import remains additive and does not reload the active profile. Cancellation propagates
+through automatic-backup updates and post-import verdict verification.
+
 The UI layer never constructs repositories by hand; view models receive them through
 Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only for genuine
 Activity operations (`finish()`, starting services, permission requests).
