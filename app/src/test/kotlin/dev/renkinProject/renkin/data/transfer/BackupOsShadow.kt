@@ -21,9 +21,10 @@ class BackupOsShadow {
     companion object {
         private val directories = IdentityHashMap<FileDescriptor, String>()
         var rejectRename: ((String, String) -> Boolean)? = null
+        var beforeDirectorySync: ((String) -> Unit)? = null
 
         @JvmStatic @Resetter
-        fun reset() { directories.clear(); rejectRename = null }
+        fun reset() { directories.clear(); rejectRename = null; beforeDirectorySync = null }
 
         // Windows cannot open directories via FileInputStream. Keep the Android directory
         // descriptor lifecycle testable; payload FileDescriptor.sync still runs normally.
@@ -35,7 +36,8 @@ class BackupOsShadow {
 
         @JvmStatic @Implementation
         fun fsync(descriptor: FileDescriptor) {
-            check(directories.containsKey(descriptor))
+            val path = checkNotNull(directories[descriptor])
+            beforeDirectorySync?.invoke(path)
         }
 
         @JvmStatic @Implementation

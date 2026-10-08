@@ -723,6 +723,22 @@ The domain StateFlow migration in **7B** is complete. The remaining primary road
 **7C** (durable unsaved drafts with ownership checks after process death) and **7D** (incremental
 feature-package moves). Each may need several independently confirmed checkpoints.
 
+The developer chose a Restore/Discard offer for the last unfinished individual editor in 7C.
+The first checkpoint, **7C1**, adds only `data/editor/EditorDraftRecord`, `EditorDraftCodec` and
+`EditorDraftStore`; no production caller captures or restores drafts yet. The bounded version-1
+envelope carries persistent comparison data and artifact checksums, never an old live session
+token. The singleton IO store owns `noBackupFilesDir/editor-draft`, atomically publishes a
+complete last checkpoint, rejects stale saves/discards and can rotate its persistent storage
+generation before replacement. See [editor-draft-recovery.md](editor-draft-recovery.md) for the
+limits, lock direction, commit/error semantics and remaining capture/validation/UI contracts.
+7C1 passed its device regression checkpoint and 25 targeted codec/store checks. All 963 unit
+tests across 151 suites pass without failures or skips, and `assembleDebug` passes. Full tests
+use the existing local test-JVM C2 workaround without changing project/application settings.
+The store tests exercise first-use IO, stale/concurrent writes, corruption, invalid paths,
+orphan cleanup, cancellation during publication and I/O failures before/after rename. Directory
+fsync uses the existing Windows-compatible Os shadow with an optional test failure callback;
+payload file sync runs normally. Room/portable-backup/recovery-prefs versions remain 21/4/3.
+
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
 typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.
