@@ -614,8 +614,9 @@ edit markers and full import/Previous state reset their baselines explicitly. A 
 rejects late publication from an older read in the same session after a Save/build synchronization.
 
 MainActivity shows the same inert `MainStartupScreen` during CHECKING and ordinary catalog/icon
-loading: home title/actions/search shell with the shared wavy loader. Startup and the interactive
-screen use the same stateless title-bar content and shared search field; the startup branch does
+loading: home title/actions/search shell with Material's morphing-shape `LoadingIndicator`.
+Startup and the interactive screen use the same stateless title-bar content and shared search
+field; the startup branch does
 not instantiate toolbar ViewModels. No profile/edit/build actions are active in that shell.
 RECOVERING, FAILED and CHECKING during an explicit recovery Retry show the dedicated recovery UI.
 Retry therefore retains its recovery progress instead of flashing the home skeleton. The storage
@@ -623,6 +624,12 @@ barrier, paused data observations, pending rollback and strict style bootstrap r
 changing startup presentation does not bypass them. Crash-report dialogs wait until the shell
 finishes. Only the optional diff follows foreground switching; durable Save and target icon
 loading still finish before dismissing progress.
+
+The startup animation retains the established morphing shapes, as requested after the 7B7
+device checkpoint. This visual restoration leaves startup/recovery routing and readiness
+ownership unchanged. Its on-device appearance is confirmed; the startup-shell test, all 936
+unit tests across 149 suites and `assembleDebug` pass. The full suite uses the local test-JVM
+C2 workaround described below; project runtime settings are unchanged.
 
 Debug `ProfilePerformance` logs report ViewModel/gate waits, input preparation, encoding, Room
 write, target-profile load, baseline loading, missing-pack summary and startup recovery/bootstrap.
@@ -1179,7 +1186,9 @@ follow-ups; CRC verifies transport integrity only.
   *over* scroll-under content (Mihon-style — the content keeps its size, so flings stay
   smooth while the bar animates; used by the edit dialog), and `Modifier.drawVerticalScrollbar`
   adds the transient scrollbar used on every long list/grid.
-- **Loading**: the shared `WavyLoadingBar` (ControlWidgets.kt), not hand-rolled indicators.
+- **Loading**: the startup shell and full-page application-list loader use Material's
+  morphing-shape `LoadingIndicator`, preserving the established startup animation. Linear
+  progress uses the shared `WavyLoadingBar` (ControlWidgets.kt); no hand-rolled indicators.
 - **Dialogs**: `RenkinAlertDialog` is the app-wide dialog chrome; `ConfirmDialog` (destructive
   confirmations) delegates to it.
 - **Tooltips**: `RenkinTooltipBox` (UIHelper.kt) — a custom position provider clamps the popup

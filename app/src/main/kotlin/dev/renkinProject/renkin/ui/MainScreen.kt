@@ -251,7 +251,7 @@ fun MainStartupScreen() {
                 enabled = false
             )
             Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                WavyLoadingBar(Modifier.fillMaxWidth().padding(horizontal = 48.dp))
+                LoadingIndicator(color = MaterialTheme.colorScheme.primary)
             }
         }
     }
