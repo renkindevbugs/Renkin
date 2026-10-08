@@ -226,14 +226,17 @@ class ApplicationProvider internal constructor(
         val previous = applicationState.value
         val keys = lockManager.lockedIconKeys
         val token = sessionToken
+        val undo = undoTracker.step
         if (previous.applications === stagedApplications && previous.lockedIconKeys == keys &&
-            previous.applicationsLoaded == applicationsLoaded && previous.sessionToken == token) return
+            previous.applicationsLoaded == applicationsLoaded && previous.sessionToken == token &&
+            previous.undoStep === undo) return
         mutableApplicationState.value = ApplicationListState(
             revision = previous.revision + 1,
             applications = stagedApplications,
             lockedIconKeys = keys,
             applicationsLoaded = applicationsLoaded,
-            sessionToken = token
+            sessionToken = token,
+            undoStep = undo
         )
     }
 
@@ -252,11 +255,16 @@ class ApplicationProvider internal constructor(
 
     private suspend fun <T> runProfileOperation(
         expected: ProfileSessionToken,
+        boundedWait: Boolean = false,
         operation: suspend () -> T
-    ): T = profileOperations.run {
-        requireCurrentSession(expected)
-        currentCoroutineContext().ensureActive()
-        operation()
+    ): T {
+        val guarded: suspend () -> T = {
+            requireCurrentSession(expected)
+            currentCoroutineContext().ensureActive()
+            operation()
+        }
+        return if (boundedWait) profileOperations.runWithBoundedWait(guarded)
+        else profileOperations.run(guarded)
     }
 
     private fun requireRecipeAvailable(expected: ProfileSessionToken) {
@@ -487,11 +495,12 @@ class ApplicationProvider internal constructor(
                     return@runProfileOperation null
                 }
                 val unsavedBefore = unsavedIconKeys
-                editApplication(live, live.changeExport(
+                val updated = live.changeExport(
                     generated.rendered, sourcePackName = origin, isRefreshMade = true,
                     isCustom = false, isLegacy = false, baseIcon = generated.base
-                ))
-                if (live.createdIcon != null) {
+                )
+                editApplication(live, updated)
+                if (!sameIconState(live, updated)) {
                     captureUndoRows(listOf(live), persisted = false, unsavedBefore = unsavedBefore)
                     undoTracker.step
                 } else null
@@ -505,7 +514,7 @@ class ApplicationProvider internal constructor(
      */
     suspend fun resetIcon(expected: ProfileSessionToken, application: PackageInfoStruct): IconUndoStep? =
         withContext(Dispatchers.Default) {
-            runProfileOperation(expected) {
+            runProfileOperation(expected, boundedWait = true) {
                 val index = applicationList.indexOfFirst { it.key == application.key }
                 if (index < 0) return@runProfileOperation null
                 val live = applicationList[index]
@@ -517,7 +526,8 @@ class ApplicationProvider internal constructor(
                 val unsavedBefore = unsavedIconKeys
                 lockManager.discard(application.key)
                 editApplication(index, live.changeExport(null).changeCalendar(false, null, null))
-                captureUndoRows(listOf(live), persisted = true, unsavedBefore = unsavedBefore)
+                // Reset only changes the live session. Undo must not save unrelated dirty icons.
+                captureUndoRows(listOf(live), persisted = false, unsavedBefore = unsavedBefore)
                 undoTracker.step
             }
         }
@@ -560,7 +570,7 @@ class ApplicationProvider internal constructor(
                             result.rendered, result.isFallback, origin, isRefreshMade = true,
                             isCustom = false, isLegacy = false, baseIcon = result.base
                         )
-                        if (live.createdIcon != null) {
+                        if (!sameIconState(live, updated)) {
                             replaced[live.key] = live to updated
                             if (live.key in unsavedIconKeys) previouslyUnsaved += live.key
                         }
@@ -1226,6 +1236,7 @@ class ApplicationProvider internal constructor(
 
     /** How many icons the pending undo would put back; 0 when there is nothing to offer. */
     val undoableIconCount: Int get() = undoTracker.size
+    /** Action-time snapshot only; UI reads Undo from [applicationState]. */
     val currentUndoStep: IconUndoStep? get() = undoTracker.step
 
     /** Captures the overwritten rows after their replacement has committed. */
@@ -1241,7 +1252,7 @@ class ApplicationProvider internal constructor(
      * profile is active, or the apps it described are gone.
      */
     suspend fun undoLastIconChange(expected: ProfileSessionToken, step: IconUndoStep): Boolean = withContext(Dispatchers.Default) {
-        runProfileOperation(expected) {
+        runProfileOperation(expected, boundedWait = true) {
             if (!ownsUndo(step)) return@runProfileOperation false
             val pending = undoTracker.step ?: return@runProfileOperation false
             val persisted = pending.persisted

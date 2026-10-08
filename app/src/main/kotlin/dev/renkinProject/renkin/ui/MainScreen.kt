@@ -73,7 +73,6 @@ import androidx.compose.animation.Crossfade
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -105,6 +104,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.supportDynamicColors
@@ -313,9 +313,23 @@ fun MainColumn(iconPacks: List<IconPack>) {
     // whole point is the action. Only the newest offer is on screen, matching the single step
     // the provider keeps.
     val snackbarHostState = remember { SnackbarHostState() }
+    val profileActionProgress by viewModel.profileActionProgress.collectAsStateWithLifecycle()
+    profileActionProgress?.let { progress ->
+        RenkinAlertDialog(
+            onDismissRequest = {},
+            properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
+            title = { Text(stringResource(progress.messageRes)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    progress.applicationName?.let { Text(it) }
+                    WavyLoadingBar(Modifier.fillMaxWidth())
+                }
+            }
+        )
+    }
     val undoLabel = stringResource(R.string.undoAction)
     LaunchedEffect(Unit) {
-        viewModel.undoEvents.combine(snapshotFlow { viewModel.currentUndoStep }) { prompt, step ->
+        viewModel.undoEvents.combine(viewModel.undoStepState) { prompt, step ->
             prompt to step
         }.collectLatest { (prompt, step) ->
             snackbarHostState.currentSnackbarData?.dismiss()

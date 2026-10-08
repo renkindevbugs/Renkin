@@ -15,6 +15,11 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.GlobalApplyCustomKey
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
+import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
+import dev.renkinProject.renkin.data.PrimarySourceKey
+import dev.renkinProject.renkin.data.OverrideIconKey
+import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.dataStore
@@ -25,8 +30,14 @@ import dev.renkinProject.renkin.icon.creator.globalModifierOptions
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
@@ -60,10 +71,18 @@ class EditorApplyIntegrityTest {
             it[GlobalApplyCustomKey] = true
             it[GlobalIconScaleKey] = 50
         }
+        addLauncherActivity("TestActivity")
+        database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java)
+            .allowMainThreadQueries().build()
+        repository = RenkinPackRepository(database)
+        provider = newProvider()
+    }
+
+    private fun addLauncherActivity(name: String) {
         val info = ActivityInfo().apply {
             applicationInfo = context.applicationInfo
             packageName = context.packageName
-            name = "${context.packageName}.TestActivity"
+            this.name = "${context.packageName}.$name"
             icon = R.drawable.renkinpack_ic_launcher_foreground
         }
         shadowOf(context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps)
@@ -73,10 +92,6 @@ class EditorApplyIntegrityTest {
                 ClassParameter.from(ActivityInfo::class.java, info),
                 ClassParameter.from(UserHandle::class.java, Process.myUserHandle())
             ))
-        database = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java)
-            .allowMainThreadQueries().build()
-        repository = RenkinPackRepository(database)
-        provider = newProvider()
     }
 
     @After
@@ -117,6 +132,114 @@ class EditorApplyIntegrityTest {
         sourcePackName = context.packageName,
         sourceDrawableName = "renkinpack_ic_launcher_foreground", isCustomIcon = isCustom
     )
+
+    @Test
+    fun undoOnlyInvalidationPublishesWithoutReplacingApplications() = runBlocking {
+        val app = initializeApp()
+        apply(app, draft())
+        val step = provider.resetIcon(provider.sessionToken, provider.applicationList.single())!!
+        val reset = provider.applicationState.value
+        assertSame(step, reset.undoStep)
+        provider.selectPrimarySource(provider.sessionToken, Source.NONE, null)
+        val cleared = provider.applicationState.value
+        assertSame(reset.applications, cleared.applications)
+        assertEquals(reset.revision + 1, cleared.revision)
+        assertNull(cleared.undoStep)
+        assertSame(step, reset.undoStep)
+        assertFalse(provider.undoLastIconChange(provider.sessionToken, step))
+    }
+
+    @Test
+    fun resetUndoDoesNotPersistEitherRestoredOrUnrelatedDirtyIcons() = runBlocking {
+        addLauncherActivity("OtherActivity")
+        provider.ensureInitialized()
+        val apps = provider.applicationList.toList()
+        val originals = apps.associate { it.key to draft() }
+        apps.forEach { apply(it, originals.getValue(it.key)) }
+        val dirty = provider.unsavedIconKeys
+        val step = provider.resetIcon(provider.sessionToken, provider.applicationList.first())!!
+        assertFalse(step.persisted)
+        assertTrue(provider.undoLastIconChange(provider.sessionToken, step))
+        assertEquals(dirty, provider.unsavedIconKeys)
+        provider.applicationList.forEach { assertSame(originals[it.key], it.createdIcon) }
+        assertTrue(repository.getAll(provider.activeProfileId).isEmpty())
+        val originalProfile = provider.activeProfileId
+        val other = provider.createProfile("Other", "", "Other")
+        provider.switchProfile(other)
+        provider.switchProfile(originalProfile)
+        assertTrue(provider.applicationList.all { it.createdIcon == null })
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun firstSingleGenerationCanReturnToTheEmptySlotWithUndo() = runBlocking {
+        context.dataStore.edit {
+            it[PrimarySourceKey] = Source.APPLICATION_ICON.ordinal
+            it[GlobalApplyGeneratedKey] = false
+        }
+        val app = initializeApp()
+        assertNull(app.createdIcon)
+        val step = provider.refreshIcon(provider.sessionToken, app)!!
+        assertNotNull(provider.applicationList.single().createdIcon)
+        assertSame(step, provider.applicationState.value.undoStep)
+        assertTrue(provider.undoLastIconChange(provider.sessionToken, step))
+        assertNull(provider.applicationList.single().createdIcon)
+        assertTrue(provider.unsavedIconKeys.isEmpty())
+        assertTrue(repository.getAll(provider.activeProfileId).isEmpty())
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun mixedBulkRefreshUndoesBothNewAndReplacedIcons() = runBlocking {
+        addLauncherActivity("OtherActivity")
+        context.dataStore.edit {
+            it[PrimarySourceKey] = Source.APPLICATION_ICON.ordinal
+            it[GlobalApplyGeneratedKey] = false
+            it[OverrideIconKey] = true
+        }
+        provider.ensureInitialized()
+        val existing = provider.applicationList.first()
+        val reviewed = draft()
+        apply(existing, reviewed)
+        val before = provider.applicationList.associateBy { it.key }
+        val dirty = provider.unsavedIconKeys
+        val result = provider.refreshIcons(provider.sessionToken)
+        val step = result.undoStep!!
+        assertEquals(2, step.rows.size)
+        assertTrue(provider.applicationList.all { it.createdIcon != null })
+        assertTrue(provider.undoLastIconChange(provider.sessionToken, step))
+        provider.applicationList.forEach { assertSame(before.getValue(it.key).createdIcon, it.createdIcon) }
+        assertEquals(dirty, provider.unsavedIconKeys)
+    }
+
+    @Test
+    fun contendedResetAndUndoLeaveThePublishedStateUntouchedAndCanBeRetried() = runBlocking {
+        val app = initializeApp()
+        val reviewed = draft()
+        apply(app, reviewed)
+        suspend fun rejectWhileStorageIsHeld(operation: suspend () -> Unit) {
+            val entered = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val holder = launch(Dispatchers.Default) {
+                StorageOperationGate.run { entered.complete(Unit); release.await() }
+            }
+            entered.await()
+            val before = provider.applicationState.value
+            try {
+                try {
+                    withTimeout(3_000) { operation() }
+                    fail("Expected bounded gate contention")
+                } catch (_: ProfileOperationBusyException) { }
+                assertSame(before, provider.applicationState.value)
+            } finally { release.complete(Unit); holder.join() }
+        }
+        rejectWhileStorageIsHeld { provider.resetIcon(provider.sessionToken, app) }
+        val step = provider.resetIcon(provider.sessionToken, app)!!
+        rejectWhileStorageIsHeld { provider.undoLastIconChange(provider.sessionToken, step) }
+        assertSame(step, provider.applicationState.value.undoStep)
+        assertTrue(provider.undoLastIconChange(provider.sessionToken, step))
+        assertSame(reviewed, provider.applicationList.single().createdIcon)
+    }
 
     @Test
     fun editorApplyKeepsReviewedDraftWithCustomGlobalStyleEnabled() = runBlocking {

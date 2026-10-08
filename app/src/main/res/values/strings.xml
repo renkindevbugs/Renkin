@@ -71,8 +71,14 @@
     <string name="crashLogsShortcutLong">Open Renkin crash logs</string>
     <string name="undoAction">Undo</string>
     <string name="undoIconReset">Icon reset to default</string>
-    <string name="undoIconsRefreshed">%1$d icons replaced</string>
+    <string name="undoIconsRefreshed">%1$d icons refreshed</string>
     <string name="undoRestored">Change undone</string>
+    <string name="undoInProgress">Undoing change…</string>
+    <string name="iconGenerationInProgress">Generating icon…</string>
+    <string name="iconResetInProgress">Resetting icon…</string>
+    <string name="profileSaveAndSwitchInProgress">Saving changes and switching profile…</string>
+    <string name="profileSwitchInProgress">Switching profile…</string>
+    <string name="profileActionBusy">Another operation is using your profile data. Try again shortly.</string>
     <string name="undoIconRefreshed">Icon regenerated</string>
     <string name="quickActionRefresh">Refresh this icon</string>
     <string name="quickActionGenerate">Generate icon</string>

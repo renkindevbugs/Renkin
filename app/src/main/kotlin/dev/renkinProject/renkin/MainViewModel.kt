@@ -75,6 +75,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterNotNull
@@ -336,11 +338,44 @@ class MainViewModel @Inject constructor(
     // older prompts would offer to undo something the tracker has already forgotten.
     private val _undoEvents = Channel<UndoPrompt>(Channel.CONFLATED)
     val undoEvents = _undoEvents.receiveAsFlow()
-    val currentUndoStep: IconUndoStep? get() = appProvider.currentUndoStep
+    val undoStepState = applicationState.map { it.undoStep }.distinctUntilChanged()
     val longOperationRunning: Boolean get() = appProvider.longOperationRunning
 
+    private val foregroundProfileActions = ForegroundProfileActions(profileSessionOperations) {
+        _toastEvents.trySend(R.string.profileActionBusy)
+    }
+    val profileActionProgress = foregroundProfileActions.progress
+
+    private fun launchVisibleProfileOperation(
+        @androidx.annotation.StringRes messageRes: Int,
+        expected: ProfileSessionToken = sessionToken,
+        applicationName: String? = null,
+        serialize: Boolean = true,
+        operation: suspend (ProfileSessionToken) -> Unit
+    ) {
+        val progress = ProfileActionProgress(messageRes, applicationName)
+        foregroundProfileActions.launch(progress, serialize) {
+            launchProfileOperation(expected, serialize = false) { owner ->
+                try {
+                    operation(owner)
+                } catch (_: ProfileOperationBusyException) {
+                    _toastEvents.trySend(R.string.profileActionBusy)
+                }
+            }
+        }
+    }
+
+    private fun offerUndo(@androidx.annotation.StringRes messageRes: Int, expected: ProfileSessionToken, step: IconUndoStep) {
+        // Presentation reads the completed aggregate; it must not wait for another gate after
+        // the mutation already finished. The collector and Undo action revalidate stale offers.
+        val state = applicationState.value
+        if (state.sessionToken == expected && state.undoStep?.operationId == step.operationId) {
+            _undoEvents.trySend(UndoPrompt(messageRes, expected, step))
+        }
+    }
+
     fun undoLastIconChange(expected: ProfileSessionToken, step: IconUndoStep) {
-        launchProfileOperation(expected) {
+        launchVisibleProfileOperation(R.string.undoInProgress, expected) {
             if (appProvider.undoLastIconChange(expected, step)) {
                 _toastEvents.trySend(R.string.undoRestored)
             } else {
@@ -465,8 +500,6 @@ class MainViewModel @Inject constructor(
                     if (result.withheldCount > 0) _toastEvents.trySend(R.string.refreshLockedSkipped)
                     if (result.conflictedCount > 0) _toastEvents.trySend(R.string.refreshNewerEditsKept)
                     if (result.missingCount > 0) _toastEvents.trySend(R.string.refreshTargetsGone)
-                    // Only worth offering when the refresh actually overwrote something: with
-                    // "Refresh replaces existing icons" off it only fills empty slots.
                     result.undoStep?.takeIf(appProvider::ownsUndo)?.let { step ->
                         _undoEvents.trySend(UndoPrompt(R.string.undoIconsRefreshed, expected, step))
                     }
@@ -677,15 +710,11 @@ class MainViewModel @Inject constructor(
      * out wrong" without refreshing the whole list.
      */
     fun refreshSingleIcon(app: PackageInfoStruct, expected: ProfileSessionToken) {
-        launchProfileOperation(expected, serialize = false) {
-            // Undo is offered only when an existing icon was actually replaced — the provider
-            // knows that, the caller doesn't (a locked origin is withheld and changes nothing).
-            val step = appProvider.refreshIcon(expected, app) ?: return@launchProfileOperation
-            appProvider.commitSessionState(expected) {
-                if (appProvider.ownsUndo(step)) {
-                    _undoEvents.trySend(UndoPrompt(R.string.undoIconRefreshed, expected, step))
-                }
-            }
+        launchVisibleProfileOperation(
+            R.string.iconGenerationInProgress, expected, app.appName, serialize = false
+        ) {
+            val step = appProvider.refreshIcon(expected, app) ?: return@launchVisibleProfileOperation
+            offerUndo(R.string.undoIconRefreshed, expected, step)
         }
     }
 
@@ -728,14 +757,10 @@ class MainViewModel @Inject constructor(
      * also discards an imported row held behind a missing pack and clears calendar rotation.
      */
     fun resetIcon(app: PackageInfoStruct, expected: ProfileSessionToken) {
-        launchProfileOperation(expected) {
-            val step = appProvider.resetIcon(expected, app) ?: return@launchProfileOperation
-            refreshMissingPacks(prompt = false)
-            appProvider.commitSessionState(expected) {
-                if (appProvider.ownsUndo(step)) {
-                    _undoEvents.trySend(UndoPrompt(R.string.undoIconReset, expected, step))
-                }
-            }
+        launchVisibleProfileOperation(R.string.iconResetInProgress, expected, app.appName) {
+            val step = appProvider.resetIcon(expected, app) ?: return@launchVisibleProfileOperation
+            offerUndo(R.string.undoIconReset, expected, step)
+            launchProfileOperation(expected, serialize = false) { refreshMissingPacks(prompt = false) }
         }
     }
 
@@ -992,9 +1017,9 @@ class MainViewModel @Inject constructor(
     private suspend fun loadChangeBaselines(expected: ProfileSessionToken, clearUpdated: Boolean = true) {
         if (!appProvider.commitSessionState(expected) { invalidateChangeBaselines() }) return
         val profileId = expected.profileId
-        val newBuiltKeys = appProvider.getSavedPackKeys(profileId)
-        val newBuiltIconHashes = appProvider.getBuiltIconHashes(profileId)
         val newSavedIconHashes = appProvider.getSavedIconHashes(profileId)
+        val newBuiltKeys = newSavedIconHashes.keys.toSet()
+        val newBuiltIconHashes = appProvider.getBuiltIconHashes(profileId)
         // A notification or another queued operation may have switched again while Room read.
         appProvider.commitSessionState(expected) {
             builtKeys = newBuiltKeys
@@ -1031,12 +1056,19 @@ class MainViewModel @Inject constructor(
 
     /** Switches the active profile (prefs snapshot + icon set swap), optionally saving first. */
     fun switchProfile(id: Long, saveFirst: Boolean = false) {
-        viewModelScope.launch { performSwitch(id, saveFirst) }
+        if (id == activeProfileId) return
+        launchVisibleProfileOperation(
+            if (saveFirst) R.string.profileSaveAndSwitchInProgress else R.string.profileSwitchInProgress,
+            serialize = false
+        ) { performSwitch(id, saveFirst) }
     }
 
     /** Creates a profile and switches straight to it, optionally saving the current one first. */
     fun createProfile(name: String, description: String, packLabel: String, saveFirst: Boolean = false) {
-        viewModelScope.launch {
+        launchVisibleProfileOperation(
+            if (saveFirst) R.string.profileSaveAndSwitchInProgress else R.string.profileSwitchInProgress,
+            serialize = false
+        ) {
             performSwitch(appProvider.createProfile(name, description, packLabel), saveFirst)
         }
     }

@@ -5,6 +5,7 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -19,6 +20,20 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33])
 class IconUndoTrackerTest {
+
+    @Test
+    fun callerCannotChangeCapturedRowsAndDiscardKeepsTheRetainedStepStable() {
+        val tracker = IconUndoTracker()
+        val rows = current.toMutableList()
+        tracker.capture(rows, 1L, false)
+        val original = tracker.step!!
+        rows.clear()
+        assertEquals(current, original.rows)
+        tracker.discard(signal.key)
+        assertEquals(current, original.rows)
+        assertEquals(listOf(firefox), tracker.step!!.rows)
+        assertNotSame(original, tracker.step)
+    }
 
     private fun app(pkg: String) = PackageInfoStruct(
         appName = pkg,

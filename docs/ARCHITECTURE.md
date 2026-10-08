@@ -28,6 +28,10 @@ It is a fork of **Alembicons** (formerly *Iconeration*). The upstream attributio
 
 ## Layers
 
+Continue the ownership-based refactor: finish coherent domain state, then durable editor drafts
+and incremental feature packages. Further service/module extraction
+requires an independent responsibility or measured need, rather than a line-count target.
+
 ```
 Composables (ui/)                         ← stateless-ish views, read VM state, call VM funcs
         │  hiltViewModel()
@@ -463,6 +467,76 @@ writes, exact document preservation on both selection paths, concurrent applicat
 combined-write failure/retry and cancellation after Room commit. Archive/recovery tests additionally
 assert raw DataStore stays application-only after full/shared/legacy imports and v20 Previous
 state bootstrap, while exported format-4 data and format-3 recovery retain derived profile values.
+
+Phase 7B5 moves `IconUndoTracker` off Compose state. Its StateFlow is private; capture
+copies the supplied row list, and discard/clear replace the stored step. The provider reads
+the operation-time step under its profile gate and includes the same object in
+`ApplicationListState.undoStep`. Publication also checks step identity, so clearing only Undo
+still publishes even when applications, locks and the session are unchanged. No new artwork
+copy or independently writable ViewModel Undo state is introduced.
+An Undo-only change also advances the aggregate revision, so revision-keyed filters, counts and
+the subscribed pack diff recompute even if the application list is unchanged. This is an accepted
+cost for infrequent operations such as clearing Undo after a build. Separate content revisions
+would also require revisiting diff freshness checks; introduce them only if measurement warrants it.
+
+MainViewModel exposes a distinct Undo projection from the completed application aggregate.
+The snackbar combines this with the existing conflated prompt channel, replacing the previous
+`snapshotFlow` bridge. Provider UI never collects the tracker's intermediate step directly:
+an edit may discard a row before the same operation captures its replacement offer. The
+operation id, session validation, partial-row invalidation, persisted restoration and build's
+step identity checks retain their existing meaning. The prompt/event collector retains its
+existing composition lifetime; this checkpoint does not change event delivery on backgrounding.
+
+The 7B5 device feedback also exposed silent waits in quick actions and save-before-switch.
+MainViewModel owns `ForegroundProfileActions`, which manages `profileActionProgress` and the
+optional session-mutex reservation. Progress is claimed synchronously before launching Generate,
+Reset, Undo, manual profile switch or create-and-switch. It covers mutex/gate acquisition and
+the complete action, including saving, profile loading and baseline synchronization. Completion
+clears it on success, failure, cancellation and cancellation before coroutine entry. MainColumn
+collects it with lifecycle awareness and shows a blocking standard progress dialog with the
+action, optional application name and shared `WavyLoadingBar`. Repeated foreground actions
+cannot queue through it and report a busy message. Single-icon Generate deliberately allows
+one foreground request at a time through this UI; its rendering still uses `serialize = false`
+and the provider's render tickets. This does not serialize the rendering service globally.
+This is presentation state; it does not replace provider session ownership or gate checks.
+
+For serialized foreground actions, the ViewModel session mutex is acquired with `tryLock` before
+launch; contention returns busy immediately instead of hiding an unbounded queue behind a modal.
+Reset and Undo additionally use the existing bounded storage/profile gate path (300 ms per gate
+acquisition). The timeout covers acquisition only, not the operation body or a committed write.
+Their progress clears after contention/failure and leaves the pending Undo and icon state intact
+when no operation began. Single-icon Generate and manual profile switching/creation still use
+their normal provider paths; profile switching also waits for its ViewModel session mutex.
+An actual Save/load/baseline refresh can therefore remain modal for its full duration. No Cancel
+button is offered during that work; cancellation semantics around profile persistence are not
+changed by this checkpoint. Device checks must cover contention as well as large-profile Save.
+
+Refresh Undo now captures every committed icon-state change, including filling a previously
+empty slot, for both single and bulk generation. This deliberately supersedes the replacement-only
+Undo decision in `832934d`, following the request to undo the first Refresh too. It is a product
+behavior change, not a necessary consequence of moving state to StateFlow. Undo restores the
+captured empty slot; mixed batches restore both newly generated and overwritten targets.
+Skipped/withheld/unchanged results do not create
+an offer. Bulk capture still checks applied-row identity at completion so later edits are never
+rolled back. The extra empty-source rows retained for Undo contain no old generated artwork.
+Reset changes only live state, so its Undo is marked `persisted = false`: restoring it must not
+serialize/save the entire profile or accidentally persist unrelated unsaved changes. Operations
+that actually reached storage still use the persisted restoration path. Reset emits its Undo
+prompt before a separate missing-pack-summary refresh rather than waiting for that follow-up.
+Single-icon Generate/Reset offers validate against the completed aggregate's session and Undo
+operation id without acquiring another gate just to send a UI event. Later aggregate changes
+invalidate the displayed offer, and executing Undo still validates its session/operation under
+the provider gate.
+Profile baseline loading derives saved keys from the saved-hash map, avoiding an additional
+full-row Room read; the session checks around baseline publication remain unchanged.
+
+The 7B5 device checkpoint is confirmed. Regression tests cover captured-row independence,
+Undo-only publication, session invalidation, first-generation and mixed-batch Undo, preserved
+dirty state without accidental persistence, and bounded Reset/Undo contention with retry.
+Foreground-action tests cover duplicate requests, externally held mutexes, cancellation before
+entry, failed jobs, failed launch and independent renderer execution. Existing profile-gate and
+application-list lifecycle tests run alongside these cases. Room stays 21, portable backups 4
+and recovery preferences 3.
 
 ## Threading & state
 

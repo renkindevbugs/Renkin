@@ -1,9 +1,7 @@
 package dev.renkinProject.renkin.apk
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import kotlinx.coroutines.flow.MutableStateFlow
 
 /**
  * The single "take that back" step the app offers. Holding the previous [PackageInfoStruct] rows
@@ -27,9 +25,9 @@ class IconUndoStep(
 class IconUndoTracker {
     private var nextOperationId = 0L
 
-    // Compose state: the UI hides a stale offer without being told.
-    var step by mutableStateOf<IconUndoStep?>(null)
-        private set
+    private val mutableStep = MutableStateFlow<IconUndoStep?>(null)
+    /** Operation-time snapshot; provider UI observes the completed application aggregate. */
+    val step: IconUndoStep? get() = mutableStep.value
 
     /** Number of rows the current offer would restore; 0 when there is nothing to offer. */
     val size: Int get() = step?.rows?.size ?: 0
@@ -39,8 +37,8 @@ class IconUndoTracker {
         rows: List<PackageInfoStruct>, profileId: Long, persisted: Boolean,
         unsavedBefore: Set<String> = emptySet()
     ) {
-        step = if (rows.isEmpty()) null else IconUndoStep(
-            profileId, rows, persisted, ++nextOperationId,
+        mutableStep.value = if (rows.isEmpty()) null else IconUndoStep(
+            profileId, rows.toList(), persisted, ++nextOperationId,
             rows.map { it.key }.toSet().intersect(unsavedBefore)
         )
     }
@@ -49,13 +47,13 @@ class IconUndoTracker {
         val pending = step ?: return
         if (pending.rows.none { it.key == key }) return
         val remaining = pending.rows.filterNot { it.key == key }
-        step = if (remaining.isEmpty()) null else IconUndoStep(
+        mutableStep.value = if (remaining.isEmpty()) null else IconUndoStep(
             pending.profileId, remaining, pending.persisted, pending.operationId,
             pending.unsavedBefore - key
         )
     }
 
-    fun clear() { step = null }
+    fun clear() { mutableStep.value = null }
 
     /**
      * The rows to put back, paired with where they sit in [current]. Empty when the step no
