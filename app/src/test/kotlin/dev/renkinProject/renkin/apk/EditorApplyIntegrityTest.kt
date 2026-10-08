@@ -351,6 +351,24 @@ class EditorApplyIntegrityTest {
     }
 
     @Test
+    fun savingPublishesDirtyOnlyChangesAndRetainedSnapshotsKeepTheirKeys() = runBlocking {
+        val app = initializeApp()
+        val original = provider.applicationState.value
+        apply(app, draft())
+        val dirty = provider.applicationState.value
+        assertEquals(setOf(app.key), dirty.unsavedIconKeys)
+        assertTrue(original.unsavedIconKeys.isEmpty())
+
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        val saved = provider.applicationState.value
+        assertSame(dirty.applications, saved.applications)
+        assertTrue(saved.unsavedIconKeys.isEmpty())
+        assertEquals(dirty.revision + 1, saved.revision)
+        assertEquals(setOf(app.key), dirty.unsavedIconKeys)
+        assertFalse(saved.longOperationRunning)
+    }
+
+    @Test
     fun publishedApplicationSnapshotsRemainStableAfterApplyResetAndUndo() = runBlocking {
         val app = initializeApp()
         val original = provider.applicationState.value

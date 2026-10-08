@@ -538,6 +538,39 @@ entry, failed jobs, failed launch and independent renderer execution. Existing p
 application-list lifecycle tests run alongside these cases. Room stays 21, portable backups 4
 and recovery preferences 3.
 
+Phase 7B6 moves the provider's dirty-key set and long-operation registry out of Compose state.
+They remain operation-time values guarded by the profile gate; replacements are volatile for
+action-time readers. `ApplicationListState` now includes the replacement-only `unsavedIconKeys` set and
+`longOperationRunning`, evaluated for the snapshot's exact session token. Gate completion
+publishes these together with applications, locks and Undo, including dirty-only or busy-only
+changes. The provider never mutates an assigned set, so publication shares it without another
+copy and retained snapshots cannot acquire later dirty keys. No independent UI flow exposes
+an intermediate registry state. These two fields establish the coherent domain contract for
+future dirty indicators and operation availability in UI; this checkpoint has no UI consumer
+for them yet and deliberately retains the existing action-time guards and feedback.
+
+Long-operation registration and non-cancellable cleanup keep their existing gate boundaries.
+Cleanup removes only its own operation id, so a render finishing after a profile switch cannot
+clear the new session's busy flag. Busy status means a provider render/build reservation for
+the owning session; it is separate from the foreground progress dialog introduced in 7B5.
+Dirty keys still describe edits to the live profile, while MainViewModel's existing saved/built
+baselines also participate in deciding whether to prompt Save/Discard. Those action-time
+checks keep their current provider reads; they do not await a UI flow while holding a gate.
+Build and Global options guards likewise read current operation status when tapped.
+
+Dirty/busy-only publications advance the aggregate revision and can recompute revision-keyed
+filters and the subscribed pack diff, as with Undo-only changes. This checkpoint does not add
+a separate content revision or change refresh batches, render tickets, persistence, Undo or
+Save/Discard semantics. Startup readiness, profile-switch transition state and profile identity
+remain for the next independently confirmed 7B checkpoint; in particular the immediate loader
+during a profile transition still uses its existing signal.
+
+The 7B6 device checkpoint is confirmed. Regression checks cover dirty-only publication on Save,
+retained dirty sets, busy-only publication before rendering, cancellation cleanup and session
+ownership when switching during a render. The targeted suites and all 924 unit tests across
+148 suites pass, with no failures or skips; `assembleDebug` also passes. Room stays 21,
+portable backups 4 and recovery preferences 3.
+
 ## Threading & state
 
 The remaining primary roadmap phases are **7B** (domain StateFlow and lifecycle-aware UI reads),

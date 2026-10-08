@@ -209,10 +209,12 @@ class ApplicationProvider internal constructor(
     private val renderTracker = IconRenderTracker()
     private val savedProfileRevisions = mutableMapOf<Long, Long>()
     private var storageEpoch = 0L
-    private var longOperations by mutableStateOf<Map<Long, ProfileSessionToken>>(emptyMap())
+    @Volatile private var longOperations: Map<Long, ProfileSessionToken> = emptyMap()
     private var nextLongOperation = 0L
+    /** Action-time snapshot only; composables collect [applicationState]. */
     val longOperationRunning: Boolean get() = longOperations.values.any { it == sessionToken }
-    var unsavedIconKeys: Set<String> by mutableStateOf(emptySet())
+    /** Operation-time dirty keys. Replace the set rather than mutate it: published snapshots share it. */
+    @Volatile var unsavedIconKeys: Set<String> = emptySet()
         private set
     private val providerInstanceId = UUID.randomUUID().toString()
     private var sessionRevision by mutableStateOf(0L)
@@ -227,16 +229,21 @@ class ApplicationProvider internal constructor(
         val keys = lockManager.lockedIconKeys
         val token = sessionToken
         val undo = undoTracker.step
+        val dirtyKeys = unsavedIconKeys
+        val running = longOperations.values.any { it == token }
         if (previous.applications === stagedApplications && previous.lockedIconKeys == keys &&
             previous.applicationsLoaded == applicationsLoaded && previous.sessionToken == token &&
-            previous.undoStep === undo) return
+            previous.undoStep === undo && previous.unsavedIconKeys == dirtyKeys &&
+            previous.longOperationRunning == running) return
         mutableApplicationState.value = ApplicationListState(
             revision = previous.revision + 1,
             applications = stagedApplications,
             lockedIconKeys = keys,
             applicationsLoaded = applicationsLoaded,
             sessionToken = token,
-            undoStep = undo
+            undoStep = undo,
+            unsavedIconKeys = dirtyKeys,
+            longOperationRunning = running
         )
     }
 

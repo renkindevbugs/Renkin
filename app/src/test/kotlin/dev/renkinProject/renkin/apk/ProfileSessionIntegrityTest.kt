@@ -201,12 +201,18 @@ class ProfileSessionIntegrityTest {
     @Test
     fun longRenderRejectsRecipeWritesAndAnotherBulkOperationImmediately() = runBlocking {
         provider.ensureInitialized()
+        val idle = provider.applicationState.value
         val started = CompletableDeferred<Unit>()
         val release = CountDownLatch(1)
         val saving = async { pausedGlobalSave(started, release) }
         try {
             withTimeout(5_000) { started.await() }
             assertTrue(provider.longOperationRunning)
+            val busy = provider.applicationState.value
+            assertTrue(busy.longOperationRunning)
+            assertSame(idle.applications, busy.applications)
+            assertEquals(idle.revision + 1, busy.revision)
+            assertFalse(idle.longOperationRunning)
             var wrote = false
             try {
                 withTimeout(1_000) {
@@ -224,6 +230,7 @@ class ProfileSessionIntegrityTest {
         }
         saving.await()
         assertFalse(provider.longOperationRunning)
+        assertFalse(provider.applicationState.value.longOperationRunning)
         provider.updateProfilePreferences(provider.sessionToken) { }
     }
 
@@ -242,6 +249,7 @@ class ProfileSessionIntegrityTest {
         }
         saving.join()
         assertFalse(provider.longOperationRunning)
+        assertFalse(provider.applicationState.value.longOperationRunning)
         assertEquals(before, context.dataStore.data.first())
         var wrote = false
         provider.updateProfilePreferences(provider.sessionToken) { wrote = true }
@@ -262,6 +270,8 @@ class ProfileSessionIntegrityTest {
             withTimeout(5_000) { started.await() }
             provider.switchProfile(other)
             assertFalse(provider.longOperationRunning)
+            assertEquals(provider.sessionToken, provider.applicationState.value.sessionToken)
+            assertFalse(provider.applicationState.value.longOperationRunning)
             assertNotEquals(original, provider.sessionToken)
             var wrote = false
             provider.updateProfilePreferences(provider.sessionToken) { wrote = true }
@@ -271,6 +281,7 @@ class ProfileSessionIntegrityTest {
         }
         saving.join()
         assertEquals(other, provider.activeProfileId)
+        assertFalse(provider.applicationState.value.longOperationRunning)
     }
 
 }

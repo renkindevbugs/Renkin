@@ -339,6 +339,7 @@ class MainViewModel @Inject constructor(
     private val _undoEvents = Channel<UndoPrompt>(Channel.CONFLATED)
     val undoEvents = _undoEvents.receiveAsFlow()
     val undoStepState = applicationState.map { it.undoStep }.distinctUntilChanged()
+    /** Action-time snapshot only; UI observes long-operation status through [applicationState]. */
     val longOperationRunning: Boolean get() = appProvider.longOperationRunning
 
     private val foregroundProfileActions = ForegroundProfileActions(profileSessionOperations) {
