@@ -2,7 +2,6 @@ package dev.renkinProject.renkin.apk
 
 import android.content.Context
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.datastore.preferences.core.Preferences
@@ -57,11 +56,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.collections.immutable.persistentListOf
+import kotlinx.collections.immutable.toPersistentList
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
+import kotlin.coroutines.AbstractCoroutineContextElement
+import kotlin.coroutines.CoroutineContext
 
 internal fun shouldApplyGlobalLayer(
     isCustom: Boolean,
@@ -91,18 +96,41 @@ internal fun shouldProcessGlobalLayer(
     )
 }
 
-/** Builds the all-or-nothing list used by Global Save without mutating the live Compose list. */
+/** Builds the all-or-nothing list used by Global Save without mutating the provider's staged list. */
 internal fun mergeGlobalRenders(
     original: List<PackageInfoStruct>,
     renderedByKey: Map<String, PackageInfoStruct>
 ): List<PackageInfoStruct> = original.map { renderedByKey[it.key] ?: it }
 
 /** Serializes active-profile mutations and coordinated snapshots. */
-internal class ProfileOperationGate {
+internal class ProfileOperationGate(private val onOperationFinished: () -> Unit = {}) {
     private val mutex = Mutex()
 
+    private class Owner(val gate: ProfileOperationGate) : AbstractCoroutineContextElement(Key) {
+        @Volatile var active = true
+        companion object Key : CoroutineContext.Key<Owner>
+    }
+
+    suspend fun checkHeld() {
+        val owner = currentCoroutineContext()[Owner]
+        check(owner != null && owner.gate === this && owner.active) {
+            "Application mutations require the owning profile gate"
+        }
+    }
+
+    private suspend fun <T> runAcquired(operation: suspend () -> T): T {
+        val owner = Owner(this)
+        try {
+            return withContext(owner) { operation() }
+        } finally {
+            owner.active = false
+        }
+    }
+
     suspend fun <T> run(operation: suspend () -> T): T = StorageOperationGate.run {
-        mutex.withLock { operation() }
+        mutex.withLock {
+            try { runAcquired(operation) } finally { onOperationFinished() }
+        }
     }
 
     suspend fun <T> runWithBoundedWait(operation: suspend () -> T): T {
@@ -124,9 +152,11 @@ internal class ProfileOperationGate {
             } == true
             if (!available) throw ProfileOperationBusyException()
             currentCoroutineContext().ensureActive()
-            return operation()
+            return runAcquired(operation)
         } finally {
-            if (acquired) mutex.unlock()
+            if (acquired) {
+                try { onOperationFinished() } finally { mutex.unlock() }
+            }
         }
     }
 }
@@ -149,32 +179,33 @@ class ApplicationProvider internal constructor(
     private val appManager: ApplicationManager,
     private val installedAppCatalog: InstalledAppCatalog
 ) {
-    // A SnapshotStateList (not mutableStateOf(List)) so editing one app's icon is an O(1)
-    // in-place set instead of copying the whole list — refreshIcons edits every app, so the
-    // old copy-per-edit made it O(n²). Exposed read-only as List; the UI still observes it.
-    private val _applicationList = mutableStateListOf<PackageInfoStruct>()
-    val applicationList: List<PackageInfoStruct> get() = _applicationList
+    // Persistent updates share storage; published lists cannot change underneath a collector.
+    @Volatile private var stagedApplications = persistentListOf<PackageInfoStruct>()
+    private val mutableApplicationState = MutableStateFlow(ApplicationListState())
+    val applicationState = mutableApplicationState.asStateFlow()
+    /** Operation-time view; composables collect [applicationState]. Mutations hold the profile gate. */
+    val applicationList: List<PackageInfoStruct> get() = stagedApplications
     // UI observes the repository flow; synchronous getters serve operation snapshots.
     val iconPackState get() = iconPackRepo.state
     /** Action-time snapshot only; composables collect [iconPackState]. */
     val iconPacks: List<IconPack> get() = iconPackRepo.iconPacks
     /** Action-time snapshot only; composables collect [iconPackState]. */
     val iconPackLoaded: Boolean get() = iconPackRepo.iconPackLoaded
-    var applicationsLoaded: Boolean by mutableStateOf(false)
+    /** Operation-time readiness only; UI reads the published [applicationState]. */
+    @Volatile var applicationsLoaded: Boolean = false
         private set
     /** True once apps, packs and the saved icons have all loaded (profile switches are safe). */
     var startupComplete: Boolean by mutableStateOf(false)
         private set
 
-    val lockedIconKeysState get() = lockManager.lockedIconKeysState
-    /** Action-time snapshot only; composables collect [lockedIconKeysState]. */
+    /** Action-time snapshot only; composables collect [applicationState]. */
     val lockedIconKeys: Set<String> get() = lockManager.lockedIconKeys
 
     /** The profile whose icons/preferences are active. Set before the saved pack loads. */
     val activeProfileId: Long get() = profileManager.activeProfileId
 
     private val initialLoadMutex = Mutex()
-    private val profileOperations = ProfileOperationGate()
+    private val profileOperations = ProfileOperationGate(::publishApplicationState)
     private val renderTracker = IconRenderTracker()
     private val savedProfileRevisions = mutableMapOf<Long, Long>()
     private var storageEpoch = 0L
@@ -188,6 +219,23 @@ class ApplicationProvider internal constructor(
 
     val sessionToken: ProfileSessionToken
         get() = ProfileSessionToken(activeProfileId, sessionRevision, providerInstanceId)
+
+    private fun publishApplicationState() {
+        // Also finish a partial held-row batch if an operation failed or was cancelled.
+        lockManager.publish()
+        val previous = applicationState.value
+        val keys = lockManager.lockedIconKeys
+        val token = sessionToken
+        if (previous.applications === stagedApplications && previous.lockedIconKeys == keys &&
+            previous.applicationsLoaded == applicationsLoaded && previous.sessionToken == token) return
+        mutableApplicationState.value = ApplicationListState(
+            revision = previous.revision + 1,
+            applications = stagedApplications,
+            lockedIconKeys = keys,
+            applicationsLoaded = applicationsLoaded,
+            sessionToken = token
+        )
+    }
 
     fun isCurrentSession(expected: ProfileSessionToken): Boolean =
         startupComplete && !isProfileSwitching && expected == sessionToken
@@ -325,7 +373,8 @@ class ApplicationProvider internal constructor(
         applicationsLoaded = true
     }
 
-    private fun replaceApplications(apps: List<PackageInfoStruct>) {
+    private suspend fun replaceApplications(apps: List<PackageInfoStruct>) {
+        profileOperations.checkHeld()
         val previous = applicationList.associateBy { it.key }
         val next = apps.associateBy { it.key }
         val changedKeys = (previous.keys + next.keys).filter { previous[it] !== next[it] }
@@ -339,8 +388,7 @@ class ApplicationProvider internal constructor(
             before != null && after != null && !sameIconState(before, after)
         }
         unsavedIconKeys = unsavedIconKeys + editedKeys
-        _applicationList.clear()
-        _applicationList.addAll(apps)
+        stagedApplications = apps.toPersistentList()
     }
 
     private suspend fun initializeIconPacks() {
@@ -1137,7 +1185,8 @@ class ApplicationProvider internal constructor(
         lockManager.publish()
     }
 
-    private fun editApplication(oldApp: PackageInfoStruct, newApp: PackageInfoStruct, trackUnsaved: Boolean = true) {
+    private suspend fun editApplication(oldApp: PackageInfoStruct, newApp: PackageInfoStruct, trackUnsaved: Boolean = true) {
+        profileOperations.checkHeld()
         val index = applicationList.indexOf(oldApp)
         if (index >= 0)
             editApplication(index, newApp, trackUnsaved)
@@ -1152,13 +1201,14 @@ class ApplicationProvider internal constructor(
             first.calendarPackName == second.calendarPackName && first.isCustom == second.isCustom &&
             first.isLegacy == second.isLegacy && first.isFallback == second.isFallback
 
-    private fun editApplication(index: Int, newApp: PackageInfoStruct, trackUnsaved: Boolean = true) {
+    private suspend fun editApplication(index: Int, newApp: PackageInfoStruct, trackUnsaved: Boolean = true) {
+        profileOperations.checkHeld()
         renderTracker.changed(newApp.key)
-        if (!sameIconState(_applicationList[index], newApp)) {
+        if (!sameIconState(stagedApplications[index], newApp)) {
             undoTracker.discard(newApp.key)
             if (trackUnsaved) unsavedIconKeys = unsavedIconKeys + newApp.key
         }
-        _applicationList[index] = newApp
+        stagedApplications = stagedApplications.set(index, newApp)
     }
 
     suspend fun getIconPackIcons(iconPackName: String, options: GenerationOptions, drawables: List<ResourceDrawable>): Map<ResourceDrawable, IconPackDrawable?> =
@@ -1214,7 +1264,7 @@ class ApplicationProvider internal constructor(
      * and nothing has locked in yet simply goes away. Nothing is persisted — these icons were
      * never saved.
      */
-    private fun clearRefreshedIcons() {
+    private suspend fun clearRefreshedIcons() {
         applicationList.forEach { renderTracker.changed(it.key) }
         clearUndo()
         for (app in applicationList.toList()) {
@@ -1259,7 +1309,7 @@ class ApplicationProvider internal constructor(
     }
 
     /** Blanks every in-memory icon and calendar opt-in (profile switch, restore, clear). */
-    private fun resetInMemoryIcons() {
+    private suspend fun resetInMemoryIcons() {
         for (app in applicationList.toList()) {
             editApplication(app, app.changeExport(null).changeCalendar(false, null, null), trackUnsaved = false)
         }

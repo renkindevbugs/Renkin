@@ -74,6 +74,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     val context = getCurrentContext()
     val viewModel: MainViewModel = hiltViewModel()
     val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()
+    val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
     val watchViewModel: WatchViewModel = hiltViewModel()
     val prefs = getPreferences()
     val view = LocalView.current
@@ -104,7 +105,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         if (s == null) onDismiss() // already handled/deleted → nothing to show
     }
 
-    val apps = viewModel.applicationList
+    val apps = applicationState.applications
     val app = suggestion?.let { s -> apps.find { it.packageName == s.packageName && it.activityName == s.activityName } }
 
     // (Re)generate the new icon for the selected pack
@@ -137,7 +138,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     if (!loaded || suggestion == null) return
     // When opened cold from a notification the app list / packs may still be
     // loading; wait so the modal shows real icons instead of empty placeholders.
-    if (!viewModel.applicationsLoaded || !iconPackState.loaded) return
+    if (!applicationState.applicationsLoaded || !iconPackState.loaded) return
 
     RenkinAlertDialog(
         onDismissRequest = { if (!applying) onDismiss() },

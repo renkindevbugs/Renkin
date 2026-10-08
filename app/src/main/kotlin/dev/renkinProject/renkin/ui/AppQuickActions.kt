@@ -42,6 +42,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.WatchViewModel
+import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dev.renkinProject.renkin.packages.PackageInfoStruct
@@ -54,13 +55,15 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 @Composable
 internal fun AppQuickActionsSheet(
     app: PackageInfoStruct,
+    sourceSession: ProfileSessionToken,
     onDismiss: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
-    val expected = remember(app.key) { viewModel.sessionToken }
+    val expected = remember(app.key) { sourceSession }
     LaunchedEffect(viewModel.sessionToken) {
         if (viewModel.sessionToken != expected) onDismiss()
     }
+    if (viewModel.sessionToken != expected) return
     val watchViewModel: WatchViewModel = hiltViewModel()
     val toaster = LocalToaster.current
     val watchingMessage = stringResource(R.string.quickActionWatchAdded, app.appName)

@@ -111,7 +111,8 @@ fun WatchScreen(
     val toaster = LocalToaster.current
 
     val rules by watchViewModel.rules.collectAsStateWithLifecycle()
-    val apps = viewModel.applicationList
+    val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
+    val apps = applicationState.applications
     // Renkin's own generated packs can't be watched (the checker ignores them), so don't
     // offer them in the rule editor's pack picker either.
     val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()

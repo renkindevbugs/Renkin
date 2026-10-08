@@ -56,7 +56,6 @@ import androidx.compose.material3.ToggleButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
@@ -88,6 +87,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.apk.ApplicationListState
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.ExportThemedKey
@@ -187,6 +187,7 @@ internal fun calculateHeroPackStats(
 @Composable
 fun HeroPackCard(
     iconPacks: List<IconPack>,
+    applicationState: ApplicationListState,
     // The home list's active filters, so the card's toggles can drive them. A null callback
     // hides them — previews reuse this card without a list to filter.
     activeFilters: Set<AppProblemFilter> = emptySet(),
@@ -195,7 +196,9 @@ fun HeroPackCard(
     val viewModel: MainViewModel = hiltViewModel()
     val prefs = getPreferences()
     val preferences = prefs.getPreferencesValue()
-    val lockedIconKeys by viewModel.lockedIconKeysState.collectAsStateWithLifecycle()
+    val builtKeys = viewModel.builtKeys
+    val pendingChanges by viewModel.pendingPackChanges.collectAsStateWithLifecycle()
+    val changes = pendingChanges.changesFor(applicationState)
 
     val source = preferences.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT)
     val packName = preferences.getStringValue(PrimaryIconPackKey)
@@ -203,12 +206,10 @@ fun HeroPackCard(
 
     // Completion progress (moved here from the options card): blue = already built, green =
     // added since (pending build), red = removed since.
-    val stats by remember(viewModel, lockedIconKeys) {
-        derivedStateOf {
-            calculateHeroPackStats(
-                viewModel.applicationList, viewModel.builtKeys, lockedIconKeys
-            )
-        }
+    val stats = remember(applicationState.revision, builtKeys) {
+        calculateHeroPackStats(
+            applicationState.applications, builtKeys, applicationState.lockedIconKeys
+        )
     }
     val builtCount = stats.builtCount
     val addedCount = stats.addedCount
@@ -359,7 +360,6 @@ fun HeroPackCard(
                 }
                 // Pending changes, now answerable: the badge says how many and opens the list of
                 // exactly which apps a build would add, change or drop.
-                val changes = viewModel.pendingPackChanges
                 if (shouldShowPendingChanges(
                         profileSummaryReady = viewModel.profileSummaryReady,
                         progressAnimationSettled = progressAnimationSettled,
@@ -406,6 +406,7 @@ fun HeroPackCard(
         PackChangesSheet(
             iconPacks = iconPacks,
             themed = preferences.getBooleanValue(ExportThemedKey),
+            sourceSession = expected,
             onBuild = { viewModel.build(expected) },
             onDismiss = { changesSession = null }
         )
@@ -482,7 +483,8 @@ private fun PackPickerSheet(
     // this device's apps. Re-read only if the installed pack list changes while the sheet is up;
     // no appfilter parsing or drawable decoding happens here.
     val matched = remember(iconPacks) { viewModel.packMatchedAppCounts() }
-    val installedAppCount = viewModel.applicationList.size
+    val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
+    val installedAppCount = applicationState.applications.size
 
     var query by rememberSaveable { mutableStateOf("") }
     val trimmedQuery = query.trim()

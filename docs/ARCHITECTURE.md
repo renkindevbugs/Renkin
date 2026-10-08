@@ -174,6 +174,67 @@ snapshot; two independent StateFlows alone would still allow mixed revisions. De
 watch reset/filter transitions for flicker and verify that rows, lock counts and filters settle
 consistently. Held-row policy and persistence continue reading under the existing gates.
 
+Phase 7B4 replaces the live Compose application list with `ApplicationListState`. The provider
+publishes applications, lock keys, app-list readiness and the owning session token together at
+the end of each acquired profile operation, while the profile and storage gates are still held.
+The completion callback also runs after cancellation/failure so already applied edits and partial
+held-row batches remain visible. A failed gate acquisition does not publish. This supersedes the
+temporary separate-list/lock delivery described for 7B3; independently combining their flows in
+UI would not provide the same guarantee.
+`replaceApplications` and both `editApplication` overloads verify an active coroutine-context
+owner for this exact profile gate. Dispatcher changes preserve that owner; a marker retained
+after an operation returns is invalid. Checking only `Mutex.isLocked` would not distinguish a
+mutation from another operation's caller. Completion publication still runs under the mutex;
+it also runs if bounded acquisition took the lock but cancellation prevented operation entry.
+
+The private staged list is a persistent list: replacing one application shares unchanged storage
+with retained snapshots instead of copying the entire list for each icon. Refresh keeps its
+existing commits of at most 20 icons, with one aggregate publication per commit. The dependency
+`kotlinx.collections.immutable` is pinned to 0.4.0, whose
+[release uses Kotlin 2.1.20](https://github.com/Kotlin/kotlinx.collections.immutable/releases/tag/v0.4.0),
+matching this project's compiler. Gradle sync is required after taking this checkpoint.
+Synchronous provider/ViewModel list getters are operation-time views of the staged list; UI
+collects the published flow with lifecycle awareness. A monotonically increasing revision is
+compared first to keep StateFlow equality from scanning every application on each publication.
+Unchanged list identity, lock values, readiness and session skip publication.
+
+MainColumn collects once and passes the same snapshot through the application list to its hero
+card and row lock flags. Global options categories, watch screens and the wallpaper build preview
+also collect the aggregate. Filters and counts invalidate on its revision. Pack changes have one
+shared ViewModel computation over application snapshots and the existing baseline inputs; it
+rejects baselines from another session. Upstream collection and diff computation run on
+`Dispatchers.Default` before `stateIn`; sharing uses `WhileSubscribed(5_000)` so computation stops
+five seconds after the last UI subscriber leaves and resumes from current inputs on return.
+Its result also carries the application revision and token,
+so a delayed diff cannot display against a newer list. Editor and quick-action ownership comes
+from the displayed snapshot rather than recapturing the provider's potentially newer session.
+Existing exact Apply, render tickets, undo, refresh exclusion, storage epoch and build ownership
+checks remain in place. Operations never wait on these UI flows while holding a gate.
+App-list readiness is a volatile operation-time Boolean rather than a second Compose state;
+UI reads it only from the aggregate snapshot.
+
+The application list intentionally displays its loading indicator while switching/reloading a
+profile or committing a full import, and until the collected token matches the live session.
+Previously the old list stayed visible. The list's scroll state lives above this branch and the
+backup restore progress dialog remains in MainColumn, so it stays visible during import.
+Device checks must assess brief loader flashes during rapid profile switches, scroll retention,
+progress visibility during import and correct rows/counts once the transition completes.
+
+Profile/startup scalar flags and ViewModel baseline bookkeeping remain Compose state for a later
+7B checkpoint. This is not a migration of every provider field. Room remains 21, portable backups
+4 and recovery preferences 3. The 7B4 manual checkpoint covers cold loading, sorting/filtering,
+Apply/reset/undo, refresh/cancellation, Save/Discard profile switches, Global options and lifecycle
+recreation, watch and build preview, plus locked-row reset/unlock when such a fixture is available.
+After device confirmation, regression tests cover aggregate publication boundaries, partial
+failure, retained immutable snapshots and stale-session rejection in `EditorApplyIntegrityTest`.
+`ProfileOperationGateTest` covers completion on success/failure/cancellation and rejects missing,
+foreign and expired coroutine owners, including dispatcher changes. `PackChangesFlowTest` uses
+the production `observePackChanges` flow to check background collection, the five-second
+subscription shutdown/restart and rejection of foreign baselines/delayed diffs.
+`ApplicationListLifecycleComposeTest` exercises the production filter, counts and categories
+against one aggregate snapshot, including retained UI values while stopped and latest values on
+resume. Existing session, exact Apply and filtering suites remain part of checkpoint validation.
+
 The UI layer never constructs repositories by hand; view models receive them through
 Hilt. `getCurrentMainActivity()` is still used in a couple of places, but only for genuine
 Activity operations (`finish()`, starting services, permission requests).
@@ -422,9 +483,10 @@ checkpoint, keep the current paired writes and the documented format-4 compatibi
   (`withContext`). View models call them from `viewModelScope` (Main) safely.
 - `lifecycleScope.launch` is the Main dispatcher — never touch Room / PackageManager from it
   directly; go through a suspend function with `withContext(Default)` inside.
-- Installed-pack readiness and published lock keys use read-only StateFlow with lifecycle-aware
-  UI collection. The live application list and remaining provider flags still use Compose state
-  until their own 7B checkpoints; preserve their current update and session semantics.
+- Installed-pack readiness uses read-only StateFlow. Applications, lock keys, application
+  readiness and session ownership publish in one `ApplicationListState`; UI collection is
+  lifecycle-aware. Remaining provider/profile flags and baseline bookkeeping still use Compose
+  state until their own 7B checkpoint; preserve their current update and session semantics.
 - Active-profile mutations run through the provider's profile-operation gate. Callers capture a
   `ProfileSessionToken` before launching work; the provider checks it after acquiring the gate.
   Tokens include the profile, session revision and provider instance, so leaving and returning to

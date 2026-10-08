@@ -43,11 +43,13 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.PackChange
 import dev.renkinProject.renkin.apk.PackChangeKind
 import dev.renkinProject.renkin.apk.PackChangeReason
+import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.ui.theme.IconShape
 import dev.renkinProject.renkin.ui.theme.InnerShape
@@ -62,11 +64,16 @@ import dev.renkinProject.renkin.ui.theme.RemovedRed
 internal fun PackChangesSheet(
     iconPacks: List<IconPack>,
     themed: Boolean,
+    sourceSession: ProfileSessionToken,
     onBuild: () -> Unit,
     onDismiss: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
-    val changes = viewModel.pendingPackChanges
+    val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
+    val pendingChanges by viewModel.pendingPackChanges.collectAsStateWithLifecycle()
+    val changes = if (applicationState.sessionToken == sourceSession && viewModel.sessionToken == sourceSession) {
+        pendingChanges.changesFor(applicationState)
+    } else emptyList()
     var filter by rememberSaveable { mutableStateOf<PackChangeKind?>(null) }
     val shown = remember(changes, filter) { changes.filter { filter == null || it.kind == filter } }
     val listState = rememberLazyListState()
@@ -165,7 +172,7 @@ internal fun PackChangesSheet(
     }
 
     editing?.let { change ->
-        OpenAppOptions(iconPacks, change.application, themed) { editing = null }
+        OpenAppOptions(iconPacks, change.application, themed, sourceSession = sourceSession) { editing = null }
     }
 }
 

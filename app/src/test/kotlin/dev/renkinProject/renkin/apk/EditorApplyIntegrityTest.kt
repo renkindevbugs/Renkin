@@ -226,4 +226,88 @@ class EditorApplyIntegrityTest {
         assertNull(provider.applicationList.single().baseIcon)
         assertNull(provider.applicationList.single().sourcePackName)
     }
+
+    @Test
+    fun publishedApplicationSnapshotsRemainStableAfterApplyResetAndUndo() = runBlocking {
+        val app = initializeApp()
+        val original = provider.applicationState.value
+        assertTrue(original.applicationsLoaded)
+        assertEquals(provider.sessionToken, original.sessionToken)
+        val reviewed = draft()
+        apply(app, reviewed)
+        val applied = provider.applicationState.value
+        assertEquals(original.revision + 1, applied.revision)
+        assertNull(original.applications.single().createdIcon)
+        assertSame(reviewed, applied.applications.single().createdIcon)
+        val step = provider.resetIcon(provider.sessionToken, applied.applications.single())!!
+        val reset = provider.applicationState.value
+        assertEquals(applied.revision + 1, reset.revision)
+        assertNull(reset.applications.single().createdIcon)
+        assertSame(reviewed, applied.applications.single().createdIcon)
+        assertTrue(provider.undoLastIconChange(provider.sessionToken, step))
+        assertSame(reviewed, provider.applicationState.value.applications.single().createdIcon)
+        assertNull(reset.applications.single().createdIcon)
+    }
+
+    @Test
+    fun heldRowReleasePublishesItsIconAndLockKeysTogetherAndResetClearsBoth() = runBlocking {
+        val app = initializeApp()
+        locks.lock(app.key, reference())
+        provider.commitSessionState(provider.sessionToken) { }
+        val locked = provider.applicationState.value
+        assertEquals(setOf(app.key), locked.lockedIconKeys)
+        assertNull(locked.applications.single().createdIcon)
+        provider.refreshIconLocks(provider.sessionToken)
+        val released = provider.applicationState.value
+        assertTrue(released.lockedIconKeys.isEmpty())
+        assertTrue(released.applications.single().createdIcon != null)
+        assertEquals(setOf(app.key), locked.lockedIconKeys)
+        locks.lock(app.key, reference())
+        provider.commitSessionState(provider.sessionToken) { }
+        val beforeReset = provider.applicationState.value
+        provider.resetIcon(provider.sessionToken, beforeReset.applications.single())
+        val reset = provider.applicationState.value
+        assertTrue(reset.lockedIconKeys.isEmpty())
+        assertNull(reset.applications.single().createdIcon)
+        assertEquals(beforeReset.revision + 1, reset.revision)
+    }
+
+    @Test
+    fun unchangedOperationsDoNotPublishAndFailedPartialLockChangesDo() = runBlocking {
+        val app = initializeApp()
+        val original = provider.applicationState.value
+        provider.commitSessionState(provider.sessionToken) { }
+        assertSame(original, provider.applicationState.value)
+        try {
+            provider.commitSessionState(provider.sessionToken) {
+                locks.lock(app.key, reference())
+                throw IllegalArgumentException("partial operation")
+            }
+            fail("Expected failure")
+        } catch (_: IllegalArgumentException) { }
+        val partial = provider.applicationState.value
+        assertEquals(original.revision + 1, partial.revision)
+        assertEquals(setOf(app.key), partial.lockedIconKeys)
+        assertTrue(original.lockedIconKeys.isEmpty())
+    }
+
+    @Test
+    fun newSessionPublishesItsOwnerAndRejectsEditsFromTheRetainedSnapshot() = runBlocking {
+        val app = initializeApp()
+        apply(app, draft())
+        val previous = provider.applicationState.value
+        val other = provider.createProfile("Other", "", "Other icons")
+        provider.switchProfile(other)
+        val current = provider.applicationState.value
+        assertEquals(other, current.sessionToken!!.profileId)
+        assertEquals(provider.sessionToken, current.sessionToken)
+        assertNull(current.applications.single().createdIcon)
+        assertTrue(previous.applications.single().createdIcon != null)
+        assertEquals(IconApplyOutcome.PROFILE_CHANGED,
+            provider.applyPickedIcon(previous.sessionToken!!, previous.applications.single(), draft(), null) { _, _, _ ->
+                fail("A retained snapshot must not authorize an edit")
+                app
+            })
+        assertSame(current, provider.applicationState.value)
+    }
 }

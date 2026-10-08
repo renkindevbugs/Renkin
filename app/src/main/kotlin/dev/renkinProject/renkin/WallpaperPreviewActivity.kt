@@ -9,6 +9,8 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import dagger.hilt.android.AndroidEntryPoint
@@ -86,6 +88,7 @@ class WallpaperPreviewActivity : ComponentActivity() {
         }
 
         setContent {
+            val applicationState by appProvider.applicationState.collectAsStateWithLifecycle()
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
             val style = SystemBarStyle.auto(Color.Transparent.toArgb(), Color.Transparent.toArgb()) { darkMode }
             enableEdgeToEdge(style, style)
@@ -105,7 +108,7 @@ class WallpaperPreviewActivity : ComponentActivity() {
                         }
                     }
                     BuildPackPreviewContent(
-                        applications = appProvider.applicationList,
+                        applications = applicationState.applications,
                         builtKeys = builtKeys,
                         updatedKeys = updatedKeys,
                         loadCalendarWarnings = { preferences -> appProvider.calendarWarnings(preferences) },

@@ -124,6 +124,7 @@ import dev.renkinProject.renkin.apk.installerSelection
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.GlobalOptionsActivity
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.apk.ApplicationListState
 import dev.renkinProject.renkin.profileSession
 import dev.renkinProject.renkin.withProfileSession
 import dev.renkinProject.renkin.apk.ProfileSessionToken
@@ -249,7 +250,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
 
     val prefs = getPreferences()
     val viewModel: MainViewModel = hiltViewModel()
-    val lockedIconKeys by viewModel.lockedIconKeysState.collectAsStateWithLifecycle()
+    val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
+    val lockedIconKeys = applicationState.lockedIconKeys
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
     val storedFilterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
     // Mirror the persisted filter locally so switching the hero buttons updates the list in
@@ -522,7 +524,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
                     }
                 }
                 ApplicationList(
-                    iconPacks, packageFilter, sortOrder, filterNoIcon, filterFallback, filterLocked, listState,
+                    iconPacks, applicationState, packageFilter, sortOrder, filterNoIcon, filterFallback, filterLocked, listState,
                     onShowAllApps = clearProblemFilters,
                     activeProblemFilters = activeProblemFilters,
                     onProblemFilterToggle = toggleProblemFilter
@@ -628,6 +630,7 @@ fun NewIconPackDialog(packLabel: String, onReload: () -> Unit, onDismiss: () -> 
 @Composable
 fun ApplicationList(
     iconPacks: List<IconPack>,
+    applicationState: ApplicationListState,
     filter: String,
     sortOrder: AppSortOrder,
     filterNoIcon: Boolean,
@@ -643,8 +646,8 @@ fun ApplicationList(
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val optionsViewModel: OptionsViewModel = hiltViewModel()
-    val applications = viewModel.applicationList
-    val lockedIconKeys by viewModel.lockedIconKeysState.collectAsStateWithLifecycle()
+    val applications = applicationState.applications
+    val lockedIconKeys = applicationState.lockedIconKeys
 
     // Read preferences once for the whole list — a DataStore subscription per row
     // causes visible scroll jank
@@ -657,31 +660,22 @@ fun ApplicationList(
     // a reinstall or list refresh that swapped apps without changing the count. Looked up off
     // the main thread via the view model — until they arrive, INSTALL_DATE sort just shows the
     // default order.
-    val packageNames by remember(applications) {
-        derivedStateOf {
-            applications.mapTo(linkedSetOf()) { it.packageName }.toList()
-        }
+    val packageNames = remember(applicationState.revision) {
+        applications.mapTo(linkedSetOf()) { it.packageName }.toList()
     }
     val installTimes by produceState(emptyMap<String, Long>(), packageNames) {
         value = viewModel.installTimes(packageNames)
     }
 
-    // Keep the original index — ApplicationItem edits the app list by position (via the VM).
-    // derivedStateOf so it recomputes when the list's contents change (applicationList is a
-    // SnapshotStateList edited in place, so its instance identity never changes) while still
-    // caching across unrelated recompositions. Recreated when the sort/filter inputs change.
-    val displayList by remember(
-        sortOrder, filterNoIcon, filterFallback, filterLocked, filter, installTimes, lockedIconKeys
+    // Keep the source index for row actions and invalidate both apps and locks with one revision.
+    val displayList = remember(
+        applicationState.revision, sortOrder, filterNoIcon, filterFallback, filterLocked, filter, installTimes
     ) {
-        derivedStateOf {
-            // withIndex() first so each app keeps its original position; the shared pipeline then
-            // filters and sorts the wrappers (selector pulls the app out of each IndexedValue).
-            applications.withIndex().toList()
-                .sortedFilteredApps(
-                    filter, filterNoIcon, filterFallback, sortOrder, installTimes,
-                    filterLocked, lockedIconKeys
-                ) { it.value }
-        }
+        applications.withIndex().toList()
+            .sortedFilteredApps(
+                filter, filterNoIcon, filterFallback, sortOrder, installTimes,
+                filterLocked, lockedIconKeys
+            ) { it.value }
     }
 
     // Keyed items make LazyColumn follow the previously visible app to its new
@@ -717,7 +711,9 @@ fun ApplicationList(
     // thread. Hold the spinner until ALL of it is done: revealing the list earlier shows rows
     // whose icons pop in seconds later, because the per-row bitmap decodes queue behind the
     // pack/DB loading still running on the same worker pool.
-    if (!viewModel.startupComplete || viewModel.startupFailed) {
+    // A profile transition also hides the retained snapshot until its owner matches again.
+    if (!viewModel.startupComplete || viewModel.startupFailed || viewModel.isProfileSwitching ||
+        applicationState.sessionToken != viewModel.sessionToken) {
         if (viewModel.startupFailed) {
             EmptyState(
                 icon = Icons.Filled.Warning,
@@ -733,6 +729,7 @@ fun ApplicationList(
         }
         return
     }
+    val sourceSession = applicationState.sessionToken ?: return
 
     // One column on a phone, more on a tablet or in landscape. The header cards describe the
     // whole profile, so each of them spans every column instead of sitting in one.
@@ -776,7 +773,7 @@ fun ApplicationList(
         // Scrolls away with the list — only the search bar stays pinned
         item(key = "hero", contentType = "hero", span = { GridItemSpan(maxLineSpan) }) {
             Box(Modifier.introTarget(IntroTarget.SOURCE)) {
-                HeroPackCard(iconPacks, activeProblemFilters, onProblemFilterToggle)
+                HeroPackCard(iconPacks, applicationState, activeProblemFilters, onProblemFilterToggle)
             }
         }
         item(key = "options", contentType = "options", span = { GridItemSpan(maxLineSpan) }) {
@@ -787,7 +784,7 @@ fun ApplicationList(
                     } else {
                         globalOptionsLauncher.launch(
                             Intent(globalOptionsContext, GlobalOptionsActivity::class.java)
-                                .withProfileSession(viewModel.sessionToken)
+                                .withProfileSession(sourceSession)
                         )
                     }
                 }
@@ -818,6 +815,7 @@ fun ApplicationList(
                 } else Modifier
                 ApplicationItem(
                     iconPacks, indexedApp.value, indexedApp.index, themed, bgColorValue,
+                    sourceSession = sourceSession,
                     isLocked = indexedApp.value.createdIcon == null && indexedApp.value.key in lockedIconKeys,
                     modifier = Modifier.animateItem().then(introModifier)
                 )
@@ -856,6 +854,7 @@ fun ApplicationItem(
     index: Int,
     themed: Boolean,
     bgColorValue: Color,
+    sourceSession: ProfileSessionToken,
     isLocked: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -1065,11 +1064,11 @@ fun ApplicationItem(
     }
 
     if (quickActionsOpen) {
-        AppQuickActionsSheet(app = app, onDismiss = { quickActionsOpen = false })
+        AppQuickActionsSheet(app = app, sourceSession = sourceSession, onDismiss = { quickActionsOpen = false })
     }
 
     if (openAppOptions) {
-        OpenAppOptions(iconPacks, app, themed) {
+        OpenAppOptions(iconPacks, app, themed, sourceSession = sourceSession) {
             openAppOptions = false
         }
     }
@@ -1080,6 +1079,7 @@ fun OpenAppOptions(
     iconPacks: List<IconPack>,
     app: PackageInfoStruct,
     themed: Boolean,
+    sourceSession: ProfileSessionToken,
     onDismiss: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
@@ -1088,9 +1088,9 @@ fun OpenAppOptions(
     val toaster = LocalToaster.current
     val sessionId = rememberSaveable(app.key) { UUID.randomUUID().toString() }
     var sessionAttached by rememberSaveable(app.key) { mutableStateOf(false) }
-    val profileId = rememberSaveable(app.key) { viewModel.sessionToken.profileId }
-    val revision = rememberSaveable(app.key) { viewModel.sessionToken.revision }
-    val providerInstance = rememberSaveable(app.key) { viewModel.sessionToken.providerInstanceId }
+    val profileId = rememberSaveable(app.key) { sourceSession.profileId }
+    val revision = rememberSaveable(app.key) { sourceSession.revision }
+    val providerInstance = rememberSaveable(app.key) { sourceSession.providerInstanceId }
     val expected = ProfileSessionToken(profileId, revision, providerInstance)
     val current = viewModel.sessionToken
 

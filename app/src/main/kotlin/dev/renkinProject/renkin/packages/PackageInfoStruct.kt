@@ -79,7 +79,7 @@ class PackageInfoStruct(
 
     // Single place that rebuilds the struct, so callers (changeExport/changeCalendar) only name
     // the fields they touch — this isn't a data class (custom equals), so there's no copy().
-    // Every edit bumps internalVersion so the SnapshotStateList sees a distinct element.
+    // Every edit bumps internalVersion so equality-based observers see a distinct element.
     private fun copyWith(
         createdIcon: IconPackDrawable? = this.createdIcon,
         calendarEnabled: Boolean = this.calendarEnabled,

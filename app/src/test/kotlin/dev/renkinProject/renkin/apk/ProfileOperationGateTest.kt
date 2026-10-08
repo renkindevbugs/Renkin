@@ -9,6 +9,10 @@ import kotlinx.coroutines.joinAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.currentCoroutineContext
+import kotlin.coroutines.CoroutineContext
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -16,6 +20,64 @@ import org.junit.Assert.fail
 import org.junit.Test
 
 class ProfileOperationGateTest {
+
+    private suspend fun expectNoOwner(gate: ProfileOperationGate) {
+        try {
+            gate.checkHeld()
+            fail("Expected a missing gate owner")
+        } catch (_: IllegalStateException) { }
+    }
+
+    @Test
+    fun onlyTheActiveOwnerPassesAcrossDispatcherChanges() = runBlocking {
+        val gate = ProfileOperationGate()
+        val other = ProfileOperationGate()
+        expectNoOwner(gate)
+        gate.run {
+            gate.checkHeld()
+            withContext(Dispatchers.Default) { gate.checkHeld() }
+            expectNoOwner(other)
+        }
+        gate.runWithBoundedWait { gate.checkHeld() }
+        expectNoOwner(gate)
+    }
+
+    @Test
+    fun aLockedGateDoesNotAuthorizeAnotherCoroutineOrAnExpiredMarker() = runBlocking {
+        val gate = ProfileOperationGate()
+        val entered = CompletableDeferred<CoroutineContext>()
+        val release = CompletableDeferred<Unit>()
+        val owner = launch(start = CoroutineStart.UNDISPATCHED) {
+            gate.run {
+                entered.complete(currentCoroutineContext())
+                release.await()
+            }
+        }
+        val captured = entered.await()
+        expectNoOwner(gate)
+        release.complete(Unit)
+        owner.join()
+        withContext(captured.minusKey(kotlinx.coroutines.Job)) { expectNoOwner(gate) }
+    }
+
+    @Test
+    fun completionPublishesAfterSuccessFailureAndCancellationButNotRejectedWaiters() = runBlocking {
+        var publications = 0
+        val gate = ProfileOperationGate { publications++ }
+        gate.run { }
+        try {
+            gate.runWithBoundedWait { throw IllegalArgumentException("failure") }
+        } catch (_: IllegalArgumentException) { }
+        assertEquals(2, publications)
+        val owner = launch(start = CoroutineStart.UNDISPATCHED) { gate.run { awaitCancellation() } }
+        val rejected = launch(start = CoroutineStart.UNDISPATCHED) { gate.runWithBoundedWait { fail("Cancelled waiter entered") } }
+        rejected.cancelAndJoin()
+        assertEquals(2, publications)
+        owner.cancelAndJoin()
+        assertEquals(3, publications)
+        gate.run { }
+        assertEquals(4, publications)
+    }
 
     @Test
     fun boundedWaitAllowsShortCriticalSectionToFinish() = runBlocking {

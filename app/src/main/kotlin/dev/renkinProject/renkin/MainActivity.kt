@@ -70,8 +70,8 @@ class MainActivity : ComponentActivity() {
 
         // Instantiate the view model now, on the main thread, before setContent. This forces
         // its ApplicationProvider — and the Compose snapshot state that provider holds
-        // (applicationList, applicationsLoaded, …) — to be created in the global snapshot. If the
-        // first touch instead happened while reading view model state during the initial
+        // (startupComplete, isProfileSwitching, session revision, …) — in the global snapshot.
+        // If the first touch instead happened while reading view model state during the initial
         // composition, Compose throws "Reading a state that was created after the snapshot
         // was taken or in a snapshot that has not yet been applied".
         viewModel

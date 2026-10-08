@@ -225,9 +225,8 @@ class GlobalOptionsViewModel @Inject constructor(
     )
     val toastEvents = _toastEvents.receiveAsFlow()
 
-    val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
+    val applicationState = appProvider.applicationState
     val iconPackState = appProvider.iconPackState
-    val lockedIconKeysState = appProvider.lockedIconKeysState
 
     private val previewCache = GlobalPreviewBitmapCache()
     private val previewLock = Any()

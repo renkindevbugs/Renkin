@@ -3,7 +3,6 @@ package dev.renkinProject.renkin
 import android.app.Application
 import android.net.Uri
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -15,8 +14,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.BuiltIconPack
-import dev.renkinProject.renkin.apk.PackChange
-import dev.renkinProject.renkin.apk.packChanges
+import dev.renkinProject.renkin.apk.PackChangeBaselines
+import dev.renkinProject.renkin.apk.observePackChanges
 import dev.renkinProject.renkin.apk.unsavedApplicationKeys
 import dev.renkinProject.renkin.apk.IconGenerationService
 import dev.renkinProject.renkin.apk.IconLockManager
@@ -131,10 +130,13 @@ class MainViewModel @Inject constructor(
      */
     private val profileSessionOperations = Mutex()
 
+    val applicationState = appProvider.applicationState
+    /** Action-time snapshot only; composables collect [applicationState]. */
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
 
     val iconPackState = appProvider.iconPackState
 
+    /** Action-time snapshot only; UI readiness comes from [applicationState]. */
     val applicationsLoaded: Boolean get() = appProvider.applicationsLoaded
 
     val startupComplete: Boolean get() = appProvider.startupComplete
@@ -240,21 +242,17 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    /**
-     * What a build would add, change or remove. Derived here rather than in each screen so the
-     * hero card's badge and the changes sheet read one computation instead of running the same
-     * diff over the whole app list twice.
-     *
-     * derivedStateOf, not a plain getter: [applicationList] is one long-lived snapshot list whose
-     * identity never changes, so only tracking its contents keeps the result from going stale.
-     */
-    val pendingPackChanges: List<PackChange> by derivedStateOf {
-        if (profileSummaryReady) {
-            packChanges(applicationList, builtIconHashes, savedIconHashes, updatedKeys)
-        } else {
-            emptyList()
-        }
-    }
+    /** One shared diff; a newly published list cannot use another profile/session's baselines. */
+    val pendingPackChanges = observePackChanges(
+        applicationState,
+        snapshotFlow {
+            PackChangeBaselines(
+                changeBaselinesSession.takeIf { profileSummaryReady },
+                builtIconHashes, savedIconHashes, updatedKeys
+            )
+        },
+        viewModelScope
+    )
 
     // Set when opened from an icon-watch notification; the home screen shows the apply
     // modal for this suggestion.
@@ -1091,9 +1089,6 @@ class MainViewModel @Inject constructor(
             }
         }
     }
-
-    /** Keys of the active profile's icons locked behind a missing pack (marks the rows). */
-    val lockedIconKeysState = appProvider.lockedIconKeysState
 
     /** The active profile's locked icons grouped by missing pack — badge, banner, dialog. */
     var missingPackSummary by mutableStateOf<List<IconLockManager.MissingPack>>(emptyList())

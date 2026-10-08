@@ -18,6 +18,7 @@ hiltNavigationCompose = "1.2.0"
 junit = "4.13.2"
 robolectric = "4.14.1"
 kotlin = "2.1.20"
+kotlinx-collections-immutable = "0.4.0"
 ksp = "2.1.20-1.0.32"
 material3Android = "1.5.0-alpha14"
 roomKtx = "2.6.1"
@@ -35,6 +36,7 @@ android-minSdk = "23"
 android-targetSdk = "35"
 
 [libraries]
+kotlinx-collections-immutable = { module = "org.jetbrains.kotlinx:kotlinx-collections-immutable", version.ref = "kotlinx-collections-immutable" }
 ackpine-core = { module = "ru.solrudev.ackpine:ackpine-core", version.ref = "ackpineCore" }
 ackpine-ktx = { module = "ru.solrudev.ackpine:ackpine-ktx", version.ref = "ackpineCore" }
 ackpine-shizuku = { module = "ru.solrudev.ackpine:ackpine-shizuku", version.ref = "ackpineCore" }
