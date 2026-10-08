@@ -752,7 +752,7 @@ fun ApplicationList(
     // pack/DB loading still running on the same worker pool.
     // A profile transition also hides the retained snapshot until its owner matches again.
     if (!runtimeState.startupComplete || viewModel.startupFailed || runtimeState.isProfileSwitching ||
-        applicationState.sessionToken != viewModel.sessionToken) {
+        applicationState.sessionToken != runtimeState.sessionToken) {
         if (viewModel.startupFailed) {
             EmptyState(
                 icon = Icons.Filled.Warning,
@@ -1123,6 +1123,7 @@ fun OpenAppOptions(
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val editorViewModel: EditorSessionViewModel = hiltViewModel()
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val activity = getCurrentMainActivity()
     val toaster = LocalToaster.current
     val sessionId = rememberSaveable(app.key) { UUID.randomUUID().toString() }
@@ -1131,7 +1132,7 @@ fun OpenAppOptions(
     val revision = rememberSaveable(app.key) { sourceSession.revision }
     val providerInstance = rememberSaveable(app.key) { sourceSession.providerInstanceId }
     val expected = ProfileSessionToken(profileId, revision, providerInstance)
-    val current = viewModel.sessionToken
+    val current = runtimeState.sessionToken
 
     if (expected != current) {
         LaunchedEffect(expected, current) {

@@ -672,12 +672,56 @@ The targeted checks and all 936 unit tests across 149 suites pass without failur
 `assembleDebug` passes. The full suite uses the same local test-JVM C2 workaround described
 above, without changing project or application runtime settings.
 
+The next checkpoint, **7B8**, adds the non-null `ProfileSessionToken` to
+`ApplicationRuntimeState`. Active profile id is a projection of that token; readiness,
+transition status, revision and provider-instance identity now share one read-only flow.
+Provider action getters read it synchronously, and session validation captures one runtime
+value for its readiness/identity checks. Invalidation increments the token revision under the
+profile gate and still clears render tickets and Undo. Leaving and returning to a profile
+cannot revive a stale token; recreating a provider starts a new instance identity.
+
+`ProfileManager.activeProfileId` is now a volatile operation-time selection for persistence,
+not UI state. Only provider initialization, profile selection and reload call its id-changing
+methods. Those calls publish the selected id back into the runtime token in `finally`, before
+loading the selected icons; failed or cancelled persistence therefore cannot silently leave
+the provider on a different id from its manager. These operations remain under the existing
+storage/profile gates. Reload announces its transition before invalidating identity. Icon
+rows, locks, dirty keys and Undo still publish as one completed `ApplicationListState` at the
+end of the gate, and the home list hides a completed snapshot whose token differs from runtime.
+
+The session observer now maps the runtime flow directly, filtering unready states. The diff
+continues observing ViewModel-owned baseline fields with `snapshotFlow`, then validates both
+their owner and the edited-key owner against the same runtime token. Hero, profile title,
+editor, quick actions, change sheet, wallpaper preview and notification source capture use
+lifecycle-aware runtime reads. Outline drafts key themselves by the collected session while
+respecting Global options' fixed saved-state owner. Watch rules/badges map the active id with
+`distinctUntilChanged`, retaining their Room subscription across same-profile revision and
+readiness changes. No I/O is added to composition, and the startup morphing-shape animation,
+deferred baseline reads, format versions and Save/Discard rules are unchanged.
+
+7B8 has passed its on-device checkpoint. Checks cover cold-start profile restoration, Save/Discard and rapid switching,
+stale editor/preview owners, outline drafts, watch rules/notification routing, reload and backup
+session replacement. Additional checks cover deleting the active profile (default title/icons/
+watch rules and completed loading), returning to Watch after a notification switches profiles,
+and preserving its rules/badge without resubscription when only the revision changes. To check
+Global options expiry on app-list reload, leave it open, use a same-profile watch notification
+to open another MainActivity, dismiss the suggestion, reload the app list from Settings and
+return to Global options. It must close with an expired-session notice and preserve storage.
+The runtime fixture supplies an explicit initial session token, with regression coverage for
+monotonic revisions, process ownership, unready intermediate switch states and deletion of the
+active profile. The deletion fixture resets/closes its Watch singleton because Robolectric
+resets SQLite connections independently of production static instances between tests.
+Targeted checks and all 938 unit tests across 149 suites pass without failures or skips;
+`assembleDebug` passes. The full suite uses the same local test-JVM C2 workaround described
+above; project/application JVM settings remain unchanged. The remaining
+primary work after domain identity is **7C** (durable drafts) and **7D** (feature packages),
+plus the separately designed legacy `prefsSnapshot` retirement described below.
+
 ## Threading & state
 
-The remaining primary roadmap phases are **7B** (domain StateFlow and lifecycle-aware UI reads),
-**7C** (durable unsaved drafts with ownership checks after process death), and **7D** (incremental
-feature-package moves). Each may need several independently confirmed checkpoints; 7B1 starts
-with the installed-pack state rather than changing every domain collection at once.
+The domain StateFlow migration in **7B** is complete. The remaining primary roadmap phases are
+**7C** (durable unsaved drafts with ownership checks after process death) and **7D** (incremental
+feature-package moves). Each may need several independently confirmed checkpoints.
 
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
@@ -686,6 +730,10 @@ Before removing the column, explicitly design its replacement recovery behavior,
 unconverted active/inactive rows, portable legacy adapters and non-additive snapshot migration.
 Do not couple that Room version bump to the StateFlow migration. Until its own reviewed/device
 checkpoint, keep the current paired writes and the documented format-4 compatibility field.
+Before installing that schema-changing checkpoint, export a full backup outside app-owned
+storage. Its migration must advance the then-current Room version (currently 21); do not fix
+the target to 22 if an intervening phase has already advanced the schema. Older builds cannot
+be assumed to open the upgraded database.
 
 - Heavy work lives in `suspend` functions that hop to `Dispatchers.Default` internally
   (`withContext`). View models call them from `viewModelScope` (Main) safely.
@@ -693,9 +741,9 @@ checkpoint, keep the current paired writes and the documented format-4 compatibi
   directly; go through a suspend function with `withContext(Default)` inside.
 - Installed-pack readiness uses read-only StateFlow. Applications, lock keys, application
   readiness and session ownership publish in one `ApplicationListState`; UI collection is
-  lifecycle-aware. Provider startup/transition readiness uses a separate immediate StateFlow.
-  Profile identity and ViewModel baseline bookkeeping still use Compose state; preserve their
-  current update and session semantics when migrating the remaining domain identity in 7B8.
+  lifecycle-aware. Provider startup/transition readiness and live identity use a separate
+  immediate StateFlow. ViewModel UI and baseline bookkeeping remain Compose state owned by
+  the ViewModel; domain providers/profile managers no longer require Compose state for identity.
 - Active-profile mutations run through the provider's profile-operation gate. Callers capture a
   `ProfileSessionToken` before launching work; the provider checks it after acquiring the gate.
   Tokens include the profile, session revision and provider instance, so leaving and returning to

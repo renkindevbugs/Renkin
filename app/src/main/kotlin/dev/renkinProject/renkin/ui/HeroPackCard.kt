@@ -195,10 +195,11 @@ fun HeroPackCard(
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
-    val profileSummaryReady = viewModel.isProfileSummaryReady(runtimeState)
+    val profileSummaryReady = viewModel.isProfileSummaryReady(runtimeState) &&
+        applicationState.sessionToken == runtimeState.sessionToken
     val prefs = getPreferences()
     val preferences = prefs.getPreferencesValue()
-    val builtKeys = viewModel.builtKeys
+    val builtKeys = viewModel.builtKeysFor(runtimeState)
     val pendingChanges by viewModel.pendingPackChanges.collectAsStateWithLifecycle()
     val changes = pendingChanges.changesFor(applicationState)
 
@@ -222,15 +223,15 @@ fun HeroPackCard(
 
     var sheetOpen by remember { mutableStateOf(false) }
     var changesSession by remember { mutableStateOf<ProfileSessionToken?>(null) }
-    LaunchedEffect(viewModel.sessionToken) {
-        if (changesSession != null && changesSession != viewModel.sessionToken) changesSession = null
+    LaunchedEffect(runtimeState.sessionToken) {
+        if (changesSession != null && changesSession != runtimeState.sessionToken) changesSession = null
     }
 
     // Saved-but-not-built marker for the active profile (set by the save-before-switch flow).
     val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
-    val activeProfile = profiles.find { it.id == viewModel.activeProfileId }
+    val activeProfile = profiles.find { it.id == runtimeState.activeProfileId }
     val progressAnimationKey = heroProgressAnimationKey(
-        activeProfileId = viewModel.activeProfileId,
+        activeProfileId = runtimeState.activeProfileId,
         profileSummaryReady = profileSummaryReady,
         hasApplications = totalCount > 0
     )
@@ -375,7 +376,7 @@ fun HeroPackCard(
                         color = MaterialTheme.colorScheme.tertiaryContainer,
                         // Always openable: an empty list is an answer too ("nothing since the
                         // last build"), and a chip that ignores taps reads as broken.
-                        onClick = { changesSession = viewModel.sessionToken }
+                        onClick = { changesSession = runtimeState.sessionToken }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),

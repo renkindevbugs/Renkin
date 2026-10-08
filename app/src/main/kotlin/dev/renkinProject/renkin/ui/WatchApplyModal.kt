@@ -75,11 +75,12 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
     val viewModel: MainViewModel = hiltViewModel()
     val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()
     val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val watchViewModel: WatchViewModel = hiltViewModel()
     val prefs = getPreferences()
     val view = LocalView.current
     val toaster = LocalToaster.current
-    val suggestionSession = remember(suggestionId) { viewModel.sessionToken }
+    val suggestionSession = remember(suggestionId) { runtimeState.sessionToken }
 
     var suggestion by remember(suggestionId) { mutableStateOf<IconSuggestion?>(null) }
     var candidates by remember(suggestionId) { mutableStateOf<List<IconSuggestionCandidate>>(emptyList()) }

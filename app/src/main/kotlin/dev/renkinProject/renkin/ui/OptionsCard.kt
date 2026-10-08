@@ -450,6 +450,7 @@ private fun AdvancedColorSection(state: AdvancedOptionsState, viewModel: Options
 /** The contour drawn around every generated icon, and the colour style it is drawn with. */
 @Composable
 private fun AdvancedOutlineSection(state: AdvancedOptionsState, viewModel: OptionsViewModel) {
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     var outlineSheetOpen by rememberSaveable { mutableStateOf(false) }
 
     OptionsSectionLabel(R.string.outlineTitle)
@@ -458,7 +459,7 @@ private fun AdvancedOutlineSection(state: AdvancedOptionsState, viewModel: Optio
     }
     AnimatedVisibility(visible = state.outlineAdd) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            val expected = viewModel.sessionToken
+            val expected = viewModel.sessionFor(runtimeState)
             key(expected) {
                 var draftWidth by remember { mutableStateOf<Float?>(null) }
                 var dragging by remember { mutableStateOf(false) }

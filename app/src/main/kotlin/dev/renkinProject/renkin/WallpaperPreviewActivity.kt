@@ -99,7 +99,7 @@ class WallpaperPreviewActivity : ComponentActivity() {
             CompositionLocalProvider(LocalToaster provides toaster) {
                 RenkinTheme(darkMode) {
                     LaunchedEffect(
-                        appProvider.sessionToken,
+                        runtimeState.sessionToken,
                         runtimeState.isProfileSwitching
                     ) {
                         // The reviewed icons must stay tied to one profile. A watch deep link can

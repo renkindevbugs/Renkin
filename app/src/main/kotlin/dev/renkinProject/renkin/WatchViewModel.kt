@@ -33,6 +33,7 @@ import dev.renkinProject.renkin.service.WatchWorker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -51,11 +52,10 @@ class WatchViewModel @Inject constructor(
     private val appProvider: ApplicationProvider
 ) : AndroidViewModel(application) {
 
-    // Rules and the badge follow the ACTIVE profile: snapshotFlow tracks the Compose state
-    // in the provider and re-subscribes the Room flow whenever the profile switches.
+    // Revision/readiness changes keep the same Room subscription until the profile id changes.
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private fun <T> perProfile(source: (Long) -> kotlinx.coroutines.flow.Flow<T>) =
-        androidx.compose.runtime.snapshotFlow { appProvider.activeProfileId }
+        appProvider.runtimeState.map { it.activeProfileId }.distinctUntilChanged()
             .flatMapLatest(source)
 
     /** The active profile's watch rules (active + completed); the UI splits them by `completed`. */

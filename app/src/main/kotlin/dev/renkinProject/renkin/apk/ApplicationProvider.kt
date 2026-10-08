@@ -1,9 +1,6 @@
 package dev.renkinProject.renkin.apk
 
 import android.content.Context
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.BuildConfig
@@ -186,7 +183,10 @@ class ApplicationProvider internal constructor(
     @Volatile private var stagedApplications = persistentListOf<PackageInfoStruct>()
     private val mutableApplicationState = MutableStateFlow(ApplicationListState())
     val applicationState = mutableApplicationState.asStateFlow()
-    private val mutableRuntimeState = MutableStateFlow(ApplicationRuntimeState())
+    private val providerInstanceId = UUID.randomUUID().toString()
+    private val mutableRuntimeState = MutableStateFlow(ApplicationRuntimeState(
+        sessionToken = ProfileSessionToken(profileManager.activeProfileId, 0L, providerInstanceId)
+    ))
     val runtimeState = mutableRuntimeState.asStateFlow()
     /** Operation-time view; composables collect [applicationState]. Mutations hold the profile gate. */
     val applicationList: List<PackageInfoStruct> get() = stagedApplications
@@ -207,8 +207,8 @@ class ApplicationProvider internal constructor(
     /** Action-time snapshot only; composables collect [applicationState]. */
     val lockedIconKeys: Set<String> get() = lockManager.lockedIconKeys
 
-    /** The profile whose icons/preferences are active. Set before the saved pack loads. */
-    val activeProfileId: Long get() = profileManager.activeProfileId
+    /** Action-time snapshot only; composables collect [runtimeState]. */
+    val activeProfileId: Long get() = runtimeState.value.activeProfileId
 
     private val initialLoadMutex = Mutex()
     private val profileOperations = ProfileOperationGate(::publishApplicationState)
@@ -217,7 +217,10 @@ class ApplicationProvider internal constructor(
     @Volatile private var loadedSavedKeys: Pair<ProfileSessionToken, Set<String>>? = null
     /** Keys from the completed profile load, available before its artwork fingerprints are read. */
     val loadedSavedIconKeys: Set<String>
-        get() = loadedSavedKeys?.takeIf { it.first == sessionToken }?.second.orEmpty()
+        get() = loadedSavedIconKeysFor(sessionToken)
+
+    internal fun loadedSavedIconKeysFor(expected: ProfileSessionToken): Set<String> =
+        loadedSavedKeys?.takeIf { it.first == expected }?.second.orEmpty()
     private var storageEpoch = 0L
     @Volatile private var longOperations: Map<Long, ProfileSessionToken> = emptyMap()
     private var nextLongOperation = 0L
@@ -226,11 +229,9 @@ class ApplicationProvider internal constructor(
     /** Operation-time dirty keys. Replace the set rather than mutate it: published snapshots share it. */
     @Volatile var unsavedIconKeys: Set<String> = emptySet()
         private set
-    private val providerInstanceId = UUID.randomUUID().toString()
-    private var sessionRevision by mutableStateOf(0L)
-
+    /** Action-time snapshot only; composables collect [runtimeState]. */
     val sessionToken: ProfileSessionToken
-        get() = ProfileSessionToken(activeProfileId, sessionRevision, providerInstanceId)
+        get() = runtimeState.value.sessionToken
 
     private fun publishApplicationState() {
         // Also finish a partial held-row batch if an operation failed or was cancelled.
@@ -257,14 +258,17 @@ class ApplicationProvider internal constructor(
         )
     }
 
-    fun isCurrentSession(expected: ProfileSessionToken): Boolean =
-        startupComplete && !isProfileSwitching && expected == sessionToken
+    fun isCurrentSession(expected: ProfileSessionToken): Boolean {
+        val runtime = runtimeState.value
+        return runtime.ready && expected == runtime.sessionToken
+    }
 
     private fun requireCurrentSession(expected: ProfileSessionToken) {
+        val runtime = runtimeState.value
         val reason = when {
             expected.providerInstanceId != providerInstanceId -> ProfileSessionFailureReason.PROCESS_LOST
-            !startupComplete || isProfileSwitching -> ProfileSessionFailureReason.LOADING
-            expected != sessionToken -> ProfileSessionFailureReason.EXPIRED
+            !runtime.ready -> ProfileSessionFailureReason.LOADING
+            expected != runtime.sessionToken -> ProfileSessionFailureReason.EXPIRED
             else -> return
         }
         throw ProfileSessionChangedException(reason)
@@ -314,9 +318,17 @@ class ApplicationProvider internal constructor(
         }
 
     private fun invalidateSession() {
-        sessionRevision++
+        mutableRuntimeState.update {
+            it.copy(sessionToken = it.sessionToken.copy(revision = it.sessionToken.revision + 1))
+        }
         renderTracker.clear()
         clearUndo()
+    }
+
+    private fun publishActiveProfile() {
+        mutableRuntimeState.update {
+            it.copy(sessionToken = it.sessionToken.copy(profileId = profileManager.activeProfileId))
+        }
     }
 
     /** Action-time profile transition snapshot only; UI collects [runtimeState]. */
@@ -371,10 +383,10 @@ class ApplicationProvider internal constructor(
         runProfileOperation(expected) {
             val unsaved = unsavedIconKeys
             val keptKeys = preserveKeys + unsaved
-            invalidateSession()
             val session = applicationList.toList()
             isProfileSwitching = true
             try {
+                invalidateSession()
                 initialize()
                 replaceApplications(mergeApplicationReload(session, applicationList.toList(), keptKeys))
                 val liveKeys = applicationList.mapTo(mutableSetOf()) { it.key }
@@ -429,7 +441,7 @@ class ApplicationProvider internal constructor(
         applicationList.map { InstalledApplication(it.packageName, it.activityName, it.iconID) }
 
     private suspend fun initializeRenkinPack() {
-        profileManager.initActiveId()
+        try { profileManager.initActiveId() } finally { publishActiveProfile() }
         loadRenkinPack(activeProfileId)
         unsavedIconKeys = emptySet()
         startupComplete = true
@@ -1488,7 +1500,12 @@ class ApplicationProvider internal constructor(
     private suspend fun switchProfileLocked(newProfileId: Long) {
         if (newProfileId == activeProfileId || !profileManager.profileExists(newProfileId)) return
         invalidateSession()
-        if (!timeProfilePhase("select style profile=$newProfileId") { profileManager.switchTo(newProfileId) }) return
+        val switched = try {
+            timeProfilePhase("select style profile=$newProfileId") { profileManager.switchTo(newProfileId) }
+        } finally {
+            publishActiveProfile()
+        }
+        if (!switched) return
         // The captured rows belong to the profile being left; they must not be restorable here.
         clearUndo()
         // Reset the in-memory icons and load exactly the target selected above.
@@ -1539,7 +1556,7 @@ class ApplicationProvider internal constructor(
         }
 
     private suspend fun reloadActiveProfileLocked() {
-        profileManager.reloadActiveId()
+        try { profileManager.reloadActiveId() } finally { publishActiveProfile() }
         resetInMemoryIcons()
         loadRenkinPack(activeProfileId)
         unsavedIconKeys = emptySet()

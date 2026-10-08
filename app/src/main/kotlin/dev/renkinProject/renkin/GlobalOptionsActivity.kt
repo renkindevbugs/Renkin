@@ -263,7 +263,7 @@ class GlobalOptionsViewModel @Inject constructor(
 
     fun hasProfileChanged(runtime: ApplicationRuntimeState): Boolean {
         val opened = screenSession ?: return false
-        return runtime.ready && opened != appProvider.sessionToken
+        return runtime.ready && opened != runtime.sessionToken
     }
 
     val sessionLost: Boolean

@@ -11,6 +11,7 @@ import androidx.lifecycle.SavedStateHandle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.ApplicationRuntimeState
 import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
@@ -76,8 +77,14 @@ class OptionsViewModel @Inject constructor(
 
     private val preferences = context.dataStore
 
+    val runtimeState = appProvider.runtimeState
+
+    /** Action-time snapshot; UI passes its collected runtime to [sessionFor]. */
     val sessionToken: ProfileSessionToken
-        get() = savedStateHandle.profileSession() ?: appProvider.sessionToken
+        get() = sessionFor(runtimeState.value)
+
+    fun sessionFor(runtime: ApplicationRuntimeState): ProfileSessionToken =
+        savedStateHandle.profileSession() ?: runtime.sessionToken
 
     private val _toastEvents = Channel<Int>(Channel.BUFFERED)
     val toastEvents = _toastEvents.receiveAsFlow()

@@ -68,7 +68,8 @@ private const val MAX_PACK_LABEL = 30
 fun ProfileSwitcherTitle() {
     val viewModel: MainViewModel = hiltViewModel()
     val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
-    val activeId = viewModel.activeProfileId
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
+    val activeId = runtimeState.activeProfileId
     val active = profiles.find { it.id == activeId }
 
     var menuOpen by remember { mutableStateOf(false) }

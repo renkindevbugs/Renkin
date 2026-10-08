@@ -70,8 +70,10 @@ internal fun PackChangesSheet(
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val pendingChanges by viewModel.pendingPackChanges.collectAsStateWithLifecycle()
-    val changes = if (applicationState.sessionToken == sourceSession && viewModel.sessionToken == sourceSession) {
+    val changes = if (runtimeState.ready && applicationState.sessionToken == sourceSession &&
+        runtimeState.sessionToken == sourceSession) {
         pendingChanges.changesFor(applicationState)
     } else emptyList()
     var filter by rememberSaveable { mutableStateOf<PackChangeKind?>(null) }

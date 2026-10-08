@@ -59,11 +59,12 @@ internal fun AppQuickActionsSheet(
     onDismiss: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val expected = remember(app.key) { sourceSession }
-    LaunchedEffect(viewModel.sessionToken) {
-        if (viewModel.sessionToken != expected) onDismiss()
+    LaunchedEffect(runtimeState.sessionToken) {
+        if (runtimeState.sessionToken != expected) onDismiss()
     }
-    if (viewModel.sessionToken != expected) return
+    if (runtimeState.sessionToken != expected) return
     val watchViewModel: WatchViewModel = hiltViewModel()
     val toaster = LocalToaster.current
     val watchingMessage = stringResource(R.string.quickActionWatchAdded, app.appName)

@@ -68,12 +68,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         consumedSharedImageUri = savedInstanceState?.getString(STATE_CONSUMED_SHARED_IMAGE_URI)
 
-        // Instantiate the view model now, on the main thread, before setContent. This forces
-        // its ApplicationProvider — and the Compose snapshot state that provider holds
-        // (session revision and profile identity) — in the global snapshot.
-        // If the first touch instead happened while reading view model state during the initial
-        // composition, Compose throws "Reading a state that was created after the snapshot
-        // was taken or in a snapshot that has not yet been applied".
+        // Start loading before handling launch intents or composing the startup shell.
         viewModel
 
         // Landscape is only allowed on large screens (sw >= 600dp). Phones and

@@ -1,9 +1,6 @@
 package dev.renkinProject.renkin.apk
 
 import android.content.Context
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
@@ -21,7 +18,7 @@ import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.dataStore
 
 /**
- * Owns which profile is active and everything stored ABOUT profiles: CRUD, the per-profile
+ * Owns persistent profile selection and stored profile metadata: CRUD, the per-profile
  * style selection and the per-profile pack package name. The shared ProfileStyleStore owns
  * typed style persistence and the transitional preference projection. Swapping the live icons stays in
  * [ApplicationProvider] — it owns the app list; this class flips the persistent state.
@@ -34,8 +31,11 @@ class ProfileManager internal constructor(
     constructor(context: Context, packRepo: RenkinPackRepository) :
         this(context, packRepo, context.dataStore)
 
-    /** The profile whose icons/preferences are active. Set before the saved pack loads. */
-    var activeProfileId: Long by mutableStateOf(DEFAULT_PROFILE_ID)
+    /**
+     * Persistence-operation selection; it can lead the published id during a gated switch.
+     * UI and session ownership checks read [ApplicationProvider.runtimeState], never this field.
+     */
+    @Volatile var activeProfileId: Long = DEFAULT_PROFILE_ID
         private set
 
     /** Reads the persisted active id at startup (before the saved pack loads). */

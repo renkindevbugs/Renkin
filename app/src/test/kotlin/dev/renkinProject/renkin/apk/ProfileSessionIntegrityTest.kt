@@ -6,21 +6,26 @@ import android.content.ContextWrapper
 import androidx.datastore.preferences.core.edit
 import androidx.room.Room
 import dev.renkinProject.renkin.data.RenkinPackDatabase
+import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.watch.WatchDatabase
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.di.AppModule
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.Collections
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -92,7 +97,11 @@ class ProfileSessionIntegrityTest {
 
     @Test
     fun runtimeStartupWaitResolvesOnlyAfterInitialization() = runBlocking {
-        assertEquals(ApplicationRuntimeState(), provider.runtimeState.value)
+        val initialToken = provider.sessionToken
+        assertEquals(DEFAULT_PROFILE_ID, initialToken.profileId)
+        assertEquals(0L, initialToken.revision)
+        assertTrue(initialToken.providerInstanceId.isNotBlank())
+        assertEquals(ApplicationRuntimeState(initialToken), provider.runtimeState.value)
         val waiting = async(start = CoroutineStart.UNDISPATCHED) {
             provider.runtimeState.first { it.startupComplete }
         }
@@ -103,6 +112,60 @@ class ProfileSessionIntegrityTest {
         assertTrue(withTimeout(5_000) { waiting.await() }.ready)
         assertTrue(provider.runtimeState.value.ready)
         assertEquals(provider.sessionToken, provider.applicationState.value.sessionToken)
+    }
+
+    @Test
+    fun switchingNeverPublishesAReadyNewRevisionForTheDepartingProfile() = runBlocking {
+        provider.ensureInitialized()
+        val original = provider.sessionToken
+        val other = provider.createProfile("Other", "", "Other icons")
+        val states = Collections.synchronizedList(mutableListOf<ApplicationRuntimeState>())
+        val observer = launch(Dispatchers.Unconfined, start = CoroutineStart.UNDISPATCHED) {
+            provider.runtimeState.collect { states.add(it) }
+        }
+        try {
+            provider.switchProfile(other)
+        } finally {
+            observer.cancelAndJoin()
+        }
+        val invalidated = states.filter {
+            it.sessionToken.revision > original.revision && it.activeProfileId == original.profileId
+        }
+        assertTrue(invalidated.isNotEmpty())
+        assertTrue(invalidated.all { !it.ready })
+        assertTrue(states.any { it.activeProfileId == other && !it.ready })
+        val completed = provider.runtimeState.value
+        assertTrue(completed.ready)
+        assertEquals(other, completed.activeProfileId)
+        assertEquals(original.providerInstanceId, completed.sessionToken.providerInstanceId)
+        assertEquals(completed.sessionToken, provider.applicationState.value.sessionToken)
+    }
+
+    @Test
+    fun deletingTheActiveProfilePublishesTheDefaultOwnerAndExpiresTheDeletedOwner() = runBlocking {
+        provider.ensureInitialized()
+        val other = provider.createProfile("Temporary", "", "Temporary icons")
+        provider.switchProfile(other)
+        val deleted = provider.sessionToken
+
+        // Robolectric resets SQLite pointers between tests, but the production singleton survives.
+        val watchInstance = WatchDatabase::class.java.getDeclaredField("instance").apply { isAccessible = true }
+        watchInstance.set(null, null)
+        try {
+            provider.deleteProfile(other)
+        } finally {
+            (watchInstance.get(null) as? WatchDatabase)?.close()
+            watchInstance.set(null, null)
+        }
+
+        val restored = provider.runtimeState.value
+        assertTrue(restored.ready)
+        assertEquals(DEFAULT_PROFILE_ID, restored.activeProfileId)
+        assertTrue(restored.sessionToken.revision > deleted.revision)
+        assertEquals(deleted.providerInstanceId, restored.sessionToken.providerInstanceId)
+        assertEquals(restored.sessionToken, provider.applicationState.value.sessionToken)
+        assertFalse(provider.profileExists(other))
+        assertFalse(provider.isCurrentSession(deleted))
     }
 
     @Test
@@ -166,10 +229,15 @@ class ProfileSessionIntegrityTest {
         val original = provider.sessionToken
         val other = provider.createProfile("Other", "", "Other icons")
         provider.switchProfile(other)
+        val otherOwner = provider.runtimeState.value.sessionToken
         provider.switchProfile(original.profileId)
 
         assertEquals(original.profileId, provider.activeProfileId)
         assertNotEquals(original, provider.sessionToken)
+        assertTrue(otherOwner.revision > original.revision)
+        assertTrue(provider.sessionToken.revision > otherOwner.revision)
+        assertEquals(original.providerInstanceId, provider.sessionToken.providerInstanceId)
+        assertEquals(provider.sessionToken, provider.runtimeState.value.sessionToken)
         var wrote = false
         expectFailure(ProfileSessionFailureReason.EXPIRED) {
             provider.updateProfilePreferences(original) { wrote = true }
@@ -186,6 +254,8 @@ class ProfileSessionIntegrityTest {
         val restarted = newProvider()
         restarted.ensureInitialized()
         assertEquals(original.profileId, restarted.activeProfileId)
+        assertNotEquals(original.providerInstanceId, restarted.runtimeState.value.sessionToken.providerInstanceId)
+        assertTrue(restarted.runtimeState.value.ready)
         expectFailure(ProfileSessionFailureReason.PROCESS_LOST) {
             restarted.updateProfilePreferences(original) { fail("Old editor must not write") }
         }
@@ -223,6 +293,7 @@ class ProfileSessionIntegrityTest {
             fail("Expected discovery failure")
         } catch (error: ProfileReloadFailedException) {
             assertEquals(provider.sessionToken, error.restoredSession)
+            assertEquals(error.restoredSession, provider.runtimeState.value.sessionToken)
             assertNotEquals(original, error.restoredSession)
             assertEquals(apps, provider.applicationList)
             assertFalse(provider.isProfileSwitching)
@@ -241,6 +312,9 @@ class ProfileSessionIntegrityTest {
         val reviewed = provider.sessionToken
         val prefs = context.dataStore.data.first()
         provider.clearIcons(reviewed)
+        assertEquals(reviewed.profileId, provider.runtimeState.value.activeProfileId)
+        assertTrue(provider.runtimeState.value.sessionToken.revision > reviewed.revision)
+        assertTrue(provider.runtimeState.value.ready)
         var buildStarted = false
         expectFailure(ProfileSessionFailureReason.EXPIRED) {
             provider.buildAndSignIconPack(reviewed, prefs, { buildStarted = true })

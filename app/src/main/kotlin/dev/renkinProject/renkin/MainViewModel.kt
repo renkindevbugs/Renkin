@@ -182,8 +182,8 @@ class MainViewModel @Inject constructor(
         isProfileSummaryReady(
             startupComplete = runtime.startupComplete,
             isProfileSwitching = runtime.isProfileSwitching,
-            baselineProfileId = changeBaselinesSession?.takeIf { it == sessionToken }?.profileId,
-            activeProfileId = activeProfileId
+            baselineProfileId = changeBaselinesSession?.takeIf { it == runtime.sessionToken }?.profileId,
+            activeProfileId = runtime.activeProfileId
         )
 
     private fun invalidateChangeBaselines() {
@@ -209,8 +209,13 @@ class MainViewModel @Inject constructor(
     }
 
     private var baselineKeys by mutableStateOf<Set<String>>(emptySet())
+    /** Action-time snapshot; UI passes its collected runtime to [builtKeysFor]. */
     val builtKeys: Set<String>
-        get() = if (changeBaselinesSession == sessionToken) baselineKeys else appProvider.loadedSavedIconKeys
+        get() = builtKeysFor(runtimeState.value)
+
+    fun builtKeysFor(runtime: ApplicationRuntimeState): Set<String> =
+        if (changeBaselinesSession == runtime.sessionToken) baselineKeys
+        else appProvider.loadedSavedIconKeysFor(runtime.sessionToken)
 
     // Keys whose icons were manually changed this session (via applyIcon with a non-null icon).
     // Distinct from builtKeys: an app in both sets had an icon already and was re-edited.
@@ -225,6 +230,7 @@ class MainViewModel @Inject constructor(
             updatedKeysOwner = sessionToken
         }
 
+    /** Action-time snapshot only; composables collect [runtimeState]. */
     val sessionToken: ProfileSessionToken get() = appProvider.sessionToken
 
     private fun launchProfileOperation(
@@ -258,11 +264,13 @@ class MainViewModel @Inject constructor(
         applicationState,
         snapshotFlow {
             PackChangeBaselines(
-                changeBaselinesSession.takeIf { it == sessionToken },
-                builtIconHashes, savedIconHashes, updatedKeys
+                changeBaselinesSession, builtIconHashes, savedIconHashes, sessionUpdatedKeys
+            ) to updatedKeysOwner
+        }.combine(runtimeState) { (baselines, editsOwner), runtime ->
+            baselines.copy(
+                owner = baselines.owner.takeIf { runtime.ready && it == runtime.sessionToken },
+                updated = baselines.updated.takeIf { editsOwner == runtime.sessionToken }.orEmpty()
             )
-        }.combine(runtimeState) { baselines, runtime ->
-            baselines.copy(owner = baselines.owner.takeIf { runtime.ready })
         },
         viewModelScope
     )
@@ -475,8 +483,8 @@ class MainViewModel @Inject constructor(
 
     private fun observeProfileSession() {
         viewModelScope.launch {
-            snapshotFlow { sessionToken }
-                .combine(runtimeState) { session, runtime -> session.takeIf { runtime.ready } }
+            runtimeState.map { runtime -> runtime.sessionToken.takeIf { runtime.ready } }
+                .distinctUntilChanged()
                 .filterNotNull()
                 .collect { expected ->
                     if (refreshSession != null && refreshSession != expected) cancelRefresh()
@@ -1023,6 +1031,7 @@ class MainViewModel @Inject constructor(
     /** All profiles for the switcher (default first). */
     val profiles = appProvider.profilesFlow()
 
+    /** Action-time snapshot only; composables collect [runtimeState]. */
     val activeProfileId: Long get() = appProvider.activeProfileId
 
     /** Action-time snapshot only; composables collect [runtimeState]. */
