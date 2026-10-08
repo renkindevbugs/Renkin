@@ -23,8 +23,10 @@ object UploadedImageStore {
 
     /** The gallery directory — also read/written directly by the backup export/import. */
     fun directory(context: Context): File {
-        return File(context.filesDir, DIRECTORY_NAME).apply { mkdirs() }
+        return directoryPath(context).apply { mkdirs() }
     }
+
+    internal fun directoryPath(context: Context): File = File(context.filesDir, DIRECTORY_NAME)
 
     suspend fun list(context: Context): List<File> = StorageOperationGate.run {
         val directory = directory(context)

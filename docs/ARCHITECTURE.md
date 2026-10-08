@@ -755,6 +755,24 @@ Device regressions are confirmed; eleven new capture/codec tests, all 974 tests 
 suites and `assembleDebug` pass. See the draft-recovery document for the format, limits,
 semantic validation requirements and integration coverage still required before recovery.
 
+Checkpoint **7C2b1** adds `EditorDraftFingerprints` for canonical typed-style/full
+persisted-icon SHA-256 baselines and `EditorDraftResources` for bounded independent copies of
+gallery PNGs and catalog/bundled fonts. Hashing detached rows runs on Default; file reads run on
+IO, validate canonical ownership/regular-file identity and never acquire the gates. References
+are selection attribution, not restore-time file authority. The existing gallery API also
+exposes its path without creating a directory. No capture/autosave/recovery caller is installed.
+Device regressions are confirmed; 17 new tests, all 991 tests across 154 suites and
+`assembleDebug` pass. Android system-font and symlink/no-follow checks remain platform coverage;
+the JVM resource tests simulate descriptors/stat changes while reading real files. **7C2b2** will add
+exact artwork/vector-path/seed codecs and coherent complete capture using these resources.
+Existing DB vector XML drops some editable properties and cannot substitute for that codec.
+Future capture/offer owners must handle oversized uploads, unavailable fonts and unconverted/
+invalid styles without crashing or replacing the last valid checkpoint with partial/default
+state. Recovery resolves verified owned font bytes even if the old system path has disappeared.
+**7C3** remains the explicit recovery offer and lifecycle/storage integration. Room/portable
+backup/recovery-prefs versions remain 21/4/3. Contracts and pending coverage are documented in
+`editor-draft-recovery.md`.
+
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
 typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.
