@@ -17,6 +17,7 @@ import dev.renkinProject.renkin.service.BackgroundWorkScheduler
 import dagger.hilt.android.EntryPointAccessors
 import dev.renkinProject.renkin.util.CrashReporter
 import dev.renkinProject.renkin.util.Log
+import dev.renkinProject.renkin.util.timeProfilePhase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,9 +40,11 @@ class RenkinApplication : Application() {
             // WorkManager's provider starts before onCreate. Install the barrier before any
             // provider can launch a worker that touches persisted state.
             StorageOperationGate.installRecovery {
-                EntryPointAccessors.fromApplication(this, BackupManagerEntryPoint::class.java)
-                    .backupManager().recoverPendingRestore()
-                ProfileStyleAccess.initialize()
+                timeProfilePhase("startup recovery and maintenance") {
+                    EntryPointAccessors.fromApplication(this, BackupManagerEntryPoint::class.java)
+                        .backupManager().recoverPendingRestore()
+                }
+                timeProfilePhase("startup profile styles") { ProfileStyleAccess.initialize() }
             }
         }
     }

@@ -571,6 +571,74 @@ ownership when switching during a render. The targeted suites and all 924 unit t
 148 suites pass, with no failures or skips; `assembleDebug` also passes. Room stays 21,
 portable backups 4 and recovery preferences 3.
 
+The independent `fix/profile-switch-latency` checkpoint addresses device feedback about profile
+switching and ordinary startup; it is separate from the confirmed 7B6 commit.
+Profile Save encodes independent rows on a dispatcher limited to two concurrent tasks, preserving
+row order and the existing single Room replacement transaction. An identical source/export
+instance is serialized once. Input files are still prepared and synced before their referencing
+rows commit, and accepted only after that commit. No cross-session artwork cache is introduced.
+When a stored source equals its rendered payload and flags, bitmap/vector decoding can use a
+detached copy instead of a second PNG/XML decode; mutable pixels/geometry remain independent.
+Other drawable types and failed copies retain the original decoding fallback. Applying/resetting
+loaded rows uses their known indices instead of repeatedly searching the whole application list.
+
+Baseline loading captures one projection containing component identity, rendered artwork and
+calendar fields, excluding base artwork and modifier documents, together with built fingerprints
+under storage/profile ownership. The immutable artwork strings are hashed on Default after
+releasing those gates. Publication rechecks session, saved-row revision, both storage epochs and
+the current built map under the gates. One load makes at most three capture/hash/publication
+attempts and stops earlier on cancellation or supersession. If all attempts lose a write race,
+the diff stays unready until the next session or explicit Save/build baseline synchronization;
+no timer immediately starts another read loop. Debug diagnostics record this deferral. Live Apply
+does not persist artwork or change the saved revision, so repeated Apply alone does not cause
+these retries. Legacy built adoption happens only after validation, reuses the computed saved
+fingerprints and retains the hasUnbuiltChanges condition. SHA-1 bytes and lowercase hexadecimal
+output are unchanged; hexadecimal encoding avoids a formatter allocation per digest byte.
+There is no Room schema or portable/recovery format change.
+
+Switch progress covers Save, loading target icons and the in-memory missing-pack summary.
+Artwork fingerprint reads run afterward in a session-owned baseline job, shared with the existing
+session observer. This background job takes the ViewModel mutex only to claim the load,
+publish its result and refresh the small missing-pack summary, allowing Apply, Reset and Undo
+during hashing. Another explicit switch cancels this optional job. Publication still validates
+the session token, and the diff remains unavailable
+until its matching baselines arrive. The completed icon load supplies its saved keys without
+another database query, so Save/Discard and preview classification do not borrow the old profile's
+keys while hashes load. `updatedKeys` already filters by its owning session. The switch also
+atomically clears expired backing markers; it preserves markers already owned by the target
+session. Deferred publication uses `clearUpdated = false`, preserving new edits. On app reload,
+refreshApps explicitly rebinds the retained edits to the new session. It carries baselines forward
+only if they were ready for the pre-reload session; a reload during hashing awaits a fresh read
+instead of declaring old hashes ready. Startup has no retained
+edit markers and full import/Previous state reset their baselines explicitly. A load owner also
+rejects late publication from an older read in the same session after a Save/build synchronization.
+
+MainActivity shows the same inert `MainStartupScreen` during CHECKING and ordinary catalog/icon
+loading: home title/actions/search shell with the shared wavy loader. Startup and the interactive
+screen use the same stateless title-bar content and shared search field; the startup branch does
+not instantiate toolbar ViewModels. No profile/edit/build actions are active in that shell.
+RECOVERING, FAILED and CHECKING during an explicit recovery Retry show the dedicated recovery UI.
+Retry therefore retains its recovery progress instead of flashing the home skeleton. The storage
+barrier, paused data observations, pending rollback and strict style bootstrap remain intact;
+changing startup presentation does not bypass them. Crash-report dialogs wait until the shell
+finishes. Only the optional diff follows foreground switching; durable Save and target icon
+loading still finish before dismissing progress.
+
+Debug `ProfilePerformance` logs report ViewModel/gate waits, input preparation, encoding, Room
+write, target-profile load, baseline loading, missing-pack summary and startup recovery/bootstrap.
+These diagnostics contain only phase names, profile ids, counts and durations. Device timings
+can establish any remaining bottleneck; no numerical speedup is claimed without measurements.
+Extended manual checks cover cold startup, Save/Discard switching between large profiles,
+rapid consecutive switches, edits before diff readiness, retained per-icon modifier sources,
+reload with unsaved edits, Save/build during baseline hashing, unchanged build diffs,
+missing-pack locks, toolbar actions and recovery Retry. The device checkpoint is confirmed.
+Regression tests cover delayed baseline publication across live edits, Save, Build, profile
+switching and storage replacement, deferred legacy built adoption, independent bitmap copies
+and the inert startup shell. All 933 unit tests across 149 suites pass without failures or skips,
+and `assembleDebug` passes. The first full test run hit a native JBR 21 C2 compiler crash while
+compiling Robolectric SQLite code; the successful full run disabled C2 only in its test JVM
+through a local init script. Project and application runtime settings are unchanged.
+
 ## Threading & state
 
 The remaining primary roadmap phases are **7B** (domain StateFlow and lifecycle-aware UI reads),

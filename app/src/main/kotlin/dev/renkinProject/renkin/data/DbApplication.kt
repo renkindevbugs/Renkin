@@ -241,6 +241,9 @@ interface PackVerdictDao {
 
 @Dao
 interface RenkinPackDao {
+    @Query("SELECT packageName, activityName, drawable, calendarEnabled, calendarPrefix FROM DbApplication WHERE profileId = :profileId")
+    fun fingerprintRows(profileId: Long): List<IconFingerprintRow>
+
     @Query("SELECT modifierInput FROM DbApplication WHERE modifierInput != ''")
     fun modifierInputDocuments(): List<String>
 
@@ -264,6 +267,15 @@ interface RenkinPackDao {
     @Query("SELECT DISTINCT sourcePackName FROM DbApplication WHERE sourcePackName != ''")
     fun distinctSourcePacks(): List<String>
 }
+
+/** Only the exported fields used by the saved-versus-built comparison; excludes source artwork. */
+data class IconFingerprintRow(
+    val packageName: String,
+    val activityName: String,
+    val drawable: String,
+    val calendarEnabled: Boolean,
+    val calendarPrefix: String
+)
 
 @Dao
 interface ProfileDao {

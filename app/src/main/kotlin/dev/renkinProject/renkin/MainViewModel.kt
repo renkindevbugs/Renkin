@@ -70,6 +70,7 @@ import dev.renkinProject.renkin.icon.creator.PackIconPreview
 import dev.renkinProject.renkin.icon.creator.PackRowPreviews
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.util.Log
+import dev.renkinProject.renkin.util.timeProfilePhase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -201,14 +202,16 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    var builtKeys by mutableStateOf<Set<String>>(emptySet())
-        private set
+    private var baselineKeys by mutableStateOf<Set<String>>(emptySet())
+    val builtKeys: Set<String>
+        get() = if (changeBaselinesSession == sessionToken) baselineKeys else appProvider.loadedSavedIconKeys
 
     // Keys whose icons were manually changed this session (via applyIcon with a non-null icon).
     // Distinct from builtKeys: an app in both sets had an icon already and was re-edited.
     // Reset after every successful build.
     private var sessionUpdatedKeys by mutableStateOf<Set<String>>(emptySet())
     private var updatedKeysOwner by mutableStateOf<ProfileSessionToken?>(null)
+    // Switching expires these edits; refreshApps explicitly rebinds preserved edits after reload.
     var updatedKeys: Set<String>
         get() = if (updatedKeysOwner == sessionToken) sessionUpdatedKeys else emptySet()
         private set(value) {
@@ -432,27 +435,43 @@ class MainViewModel @Inject constructor(
     var refreshProgress by mutableStateOf<Pair<Int, Int>?>(null)
         private set
 
+    private var baselineRefreshJob: Job? = null
+    private var baselineRefreshSession: ProfileSessionToken? = null
+    @Volatile private var baselineLoadOwner: Any? = null
+
+    private fun requestBaselineRefresh(expected: ProfileSessionToken) {
+        if (!appProvider.isCurrentSession(expected) || changeBaselinesSession == expected ||
+            (baselineRefreshSession == expected && baselineRefreshJob?.isActive == true)) return
+        baselineRefreshJob?.cancel()
+        baselineRefreshSession = expected
+        baselineRefreshJob = viewModelScope.launch {
+            if (appProvider.isCurrentSession(expected) && changeBaselinesSession != expected) {
+                try {
+                    // Only publication takes the UI-operation mutex; edits can run during hashing.
+                    loadChangeBaselines(expected, clearUpdated = false, serializePublication = true)
+                    profileSessionOperations.withLock {
+                        if (!appProvider.isCurrentSession(expected)) return@withLock
+                        refreshMissingPacks(prompt = false)
+                    }
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: ProfileSessionChangedException) {
+                    // A newer session will be delivered by snapshotFlow.
+                } catch (error: Exception) {
+                    Log.error("MainViewModel", "Profile baselines could not be loaded", error)
+                    _toastEvents.trySend(R.string.profileOperationFailed)
+                }
+            }
+        }
+    }
+
     private fun observeProfileSession() {
         viewModelScope.launch {
             snapshotFlow { sessionToken.takeIf { startupComplete && !isProfileSwitching } }
                 .filterNotNull()
                 .collect { expected ->
                     if (refreshSession != null && refreshSession != expected) cancelRefresh()
-                    profileSessionOperations.withLock {
-                        if (appProvider.isCurrentSession(expected) && changeBaselinesSession != expected) {
-                            try {
-                                loadChangeBaselines(expected)
-                                refreshMissingPacks(prompt = false)
-                            } catch (error: CancellationException) {
-                                throw error
-                            } catch (error: ProfileSessionChangedException) {
-                                // A newer session will be delivered by snapshotFlow.
-                            } catch (error: Exception) {
-                                Log.error("MainViewModel", "Profile baselines could not be loaded", error)
-                                _toastEvents.trySend(R.string.profileOperationFailed)
-                            }
-                        }
-                    }
+                    requestBaselineRefresh(expected)
                 }
         }
     }
@@ -911,7 +930,7 @@ class MainViewModel @Inject constructor(
                 val liveKeys = appProvider.applicationList.mapTo(mutableSetOf()) { it.key }
                 appProvider.commitSessionState(reloaded) {
                     updatedKeys = previousEdits.filterTo(mutableSetOf()) { it in liveKeys }
-                    changeBaselinesSession = reloaded
+                    changeBaselinesSession = reloaded.takeIf { previousBaselines == expected }
                 }
                 _toastEvents.trySend(R.string.appListRefreshed)
             } catch (error: CancellationException) {
@@ -1015,32 +1034,64 @@ class MainViewModel @Inject constructor(
      * Re-reads the change baselines from the (just switched or just saved) profile's stored
      * pack — every operation that changes which saved set is current ends with this.
      */
-    private suspend fun loadChangeBaselines(expected: ProfileSessionToken, clearUpdated: Boolean = true) {
-        if (!appProvider.commitSessionState(expected) { invalidateChangeBaselines() }) return
-        val profileId = expected.profileId
-        val newSavedIconHashes = appProvider.getSavedIconHashes(profileId)
-        val newBuiltKeys = newSavedIconHashes.keys.toSet()
-        val newBuiltIconHashes = appProvider.getBuiltIconHashes(profileId)
-        // A notification or another queued operation may have switched again while Room read.
-        appProvider.commitSessionState(expected) {
-            builtKeys = newBuiltKeys
-            builtIconHashes = newBuiltIconHashes
-            savedIconHashes = newSavedIconHashes
-            if (clearUpdated) updatedKeys = emptySet()
-            changeBaselinesSession = expected
+    private suspend fun loadChangeBaselines(
+        expected: ProfileSessionToken,
+        clearUpdated: Boolean = true,
+        serializePublication: Boolean = false
+    ) {
+        val owner = Any()
+        suspend fun begin(): Boolean = appProvider.commitSessionState(expected) {
+            baselineLoadOwner = owner
+            invalidateChangeBaselines()
+        }
+        val started = if (serializePublication) {
+            profileSessionOperations.withLock {
+                if (changeBaselinesSession == expected) false else begin()
+            }
+        } else begin()
+        if (!started) return
+        repeat(MAX_BASELINE_READ_ATTEMPTS) {
+            if (baselineLoadOwner !== owner || !appProvider.isCurrentSession(expected)) return
+            val read = timeProfilePhase("baselines profile=${expected.profileId}") {
+                appProvider.readIconChangeBaselines(expected)
+            }
+            suspend fun publish(): Boolean = appProvider.commitIconChangeBaselines(read) { baselines ->
+                if (baselineLoadOwner === owner) {
+                    baselineKeys = baselines.saved.keys.toSet()
+                    builtIconHashes = baselines.built
+                    savedIconHashes = baselines.saved
+                    if (clearUpdated) updatedKeys = emptySet()
+                    changeBaselinesSession = expected
+                }
+            }
+            val published = if (serializePublication) {
+                profileSessionOperations.withLock { publish() }
+            } else publish()
+            if (published) return
+            // Save/build changed the captured data. Read again unless a newer load superseded us.
+        }
+        // Keep the diff unready; a new session or save/build synchronization starts a fresh load.
+        if (BuildConfig.DEBUG && baselineLoadOwner === owner && appProvider.isCurrentSession(expected)) {
+            Log.debug("ProfilePerformance", "Baseline read deferred after $MAX_BASELINE_READ_ATTEMPTS attempts profile=${expected.profileId}")
         }
     }
 
     private suspend fun resetChangeBaselines() =
         loadChangeBaselines(sessionToken)
 
-    /** Saves the active profile if asked, switches to [id], and refreshes the baselines. */
+    /** Saves and loads the target; the session-owned diff is refreshed without holding the dialog. */
     private suspend fun performSwitch(
         id: Long,
         saveFirst: Boolean,
         saveIfChanged: Boolean = false
     ) {
+        // A previous profile's optional diff must not queue ahead of another explicit switch.
+        baselineRefreshJob?.cancel()
+        val waitStarted = android.os.SystemClock.elapsedRealtime()
         profileSessionOperations.withLock {
+            if (BuildConfig.DEBUG) {
+                Log.debug("ProfilePerformance", "switch ViewModel wait elapsedMs=${android.os.SystemClock.elapsedRealtime() - waitStarted}")
+            }
             if (id == activeProfileId) return@withLock
             // The provider rechecks committed dirty keys under its gate, including an edit
             // that lands between this UI check and the actual notification-driven switch.
@@ -1049,10 +1100,14 @@ class MainViewModel @Inject constructor(
             val switched = appProvider.switchProfile(id, saveFirst = shouldSave, saveIfChanged = saveIfChanged)
             if (switched != previous) {
                 cancelRefresh()
-                loadChangeBaselines(switched)
+                appProvider.commitSessionState(switched) {
+                    invalidateChangeBaselines()
+                    if (updatedKeysOwner != switched) updatedKeys = emptySet()
+                }
             }
+            timeProfilePhase("switch missing-pack summary") { refreshMissingPacks() }
         }
-        refreshMissingPacks()
+        requestBaselineRefresh(sessionToken)
     }
 
     /** Switches the active profile (prefs snapshot + icon set swap), optionally saving first. */
@@ -1070,6 +1125,7 @@ class MainViewModel @Inject constructor(
             if (saveFirst) R.string.profileSaveAndSwitchInProgress else R.string.profileSwitchInProgress,
             serialize = false
         ) {
+            baselineRefreshJob?.cancel()
             performSwitch(appProvider.createProfile(name, description, packLabel), saveFirst)
         }
     }
@@ -1341,3 +1397,5 @@ class MainViewModel @Inject constructor(
         appProvider.dynamicClockDrawables(packPackageName)
 
 }
+
+private const val MAX_BASELINE_READ_ATTEMPTS = 3

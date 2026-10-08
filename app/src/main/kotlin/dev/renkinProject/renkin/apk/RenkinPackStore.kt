@@ -1,15 +1,18 @@
 package dev.renkinProject.renkin.apk
 
 import android.content.Context
+import android.graphics.Bitmap
 import androidx.compose.ui.graphics.Color
 import dev.renkinProject.renkin.data.BuiltIcon
 import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.IconFingerprintRow
 import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.drawable.ADAPTIVE_ICON_SCALE
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.drawable.ImageVectorDrawable
 import dev.renkinProject.renkin.extension.bitmapFromBase64
 import dev.renkinProject.renkin.icon.creator.IconModifierInput
 import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
@@ -21,7 +24,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import dev.renkinProject.renkin.util.timeProfilePhase
 
 /**
  * Persists the generated icons (the "Renkin pack") and handles the serialization between
@@ -34,6 +40,14 @@ class RenkinPackStore(
 ) {
     constructor(context: Context) : this(context, RenkinPackRepository(context))
     private val inputStore = IconModifierInputStore(context)
+    private val artworkDispatcher = Dispatchers.Default.limitedParallelism(2)
+
+    data class ChangeBaselines(val saved: Map<String, String>, val built: Map<String, String>)
+
+    internal data class BaselineSource(
+        val rows: List<IconFingerprintRow>,
+        val built: Map<String, String>
+    )
 
     internal suspend fun readModifierInput(state: IconModifierInput) = inputStore.read(state)
 
@@ -95,9 +109,27 @@ class RenkinPackStore(
             }
         }.getOrNull()
         val icon = decode(dbApp.drawable, dbApp.isXml, dbApp.isAdaptiveIcon)
-        val baseIcon = if (dbApp.baseDrawable.isNotEmpty()) {
-            decode(dbApp.baseDrawable, dbApp.baseIsXml, dbApp.baseIsAdaptiveIcon)
-        } else icon
+        fun decodeBase() = decode(dbApp.baseDrawable, dbApp.baseIsXml, dbApp.baseIsAdaptiveIcon)
+        val baseIcon = when {
+            dbApp.baseDrawable.isEmpty() -> icon
+            dbApp.baseDrawable == dbApp.drawable && dbApp.baseIsXml == dbApp.isXml &&
+                dbApp.baseIsAdaptiveIcon == dbApp.isAdaptiveIcon -> {
+                // Avoid parsing/decompressing identical payloads twice, while keeping the
+                // editable source detached from the rendered icon's mutable geometry/pixels.
+                runCatching {
+                    when (icon) {
+                        is ImageVectorDrawable -> icon.deepCopy()
+                        is BitmapIconDrawable -> icon.toBitmap().let { bitmap ->
+                            bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, bitmap.isMutable)?.let {
+                                BitmapIconDrawable(it, icon.isAdaptiveIcon(), icon.previewScale)
+                            }
+                        }
+                        else -> null
+                    }
+                }.getOrNull() ?: decodeBase()
+            }
+            else -> decodeBase()
+        }
         // Stored artwork that refuses to decode: the icon is lost for this session, but the row
         // itself must survive the next save instead of disappearing without a word.
         // Either representation can recover the row: a valid base replaces a broken rendered
@@ -137,55 +169,72 @@ class RenkinPackStore(
         preservedRows: Collection<DbApplication> = emptyList()
     ) = StorageOperationGate.run {
         withContext(Dispatchers.Default) {
-            val preparedInputs = mutableMapOf<IconModifierInput, IconModifierInputStore.Prepared>()
-            for (app in apps) {
-                val state = app.modifierInput ?: continue
-                if (app.createdIcon == null || state in preparedInputs) continue
-                inputStore.prepare(state)?.let { preparedInputs[state] = it }
+            val preparedInputs = timeProfilePhase("prepare inputs profile=$profileId") {
+                val prepared = mutableMapOf<IconModifierInput, IconModifierInputStore.Prepared>()
+                for (app in apps) {
+                    val state = app.modifierInput ?: continue
+                    if (app.createdIcon == null || state in prepared) continue
+                    inputStore.prepare(state)?.let { prepared[state] = it }
+                }
+                prepared
             }
-            repo.replaceAll(profileId, encodeRows(profileId, apps, preservedRows, preparedInputs))
+            val rows = timeProfilePhase("encode profile=$profileId rows=${apps.size}") {
+                encodeRows(profileId, apps, preservedRows, preparedInputs)
+            }
+            timeProfilePhase("write profile=$profileId rows=${rows.size}") {
+                repo.replaceAll(profileId, rows)
+            }
             preparedInputs.forEach { (state, prepared) -> inputStore.accept(state, prepared) }
         }
     }
 
-    private fun encodeRows(
+    private suspend fun encodeRows(
         profileId: Long,
         apps: List<PackageInfoStruct>,
         preservedRows: Collection<DbApplication>,
         preparedInputs: Map<IconModifierInput, IconModifierInputStore.Prepared> = emptyMap()
     ): List<DbApplication> {
-        val dbApps = apps.mapNotNull { app ->
-            val rendered = app.createdIcon
-            val base = app.baseIcon ?: rendered
-            if (rendered == null && !app.calendarEnabled) return@mapNotNull null
-            // Encoding a bitmap icon means base64 of a PNG; do it once and reuse it for the
-            // fingerprint below.
-            val renderedPayload = rendered?.toDbString() ?: ""
-            DbApplication(
-                app.packageName,
-                app.activityName,
-                rendered?.isAdaptiveIcon() ?: false,
-                rendered != null && rendered !is BitmapIconDrawable,
-                renderedPayload,
-                app.calendarEnabled,
-                app.calendarPrefix ?: "",
-                app.calendarPackName ?: "",
-                app.sourcePackName ?: "",
-                profileId,
-                isCustomIcon = app.isCustom,
-                isLegacyIcon = app.isLegacy,
-                baseDrawable = base?.toDbString() ?: "",
-                baseIsAdaptiveIcon = base?.isAdaptiveIcon() ?: false,
-                baseIsXml = base != null && base !is BitmapIconDrawable,
-                sourceUrl = app.sourceUrl ?: "",
-                isFallbackIcon = app.isFallback,
-                modifierRecipe = if (base != null) app.modifierRecipe.orEmpty() else "",
-                modifierInput = if (base != null) app.modifierInput?.let { preparedInputs[it]?.document }.orEmpty() else ""
-            )
+        val dbApps = coroutineScope {
+            apps.filter { it.createdIcon != null || it.calendarEnabled }.map { app ->
+                async(artworkDispatcher) { encodeRow(profileId, app, preparedInputs) }
+            }.awaitAll().filterNotNull()
         }
         val liveKeys = dbApps.map { "${it.packageName}/${it.activityName}" }.toSet()
         val kept = preservedRows.filter { "${it.packageName}/${it.activityName}" !in liveKeys }
         return dbApps + kept
+    }
+
+    private fun encodeRow(
+        profileId: Long,
+        app: PackageInfoStruct,
+        preparedInputs: Map<IconModifierInput, IconModifierInputStore.Prepared>
+    ): DbApplication? {
+        val rendered = app.createdIcon
+        val base = app.baseIcon ?: rendered
+        if (rendered == null && !app.calendarEnabled) return null
+        // The same source/export instance needs only one PNG/XML serialization.
+        val renderedPayload = rendered?.toDbString() ?: ""
+        return DbApplication(
+            app.packageName,
+            app.activityName,
+            rendered?.isAdaptiveIcon() ?: false,
+            rendered != null && rendered !is BitmapIconDrawable,
+            renderedPayload,
+            app.calendarEnabled,
+            app.calendarPrefix ?: "",
+            app.calendarPackName ?: "",
+            app.sourcePackName ?: "",
+            profileId,
+            isCustomIcon = app.isCustom,
+            isLegacyIcon = app.isLegacy,
+            baseDrawable = if (base === rendered) renderedPayload else base?.toDbString() ?: "",
+            baseIsAdaptiveIcon = base?.isAdaptiveIcon() ?: false,
+            baseIsXml = base != null && base !is BitmapIconDrawable,
+            sourceUrl = app.sourceUrl ?: "",
+            isFallbackIcon = app.isFallback,
+            modifierRecipe = if (base != null) app.modifierRecipe.orEmpty() else "",
+            modifierInput = if (base != null) app.modifierInput?.let { preparedInputs[it]?.document }.orEmpty() else ""
+        )
     }
 
     /** Keys ("package/activity") of the apps in [profileId]'s last built/saved pack. */
@@ -196,10 +245,31 @@ class RenkinPackStore(
     /** Every stored icon's fingerprint, keyed the same way — the "saved" side of the comparison. */
     suspend fun savedHashes(profileId: Long): Map<String, String> =
         withContext(Dispatchers.Default) {
-            repo.getAll(profileId).associate {
-                "${it.packageName}/${it.activityName}" to it.fingerprint()
-            }
+            fingerprints(repo.fingerprintRows(profileId))
         }
+
+    private suspend fun fingerprints(rows: List<IconFingerprintRow>): Map<String, String> = rows.associate {
+        currentCoroutineContext().ensureActive()
+        "${it.packageName}/${it.activityName}" to iconFingerprint(it.drawable, it.calendarEnabled, it.calendarPrefix)
+    }
+
+    internal suspend fun readBaselineSource(profileId: Long): BaselineSource =
+        StorageOperationGate.run {
+            BaselineSource(repo.fingerprintRows(profileId), builtHashes(profileId))
+        }
+
+    internal suspend fun calculateBaselines(source: BaselineSource): ChangeBaselines =
+        withContext(Dispatchers.Default) { ChangeBaselines(fingerprints(source.rows), source.built) }
+
+    /** Caller revalidates saved rows and build ownership under the profile/storage gates. */
+    internal suspend fun adoptBaselineSource(
+        profileId: Long, source: BaselineSource, saved: Map<String, String>
+    ) {
+        repo.replaceBuiltIcons(profileId, source.rows.map { row ->
+            BuiltIcon(profileId, row.packageName, row.activityName,
+                saved.getValue("${row.packageName}/${row.activityName}"))
+        })
+    }
 
     /** Records what a build shipped, replacing the previous record for that profile. */
     suspend fun recordBuilt(profileId: Long) = withContext(Dispatchers.Default) {
@@ -257,5 +327,12 @@ internal fun iconFingerprint(
     if (drawable.isEmpty() && !calendarEnabled) return ""
     val payload = "$drawable|$calendarEnabled|${calendarPrefix.orEmpty()}"
     val digest = java.security.MessageDigest.getInstance("SHA-1").digest(payload.toByteArray())
-    return digest.joinToString("") { "%02x".format(it) }
+    val alphabet = "0123456789abcdef"
+    return buildString(digest.size * 2) {
+        digest.forEach { byte ->
+            val value = byte.toInt() and 0xff
+            append(alphabet[value ushr 4])
+            append(alphabet[value and 0x0f])
+        }
+    }
 }

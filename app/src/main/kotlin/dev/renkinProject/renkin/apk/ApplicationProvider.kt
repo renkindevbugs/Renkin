@@ -6,6 +6,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
@@ -51,6 +52,7 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.util.Log
+import dev.renkinProject.renkin.util.timeProfilePhase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -208,6 +210,10 @@ class ApplicationProvider internal constructor(
     private val profileOperations = ProfileOperationGate(::publishApplicationState)
     private val renderTracker = IconRenderTracker()
     private val savedProfileRevisions = mutableMapOf<Long, Long>()
+    @Volatile private var loadedSavedKeys: Pair<ProfileSessionToken, Set<String>>? = null
+    /** Keys from the completed profile load, available before its artwork fingerprints are read. */
+    val loadedSavedIconKeys: Set<String>
+        get() = loadedSavedKeys?.takeIf { it.first == sessionToken }?.second.orEmpty()
     private var storageEpoch = 0L
     @Volatile private var longOperations: Map<Long, ProfileSessionToken> = emptyMap()
     private var nextLongOperation = 0L
@@ -998,8 +1004,8 @@ class ApplicationProvider internal constructor(
         val savedByKey = apps.associateBy { it.key }
         val matchingKeys = applicationList.filter { savedByKey[it.key] == it }.mapTo(mutableSetOf()) { it.key }
         lockManager.releaseReplaced(apps.filter { it.key in matchingKeys && it.createdIcon != null }.mapTo(mutableSetOf()) { it.key })
-        for (app in applicationList.toList()) {
-            if (app.isRefreshMade && savedByKey[app.key] == app) editApplication(app, app.locked())
+        for ((index, app) in applicationList.withIndex()) {
+            if (app.isRefreshMade && savedByKey[app.key] == app) editApplication(index, app.locked())
         }
         unsavedIconKeys = unsavedIconKeys - matchingKeys
     }
@@ -1010,7 +1016,10 @@ class ApplicationProvider internal constructor(
         // Saved vectors may contain theme references. Resolve their fallback from the user's
         // explicit theme choice every time a profile is loaded, not from stale system state.
         val defaultColor = prefs.getDefaultIconColor(context)
-        val saved = renkinPackStore.load(profileId, defaultColor)
+        val saved = timeProfilePhase("read/decode icons profile=$profileId") {
+            renkinPackStore.load(profileId, defaultColor)
+        }
+        loadedSavedKeys = sessionToken to saved.keys.toSet()
         if (saved.isEmpty()) return
 
         // Which source packs' icons must stay locked on this device (paid or unverified,
@@ -1028,7 +1037,7 @@ class ApplicationProvider internal constructor(
             if (key !in appKeys || entry.decodeFailed) lockManager.holdOrphan(key, entry.row)
         }
 
-        for (app in applicationList.toList()) {
+        for ((index, app) in applicationList.withIndex()) {
             val entry = saved[app.key] ?: continue
             // Undecodable artwork: keep the row (held above), show the app as having no icon.
             if (entry.decodeFailed) continue
@@ -1075,7 +1084,7 @@ class ApplicationProvider internal constructor(
                 }
                 else -> app.changeCalendar(entry.calendarEnabled, entry.calendarPrefix, entry.calendarPackName)
             }
-            editApplication(app, updated, trackUnsaved = false)
+            editApplication(index, updated, trackUnsaved = false)
         }
         lockManager.publish()
     }
@@ -1328,8 +1337,8 @@ class ApplicationProvider internal constructor(
 
     /** Blanks every in-memory icon and calendar opt-in (profile switch, restore, clear). */
     private suspend fun resetInMemoryIcons() {
-        for (app in applicationList.toList()) {
-            editApplication(app, app.changeExport(null).changeCalendar(false, null, null), trackUnsaved = false)
+        for ((index, app) in applicationList.withIndex()) {
+            editApplication(index, app.changeExport(null).changeCalendar(false, null, null), trackUnsaved = false)
         }
     }
 
@@ -1340,6 +1349,50 @@ class ApplicationProvider internal constructor(
     /** Fingerprints of the stored icons — the "saved" half of the changes-since-build compare. */
     suspend fun getSavedIconHashes(profileId: Long = activeProfileId): Map<String, String> =
         renkinPackStore.savedHashes(profileId)
+
+    internal data class IconChangeBaselineSource(
+        val session: ProfileSessionToken,
+        val savedRevision: Long,
+        val storageEpoch: Long,
+        val gateEpoch: Long,
+        val artwork: RenkinPackStore.BaselineSource
+    )
+
+    internal data class IconChangeBaselineRead(
+        val source: IconChangeBaselineSource,
+        val baselines: RenkinPackStore.ChangeBaselines
+    )
+
+    internal suspend fun readIconChangeBaselines(expected: ProfileSessionToken): IconChangeBaselineRead {
+        val source = runProfileOperation(expected) {
+            IconChangeBaselineSource(
+                expected, savedProfileRevisions[expected.profileId] ?: 0L, storageEpoch,
+                StorageOperationGate.epoch, renkinPackStore.readBaselineSource(expected.profileId)
+            )
+        }
+        // The captured strings are immutable. Hashing must not hold either storage/profile gate.
+        return IconChangeBaselineRead(source, renkinPackStore.calculateBaselines(source.artwork))
+    }
+
+    internal suspend fun commitIconChangeBaselines(
+        read: IconChangeBaselineRead, update: (RenkinPackStore.ChangeBaselines) -> Unit
+    ): Boolean = profileOperations.run {
+        val source = read.source
+        val profileId = source.session.profileId
+        if (!isCurrentSession(source.session) || source.storageEpoch != storageEpoch ||
+            source.gateEpoch != StorageOperationGate.epoch ||
+            source.savedRevision != (savedProfileRevisions[profileId] ?: 0L)) return@run false
+        currentCoroutineContext().ensureActive()
+        // A build can replace its baseline without saving newer live artwork.
+        if (renkinPackStore.builtHashes(profileId) != source.artwork.built) return@run false
+        val baselines = if (source.artwork.built.isEmpty() &&
+            profileManager.profile(profileId)?.hasUnbuiltChanges == false) {
+            renkinPackStore.adoptBaselineSource(profileId, source.artwork, read.baselines.saved)
+            read.baselines.copy(built = read.baselines.saved)
+        } else read.baselines
+        update(baselines)
+        true
+    }
 
     /**
      * Fingerprints of what the last build shipped; empty when this profile never built. A profile
@@ -1402,17 +1455,23 @@ class ApplicationProvider internal constructor(
     suspend fun switchProfile(
         newProfileId: Long, saveFirst: Boolean = false, saveIfChanged: Boolean = false
     ): ProfileSessionToken = withContext(Dispatchers.Default) {
-        ensureInitialized()
+        timeProfilePhase("switch initialization") { ensureInitialized() }
+        val waitStarted = android.os.SystemClock.elapsedRealtime()
         profileOperations.run {
+            if (BuildConfig.DEBUG) {
+                Log.debug("ProfilePerformance", "switch storage/profile wait elapsedMs=${android.os.SystemClock.elapsedRealtime() - waitStarted}")
+            }
             if (newProfileId == activeProfileId || !profileManager.profileExists(newProfileId)) {
                 return@run sessionToken
             }
             if (saveFirst || (saveIfChanged && unsavedIconKeys.isNotEmpty())) {
-                persistActiveProfileIcons(unbuiltAfter = true)
+                timeProfilePhase("save departing profile=$activeProfileId") {
+                    persistActiveProfileIcons(unbuiltAfter = true)
+                }
             }
             isProfileSwitching = true
             try {
-                switchProfileLocked(newProfileId)
+                timeProfilePhase("load target profile=$newProfileId") { switchProfileLocked(newProfileId) }
             } finally {
                 isProfileSwitching = false
             }
@@ -1424,11 +1483,11 @@ class ApplicationProvider internal constructor(
     private suspend fun switchProfileLocked(newProfileId: Long) {
         if (newProfileId == activeProfileId || !profileManager.profileExists(newProfileId)) return
         invalidateSession()
-        if (!profileManager.switchTo(newProfileId)) return
+        if (!timeProfilePhase("select style profile=$newProfileId") { profileManager.switchTo(newProfileId) }) return
         // The captured rows belong to the profile being left; they must not be restorable here.
         clearUndo()
         // Reset the in-memory icons and load exactly the target selected above.
-        resetInMemoryIcons()
+        timeProfilePhase("reset departing icons") { resetInMemoryIcons() }
         loadRenkinPack(newProfileId)
         unsavedIconKeys = emptySet()
     }

@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -232,6 +233,28 @@ private fun LazyGridState.isScrollingUp(): Boolean {
             }
         }
     }.value
+}
+
+/** The same inert home shell covers storage checking and normal catalog/icon loading. */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+fun MainStartupScreen() {
+    Scaffold(
+        topBar = { TitleBar(loading = true) }
+    ) { padding ->
+        Column(Modifier.fillMaxSize().padding(padding)) {
+            SearchField(
+                value = "",
+                onValueChange = {},
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                placeholder = stringResource(R.string.searchApps),
+                enabled = false
+            )
+            Box(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
+                WavyLoadingBar(Modifier.fillMaxWidth().padding(horizontal = 48.dp))
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1155,11 +1178,8 @@ fun OpenAppOptions(
 
 @Composable
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
-fun RefreshButton() {
-    val viewModel: MainViewModel = hiltViewModel()
-    val isRefreshing = viewModel.isRefreshing
-
-    IconButton(enabled = !isRefreshing, onClick = viewModel::refresh) {
+private fun RefreshButton(isRefreshing: Boolean, enabled: Boolean, onRefresh: () -> Unit) {
+    IconButton(enabled = enabled && !isRefreshing, onClick = onRefresh) {
         if (isRefreshing) {
             LoadingIndicator(
                 modifier = Modifier.size(24.dp),
@@ -1178,8 +1198,17 @@ fun RefreshButton() {
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun TitleBar(
-    scrollBehavior: TopAppBarScrollBehavior? = null
+    scrollBehavior: TopAppBarScrollBehavior? = null,
+    loading: Boolean = false
 ) {
+    if (loading) {
+        TitleBarContent(
+            scrollBehavior = scrollBehavior,
+            enabled = false,
+            title = { Text(stringResource(R.string.app_name)) }
+        )
+        return
+    }
     val prefs = getPreferences()
     var openSettings by rememberSaveable { mutableStateOf(false) }
     var openInfo by rememberSaveable { mutableStateOf(false) }
@@ -1189,66 +1218,17 @@ fun TitleBar(
     val completedCount by watchViewModel.completedCount.collectAsStateWithLifecycle()
     val mainViewModel: MainViewModel = hiltViewModel()
 
-    LargeFlexibleTopAppBar(
+    TitleBarContent(
         scrollBehavior = scrollBehavior,
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.background,
-            scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
-            titleContentColor = MaterialTheme.colorScheme.primary,
-        ),
-        title = {
-            Box(Modifier.introTarget(IntroTarget.PROFILE)) { ProfileSwitcherTitle() }
-        },
-        actions = {
-            // Lit while any of the active profile's icons are locked behind a missing pack.
-            // Error tint on purpose: it must stand out from the primary-tinted actions.
-            if (mainViewModel.missingPackSummary.isNotEmpty()) {
-                IconButton(onClick = { mainViewModel.openMissingPacksDialog() }) {
-                    Icon(
-                        imageVector = Icons.Filled.Warning,
-                        contentDescription = stringResource(R.string.missingPacksTitle),
-                        tint = MaterialTheme.colorScheme.error
-                    )
-                }
-            }
-            Box(Modifier.introTarget(IntroTarget.REFRESH)) { RefreshButton() }
-            IconButton(
-                onClick = { openWatch = true },
-                modifier = Modifier.introTarget(IntroTarget.WATCHED_ICONS)
-            ) {
-                BadgedBox(badge = {
-                    if (completedCount > 0) {
-                        Badge { Text(completedCount.toString()) }
-                    }
-                }) {
-                    Icon(
-                        imageVector = Icons.Filled.Notifications,
-                        contentDescription = stringResource(R.string.openWatchedIcons),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-            IconButton(
-                onClick = { openInfo = true },
-                modifier = Modifier.introTarget(IntroTarget.INFO)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Info,
-                    contentDescription = stringResource(R.string.info),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-            IconButton(
-                onClick = { openSettings = true },
-                modifier = Modifier.introTarget(IntroTarget.SETTINGS)
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Settings,
-                    contentDescription = stringResource(R.string.settings),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-        }
+        isRefreshing = mainViewModel.isRefreshing,
+        completedCount = completedCount,
+        hasMissingPacks = mainViewModel.missingPackSummary.isNotEmpty(),
+        onMissingPacks = mainViewModel::openMissingPacksDialog,
+        onRefresh = mainViewModel::refresh,
+        onWatch = { openWatch = true },
+        onInfo = { openInfo = true },
+        onSettings = { openSettings = true },
+        title = { Box(Modifier.introTarget(IntroTarget.PROFILE)) { ProfileSwitcherTitle() } }
     )
 
     if (openSettings) {
@@ -1268,6 +1248,87 @@ fun TitleBar(
             openWatch = false
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
+@Composable
+private fun TitleBarContent(
+    title: @Composable () -> Unit,
+    scrollBehavior: TopAppBarScrollBehavior? = null,
+    enabled: Boolean = true,
+    isRefreshing: Boolean = false,
+    completedCount: Int = 0,
+    hasMissingPacks: Boolean = false,
+    onMissingPacks: () -> Unit = {},
+    onRefresh: () -> Unit = {},
+    onWatch: () -> Unit = {},
+    onInfo: () -> Unit = {},
+    onSettings: () -> Unit = {}
+) {
+    LargeFlexibleTopAppBar(
+        scrollBehavior = scrollBehavior,
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = MaterialTheme.colorScheme.background,
+            scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+            titleContentColor = MaterialTheme.colorScheme.primary,
+        ),
+        title = title,
+        actions = {
+            // Lit while any of the active profile's icons are locked behind a missing pack.
+            // Error tint on purpose: it must stand out from the primary-tinted actions.
+            if (hasMissingPacks) {
+                IconButton(onClick = onMissingPacks, enabled = enabled) {
+                    Icon(
+                        imageVector = Icons.Filled.Warning,
+                        contentDescription = stringResource(R.string.missingPacksTitle),
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+            Box(Modifier.introTarget(IntroTarget.REFRESH)) {
+                RefreshButton(isRefreshing, enabled, onRefresh)
+            }
+            IconButton(
+                onClick = onWatch,
+                enabled = enabled,
+                modifier = Modifier.introTarget(IntroTarget.WATCHED_ICONS)
+            ) {
+                BadgedBox(badge = {
+                    if (completedCount > 0) {
+                        Badge { Text(completedCount.toString()) }
+                    }
+                }) {
+                    Icon(
+                        imageVector = Icons.Filled.Notifications,
+                        contentDescription = stringResource(R.string.openWatchedIcons),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
+            IconButton(
+                onClick = onInfo,
+                enabled = enabled,
+                modifier = Modifier.introTarget(IntroTarget.INFO)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = stringResource(R.string.info),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            IconButton(
+                onClick = onSettings,
+                enabled = enabled,
+                modifier = Modifier.introTarget(IntroTarget.SETTINGS)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Settings,
+                    contentDescription = stringResource(R.string.settings),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    )
 }
 
 @Composable

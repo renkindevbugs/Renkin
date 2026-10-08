@@ -96,7 +96,8 @@ class MainActivity : ComponentActivity() {
             val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()
             val recoveryState by StorageOperationGate.recoveryState.collectAsStateWithLifecycle()
             val recoveryFailureReason by StorageOperationGate.recoveryFailureReason.collectAsStateWithLifecycle()
-            if (recoveryState != StorageRecoveryState.READY) {
+            if (recoveryState == StorageRecoveryState.RECOVERING || recoveryState == StorageRecoveryState.FAILED ||
+                (recoveryState == StorageRecoveryState.CHECKING && viewModel.storageRecoveryRetryRunning)) {
                 RenkinTheme {
                     BackupRecoveryScreen(
                         state = recoveryState,
@@ -110,6 +111,8 @@ class MainActivity : ComponentActivity() {
                 return@setContent
             }
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
+            val startupLoading = recoveryState == StorageRecoveryState.CHECKING ||
+                (!viewModel.startupComplete && !viewModel.startupFailed)
             edgeToEdge(darkMode)
             // Pack resources must resolve values-night the way the UI displays, not the way
             // the system is set — mode-dependent pack colours are invisible otherwise.
@@ -149,9 +152,9 @@ class MainActivity : ComponentActivity() {
                                     color = MaterialTheme.colorScheme.background
                                 ) {
                                     ToastHost(toaster)
-                                    MainColumn(iconPackState.packs)
+                                    if (startupLoading) MainStartupScreen() else MainColumn(iconPackState.packs)
 
-                                    if (crashPending) {
+                                    if (crashPending && !startupLoading) {
                                         CrashReportDialog(
                                             onDismiss = {
                                                 CrashReporter.markCrashesSeen(this@MainActivity)

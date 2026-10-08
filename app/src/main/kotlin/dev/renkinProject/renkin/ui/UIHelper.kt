@@ -197,6 +197,7 @@ fun SearchField(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String? = null,
+    enabled: Boolean = true,
     // Extra control(s) rendered inside the field after the clear button — e.g. the home
     // list's sort/filter menu, so it belongs to the field instead of floating beside it.
     extraTrailing: (@Composable () -> Unit)? = null
@@ -205,6 +206,7 @@ fun SearchField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
+        enabled = enabled,
         shape = CircleShape,
         singleLine = true,
         // Enter / the IME search key just dismisses the keyboard and the cursor — the list already

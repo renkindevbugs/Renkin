@@ -13,6 +13,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.room.Room
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.BuiltIcon
 import dev.renkinProject.renkin.data.GlobalApplyCustomKey
 import dev.renkinProject.renkin.data.GlobalIconScaleKey
 import dev.renkinProject.renkin.data.GlobalApplyGeneratedKey
@@ -348,6 +349,100 @@ class EditorApplyIntegrityTest {
         assertNull(provider.applicationList.single().createdIcon)
         assertNull(provider.applicationList.single().baseIcon)
         assertNull(provider.applicationList.single().sourcePackName)
+    }
+
+    @Test
+    fun baselineReadAllowsNewLiveEditsWithoutClearingTheirDirtyKeys() = runBlocking {
+        val app = initializeApp()
+        val read = provider.readIconChangeBaselines(provider.sessionToken)
+        val reviewed = draft()
+        apply(app, reviewed)
+        assertTrue(provider.commitIconChangeBaselines(read) {
+            assertTrue(it.saved.isEmpty())
+        })
+        assertSame(reviewed, provider.applicationList.single().createdIcon)
+        assertEquals(setOf(app.key), provider.applicationState.value.unsavedIconKeys)
+    }
+
+    @Test
+    fun savedArtworkRejectsAnOlderBaselineReadAndFreshReadUsesTheSavedRows() = runBlocking {
+        val app = initializeApp()
+        val read = provider.readIconChangeBaselines(provider.sessionToken)
+        apply(app, draft())
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        assertFalse(provider.commitIconChangeBaselines(read) { fail("Stale save baseline published") })
+        val fresh = provider.readIconChangeBaselines(provider.sessionToken)
+        val rows = repository.getAll(provider.activeProfileId)
+        assertEquals(setOf(app.key), fresh.baselines.saved.keys)
+        assertEquals(rows.single().fingerprint(), fresh.baselines.saved.getValue(app.key))
+        assertTrue(provider.commitIconChangeBaselines(fresh) { assertEquals(fresh.baselines, it) })
+    }
+
+    @Test
+    fun changedBuildRecordRejectsBaselineEvenWhenSavedArtworkDidNotChange() = runBlocking {
+        val app = initializeApp()
+        val read = provider.readIconChangeBaselines(provider.sessionToken)
+        repository.replaceBuiltIcons(provider.activeProfileId, listOf(
+            BuiltIcon(provider.activeProfileId, app.packageName, app.activityName, "previous-apk")
+        ))
+        assertFalse(provider.commitIconChangeBaselines(read) { fail("Stale build baseline published") })
+        val fresh = provider.readIconChangeBaselines(provider.sessionToken)
+        assertTrue(provider.commitIconChangeBaselines(fresh) {
+            assertEquals(mapOf(app.key to "previous-apk"), it.built)
+        })
+    }
+
+    @Test
+    fun switchingExpiresBaselineReadsAndSuppliesOnlyTheTargetsLoadedKeys() = runBlocking {
+        val app = initializeApp()
+        apply(app, draft())
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        val original = provider.sessionToken
+        val read = provider.readIconChangeBaselines(original)
+        val other = provider.createProfile("Other", "", "Other icons")
+        provider.switchProfile(other)
+        assertTrue(provider.loadedSavedIconKeys.isEmpty())
+        assertFalse(provider.commitIconChangeBaselines(read) { fail("Other profile baseline published") })
+        provider.switchProfile(original.profileId)
+        assertEquals(setOf(app.key), provider.loadedSavedIconKeys)
+        assertFalse(provider.commitIconChangeBaselines(read) { fail("An old session was revived") })
+    }
+
+    @Test
+    fun storageReplacementRejectsCapturedBaselineWithoutPublishing() = runBlocking {
+        initializeApp()
+        val read = provider.readIconChangeBaselines(provider.sessionToken)
+        StorageOperationGate.run { StorageOperationGate.markStorageReplaced() }
+        assertFalse(provider.commitIconChangeBaselines(read) { fail("Pre-restore baseline published") })
+    }
+
+    @Test
+    fun legacyBuiltAdoptionHappensOnlyWhenAFreshReadCommits() = runBlocking {
+        val app = initializeApp()
+        apply(app, draft())
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        val profile = repository.profile(provider.activeProfileId)!!
+        repository.updateProfile(profile.copy(hasUnbuiltChanges = false))
+        val read = provider.readIconChangeBaselines(provider.sessionToken)
+        assertTrue(repository.builtIcons(profile.id).isEmpty())
+        assertTrue(provider.commitIconChangeBaselines(read) {
+            assertEquals(it.saved, it.built)
+            assertEquals(setOf(app.key), it.built.keys)
+        })
+        assertEquals(read.baselines.saved.values.single(), repository.builtIcons(profile.id).single().iconHash)
+    }
+
+    @Test
+    fun legacyAdoptionRechecksUnbuiltPolicyAtPublication() = runBlocking {
+        val app = initializeApp()
+        apply(app, draft())
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        val profile = repository.profile(provider.activeProfileId)!!
+        repository.updateProfile(profile.copy(hasUnbuiltChanges = false))
+        val read = provider.readIconChangeBaselines(provider.sessionToken)
+        repository.updateProfile(profile.copy(hasUnbuiltChanges = true))
+        assertTrue(provider.commitIconChangeBaselines(read) { assertTrue(it.built.isEmpty()) })
+        assertTrue(repository.builtIcons(profile.id).isEmpty())
     }
 
     @Test

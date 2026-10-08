@@ -52,6 +52,10 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         dao.getAll(profileId)
     }
 
+    internal suspend fun fingerprintRows(profileId: Long): List<IconFingerprintRow> = access {
+        dao.fingerprintRows(profileId)
+    }
+
     /**
      * Replaces the stored set of [profileId] in one shot — atomically: a crash or error
      * between the delete and the insert must not leave the profile empty.
