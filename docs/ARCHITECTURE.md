@@ -739,6 +739,22 @@ orphan cleanup, cancellation during publication and I/O failures before/after re
 fsync uses the existing Windows-compatible Os shadow with an optional test failure callback;
 payload file sync runs normally. Room/portable-backup/recovery-prefs versions remain 21/4/3.
 
+Checkpoint **7C2a** adds `EditorControlsSnapshot`, a bounded version-1 binary
+`EditorControlsCodec`, and the Main-thread `ui/EditorControlCapture` adapter. The value snapshot
+preserves disabled controls, nested color/target lists, exact finite floats, packed UI colors,
+vector/upload control values and ordered brush geometry without retaining live Compose state.
+The fixed binary order, named enums, strict UTF-8/count checks and 2 MiB output ceiling avoid
+recipe normalization and unbounded parsing. Capture bounds/copies collections before encoding
+off Main. No autosave/recovery caller is installed yet. Complete artwork/origin/vector-seed/
+replay capture and canonical baseline fingerprints remain **7C2b**, followed by the recovery
+offer and storage/lifecycle integration in **7C3**. Controls alone cannot restore a draft.
+Those callers must handle capture/encode rejection without replacing the last valid checkpoint,
+validate control domains before binding without silent clamping, and resolve font identifiers
+only through verified owned artifacts or the allowed catalog.
+Device regressions are confirmed; eleven new capture/codec tests, all 974 tests across 152
+suites and `assembleDebug` pass. See the draft-recovery document for the format, limits,
+semantic validation requirements and integration coverage still required before recovery.
+
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
 typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.
