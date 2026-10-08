@@ -70,7 +70,7 @@ class MainActivity : ComponentActivity() {
 
         // Instantiate the view model now, on the main thread, before setContent. This forces
         // its ApplicationProvider — and the Compose snapshot state that provider holds
-        // (startupComplete, isProfileSwitching, session revision, …) — in the global snapshot.
+        // (session revision and profile identity) — in the global snapshot.
         // If the first touch instead happened while reading view model state during the initial
         // composition, Compose throws "Reading a state that was created after the snapshot
         // was taken or in a snapshot that has not yet been applied".
@@ -94,6 +94,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val iconPackState by viewModel.iconPackState.collectAsStateWithLifecycle()
+            val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
             val recoveryState by StorageOperationGate.recoveryState.collectAsStateWithLifecycle()
             val recoveryFailureReason by StorageOperationGate.recoveryFailureReason.collectAsStateWithLifecycle()
             if (recoveryState == StorageRecoveryState.RECOVERING || recoveryState == StorageRecoveryState.FAILED ||
@@ -112,7 +113,7 @@ class MainActivity : ComponentActivity() {
             }
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
             val startupLoading = recoveryState == StorageRecoveryState.CHECKING ||
-                (!viewModel.startupComplete && !viewModel.startupFailed)
+                (!runtimeState.startupComplete && !viewModel.startupFailed)
             edgeToEdge(darkMode)
             // Pack resources must resolve values-night the way the UI displays, not the way
             // the system is set — mode-dependent pack colours are invisible otherwise.

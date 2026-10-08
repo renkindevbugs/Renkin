@@ -274,6 +274,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val prefs = getPreferences()
     val viewModel: MainViewModel = hiltViewModel()
     val applicationState by viewModel.applicationState.collectAsStateWithLifecycle()
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val lockedIconKeys = applicationState.lockedIconKeys
     val sortOrder = prefs.getEnumValue(AppSortOrderKey, AppSortOrder.NAME)
     val storedFilterNoIcon = prefs.getBooleanValue(AppFilterNoIconKey)
@@ -576,7 +577,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val onboardingSeen by remember {
         prefs.observePreferences().map { it.getBooleanValue(OnboardingSeenKey) }
     }.collectAsStateWithLifecycle(initialValue = true)
-    if (!onboardingSeen && viewModel.startupComplete) {
+    if (!onboardingSeen && runtimeState.startupComplete) {
         LaunchedEffect(Unit) {
             listState.scrollToItem(0)
             scrollBehavior.state.heightOffset = 0f
@@ -684,6 +685,7 @@ fun ApplicationList(
     val viewModel: MainViewModel = hiltViewModel()
     val optionsViewModel: OptionsViewModel = hiltViewModel()
     val applications = applicationState.applications
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val lockedIconKeys = applicationState.lockedIconKeys
 
     // Read preferences once for the whole list — a DataStore subscription per row
@@ -749,7 +751,7 @@ fun ApplicationList(
     // whose icons pop in seconds later, because the per-row bitmap decodes queue behind the
     // pack/DB loading still running on the same worker pool.
     // A profile transition also hides the retained snapshot until its owner matches again.
-    if (!viewModel.startupComplete || viewModel.startupFailed || viewModel.isProfileSwitching ||
+    if (!runtimeState.startupComplete || viewModel.startupFailed || runtimeState.isProfileSwitching ||
         applicationState.sessionToken != viewModel.sessionToken) {
         if (viewModel.startupFailed) {
             EmptyState(

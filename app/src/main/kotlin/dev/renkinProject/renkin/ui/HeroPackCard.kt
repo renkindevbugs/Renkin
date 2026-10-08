@@ -194,6 +194,8 @@ fun HeroPackCard(
     onFilterToggle: ((AppProblemFilter) -> Unit)? = null
 ) {
     val viewModel: MainViewModel = hiltViewModel()
+    val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
+    val profileSummaryReady = viewModel.isProfileSummaryReady(runtimeState)
     val prefs = getPreferences()
     val preferences = prefs.getPreferencesValue()
     val builtKeys = viewModel.builtKeys
@@ -229,7 +231,7 @@ fun HeroPackCard(
     val activeProfile = profiles.find { it.id == viewModel.activeProfileId }
     val progressAnimationKey = heroProgressAnimationKey(
         activeProfileId = viewModel.activeProfileId,
-        profileSummaryReady = viewModel.profileSummaryReady,
+        profileSummaryReady = profileSummaryReady,
         hasApplications = totalCount > 0
     )
     // LazyColumn disposes this card when it is far off-screen. Save both the completed state and
@@ -242,7 +244,7 @@ fun HeroPackCard(
         }
         settledAnimationKey = progressAnimationKey
         progressAnimationSettled = false
-        if (viewModel.profileSummaryReady && totalCount > 0) {
+        if (profileSummaryReady && totalCount > 0) {
             delay(CHANGE_BAR_ANIMATION_MS.toLong())
             if (settledAnimationKey == progressAnimationKey) {
                 progressAnimationSettled = true
@@ -361,7 +363,7 @@ fun HeroPackCard(
                 // Pending changes, now answerable: the badge says how many and opens the list of
                 // exactly which apps a build would add, change or drop.
                 if (shouldShowPendingChanges(
-                        profileSummaryReady = viewModel.profileSummaryReady,
+                        profileSummaryReady = profileSummaryReady,
                         progressAnimationSettled = progressAnimationSettled,
                         changeCount = changes.size,
                         hasUnbuiltChanges = activeProfile?.hasUnbuiltChanges == true

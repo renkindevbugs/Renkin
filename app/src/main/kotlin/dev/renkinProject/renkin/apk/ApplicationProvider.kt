@@ -62,6 +62,7 @@ import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -185,6 +186,8 @@ class ApplicationProvider internal constructor(
     @Volatile private var stagedApplications = persistentListOf<PackageInfoStruct>()
     private val mutableApplicationState = MutableStateFlow(ApplicationListState())
     val applicationState = mutableApplicationState.asStateFlow()
+    private val mutableRuntimeState = MutableStateFlow(ApplicationRuntimeState())
+    val runtimeState = mutableRuntimeState.asStateFlow()
     /** Operation-time view; composables collect [applicationState]. Mutations hold the profile gate. */
     val applicationList: List<PackageInfoStruct> get() = stagedApplications
     // UI observes the repository flow; synchronous getters serve operation snapshots.
@@ -196,9 +199,10 @@ class ApplicationProvider internal constructor(
     /** Operation-time readiness only; UI reads the published [applicationState]. */
     @Volatile var applicationsLoaded: Boolean = false
         private set
-    /** True once apps, packs and the saved icons have all loaded (profile switches are safe). */
-    var startupComplete: Boolean by mutableStateOf(false)
-        private set
+    /** Action-time snapshot only; UI collects [runtimeState]. */
+    var startupComplete: Boolean
+        get() = runtimeState.value.startupComplete
+        private set(value) { mutableRuntimeState.update { it.copy(startupComplete = value) } }
 
     /** Action-time snapshot only; composables collect [applicationState]. */
     val lockedIconKeys: Set<String> get() = lockManager.lockedIconKeys
@@ -315,9 +319,10 @@ class ApplicationProvider internal constructor(
         clearUndo()
     }
 
-    /** True while the shared preferences and live icon list are changing profiles. */
-    var isProfileSwitching: Boolean by mutableStateOf(false)
-        private set
+    /** Action-time profile transition snapshot only; UI collects [runtimeState]. */
+    var isProfileSwitching: Boolean
+        get() = runtimeState.value.isProfileSwitching
+        private set(value) { mutableRuntimeState.update { it.copy(isProfileSwitching = value) } }
 
     private suspend fun initialize() {
         // Startup phase timings land in logcat (tag "Startup") so a slow cold start can be

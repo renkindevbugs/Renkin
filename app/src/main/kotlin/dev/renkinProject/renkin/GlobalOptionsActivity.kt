@@ -26,6 +26,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.ApplicationRuntimeState
 import dev.renkinProject.renkin.apk.IconApplyOutcome
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
@@ -106,14 +107,16 @@ class GlobalOptionsActivity : ComponentActivity() {
             val viewModel: GlobalOptionsViewModel = hiltViewModel()
             val optionsViewModel: OptionsViewModel = hiltViewModel()
             val presetsViewModel: PresetLibraryViewModel = hiltViewModel()
+            val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
+            val profileChanged = viewModel.hasProfileChanged(runtimeState)
             val colorPresets by presetsViewModel.colorPresets.collectAsStateWithLifecycle()
             val modifierPresets by presetsViewModel.modifierPresets.collectAsStateWithLifecycle()
 
             // The screen is bound to the profile it opened with (see GlobalOptionsViewModel):
             // if that changes underneath, close and hand back what was already applied rather
             // than let a Save write one profile's staged recipe into another.
-            LaunchedEffect(viewModel.profileChanged) {
-                if (viewModel.profileChanged) {
+            LaunchedEffect(profileChanged) {
+                if (profileChanged) {
                     setResult(
                         RESULT_OK,
                         Intent()
@@ -226,6 +229,7 @@ class GlobalOptionsViewModel @Inject constructor(
     val toastEvents = _toastEvents.receiveAsFlow()
 
     val applicationState = appProvider.applicationState
+    val runtimeState = appProvider.runtimeState
     val iconPackState = appProvider.iconPackState
 
     private val previewCache = GlobalPreviewBitmapCache()
@@ -255,10 +259,12 @@ class GlobalOptionsViewModel @Inject constructor(
      * with, and saving them into a different one silently rewrites that profile's recipe.
      */
     val profileChanged: Boolean
-        get() {
-            val opened = screenSession ?: return false
-            return appProvider.startupComplete && !appProvider.isProfileSwitching && opened != appProvider.sessionToken
-        }
+        get() = hasProfileChanged(runtimeState.value)
+
+    fun hasProfileChanged(runtime: ApplicationRuntimeState): Boolean {
+        val opened = screenSession ?: return false
+        return runtime.ready && opened != appProvider.sessionToken
+    }
 
     val sessionLost: Boolean
         get() = screenSession?.providerInstanceId?.let {

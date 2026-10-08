@@ -13,6 +13,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.ApplicationRuntimeState
 import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.PackChangeBaselines
 import dev.renkinProject.renkin.apk.observePackChanges
@@ -78,8 +79,8 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -134,6 +135,7 @@ class MainViewModel @Inject constructor(
     private val profileSessionOperations = Mutex()
 
     val applicationState = appProvider.applicationState
+    val runtimeState = appProvider.runtimeState
     /** Action-time snapshot only; composables collect [applicationState]. */
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList
 
@@ -142,6 +144,7 @@ class MainViewModel @Inject constructor(
     /** Action-time snapshot only; UI readiness comes from [applicationState]. */
     val applicationsLoaded: Boolean get() = appProvider.applicationsLoaded
 
+    /** Action-time snapshot only; composables collect [runtimeState]. */
     val startupComplete: Boolean get() = appProvider.startupComplete
 
     var startupLoading by mutableStateOf(false)
@@ -171,11 +174,14 @@ class MainViewModel @Inject constructor(
      */
     private var changeBaselinesSession by mutableStateOf<ProfileSessionToken?>(null)
 
-    /** True only when the hero progress and build diff describe the active profile. */
+    /** Action-time snapshot; UI passes its collected [runtimeState] to [isProfileSummaryReady]. */
     val profileSummaryReady: Boolean
-        get() = isProfileSummaryReady(
-            startupComplete = startupComplete,
-            isProfileSwitching = isProfileSwitching,
+        get() = isProfileSummaryReady(runtimeState.value)
+
+    fun isProfileSummaryReady(runtime: ApplicationRuntimeState): Boolean =
+        isProfileSummaryReady(
+            startupComplete = runtime.startupComplete,
+            isProfileSwitching = runtime.isProfileSwitching,
             baselineProfileId = changeBaselinesSession?.takeIf { it == sessionToken }?.profileId,
             activeProfileId = activeProfileId
         )
@@ -252,9 +258,11 @@ class MainViewModel @Inject constructor(
         applicationState,
         snapshotFlow {
             PackChangeBaselines(
-                changeBaselinesSession.takeIf { profileSummaryReady },
+                changeBaselinesSession.takeIf { it == sessionToken },
                 builtIconHashes, savedIconHashes, updatedKeys
             )
+        }.combine(runtimeState) { baselines, runtime ->
+            baselines.copy(owner = baselines.owner.takeIf { runtime.ready })
         },
         viewModelScope
     )
@@ -282,9 +290,9 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             // Cold start from a notification: the app list / saved icons may still be loading.
             // Safety beats a timeout here: opening in the current profile after a slow startup
-            // could apply the icon to the wrong profile. The activity-scoped coroutine is
-            // cancelled naturally if startup cannot finish and the activity goes away.
-            while (!appProvider.startupComplete) delay(50)
+            // could apply the icon to the wrong profile. The ViewModel-scoped coroutine is
+            // cancelled naturally when its owner is cleared, even if startup cannot finish.
+            runtimeState.first { it.startupComplete }
             // The database is authoritative. Intent extras can be stale (or supplied by another
             // app because MainActivity is exported), so never trust them for profile ownership.
             val suggestion = watchRepo.getSuggestion(suggestionId) ?: return@launch
@@ -456,7 +464,7 @@ class MainViewModel @Inject constructor(
                 } catch (error: CancellationException) {
                     throw error
                 } catch (error: ProfileSessionChangedException) {
-                    // A newer session will be delivered by snapshotFlow.
+                    // A newer ready session will be delivered by the session observer.
                 } catch (error: Exception) {
                     Log.error("MainViewModel", "Profile baselines could not be loaded", error)
                     _toastEvents.trySend(R.string.profileOperationFailed)
@@ -467,7 +475,8 @@ class MainViewModel @Inject constructor(
 
     private fun observeProfileSession() {
         viewModelScope.launch {
-            snapshotFlow { sessionToken.takeIf { startupComplete && !isProfileSwitching } }
+            snapshotFlow { sessionToken }
+                .combine(runtimeState) { session, runtime -> session.takeIf { runtime.ready } }
                 .filterNotNull()
                 .collect { expected ->
                     if (refreshSession != null && refreshSession != expected) cancelRefresh()
@@ -1016,6 +1025,7 @@ class MainViewModel @Inject constructor(
 
     val activeProfileId: Long get() = appProvider.activeProfileId
 
+    /** Action-time snapshot only; composables collect [runtimeState]. */
     val isProfileSwitching: Boolean get() = appProvider.isProfileSwitching
 
     /**

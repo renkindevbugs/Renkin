@@ -639,6 +639,32 @@ and `assembleDebug` passes. The first full test run hit a native JBR 21 C2 compi
 compiling Robolectric SQLite code; the successful full run disabled C2 only in its test JVM
 through a local init script. Project and application runtime settings are unchanged.
 
+The next checkpoint, **7B7**, moves provider startup readiness and profile-transition status
+from Compose state into the read-only `runtimeState: StateFlow<ApplicationRuntimeState>`.
+The existing assignments still occur at the same points, including transition cleanup in
+`finally`. Atomic updates retain the other flag. `startupComplete` and `isProfileSwitching`
+remain action-time projections only. MainActivity, the home list/card, Global options and
+wallpaper preview collect the flow with lifecycle awareness. Summary and screen-ownership
+checks receive the collected runtime value rather than relying on a Compose read of a getter.
+
+Runtime readiness is separate from `ApplicationListState`: it must announce a transition
+before icon loading finishes, while icon rows, locks, dirty keys and Undo still publish together
+at profile-gate completion. The list continues checking its session against the live owner.
+The baseline/session observers combine runtime readiness with the remaining Compose identity
+and baseline state, so a startup completion or transition end still triggers their work.
+Opening a watch notification awaits `runtimeState.first { it.startupComplete }` instead of
+polling every 50 ms; the wait remains cancellable and has no timeout or fallback profile.
+Deferred baseline hashing, retry bounds, gate ownership and Save/Discard behavior are unchanged.
+ProfileManager's active id and the provider session revision remain Compose state for a separate
+**7B8** checkpoint; ViewModel UI/diff bookkeeping remains owned by its ViewModel. There is no
+database, backup, dependency or string change. The 7B7 on-device checkpoint is confirmed,
+including watch notifications after cold and warm startup. Regression tests cover startup
+readiness, transition publication before the completed icon snapshot, and readiness cleanup
+after cancellation and reload failure.
+The targeted checks and all 936 unit tests across 149 suites pass without failures or skips;
+`assembleDebug` passes. The full suite uses the same local test-JVM C2 workaround described
+above, without changing project or application runtime settings.
+
 ## Threading & state
 
 The remaining primary roadmap phases are **7B** (domain StateFlow and lifecycle-aware UI reads),
@@ -660,8 +686,9 @@ checkpoint, keep the current paired writes and the documented format-4 compatibi
   directly; go through a suspend function with `withContext(Default)` inside.
 - Installed-pack readiness uses read-only StateFlow. Applications, lock keys, application
   readiness and session ownership publish in one `ApplicationListState`; UI collection is
-  lifecycle-aware. Remaining provider/profile flags and baseline bookkeeping still use Compose
-  state until their own 7B checkpoint; preserve their current update and session semantics.
+  lifecycle-aware. Provider startup/transition readiness uses a separate immediate StateFlow.
+  Profile identity and ViewModel baseline bookkeeping still use Compose state; preserve their
+  current update and session semantics when migrating the remaining domain identity in 7B8.
 - Active-profile mutations run through the provider's profile-operation gate. Callers capture a
   `ProfileSessionToken` before launching work; the provider checks it after acquiring the gate.
   Tokens include the profile, session revision and provider instance, so leaving and returning to

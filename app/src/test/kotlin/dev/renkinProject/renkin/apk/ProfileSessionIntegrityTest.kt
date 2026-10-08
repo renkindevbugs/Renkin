@@ -12,6 +12,8 @@ import dev.renkinProject.renkin.di.AppModule
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -89,6 +91,67 @@ class ProfileSessionIntegrityTest {
     }
 
     @Test
+    fun runtimeStartupWaitResolvesOnlyAfterInitialization() = runBlocking {
+        assertEquals(ApplicationRuntimeState(), provider.runtimeState.value)
+        val waiting = async(start = CoroutineStart.UNDISPATCHED) {
+            provider.runtimeState.first { it.startupComplete }
+        }
+        assertFalse(waiting.isCompleted)
+
+        provider.ensureInitialized()
+
+        assertTrue(withTimeout(5_000) { waiting.await() }.ready)
+        assertTrue(provider.runtimeState.value.ready)
+        assertEquals(provider.sessionToken, provider.applicationState.value.sessionToken)
+    }
+
+    @Test
+    fun runtimeTransitionPublishesBeforeTheCompletedApplicationSnapshot() = runBlocking {
+        provider.ensureInitialized()
+        val original = provider.applicationState.value
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val transition = async(start = CoroutineStart.UNDISPATCHED) {
+            provider.runtimeState.first { it.isProfileSwitching }
+        }
+        val replacing = launch {
+            provider.replaceProfileSession { entered.complete(Unit); release.await() }
+        }
+        try {
+            withTimeout(5_000) { entered.await() }
+            val running = withTimeout(5_000) { transition.await() }
+            assertTrue(running.startupComplete)
+            assertFalse(running.ready)
+            assertSame(original, provider.applicationState.value)
+            assertFalse(provider.isCurrentSession(provider.sessionToken))
+        } finally {
+            release.complete(Unit)
+            replacing.join()
+        }
+        assertTrue(provider.runtimeState.value.ready)
+        assertEquals(provider.sessionToken, provider.applicationState.value.sessionToken)
+        assertNotEquals(original.sessionToken, provider.applicationState.value.sessionToken)
+    }
+
+    @Test
+    fun cancelledSessionReplacementRestoresRuntimeReadiness() = runBlocking {
+        provider.ensureInitialized()
+        val entered = CompletableDeferred<Unit>()
+        val replacing = launch {
+            provider.replaceProfileSession { entered.complete(Unit); awaitCancellation() }
+        }
+        try {
+            withTimeout(5_000) { entered.await() }
+            assertTrue(provider.runtimeState.value.isProfileSwitching)
+        } finally {
+            replacing.cancelAndJoin()
+        }
+        assertTrue(provider.runtimeState.value.ready)
+        assertTrue(provider.isCurrentSession(provider.sessionToken))
+        assertEquals(provider.sessionToken, provider.applicationState.value.sessionToken)
+    }
+
+    @Test
     fun loadingRejectionDoesNotPretendTheProfileChanged() = runBlocking {
         var wrote = false
         expectFailure(ProfileSessionFailureReason.LOADING) {
@@ -163,6 +226,7 @@ class ProfileSessionIntegrityTest {
             assertNotEquals(original, error.restoredSession)
             assertEquals(apps, provider.applicationList)
             assertFalse(provider.isProfileSwitching)
+            assertTrue(provider.runtimeState.value.ready)
             assertTrue(provider.isCurrentSession(error.restoredSession))
             assertSame(IllegalStateException::class.java, error.cause!!.javaClass)
         }

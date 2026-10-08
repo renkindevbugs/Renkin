@@ -89,6 +89,7 @@ class WallpaperPreviewActivity : ComponentActivity() {
 
         setContent {
             val applicationState by appProvider.applicationState.collectAsStateWithLifecycle()
+            val runtimeState by appProvider.runtimeState.collectAsStateWithLifecycle()
             val darkMode = applicationContext.dataStore.isDarkModeEnabled()
             val style = SystemBarStyle.auto(Color.Transparent.toArgb(), Color.Transparent.toArgb()) { darkMode }
             enableEdgeToEdge(style, style)
@@ -99,7 +100,7 @@ class WallpaperPreviewActivity : ComponentActivity() {
                 RenkinTheme(darkMode) {
                     LaunchedEffect(
                         appProvider.sessionToken,
-                        appProvider.isProfileSwitching
+                        runtimeState.isProfileSwitching
                     ) {
                         // The reviewed icons must stay tied to one profile. A watch deep link can
                         // otherwise switch the singleton provider underneath this activity.
