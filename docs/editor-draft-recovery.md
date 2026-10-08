@@ -13,8 +13,11 @@ Never restore an old `ProfileSessionToken`; successful recovery obtains a new li
 - **7C2b1 — persisted baselines and owned resources (confirmed and verified).** Canonical
   SHA-256 persisted baseline encodings and bounded copies of selected gallery images/fonts.
   No production caller or recovery offer is installed.
-- **7C2b2 — artwork and complete capture.** Add draft-owned artwork, vector paths
-  and seed, original input, replay bookkeeping and canonical baseline encodings. Capture a
+- **7C2b2 — artwork and vector-state codecs (confirmed and verified).** Detached artwork,
+  exact vector paths/root properties, editable entries and their original seed. No production
+  capture/autosave/recovery caller is installed.
+- **7C2b3 — complete capture.** Combine artwork, controls, original input, selected resources
+  and replay bookkeeping with the persisted baseline encodings from 7C2b1. Capture a
   coherent completed frame without I/O in composition or a long-held profile gate. Include all
   source-specific state, use the verified resources from 7C2b1 and reject partial capture before
   checkpointing. Existing DB vector XML omits properties such as path trim, miter, clipping and
@@ -118,12 +121,12 @@ typed style at its own codec limit. Invalid Unicode or oversized values fail cap
 Changing this canonical field order/meaning requires a fingerprint version change and explicit
 handling of previously saved drafts, never treating them as equivalent under the new encoding.
 
-7C2b2/7C3 must capture these immutable rows/styles under the owning provider/storage gate, hash
+7C2b3/7C3 must capture these immutable rows/styles under the owning provider/storage gate, hash
 outside it, then revalidate session, storage generation and persisted revision before publishing
 or accepting recovery. Profile/component deletion, row changes and storage replacement reject
 the result. These hashes do not replace verification of referenced modifier-input artifact
 bytes. They do not describe unsaved live artwork: that original live input still needs its own
-owned payload in 7C2b2, without committing unrelated profile edits.
+owned payload in 7C2b3, without committing unrelated profile edits.
 
 `EditorDraftResources` reads selected gallery PNGs only from the direct owned gallery directory,
 and fonts only from the current system-font catalog or the bundled default. Canonical resolution
@@ -143,14 +146,14 @@ bundled default font is captured as bytes so an app/system update cannot silentl
 References never become restore-time filesystem authority. This checkpoint does not write files
 or catalogs, install a Hilt consumer, change editing behavior or enable autosave/recovery.
 
-7C2b2 must enforce the 12-artifact/64-MiB aggregate budget while capturing all resources and
+7C2b3 must enforce the 12-artifact/64-MiB aggregate budget while capturing all resources and
 artwork, preserve their slot/selection/content correspondence and fail the complete capture if
 any required resource is missing, incompatible or over budget. Recovery must resolve the owned
 artifact, not reopen the old gallery/system path. It must preserve the original font selection
 for display while rendering from verified owned font bytes. A missing gallery path from an
 online import does not imply missing artwork; retain its captured raw icon instead.
 
-The 7C2b2 autosave boundary must handle resource-read/validation failures as well as control
+The 7C2b3 autosave boundary must handle resource-read/validation failures as well as control
 capture/encoding failures. In particular, gallery files restored from backup can exceed the
 4096-pixel capture limit; backup import does not resize them. The current share-intent path
 already uses `getBitmapFromURI` with bounds-based downsampling, but callers must not assume all
@@ -182,10 +185,110 @@ changed path identity and descriptor cleanup on failure/cancellation. A test-onl
 simulates descriptors/stat changes over real JVM file reads; real Android system-font capture
 and symlink/no-follow behavior remain platform integration coverage. All 991 tests across 154
 suites and `assembleDebug` pass with the existing local test-JVM C2 workaround.
-Before enabling 7C2b2/7C3, verify over-limit backup uploads, a font disappearing before capture,
+Before enabling 7C2b3/7C3, verify over-limit backup uploads, a font disappearing before capture,
 owned-font recovery after its system path disappears, and empty/invalid style during offer or
 acceptance. Each rejected capture/offer must preserve the prior checkpoint without crashing or
 silently publishing partial/default state.
+
+## Artwork and vector-state checkpoint (7C2b2)
+
+`EditorArtworkSnapshot` contains detached values for bitmap, vector, adaptive and inset
+artwork. `ui/EditorArtworkCapture.kt` copies live values on the owning Main thread; it neither
+reads files nor acquires a gate. Byte arrays are privately copied; vector command/child lists
+and nested pack-style lists are detached. PathNode values themselves are immutable. The
+working-vector snapshot contains both current entries and the original seed, with fill flags,
+base stroke widths, thickness, auto-centering, viewport, attribution and baked-edits flags.
+An initialized vector without its seed is rejected instead of treating its current paths as
+an unchanged seed. This checkpoint exposes a read-only seed accessor without changing editing.
+
+`EditorArtworkCodec` version 1 uses separate big-endian `RKEA` artwork and `RKEV` working-state
+headers. It preserves finite Float bits, strict UTF-8, nullable values and exact 0/1 booleans,
+rejecting unknown kinds/commands, versions, trailing/truncated content and invalid counts.
+All 19 PathNode kinds have explicit tags. Vectors retain names, root/group transforms and clip
+paths, path fill type, colors/reference brushes, alpha, stroke cap/join/miter and trim, tint,
+viewport/default size, mirroring and stroke-scaling policy. Ordinary DB vector XML is not
+used because its conversion loses editable properties. SolidColor and ReferenceBrush with a
+SolidColorShader fallback are supported; other shaders/gradients fail capture rather than
+being flattened or substituted. A reference is preserved metadata, never permission to load
+an external resource during binding.
+
+Bitmaps preserve raw ARGB_8888 sRGB pixels, row layout, density, alpha/premultiplication,
+adaptive flag and preview scale. Dimensions are limited to 4096; other configs/color spaces
+are rejected. Native binding creates a fresh bitmap and rejects a runtime with an incompatible
+row layout or flags. Raw storage avoids PNG conversion changing premultiplied pixel values.
+Adaptive snapshots retain exact foreground/background/optional monochrome PNGs, original
+layers and optional pack controls. The nested `RKEP` version-1 pack document reuses the controls
+codec's exact style encoding. Inset snapshots retain their child plus absolute/fractional
+margins; a child outside the supported IconPackDrawable types is rejected.
+
+Draft artwork cannot currently be captured/recovered for these inputs:
+
+- Bitmaps outside sRGB, including Display P3 uploads or shared images, or configurations
+  other than ARGB_8888.
+- Bitmaps with either dimension above 4096, or raw pixel bytes exceeding the 32 MiB aggregate
+  budget. A 3000-by-3000 ARGB image already needs 36,000,000 bytes and exceeds that budget;
+  the dimension ceiling alone does not establish support. Encoded framing also consumes space.
+- Vectors containing brushes other than SolidColor or ReferenceBrush with a SolidColorShader
+  fallback, including gradient brushes if an importer produces them.
+- Unsupported inset children, over-budget trees/commands/layers, or values rejected by the
+  codec/native binding checks described below.
+
+These are draft-recovery limits, not a request to disable existing live editing or Apply.
+The complete-capture/autosave owner in 7C2b3/7C3 must catch capture and encode validation failures,
+including failures thrown directly on Main before a suspend call. Keep the live editor and
+last valid checkpoint, report/log that the latest state could not be saved for recovery, and
+allow a later supported capture to retry. Never resize, convert the color space, flatten a
+brush or omit required artwork silently to fit the draft. Cancellation must propagate.
+
+Main-thread bitmap capture copies the entire raw pixel buffer; 1024-by-1024 ARGB pixels alone
+are 4 MiB, and the private byte wrapper makes another detached copy. Debounce routine gestures
+before calling capture, not merely before background encoding/store writes. Do not copy the
+bitmap on every brush point or slider event. Background flushes still need the owning-thread
+capture and completed-render checks, with timing/heap coverage before enabling autosave.
+
+Limits apply across the entire artwork tree, or across both current and seed vector state:
+depth 64, 10,000 nodes, 100,000 commands, and 32 MiB of copied pixel/layer bytes. The complete
+encoded artifact also has a 32 MiB ceiling. Text is limited to 64 KiB UTF-8. Capture checks
+collection/byte budgets before copying, and reader counts are checked against remaining bytes
+before allocation. Background encoding/decoding checks coroutine cancellation, including
+command lists containing only Close nodes. These per-artifact limits do not replace the store's
+12-artifact/64 MiB total; complete capture must enforce the latter before publication.
+
+`restoreEditorArtwork` validates the detached tree/budgets before allocating native drawable
+objects on Default, checks packed colors and named stroke/tint modes, and validates PNG
+signature, 750-pixel layer bounds and full decoding. It never opens captured paths or resolves
+references. Binding currently re-encodes for whole-tree validation, and raw byte copies can
+temporarily coexist with encoded/native buffers; 32 MiB is an artifact limit, not a peak-heap
+limit. Future recovery must validate all source/control domains and accept ownership before
+publishing any bound object. Codec-level finite-number checks alone do not establish that a
+working vector or disabled UI value is semantically supported by the current editor.
+
+Adaptive binding currently fully decodes each PNG for validation and recycles that temporary
+bitmap. AdaptiveIconPackDrawable retains the compressed bytes and decodes them again when a
+layer is requested for preview/rendering. This repeated work is a known off-Main recovery cost;
+the constructor itself does not decode. Measure it at recovery integration before introducing
+validated-layer reuse, which must preserve bounded ownership and avoid retaining large decoded
+buffers for every captured icon. Do not remove full-decode validation merely to save this work.
+
+No live caller uses these APIs yet. Complete capture in 7C2b3 must additionally preserve
+custom source selections, original/raw and completed artwork, modifier-replay ownership and
+baseline, and IconDraftState origin/private bookkeeping. It must identify a coherent completed
+render generation together with its controls; the selected tab is not evidence of origin or
+render completion. Rebinding editable paths must preserve the captured seed and source flags,
+not call captureSeed on already edited paths or publish a restored vector as a new edit.
+
+Device regressions are confirmed. Nineteen new Robolectric/native-graphics tests cover every
+command and vector field, direct root properties, all supported stroke/tint modes, brush
+references and packed colors, raw pixel/flag/density/preview round trips, adaptive originals
+and controls, nested insets, detached mutable capture, current/seed differences and baked
+flags. They reject every truncated prefix, trailing content, invalid framing/counts/UTF-8,
+non-finite values, unsupported brushes/configs/color spaces, over-budget dimensions/pixels/
+trees/current-plus-seed commands, missing seeds and incompatible native layouts/modes/PNGs.
+Close-only command lists and cancelled coroutine owners exercise cancellation. All 1,010 tests
+across 155 suites pass without failures/errors/skips, and `assembleDebug` passes with the
+existing local test-JVM C2 workaround. No production recovery caller is installed; Android
+process-death recovery, integration timing/heap and semantic live-state publication remain
+future checkpoint coverage, not established by these codec/binding regressions.
 
 ## Envelope and local files
 

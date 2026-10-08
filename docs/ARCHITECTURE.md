@@ -763,8 +763,17 @@ are selection attribution, not restore-time file authority. The existing gallery
 exposes its path without creating a directory. No capture/autosave/recovery caller is installed.
 Device regressions are confirmed; 17 new tests, all 991 tests across 154 suites and
 `assembleDebug` pass. Android system-font and symlink/no-follow checks remain platform coverage;
-the JVM resource tests simulate descriptors/stat changes while reading real files. **7C2b2** will add
-exact artwork/vector-path/seed codecs and coherent complete capture using these resources.
+the JVM resource tests simulate descriptors/stat changes while reading real files. **7C2b2** adds
+detached bitmap/vector/adaptive/inset artwork and exact vector-path/current/seed codecs, with
+Main-thread value capture and background codec/native binding boundaries. It preserves vector
+root properties, trim/miter/clip, packed colors/reference brushes, raw sRGB ARGB pixels and
+adaptive original layers. Unsupported brushes/configs and over-budget trees fail explicitly.
+No production caller is installed. Device regressions are confirmed; 19 new native-graphics
+codec/capture/binding tests, all 1,010 tests across 155 suites and `assembleDebug` pass with
+the existing local test-JVM C2 workaround. Integration timing/heap and process-death recovery
+remain coverage for the subsequent checkpoints.
+**7C2b3** will combine those values with controls/resources, original input, replay bookkeeping
+and completed-render ownership into one coherent complete capture before **7C3** enables recovery.
 Existing DB vector XML drops some editable properties and cannot substitute for that codec.
 Future capture/offer owners must handle oversized uploads, unavailable fonts and unconverted/
 invalid styles without crashing or replacing the last valid checkpoint with partial/default

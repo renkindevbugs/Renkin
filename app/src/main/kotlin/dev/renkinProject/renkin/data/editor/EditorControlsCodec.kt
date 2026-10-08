@@ -31,6 +31,28 @@ internal object EditorControlsCodec {
     const val MAX_STROKES = 2048
     const val MAX_POINTS = 100_000
 
+    internal fun encodePack(value: EditorPackControls): ByteArray {
+        val bytes = BoundedOutput()
+        with(Writer(DataOutputStream(bytes))) {
+            output.writeInt(0x524b4550); output.writeInt(VERSION) // RKEP
+            output.writeInt(value.selectedScheme); style(value.customForeground); style(value.customBackground); number(value.strokeScale)
+        }
+        return bytes.toByteArray()
+    }
+
+    internal fun decodePack(encoded: ByteArray): EditorPackControls {
+        require(encoded.size.toLong() in 1..EditorDraftCodec.MAX_CONTROLS_BYTES)
+        try {
+            return DataInputStream(ByteArrayInputStream(encoded)).use { input ->
+                require(input.readInt() == 0x524b4550 && input.readInt() == VERSION) { "Unsupported editor pack controls" }
+                val reader = Reader(input)
+                EditorPackControls(input.readInt(), reader.style(), reader.style(), reader.number()).also {
+                    require(input.read() == -1) { "Trailing editor pack controls" }
+                }
+            }
+        } catch (error: IOException) { throw IllegalArgumentException("Invalid editor pack controls", error) }
+    }
+
     fun encode(snapshot: EditorControlsSnapshot): ByteArray {
         require(snapshot.selectedTab in 0..3 && snapshot.create.materialYouScheme >= 0) { "Invalid editor selection" }
         val bytes = BoundedOutput()

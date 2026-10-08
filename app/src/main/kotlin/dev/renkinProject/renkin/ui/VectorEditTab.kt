@@ -129,6 +129,7 @@ internal class VectorEditState {
         val viewport: Pair<Float, Float>?, val sourceUrl: String?, val containsBakedModifierEdits: Boolean
     )
     private var initialInputs: Inputs? = null
+    internal fun seedForDraft(): Inputs? = initialInputs
     fun inputs() = Inputs(entries, thickness, automaticallyCenter, viewportOverride, sourceUrl, containsBakedModifierEdits)
     val hasChangesFromSeed: Boolean get() = initialInputs?.let { it != inputs() } == true
 

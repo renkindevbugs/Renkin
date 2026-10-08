@@ -22,7 +22,7 @@ import dev.renkinProject.renkin.vector.VectorEditor.Companion.resizeTo
 import dev.renkinProject.renkin.vector.VectorExporter.Companion.toXml
 import dev.renkinProject.renkin.vector.VectorRenderer.Companion.renderToCanvas
 
-class ImageVectorDrawable(imageVector: ImageVector, private val scaleStrokesWithBounds: Boolean = false): IconPackDrawable() {
+class ImageVectorDrawable(imageVector: ImageVector, internal val scaleStrokesWithBounds: Boolean = false): IconPackDrawable() {
     var name: String = imageVector.name
     var defaultWidth: Dp = imageVector.defaultWidth
     var defaultHeight: Dp = imageVector.defaultHeight
