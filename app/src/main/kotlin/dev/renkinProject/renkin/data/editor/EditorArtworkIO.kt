@@ -23,13 +23,13 @@ internal class EditorArtworkWriter(private val checkActive: () -> Unit = {}) {
     val budget = EditorArtworkBudget(checkActive)
     fun boolean(value: Boolean) = output.writeByte(if (value) 1 else 0)
     fun number(value: Float) { checkActive(); require(value.isFinite()) { "Non-finite editor artwork" }; output.writeFloat(value) }
-    fun text(value: String) {
-        require(value.length <= EditorControlsCodec.MAX_TEXT_BYTES && Charsets.UTF_8.newEncoder().canEncode(value)) { "Invalid artwork text" }
+    fun text(value: String, limit: Int = EditorControlsCodec.MAX_TEXT_BYTES) {
+        require(value.length <= limit && Charsets.UTF_8.newEncoder().canEncode(value)) { "Invalid artwork text" }
         val encoded = value.toByteArray(Charsets.UTF_8)
-        require(encoded.size <= EditorControlsCodec.MAX_TEXT_BYTES) { "Artwork text exceeds limit" }
+        require(encoded.size <= limit) { "Artwork text exceeds limit" }
         output.writeInt(encoded.size); output.write(encoded)
     }
-    fun optionalText(value: String?) { boolean(value != null); value?.let(::text) }
+    fun optionalText(value: String?, limit: Int = EditorControlsCodec.MAX_TEXT_BYTES) { boolean(value != null); value?.let { text(it, limit) } }
     fun blob(value: EditorArtworkBytes) { budget.bytes(value.size); output.writeInt(value.size); output.write(value.copyBytes()) }
     fun optionalBlob(value: EditorArtworkBytes?) { boolean(value != null); value?.let(::blob) }
     fun result(): ByteArray = bytes.toByteArray()
@@ -49,12 +49,12 @@ internal class EditorArtworkReader(encoded: ByteArray, private val checkActive: 
     fun count(limit: Int, minimumBytes: Int = 1): Int = input.readInt().also {
         require(it in 0..limit && it <= input.available() / minimumBytes) { "Invalid artwork count" }
     }
-    fun text(): String {
-        val bytes = ByteArray(count(EditorControlsCodec.MAX_TEXT_BYTES)); input.readFully(bytes)
+    fun text(limit: Int = EditorControlsCodec.MAX_TEXT_BYTES): String {
+        val bytes = ByteArray(count(limit)); input.readFully(bytes)
         return Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
             .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(bytes)).toString()
     }
-    fun optionalText(): String? = if (boolean()) text() else null
+    fun optionalText(limit: Int = EditorControlsCodec.MAX_TEXT_BYTES): String? = if (boolean()) text(limit) else null
     fun blob(): EditorArtworkBytes {
         val size = count(EditorDraftCodec.MAX_ARTIFACT_BYTES.toInt()); budget.bytes(size)
         val bytes = ByteArray(size); input.readFully(bytes); return EditorArtworkBytes(bytes)

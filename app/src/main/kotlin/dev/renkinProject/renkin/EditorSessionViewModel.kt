@@ -4,16 +4,35 @@ import androidx.annotation.MainThread
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
-import dev.renkinProject.renkin.packages.PackageInfoStruct
-import dev.renkinProject.renkin.ui.EditorSession
-import javax.inject.Inject
-import dev.renkinProject.renkin.icon.creator.PreparedModifierReplay
+import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.data.editor.EditorCaptureResult
+import dev.renkinProject.renkin.data.editor.EditorCompleteCodec
+import dev.renkinProject.renkin.data.editor.EditorDraftCheckpoint
+import dev.renkinProject.renkin.data.editor.EditorDraftFingerprints
+import dev.renkinProject.renkin.data.editor.EditorDraftOwner
+import dev.renkinProject.renkin.data.editor.EditorDraftResources
+import dev.renkinProject.renkin.data.editor.EditorDraftStore
+import dev.renkinProject.renkin.data.editor.PreparedEditorDraft
+import dev.renkinProject.renkin.icon.creator.PreparedModifierReplay
+import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.ui.EditorCapturePendingException
+import dev.renkinProject.renkin.ui.EditorCompleteMainCapture
+import dev.renkinProject.renkin.ui.EditorSession
+import dev.renkinProject.renkin.ui.captureRenderWitness
+import dev.renkinProject.renkin.ui.requirePublishedSources
 import dev.renkinProject.renkin.util.Log
+import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 @HiltViewModel
 class EditorSessionViewModel @Inject constructor() : ViewModel() {
@@ -21,6 +40,72 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
     private var activeSession: ActiveSession? = null
     private var restoreJob: Job? = null
     private var restoreGeneration = 0L
+    private val captureMutex = Mutex()
+
+    // No lifecycle caller is enabled until 7C3. Debounce must precede this Main pixel copy.
+    internal suspend fun captureCompleteDraft(
+        id: String,
+        expected: EditorDraftCheckpoint,
+        provider: ApplicationProvider,
+        store: EditorDraftStore,
+        resources: EditorDraftResources,
+        inputs: IconModifierInputStore
+    ): EditorCaptureResult = captureMutex.withLock {
+        try {
+            val active = withContext(Dispatchers.Main.immediate) { activeSession?.takeIf { it.id == id } }
+                ?: return@withLock EditorCaptureResult.Superseded
+            if (store.checkpoint() != expected) return@withLock EditorCaptureResult.Superseded
+            val baseline = provider.captureEditorDraftBaseline(active.state.owner, active.state.application)
+            val witness = withContext(Dispatchers.Main.immediate) {
+                if (activeSession !== active) throw EditorCapturePendingException()
+                active.state.captureRenderWitness().also {
+                    active.state.requirePublishedSources(it)
+                    active.state.draft.captureState(it)
+                }
+            }
+            val owned = linkedMapOf("font" to resources.font(witness.controls.create.fontReference))
+            witness.upload.path?.let { owned["upload"] = resources.upload(it) }
+            val captured = withContext(Dispatchers.Main.immediate) {
+                if (activeSession !== active || active.state.captureRenderWitness() != witness) throw EditorCapturePendingException()
+                EditorCompleteMainCapture.capture(active.state, owned.values.sumOf { it.byteCount.toLong() })
+            }
+            val owner = EditorDraftOwner(active.state.owner.profileId, active.state.application.packageName,
+                active.state.application.activityName, EditorDraftFingerprints.profile(baseline.profile),
+                EditorDraftFingerprints.icon(baseline.session.profileId, baseline.application.packageName,
+                    baseline.application.activityName, baseline.row))
+            for (pending in captured.pendingInputs) {
+                val encoded = requireNotNull(inputs.read(pending.retained)) { "Editor modifier input file is unavailable" }
+                val icon = requireNotNull(inputs.decode(encoded)) { "Editor modifier input file is invalid" }
+                withContext(Dispatchers.Main.immediate) { captured.attachInput(pending.slot, icon) }
+            }
+            val detached = withContext(Dispatchers.Main.immediate) { captured.finish(owned) }
+            val payloads = EditorCompleteCodec.encode(detached)
+            if (!provider.validateEditorDraftBaseline(baseline) || store.checkpoint() != expected) {
+                return@withLock EditorCaptureResult.Superseded
+            }
+            val current = withContext(Dispatchers.Main.immediate) {
+                activeSession === active && run {
+                    val witness = active.state.captureRenderWitness()
+                    active.state.requirePublishedSources(witness)
+                    witness == captured.witness && active.state.draft.captureState(witness).serial == captured.serial
+                }
+            }
+            if (!current) EditorCaptureResult.Superseded else EditorCaptureResult.Ready(
+                PreparedEditorDraft(expected, owner, baseline, captured.serial, payloads))
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: EditorCapturePendingException) {
+            EditorCaptureResult.Superseded
+        } catch (_: ProfileSessionChangedException) {
+            EditorCaptureResult.Superseded
+        } catch (error: Exception) {
+            Log.error("EditorSessionViewModel", "Complete editor draft could not be captured", error)
+            EditorCaptureResult.Failed(error)
+        } catch (error: OutOfMemoryError) {
+            Log.error("EditorSessionViewModel", "Complete editor draft exceeds available memory", error)
+            EditorCaptureResult.Failed(error)
+        }
+    }
 
     @MainThread
     internal fun restoreModifiers(id: String, load: suspend (EditorSession) -> PreparedModifierReplay?) {

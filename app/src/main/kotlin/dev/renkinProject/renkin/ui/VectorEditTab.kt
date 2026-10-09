@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.ui
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.MainThread
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -129,12 +130,23 @@ internal class VectorEditState {
         val viewport: Pair<Float, Float>?, val sourceUrl: String?, val containsBakedModifierEdits: Boolean
     )
     private var initialInputs: Inputs? = null
+    internal var publishedInputs: Inputs? = null
+    internal var preserveDraftSeedPublication = false
+        private set
     internal fun seedForDraft(): Inputs? = initialInputs
     fun inputs() = Inputs(entries, thickness, automaticallyCenter, viewportOverride, sourceUrl, containsBakedModifierEdits)
     val hasChangesFromSeed: Boolean get() = initialInputs?.let { it != inputs() } == true
 
     fun captureSeed() {
         if (initialInputs == null) initialInputs = inputs()
+    }
+    @MainThread
+    internal fun restoreDraftSeed(seed: Inputs?) {
+        require(!initialized || seed != null) { "Initialized editor vector has no seed" }
+        initialInputs = seed
+        preserveDraftSeedPublication = true
+        // Reattaching a recovered working vector must not publish its existing edits again.
+        publishedInputs = inputs()
     }
     var entries: List<PathEntry> by mutableStateOf(listOf())
     var thickness: Float by mutableStateOf(1f)
@@ -155,6 +167,8 @@ internal class VectorEditState {
     /** Drops the previous vector selection when another editor source is chosen. */
     fun reset(containsBakedModifierEdits: Boolean = false) {
         initialInputs = null
+        publishedInputs = null
+        preserveDraftSeedPublication = false
         entries = emptyList()
         thickness = 1f
         automaticallyCenter = true

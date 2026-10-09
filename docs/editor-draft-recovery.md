@@ -16,7 +16,7 @@ Never restore an old `ProfileSessionToken`; successful recovery obtains a new li
 - **7C2b2 — artwork and vector-state codecs (confirmed and verified).** Detached artwork,
   exact vector paths/root properties, editable entries and their original seed. No production
   capture/autosave/recovery caller is installed.
-- **7C2b3 — complete capture.** Combine artwork, controls, original input, selected resources
+- **7C2b3 — complete capture (confirmed and verified).** Combine artwork, controls, original input, selected resources
   and replay bookkeeping with the persisted baseline encodings from 7C2b1. Capture a
   coherent completed frame without I/O in composition or a long-held profile gate. Include all
   source-specific state, use the verified resources from 7C2b1 and reject partial capture before
@@ -289,6 +289,180 @@ across 155 suites pass without failures/errors/skips, and `assembleDebug` passes
 existing local test-JVM C2 workaround. No production recovery caller is installed; Android
 process-death recovery, integration timing/heap and semantic live-state publication remain
 future checkpoint coverage, not established by these codec/binding regressions.
+
+## Complete capture checkpoint (7C2b3)
+
+`EditorSessionViewModel.captureCompleteDraft` is an explicit, serialized preparation API. It
+has no production caller in this checkpoint and never calls `save`, `discard`, or storage
+invalidation. It returns Ready, Superseded (including pending renders/source publications), or
+Failed. Failure is logged and returned to the future lifecycle owner; cancellation propagates.
+An unsupported Main capture, missing resource/input file, encoding rejection, invalid persisted
+style or allocation failure cannot replace the last valid checkpoint or mutate the live editor.
+7C3 must display Failed, preserve Retry, and handle corrupt-catalog explicit discard before
+enabling this API from lifecycle/autosave code. A morphing startup LoadingIndicator is unchanged.
+
+### Completed render ownership
+
+The existing `IconDraftState` owns one completed frame alongside the winning artwork, recipe
+and optional portable input. A narrow `captureState` contract exposes its initialization and
+restore availability, actual origin, raw-stage pipeline/baked flag, previous verified input,
+active replay, requested/effective options and frame serial. Generation counters, active-job
+counts, source invalidation revisions and live session tokens are deliberately not durable
+state. Invalidating the active source clears the completed frame; clearing an inactive
+upload/vector draft preserves it. Pending/failed renders and a witness mismatch defer capture
+instead of pairing current controls with an old completed result.
+An empty/null preview also defers preparation; it cannot replace a valid checkpoint with an
+incomplete source/result pair.
+
+`EditorRenderWitness` contains detached controls, the selected resource identity, raw source
+publication identity, upload selection (path/adaptive/zoom), vector inputs, online attribution
+and replay owner. The dialog freezes it and the source selection in the same composition as
+its generation options. Render effects check their options and source identity before starting
+and before publishing. Their keys contain render inputs and explicit source invalidation;
+browsing/tab state and controls outside generation options do not cancel an in-flight render.
+A separate idle effect acknowledges the current
+witness only when the completed frame still matches the exact render options and source.
+Equal completed Create inputs, or equal upload/vector options and raw source, reuse the result;
+they do not apply another modifier stage.
+Apply still reads the completed artwork/recipe/input pair, never capture output or pending
+options. An obsolete render cannot publish solely because its coroutine has not yet been cancelled.
+Apply availability and its tap-time guard also check the acknowledged frame and published source,
+covering the interval before a newly keyed render effect starts. Unsupported recovery controls
+can still use live Apply once their normal source/render is complete; a missing witness alone
+does not disable supported existing editing behavior.
+
+The untouched initial saved-icon frame explicitly has no effective rendered-options document.
+Its neutral current controls do not claim to have produced the old baked artwork. The old
+recipe/input remain attached to that artwork, with their own source options and owned input,
+until a real new render completes. Recovery must preserve this distinction and the completed
+Create request; it must not render the old recipe over the already baked initial icon.
+
+The witness copies bounded control/brush values when its Compose dependencies change and at
+explicit capture/revalidation. Render entry/completion checks compare source identities and
+options without copying controls. It copies no pixels, fonts or gallery files. The future owner
+must debounce before invoking complete preparation, not just before encoding or store writes.
+This control-copy overhead and Main pixel-copy heap/timing still require device measurement;
+no performance improvement is claimed by this checkpoint.
+
+Upload callbacks verify the composition's path, adaptive choice and zoom before publishing raw
+artwork; the session records the accepted selection. Vector callbacks already verify the full
+current input snapshot; the session additionally records that publication. Complete capture
+rejects a source whose current tools have not published their artwork yet, even when the shared
+modifier renderer is idle. Selected tab and the generating flag alone never establish origin.
+
+`IconGenerationResult.draftInput`/`draftPipeline` retain the actual source-stage input for
+individual previews independently of optional portable modifier metadata. This includes brush
+edits and pack restyling that cannot fit the portable recipe/input contract. It introduces no
+second source render or bitmap copy. Bulk calls with input retention disabled keep their old
+result/lifetime behavior. The raw baked-modifier flag also travels when no portable input exists.
+
+### Detached values and wire format
+
+`EditorCompleteMainCapture` copies native artwork on Main and exposes only detached value trees
+and immutable stored-input descriptors to background preparation. It preserves:
+
+- The original live application's base and rendered artwork, labels, local recipe/input,
+  calendar, source/online attribution and fallback/custom/legacy/refresh classification. Both
+  artwork values are retained even when they differ from the persisted row; preparation never
+  saves that row or other unsaved profile changes.
+- The completed raw stage and result, requested and effective generation options, optional
+  portable recipe/input, actual origin and private initialization/restore/baked bookkeeping.
+- The session's retained raw source and its baked flag, the previous verified input after source
+  transitions, and active replay's original input/options, UI-projection baseline and plate style.
+- All controls, current and original-seed vector values, ordered brush geometry and exact native
+  erase/background masks. Masks retain separate bitmap references and operation order inside
+  one owned artifact; erase/restore groups are never flattened into a different operation.
+- `customIconList` selection identity (resource id and pack), online/gallery attribution, owned
+  selected upload PNG bytes and owned selected font bytes. Font lookup uses only the captured
+  controls selection through the catalog resolver; neither replay options nor a decoded path
+  grant filesystem authority. Recovery must render from the owned font bytes.
+
+The current picker publishes zero or one custom resource. Complete capture explicitly rejects
+a larger list. Its owned selected artwork is the actual canonical source-stage input, including
+source parsing, rather than a serialization of an arbitrary Android ResourceDrawable. Resource
+id/pack/path/URL remain attribution. 7C3 must bind that frozen stage and restore the completed
+request bookkeeping; it must not fetch/reparse the pack resource or reapply source-stage pack
+restyling to reproduce the captured frame. A user explicitly choosing a new source may use the
+normal live source pipeline afterward.
+
+`EditorCompleteCodec` uses separate `controls` (RKED v1), `vector` (RKEV v1), `session` (RKEC v1),
+numbered RKEA artwork slots, optional `masks` (RKEM v1), `font`, and optional `upload` artifacts.
+The masks document contains unique numbered `mask-N` entries with exact RKEA bitmap documents;
+generation metadata retains their ordered references and erase/restore actions. RKEC is fixed-order,
+big-endian and includes the SHA-256 of its exact controls artifact. It writes frame flags,
+original input metadata, completed request/result metadata, replay bookkeeping, selections and
+owned-resource references. Strings use strict UTF-8 with bounded length, nullable values have
+strict presence booleans, enums use names, and finite Float bits are preserved. Recipes allow
+1 MiB; ordinary text retains the existing 64 KiB limit. Unknown versions/enums, invalid counts,
+truncation, trailing content and non-finite values fail. Changing field order/meaning needs an
+explicit version change/adapter.
+
+`EditorGenerationWire` encodes all source/export/modifier fields directly, reusing the exact
+control-style field encoding. It preserves nullable groups, inactive values, high/low edge
+thresholds, inherited versus explicit fills, resolved dynamic colors and export flags. It does
+not pass complete options through ModifierRecipeCodec or its normalization/clamping. Native
+masks are removed from the detached options object only after exact owned bitmap references are
+captured; decoding retains those references for later binding rather than inventing masks.
+
+The codec checks referenced artwork, bitmap mask types, vector/control agreement, selected
+pack/stage correspondence, completed input/pipeline/baked correspondence and owned font/upload
+selection/digest correspondence. Extra, duplicate or missing resources/artwork reject the whole
+capture. Artwork is deduplicated by live icon identity; masks are deduplicated by bitmap identity
+within a single capture. No cross-editor cache is introduced. Encoded totals include controls,
+metadata, vector state,
+all artwork and resources. The store's 12-artifact/64-MiB and per-artifact limits apply before a
+Ready result. All masks together consume one artifact slot, bounded to 10,000 entries and
+32 MiB including their encoded headers; alternating erase/restore groups therefore do not
+consume the store's artwork slots. Oversized masks fail capture without dropping operations.
+Known resource bytes plus cumulative raw artwork bytes are checked
+before pixel/layer copies, with exact encoded-size checks afterward. Temporary encoding/native
+buffers can coexist; these limits still do not bound peak heap usage.
+
+The original persisted modifier input can have only a content-addressed file descriptor. Capture
+copies that descriptor and its exact options, then reads/verifies the file on IO and decodes on
+Default using the existing input store. The resulting unpublished native value is captured on
+Main. New live artwork is never serialized through DB XML. Unavailable/unsupported original
+input fails the complete capture instead of quietly dropping re-editing metadata.
+
+`VectorEditState.restoreDraftSeed` is a narrow future binding contract: 7C3 must assign validated
+current values/initialization first, then attach the preserved original seed. It records the
+captured current publication without recapturing the edited paths as their own seed. Reattaching
+that recovered state does not publish the same current vector as a new source edit. The original
+seed comparison remains intact, and unchanged replay seeds keep replay. This accessor is not a
+recovery caller and does not attach an old session owner.
+
+### Baselines, races and remaining verification
+
+The provider captures the exact component's persisted DbApplication row, authoritative Profile
+row, original live application identity, saved-row revision and both storage epochs under its
+existing storage/profile gates. A single-component DAO query avoids reading all profile artwork.
+Fingerprinting, owned-resource reads, stored-input decoding and complete encoding happen after
+releasing those gates. Before Ready, preparation repeats provider session/component/live-original
+identity, persisted row/style, revision/epoch checks, compares the persistent draft checkpoint and
+rechecks the Main editor witness/frame serial/accepted source publications.
+
+Ready is a process-local preparation lease, not permission to publish later without validation.
+`PreparedEditorDraft` carries the captured baseline/checkpoint and private encoded payloads;
+its live token is never encoded. 7C3 must recheck the editor and baseline at publication and pass
+the exact expected checkpoint to the store. Storage replacement must invalidate the generation
+before writes, using storage gate → draft store; the store never calls back into the provider.
+It must also handle an ambiguous store publication failure by rereading the checkpoint. This
+checkpoint installs no replacement hooks, lifecycle flushes, clear-on-Apply or recovery prompt.
+
+Device regression confirmation is complete. After confirmation, 23 new complete-capture/codec
+tests and four provider-baseline tests passed. Coverage includes inactive-source clearing,
+idle/tab acknowledgment without rerendering, option mismatches, pending/cancelled/obsolete
+renders, source revision invalidation, exact original unsaved artwork and stage input without
+portable metadata, all-option wire round trips, 24 alternating erase/restore masks in one
+artifact, corrupt mask documents, multi-digit artwork slots, required-resource/digest/vector
+correspondence, unpublished sources, seed acknowledgment, replay/baked transitions and Main
+budget rejection. Provider tests cover unchanged-state publication, value-based persisted-row
+comparison, changed rows, replaced live identity, storage replacement and profile switching.
+All 1,037 tests across 156 suites and `assembleDebug` pass using the local test-JVM C2 workaround;
+logs are in `build/verify-7c2b3-targeted.log` and `build/verify-7c2b3-full.log`.
+Native binding/semantic UI-domain validation, orchestration failures preserving the last stored
+checkpoint and end-to-end process-death recovery remain 7C3 coverage. The preparation API has
+no production caller and cannot establish lifecycle/recovery behavior by itself.
 
 ## Envelope and local files
 

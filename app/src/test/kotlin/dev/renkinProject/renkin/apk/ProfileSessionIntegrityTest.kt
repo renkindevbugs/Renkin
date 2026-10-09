@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.apk
 
 import android.app.Application
+import android.graphics.drawable.ColorDrawable
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.datastore.preferences.core.edit
@@ -8,6 +9,10 @@ import androidx.room.Room
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.packages.PackageInfoStruct
+import kotlinx.collections.immutable.toPersistentList
 import dev.renkinProject.renkin.data.watch.WatchDatabase
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.di.AppModule
@@ -93,6 +98,56 @@ class ProfileSessionIntegrityTest {
         } catch (error: ProfileSessionChangedException) {
             assertEquals(reason, error.reason)
         }
+    }
+
+    private fun stageEditorApplication(): PackageInfoStruct {
+        val app = PackageInfoStruct("Editor", "test.editor", "Main", ColorDrawable(0), 0)
+        ApplicationProvider::class.java.getDeclaredField("stagedApplications").apply { isAccessible = true }
+            .set(provider, listOf(app).toPersistentList())
+        return app
+    }
+
+    @Test fun editorBaselineReadsDoNotRepublishAnUnchangedApplicationState() = runBlocking {
+        provider.ensureInitialized()
+        val app = stageEditorApplication()
+        val first = provider.captureEditorDraftBaseline(provider.sessionToken, app)
+        val published = provider.applicationState.value
+        val second = provider.captureEditorDraftBaseline(provider.sessionToken, app)
+        assertEquals(first, second)
+        assertTrue(provider.validateEditorDraftBaseline(first))
+        assertSame(published, provider.applicationState.value)
+    }
+
+    @Test fun editorBaselineComparesPersistedRowsByValueAndRejectsChangedArtwork() = runBlocking {
+        provider.ensureInitialized()
+        val app = stageEditorApplication()
+        val row = DbApplication(app.packageName, app.activityName, false, false, "original")
+        repository.replaceAll(DEFAULT_PROFILE_ID, listOf(row))
+        val baseline = provider.captureEditorDraftBaseline(provider.sessionToken, app)
+        repository.replaceAll(DEFAULT_PROFILE_ID, listOf(row.copy()))
+        assertTrue(provider.validateEditorDraftBaseline(baseline))
+        repository.replaceAll(DEFAULT_PROFILE_ID, listOf(row.copy(drawable = "replacement")))
+        assertFalse(provider.validateEditorDraftBaseline(baseline))
+    }
+
+    @Test fun editorBaselineRejectsReplacedLiveIdentityEvenWithEqualComponentAndVersion() = runBlocking {
+        provider.ensureInitialized()
+        val app = stageEditorApplication()
+        val baseline = provider.captureEditorDraftBaseline(provider.sessionToken, app)
+        assertEquals(app, stageEditorApplication())
+        assertFalse(provider.validateEditorDraftBaseline(baseline))
+    }
+
+    @Test fun editorBaselineRejectsStorageReplacementAndNewProfileOwner() = runBlocking {
+        provider.ensureInitialized()
+        val app = stageEditorApplication()
+        val beforeStorage = provider.captureEditorDraftBaseline(provider.sessionToken, app)
+        StorageOperationGate.run { StorageOperationGate.markStorageReplaced() }
+        assertFalse(provider.validateEditorDraftBaseline(beforeStorage))
+        val beforeSwitch = provider.captureEditorDraftBaseline(provider.sessionToken, app)
+        val other = provider.createProfile("Other editor", "", "Other")
+        provider.switchProfile(other)
+        assertFalse(provider.validateEditorDraftBaseline(beforeSwitch))
     }
 
     @Test

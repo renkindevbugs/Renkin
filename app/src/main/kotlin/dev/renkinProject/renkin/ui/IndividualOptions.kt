@@ -29,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -408,14 +409,32 @@ internal fun OptionsDialog(
         render = renderPreviewWith
     )
 
-    LaunchedEffect(draft.origin, draft.replay, generatingOptions, customIconList) {
-        draft.regenerateCreate(viewModel, app, generatingOptions, customIconList, viewModel::renderModifierReplay)
+    val renderWitness by remember(session) { derivedStateOf { session.renderWitnessOrNull() } }
+    val composedRenderWitness = renderWitness
+    val composedSelections = customIconList.toList()
+    val composedOrigin = draft.origin
+    val composedReplay = draft.replay
+    val composedSource = session.renderSource()
+    val composedSourceRevision = draft.sourceRevision
+    val currentGeneratingOptions = rememberUpdatedState(generatingOptions)
+    val renderStillCurrent = {
+        currentGeneratingOptions.value == generatingOptions && draft.sourceRevision == composedSourceRevision &&
+            draft.origin == composedOrigin &&
+            draft.replay === composedReplay && session.renderSource() === composedSource &&
+            (composedOrigin != IconOrigin.CREATE || session.customIconList == composedSelections)
     }
-    LaunchedEffect(draft.origin, draft.vectorIcon, generatingOptions) {
-        draft.regenerateVector(viewModel, generatingOptions)
+    LaunchedEffect(draft.origin, draft.replay, generatingOptions, customIconList, composedSourceRevision) {
+        draft.regenerateCreate(viewModel, app, generatingOptions, composedSelections,
+            composedRenderWitness, renderStillCurrent, viewModel::renderModifierReplay)
     }
-    LaunchedEffect(draft.origin, draft.uploadBase, generatingOptions) {
-        draft.regenerateUpload(viewModel, generatingOptions)
+    LaunchedEffect(draft.origin, draft.vectorIcon, generatingOptions, composedSourceRevision) {
+        draft.regenerateVector(viewModel, generatingOptions, composedRenderWitness, renderStillCurrent)
+    }
+    LaunchedEffect(draft.origin, draft.uploadBase, generatingOptions, composedSourceRevision) {
+        draft.regenerateUpload(viewModel, generatingOptions, composedRenderWitness, renderStillCurrent)
+    }
+    LaunchedEffect(composedRenderWitness, generatingOptions, draft.generating, draft.completedFrameSerial) {
+        draft.acknowledgeWitness(composedRenderWitness, app, generatingOptions, composedSelections)
     }
 
     // The snackbar surface exists only for the upload gallery's Undo action; plain hints go
@@ -436,7 +455,8 @@ internal fun OptionsDialog(
         }
     }
 
-    val confirmIcon: () -> Unit = {
+    val confirmIcon: () -> Unit = confirm@{
+        if (!session.canConfirmDraft(session.renderWitnessOrNull())) return@confirm
         // Credit the icon to a pack only when it actually came from one: the Create
         // tab's Icon Pack source. A fresh pick uses the picked pack; keeping the
         // existing icon keeps its stored source. Upload/vector/text/app-icon = none.
@@ -716,10 +736,10 @@ internal fun OptionsDialog(
                                 app = app,
                                 state = vectorEditState,
                                 onImportedImage = { imported, url ->
+                                    session.upload.selectImported(imported.galleryPath)
                                     activateUpload(BitmapIconDrawable(imported.bitmap, false))
                                     onlineImageUrl = url
                                     onlineImagePath = imported.galleryPath
-                                    session.upload.selectImported(imported.galleryPath)
                                     selectedTab = 1
                                 },
                                 onIconChange = {
@@ -753,7 +773,7 @@ internal fun OptionsDialog(
                     appName = app.appName,
                     icon = draft.iconToConfirm,
                     loading = draft.generating,
-                    canConfirm = !draft.generating && !draft.replayRenderFailed
+                    canConfirm = session.canConfirmDraft(composedRenderWitness)
                 )
                 val actions = OptionsPreviewActions(
                     onDismiss = startClose,
@@ -956,7 +976,8 @@ private fun VectorOptionsTab(
             state = state,
             onImportedImage = onImportedImage,
             onChange = {
-                if (!keepRetainedStage || state.hasChangesFromSeed) onIconChange(it)
+                val unchangedRecovered = state.preserveDraftSeedPublication && state.publishedInputs == state.inputs()
+                if (!unchangedRecovered && (!keepRetainedStage || state.hasChangesFromSeed)) onIconChange(it)
             }
         )
     }

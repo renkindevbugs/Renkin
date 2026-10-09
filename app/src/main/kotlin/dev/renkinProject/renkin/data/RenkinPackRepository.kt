@@ -52,6 +52,10 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         dao.getAll(profileId)
     }
 
+    internal suspend fun editorBaseline(profileId: Long, packageName: String, activityName: String): DbApplication? = access {
+        dao.editorBaseline(profileId, packageName, activityName)
+    }
+
     internal suspend fun fingerprintRows(profileId: Long): List<IconFingerprintRow> = access {
         dao.fingerprintRows(profileId)
     }

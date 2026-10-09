@@ -58,6 +58,7 @@ internal class EditorSession(
     var restoredIconSource by mutableStateOf<IconPackDrawable?>(null)
         private set
     private var restoredSourceContainsBakedModifierEdits = false
+    internal fun restoredSourceBakedForDraft(): Boolean = restoredSourceContainsBakedModifierEdits
     val upload = UploadEditorState()
     val adjustments = AdjustmentState()
     val storedMaterialYouPackState =
@@ -131,6 +132,7 @@ internal class EditorSession(
             vectorEditState.reset(restoredSourceContainsBakedModifierEdits)
         }
         draft.selectUpload(icon)
+        upload.publishedSelection = upload.selection()
     }
 
     fun activateVector(icon: IconPackDrawable) {
@@ -143,16 +145,21 @@ internal class EditorSession(
             upload.reset()
         }
         draft.selectVector(icon, vectorEditState.containsBakedModifierEdits)
+        vectorEditState.publishedInputs = vectorEditState.inputs()
     }
 }
 
 @Stable
 internal class UploadEditorState {
+    data class Selection(val path: String?, val adaptive: Boolean, val zoom: Float)
+    internal var publishedSelection: Selection? = null
+    internal fun selection() = Selection(selectedImagePath, asAdaptiveIcon, zoomLevel)
     var selectedImagePath by mutableStateOf<String?>(null)
     var asAdaptiveIcon by mutableStateOf(false)
     var zoomLevel by mutableFloatStateOf(1f)
 
     fun reset() {
+        publishedSelection = null
         selectedImagePath = null
         asAdaptiveIcon = false
         zoomLevel = 1f

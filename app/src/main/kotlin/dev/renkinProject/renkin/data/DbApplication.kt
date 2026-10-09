@@ -241,6 +241,9 @@ interface PackVerdictDao {
 
 @Dao
 interface RenkinPackDao {
+    @Query("SELECT * FROM DbApplication WHERE profileId = :profileId AND packageName = :packageName AND activityName = :activityName")
+    fun editorBaseline(profileId: Long, packageName: String, activityName: String): DbApplication?
+
     @Query("SELECT packageName, activityName, drawable, calendarEnabled, calendarPrefix FROM DbApplication WHERE profileId = :profileId")
     fun fingerprintRows(profileId: Long): List<IconFingerprintRow>
 

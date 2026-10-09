@@ -45,7 +45,7 @@ internal class VerifiedModifierInput private constructor(
             null
         }
         currentCoroutineContext().ensureActive()
-        IconGenerationResult(icon, metadata, options)
+        IconGenerationResult(icon, metadata, options, input, retained.pipeline)
     }
 
     companion object {

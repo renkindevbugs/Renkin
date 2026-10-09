@@ -105,7 +105,7 @@ internal object EditorControlsCodec {
         }
     }
 
-    private class Writer(val output: DataOutputStream) {
+    internal class Writer(val output: DataOutputStream) {
         private var pointCount = 0
 
         fun create(value: EditorCreateControls) = with(value) {
@@ -175,7 +175,7 @@ internal object EditorControlsCodec {
         }
     }
 
-    private class Reader(private val input: DataInputStream) {
+    internal class Reader(private val input: DataInputStream) {
         private var pointCount = 0
 
         fun create(): EditorCreateControls = EditorCreateControls(

@@ -22,6 +22,8 @@ internal class EditorModifierReplay(val verified: VerifiedModifierInput) {
     private lateinit var baseline: ModifierStack
     private var baselinePlateStyle: ColorizerStyle? = null
     val allowsImageEdits: Boolean get() = verified.retained.pipeline != ModifierInputPipeline.ADJUSTMENTS_ONLY
+    internal data class Bookkeeping(val baseline: ModifierStack, val plate: ColorizerStyle?)
+    internal fun captureBookkeeping() = Bookkeeping(baseline, baselinePlateStyle)
 
     fun restoreControls(session: EditorSession) {
         val stack = saved.modifiers

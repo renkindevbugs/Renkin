@@ -21,7 +21,7 @@ internal class IconSourceStage(
             else options.withModifiers { withEffect { copy(imageEdit = effectiveImageEdit) } }
         }
         val retained = if (retainable) retain(effective) else null
-        return IconGenerationResult(rendered, retained, effective)
+        return IconGenerationResult(rendered, retained, effective, input, pipeline)
     }
 
     private fun retain(options: GenerationOptions): IconModifierInput? = try {

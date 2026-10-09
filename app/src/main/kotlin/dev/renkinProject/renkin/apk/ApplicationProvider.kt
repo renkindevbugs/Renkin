@@ -1367,6 +1367,40 @@ class ApplicationProvider internal constructor(
     suspend fun getSavedIconHashes(profileId: Long = activeProfileId): Map<String, String> =
         renkinPackStore.savedHashes(profileId)
 
+    internal data class EditorDraftBaselineSource(
+        val session: ProfileSessionToken,
+        val application: PackageInfoStruct,
+        val profile: Profile,
+        val row: DbApplication?,
+        val savedRevision: Long,
+        val storageEpoch: Long,
+        val gateEpoch: Long
+    )
+
+    internal suspend fun captureEditorDraftBaseline(
+        expected: ProfileSessionToken, application: PackageInfoStruct
+    ): EditorDraftBaselineSource = withContext(Dispatchers.Default) {
+        runProfileOperation(expected) {
+            require(applicationList.any { it === application }) { "Editor original application has changed" }
+            EditorDraftBaselineSource(expected, application,
+                requireNotNull(profileManager.profile(expected.profileId)) { "Editor profile no longer exists" },
+                packRepo.editorBaseline(expected.profileId, application.packageName, application.activityName),
+                savedProfileRevisions[expected.profileId] ?: 0L, storageEpoch, StorageOperationGate.epoch)
+        }
+    }
+
+    internal suspend fun validateEditorDraftBaseline(source: EditorDraftBaselineSource): Boolean = withContext(Dispatchers.Default) {
+        profileOperations.run {
+            val app = source.application
+            isCurrentSession(source.session) && source.storageEpoch == storageEpoch &&
+                source.gateEpoch == StorageOperationGate.epoch &&
+                source.savedRevision == (savedProfileRevisions[source.session.profileId] ?: 0L) &&
+                applicationList.any { it === app } &&
+                profileManager.profile(source.session.profileId)?.profileStyle == source.profile.profileStyle &&
+                packRepo.editorBaseline(source.session.profileId, app.packageName, app.activityName) == source.row
+        }
+    }
+
     internal data class IconChangeBaselineSource(
         val session: ProfileSessionToken,
         val savedRevision: Long,

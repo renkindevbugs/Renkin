@@ -162,6 +162,7 @@ internal fun UploadColumn(
     }
 
     Box(Modifier.fillMaxSize()) {
+        val previewSelection = state.selection()
         UploadGalleryContent(
             savedImages = savedImages,
             uploadedImage = uploadedImage.takeIf { selectedImagePath != null && loadedPath == selectedImagePath },
@@ -178,7 +179,9 @@ internal fun UploadColumn(
             onSelectedImageChange = { selectedImagePath = it },
             onSelectionChange = { selection = it },
             onChange = { icon, path ->
-                if (path != null && path == selectedImagePath) onChange(icon, path)
+                if (path != null && previewSelection == state.selection() && path == previewSelection.path) {
+                    onChange(icon, path)
+                }
             }
         )
         UploadGalleryActions(

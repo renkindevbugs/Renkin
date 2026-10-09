@@ -772,8 +772,19 @@ No production caller is installed. Device regressions are confirmed; 19 new nati
 codec/capture/binding tests, all 1,010 tests across 155 suites and `assembleDebug` pass with
 the existing local test-JVM C2 workaround. Integration timing/heap and process-death recovery
 remain coverage for the subsequent checkpoints.
-**7C2b3** will combine those values with controls/resources, original input, replay bookkeeping
-and completed-render ownership into one coherent complete capture before **7C3** enables recovery.
+**7C2b3** implements an explicit complete-capture preparation API on the existing editor owner;
+its device checkpoint is confirmed and verified. It combines controls/resources, original live input, completed
+raw/rendered artwork, exact generation options/masks, replay bookkeeping and current/seed vector
+state. Ordered native masks share one bounded artifact. Render/source witnesses reject mixed
+or obsolete frames; idle witness acknowledgment does not restart rendering for tab changes.
+Preparation rechecks gated
+persisted baselines, both storage epochs, the draft checkpoint and live frame identity after
+off-Main hashing/encoding/resource work. It does not write a checkpoint or install a production
+caller. Twenty-three complete-capture/codec regressions and four provider-baseline regressions
+cover inactive-source clearing, idle witness acknowledgment, pending/cancelled/stale renders,
+exact options/original artwork, grouped ordered masks, malformed payloads and replaced owners.
+All 1,037 tests across 156 suites and `assembleDebug` pass with the existing local test-JVM
+C2 workaround. **7C3** will enable recovery and lifecycle persistence after its own checkpoints.
 Existing DB vector XML drops some editable properties and cannot substitute for that codec.
 Future capture/offer owners must handle oversized uploads, unavailable fonts and unconverted/
 invalid styles without crashing or replacing the last valid checkpoint with partial/default

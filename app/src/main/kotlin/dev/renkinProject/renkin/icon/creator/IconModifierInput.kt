@@ -9,7 +9,10 @@ enum class ModifierInputPipeline { SHARED, IMAGE_EDIT, BITMAP_IMAGE_EDIT, ADJUST
 data class IconGenerationResult(
     val icon: IconPackDrawable?,
     val modifierInput: IconModifierInput? = null,
-    val renderedOptions: GenerationOptions? = null
+    val renderedOptions: GenerationOptions? = null,
+    // Complete drafts also need the stage input when portable modifier metadata is unsupported.
+    val draftInput: IconPackDrawable? = null,
+    val draftPipeline: ModifierInputPipeline = ModifierInputPipeline.SHARED
 )
 
 // The input to one confirmed local modifier stage, not the baked base or a pack reference.
