@@ -51,7 +51,7 @@ class EditorSessionRecoveryTest {
         val live = EditorRecoveryFixtures.application(EditorRecoveryFixtures.icon(android.graphics.Color.GREEN))
         val baseline = ApplicationProvider.EditorDraftBaselineSource(owner, live, Profile(1, "Test"), null, 0, 0, 0)
         return PreparedEditorRecovery(EditorDraftCheckpoint("generation", "draft"),
-            EditorDraftOwner(1, live.packageName, live.activityName, "profile", "icon"), baseline, 0, bound)
+            EditorDraftOwner(1, live.packageName, live.activityName, "profile", "icon"), baseline, 0, bound, Any())
     }
 
     private suspend fun withRecovery(value: EditorCompleteCapture, action: suspend (PreparedEditorRecovery, EditorSession) -> Unit) {

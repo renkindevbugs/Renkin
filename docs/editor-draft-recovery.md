@@ -29,7 +29,8 @@ Never restore an old `ProfileSessionToken`; successful recovery obtains a new li
   current persisted-baseline lease without attaching an editor.
   **7C3b1 (confirmed and verified)** reconstructs an unpublished session from
   that lease, including completed frame, controls, original/live identity and owned resources.
-  **7C3b2** adds validated acceptance/native ownership transfer. **7C3b3** integrates first-composition
+  **7C3b2 (confirmed and verified)** adds validated acceptance/native ownership transfer.
+  **7C3b3** integrates first-composition
   rendering, the visible offer/error paths, lifecycle persistence and replacement hooks.
 
 Each checkpoint follows CLAUDE.md's device-confirmation/test/commit sequence. The envelope is
@@ -624,9 +625,9 @@ error log, for both normal and recovered sessions.
 
 The preparation continues owning all native values while construction is unpublished. Its
 disposeUnattached clears the cached session and recycles native artwork once, and reconstruction
-after disposal is rejected. The caller must first detach every preview consumer. There is no live
-native ownership transfer API yet; 7C3b2 must add that guard before attaching, so offer cleanup can
-never recycle artwork transferred to a live editor.
+after disposal is rejected. The caller must first detach every preview consumer. The 7C3b2
+acceptance API below guards live ownership transfer, so offer cleanup can never recycle artwork
+transferred to a live editor.
 
 Device regressions are confirmed. Nineteen new tests cover exact reconstructed controls and
 completed frames, distinct original/live artwork, frozen canonical/adaptive pack rendering without
@@ -639,13 +640,77 @@ color mutation proving ordinary verification fails. All 1,085 tests across 161 s
 compileDebugKotlin and assembleDebug pass with the local test-JVM C2 workaround. Roborazzi is
 absent from debugRuntimeClasspath; see [rendering tests](rendering-tests.md).
 
-Before enabling an offer, 7C3b2 must revalidate acceptance and implement native ownership transfer.
-7C3b3 must preserve requested native masks and unrepresented generation values through first
-composition, handle tab initialization without changing restored controls and test modifier-sheet
+Before enabling an offer, 7C3b3 must preserve requested native masks and unrepresented generation
+values through first composition, handle tab initialization without changing restored controls and test modifier-sheet
 previews and Clear/Restore against captured originals, including unsaved originals absent from the
 live app list. It must also implement explicit obsolete/corrupt Retry/discard behavior,
 debounced autosave/background flush, checkpoint-aware Apply/dismiss cleanup and storage invalidation.
 Startup/process-death recovery remains disabled in this checkpoint; keep the morphing LoadingIndicator.
+
+## Validated acceptance checkpoint (7C3b2)
+
+`EditorSessionViewModel.acceptDraftRecovery` is a dormant explicit operation returning Accepted,
+Superseded or Failed. Preparation records the creating VM's process-local identity as well as its
+generation. The VM identity is a required non-null constructor argument. A newly created VM cannot
+accept an old preparation merely because its counter starts
+at the same number. Opening/releasing another editor, clearing the VM, disposing or transferring
+the preparation rejects acceptance. A cheap Main ownership check and successful checkpoint lease
+precede cached session construction; ownership is checked again after the lease. Session construction
+and result allocation happen before final validation/publication; no render, resource lookup or
+storage write occurs there.
+
+`EditorDraftStore.acceptanceLease` checks the persisted checkpoint under its own mutex on IO,
+then releases the mutex before the provider gate is acquired. A short process-local synchronized
+fence ties that check to final publication. Every admitted save, matching discard and storage
+invalidation expires earlier leases before mutation begins, including mutations that later fail
+or are cancelled. An already stale save/discard does not expire the lease. This fence is scoped
+to the singleton store and arbitrates same-process writes; it is not a persisted replacement
+generation or a cross-process file lock. The persistent checkpoint/generation contracts remain
+unchanged. Only a synchronous in-memory publication callback may run under the fence; it must
+never acquire a gate or store mutex or perform I/O.
+
+The provider acquires the profile/storage gate on Default, so any recovery callback triggered by
+storage gate acquisition also starts off Main. It repeats the complete baseline check there (token,
+epochs, saved revision, live application identity, profile style and stored icon row), then dispatches
+only publication to Main while retaining both gates. This suspends the holder rather than blocking
+a thread; Main callers likewise acquire gates through suspension. There are no blocking gate waits
+on Main and no wait for UI emissions. Repository queries dispatch off Main.
+The VM takes the store fence, checks cancellation, VM identity/generation, editor absence and
+native ownership again, then transfers and installs the cached session without suspension. The
+lock order is VM capture mutex, store mutex (released), storage/profile gate on Default, Main,
+synchronous store fence. Writers hold the fence only to advance a counter, never during disk work. There is
+no gate acquisition while holding the store mutex and no store I/O while the provider gate is held.
+
+`PreparedEditorRecovery` has unattached, transferred and disposed ownership states. Transfer can
+occur only once for its exact cached session. `disposeUnattached` after transfer is a no-op;
+session release/replacement/VM cleanup rely on normal GC rather than manually recycling artwork
+that a closing Compose preview might still draw. Superseded/failed acceptance does not dispose
+the preparation: the offer owner must detach preview consumers first and explicitly dispose it.
+
+Successful publication also sets `recoveryAttachment`, a runtime-only StateFlow containing the
+session id, component and current token, without native values or saved-state serialization.
+It lets the future UI retrieve the exact attached session through getOrCreate with allowCreate=false
+even if cancellation propagates after publication and loses the return value. Normal replacement,
+matching release and VM cleanup clear this attachment. Acceptance does not switch profiles,
+overwrite live icons, discard the stored checkpoint or enable startup recovery/autosave.
+
+StorageRecoveryUnavailableException during preparation/acceptance returns Superseded without a
+draft-error log. The storage recovery owner remains responsible for its existing error/Retry UI.
+The future offer owner must refresh preparation after Superseded while its editor/offer ownership
+still permits recovery, rather than show a draft error or repeatedly reuse the stale preparation.
+Keep a stable preparing presentation during refresh; a new result can then classify the latest
+checkpoint as Ready, Obsolete, NeedsProfile or Empty. Avoid an immediate unbounded retry loop while
+storage recovery is unavailable; resume when its state permits preparation.
+
+The device regression checkpoint is confirmed. Twenty-five new tests cover same-VM/different-VM
+ownership, editor open/release/clear, profile/icon/style/storage/revision changes, save/discard/
+invalidation during Main handoff, admitted-write failure/cancellation and lease expiry, off-Main
+gate-triggered recovery, unavailable-storage classification, cancellation before/after publication,
+duplicate acceptance, disposal during handoff and after transfer, observable attachment and
+checkpoint preservation. The existing reconstruction fixture now supplies its explicit owner.
+All 1,110 tests across 161 suites, compileDebugKotlin and assembleDebug pass with the local test-JVM
+C2 workaround, including ordinary Roborazzi verification. End-to-end Restore/Discard and
+first-composition rendering remain subsequent checkpoint coverage.
 
 ## Envelope and local files
 

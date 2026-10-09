@@ -10,6 +10,7 @@ import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.data.StorageRecoveryUnavailableException
 import dev.renkinProject.renkin.data.editor.EditorCaptureResult
 import dev.renkinProject.renkin.data.editor.EditorCompleteCodec
 import dev.renkinProject.renkin.data.editor.EditorDraftChangedException
@@ -25,6 +26,8 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.BoundEditorRecovery
 import dev.renkinProject.renkin.ui.EditorCapturePendingException
 import dev.renkinProject.renkin.ui.EditorCompleteMainCapture
+import dev.renkinProject.renkin.ui.EditorRecoveryAcceptance
+import dev.renkinProject.renkin.ui.EditorRecoveryAttachment
 import dev.renkinProject.renkin.ui.EditorRecoveryPreparation
 import dev.renkinProject.renkin.ui.EditorSession
 import dev.renkinProject.renkin.ui.PreparedEditorRecovery
@@ -36,6 +39,10 @@ import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -48,9 +55,13 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
     private var restoreJob: Job? = null
     private var restoreGeneration = 0L
     private var sessionGeneration = 0L
+    private var cleared = false
+    private val recoveryOwner = Any()
     private val captureMutex = Mutex()
+    private val mutableRecoveryAttachment = MutableStateFlow<EditorRecoveryAttachment?>(null)
+    internal val recoveryAttachment = mutableRecoveryAttachment.asStateFlow()
 
-    // Dormant until the offer/error/acceptance owner is integrated. This never attaches a session.
+    // Dormant until the offer/error owner is integrated. Preparation never attaches a session.
     internal suspend fun prepareDraftRecovery(
         expected: EditorDraftCheckpoint,
         provider: ApplicationProvider,
@@ -61,7 +72,7 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
         var retained = false
         try {
             val generation = withContext(Dispatchers.Main.immediate) {
-                sessionGeneration.takeIf { activeSession == null }
+                sessionGeneration.takeIf { !cleared && activeSession == null }
             } ?: return@withLock EditorRecoveryPreparation.Superseded
             val candidate = store.candidate() ?: return@withLock if (store.checkpoint() == expected) {
                 EditorRecoveryPreparation.Empty
@@ -101,7 +112,7 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
                 activeSession == null && sessionGeneration == generation && provider.isCurrentSession(baseline.session)
             }
             if (!stillAvailable) EditorRecoveryPreparation.Superseded else {
-                val result = EditorRecoveryPreparation.Ready(PreparedEditorRecovery(expected, owner, baseline, generation, bound))
+                val result = EditorRecoveryPreparation.Ready(PreparedEditorRecovery(expected, owner, baseline, generation, bound, recoveryOwner))
                 retained = true
                 result
             }
@@ -110,6 +121,8 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
         } catch (_: EditorDraftChangedException) {
             EditorRecoveryPreparation.Superseded
         } catch (_: ProfileSessionChangedException) {
+            EditorRecoveryPreparation.Superseded
+        } catch (_: StorageRecoveryUnavailableException) {
             EditorRecoveryPreparation.Superseded
         } catch (error: Exception) {
             Log.error("EditorSessionViewModel", "Editor draft recovery could not be prepared", error)
@@ -121,6 +134,69 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
             if (!retained) unattached?.disposeUnattached()
         }
     }
+
+    // The offer owner observes recoveryAttachment even if cancellation loses the returned Accepted.
+    internal suspend fun acceptDraftRecovery(
+        id: String,
+        prepared: PreparedEditorRecovery,
+        provider: ApplicationProvider,
+        store: EditorDraftStore
+    ): EditorRecoveryAcceptance = captureMutex.withLock {
+        var published = false
+        var accepted: EditorRecoveryAcceptance.Accepted? = null
+        try {
+            val available = withContext(Dispatchers.Main.immediate) { canAcceptRecovery(prepared) }
+            if (!available) return@withLock EditorRecoveryAcceptance.Superseded
+            // Release the store mutex before constructing the session or acquiring domain gates.
+            val lease = store.acceptanceLease(prepared.checkpoint)
+                ?: return@withLock EditorRecoveryAcceptance.Superseded
+            val active = withContext(Dispatchers.Main.immediate) {
+                if (!canAcceptRecovery(prepared)) null
+                else ActiveSession(id, prepared.sessionForAcceptance())
+            } ?: return@withLock EditorRecoveryAcceptance.Superseded
+            val result = EditorRecoveryAcceptance.Accepted(EditorRecoveryAttachment(
+                id, active.state.application.packageName, active.state.application.activityName, active.state.owner))
+            accepted = result
+            val caller = currentCoroutineContext()
+            val attached = provider.publishEditorDraftRecovery(prepared.baseline) {
+                lease.publishIfCurrent {
+                    caller.ensureActive()
+                    if (!canAcceptRecovery(prepared) || !prepared.transferToEditor(active.state)) false
+                    else {
+                        sessionGeneration++
+                        activeSession = active
+                        published = true
+                        mutableRecoveryAttachment.value = result.attachment
+                        true
+                    }
+                }
+            }
+            if (attached) result else EditorRecoveryAcceptance.Superseded
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: ProfileOperationSupersededException) {
+            if (published) checkNotNull(accepted) else EditorRecoveryAcceptance.Superseded
+        } catch (_: ProfileSessionChangedException) {
+            if (published) checkNotNull(accepted) else EditorRecoveryAcceptance.Superseded
+        } catch (_: StorageRecoveryUnavailableException) {
+            if (published) checkNotNull(accepted) else EditorRecoveryAcceptance.Superseded
+        } catch (error: Exception) {
+            if (published) checkNotNull(accepted) else {
+                Log.error("EditorSessionViewModel", "Editor draft recovery could not be accepted", error)
+                EditorRecoveryAcceptance.Failed(error)
+            }
+        } catch (error: OutOfMemoryError) {
+            if (published) checkNotNull(accepted) else {
+                Log.error("EditorSessionViewModel", "Editor draft acceptance exceeded available memory", error)
+                EditorRecoveryAcceptance.Failed(error)
+            }
+        }
+    }
+
+    @MainThread
+    private fun canAcceptRecovery(prepared: PreparedEditorRecovery): Boolean =
+        !cleared && activeSession == null && prepared.editorOwner === recoveryOwner &&
+            sessionGeneration == prepared.editorGeneration && prepared.canTransfer
 
     // No lifecycle caller is enabled until 7C3. Debounce must precede this Main pixel copy.
     internal suspend fun captureCompleteDraft(
@@ -244,6 +320,7 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
         if (!allowCreate) return null
         activeSession?.id?.let(::cancelModifierRestore)
         sessionGeneration++
+        mutableRecoveryAttachment.value = null
         return EditorSession(owner, app, initialPack, initialFont).also {
             activeSession = ActiveSession(id, it)
         }
@@ -255,12 +332,15 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
         if (activeSession?.id == id) {
             sessionGeneration++
             activeSession = null
+            mutableRecoveryAttachment.value = null
         }
     }
 
     override fun onCleared() {
         restoreJob?.cancel()
+        cleared = true
         sessionGeneration++
         activeSession = null
+        mutableRecoveryAttachment.value = null
     }
 }

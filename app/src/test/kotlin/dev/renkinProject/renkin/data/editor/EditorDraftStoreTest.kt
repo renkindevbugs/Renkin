@@ -54,6 +54,69 @@ class EditorDraftStoreTest {
         try { action(); fail("Expected draft I/O rejection") } catch (_: IOException) { }
     }
 
+    @Test fun acceptanceLeaseSurvivesReadsAndRejectedMutationsButRejectsAStaleCheckpoint() = runBlocking {
+        val empty = store.checkpoint(); val saved = save()
+        val lease = requireNotNull(store.acceptanceLease(saved.checkpoint))
+        assertNull(store.acceptanceLease(empty))
+        assertEquals(saved, store.candidate())
+        store.artifact(saved.checkpoint, "controls")
+        rejects { store.save(empty, owner, payloads) }
+        assertFalse(store.discard(empty))
+        assertThrows(IllegalArgumentException::class.java) {
+            runBlocking { store.save(saved.checkpoint, owner, mapOf("../invalid" to byteArrayOf(1))) }
+        }
+        var published = false
+        assertTrue(lease.publishIfCurrent { published = true; true }); assertTrue(published)
+        assertEquals(saved.checkpoint, store.checkpoint())
+    }
+
+    @Test fun acceptedSaveExpiresLeaseBeforeDiskPublicationStarts() = runBlocking {
+        val saved = save(); val lease = requireNotNull(store.acceptanceLease(saved.checkpoint))
+        var invoked = false; var checked = false
+        BackupOsShadow.beforeDirectorySync = {
+            checked = true
+            assertFalse(lease.publishIfCurrent { invoked = true; true })
+        }
+        store.save(saved.checkpoint, owner, payloads)
+        assertTrue(checked); assertFalse(invoked)
+    }
+
+    @Test fun discardAndStorageInvalidationExpireAcceptanceLeases() = runBlocking {
+        val saved = save(); val first = requireNotNull(store.acceptanceLease(saved.checkpoint))
+        assertTrue(store.discard(saved.checkpoint)); assertFalse(first.publishIfCurrent { true })
+        val second = requireNotNull(store.acceptanceLease(store.checkpoint()))
+        store.invalidateStorage(); assertFalse(second.publishIfCurrent { true })
+    }
+
+    @Test fun failedAdmittedSaveExpiresLeaseEvenIfTheOldCheckpointSurvives() = runBlocking {
+        val saved = save(); val lease = requireNotNull(store.acceptanceLease(saved.checkpoint))
+        BackupOsShadow.beforeDirectorySync = { throw IOException("Failed admitted write") }
+        rejects { store.save(saved.checkpoint, owner, payloads) }
+        BackupOsShadow.beforeDirectorySync = null
+        assertEquals(saved.checkpoint, store.checkpoint())
+        assertFalse(lease.publishIfCurrent { true })
+        assertTrue(requireNotNull(store.acceptanceLease(saved.checkpoint)).publishIfCurrent { true })
+    }
+
+    @Test fun cancelledAdmittedWriteCannotReviveAnEarlierAcceptanceLease() = runBlocking {
+        val saved = save(); val lease = requireNotNull(store.acceptanceLease(saved.checkpoint))
+        val expired = CompletableDeferred<Unit>(); val release = java.util.concurrent.CountDownLatch(1)
+        BackupOsShadow.beforeDirectorySync = {
+            expired.complete(Unit)
+            check(release.await(10, java.util.concurrent.TimeUnit.SECONDS))
+        }
+        val writing = launch(Dispatchers.Default) { store.save(saved.checkpoint, owner, payloads) }
+        try {
+            withTimeout(5_000) { expired.await() }
+            assertFalse(lease.publishIfCurrent { true })
+            writing.cancel()
+        } finally { release.countDown() }
+        writing.cancelAndJoin()
+        BackupOsShadow.beforeDirectorySync = null
+        assertFalse(lease.publishIfCurrent { true })
+        assertNotNull(store.candidate())
+    }
+
     @Test fun firstReadInitializesPersistentGenerationOutsideCallerThread() = runBlocking {
         assertFalse(root.exists())
         val callerThread = Thread.currentThread()

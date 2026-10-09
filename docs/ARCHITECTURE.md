@@ -821,15 +821,35 @@ identity used for later baseline checks; replaced identities classify capture as
 Selected pack raw artwork uses its recorded modifier pipeline for edits and sheet previews, without
 reentering the pack source stage. Owned Typeface/upload values are consumed by text generation and
 the Upload tab, and owned bytes remain available for recapture until explicit replacement.
-Construction is cached on the preparation;
-unattached disposal invalidates it. This API has no production caller, acceptance/publication or
-native ownership transfer. **7C3b2** adds validated acceptance and native ownership transfer;
-**7C3b3** integrates first-composition rendering, the offer/error UI and autosave/storage hooks.
+Construction is cached on the preparation; unattached disposal invalidates it. The reconstruction
+API has no production caller. **7C3b3** integrates first-composition rendering, the offer/error UI
+and autosave/storage hooks.
 The 7C3b1 device checkpoint is confirmed. Nineteen new tests cover reconstruction, frozen-source
 rendering, owned resources, Upload composition, expired live identities and a Roborazzi rendering
 reference. All 1,085 tests across 161 suites, compileDebugKotlin and assembleDebug pass with the
 local test-JVM C2 workaround. An intentional color change fails ordinary screenshot verification;
 Roborazzi is absent from debugRuntimeClasspath.
+
+**7C3b2 (confirmed and verified)** adds dormant validated acceptance on the same
+EditorSessionViewModel. The preparation records that VM's identity and generation. Acceptance
+obtains a checkpoint lease outside the profile/storage gate, then constructs the unpublished
+session. Gate acquisition and baseline validation run on Default, including any storage recovery
+triggered by acquisition. Only the synchronous publication dispatches to Main with both gates held;
+Main callers acquire these gates through suspension, never blocking waits. A short synchronous
+store fence rejects any save/discard/invalidation admitted since
+the lease; no store mutex or I/O is acquired during publication. Native ownership transfers once,
+so offer disposal cannot recycle live artwork. Release/replacement/VM cleanup drop live references
+without recycling bitmap values that a closing Compose preview may still draw. A runtime-only
+StateFlow exposes the attached session identifier/component/token even when cancellation loses
+the returned result after publication. Failed/stale acceptance leaves preparation disposal to the
+offer owner after preview detachment. Unavailable storage recovery returns Superseded without
+logging a draft error. The preparation's VM owner is a required non-null constructor argument.
+No offer/autosave/storage-replacement caller is enabled.
+The device checkpoint is confirmed. Twenty-five new tests cover acceptance/attachment ownership,
+domain/checkpoint expiry, concurrent writes during Main handoff, storage unavailability, off-Main
+recovery, cancellation before/after publication, native disposal and admitted-write lease expiry.
+All 1,110 tests across 161 suites, compileDebugKotlin and assembleDebug pass with the local
+test-JVM C2 workaround, including ordinary Roborazzi verification.
 
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged

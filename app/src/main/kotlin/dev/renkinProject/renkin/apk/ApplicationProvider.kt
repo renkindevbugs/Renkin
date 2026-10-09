@@ -1410,15 +1410,31 @@ class ApplicationProvider internal constructor(
     }
 
     internal suspend fun validateEditorDraftBaseline(source: EditorDraftBaselineSource): Boolean = withContext(Dispatchers.Default) {
+        profileOperations.run { validateEditorDraftBaselineHeld(source) }
+    }
+
+    internal suspend fun publishEditorDraftRecovery(
+        source: EditorDraftBaselineSource, publish: () -> Boolean
+    ): Boolean = withContext(Dispatchers.Default) {
         profileOperations.run {
-            val app = source.application
-            isCurrentSession(source.session) && source.storageEpoch == storageEpoch &&
-                source.gateEpoch == StorageOperationGate.epoch &&
-                source.savedRevision == (savedProfileRevisions[source.session.profileId] ?: 0L) &&
-                applicationList.any { it === app } &&
-                profileManager.profile(source.session.profileId)?.profileStyle == source.profile.profileStyle &&
-                packRepo.editorBaseline(source.session.profileId, app.packageName, app.activityName) == source.row
+            if (!validateEditorDraftBaselineHeld(source)) return@run false
+            // Main dispatch retains both gates; UI callers must never block on gate acquisition.
+            withContext(Dispatchers.Main.immediate) {
+                currentCoroutineContext().ensureActive()
+                publish()
+            }
         }
+    }
+
+    private suspend fun validateEditorDraftBaselineHeld(source: EditorDraftBaselineSource): Boolean {
+        profileOperations.checkHeld()
+        val app = source.application
+        return isCurrentSession(source.session) && source.storageEpoch == storageEpoch &&
+            source.gateEpoch == StorageOperationGate.epoch &&
+            source.savedRevision == (savedProfileRevisions[source.session.profileId] ?: 0L) &&
+            applicationList.any { it === app } &&
+            profileManager.profile(source.session.profileId)?.profileStyle == source.profile.profileStyle &&
+            packRepo.editorBaseline(source.session.profileId, app.packageName, app.activityName) == source.row
     }
 
     internal data class IconChangeBaselineSource(

@@ -38,9 +38,21 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
     private val root by lazy { File(base, "editor-draft") }
     private val catalogFile by lazy { AtomicFile(File(root, "catalog.json")) }
     private val mutex = Mutex()
+    private val acceptanceFence = Any()
+    private var acceptanceVersion = 0L
 
     /** Initializes and fsyncs a persistent generation on first use; all I/O runs on IO. */
     suspend fun checkpoint(): EditorDraftCheckpoint = access { catalog().checkpoint }
+
+    internal suspend fun acceptanceLease(expected: EditorDraftCheckpoint): EditorDraftAcceptanceLease? = access {
+        if (catalog().checkpoint != expected) return@access null
+        val version = synchronized(acceptanceFence) { acceptanceVersion }
+        EditorDraftAcceptanceLease { publish ->
+            synchronized(acceptanceFence) {
+                acceptanceVersion == version && publish()
+            }
+        }
+    }
 
     /**
      * May initialize the catalog and prune orphan files. Verifies owned files without
@@ -71,6 +83,7 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
             payloads.map { (name, bytes) -> EditorDraftArtifact(name, bytes.size.toLong(), "0".repeat(64)) }
         )
         EditorDraftCodec.validate(EditorDraftCatalog(current.storageGeneration, record))
+        expireAcceptanceLeases()
         prune(current.draft?.id)
         val artifacts = record.artifacts.map { artifact ->
             val bytes = payloads.getValue(artifact.name)
@@ -110,6 +123,7 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
     suspend fun discard(expected: EditorDraftCheckpoint): Boolean = access {
         val current = catalog()
         if (current.checkpoint != expected) return@access false
+        expireAcceptanceLeases()
         // Also invalidate writers that captured the earlier empty checkpoint (null -> id -> null).
         commit(EditorDraftCatalog(UUID.randomUUID().toString(), null))
         prune(null)
@@ -122,6 +136,7 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
      * It can explicitly abandon corrupt metadata without attempting to decode it.
      */
     suspend fun invalidateStorage() = access {
+        expireAcceptanceLeases()
         ensureRoot()
         commit(EditorDraftCatalog(UUID.randomUUID().toString(), null))
         prune(null)
@@ -130,6 +145,9 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
     private suspend fun <T> access(block: suspend () -> T): T = withContext(Dispatchers.IO) {
         mutex.withLock { block() }
     }
+
+    // Expire before writes begin, including admitted writes that later fail or are cancelled.
+    private fun expireAcceptanceLeases() = synchronized(acceptanceFence) { acceptanceVersion++ }
 
     private suspend fun catalog(): EditorDraftCatalog {
         ensureRoot()
