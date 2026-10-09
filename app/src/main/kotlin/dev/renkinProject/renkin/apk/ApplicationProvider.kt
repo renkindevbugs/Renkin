@@ -1382,11 +1382,29 @@ class ApplicationProvider internal constructor(
     ): EditorDraftBaselineSource = withContext(Dispatchers.Default) {
         runProfileOperation(expected) {
             require(applicationList.any { it === application }) { "Editor original application has changed" }
-            EditorDraftBaselineSource(expected, application,
-                requireNotNull(profileManager.profile(expected.profileId)) { "Editor profile no longer exists" },
-                packRepo.editorBaseline(expected.profileId, application.packageName, application.activityName),
-                savedProfileRevisions[expected.profileId] ?: 0L, storageEpoch, StorageOperationGate.epoch)
+            editorDraftBaselineHeld(expected, application)
         }
+    }
+
+    internal suspend fun captureEditorRecoveryBaseline(
+        expected: ProfileSessionToken, packageName: String, activityName: String
+    ): EditorDraftBaselineSource? = withContext(Dispatchers.Default) {
+        runProfileOperation(expected) {
+            val app = applicationList.firstOrNull {
+                it.packageName == packageName && it.activityName == activityName
+            } ?: return@runProfileOperation null
+            editorDraftBaselineHeld(expected, app)
+        }
+    }
+
+    private suspend fun editorDraftBaselineHeld(
+        expected: ProfileSessionToken, application: PackageInfoStruct
+    ): EditorDraftBaselineSource {
+        profileOperations.checkHeld()
+        return EditorDraftBaselineSource(expected, application,
+            requireNotNull(profileManager.profile(expected.profileId)) { "Editor profile no longer exists" },
+            packRepo.editorBaseline(expected.profileId, application.packageName, application.activityName),
+            savedProfileRevisions[expected.profileId] ?: 0L, storageEpoch, StorageOperationGate.epoch)
     }
 
     internal suspend fun validateEditorDraftBaseline(source: EditorDraftBaselineSource): Boolean = withContext(Dispatchers.Default) {

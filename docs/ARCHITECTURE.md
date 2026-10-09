@@ -793,6 +793,21 @@ state. Recovery resolves verified owned font bytes even if the old system path h
 backup/recovery-prefs versions remain 21/4/3. Contracts and pending coverage are documented in
 `editor-draft-recovery.md`.
 
+**7C3a** implements dormant recovery preparation on EditorSessionViewModel, semantic validation
+before native binding, owned-byte Typeface/upload binding, exact artwork/mask/current/seed values
+and original modifier-stage verification. It compares both durable baselines and repeats current
+provider/storage/checkpoint/editor-generation checks around decoding and native work. A different
+profile requires an explicit normal switch and fresh preparation. Missing components or changed
+durable fingerprints return Obsolete without error logging; a profile switch after inspection
+expires the exact captured session token and returns Superseded. Ready is an unattached native
+lease; the future offer owner must revalidate before acceptance and detach every preview consumer
+before recycling expired preparations.
+No live controls/session attachment, recovery offer, autosave or replacement hooks are installed.
+The device checkpoint is confirmed. Twenty-nine new tests cover semantic/native/resource binding,
+preparation ownership/results, failure/cancellation preservation and inspected-token expiry. All
+1,066 tests across 158 suites, compileDebugKotlin and assembleDebug pass with the local test-JVM
+C2 workaround. **7C3b** will integrate acceptance, the offer/error UI and lifecycle/storage behavior.
+
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
 typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.

@@ -11,17 +11,23 @@ import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.editor.EditorCaptureResult
 import dev.renkinProject.renkin.data.editor.EditorCompleteCodec
+import dev.renkinProject.renkin.data.editor.EditorDraftChangedException
 import dev.renkinProject.renkin.data.editor.EditorDraftCheckpoint
 import dev.renkinProject.renkin.data.editor.EditorDraftFingerprints
 import dev.renkinProject.renkin.data.editor.EditorDraftOwner
 import dev.renkinProject.renkin.data.editor.EditorDraftResources
 import dev.renkinProject.renkin.data.editor.EditorDraftStore
+import dev.renkinProject.renkin.data.editor.EditorRecoveryResources
 import dev.renkinProject.renkin.data.editor.PreparedEditorDraft
 import dev.renkinProject.renkin.icon.creator.PreparedModifierReplay
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.ui.BoundEditorRecovery
 import dev.renkinProject.renkin.ui.EditorCapturePendingException
 import dev.renkinProject.renkin.ui.EditorCompleteMainCapture
+import dev.renkinProject.renkin.ui.EditorRecoveryPreparation
 import dev.renkinProject.renkin.ui.EditorSession
+import dev.renkinProject.renkin.ui.PreparedEditorRecovery
+import dev.renkinProject.renkin.ui.bindEditorRecovery
 import dev.renkinProject.renkin.ui.captureRenderWitness
 import dev.renkinProject.renkin.ui.requirePublishedSources
 import dev.renkinProject.renkin.util.Log
@@ -40,7 +46,80 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
     private var activeSession: ActiveSession? = null
     private var restoreJob: Job? = null
     private var restoreGeneration = 0L
+    private var sessionGeneration = 0L
     private val captureMutex = Mutex()
+
+    // Dormant until the offer/error/acceptance owner is integrated. This never attaches a session.
+    internal suspend fun prepareDraftRecovery(
+        expected: EditorDraftCheckpoint,
+        provider: ApplicationProvider,
+        store: EditorDraftStore,
+        resources: EditorRecoveryResources
+    ): EditorRecoveryPreparation = captureMutex.withLock {
+        var unattached: BoundEditorRecovery? = null
+        var retained = false
+        try {
+            val generation = withContext(Dispatchers.Main.immediate) {
+                sessionGeneration.takeIf { activeSession == null }
+            } ?: return@withLock EditorRecoveryPreparation.Superseded
+            val candidate = store.candidate() ?: return@withLock if (store.checkpoint() == expected) {
+                EditorRecoveryPreparation.Empty
+            } else EditorRecoveryPreparation.Superseded
+            if (candidate.checkpoint != expected) return@withLock EditorRecoveryPreparation.Superseded
+            val owner = candidate.record.owner
+            val runtime = provider.runtimeState.value
+            if (!runtime.ready) return@withLock EditorRecoveryPreparation.Superseded
+            if (runtime.activeProfileId != owner.profileId) return@withLock EditorRecoveryPreparation.NeedsProfile(owner.profileId)
+            val baseline = provider.captureEditorRecoveryBaseline(runtime.sessionToken, owner.packageName, owner.activityName)
+            val fingerprintsMatch = baseline != null &&
+                EditorDraftFingerprints.profile(baseline.profile) == owner.profileFingerprint &&
+                EditorDraftFingerprints.icon(owner.profileId, owner.packageName, owner.activityName, baseline.row) == owner.originalIconFingerprint
+            if ((baseline != null && !provider.validateEditorDraftBaseline(baseline)) || store.checkpoint() != expected) {
+                return@withLock EditorRecoveryPreparation.Superseded
+            }
+            val ownerUnchanged = withContext(Dispatchers.Main.immediate) {
+                activeSession == null && sessionGeneration == generation && provider.isCurrentSession(runtime.sessionToken)
+            }
+            if (!ownerUnchanged) return@withLock EditorRecoveryPreparation.Superseded
+            if (baseline == null || !fingerprintsMatch) return@withLock EditorRecoveryPreparation.Obsolete
+            val payloads = linkedMapOf<String, ByteArray>()
+            for (artifact in candidate.record.artifacts) payloads[artifact.name] = store.artifact(expected, artifact.name)
+            val capture = EditorCompleteCodec.decode(payloads)
+            if (!provider.validateEditorDraftBaseline(baseline) || store.checkpoint() != expected) {
+                return@withLock EditorRecoveryPreparation.Superseded
+            }
+            val bound = bindEditorRecovery(capture, resources)
+            unattached = bound
+            val editorUnchanged = withContext(Dispatchers.Main.immediate) {
+                activeSession == null && sessionGeneration == generation
+            }
+            if (!editorUnchanged || !provider.validateEditorDraftBaseline(baseline) || store.checkpoint() != expected) {
+                return@withLock EditorRecoveryPreparation.Superseded
+            }
+            val stillAvailable = withContext(Dispatchers.Main.immediate) {
+                activeSession == null && sessionGeneration == generation && provider.isCurrentSession(baseline.session)
+            }
+            if (!stillAvailable) EditorRecoveryPreparation.Superseded else {
+                val result = EditorRecoveryPreparation.Ready(PreparedEditorRecovery(expected, owner, baseline, generation, bound))
+                retained = true
+                result
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: EditorDraftChangedException) {
+            EditorRecoveryPreparation.Superseded
+        } catch (_: ProfileSessionChangedException) {
+            EditorRecoveryPreparation.Superseded
+        } catch (error: Exception) {
+            Log.error("EditorSessionViewModel", "Editor draft recovery could not be prepared", error)
+            EditorRecoveryPreparation.Failed(error)
+        } catch (error: OutOfMemoryError) {
+            Log.error("EditorSessionViewModel", "Editor draft recovery exceeded available memory", error)
+            EditorRecoveryPreparation.Failed(error)
+        } finally {
+            if (!retained) unattached?.disposeUnattached()
+        }
+    }
 
     // No lifecycle caller is enabled until 7C3. Debounce must precede this Main pixel copy.
     internal suspend fun captureCompleteDraft(
@@ -156,6 +235,7 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
         }?.let { return it.state }
         if (!allowCreate) return null
         activeSession?.id?.let(::cancelModifierRestore)
+        sessionGeneration++
         return EditorSession(owner, app, initialPack, initialFont).also {
             activeSession = ActiveSession(id, it)
         }
@@ -164,11 +244,15 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
     @MainThread
     internal fun release(id: String) {
         cancelModifierRestore(id)
-        if (activeSession?.id == id) activeSession = null
+        if (activeSession?.id == id) {
+            sessionGeneration++
+            activeSession = null
+        }
     }
 
     override fun onCleared() {
         restoreJob?.cancel()
+        sessionGeneration++
         activeSession = null
     }
 }

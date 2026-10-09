@@ -25,6 +25,9 @@ Never restore an old `ProfileSessionToken`; successful recovery obtains a new li
 - **7C3 — recovery and lifecycle.** Offer the validated draft after startup, bind it to a fresh
   editor session, clear it on Apply/explicit dismissal, and integrate import/recovery/deletion
   invalidation. Validate races and cancellation before enabling recovery offers.
+  **7C3a (confirmed and verified)** prepares validated native values and a
+  current persisted-baseline lease without attaching an editor. **7C3b** must integrate fresh
+  session acceptance, the visible offer/error paths, lifecycle persistence and replacement hooks.
 
 Each checkpoint follows CLAUDE.md's device-confirmation/test/commit sequence. The envelope is
 not evidence that arbitrary controls or artwork can already be restored. End-to-end recovery
@@ -463,6 +466,100 @@ logs are in `build/verify-7c2b3-targeted.log` and `build/verify-7c2b3-full.log`.
 Native binding/semantic UI-domain validation, orchestration failures preserving the last stored
 checkpoint and end-to-end process-death recovery remain 7C3 coverage. The preparation API has
 no production caller and cannot establish lifecycle/recovery behavior by itself.
+
+## Recovery preparation checkpoint (7C3a)
+
+`EditorSessionViewModel.prepareDraftRecovery` is an explicit serialized API with no production
+caller. It shares the editor's capture mutex, requires no open editor and carries a monotonic
+editor generation so opening and closing another editor during preparation expires the result.
+It returns Ready, Empty, Superseded, Obsolete, NeedsProfile or Failed; it never calls save, discard,
+invalidateStorage or getOrCreate, and never attaches decoded controls to live Compose state.
+Cancellation propagates. Corruption, unsupported values, native binding/resource errors and
+allocation failures remain visible Failed results for the future offer owner, preserving the
+catalog and last valid stored checkpoint.
+
+Candidate inspection and artifact reads use the store's checkpoint, lengths and checksums. The
+provider captures the currently active profile's component, authoritative style, persisted icon
+row, original live identity, saved revision and both storage epochs under its existing gates.
+An unavailable component or a durable fingerprint mismatch returns Obsolete without error logging;
+the future offer owner can explain that the draft no longer applies and offer checkpoint-aware
+discard without presenting a corruption error. Preparation never discards it automatically.
+The provider uses the exact session token inspected before entering its gate, rather than capturing
+a newer token there. A profile switch during that interval returns Superseded, including a switch
+away and back. Before Obsolete, preparation rechecks the available baseline, checkpoint and editor/
+provider ownership so a detected concurrent change takes precedence as Superseded.
+Both canonical durable fingerprints must match before decoding. After decode and after native
+binding, preparation rechecks the baseline and checkpoint; before Ready it also rechecks editor
+generation and the current ready provider token on Main. Hashing, decoding, resource work and
+native binding run outside those gates. A different active profile returns NeedsProfile without
+switching profiles or granting acceptance; 7C3b must resolve profile existence and the user's
+normal Save/Discard switch flow, then prepare again for that profile before showing acceptance.
+
+`EditorRecoveryValidation` applies semantic domains after the strict wire codec and before
+native binding. It validates packed Color/color-space values, gradient stop counts/positions,
+upload zoom, vector thickness/viewport/path paint, controls and generation transforms, outline,
+edge, background-removal and shadow parameters. It retains valid disabled values, signed zeros,
+nullable modifier groups and style flags. Positionless gradients retain their meaning; explicit
+positions must match their colors, remain ordered and lie in 0..1. Unsupported values reject
+the draft without normalization, truncation or substitution. Pack scheme -1 still means inherited;
+non-negative scheme indices beyond the current palette remain Custom, with no palette-count cap.
+Explicit high edge thresholds are preserved rather than replaced with three times the low value.
+Replay/current-source/original-input references must agree before any native object is built.
+
+`bindEditorRecovery` creates unpublished artwork, mask references, original/current input values,
+exact requested/effective options and editable current/seed vector paths on Default. All references
+to one mask slot share the restored bitmap and ordered erase/restore operations remain separate.
+It does not select/fetch a pack drawable or run the source generation pipeline. A previous verified
+input is verified again against the captured original base using the existing modifier-stage
+verifier; it must not verify against the draft's later edited result or bake another modifier into
+that result. Replay bookkeeping remains available for the later live binding step. Failed,
+cancelled or superseded unattached preparations recycle their owned bitmaps, including cancellation
+while dispatching a completed native preparation back to its caller.
+
+`EditorRecoveryResources` admits only the captured owned bytes. Font loading uses a randomly named
+private temporary cache file on IO and removes it in finally; decoded font identifiers never
+become filesystem paths. API 26+ uses Typeface.Builder so invalid font data cannot silently fall
+back through createFromFile; API 23–25 uses the legacy loader. AOSP Android 6.0.1 and 7.1.2 throw
+when that loader rejects a font, rather than silently returning DEFAULT; device coverage remains
+necessary. A process death before finally can leave a temporary
+font in cache; startup cleanup of this fixed-prefix cache namespace remains an integration task.
+Upload PNGs receive signature/bounds checks and full ARGB_8888 decoding on Default, without
+resizing. Their expanded pixels are bounded
+to 32 MiB and must also fit the remaining 64 MiB budget after artwork bitmap pixels, including inset
+children. These bounds do not limit total peak heap or adaptive-layer decoder scratch space.
+The resulting Typeface/upload bitmap are for later session binding; 7C3b must explicitly pass them
+to text/upload rendering instead of reopening old selection paths or fetching a replacement font.
+
+Ready carries `PreparedEditorRecovery`, a process-local lease containing the exact checkpoint,
+current baseline, editor generation and native values. It contains no restored old token. The
+future offer owner owns this lease and must dispose unattached values if the offer expires or is
+discarded, only after removing every preview consumer that could still draw its bitmaps. Expiring
+an offer does not by itself make recycling safe while a dismissal animation still displays it.
+Acceptance must repeat baseline/checkpoint/editor-generation validation before creating
+a fresh editor and transferring native ownership. This checkpoint deliberately provides no
+acceptance or UI entry point, and does not yet reconstruct IconDraftState's completed request or
+restore live controls/vector publication bookkeeping.
+
+The device regression checkpoint is confirmed. Twenty-nine new tests cover valid/invalid control
+domains (including disabled fields, inherited/Custom schemes, packed colors, positionless gradients
+and explicit high thresholds), native pixels, mask aliasing/order, independent current/seed paths,
+owned-byte resource binding without resolving selection paths, font preconditions, upload bounds/
+expanded pixel budgets, temporary-file cleanup and original-stage replay verification. Preparation
+tests use real temporary checkpoint files and an in-memory provider: they cover Ready without live
+attachment, Empty, stale checkpoints, Obsolete for changed durable fingerprints or a removed
+component, NeedsProfile without switching, new editor generations, profile/storage/checkpoint
+replacement during binding, cancellation, semantic/corrupt artifact rejection and I/O/OOM failures
+preserving stored data. Provider tests reject the inspected token after switching away and back.
+All 1,066 tests across 158 suites, compileDebugKotlin and assembleDebug pass with the existing local
+test-JVM C2 workaround. Logs are in build/verify-7c3a-compile.log, build/verify-7c3a-targeted.log and
+build/verify-7c3a-full.log. Native font parser behavior on API 23–25 and current devices, cancellation
+at completed dispatcher handoff and allocation timing/peak heap still need platform coverage.
+There is no production autosave/recovery caller; on-device checks establish startup/editor regressions.
+
+Before enabling 7C3b, implement a visible corrupt-catalog Retry/confirmed-discard path, fresh
+session construction with exact initial/completed-frame/source/replay/vector-seed ownership,
+debounce before Main pixel copies, background flush, checkpoint-aware Apply/dismiss cleanup,
+and invalidation before storage replacement/deletion. Keep the startup morphing LoadingIndicator.
 
 ## Envelope and local files
 

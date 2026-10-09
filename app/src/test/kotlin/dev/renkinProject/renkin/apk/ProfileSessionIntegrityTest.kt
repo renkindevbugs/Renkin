@@ -118,6 +118,29 @@ class ProfileSessionIntegrityTest {
         assertSame(published, provider.applicationState.value)
     }
 
+    @Test fun recoveryBaselineMissingComponentIsAnExpectedAbsentValue() = runBlocking {
+        provider.ensureInitialized()
+        assertEquals(null, provider.captureEditorRecoveryBaseline(provider.sessionToken, "removed", "Main"))
+        val app = stageEditorApplication()
+        val baseline = requireNotNull(provider.captureEditorRecoveryBaseline(provider.sessionToken, app.packageName, app.activityName))
+        assertSame(app, baseline.application)
+        assertTrue(provider.validateEditorDraftBaseline(baseline))
+    }
+
+    @Test fun recoveryBaselineRejectsTheInspectedTokenAfterSwitchingAwayAndBack() = runBlocking {
+        provider.ensureInitialized()
+        val app = stageEditorApplication(); val inspected = provider.sessionToken
+        val other = provider.createProfile("Other", "", "Other")
+        provider.switchProfile(other)
+        expectFailure(ProfileSessionFailureReason.EXPIRED) {
+            provider.captureEditorRecoveryBaseline(inspected, app.packageName, app.activityName)
+        }
+        provider.switchProfile(inspected.profileId)
+        expectFailure(ProfileSessionFailureReason.EXPIRED) {
+            provider.captureEditorRecoveryBaseline(inspected, app.packageName, app.activityName)
+        }
+    }
+
     @Test fun editorBaselineComparesPersistedRowsByValueAndRejectsChangedArtwork() = runBlocking {
         provider.ensureInitialized()
         val app = stageEditorApplication()
