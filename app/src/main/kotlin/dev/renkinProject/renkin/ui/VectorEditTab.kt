@@ -249,6 +249,8 @@ internal fun EditVectorColumn(
             if (initial.isEmpty()) state.containsBakedModifierEdits = false
             state.captureSeed()
             state.initialized = true
+            // Recovered tab initialization acknowledges its preview without selecting a new source.
+            if (state.preserveDraftSeedPublication) state.publishedInputs = state.inputs()
         }
 
         val editedVector = remember(

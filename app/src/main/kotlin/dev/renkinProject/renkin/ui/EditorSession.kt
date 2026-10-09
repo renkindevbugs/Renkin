@@ -20,9 +20,12 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.TextCase
 import dev.renkinProject.renkin.icon.creator.VerifiedModifierInput
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+
+private const val MODIFIER_TAB_INDEX = 2
 
 // Live artwork and brush geometry belong to the same owner as their controls. Only the
 // session identifier and profile token go into saved state; this object never enters a Bundle.
@@ -39,6 +42,7 @@ internal class EditorSession(
     }
 
     var selectedTab by mutableIntStateOf(0)
+    private var lastEnteredTab = selectedTab
     var source by mutableStateOf(Source.ICON_PACK)
     var browsingIconPacks by mutableStateOf(false)
     val createSourceToDisplay: Source get() = if (browsingIconPacks) Source.ICON_PACK else source
@@ -84,6 +88,23 @@ internal class EditorSession(
     var replayMaterialYou by mutableStateOf(false)
     internal var recoveryResources: EditorSessionResources? = null
         private set
+    internal var recoveredRendering by mutableStateOf<EditorRecoveredRendering?>(null)
+        private set
+
+    @MainThread
+    internal fun enterSelectedTab() {
+        val changed = lastEnteredTab != selectedTab
+        lastEnteredTab = selectedTab
+        // Leaving the Modifier tab starts the next visit clean, except during verified replay.
+        // Mounting the same tab must preserve recovered controls.
+        if (changed && selectedTab != MODIFIER_TAB_INDEX && modifierReplay == null) imageEdit = ImageEdit.NONE
+    }
+
+    @MainThread
+    internal fun generationOptionsFor(ui: GenerationOptions, witness: EditorRenderWitness?): GenerationOptions {
+        val proposed = modifierReplay?.optionsFor(ui) ?: ui
+        return if (witness == null) proposed else recoveredRendering?.optionsFor(proposed, witness) ?: proposed
+    }
 
     @MainThread
     internal fun restoreDraft(bound: BoundEditorRecovery) {
@@ -112,7 +133,13 @@ internal class EditorSession(
         modifierRestoreFailed = value.modifierRestoreFailed
         recoveryResources = EditorSessionResources(bound.capture.resources, bound.resources)
         upload.ownedImage = value.uploadPath?.let { recoveryResources?.uploadBitmap(it) }
-        draft.restoreDraft(bound, application, customIconList) { captureRenderWitness() }
+        lateinit var restoredWitness: EditorRenderWitness
+        draft.restoreDraft(bound, application, customIconList) {
+            captureRenderWitness().also { restoredWitness = it }
+        }
+        lastEnteredTab = selectedTab
+        recoveredRendering = EditorRecoveredRendering(bound.requested, restoredWitness,
+            adjustments.eraseStrokes.toList(), adjustments.backgroundBrushStrokes.toList())
     }
 
     fun selectFont(reference: String) {
@@ -122,6 +149,7 @@ internal class EditorSession(
     }
 
     fun restoreModifiers(verified: VerifiedModifierInput) {
+        recoveredRendering = null
         browsingIconPacks = false
         restoredIconSource = verified.input
         restoredSourceContainsBakedModifierEdits = verified.retained.containsBakedModifierEdits
@@ -133,6 +161,8 @@ internal class EditorSession(
 
     private fun selectNewSource() {
         if (source == Source.NONE) source = Source.ICON_PACK
+        // Recovery still supplies untouched shared modifiers and native masks after source replacement.
+        // Upload zoom and Vector edits also use this path, so it must not discard that projection.
         modifierReplay = null
         modifierRestoreFailed = false
         draft.selectNewSource()

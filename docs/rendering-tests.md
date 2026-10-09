@@ -9,6 +9,9 @@ The initial proof of concept renders a fixed local circle through Renkin's actua
 bitmap modifier pipeline, with a color gradient and shadow. It runs with native graphics,
 SDK 33 and mdpi, without wallpaper colors, installed packs, network access or system fonts.
 The checked-in reference is `app/src/test/screenshots/icon-shadow-gradient.png`.
+The same reference also verifies a selected stage after complete draft capture, codec round trip,
+native binding and recovered request projection with different current UI colors. Recovery must
+produce the original pixels without recording a separate golden or accepting a visual change.
 
 `IconRenderingScreenshotTest` explicitly verifies in an ordinary `testDebugUnitTest` run too;
 missing references and visual changes must fail rather than silently skip screenshot capture.

@@ -822,8 +822,8 @@ Selected pack raw artwork uses its recorded modifier pipeline for edits and shee
 reentering the pack source stage. Owned Typeface/upload values are consumed by text generation and
 the Upload tab, and owned bytes remain available for recapture until explicit replacement.
 Construction is cached on the preparation; unattached disposal invalidates it. The reconstruction
-API has no production caller. **7C3b3** integrates first-composition rendering, the offer/error UI
-and autosave/storage hooks.
+API has no production caller. **7C3b3** integrates first-composition rendering; **7C3c** adds the
+offer/error UI and autosave/storage hooks after the binding checkpoints.
 The 7C3b1 device checkpoint is confirmed. Nineteen new tests cover reconstruction, frozen-source
 rendering, owned resources, Upload composition, expired live identities and a Roborazzi rendering
 reference. All 1,085 tests across 161 suites, compileDebugKotlin and assembleDebug pass with the
@@ -850,6 +850,27 @@ domain/checkpoint expiry, concurrent writes during Main handoff, storage unavail
 recovery, cancellation before/after publication, native disposal and admitted-write lease expiry.
 All 1,110 tests across 161 suites, compileDebugKotlin and assembleDebug pass with the local
 test-JVM C2 workaround, including ordinary Roborazzi verification.
+
+**7C3b3 (confirmed and verified)** projects recovered generation options from the
+captured request plus explicit control changes. OptionsDialog uses that projection for its main
+render and modifier-sheet preview inputs, preserving untouched nullable groups, independent high
+edge thresholds, source/export values, shape fills and native masks even when current UI defaults
+or wallpaper-derived colors differ. Unchanged brush geometry reuses bound masks across mounting;
+edited geometry uses the normal rasterizer. Upload zoom/vector edits preserve unrelated options;
+a replacement source adopts current source presentation and pack styling while keeping unrelated
+modifier values. Explicit modifier restoration drops this recovery projection.
+The projected request is memoized by session, UI options, witness, recovery projection and replay,
+avoiding repeated projection on unrelated recompositions. Source changes retain the projection's
+native masks because untouched shared modifiers and edit reversals still use them.
+Tab entry is remembered by the session, so mounting/recreating a dialog does not clear imageEdit;
+an actual tab switch retains the existing reset behavior. First initialization of a recovered
+Vector tab acknowledges its working inputs without selecting a new vector source; unlike live
+initialization, it preserves the captured origin/replay until an actual edit. The recovery
+offer/autosave remain disabled. Twenty-five new regressions cover exact request preservation,
+modifier changes/reversals, native masks, session tab mounting, production Vector-tab composition
+and recovered-stage rendering against the existing Roborazzi reference.
+All 1,135 tests across 163 suites, compileDebugKotlin and assembleDebug pass with the existing
+test-JVM C2 workaround; ordinary unit tests verify both Roborazzi scenarios.
 
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged

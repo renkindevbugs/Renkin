@@ -30,8 +30,8 @@ Never restore an old `ProfileSessionToken`; successful recovery obtains a new li
   **7C3b1 (confirmed and verified)** reconstructs an unpublished session from
   that lease, including completed frame, controls, original/live identity and owned resources.
   **7C3b2 (confirmed and verified)** adds validated acceptance/native ownership transfer.
-  **7C3b3** integrates first-composition
-  rendering, the visible offer/error paths, lifecycle persistence and replacement hooks.
+  **7C3b3 (confirmed and verified)** integrates first-composition rendering.
+  **7C3c** adds the visible offer/error paths, lifecycle persistence and replacement hooks.
 
 Each checkpoint follows CLAUDE.md's device-confirmation/test/commit sequence. The envelope is
 not evidence that arbitrary controls or artwork can already be restored. End-to-end recovery
@@ -595,7 +595,7 @@ selected source, then captures a new witness after origin/source installation. T
 a new runtime serial; old generation counters, active jobs and source revisions are not restored.
 An immediate capture or confirmation can refer to this coherent frame without calling a builder
 or applying modifiers to the saved result. This is not yet a guarantee about the first mounted
-OptionsDialog: the UI's derived options/masks and tab effects still need the 7C3b3 integration below.
+OptionsDialog: the UI's derived options/masks and tab effects use the separate 7C3b3 projection below.
 
 `EditorModifierReplay.fromDraft` restores the captured baseline modifier stack and plate directly;
 it deliberately does not call restoreControls, which would overwrite the current draft with the
@@ -640,10 +640,9 @@ color mutation proving ordinary verification fails. All 1,085 tests across 161 s
 compileDebugKotlin and assembleDebug pass with the local test-JVM C2 workaround. Roborazzi is
 absent from debugRuntimeClasspath; see [rendering tests](rendering-tests.md).
 
-Before enabling an offer, 7C3b3 must preserve requested native masks and unrepresented generation
-values through first composition, handle tab initialization without changing restored controls and test modifier-sheet
-previews and Clear/Restore against captured originals, including unsaved originals absent from the
-live app list. It must also implement explicit obsolete/corrupt Retry/discard behavior,
+Before enabling an offer, verify the 7C3b3 first-composition projection, modifier-sheet previews and
+Clear/Restore against captured originals, including unsaved originals absent from the live app
+list. 7C3c must implement explicit obsolete/corrupt Retry/discard behavior,
 debounced autosave/background flush, checkpoint-aware Apply/dismiss cleanup and storage invalidation.
 Startup/process-death recovery remains disabled in this checkpoint; keep the morphing LoadingIndicator.
 
@@ -711,6 +710,79 @@ checkpoint preservation. The existing reconstruction fixture now supplies its ex
 All 1,110 tests across 161 suites, compileDebugKotlin and assembleDebug pass with the local test-JVM
 C2 workaround, including ordinary Roborazzi verification. End-to-end Restore/Discard and
 first-composition rendering remain subsequent checkpoint coverage.
+
+## First-composition rendering checkpoint (7C3b3)
+
+`EditorSession.restoreDraft` installs `EditorRecoveredRendering` beside the already completed frame.
+It retains the captured requested options, exact control/source witness and restored brush geometry.
+`generationOptionsFor` first obtains the ordinary UI/replay proposal, then patches only values whose
+controls differ from that captured witness. It does not restore controls again, render, perform I/O
+or derive the request from a portable recipe. Normal sessions use their existing UI/replay options.
+OptionsDialog applies this projection to the main render request and the inputs of its modifier
+previews. Draft styles inside those previews remain free to substitute their own temporary values.
+
+OptionsDialog memoizes the projected request by session, UI options, composed witness, recovery
+projection and modifier replay. Unrelated recompositions reuse the result instead of traversing
+captured styles and brush points again. Actual input changes still recompute the projection; key
+comparison and witness capture costs remain, so this is not a measured guarantee for large drafts.
+The replay key also invalidates the result when a valid witness is temporarily unavailable.
+
+Untouched controls preserve the captured request even when composition projects different defaults,
+wallpaper colors or available pack metadata. This includes secondary/fallback source options,
+themed/export background/foreground values, override, nullable shape/outline/shadow groups, explicit
+shape fills, independent low/high edge thresholds, inactive segment/background values and source
+restyling metadata. A scale edit patches scale; a smoothing edit does not derive a new high threshold.
+A low-threshold edit deliberately uses the UI's derived high threshold. Existing optional groups
+are patched per field; a previously absent group is introduced when its related controls change.
+
+Recovered outline/background mask suppliers return the bound native values for unchanged geometry,
+including null/empty masks and shared bitmap identities; remounting does not rasterize them again.
+The normal builders run after relevant brush/activation edits. The projection likewise changes only
+the mask whose geometry/activation changed, leaving unrelated native masks intact. Returning to
+the captured geometry/control values reuses the captured request values rather than accumulated
+projections. This state stays process-local and follows the preparation/session native ownership
+contract from 7C3b2.
+
+The source comparison uses origin, actual Create selection/replay/source identity and Upload path.
+Upload zoom/adaptive changes and edits to an already active Vector do not count as a replacement
+source and retain unrelated captured options. A new source adopts the current UI source/export
+presentation and source-specific pack styling; shared modifiers retain their captured values until
+their controls change. Consequently `selectNewSource` retains the projection and its native mask
+references: they still supply untouched shared modifiers and edit reversals. That method also runs
+for Upload zoom and Vector edits. Dropping it there would lose exact captured values; the references
+follow session lifetime unless explicit saved-modifier restoration replaces the projection.
+Explicit saved-modifier restoration drops this recovery projection and uses
+the existing verified replay contract. The frozen selected-pack stage from 7C3b1 still owns its
+source pixels and is never reparsed merely by mounting or editing a modifier.
+
+`enterSelectedTab` compares against session-owned tab history, seeded to the restored tab. Initial
+mount and configuration remount preserve imageEdit. An actual switch to a non-Modifier tab keeps
+the existing reset policy, except during verified replay. An already initialized recovered vector
+keeps its working/seed inputs and suppresses unchanged publication. If the captured vector tab was
+not initialized yet, its first ordinary source seeding acknowledges the initialized inputs before
+publication; this prepares the working preview without replacing the completed Create/Upload frame.
+This intentionally differs from a live session with a vector source, where first visiting Vector
+publishes the initial vector, switches origin to VECTOR and ends replay. A recovered session keeps
+its captured origin/replay on that visit; an actual vector edit publishes normally. The recovery
+offer integration in 7C3c must preserve this distinction.
+Native mask suppliers and projections are not serialized or reintroduced into saved state.
+
+This checkpoint does not add a recovery-offer caller, startup restoration or autosave. The developer
+confirmed device regressions. Twenty-five new tests cover exact projected requests for all origins,
+changed UI defaults, individual modifier edits and reversals, absent groups, independent edge
+thresholds, explicit fills, native mask identity and lazy rebuilding, source replacement versus
+Upload zoom/Vector geometry, decoded session tab mounting and replay/explicit restoration.
+Compose tests exercise the production Vector tab wrapper: recovered initialization/remount does
+not publish, real edits and reversals do, normal initialization still selects Vector, and a
+recovered bitmap acknowledges empty paths without publishing null. Existing owned-Upload and
+session reconstruction regressions remain in the targeted suite. A second Roborazzi test captures,
+encodes, decodes and binds a selected canonical bitmap stage, then checks its projected rendering
+against the unchanged gradient/shadow reference despite different current UI colors.
+Full offer/dialog lifecycle, modifier-sheet interaction and Clear/Apply/discard races remain
+integration coverage for 7C3c.
+All 1,135 tests across 163 suites, compileDebugKotlin and assembleDebug pass with the existing
+local test-JVM C2 workaround, including ordinary Roborazzi verification. Targeted and full logs
+are `build/verify-7c3b3-targeted.log` and `build/verify-7c3b3-full.log`.
 
 ## Envelope and local files
 

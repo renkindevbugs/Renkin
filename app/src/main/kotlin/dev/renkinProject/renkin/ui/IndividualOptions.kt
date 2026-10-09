@@ -316,13 +316,22 @@ internal fun OptionsDialog(
         else -> selectedPackScheme!!.second.toInt()
     }
 
+    val renderWitness by remember(session) { derivedStateOf { session.renderWitnessOrNull() } }
+    val composedRenderWitness = renderWitness
+    val recoveredRendering = session.recoveredRendering
     // Memoised per stroke list: the options object must only change when the strokes do,
     // or every recomposition would look like a new mask and re-trigger generation.
-    val outlineEraseMask = remember(adjustments.eraseStrokes) {
-        if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes)
+    val outlineEraseMask = remember(adjustments.eraseStrokes, recoveredRendering,
+        adjustments.outlineMode.takeIf { recoveredRendering != null }) {
+        val build = { if (adjustments.eraseStrokes.isEmpty()) null else buildEraseMask(adjustments.eraseStrokes) }
+        if (recoveredRendering == null) build()
+        else recoveredRendering.outlineMask(adjustments.eraseStrokes, adjustments.outlineMode, build)
     }
-    val backgroundBrushOperations = remember(adjustments.backgroundBrushStrokes) {
-        buildBackgroundBrushOperations(adjustments.backgroundBrushStrokes)
+    val backgroundBrushOperations = remember(adjustments.backgroundBrushStrokes, recoveredRendering,
+        imageEdit.takeIf { recoveredRendering != null }) {
+        val build = { buildBackgroundBrushOperations(adjustments.backgroundBrushStrokes) }
+        if (recoveredRendering == null) build()
+        else recoveredRendering.backgroundMasks(adjustments.backgroundBrushStrokes, imageEdit, build)
     }
     val uiOptions = GenerationOptions(
         source = IconSourceOptions(
@@ -367,7 +376,9 @@ internal fun OptionsDialog(
         outlineEraseMask = outlineEraseMask,
         backgroundBrushOperations = backgroundBrushOperations
     )
-    val generatingOptions = session.modifierReplay?.optionsFor(uiOptions) ?: uiOptions
+    val generatingOptions = remember(session, uiOptions, composedRenderWitness, recoveredRendering, session.modifierReplay) {
+        session.generationOptionsFor(uiOptions, composedRenderWitness)
+    }
     // Pack rows describe the source artwork, not its themed export. The launcher applies the
     // adaptive viewport to themed output; applying that inset directly to these flat browser
     // tiles made every candidate look half-sized until a modifier happened to flatten it.
@@ -420,8 +431,6 @@ internal fun OptionsDialog(
         render = renderPreviewWith
     )
 
-    val renderWitness by remember(session) { derivedStateOf { session.renderWitnessOrNull() } }
-    val composedRenderWitness = renderWitness
     val composedSelections = customIconList.toList()
     val composedOrigin = draft.origin
     val composedReplay = draft.replay
@@ -461,10 +470,7 @@ internal fun OptionsDialog(
     LaunchedEffect(selectedTab) {
         // Leaving the icon-pack list re-expands the app bar (other tabs barely scroll).
         if (selectedTab != 0) headerScrollBehavior.state.heightOffset = 0f
-        // Modifiers live only in the Modifier tab — leaving it starts the next visit clean
-        if (selectedTab != 2 && session.modifierReplay == null) {
-            imageEdit = ImageEdit.NONE
-        }
+        session.enterSelectedTab()
     }
 
     val confirmIcon: () -> Unit = confirm@{
@@ -972,7 +978,7 @@ private fun ModifierOptionsTab(
 }
 
 @Composable
-private fun VectorOptionsTab(
+internal fun VectorOptionsTab(
     keepRetainedStage: Boolean,
     sourceIcon: IconPackDrawable?,
     contentPadding: PaddingValues,
