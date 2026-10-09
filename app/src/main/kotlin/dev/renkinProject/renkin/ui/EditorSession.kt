@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.ui
 
+import android.graphics.Bitmap
+import androidx.annotation.MainThread
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -12,6 +14,7 @@ import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.TextType
+import dev.renkinProject.renkin.data.editor.EditorDraftOrigin
 import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
@@ -28,8 +31,13 @@ internal class EditorSession(
     val owner: ProfileSessionToken,
     val application: PackageInfoStruct,
     initialPack: String,
-    initialFont: String
+    initialFont: String,
+    internal val baselineApplication: PackageInfoStruct = application
 ) {
+    init {
+        require(baselineApplication.key == application.key) { "Editor baseline belongs to another component" }
+    }
+
     var selectedTab by mutableIntStateOf(0)
     var source by mutableStateOf(Source.ICON_PACK)
     var browsingIconPacks by mutableStateOf(false)
@@ -74,6 +82,44 @@ internal class EditorSession(
     var restoringModifiers by mutableStateOf(false)
     var modifierRestoreFailed by mutableStateOf(false)
     var replayMaterialYou by mutableStateOf(false)
+    internal var recoveryResources: EditorSessionResources? = null
+        private set
+
+    @MainThread
+    internal fun restoreDraft(bound: BoundEditorRecovery) {
+        check(recoveryResources == null && draft.completedFrameSerial == null)
+        val value = bound.capture.snapshot
+        restoreDraftControls(value.controls)
+        customIconList = value.selections.map { ResourceDrawable(it.resourceId, bound.artwork.getValue(it.artwork)) }
+        onlineImagePath = value.onlinePath
+        upload.selectedImagePath = value.uploadPath
+        upload.publishedSelection = upload.selection().takeIf { value.origin == EditorDraftOrigin.UPLOAD }
+        with(vectorEditState) {
+            entries = bound.vector.entries
+            thickness = bound.vector.thickness
+            automaticallyCenter = bound.vector.automaticallyCenter
+            viewportOverride = bound.vector.viewport
+            sourceUrl = bound.vector.sourceUrl
+            containsBakedModifierEdits = bound.vector.containsBakedModifierEdits
+            initialized = value.vector.initialized
+            restoreDraftSeed(bound.vectorSeed)
+        }
+        restoredIconSource = value.restoredSource?.let(bound.artwork::getValue)
+        restoredSourceContainsBakedModifierEdits = value.restoredSourceBaked
+        modifierReplay = bound.replay?.let {
+            EditorModifierReplay.fromDraft(it, requireNotNull(bound.replayBaseline), requireNotNull(value.replay).plate)
+        }
+        modifierRestoreFailed = value.modifierRestoreFailed
+        recoveryResources = EditorSessionResources(bound.capture.resources, bound.resources)
+        upload.ownedImage = value.uploadPath?.let { recoveryResources?.uploadBitmap(it) }
+        draft.restoreDraft(bound, application, customIconList) { captureRenderWitness() }
+    }
+
+    fun selectFont(reference: String) {
+        recoveryResources?.replaceFontSelection()
+        textFontPath = reference
+        activateCreate()
+    }
 
     fun restoreModifiers(verified: VerifiedModifierInput) {
         browsingIconPacks = false
@@ -153,12 +199,14 @@ internal class EditorSession(
 internal class UploadEditorState {
     data class Selection(val path: String?, val adaptive: Boolean, val zoom: Float)
     internal var publishedSelection: Selection? = null
+    internal var ownedImage by mutableStateOf<Bitmap?>(null)
     internal fun selection() = Selection(selectedImagePath, asAdaptiveIcon, zoomLevel)
     var selectedImagePath by mutableStateOf<String?>(null)
     var asAdaptiveIcon by mutableStateOf(false)
     var zoomLevel by mutableFloatStateOf(1f)
 
     fun reset() {
+        ownedImage = null
         publishedSelection = null
         selectedImagePath = null
         asAdaptiveIcon = false
@@ -167,6 +215,13 @@ internal class UploadEditorState {
 
     fun selectImported(path: String?) {
         reset()
+        selectedImagePath = path
+    }
+
+    fun selectGallery(path: String?) {
+        if (selectedImagePath == path && ownedImage == null) return
+        ownedImage = null
+        publishedSelection = null
         selectedImagePath = path
     }
 }

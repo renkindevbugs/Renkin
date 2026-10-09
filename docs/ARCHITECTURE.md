@@ -717,6 +717,11 @@ above; project/application JVM settings remain unchanged. The remaining
 primary work after domain identity is **7C** (durable drafts) and **7D** (feature packages),
 plus the separately designed legacy `prefsSnapshot` retirement described below.
 
+Rendering regression tests now use test-only Roborazzi 1.41.0 alongside the existing Robolectric
+4.14.1. The first reference covers a gradient and shadow in the actual bitmap modifier pipeline.
+Ordinary unit tests verify the checked-in PNG; explicit record tasks update it for visual review.
+See [rendering-tests.md](rendering-tests.md) for commands, scope and native-host limitations.
+
 ## Threading & state
 
 The domain StateFlow migration in **7B** is complete. The remaining primary roadmap phases are
@@ -807,6 +812,24 @@ The device checkpoint is confirmed. Twenty-nine new tests cover semantic/native/
 preparation ownership/results, failure/cancellation preservation and inspected-token expiry. All
 1,066 tests across 158 suites, compileDebugKotlin and assembleDebug pass with the local test-JVM
 C2 workaround. **7C3b** will integrate acceptance, the offer/error UI and lifecycle/storage behavior.
+
+**7C3b1** reconstructs an unpublished session through PreparedEditorRecovery.sessionForAcceptance.
+It restores exact controls, original/base/result metadata, active completed frame/Create request,
+verified replay bookkeeping and independent current/seed vector inputs without a builder call.
+The original editor application is distinct from baselineApplication, the provider's current live
+identity used for later baseline checks; replaced identities classify capture as Superseded.
+Selected pack raw artwork uses its recorded modifier pipeline for edits and sheet previews, without
+reentering the pack source stage. Owned Typeface/upload values are consumed by text generation and
+the Upload tab, and owned bytes remain available for recapture until explicit replacement.
+Construction is cached on the preparation;
+unattached disposal invalidates it. This API has no production caller, acceptance/publication or
+native ownership transfer. **7C3b2** adds validated acceptance and native ownership transfer;
+**7C3b3** integrates first-composition rendering, the offer/error UI and autosave/storage hooks.
+The 7C3b1 device checkpoint is confirmed. Nineteen new tests cover reconstruction, frozen-source
+rendering, owned resources, Upload composition, expired live identities and a Roborazzi rendering
+reference. All 1,085 tests across 161 suites, compileDebugKotlin and assembleDebug pass with the
+local test-JVM C2 workaround. An intentional color change fails ordinary screenshot verification;
+Roborazzi is absent from debugRuntimeClasspath.
 
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged

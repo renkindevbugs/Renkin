@@ -26,8 +26,11 @@ Never restore an old `ProfileSessionToken`; successful recovery obtains a new li
   editor session, clear it on Apply/explicit dismissal, and integrate import/recovery/deletion
   invalidation. Validate races and cancellation before enabling recovery offers.
   **7C3a (confirmed and verified)** prepares validated native values and a
-  current persisted-baseline lease without attaching an editor. **7C3b** must integrate fresh
-  session acceptance, the visible offer/error paths, lifecycle persistence and replacement hooks.
+  current persisted-baseline lease without attaching an editor.
+  **7C3b1 (confirmed and verified)** reconstructs an unpublished session from
+  that lease, including completed frame, controls, original/live identity and owned resources.
+  **7C3b2** adds validated acceptance/native ownership transfer. **7C3b3** integrates first-composition
+  rendering, the visible offer/error paths, lifecycle persistence and replacement hooks.
 
 Each checkpoint follows CLAUDE.md's device-confirmation/test/commit sequence. The envelope is
 not evidence that arbitrary controls or artwork can already be restored. End-to-end recovery
@@ -537,8 +540,7 @@ discarded, only after removing every preview consumer that could still draw its 
 an offer does not by itself make recycling safe while a dismissal animation still displays it.
 Acceptance must repeat baseline/checkpoint/editor-generation validation before creating
 a fresh editor and transferring native ownership. This checkpoint deliberately provides no
-acceptance or UI entry point, and does not yet reconstruct IconDraftState's completed request or
-restore live controls/vector publication bookkeeping.
+acceptance or UI entry point. Session construction is the separate 7C3b1 checkpoint below.
 
 The device regression checkpoint is confirmed. Twenty-nine new tests cover valid/invalid control
 domains (including disabled fields, inherited/Custom schemes, packed colors, positionless gradients
@@ -556,10 +558,94 @@ build/verify-7c3a-full.log. Native font parser behavior on API 23–25 and curre
 at completed dispatcher handoff and allocation timing/peak heap still need platform coverage.
 There is no production autosave/recovery caller; on-device checks establish startup/editor regressions.
 
-Before enabling 7C3b, implement a visible corrupt-catalog Retry/confirmed-discard path, fresh
+Before enabling recovery, implement a visible corrupt-catalog Retry/confirmed-discard path, fresh
 session construction with exact initial/completed-frame/source/replay/vector-seed ownership,
 debounce before Main pixel copies, background flush, checkpoint-aware Apply/dismiss cleanup,
 and invalidation before storage replacement/deletion. Keep the startup morphing LoadingIndicator.
+
+## Session reconstruction checkpoint (7C3b1)
+
+`PreparedEditorRecovery.sessionForAcceptance()` constructs and caches one unpublished EditorSession
+on Main. It uses the current provider token from the preparation lease, never a serialized old
+token. Neither this method nor the factory attaches the session to EditorSessionViewModel, changes
+the app list, switches profiles, writes storage or accepts recovery. They have no production caller.
+The 7C3b2 owner must revalidate baseline/checkpoint/editor generation before publishing this session;
+constructing it does not extend or renew the lease.
+
+`EditorControlRestore` directly restores the already validated control values, including disabled
+styles/groups, packed colors, nullable attribution, selected tab, Create/browser selections, Upload
+zoom/adaptive values, all adjustments, ordered brush geometry and pack styling. It neither clamps
+values nor reconstructs them from a portable recipe. Vector current/seed inputs are installed
+independently, with initialized, viewport, thickness, filled/base-stroke metadata, attribution and
+baked flags intact. The original seed and current publication are acknowledged through the existing
+restoreDraftSeed contract. Upload publication is acknowledged only for the active Upload origin.
+
+The reconstructed application contains the original captured base/rendered artwork, input, recipe,
+calendar/source metadata and original flags. Its platform icon/component are obtained from the
+currently verified live application. `EditorSession.baselineApplication` retains that provider-owned
+live identity separately, so later capture does not ask the provider to find the reconstructed
+original object in its app list. Normal sessions default this reference to their existing application.
+Recovery does not persist the captured original or overwrite unrelated live profile edits.
+
+`IconDraftState.restoreDraft` installs the actual origin's raw/result/recipe/input pair, exact
+requested/effective generation options, initialization/restore availability, restored original
+input and replay. It reconstructs the completed Create request against the restored original and
+selected source, then captures a new witness after origin/source installation. The frame receives
+a new runtime serial; old generation counters, active jobs and source revisions are not restored.
+An immediate capture or confirmation can refer to this coherent frame without calling a builder
+or applying modifiers to the saved result. This is not yet a guarantee about the first mounted
+OptionsDialog: the UI's derived options/masks and tab effects still need the 7C3b3 integration below.
+
+`EditorModifierReplay.fromDraft` restores the captured baseline modifier stack and plate directly;
+it deliberately does not call restoreControls, which would overwrite the current draft with the
+original recipe's controls. Its verified original input remains separate from the current edited
+render. Source switching retains the existing restored-source baked behavior.
+
+Selected pack artwork is restored as a `RetainedModifierStage` containing the captured raw input,
+pipeline and baked flag. The reconstructed ResourceDrawable is attribution only. Both Create
+regeneration and modifier-sheet previews render the frozen stage directly, using the same renderer
+as verified modifier replay; neither path reopens pack XML, normalizes adaptive geometry again or
+reapplies source-stage pack restyling. A failed retained render preserves the completed trio and
+blocks Apply. Explicit source selection or modifier restoration releases the frozen-stage route.
+Text/application sources keep their normal source-generation semantics; text uses the owned font.
+
+`EditorSessionResources` retains immutable owned font/upload bytes and their native values keyed
+by the captured selection reference. Complete recapture reuses these exact bytes while the
+reference and retained selection match, rather than reopening missing/changed old paths. Text
+generation and its sheet previews pass the owned Typeface through the VM/provider/generation
+service into LetterGenerator, without putting native values in GenerationOptions or its codec.
+UploadColumn uses the owned bitmap before any gallery decode, and suppresses publication of an
+already acknowledged unchanged recovered upload. Zoom/adaptive edits still publish normally.
+Explicit font/gallery replacement invalidates the retained selection even at the same path; capture
+then uses the normal bounded resolver. Upload callbacks also verify owned-image identity, so a
+callback from a replaced recovered image cannot publish merely because the path/zoom still match.
+An application reference replaced in the provider now classifies capture as Superseded without an
+error log, for both normal and recovered sessions.
+
+The preparation continues owning all native values while construction is unpublished. Its
+disposeUnattached clears the cached session and recycles native artwork once, and reconstruction
+after disposal is rejected. The caller must first detach every preview consumer. There is no live
+native ownership transfer API yet; 7C3b2 must add that guard before attaching, so offer cleanup can
+never recycle artwork transferred to a live editor.
+
+Device regressions are confirmed. Nineteen new tests cover exact reconstructed controls and
+completed frames, distinct original/live artwork, frozen canonical/adaptive pack rendering without
+source lookup, source replacement, replay bookkeeping, vector current/seed independence, brush
+mask aliases, owned font/upload reuse and replacement, construction/disposal, and expired live
+identity capture. Compose regressions cover missing-file Upload entry and zoom publication; they
+also caught and fixed the empty-gallery branch hiding a recovered owned image. A test-only
+Roborazzi reference covers the actual gradient/shadow modifier pipeline, with an intentional
+color mutation proving ordinary verification fails. All 1,085 tests across 161 suites,
+compileDebugKotlin and assembleDebug pass with the local test-JVM C2 workaround. Roborazzi is
+absent from debugRuntimeClasspath; see [rendering tests](rendering-tests.md).
+
+Before enabling an offer, 7C3b2 must revalidate acceptance and implement native ownership transfer.
+7C3b3 must preserve requested native masks and unrepresented generation values through first
+composition, handle tab initialization without changing restored controls and test modifier-sheet
+previews and Clear/Restore against captured originals, including unsaved originals absent from the
+live app list. It must also implement explicit obsolete/corrupt Retry/discard behavior,
+debounced autosave/background flush, checkpoint-aware Apply/dismiss cleanup and storage invalidation.
+Startup/process-death recovery remains disabled in this checkpoint; keep the morphing LoadingIndicator.
 
 ## Envelope and local files
 

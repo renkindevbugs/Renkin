@@ -92,7 +92,7 @@ internal fun UploadGalleryContent(
     onSelectionChange: (GallerySelection) -> Unit,
     onChange: (IconPackDrawable?, String?) -> Unit
 ) {
-    if (savedImages.isEmpty()) {
+    if (savedImages.isEmpty() && uploadedImage == null) {
         UploadGalleryEmptyState()
         return
     }

@@ -17,6 +17,7 @@ hilt = "2.56.2"
 hiltNavigationCompose = "1.2.0"
 junit = "4.13.2"
 robolectric = "4.14.1"
+roborazzi = "1.41.0"
 kotlin = "2.1.20"
 kotlinx-collections-immutable = "0.4.0"
 ksp = "2.1.20-1.0.32"
@@ -67,6 +68,7 @@ apksigner-compat = { group = "com.github.Alembicons", name = "ApkSignerCompat", 
 
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 robolectric = { group = "org.robolectric", name = "robolectric", version.ref = "robolectric" }
+roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }
 androidx-test-junit = { group = "androidx.test.ext", name = "junit", version.ref = "androidx-test-junit" }
 androidx-espresso-core = { group = "androidx.test.espresso", name = "espresso-core", version.ref = "androidx-espresso-core" }
 
@@ -79,3 +81,4 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
+roborazzi = { id = "io.github.takahirom.roborazzi", version.ref = "roborazzi" }

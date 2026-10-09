@@ -74,7 +74,7 @@ internal fun UploadColumn(
             val movedFiles = trashed.map { it.original }.toSet()
             savedImages = savedImages - movedFiles
             if (movedFiles.any { it.absolutePath == selectedImagePath }) {
-                selectedImagePath = null
+                state.selectGallery(null)
             }
             if (trashed.size != toDelete.size) toaster.show(uploadErrorMessage)
 
@@ -122,7 +122,7 @@ internal fun UploadColumn(
                     }
                 }
                 savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
-                selectedImagePath = added.firstOrNull()?.absolutePath ?: selectedImagePath
+                added.firstOrNull()?.absolutePath?.let(state::selectGallery)
                 if (failed) toaster.show(uploadErrorMessage)
             } finally {
                 isUploading = false
@@ -130,7 +130,7 @@ internal fun UploadColumn(
         }
     }
 
-    LaunchedEffect(selectedImagePath) {
+    LaunchedEffect(selectedImagePath, state.ownedImage) {
         val path = selectedImagePath
         if (path == null) {
             uploadedImage = null
@@ -141,7 +141,7 @@ internal fun UploadColumn(
             return@LaunchedEffect
         }
         hadSelectedImage = true
-        val bitmap = withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path) }
+        val bitmap = state.ownedImage ?: withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path) }
         if (bitmap == null) {
             uploadedImage = null
             mask = null
@@ -163,6 +163,7 @@ internal fun UploadColumn(
 
     Box(Modifier.fillMaxSize()) {
         val previewSelection = state.selection()
+        val previewOwnedImage = state.ownedImage
         UploadGalleryContent(
             savedImages = savedImages,
             uploadedImage = uploadedImage.takeIf { selectedImagePath != null && loadedPath == selectedImagePath },
@@ -176,11 +177,13 @@ internal fun UploadColumn(
                 zoomLevel = 1f
             },
             onZoomChange = { zoomLevel = it },
-            onSelectedImageChange = { selectedImagePath = it },
+            onSelectedImageChange = state::selectGallery,
             onSelectionChange = { selection = it },
             onChange = { icon, path ->
-                if (path != null && previewSelection == state.selection() && path == previewSelection.path) {
-                    onChange(icon, path)
+                if (path != null && previewSelection == state.selection() && path == previewSelection.path &&
+                    previewOwnedImage === state.ownedImage
+                ) {
+                    if (state.ownedImage == null || state.publishedSelection != previewSelection) onChange(icon, path)
                 }
             }
         )

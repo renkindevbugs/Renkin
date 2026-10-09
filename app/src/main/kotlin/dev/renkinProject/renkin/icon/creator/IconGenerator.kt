@@ -8,6 +8,7 @@ import android.graphics.PorterDuff
 import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
+import android.graphics.Typeface
 import android.graphics.drawable.AdaptiveIconDrawable
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.ColorDrawable
@@ -80,7 +81,8 @@ class IconGenerator(
     // those drawables (iconback/mask/upon) load from.
     private val primaryFallback: IconPackFallback = IconPackFallback(),
     private val fallbackPackName: String = "",
-    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(ctx)
+    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(ctx),
+    private val ownedTypeface: Typeface? = null
 ) {
     private val source = options.source
     private val modifiers = options.modifiers
@@ -605,7 +607,7 @@ class IconGenerator(
     private fun generateText(applicationName: String, textType: TextType): IconPackDrawable {
         val size = 256
         val strokeWidth = size / 48F
-        val textGenerator = LetterGenerator(ctx, source.textFontPath)
+        val textGenerator = LetterGenerator(ctx, source.textFontPath, ownedTypeface)
 
         // Custom text only applies to the CUSTOM type; the case transform applies everywhere.
         val text = when (source.textCase) {

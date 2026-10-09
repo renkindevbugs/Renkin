@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.apk
 
 import android.content.Context
+import android.graphics.Typeface
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.Source
@@ -56,14 +57,16 @@ class IconGenerationService(
     suspend fun getIconPreview(
         application: PackageInfoStruct,
         options: GenerationOptions,
-        customIcon: ResourceDrawable?
-    ): IconGenerationResult = generatePreview(application, options, customIcon, retainInput = true)
+        customIcon: ResourceDrawable?,
+        ownedTypeface: Typeface? = null
+    ): IconGenerationResult = generatePreview(application, options, customIcon, retainInput = true, ownedTypeface = ownedTypeface)
 
     private suspend fun generatePreview(
         application: PackageInfoStruct,
         options: GenerationOptions,
         customIcon: ResourceDrawable?,
-        retainInput: Boolean
+        retainInput: Boolean,
+        ownedTypeface: Typeface? = null
     ): IconGenerationResult = withContext(Dispatchers.Default) {
         currentCoroutineContext().ensureActive()
 
@@ -82,7 +85,8 @@ class IconGenerationService(
             options,
             pack1,
             pack2,
-            iconPackCatalog = iconPackCatalog
+            iconPackCatalog = iconPackCatalog,
+            ownedTypeface = ownedTypeface
         )
         val preview = builder.generatePreview(application, customIcon, retainInput)
         currentCoroutineContext().ensureActive()

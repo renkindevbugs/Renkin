@@ -1,3 +1,5 @@
+@file:OptIn(com.github.takahirom.roborazzi.ExperimentalRoborazziApi::class)
+
 import java.util.Properties
 
 plugins {
@@ -6,6 +8,7 @@ plugins {
     alias(libs.plugins.kotlin.ksp)
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.hilt.android)
+    alias(libs.plugins.roborazzi)
 }
 
 // Release signing credentials live in local.properties (gitignored), so a signed release
@@ -145,6 +148,7 @@ dependencies {
     //Test
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)
+    testImplementation(libs.roborazzi)
     // Compose UI tests run locally on Robolectric (no device): the BOM pins the versions,
     // ui-test-manifest provides the host activity createComposeRule needs.
     testImplementation(composeBom)
@@ -154,6 +158,19 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation(libs.androidx.test.junit)
     androidTestImplementation(libs.androidx.espresso.core)
+}
+
+roborazzi {
+    outputDir.set(file("src/test/screenshots"))
+    compare {
+        outputDir.set(file("build/outputs/screenshots_comparison"))
+    }
+}
+
+tasks.withType<Test>().configureEach {
+    inputs.files(fileTree("src/test/screenshots") { include("**/*.png") })
+        .withPropertyName("renderingReferences")
+        .withPathSensitivity(PathSensitivity.RELATIVE)
 }
 
 ksp {

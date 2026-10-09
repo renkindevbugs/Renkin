@@ -15,38 +15,10 @@ internal class VerifiedModifierInput private constructor(
     val input: IconPackDrawable,
     val retained: IconModifierInput
 ) {
-    suspend fun render(options: GenerationOptions): IconGenerationResult = withContext(Dispatchers.Default) {
-        currentCoroutineContext().ensureActive()
-        val icon = try {
-            IconModifierStageRenderer(resources, options).render(input, retained.pipeline)
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            Log.error("VerifiedModifierInput", "Retained modifier preview failed", error)
-            return@withContext IconGenerationResult(null)
-        } catch (error: OutOfMemoryError) {
-            Log.error("VerifiedModifierInput", "Retained modifier preview exceeded available memory", error)
-            return@withContext IconGenerationResult(null)
-        }
-        currentCoroutineContext().ensureActive()
-        val metadata = try {
-            val recipe = StoredIconModifierRecipe.fromRenderedOptions(options)
-            val normalized = recipe?.let(ModifierRecipeCodec::decode)?.let { options.copy(modifiers = it) }
-            normalized?.takeIf(StoredIconModifierInput::supportsOptions)?.let {
-                IconModifierInput(it, retained.containsBakedModifierEdits, retained.origin,
-                    liveInput = input, storedInput = retained.storedInput, pipeline = retained.pipeline)
-            }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            Log.error("VerifiedModifierInput", "Optional replay metadata was not captured", error)
-            null
-        } catch (error: OutOfMemoryError) {
-            null
-        }
-        currentCoroutineContext().ensureActive()
-        IconGenerationResult(icon, metadata, options, input, retained.pipeline)
-    }
+    suspend fun render(options: GenerationOptions): IconGenerationResult = RetainedModifierStage(
+        resources, input, retained.pipeline, retained.containsBakedModifierEdits,
+        retained.origin, retained.storedInput
+    ).render(options)
 
     companion object {
         suspend fun verify(

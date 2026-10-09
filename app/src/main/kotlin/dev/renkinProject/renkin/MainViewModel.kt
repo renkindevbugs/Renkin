@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin
 
 import android.app.Application
+import android.graphics.Typeface
 import android.net.Uri
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -978,6 +979,11 @@ class MainViewModel @Inject constructor(
         options: GenerationOptions,
         customIcon: ResourceDrawable?
     ): IconGenerationResult = appProvider.getIconPreview(app, options, customIcon)
+
+    internal suspend fun previewIconWithOwnedFont(
+        app: PackageInfoStruct, options: GenerationOptions, customIcon: ResourceDrawable?,
+        typeface: Typeface
+    ): IconGenerationResult = appProvider.getIconPreview(app, options, customIcon, typeface)
 
     internal suspend fun prepareModifierReplay(app: PackageInfoStruct, expected: ProfileSessionToken) =
         appProvider.prepareModifierReplay(app, expected)

@@ -6,6 +6,7 @@ import dev.renkinProject.renkin.data.editor.EditorArtworkSnapshot
 import dev.renkinProject.renkin.data.editor.EditorBitmapArtwork
 import dev.renkinProject.renkin.data.editor.EditorCompleteCapture
 import dev.renkinProject.renkin.data.editor.EditorDraftCodec
+import dev.renkinProject.renkin.data.editor.EditorDraftOrigin
 import dev.renkinProject.renkin.data.editor.EditorGenerationSnapshot
 import dev.renkinProject.renkin.data.editor.EditorInputSnapshot
 import dev.renkinProject.renkin.data.editor.EditorInsetArtwork
@@ -20,6 +21,8 @@ import dev.renkinProject.renkin.drawable.InsetIconDrawable
 import dev.renkinProject.renkin.icon.creator.BackgroundBrushOperation
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconModifierInput
+import dev.renkinProject.renkin.icon.creator.ModifierInputOrigin
+import dev.renkinProject.renkin.icon.creator.RetainedModifierStage
 import dev.renkinProject.renkin.icon.creator.VerifiedModifierInput
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
@@ -39,7 +42,8 @@ internal class BoundEditorRecovery(
     val replayBaseline: GenerationOptions?,
     val vector: VectorEditState.Inputs,
     val vectorSeed: VectorEditState.Inputs?,
-    val resources: BoundEditorResources
+    val resources: BoundEditorResources,
+    val createStage: RetainedModifierStage?
 ) {
     // The offer owner must detach every preview consumer before recycling an untransferred preparation.
     internal fun disposeUnattached() = disposeArtwork(artwork, resources)
@@ -107,7 +111,10 @@ private suspend fun bindEditorRecoveryValues(
         }
         return BoundEditorRecovery(capture, artwork.toMap(), generation(value.requested), value.renderedOptions?.let(::generation),
             input(value.original.input), input(value.input), existing, existing.takeIf { value.replay != null },
-            value.replay?.baseline?.let(::generation), vector(value.vector.current), value.vector.seed?.let(::vector), boundResources)
+            value.replay?.baseline?.let(::generation), vector(value.vector.current), value.vector.seed?.let(::vector), boundResources,
+            if (value.origin == EditorDraftOrigin.CREATE && value.selections.isNotEmpty()) RetainedModifierStage(resources.androidResources,
+                requireNotNull(artwork[requireNotNull(value.raw)]), value.pipeline, value.rawBaked,
+                value.input?.origin ?: ModifierInputOrigin.FRESH_SOURCE) else null)
             .also { owner.ensureActive() }
     } catch (error: Throwable) {
         disposeArtwork(artwork, boundResources)

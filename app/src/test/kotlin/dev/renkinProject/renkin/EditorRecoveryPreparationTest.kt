@@ -16,6 +16,7 @@ import dev.renkinProject.renkin.di.AppModule
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.EditorRecoveryFixtures
 import dev.renkinProject.renkin.ui.EditorRecoveryPreparation
+import dev.renkinProject.renkin.ui.captureRenderWitness
 import java.io.File
 import java.io.IOException
 import kotlinx.collections.immutable.toPersistentList
@@ -101,6 +102,15 @@ class EditorRecoveryPreparationTest {
     }
     private suspend fun prepare(checkpoint: EditorDraftCheckpoint) = vm.prepareDraftRecovery(checkpoint, provider, store, EditorRecoveryResources(context))
     private fun open() = vm.getOrCreate("interloper", provider.sessionToken, app, "", "", true)
+
+    @Test fun replacedLiveApplicationSupersedesCaptureWithoutARecoveryError() = runBlocking<Unit> {
+        val editor = requireNotNull(open())
+        editor.draft.regenerateCreate(EditorRecoveryFixtures.builder, app, EditorRecoveryFixtures.options(), emptyList(),
+            editor.captureRenderWitness())
+        stage(listOf(EditorRecoveryFixtures.application()))
+        assertEquals(EditorCaptureResult.Superseded, vm.captureCompleteDraft("interloper", store.checkpoint(), provider, store,
+            EditorDraftResources(context), dev.renkinProject.renkin.data.IconModifierInputStore(context)))
+    }
 
     @Test fun emptyAndStaleCheckpointsHaveDistinctNonErrorResults() = runBlocking<Unit> {
         val empty = store.checkpoint()

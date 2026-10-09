@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.apk
 
 import android.content.Context
+import android.graphics.Typeface
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.BuildConfig
@@ -664,9 +665,10 @@ class ApplicationProvider internal constructor(
     suspend fun getIconPreview(
         application: PackageInfoStruct,
         options: GenerationOptions,
-        customIcon: ResourceDrawable?
+        customIcon: ResourceDrawable?,
+        ownedTypeface: Typeface? = null
     ): IconGenerationResult =
-        iconGenService.getIconPreview(application, options, customIcon)
+        iconGenService.getIconPreview(application, options, customIcon, ownedTypeface)
 
     internal suspend fun prepareModifierReplay(
         application: PackageInfoStruct,
@@ -1381,7 +1383,7 @@ class ApplicationProvider internal constructor(
         expected: ProfileSessionToken, application: PackageInfoStruct
     ): EditorDraftBaselineSource = withContext(Dispatchers.Default) {
         runProfileOperation(expected) {
-            require(applicationList.any { it === application }) { "Editor original application has changed" }
+            if (applicationList.none { it === application }) throw ProfileOperationSupersededException()
             editorDraftBaselineHeld(expected, application)
         }
     }

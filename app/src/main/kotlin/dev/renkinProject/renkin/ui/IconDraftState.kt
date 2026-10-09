@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.ui
 
+import androidx.annotation.MainThread
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -7,6 +8,7 @@ import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.IconPreviewBuilder
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.editor.EditorDraftOrigin
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
@@ -15,6 +17,7 @@ import dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe
 import dev.renkinProject.renkin.icon.creator.IconModifierInput
 import dev.renkinProject.renkin.icon.creator.ModifierInputOrigin
 import dev.renkinProject.renkin.icon.creator.ModifierInputPipeline
+import dev.renkinProject.renkin.icon.creator.RetainedModifierStage
 import dev.renkinProject.renkin.icon.creator.modifierInputForResult
 import dev.renkinProject.renkin.icon.creator.hasIconAdjustments
 import dev.renkinProject.renkin.icon.creator.VerifiedModifierInput
@@ -58,6 +61,8 @@ internal class IconDraftState(
     private var vectorContainsBakedModifierEdits = false
     // Source switching may end replay while its controls still describe this raw input.
     private var restoredExistingInput: VerifiedModifierInput? = null
+    internal var recoveredCreateStage by mutableStateOf<RetainedModifierStage?>(null)
+        private set
 
     var origin by mutableStateOf(IconOrigin.CREATE)
 
@@ -127,6 +132,52 @@ internal class IconDraftState(
     ) {
         completedFrame = CompletedFrame(witness, ++frameSerial, requested, rendered, input, pipeline, containsBakedModifierEdits)
     }
+
+    @MainThread
+    internal fun restoreDraft(
+        bound: BoundEditorRecovery, app: PackageInfoStruct,
+        selections: List<ResourceDrawable>, witness: () -> EditorRenderWitness
+    ) {
+        check(completedFrame == null && activeGenerations == 0 && !initialized)
+        val value = bound.capture.snapshot
+        val raw = bound.artwork.getValue(requireNotNull(value.raw))
+        val rendered = bound.artwork.getValue(requireNotNull(value.rendered))
+        restoredExistingInput = bound.restoredExisting
+        recoveredCreateStage = bound.createStage
+        replay = bound.replay
+        canRestore = value.canRestore
+        initialized = value.initialized
+        vectorContainsBakedModifierEdits = value.vectorBaked
+        createIcon = null
+        when (value.origin) {
+            EditorDraftOrigin.CREATE -> {
+                origin = IconOrigin.CREATE
+                createIcon = rendered
+                createRecipe = value.recipe
+                createInput = bound.input
+                completedCreate = createRequest(app, bound.requested, selections)
+            }
+            EditorDraftOrigin.UPLOAD -> {
+                origin = IconOrigin.UPLOAD
+                uploadBase = raw
+                uploadIcon = rendered
+                uploadRecipe = value.recipe
+                uploadInput = bound.input
+                createRecipe = null
+                createInput = null
+            }
+            EditorDraftOrigin.VECTOR -> {
+                origin = IconOrigin.VECTOR
+                vectorIcon = raw
+                modifiedVector = rendered
+                vectorRecipe = value.recipe
+                vectorInput = bound.input
+                createRecipe = null
+                createInput = null
+            }
+        }
+        complete(witness(), bound.requested, bound.renderedOptions, raw, value.pipeline, value.rawBaked)
+    }
     var canRestore by mutableStateOf(initialInput != null && initialIcon != null)
         private set
     var replay by mutableStateOf<VerifiedModifierInput?>(null)
@@ -136,6 +187,7 @@ internal class IconDraftState(
 
     fun restore(verified: VerifiedModifierInput) {
         invalidateGenerations()
+        recoveredCreateStage = null
         replay = verified
         restoredExistingInput = verified
         replayRenderFailed = false
@@ -146,6 +198,7 @@ internal class IconDraftState(
     }
 
     fun selectNewSource() {
+        recoveredCreateStage = null
         replay = null
         replayRenderFailed = false
         canRestore = false
@@ -289,6 +342,9 @@ internal class IconDraftState(
         customIconList: List<ResourceDrawable>,
         witness: EditorRenderWitness? = null,
         isCurrent: () -> Boolean = { true },
+        renderSource: suspend (GenerationOptions, ResourceDrawable?) -> IconGenerationResult = { settings, custom ->
+            builder.previewIconWithInput(app, settings, custom)
+        },
         renderReplay: suspend (VerifiedModifierInput, GenerationOptions) -> IconGenerationResult = { input, settings ->
             input.render(settings)
         }
@@ -318,21 +374,23 @@ internal class IconDraftState(
         val generation = ++createGeneration
         canRestore = false
         val retainedReplay = replay
+        val retainedStage = recoveredCreateStage
         replayRenderFailed = false
         val generated = trackGeneration {
             when {
                 retainedReplay != null -> renderReplay(retainedReplay, options)
-                custom != null -> builder.previewIconWithInput(app, options, custom)
+                retainedStage != null -> retainedStage.render(options)
+                custom != null -> renderSource(options, custom)
                 // Icon-pack source with no new pick: apply the modifier to the already saved icon
                 // rather than pulling a fresh one from the first pack (which would swap the icon
                 // out from under the user). Null until a tap if none.
                 options.source.primarySource == Source.ICON_PACK ->
                     IconGenerationResult(request.base?.let { builder.applyModifier(it, options) })
-                else -> builder.previewIconWithInput(app, options, null)
+                else -> renderSource(options, null)
             }
         }
         if (generation == createGeneration && isCurrent()) {
-            if (retainedReplay != null && generated.icon == null) {
+            if ((retainedReplay != null || retainedStage != null) && generated.icon == null) {
                 replayRenderFailed = true
                 return
             }
@@ -340,7 +398,7 @@ internal class IconDraftState(
             createRecipe = if (generated.icon != null) {
                 StoredIconModifierRecipe.fromRenderedOptions(generated.renderedOptions ?: options)
             } else null
-            createInput = if (retainedReplay == null && generated.icon != null && custom == null && options.source.primarySource == Source.ICON_PACK) {
+            createInput = if (retainedReplay == null && retainedStage == null && generated.icon != null && custom == null && options.source.primarySource == Source.ICON_PACK) {
                 request.base?.let {
                     modifierInputForResult(it, options, ModifierInputOrigin.EXISTING_ICON,
                         containsBakedModifierEdits = existing?.retained?.containsBakedModifierEdits ?: true)
@@ -352,6 +410,7 @@ internal class IconDraftState(
                     request.base.takeIf { custom == null && options.source.primarySource == Source.ICON_PACK },
                 generated.draftPipeline,
                 retainedReplay?.retained?.containsBakedModifierEdits ?:
+                    retainedStage?.containsBakedModifierEdits ?:
                     if (custom == null && options.source.primarySource == Source.ICON_PACK) {
                         existing?.retained?.containsBakedModifierEdits ?: true
                     } else false)

@@ -56,11 +56,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.haveMonochrome
 import dev.renkinProject.renkin.drawable.isAdaptiveIconDrawable
 import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.IconGenerationResult
 import dev.renkinProject.renkin.icon.creator.withModifiers
 import dev.renkinProject.renkin.icon.creator.withExport
 import dev.renkinProject.renkin.icon.creator.withSource
@@ -377,6 +379,11 @@ internal fun OptionsDialog(
     // The Colorize sheet previews a draft style that is NOT applied yet, so it runs the real
     // generation pipeline with the draft substituted in — anything cheaper (colouring the app's
     // current icon) would show a different icon than the one Apply produces.
+    val renderCreateSource: suspend (GenerationOptions, ResourceDrawable?) -> IconGenerationResult = { settings, custom ->
+        val font = session.recoveryResources?.typeface(settings.source.textFontPath)
+        if (font != null) viewModel.previewIconWithOwnedFont(app, settings, custom, font)
+        else viewModel.previewIconWithInput(app, settings, custom)
+    }
     val renderPreviewWith: suspend (GenerationOptions) -> Bitmap? = { previewOptions ->
         val replay = draft.replay
         val rendered = if (replay != null) viewModel.renderModifierReplay(replay, previewOptions).icon else when (draft.origin) {
@@ -385,6 +392,10 @@ internal fun OptionsDialog(
             IconOrigin.CREATE -> {
                 val custom = customIconList.firstOrNull()
                 when {
+                    draft.recoveredCreateStage != null -> draft.recoveredCreateStage?.render(previewOptions)?.icon
+                    previewOptions.source.primarySource == Source.APPLICATION_NAME &&
+                        session.recoveryResources?.typeface(previewOptions.source.textFontPath) != null ->
+                        renderCreateSource(previewOptions, custom).icon
                     custom != null -> viewModel.previewIcon(app, previewOptions, custom)
                     previewOptions.source.primarySource == Source.ICON_PACK ->
                         (session.restoredIconSource ?: app.baseIcon ?: app.createdIcon)?.let {
@@ -402,7 +413,7 @@ internal fun OptionsDialog(
         sourceKey = draft.replay?.input ?: when (draft.origin) {
             IconOrigin.UPLOAD -> draft.uploadBase
             IconOrigin.VECTOR -> draft.vectorIcon
-            IconOrigin.CREATE -> customIconList.firstOrNull()?.let {
+            IconOrigin.CREATE -> draft.recoveredCreateStage?.input ?: customIconList.firstOrNull()?.let {
                 iconPack to it.resourceId
             } ?: (session.restoredIconSource ?: app.baseIcon ?: app.createdIcon ?: app.icon)
         },
@@ -425,7 +436,8 @@ internal fun OptionsDialog(
     }
     LaunchedEffect(draft.origin, draft.replay, generatingOptions, customIconList, composedSourceRevision) {
         draft.regenerateCreate(viewModel, app, generatingOptions, composedSelections,
-            composedRenderWitness, renderStillCurrent, viewModel::renderModifierReplay)
+            composedRenderWitness, renderStillCurrent, renderSource = renderCreateSource,
+            renderReplay = viewModel::renderModifierReplay)
     }
     LaunchedEffect(draft.origin, draft.vectorIcon, generatingOptions, composedSourceRevision) {
         draft.regenerateVector(viewModel, generatingOptions, composedRenderWitness, renderStillCurrent)
@@ -589,7 +601,7 @@ internal fun OptionsDialog(
                                 textCase = textCase,
                                 onTextCaseChange = { textCase = it; activateCreate() },
                                 fontPath = textFontPath,
-                                onFontPathChange = { textFontPath = it; activateCreate() },
+                                onFontPathChange = session::selectFont,
                                 contentReady = createTabReady,
                                 selectedResourceId = customIconList.firstOrNull()?.resourceId,
                                 selectedCalendarPrefix = calendarPrefix.takeIf { calendarEnabled },

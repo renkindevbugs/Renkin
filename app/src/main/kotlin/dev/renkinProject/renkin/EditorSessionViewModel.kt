@@ -5,6 +5,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.IconModifierInputStore
@@ -134,16 +135,21 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
             val active = withContext(Dispatchers.Main.immediate) { activeSession?.takeIf { it.id == id } }
                 ?: return@withLock EditorCaptureResult.Superseded
             if (store.checkpoint() != expected) return@withLock EditorCaptureResult.Superseded
-            val baseline = provider.captureEditorDraftBaseline(active.state.owner, active.state.application)
-            val witness = withContext(Dispatchers.Main.immediate) {
+            val baseline = provider.captureEditorDraftBaseline(active.state.owner, active.state.baselineApplication)
+            val selections = withContext(Dispatchers.Main.immediate) {
                 if (activeSession !== active) throw EditorCapturePendingException()
-                active.state.captureRenderWitness().also {
+                val witness = active.state.captureRenderWitness().also {
                     active.state.requirePublishedSources(it)
                     active.state.draft.captureState(it)
                 }
+                Triple(witness, active.state.recoveryResources?.font(witness.controls.create.fontReference),
+                    witness.upload.path?.takeIf { active.state.upload.ownedImage != null }
+                        ?.let { active.state.recoveryResources?.upload(it) })
             }
-            val owned = linkedMapOf("font" to resources.font(witness.controls.create.fontReference))
-            witness.upload.path?.let { owned["upload"] = resources.upload(it) }
+            val witness = selections.first
+            val owned = linkedMapOf("font" to (selections.second
+                ?: resources.font(witness.controls.create.fontReference)))
+            witness.upload.path?.let { owned["upload"] = selections.third ?: resources.upload(it) }
             val captured = withContext(Dispatchers.Main.immediate) {
                 if (activeSession !== active || active.state.captureRenderWitness() != witness) throw EditorCapturePendingException()
                 EditorCompleteMainCapture.capture(active.state, owned.values.sumOf { it.byteCount.toLong() })
@@ -174,6 +180,8 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
         } catch (error: CancellationException) {
             throw error
         } catch (_: EditorCapturePendingException) {
+            EditorCaptureResult.Superseded
+        } catch (_: ProfileOperationSupersededException) {
             EditorCaptureResult.Superseded
         } catch (_: ProfileSessionChangedException) {
             EditorCaptureResult.Superseded

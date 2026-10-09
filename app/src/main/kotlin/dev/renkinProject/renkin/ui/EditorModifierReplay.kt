@@ -18,6 +18,13 @@ import dev.renkinProject.renkin.icon.creator.SHADOW_OPACITY_DEFAULT
 import dev.renkinProject.renkin.icon.creator.VerifiedModifierInput
 
 internal class EditorModifierReplay(val verified: VerifiedModifierInput) {
+    companion object {
+        internal fun fromDraft(verified: VerifiedModifierInput, baseline: GenerationOptions, plate: ColorizerStyle?) =
+            EditorModifierReplay(verified).apply {
+                this.baseline = baseline.modifiers
+                baselinePlateStyle = plate
+            }
+    }
     private val saved = verified.retained.options
     private lateinit var baseline: ModifierStack
     private var baselinePlateStyle: ColorizerStyle? = null
