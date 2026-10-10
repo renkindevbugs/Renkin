@@ -15,6 +15,7 @@ import dev.renkinProject.renkin.apk.ProfileManager
 import dev.renkinProject.renkin.apk.RenkinPackStore
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.ProfileStyleStore
+import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
 import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.data.watch.WatchRepository
@@ -67,12 +68,14 @@ object AppModule {
         @ApplicationContext context: Context,
         renkinPackRepository: RenkinPackRepository,
         watchRepository: WatchRepository,
-        iconPackCatalog: IconPackCatalog
+        iconPackCatalog: IconPackCatalog,
+        editorDraftInvalidation: EditorDraftInvalidation
     ): BackupManager = BackupManager(
         context,
         renkinPackRepository,
         watchRepository,
-        iconPackCatalog
+        iconPackCatalog,
+        editorDraftInvalidation = editorDraftInvalidation
     )
 
     @Provides
@@ -136,7 +139,8 @@ object AppModule {
         iconLockManager: IconLockManager,
         profileManager: ProfileManager,
         iconGenerationService: IconGenerationService,
-        iconPackBuildService: IconPackBuildService
+        iconPackBuildService: IconPackBuildService,
+        editorDraftInvalidation: EditorDraftInvalidation
     ): ApplicationProvider = ApplicationProvider(
         context = context,
         renkinPackStore = renkinPackStore,
@@ -147,6 +151,7 @@ object AppModule {
         iconGenService = iconGenerationService,
         iconPackBuildService = iconPackBuildService,
         appManager = ApplicationManager(context),
-        installedAppCatalog = InstalledAppCatalog(context)
+        installedAppCatalog = InstalledAppCatalog(context),
+        editorDraftInvalidation = editorDraftInvalidation
     )
 }

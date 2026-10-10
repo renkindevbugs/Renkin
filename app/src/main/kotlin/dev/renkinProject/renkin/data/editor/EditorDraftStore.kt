@@ -16,6 +16,7 @@ import java.security.MessageDigest
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -40,9 +41,49 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
     private val mutex = Mutex()
     private val acceptanceFence = Any()
     private var acceptanceVersion = 0L
+    private val resetOwner = Any()
+    private var invalidationPending = false
 
     /** Initializes and fsyncs a persistent generation on first use; all I/O runs on IO. */
     suspend fun checkpoint(): EditorDraftCheckpoint = access { catalog().checkpoint }
+
+    // Artifact corruption still has a readable checkpoint and uses ordinary checkpoint-aware discard.
+    suspend fun inspectCheckpoint(): EditorDraftInspection = access {
+        try {
+            EditorDraftInspection.Readable(catalog().checkpoint)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            val fingerprint = try {
+                metadataFingerprint()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            val lease = fingerprint?.let {
+                EditorDraftResetLease(resetOwner, synchronized(acceptanceFence) { acceptanceVersion }, it)
+            }
+            EditorDraftInspection.Unreadable(error, lease)
+        }
+    }
+
+    /** Requires explicit confirmation; a stale error cannot erase a repaired or newer catalog. */
+    suspend fun discardUnreadable(lease: EditorDraftResetLease): EditorDraftCheckpoint? = access {
+        if (lease.storeOwner !== resetOwner ||
+            synchronized(acceptanceFence) { acceptanceVersion } != lease.writeVersion) return@access null
+        if (metadataFingerprint() != lease.metadataFingerprint) return@access null
+        try {
+            catalog()
+            return@access null
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            // AtomicFile may have promoted a backup while retrying. Require the exact observation again.
+            if (metadataFingerprint() != lease.metadataFingerprint) return@access null
+        }
+        rotateGeneration(null).checkpoint
+    }
 
     internal suspend fun acceptanceLease(expected: EditorDraftCheckpoint): EditorDraftAcceptanceLease? = access {
         if (catalog().checkpoint != expected) return@access null
@@ -123,23 +164,66 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
     suspend fun discard(expected: EditorDraftCheckpoint): Boolean = access {
         val current = catalog()
         if (current.checkpoint != expected) return@access false
-        expireAcceptanceLeases()
         // Also invalidate writers that captured the earlier empty checkpoint (null -> id -> null).
-        commit(EditorDraftCatalog(UUID.randomUUID().toString(), null))
-        prune(null)
+        rotateGeneration(null)
         true
     }
 
+    /** Expire queued writers even if the deleted profile has not published a draft yet. */
+    suspend fun invalidateProfile(profileId: Long) = access {
+        val retained = try {
+            catalog().draft?.takeUnless { it.owner.profileId == profileId }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: IOException) {
+            Log.error("EditorDraftStore", "Unreadable draft catalog discarded before profile deletion", error)
+            null
+        }
+        rotateGenerationOrRemoveCache(retained, "Draft invalidation failed before profile deletion; removing draft cache")
+        Unit
+    }
+
     /**
-     * Must precede storage replacement/recovery once capture is integrated. Rotating the
+     * Must precede elective storage replacement once capture is integrated. Rotating the
      * persistent generation also rejects autosaves already queued before the replacement.
      * It can explicitly abandon corrupt metadata without attempting to decode it.
      */
     suspend fun invalidateStorage() = access {
+        rotateGeneration(null)
+        Unit
+    }
+
+    /** Auxiliary draft storage must never prevent rollback or the user's recovery escape path. */
+    suspend fun invalidateForRecovery() = access {
+        rotateGenerationOrRemoveCache(null, "Draft invalidation failed during storage recovery; removing draft cache")
+    }
+
+    private suspend fun rotateGenerationOrRemoveCache(draft: EditorDraftRecord?, failureMessage: String) {
+        invalidationPending = true
+        try {
+            rotateGeneration(draft)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.error("EditorDraftStore", failureMessage, error)
+            try {
+                removeDraftCache()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (cleanupError: Exception) {
+                Log.error("EditorDraftStore", "Draft cache could not be removed; draft access remains blocked", cleanupError)
+            }
+        }
+    }
+
+    private suspend fun rotateGeneration(draft: EditorDraftRecord?): EditorDraftCatalog {
         expireAcceptanceLeases()
         ensureRoot()
-        commit(EditorDraftCatalog(UUID.randomUUID().toString(), null))
-        prune(null)
+        val replacement = EditorDraftCatalog(UUID.randomUUID().toString(), draft)
+        commit(replacement)
+        prune(draft?.id)
+        invalidationPending = false
+        return replacement
     }
 
     private suspend fun <T> access(block: suspend () -> T): T = withContext(Dispatchers.IO) {
@@ -150,6 +234,8 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
     private fun expireAcceptanceLeases() = synchronized(acceptanceFence) { acceptanceVersion++ }
 
     private suspend fun catalog(): EditorDraftCatalog {
+        // Failed invalidation cannot admit old checkpoints, even if cleanup also failed.
+        if (invalidationPending) rotateGeneration(null)
         ensureRoot()
         val paths = metadataPaths().onEach(::requireOwnedFile)
         if (!paths[0].exists() && !paths[1].exists()) {
@@ -243,6 +329,35 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
     private fun metadataPaths(): List<File> =
         listOf(catalogFile.baseFile, File(root, "catalog.json.bak"), File(root, "catalog.json.new"))
 
+    private suspend fun metadataFingerprint(): String {
+        ensureRoot()
+        val digest = MessageDigest.getInstance("SHA-256")
+        val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+        for (file in metadataPaths()) {
+            currentCoroutineContext().ensureActive()
+            requireOwnedFile(file)
+            digest.update(file.name.toByteArray(Charsets.UTF_8))
+            digest.update(if (file.exists()) 1.toByte() else 0.toByte())
+            if (!file.exists()) continue
+            if (!file.isFile) throw IOException("Editor draft metadata is not a regular file")
+            val length = file.length()
+            digest.update(ByteBuffer.allocate(Long.SIZE_BYTES).putLong(length).array())
+            var read = 0L
+            file.inputStream().use { input ->
+                while (true) {
+                    currentCoroutineContext().ensureActive()
+                    val count = input.read(buffer)
+                    if (count < 0) break
+                    read += count
+                    if (read > length) throw IOException("Editor draft metadata grew during inspection")
+                    digest.update(buffer, 0, count)
+                }
+            }
+            if (read != length || file.length() != length) throw IOException("Editor draft metadata changed during inspection")
+        }
+        return digest.hex()
+    }
+
     private fun requireCheckpoint(catalog: EditorDraftCatalog, expected: EditorDraftCheckpoint) {
         if (catalog.checkpoint != expected) throw EditorDraftChangedException()
     }
@@ -256,6 +371,27 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
         if (file.canonicalFile != file.absoluteFile || file.parentFile != root) {
             throw IOException("Invalid editor draft file path")
         }
+    }
+
+    private suspend fun removeDraftCache() {
+        // Only the fixed private namespace may be removed. Never traverse a symlink's target.
+        if (base.canonicalFile != base.absoluteFile || root.absoluteFile.parentFile != base || root.name != "editor-draft") {
+            throw IOException("Invalid editor draft cache location")
+        }
+        removeDraftEntry(root)
+        syncDirectory(base)
+    }
+
+    private suspend fun removeDraftEntry(file: File, depth: Int = 0) {
+        currentCoroutineContext().ensureActive()
+        if (depth > 64 || (file != root && !file.absolutePath.startsWith(root.absolutePath + File.separator))) {
+            throw IOException("Invalid editor draft cache entry")
+        }
+        if (file.canonicalFile == file.absoluteFile && file.isDirectory) {
+            val children = file.listFiles() ?: throw IOException("Cannot inspect editor draft cache")
+            for (child in children) removeDraftEntry(child, depth + 1)
+        }
+        if (!file.delete() && file.exists()) throw IOException("Cannot remove editor draft cache entry")
     }
 
     private suspend fun prune(keep: String?) {

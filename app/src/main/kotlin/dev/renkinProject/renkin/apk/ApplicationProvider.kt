@@ -29,6 +29,7 @@ import dev.renkinProject.renkin.data.persistGlobalStylePrefs
 import dev.renkinProject.renkin.data.setPrimarySource
 import dev.renkinProject.renkin.data.restoreBuiltPrimarySource
 import dev.renkinProject.renkin.data.online.onlineAttributionLabel
+import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
@@ -178,7 +179,8 @@ class ApplicationProvider internal constructor(
     private val iconGenService: IconGenerationService,
     private val iconPackBuildService: IconPackBuildService,
     private val appManager: ApplicationManager,
-    private val installedAppCatalog: InstalledAppCatalog
+    private val installedAppCatalog: InstalledAppCatalog,
+    private val editorDraftInvalidation: EditorDraftInvalidation
 ) {
     // Persistent updates share storage; published lists cannot change underneath a collector.
     @Volatile private var stagedApplications = persistentListOf<PackageInfoStruct>()
@@ -1517,6 +1519,7 @@ class ApplicationProvider internal constructor(
         if (id == DEFAULT_PROFILE_ID) return@withContext
         ensureInitialized()
         profileOperations.run {
+            editorDraftInvalidation.beforeProfileDeletion(id)
             isProfileSwitching = true
             try {
                 if (id == activeProfileId) switchProfileLocked(DEFAULT_PROFILE_ID)

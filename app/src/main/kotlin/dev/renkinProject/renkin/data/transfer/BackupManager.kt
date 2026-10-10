@@ -28,6 +28,7 @@ import dev.renkinProject.renkin.data.PackVerdict
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.StorageOperationGate
+import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
 import dev.renkinProject.renkin.data.ProfileStyleAccess
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -86,7 +87,8 @@ class BackupManager(
     private val context: Context,
     private val packRepo: RenkinPackRepository,
     private val watchRepo: WatchRepository,
-    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(context)
+    private val iconPackCatalog: IconPackCatalog = IconPackCatalog(context),
+    private val editorDraftInvalidation: EditorDraftInvalidation
 ) {
     private var inputCleanupComplete = false
     private val appManager by lazy { ApplicationManager(context) }
@@ -702,6 +704,7 @@ class BackupManager(
 
     suspend fun abandonPendingRecovery() = runOperation {
         withContext(NonCancellable) {
+            editorDraftInvalidation.duringStorageRecovery()
             recovery.preserveAbandonedRecovery()
             refreshAbandonedRecoveryAvailability()
             StorageOperationGate.markStorageReplaced()
@@ -767,6 +770,7 @@ class BackupManager(
     private suspend fun restoreSnapshot(snapshot: BackupRecoveryStore.Snapshot) {
         recovery.validate(snapshot)
         checkSnapshotCompatibility(snapshot)
+        editorDraftInvalidation.duringStorageRecovery()
         mutableRestoreStage.value = RestoreStage.RESTORING_DATA
         StorageOperationGate.markStorageReplaced()
         // The pending marker survives every step. A failed or interrupted rollback is retried
@@ -804,6 +808,8 @@ class BackupManager(
         return withContext(NonCancellable) {
             // Only the durable phase may invalidate the live profile session. Preparation
             // and an accepted Cancel must leave in-memory icons, tokens and undo untouched.
+            // Fail before the commit callback can invalidate the provider session or start recovery.
+            editorDraftInvalidation.beforeStorageReplacement()
             commit {
                 var activated = false
                 try {

@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.Context
 import android.net.Uri
 import androidx.room.Room
+import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
+import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.apk.PackKeystore
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
@@ -55,6 +57,7 @@ import java.util.zip.ZipOutputStream
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 class BackupManagerTest {
+    private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(context)) }
 
     private lateinit var context: Context
     private lateinit var srcPackDb: RenkinPackDatabase
@@ -84,7 +87,7 @@ class BackupManagerTest {
 
     private suspend fun sourceManager(pack: RenkinPackRepository, watch: WatchRepository): BackupManager {
         ProfileStyleStore(pack, context.dataStore).initialize(force = true)
-        return BackupManager(context, pack, watch)
+        return BackupManager(context, pack, watch, editorDraftInvalidation = draftInvalidation)
     }
 
     private fun inMemoryPackDb() = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java)
@@ -122,7 +125,7 @@ class BackupManagerTest {
                 )
             )
         )
-        val manager = BackupManager(context, packRepo, WatchRepository(srcWatchDb))
+        val manager = BackupManager(context, packRepo, WatchRepository(srcWatchDb), editorDraftInvalidation = draftInvalidation)
 
         assertFalse(manager.profileUsesIconPackStudio(DEFAULT_PROFILE_ID))
         assertTrue(manager.profileUsesIconPackStudio(4L))
@@ -178,7 +181,7 @@ class BackupManagerTest {
 
         val tgtPackRepo = RenkinPackRepository(tgtPackDb)
         val tgtWatchRepo = WatchRepository(tgtWatchDb)
-        val summary = BackupManager(context, tgtPackRepo, tgtWatchRepo)
+        val summary = BackupManager(context, tgtPackRepo, tgtWatchRepo, editorDraftInvalidation = draftInvalidation)
             .importBackup { ByteArrayInputStream(bytes) }
 
         assertEquals(2, summary.profileCount)
@@ -253,7 +256,7 @@ class BackupManagerTest {
             val out = ByteArrayOutputStream()
             sourceManager(packRepo, watchRepo).exportBackup { out }
 
-            val inspection = BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb))
+            val inspection = BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
                 .inspectFile { ByteArrayInputStream(out.toByteArray()) }
 
             assertEquals(BackupManager.ImportKind.BACKUP, inspection.kind)
@@ -276,7 +279,7 @@ class BackupManagerTest {
     @Test
     fun inspectBackup_rejectsGarbage() = runBlocking {
         val result = runCatching {
-            BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb))
+            BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
                 .inspectFile { ByteArrayInputStream("not a backup".toByteArray()) }
         }
 
@@ -299,7 +302,7 @@ class BackupManagerTest {
         val tgtPackRepo = RenkinPackRepository(tgtPackDb)
         tgtPackRepo.upsertVerdicts(listOf(PackVerdict("pack.free", "free", seenInstalled = true)))
 
-        BackupManager(context, tgtPackRepo, WatchRepository(tgtWatchDb))
+        BackupManager(context, tgtPackRepo, WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
             .importBackup { ByteArrayInputStream(out.toByteArray()) }
 
         // The stale ownership is gone — the pack would lock again on load.
@@ -337,7 +340,7 @@ class BackupManagerTest {
         val tgtPackRepo = RenkinPackRepository(tgtPackDb)
         val tgtWatchRepo = WatchRepository(tgtWatchDb)
         tgtPackRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Keep me")), emptyList())
-        val result = BackupManager(context, tgtPackRepo, tgtWatchRepo)
+        val result = BackupManager(context, tgtPackRepo, tgtWatchRepo, editorDraftInvalidation = draftInvalidation)
             .importFile { ByteArrayInputStream(bytes) }
 
         // The import is additive: a fresh profile next to the untouched existing ones.
@@ -381,7 +384,7 @@ class BackupManagerTest {
             PackKeystore.keystoreFile(filesDir).delete()
             PackKeystore.passwordFile(filesDir).delete()
 
-            BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb))
+            BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
                 .importBackup { ByteArrayInputStream(out.toByteArray()) }
 
             assertArrayEquals(byteArrayOf(1, 2, 3), PackKeystore.keystoreFile(filesDir).readBytes())
@@ -407,7 +410,7 @@ class BackupManagerTest {
             // rename, so the result must be the backup's bytes exactly — never a mix of both.
             PackKeystore.keystoreFile(filesDir).writeBytes(byteArrayOf(7, 7, 7, 7, 7, 7, 7, 7))
 
-            BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb))
+            BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
                 .importBackup { ByteArrayInputStream(out.toByteArray()) }
 
             assertArrayEquals(byteArrayOf(1, 2, 3), PackKeystore.keystoreFile(filesDir).readBytes())
@@ -434,7 +437,7 @@ class BackupManagerTest {
             // backup must not leave that password behind (it would lock the keystore out).
             PackKeystore.passwordFile(filesDir).writeText("stale-random")
 
-            BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb))
+            BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
                 .importBackup { ByteArrayInputStream(out.toByteArray()) }
 
             assertArrayEquals(byteArrayOf(9), PackKeystore.keystoreFile(filesDir).readBytes())
@@ -463,7 +466,7 @@ class BackupManagerTest {
         val tgtPackRepo = RenkinPackRepository(tgtPackDb)
         val tgtWatchRepo = WatchRepository(tgtWatchDb)
         tgtPackRepo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Renkin")), emptyList())
-        val manager = BackupManager(context, tgtPackRepo, tgtWatchRepo)
+        val manager = BackupManager(context, tgtPackRepo, tgtWatchRepo, editorDraftInvalidation = draftInvalidation)
         manager.importFile { ByteArrayInputStream(bytes) }
         manager.importFile { ByteArrayInputStream(bytes) }
         manager.importFile { ByteArrayInputStream(bytes) }
@@ -484,7 +487,7 @@ class BackupManagerTest {
         )
 
         val result = runCatching {
-            BackupManager(context, tgtPackRepo, tgtWatchRepo)
+            BackupManager(context, tgtPackRepo, tgtWatchRepo, editorDraftInvalidation = draftInvalidation)
                 .importFile { ByteArrayInputStream("definitely not a zip".toByteArray()) }
         }
 
@@ -516,7 +519,7 @@ class BackupManagerTest {
     @Test fun invalidArchives_neverReachCommitOrChangeLiveFilesAndStores() = runBlocking {
         val pack = RenkinPackRepository(tgtPackDb)
         pack.replaceEverything(listOf(Profile(id = 1, name = "Keep")), emptyList())
-        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb))
+        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
         val data = minimalData()
         val profile = data.profiles.single()
         val files = context.filesDir
@@ -546,7 +549,7 @@ class BackupManagerTest {
     @Test fun preparedImport_usesVerifiedSnapshotAfterSourceDisappears() = runBlocking {
         val pack = RenkinPackRepository(tgtPackDb)
         pack.replaceEverything(listOf(Profile(id = 1, name = "Before")), emptyList())
-        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb))
+        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
         val source = context.cacheDir.resolve("prepared.renkin").apply { writeBytes(archive(minimalData())) }
         val prepared = manager.prepareImport(Uri.fromFile(source))
         assertEquals("Before", pack.profiles().single().name)
@@ -558,7 +561,7 @@ class BackupManagerTest {
     }
 
     @Test fun discardedImport_releasesFilesAndCannotBeCommitted() = runBlocking {
-        val manager = BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb))
+        val manager = BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
         val source = context.cacheDir.resolve("discard.renkin").apply { writeBytes(archive(minimalData())) }
         val prepared = manager.prepareImport(Uri.fromFile(source))
         manager.discardImport(prepared)
@@ -571,7 +574,7 @@ class BackupManagerTest {
     @Test fun changedFingerprint_rejectsLegacyReopenedInputBeforeCommit() = runBlocking {
         val pack = RenkinPackRepository(tgtPackDb)
         pack.replaceEverything(listOf(Profile(id = 1, name = "Keep")), emptyList())
-        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb))
+        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
         val source = context.cacheDir.resolve("changed.renkin").apply { writeBytes(archive(minimalData())) }
         val inspection = manager.inspectFile { source.inputStream() }
         source.writeBytes(archive(minimalData("Different")))
@@ -611,7 +614,7 @@ class BackupManagerTest {
         assertEquals(2, watch.getAllRules().size)
         assertEquals(1, watch.getStatesForRule(active).size)
         val target = WatchRepository(tgtWatchDb)
-        BackupManager(context, RenkinPackRepository(tgtPackDb), target)
+        BackupManager(context, RenkinPackRepository(tgtPackDb), target, editorDraftInvalidation = draftInvalidation)
             .importBackup { ByteArrayInputStream(output.toByteArray()) }
         assertEquals(1, target.getAllRules().size)
         assertTrue(target.getStatesForRule(target.getAllRules().single().rule.id).isEmpty())
@@ -619,7 +622,7 @@ class BackupManagerTest {
 
     @Test fun legacyFormatsOneThroughThreeRemainImportable() = runBlocking {
         val pack = RenkinPackRepository(tgtPackDb)
-        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb))
+        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
         for (format in 1..3) {
             manager.importBackup { ByteArrayInputStream(archive(minimalData("Legacy $format"), format)) }
             assertEquals("Legacy $format", pack.profiles().single().name)

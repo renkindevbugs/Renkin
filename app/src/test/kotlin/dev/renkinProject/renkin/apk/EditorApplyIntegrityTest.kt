@@ -11,6 +11,8 @@ import android.os.Process
 import android.os.UserHandle
 import androidx.datastore.preferences.core.edit
 import androidx.room.Room
+import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
+import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.BuiltIcon
@@ -58,6 +60,7 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [28])
 class EditorApplyIntegrityTest {
+    private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(context)) }
     private lateinit var context: Application
     private lateinit var database: RenkinPackDatabase
     private lateinit var repository: RenkinPackRepository
@@ -106,7 +109,8 @@ class EditorApplyIntegrityTest {
         return AppModule.provideApplicationProvider(
             context, AppModule.provideRenkinPackStore(context, repository), repository,
             icons, locks, profiles, AppModule.provideIconGenerationService(context, icons, catalog),
-            AppModule.provideIconPackBuildService(context, icons, repository, locks, profiles, catalog)
+            AppModule.provideIconPackBuildService(context, icons, repository, locks, profiles, catalog),
+            editorDraftInvalidation = draftInvalidation
         )
     }
 

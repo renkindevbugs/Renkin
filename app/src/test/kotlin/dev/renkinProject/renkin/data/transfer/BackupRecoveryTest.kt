@@ -6,6 +6,9 @@ import android.net.Uri
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.room.Room
+import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
+import dev.renkinProject.renkin.data.editor.EditorDraftStore
+import dev.renkinProject.renkin.data.editor.EditorDraftOwner
 import dev.renkinProject.renkin.apk.PackKeystore
 import dev.renkinProject.renkin.data.*
 import dev.renkinProject.renkin.data.watch.*
@@ -35,6 +38,8 @@ import java.util.zip.ZipInputStream
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 class BackupRecoveryTest {
+    private val draftStore by lazy { EditorDraftStore(context) }
+    private val draftInvalidation by lazy { EditorDraftInvalidation(draftStore) }
     private lateinit var context: Context
     private lateinit var packDb: RenkinPackDatabase
     private lateinit var watchDb: WatchDatabase
@@ -54,11 +59,12 @@ class BackupRecoveryTest {
         pack = RenkinPackRepository(packDb)
         watch = WatchRepository(watchDb)
         store = BackupRecoveryStore(context)
-        manager = BackupManager(context, pack, watch)
+        manager = BackupManager(context, pack, watch, editorDraftInvalidation = draftInvalidation)
     }
 
     @After fun cleanup() {
         BackupOsShadow.rejectRename = null
+        BackupOsShadow.beforeDirectorySync = null
         StorageOperationGate.resetForTests()
         packDb.close()
         watchDb.close()
@@ -153,6 +159,117 @@ class BackupRecoveryTest {
         val file = context.cacheDir.resolve("restore-test.renkin")
         file.writeBytes(output.toByteArray())
         return manager.prepareImport(Uri.fromFile(file))
+    }
+
+    private suspend fun saveDraft() = draftStore.save(draftStore.checkpoint(),
+        EditorDraftOwner(1, "app.one", "Main", "a".repeat(64), "b".repeat(64)),
+        mapOf("controls" to byteArrayOf(1)))
+
+    private fun failDraftSync() {
+        val root = context.noBackupFilesDir.resolve("editor-draft").canonicalPath
+        BackupOsShadow.beforeDirectorySync = { path ->
+            if (path == root) throw IOException("Draft fsync failed")
+        }
+    }
+
+    @Test fun failedDraftInvalidationStopsImportBeforeSessionReplacement() = runBlocking {
+        val prepared = preparedBackup()
+        val current = seed("Current")
+        val draft = saveDraft()
+        val epoch = StorageOperationGate.epoch
+        var replacements = 0
+        failDraftSync()
+        val error = runCatching { manager.importPrepared(prepared) { replacements++; it() } }.exceptionOrNull()
+        BackupOsShadow.beforeDirectorySync = null
+        assertTrue(error is IOException)
+        assertEquals(0, replacements)
+        assertEquals(epoch, StorageOperationGate.epoch)
+        assertState("Current", current)
+        assertEquals(draft, draftStore.candidate())
+        assertNull(store.pendingSnapshot())
+    }
+
+    @Test fun failedDraftInvalidationStopsPreviousStateBeforeSessionReplacement() = runBlocking {
+        seed("Original")
+        store.complete(capture())
+        val current = seed("Current")
+        val draft = saveDraft()
+        var replacements = 0
+        failDraftSync()
+        assertTrue(runCatching { manager.restorePreviousState { replacements++; it() } }.exceptionOrNull() is IOException)
+        BackupOsShadow.beforeDirectorySync = null
+        assertEquals(0, replacements)
+        assertState("Current", current)
+        assertEquals(draft, draftStore.candidate())
+        assertNull(store.pendingSnapshot())
+    }
+
+    @Test fun successfulImportInvalidatesDraftBeforeCommitCallback() = runBlocking {
+        val prepared = preparedBackup()
+        seed("Current")
+        val draft = saveDraft()
+        val lease = requireNotNull(draftStore.acceptanceLease(draft.checkpoint))
+        var checked = false
+        manager.importPrepared(prepared) { commit ->
+            assertNull(draftStore.candidate())
+            assertFalse(lease.publishIfCurrent { true })
+            checked = true
+            commit()
+        }
+        assertTrue(checked)
+        assertEquals("Incoming", pack.profiles().single().name)
+        assertNull(store.pendingSnapshot())
+    }
+
+    @Test fun startupRecoveryContinuesWhenDraftRootIsNotADirectory() = runBlocking {
+        val original = seed("Original")
+        store.activate(capture())
+        seed("Partial")
+        context.noBackupFilesDir.resolve("editor-draft").writeText("obstruction")
+        StorageOperationGate.installRecovery { manager.recoverPendingRestore() }
+        StorageOperationGate.run { assertState("Original", original) }
+        assertEquals(StorageRecoveryState.READY, StorageOperationGate.recoveryState.value)
+        assertNull(store.pendingSnapshot())
+        assertNull(draftStore.candidate())
+    }
+
+    @Test fun abandonContinuesWhenDraftRotationFails() = runBlocking {
+        seed("Original")
+        val snapshot = capture()
+        store.activate(snapshot)
+        val current = seed("Current")
+        saveDraft()
+        snapshot.directory.resolve("pack.json").appendText("corrupt")
+        StorageOperationGate.installRecovery { manager.recoverPendingRestore() }
+        assertTrue(runCatching { StorageOperationGate.run { } }.isFailure)
+        failDraftSync()
+        StorageOperationGate.abandonRecovery { manager.abandonPendingRecovery() }
+        BackupOsShadow.beforeDirectorySync = null
+        assertState("Current", current)
+        assertEquals(StorageRecoveryState.READY, StorageOperationGate.recoveryState.value)
+        assertNull(draftStore.candidate())
+    }
+
+    @Test fun rollbackContinuesWhenSecondDraftInvalidationFails() = runBlocking {
+        seed("Original")
+        store.complete(capture())
+        val current = seed("Current")
+        saveDraft()
+        var injected = false
+        BackupOsShadow.rejectRename = { source, _ ->
+            if (!injected && source.endsWith(".image.png.recovery-tmp")) { injected = true; true } else false
+        }
+        val error = runCatching {
+            manager.restorePreviousState { commit -> failDraftSync(); commit() }
+        }.exceptionOrNull()
+        BackupOsShadow.beforeDirectorySync = null
+        assertNotNull(error)
+        assertFalse(error is BackupRecoveryRequiredException)
+        assertTrue(injected)
+        assertState("Current", current)
+        assertNull(store.pendingSnapshot())
+        assertEquals(StorageRecoveryState.READY, StorageOperationGate.recoveryState.value)
+        assertNull(draftStore.candidate())
     }
 
     @Test fun cancellingFullImportPreparationNeverEntersSessionReplacement() = runBlocking {

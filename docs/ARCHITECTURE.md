@@ -872,6 +872,28 @@ and recovered-stage rendering against the existing Roborazzi reference.
 All 1,135 tests across 163 suites, compileDebugKotlin and assembleDebug pass with the existing
 test-JVM C2 workaround; ordinary unit tests verify both Roborazzi scenarios.
 
+**7C3c1 (confirmed and verified)** wires a shared `EditorDraftInvalidation`
+singleton into committed backup imports/Previous state, rollback, confirmed keep-current repair
+and profile deletion. Invalidation runs under the domain storage gate before profile writes;
+import invalidation also precedes the callback that replaces the provider's live session.
+Profile deletion attempts to rotate the generation to expire queued writers, retaining another
+profile's draft record/artifacts on success. An unreadable catalog is logged and replaced with an
+empty generation before deletion. Initial import/Previous-state invalidation failure prevents the
+domain mutation. Profile-deletion fallback, emergency rollback, startup recovery and keep-current repair instead log draft
+I/O failure, attempt to remove the owned cache without following symlink targets and continue.
+A process-local pending flag blocks old draft access until an empty generation can be published;
+acceptance leases expire even when rotation fails. The invalidation dependency is required in
+both production and standalone constructors. The store never acquires the domain gate,
+preserving storage/profile gate → store mutex → acceptance fence order.
+`inspectCheckpoint` can supply a process-local confirmed-reset lease for unreadable metadata;
+`discardUnreadable` compares store identity, admitted-write version and exact metadata fingerprints,
+then refuses reset if retry now reads a valid catalog. Reset inspection/actions have no production
+caller yet. Visible recovery/error handling remains 7C3c2a; debounced lifecycle persistence remains
+7C3c2b. Capture/autosave stay disabled. Thirty new regressions cover store invalidation/reset and
+backup integration, including draft failures during rollback/startup recovery/Abandon and strict
+failure before import/Previous-state session replacement. All 1,165 tests across 164 suites,
+compileDebugKotlin and assembleDebug pass, including both Roborazzi scenarios.
+
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
 typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.

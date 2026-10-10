@@ -4,6 +4,8 @@ import android.app.Application
 import android.net.Uri
 import androidx.datastore.preferences.core.edit
 import androidx.room.Room
+import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
+import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.Profile
@@ -54,6 +56,7 @@ import java.io.IOException
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 class BackupUiCoordinatorTest {
+    private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(application)) }
     private lateinit var application: Application
     private lateinit var packDb: RenkinPackDatabase
     private lateinit var watchDb: WatchDatabase
@@ -86,9 +89,10 @@ class BackupUiCoordinatorTest {
             application, AppModule.provideRenkinPackStore(application, repository), repository,
             icons, locks, profiles,
             AppModule.provideIconGenerationService(application, icons, catalog),
-            AppModule.provideIconPackBuildService(application, icons, repository, locks, profiles, catalog)
+            AppModule.provideIconPackBuildService(application, icons, repository, locks, profiles, catalog),
+            editorDraftInvalidation = draftInvalidation
         )
-        manager = BackupManager(application, repository, WatchRepository(watchDb), catalog)
+        manager = BackupManager(application, repository, WatchRepository(watchDb), catalog, editorDraftInvalidation = draftInvalidation)
     }
 
     @After

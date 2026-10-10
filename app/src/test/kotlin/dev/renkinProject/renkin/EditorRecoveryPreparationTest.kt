@@ -60,6 +60,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class EditorRecoveryPreparationTest {
+    private val draftInvalidation get() = EditorDraftInvalidation(store)
     @get:Rule val temporary = TemporaryFolder()
     private lateinit var database: RenkinPackDatabase
     private lateinit var repository: RenkinPackRepository
@@ -89,15 +90,16 @@ class EditorRecoveryPreparationTest {
         val icons = AppModule.provideIconPackRepository(context, catalog)
         val locks = AppModule.provideIconLockManager(context, repository)
         val profiles = AppModule.provideProfileManager(context, repository)
+        store = EditorDraftStore(context)
         provider = AppModule.provideApplicationProvider(context, AppModule.provideRenkinPackStore(context, repository), repository,
             icons, locks, profiles, AppModule.provideIconGenerationService(context, icons, catalog),
-            AppModule.provideIconPackBuildService(context, icons, repository, locks, profiles, catalog))
+            AppModule.provideIconPackBuildService(context, icons, repository, locks, profiles, catalog),
+            editorDraftInvalidation = draftInvalidation)
         provider.ensureInitialized()
         repository.writeProfileStyles(listOf(dev.renkinProject.renkin.data.ProfileStyleUpdate(provider.sessionToken.profileId,
             dev.renkinProject.renkin.data.ProfileStyleCodec.encode(dev.renkinProject.renkin.data.ProfileStyle()), "")))
         app = EditorRecoveryFixtures.application()
         stage(listOf(app))
-        store = EditorDraftStore(context)
     }
 
     @After fun cleanup() {

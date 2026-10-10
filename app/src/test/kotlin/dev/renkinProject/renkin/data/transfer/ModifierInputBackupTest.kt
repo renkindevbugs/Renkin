@@ -4,6 +4,8 @@ import android.app.Application
 import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.room.Room
+import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
+import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.data.*
 import dev.renkinProject.renkin.data.watch.WatchDatabase
 import dev.renkinProject.renkin.data.watch.WatchRepository
@@ -28,6 +30,7 @@ import java.util.zip.ZipOutputStream
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 class ModifierInputBackupTest {
+    private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(context)) }
     private lateinit var context: Context
     private lateinit var packDb: RenkinPackDatabase
     private lateinit var watchDb: WatchDatabase
@@ -44,7 +47,7 @@ class ModifierInputBackupTest {
         watchDb = Room.inMemoryDatabaseBuilder(context, WatchDatabase::class.java).allowMainThreadQueries().build()
         pack = RenkinPackRepository(packDb)
         watch = WatchRepository(watchDb)
-        manager = BackupManager(context, pack, watch)
+        manager = BackupManager(context, pack, watch, editorDraftInvalidation = draftInvalidation)
         recovery = BackupRecoveryStore(context)
         context.dataStore.edit { it.clear() }
     }

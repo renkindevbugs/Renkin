@@ -31,7 +31,9 @@ Never restore an old `ProfileSessionToken`; successful recovery obtains a new li
   that lease, including completed frame, controls, original/live identity and owned resources.
   **7C3b2 (confirmed and verified)** adds validated acceptance/native ownership transfer.
   **7C3b3 (confirmed and verified)** integrates first-composition rendering.
-  **7C3c** adds the visible offer/error paths, lifecycle persistence and replacement hooks.
+  **7C3c1 (confirmed and verified)** installs storage/profile invalidation and
+  conditional unreadable-catalog discard. **7C3c2a** adds the visible offer/error owner;
+  **7C3c2b** adds debounced lifecycle persistence using those boundaries.
 
 Each checkpoint follows CLAUDE.md's device-confirmation/test/commit sequence. The envelope is
 not evidence that arbitrary controls or artwork can already be restored. End-to-end recovery
@@ -784,13 +786,88 @@ All 1,135 tests across 163 suites, compileDebugKotlin and assembleDebug pass wit
 local test-JVM C2 workaround, including ordinary Roborazzi verification. Targeted and full logs
 are `build/verify-7c3b3-targeted.log` and `build/verify-7c3b3-full.log`.
 
+## Storage invalidation checkpoint (7C3c1)
+
+`EditorDraftInvalidation` is a Hilt singleton sharing the same singleton `EditorDraftStore` as
+future editor owners. BackupManager and ApplicationProvider require this dependency, including
+standalone/test construction; there are no silent no-op hooks. AppModule supplies the shared
+instance, so production uses no second context-created store or independent acceptance fence.
+
+BackupManager invalidates the persistent generation before invoking the committed import/Previous
+state callback, so failure cannot invalidate the provider's live session, activate a recovery
+snapshot or mutate profile data. Archive inspection, cancelled preparation and export do not
+invalidate drafts. The shared commit boundary also covers an imported additional profile, which
+already changes the storage epoch. Pending rollback, failed-import rollback and Previous-state
+snapshot application attempt invalidation before their own storage writes. Confirmed keep-current
+repair attempts it before preserving/repairing abandoned recovery state. These emergency paths
+must continue if draft I/O fails: they log the failure and try to remove the fixed private
+`editor-draft` namespace, without traversing symlink targets. Cleanup failure is also logged and
+does not block recovery. Acceptance leases expire before attempting the rotation. A process-local
+pending-invalidation flag prevents subsequent draft access from admitting old checkpoints until
+an empty generation can be durably published, even if cleanup failed. If all writes and cleanup
+fail, this flag does not survive process death; normal owner/baseline validation remains required
+after restart. Repeated rotations within one restore are intentional; the inner emergency
+rotation never restores blocking behavior after the strict pre-commit boundary.
+
+Profile deletion invalidates under the existing storage/profile gates before switching away or
+deleting any row. It always attempts to rotate the generation, even with no draft or with another
+profile's draft, to reject already prepared writes for the deleted profile. On successful rotation,
+a different profile's record and artifacts remain intact under the new generation. A matching record is removed. The default
+profile's existing early return remains. An unreadable catalog is logged and replaced with an
+empty generation, allowing deletion without preserving an unusable draft. Failed rotation uses
+the same cache-removal and pending-invalidation fallback as storage recovery, so a full draft
+disk does not prevent profile deletion. This exceptional fallback may also discard another
+profile's draft. Failed cleanup is logged and deletion continues while stale draft access stays
+blocked within the process. If profile deletion itself later fails, its matching draft may already
+be discarded. Lock order is storage/profile gate → store mutex → synchronous acceptance fence;
+the store never enters a provider or acquires a domain gate.
+
+`inspectCheckpoint` distinguishes a readable catalog from an unreadable one without reading or
+decoding artwork. A readable catalog with damaged artifacts uses its ordinary checkpoint-aware
+discard path. For unreadable metadata, inspection returns the original exception and, only when
+the owned metadata files can be safely observed, a process-local reset lease. The lease identifies
+this store, its admitted-write version and the SHA-256 of exact primary/backup/new metadata file
+presence, lengths and bytes. Hashing streams on IO, including oversized corrupt metadata, without
+allocating a whole invalid document. Ordinary inspection and Retry do not rotate the generation
+or discard files, although AtomicFile may perform its normal backup recovery. When fallback
+invalidation is pending, every catalog access first retries the required empty-generation rotation.
+
+Only a future explicitly confirmed error action may call `discardUnreadable`. Under the same
+store mutex it checks store identity, write version and metadata fingerprint, retries catalog
+reading, and refuses reset if it is now readable. It checks the fingerprint again after a failed
+retry because AtomicFile may have promoted a backup. A mismatch returns null (Superseded); an
+unchanged unreadable catalog rotates to an empty generation and returns its new checkpoint.
+Filesystem/reset failures and cancellation propagate. A failed admitted reset expires its lease;
+the owner must inspect again and keep an error visible instead of assuming discard succeeded.
+As with other store commits, an ambiguous final fsync/cancellation outcome requires rereading
+the checkpoint. These APIs are not cross-process filesystem locks.
+
+This checkpoint activates replacement/deletion hooks only. No production caller yet inspects or
+resets a corrupt catalog, captures an editor draft, shows a recovery offer or runs autosave.
+7C3c2a must add the visible Retry/confirmed-discard path before enabling writes; 7C3c2b must serialize opening,
+cleanup and reset in the editor owner, adopt fresh checkpoints after invalidation, revalidate live
+ownership, debounce Main pixel copies and flush completed frames on background transitions.
+
+The developer confirmed profile deletion and normal behavior on-device. Thirty new regressions
+cover same/other/empty-profile invalidation, unreadable-catalog profile deletion, queued saves and
+acceptance leases, failed rotation, blocked directory creation, failed cleanup and later repair.
+Reset coverage includes unchanged errors, valid repair, different corruption, foreign/expired
+leases, primary/backup/new metadata observations, oversized metadata and failed admitted resets.
+Backup integration verifies strict import/Previous-state failure before the session callback,
+successful invalidation before that callback, startup recovery, Abandon and rollback with broken
+draft storage. Existing cancellation/publication tests remain green. Symlink target protection is
+source-reviewed and still needs platform integration coverage. All 1,165 tests across 164 suites,
+compileDebugKotlin and assembleDebug pass with the existing local test-JVM C2 workaround; both
+ordinary Roborazzi scenarios verify the unchanged reference. Logs are
+`build/verify-7c3c1-targeted.log` and `build/verify-7c3c1-full.log`.
+
 ## Envelope and local files
 
 `data/editor/EditorDraftRecord.kt` contains primitive metadata, without Drawable, Compose state
 or a live session token. The owner records a profile id, component, SHA-256 profile baseline and
 SHA-256 original-icon baseline. A separate persistent UUID identifies the local storage
-generation; it must change before full import, Previous state, rollback and confirmed
-keep-current repair can replace storage. These hooks belong to 7C3 and are not installed yet.
+generation; committed imports and Previous state rotate it before mutation. Rollback and confirmed
+keep-current repair attempt rotation with the emergency fallback described above.
 
 `EditorDraftCodec` version 1 describes the storage generation and an optional last draft. Each
 draft has a UUID, timestamp, owner and named artifact descriptors. `controls` is required;
@@ -829,7 +906,8 @@ generation, so an old writer that captured an empty store cannot resurrect its d
 an intervening save/discard cycle. Storage invalidation atomically replaces
 the catalog with a new generation and no draft, preventing already queued pre-import saves
 from republishing old data. Cleanup removes only recognized, unreferenced local blob files;
-it does not recursively delete directories. Orphans are pruned before/after successful saves
+it does not recursively delete directories. Storage recovery and profile-deletion fallback may
+remove the entire owned draft namespace after a failed rotation. Orphans are pruned before/after successful saves
 and after successful candidate inspection. An invalid catalog or checksum is reported and
 preserved for an explicit decision, never interpreted as an empty/default editor. The explicit
 invalidation API can clear corrupt metadata without decoding it.
@@ -868,7 +946,9 @@ and accepting recovery. Repeat validation after decoding and before attaching a 
 Large encoding/hashing/file writes run outside the profile gate. Import/recovery takes the
 storage gate before invalidating the draft store. The store never calls back into a provider
 or acquires that gate, keeping the lock direction consistent. Draft invalidation failures
-must stop a storage replacement before it begins. Explicit discard and old ViewModel cleanup
+must stop elective imports/Previous-state commits before they begin. Emergency rollback,
+startup recovery and keep-current repair use best-effort cleanup and block stale draft access
+within the process instead of trapping the application in recovery. Explicit discard and old ViewModel cleanup
 must compare the offered checkpoint so they cannot delete a newer editor's saved state.
 
 The recovery prompt appears only after storage recovery and application startup have completed.
