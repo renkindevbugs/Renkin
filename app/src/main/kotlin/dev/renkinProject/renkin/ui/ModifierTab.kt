@@ -100,6 +100,7 @@ internal fun ModifierTab(
     previews: ModifierPreviews? = null,
     materialYouPackAdjustments: MaterialYouPackAdjustmentState? = null,
     materialYouSchemes: List<Pair<Color, Color>> = emptyList(),
+    materialYouPackLineThicknessEditable: Boolean = true,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
@@ -149,7 +150,8 @@ internal fun ModifierTab(
                 adjustments = it,
                 schemes = materialYouSchemes,
                 previews = previews,
-                sampleBitmap = sampleBitmap
+                sampleBitmap = sampleBitmap,
+                lineThicknessEditable = materialYouPackLineThicknessEditable
             )
         }
 

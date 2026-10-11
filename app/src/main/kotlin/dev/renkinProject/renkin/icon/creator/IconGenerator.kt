@@ -320,10 +320,11 @@ class IconGenerator(
     ): IconSourceStage? {
         val resIcon = customIcon ?: iconPack.getApplicationIcon(application.toInstalledApplication()) ?: return null
 
-        val retainable = !modifiers.materialYouPack.hasRestyling
+        val retainable = modifiers.materialYouPack.isReplayableOn(adaptiveLayers = false)
 
         preservePackLayers(iconPack.iconPackName, resIcon)?.let {
-            return IconSourceStage(it, ModifierInputPipeline.IMAGE_EDIT, imageEdit, retainable)
+            return IconSourceStage(it, ModifierInputPipeline.IMAGE_EDIT, imageEdit,
+                modifiers.materialYouPack.isReplayableOn(adaptiveLayers = true))
         }
 
         val bitmapIcon = getIconBitmap(resIcon.drawable) ?: return null

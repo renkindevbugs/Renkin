@@ -57,4 +57,8 @@ internal class IconModifierStageRenderer(resources: Resources, val options: Gene
         }
         return adjustments.apply(edited)
     }
+
+    // Fresh source stages restyle while parsing; retained ones may still receive colour edits.
+    fun renderRetained(input: IconPackDrawable, pipeline: ModifierInputPipeline): IconPackDrawable =
+        render(if (pipeline == ModifierInputPipeline.IMAGE_EDIT) imageEdits.restyleRetainedPackIcon(input) else input, pipeline)
 }

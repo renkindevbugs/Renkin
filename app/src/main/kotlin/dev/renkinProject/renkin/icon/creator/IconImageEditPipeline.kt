@@ -163,16 +163,28 @@ internal class IconImageEditPipeline(
         }
     }
 
-    private fun restyleMaterialYouPackIcon(icon: AdaptiveIconPackDrawable): AdaptiveIconPackDrawable {
-        if (icon.materialYouEditState == null) return icon
-        val customForeground = materialYouPack.customForeground ?: return icon
-        val customBackground = materialYouPack.customBackground ?: return icon
-        val state = MaterialYouPackEditState(
+    /**
+     * A retained pack icon already carries the colours of its edit state. Recolouring it again would
+     * round its anti-aliased layers differently, so only an edited state is applied.
+     */
+    internal fun restyleRetainedPackIcon(icon: IconPackDrawable): IconPackDrawable {
+        if (icon !is AdaptiveIconPackDrawable || icon.materialYouEditState == null) return icon
+        if (packEditState() == icon.materialYouEditState) return icon
+        return restyleMaterialYouPackIcon(icon)
+    }
+
+    private fun packEditState(): MaterialYouPackEditState? {
+        return MaterialYouPackEditState(
             selectedScheme = materialYouPack.selectedScheme,
-            customForeground = customForeground,
-            customBackground = customBackground,
+            customForeground = materialYouPack.customForeground ?: return null,
+            customBackground = materialYouPack.customBackground ?: return null,
             strokeScale = materialYouPack.strokeScale
         )
+    }
+
+    private fun restyleMaterialYouPackIcon(icon: AdaptiveIconPackDrawable): AdaptiveIconPackDrawable {
+        if (icon.materialYouEditState == null) return icon
+        val state = packEditState() ?: return icon
         if (state.selectedScheme < 0) return icon.restoreOriginalMaterialYouLayers(state)
 
         val foregroundColor = materialYouPack.foreground ?: return icon

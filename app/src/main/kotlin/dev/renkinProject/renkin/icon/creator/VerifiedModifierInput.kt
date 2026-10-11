@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.icon.creator
 
 import android.content.res.Resources
+import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.util.Log
@@ -25,9 +26,10 @@ internal class VerifiedModifierInput private constructor(
             resources: Resources, input: IconPackDrawable, retained: IconModifierInput, base: IconPackDrawable
         ): VerifiedModifierInput? = withContext(Dispatchers.Default) {
             try {
-                if (retained.options.modifiers.materialYouPack.hasRestyling) return@withContext null
+                val adaptiveLayers = input is AdaptiveIconPackDrawable && retained.pipeline == ModifierInputPipeline.IMAGE_EDIT
+                if (!retained.options.modifiers.materialYouPack.isReplayableOn(adaptiveLayers)) return@withContext null
                 currentCoroutineContext().ensureActive()
-                val replay = IconModifierStageRenderer(resources, retained.options).render(input, retained.pipeline)
+                val replay = IconModifierStageRenderer(resources, retained.options).renderRetained(input, retained.pipeline)
                 currentCoroutineContext().ensureActive()
                 val matches = sameLocalArtwork(base, replay)
                 currentCoroutineContext().ensureActive()

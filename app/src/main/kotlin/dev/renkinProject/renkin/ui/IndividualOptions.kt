@@ -260,7 +260,8 @@ internal fun OptionsDialog(
     val isMaterialYouVariant = source == Source.APPLICATION_ICON &&
         applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU
     val materialYouSchemes = rememberMaterialYouSchemes()
-    val selectedMaterialYouPackIcon = session.modifierReplay == null && draft.origin == IconOrigin.CREATE &&
+    val selectedMaterialYouPackIcon = session.modifierReplay?.packEditState != null ||
+        session.modifierReplay == null && draft.origin == IconOrigin.CREATE &&
         source == Source.ICON_PACK &&
         (if (customIconList.isEmpty()) {
             storedMaterialYouPackState != null
@@ -721,6 +722,7 @@ internal fun OptionsDialog(
                                 materialYouPackAdjustments =
                                     materialYouPackAdjustments.takeIf { selectedMaterialYouPackIcon },
                                 materialYouSchemes = materialYouSchemes,
+                                materialYouPackLineThicknessEditable = session.modifierReplay == null,
                                 onImageEditChange = {
                                     imageEdit = if (session.modifierReplay?.allowsImageEdits == false) ImageEdit.NONE else it
                                 },
@@ -950,6 +952,7 @@ private fun ModifierOptionsTab(
     previews: ModifierPreviews,
     materialYouPackAdjustments: MaterialYouPackAdjustmentState?,
     materialYouSchemes: List<Pair<Color, Color>>,
+    materialYouPackLineThicknessEditable: Boolean,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
@@ -972,6 +975,7 @@ private fun ModifierOptionsTab(
             previews = previews,
             materialYouPackAdjustments = materialYouPackAdjustments,
             materialYouSchemes = materialYouSchemes,
+            materialYouPackLineThicknessEditable = materialYouPackLineThicknessEditable,
             onImageEditChange = onImageEditChange,
             onColorChange = onColorChange,
             onVectorChange = onVectorChange,

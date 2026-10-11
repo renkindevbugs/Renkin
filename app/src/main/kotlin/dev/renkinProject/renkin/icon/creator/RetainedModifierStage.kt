@@ -21,7 +21,7 @@ internal class RetainedModifierStage(
     suspend fun render(options: GenerationOptions): IconGenerationResult = withContext(Dispatchers.Default) {
         currentCoroutineContext().ensureActive()
         val icon = try {
-            IconModifierStageRenderer(resources, options).render(input, pipeline)
+            IconModifierStageRenderer(resources, options).renderRetained(input, pipeline)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {

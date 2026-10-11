@@ -32,6 +32,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
+import kotlinx.coroutines.runBlocking
 import java.io.File
 import kotlin.math.abs
 
@@ -101,7 +102,10 @@ class AdaptiveModifierRenderingTest {
         }
     }
 
-    private fun renderFromPack(options: GenerationOptions, packName: String = PACK): IconPackDrawable {
+    private fun renderFromPack(options: GenerationOptions, packName: String = PACK): IconPackDrawable =
+        requireNotNull(generateFromPack(options, packName).icon)
+
+    private fun generateFromPack(options: GenerationOptions, packName: String = PACK): IconGenerationResult {
         val application = app()
         val resource = ResourceDrawable(0, adaptiveFixture())
         val pack = IconPackContainer(packName, mapOf(
@@ -109,7 +113,7 @@ class AdaptiveModifierRenderingTest {
         ))
         val generator = IconGenerator(context, options, pack, IconPackContainer("", emptyMap()),
             iconPackCatalog = IconPackCatalog(context))
-        return requireNotNull(generator.generatePreview(application, resource).icon)
+        return generator.generatePreview(application, resource)
     }
 
     private fun renderFromApplication(options: GenerationOptions): IconPackDrawable {
@@ -234,6 +238,37 @@ class AdaptiveModifierRenderingTest {
         assertNotNull(state)
         assertEquals(MaterialYouPackEditState(CUSTOM_SCHEME, ColorizerStyle(firstColor = Color.GREEN),
             ColorizerStyle(firstColor = Color.BLUE), 1f), state)
+    }
+
+    private fun GenerationOptions.withPack(pack: MaterialYouPackModifier) = copy(modifiers = modifiers.copy(materialYouPack = pack))
+
+    @Test
+    fun reopenedRestyledPackIconReplaysColourChangesUnderAModifier() = runBlocking {
+        registerMaterialYouPack(PACK)
+        val saved = modifiers[1].second.withPack(restyle(Color.RED, Color.BLACK))
+        val fresh = generateFromPack(saved)
+        val retained = requireNotNull(fresh.modifierInput) { "Colour-only restyling must keep its modifier input" }
+        val input = requireNotNull(retained.liveInput)
+
+        val verified = requireNotNull(VerifiedModifierInput.verify(context.resources, input, retained, requireNotNull(fresh.icon))) {
+            "Replaying the saved colours must reproduce the saved icon exactly"
+        }
+        val unchanged = requireNotNull(verified.render(saved).icon).shown()
+        val recoloured = requireNotNull(verified.render(saved.withPack(restyle(Color.GREEN, Color.BLUE))).icon).shown()
+        save("replay-unchanged", unchanged)
+        save("replay-recoloured", recoloured)
+
+        assertTrue(requireNotNull(fresh.icon).shown().sameAs(unchanged))
+        assertTrue("Foreground not recoloured", close(recoloured.getPixel(PREVIEW / 2, PREVIEW / 2), Color.GREEN))
+        assertTrue("Background not recoloured", close(recoloured.getPixel(PREVIEW / 2, PREVIEW / 20), Color.BLUE))
+        assertEquals(unchanged.glyphWidth(Color.RED), recoloured.glyphWidth(Color.GREEN), 0.01f)
+    }
+
+    @Test
+    fun strokeRestylingStillKeepsOnlyItsBakedResult() {
+        registerMaterialYouPack(PACK)
+        val result = generateFromPack(options(pack = restyle(Color.RED, Color.BLACK).copy(strokeScale = 1.4f)))
+        assertEquals(null, result.modifierInput)
     }
 
     private companion object {

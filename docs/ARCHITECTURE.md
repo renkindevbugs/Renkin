@@ -1370,8 +1370,9 @@ be assumed to open the upgraded database.
   The pipeline kind preserves these differences instead of guessing that all paths
   use the same vector recolour or rasterization rules. Material You pack restyling performed
   during resource parsing (especially vector stroke width) is not reversible from captured PNG
-  layers, so fresh pack picks with active pack restyling retain only their baked result and v19
-  recipe for now. Brush geometry remains unsupported. Bulk refresh/fallback and watch keep
+  layers, so fresh pack picks that change line thickness retain only their baked result and v19
+  recipe. Colour-only restyling of preserved adaptive layers is retained: those layers carry their
+  edit state and original PNGs, and a retained stage recolours them only when that state changes. Brush geometry remains unsupported. Bulk refresh/fallback and watch keep
   their existing persistence contract; this step does not add retained input to generated rows.
   Initial controls remain neutral until the user requests verified restoration in the Modifier
   tab. Reopening without a new
@@ -1437,8 +1438,9 @@ be assumed to open the upgraded database.
   adaptive/monochrome layers, vector geometry and resolved reference colours. Conservative
   mismatches leave the baked editor usable and explain that saved modifiers are unavailable.
   An input containing earlier baked edits restores only its last stage, with an explicit hint.
-  Active Material You pack restyling remains unsupported; its original vector stroke semantics
-  cannot be reconstructed from captured PNGs. Text restoration disables image effects and retains
+  Material You pack restyling with a changed line thickness remains unsupported; its original vector
+  stroke semantics cannot be reconstructed from captured PNGs. A colour-only restyle replays with
+  the Material You colour controls restored and line thickness hidden. Text restoration disables image effects and retains
   the adjustments-only pipeline; text/font/colours are frozen source artwork, not editable glyphs.
   `EditorModifierReplay` seeds the existing controls and preserves original source/export settings
   and values not represented exactly by those controls until their corresponding control changes.

@@ -16,6 +16,8 @@ import dev.renkinProject.renkin.icon.creator.SHADOW_BLUR_DEFAULT
 import dev.renkinProject.renkin.icon.creator.SHADOW_DISTANCE_DEFAULT
 import dev.renkinProject.renkin.icon.creator.SHADOW_OPACITY_DEFAULT
 import dev.renkinProject.renkin.icon.creator.VerifiedModifierInput
+import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
+import dev.renkinProject.renkin.drawable.MaterialYouPackEditState
 
 internal class EditorModifierReplay(val verified: VerifiedModifierInput) {
     companion object {
@@ -29,6 +31,10 @@ internal class EditorModifierReplay(val verified: VerifiedModifierInput) {
     private lateinit var baseline: ModifierStack
     private var baselinePlateStyle: ColorizerStyle? = null
     val allowsImageEdits: Boolean get() = verified.retained.pipeline != ModifierInputPipeline.ADJUSTMENTS_ONLY
+    // Pack colours stay editable because the retained layers can be recoloured exactly.
+    val packEditState: MaterialYouPackEditState? =
+        (verified.input as? AdaptiveIconPackDrawable)?.materialYouEditState
+            ?.takeIf { verified.retained.pipeline == ModifierInputPipeline.IMAGE_EDIT }
     internal data class Bookkeeping(val baseline: ModifierStack, val plate: ColorizerStyle?)
     internal fun captureBookkeeping() = Bookkeeping(baseline, baselinePlateStyle)
 
@@ -40,7 +46,7 @@ internal class EditorModifierReplay(val verified: VerifiedModifierInput) {
         session.useVector = saved.export.vector
         session.replayMaterialYou = saved.export.materialYou
         session.customIconList = emptyList()
-        session.materialYouPackAdjustments.reset()
+        with(session.materialYouPackAdjustments) { packEditState?.let(::restore) ?: reset() }
         with(session.adjustments) {
             colorizerStyle = stack.effect.colorizer
             edgeThreshold = stack.effect.edges.lowThreshold
@@ -118,7 +124,10 @@ internal class EditorModifierReplay(val verified: VerifiedModifierInput) {
                 transform = if (after.transform == before.transform) original.transform else after.transform,
                 shape = shape,
                 outline = outline,
-                shadow = if (after.shadow == before.shadow) original.shadow else after.shadow
+                shadow = if (after.shadow == before.shadow) original.shadow else after.shadow,
+                materialYouPack = if (packEditState == null || after.materialYouPack == before.materialYouPack) {
+                    original.materialYouPack
+                } else after.materialYouPack
             ),
             export = saved.export.copy(vector = ui.export.vector, materialYou = ui.export.materialYou)
         )
