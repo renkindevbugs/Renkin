@@ -399,10 +399,11 @@ class IconGenerator(
         }
         fun monochromeOf(icon: AdaptiveIconDrawable) =
             if (icon.haveMonochrome()) icon.monochrome else packMonochrome
-        val original = if (changesWithMaterialYou) {
+        val restyle = modifiers.materialYouPack.hasRestyling
+        // Only a restyle keeps the original layers; browser tiles never restyle, so skip the encodes.
+        val original = if (changesWithMaterialYou && restyle) {
             AdaptiveIconPackDrawable.capture(source, monochromeOf(source))
         } else null
-        val restyle = modifiers.materialYouPack.hasRestyling
         val styled = if (restyle && changesWithMaterialYou) {
             val editable = if (modifiers.materialYouPack.strokeScale != 1f) {
                 exportIconPackXML(packName, ResourceDrawable(resource.resourceId, source)) ?: source
@@ -421,8 +422,8 @@ class IconGenerator(
             styled,
             monochromeOf(styled),
             editState,
-            originalForegroundPng = original?.foregroundPng.takeIf { restyle },
-            originalBackgroundPng = original?.backgroundPng.takeIf { restyle }
+            originalForegroundPng = original?.foregroundPng,
+            originalBackgroundPng = original?.backgroundPng
         )
     }
 
