@@ -48,9 +48,10 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
     suspend fun checkpoint(): EditorDraftCheckpoint = access { catalog().checkpoint }
 
     // Artifact corruption still has a readable checkpoint and uses ordinary checkpoint-aware discard.
-    suspend fun inspectCheckpoint(): EditorDraftInspection = access {
+    suspend fun inspectCheckpoint(includeOwner: Boolean = false): EditorDraftInspection = access {
         try {
-            EditorDraftInspection.Readable(catalog().checkpoint)
+            val catalog = catalog()
+            EditorDraftInspection.Readable(catalog.checkpoint, if (includeOwner) catalog.draft?.owner else null)
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
@@ -115,12 +116,14 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
     suspend fun save(
         expected: EditorDraftCheckpoint,
         owner: EditorDraftOwner,
-        payloads: Map<String, ByteArray>
+        payloads: Map<String, ByteArray>,
+        draftId: String = UUID.randomUUID().toString()
     ): EditorDraftCandidate = access {
         val current = catalog()
         requireCheckpoint(current, expected)
+        require(draftId != current.draft?.id) { "Editor draft publication requires a new identity" }
         val record = EditorDraftRecord(
-            UUID.randomUUID().toString(), System.currentTimeMillis(), owner,
+            draftId, System.currentTimeMillis(), owner,
             payloads.map { (name, bytes) -> EditorDraftArtifact(name, bytes.size.toLong(), "0".repeat(64)) }
         )
         EditorDraftCodec.validate(EditorDraftCatalog(current.storageGeneration, record))

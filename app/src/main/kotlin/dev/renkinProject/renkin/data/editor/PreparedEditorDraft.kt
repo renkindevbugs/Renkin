@@ -11,6 +11,10 @@ internal class PreparedEditorDraft(
     private val payloads: Map<String, ByteArray>
 ) {
     fun copyPayloads(): Map<String, ByteArray> = payloads.mapValues { it.value.copyOf() }
+
+    // The store reads these immutable, privately owned bytes; avoid another full payload copy.
+    suspend fun save(store: EditorDraftStore, draftId: String): EditorDraftCandidate =
+        store.save(checkpoint, owner, payloads, draftId)
 }
 
 internal sealed interface EditorCaptureResult {

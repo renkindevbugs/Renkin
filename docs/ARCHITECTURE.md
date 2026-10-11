@@ -38,6 +38,7 @@ Composables (ui/)                         ← stateless-ish views, read VM state
         ▼
 MainViewModel / WatchViewModel            ← @HiltViewModel; own session/UI state, orchestrate
 EditorSessionViewModel                   ← owns the individual editor's live draft and controls
+EditorDraftRecoveryViewModel             ← serializes recovery offers, autosave and checkpoint cleanup
         │                                    operations on viewModelScope
         ▼
 ApplicationProvider (apk/)                ← orchestrator: owns the app list, profiles, refresh,
@@ -908,6 +909,36 @@ expiration/loss only detaches the editor and preserves its draft for another off
 capture/save is enabled. Debounced lifecycle persistence and normal-editor cleanup remain 7C3c2b.
 After device confirmation, 21 owner/Compose cases were added; all 1,186 tests across 166 suites pass,
 including both Roborazzi scenarios. compileDebugKotlin and assembleDebug also pass.
+
+**7C3c2b (confirmed and verified)** connects autosave to the same recovery-owner
+queue. Its Main-owned `EditorDraftAutosave` collaborator admits empty checkpoints or explicitly
+accepted recovery; existing/postponed/other-profile data requires confirmed Discard before a new
+editor can save. Lifetime-driven snapshotFlow observes coherent completed frames, debounces 600 ms
+before Main artwork copies, coalesces pending saves and bypasses delay for background flush.
+Opening frames are recorded at publication and remain unwritten until changed; accepted recovery
+starts with its original frame already saved. Reverting a later saved edit still updates the draft.
+Immutable edit content is derived once per frame for autosave comparison; it excludes tab/pack
+browsing and untouched vector initialization. Full witnesses retain these fields for coherent capture
+and recovery. Navigation alone neither creates nor rewrites drafts. Ordinary Vector seeding now
+preserves the active source, like recovery; actual edits and returning to the seed still publish.
+MainActivity connects the activity-scoped owners and requests asynchronous onStop flush.
+Capture/resource/encoding work uses the existing dispatcher boundaries; baseline, generation,
+profile token, original storage epoch and store checkpoint fence stale work. Each publication UUID
+supports exact reconciliation after ambiguous fsync failure without claiming a foreign draft.
+Private prepared bytes go directly to the read-only writer without another full payload copy.
+Explicit Apply/Clear/dismiss fences captures synchronously, then queued cleanup waits for an
+in-flight write and removes only the latest owned checkpoint. Unexpected loss/clearing preserves
+the draft. Routine autosave is silent; only Blocked/Failed show Retry and confirmed Discard,
+identifying the stored application's name (package fallback) from an optional metadata-only inspection.
+Unsupported witnesses report failure once and wait for Retry or supported values before resuming.
+Queue coalescing flags are set before channel sends: Main.immediate can consume a request inline,
+and a post-send assignment must not undo the receiver's reset or disable later saves/observations.
+The device checkpoint confirms process-death recovery of Scale, Colorize, Outline and brush edits.
+Twenty-nine new tests cover semantic edit comparison, repeated immediate-dispatch saves, debounce,
+background flush, recovery edits, admission/reset and close/publication races. All 1,215 tests across
+168 suites pass, including both Roborazzi cases; compileDebugKotlin and assembleDebug pass with
+the existing local test-JVM workaround. Debug capture logs include copy time, payload size and heap
+observations; peak memory and large-draft device performance still need measurement.
 
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged

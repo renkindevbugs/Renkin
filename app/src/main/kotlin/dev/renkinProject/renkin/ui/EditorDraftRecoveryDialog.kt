@@ -29,6 +29,7 @@ internal fun EditorDraftRecoveryHost(iconPacks: List<IconPack>, showPrompt: Bool
     LaunchedEffect(owner, editor) { owner.connect(editor) }
     val shown by owner.state.collectAsStateWithLifecycle()
     val attachment by editor.recoveryAttachment.collectAsStateWithLifecycle()
+    val lifetime by editor.lifetime.collectAsStateWithLifecycle()
     attachment?.let { attached ->
         editor.recoveredSession(attached)?.let { session ->
             OpenAppOptions(iconPacks, session.application, attached.themed, attached.owner,
@@ -36,7 +37,9 @@ internal fun EditorDraftRecoveryHost(iconPacks: List<IconPack>, showPrompt: Bool
                 onDismiss = { owner.close(attached) })
         }
     }
-    if (showPrompt) EditorDraftRecoveryDialog(shown, owner::restore, owner::retry, owner::discard, owner::postpone)
+    if (showPrompt && lifetime.sessionId == null) {
+        EditorDraftRecoveryDialog(shown, owner::restore, owner::retry, owner::discard, owner::postpone)
+    }
 }
 
 @Composable

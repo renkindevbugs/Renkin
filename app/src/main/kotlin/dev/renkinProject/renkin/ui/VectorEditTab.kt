@@ -129,7 +129,7 @@ internal class VectorEditState {
         val entries: List<PathEntry>, val thickness: Float, val automaticallyCenter: Boolean,
         val viewport: Pair<Float, Float>?, val sourceUrl: String?, val containsBakedModifierEdits: Boolean
     )
-    private var initialInputs: Inputs? = null
+    private var initialInputs: Inputs? by mutableStateOf(null)
     internal var publishedInputs: Inputs? = null
     internal var preserveDraftSeedPublication = false
         private set

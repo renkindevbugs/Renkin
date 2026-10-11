@@ -80,12 +80,18 @@ internal class IconDraftState(
     private var initialized = false
     private var completedCreate: CreateRequest? = null
     private var completedFrame by mutableStateOf<CompletedFrame?>(null)
+    private var initialFrame by mutableStateOf<InitialFrame?>(null)
     private var frameSerial = 0L
+    private data class InitialFrame(val serial: Long, val witness: EditorRenderWitness?) {
+        val content = witness?.autosaveContent()
+    }
     private data class CompletedFrame(
         val witness: EditorRenderWitness?, val serial: Long,
         val requested: GenerationOptions, val rendered: GenerationOptions?,
         val input: IconPackDrawable?, val pipeline: ModifierInputPipeline, val baked: Boolean
-    )
+    ) {
+        val content = witness?.autosaveContent()
+    }
 
     internal data class CaptureState(
         val serial: Long, val origin: IconOrigin, val initialized: Boolean, val canRestore: Boolean,
@@ -110,6 +116,17 @@ internal class IconDraftState(
     }
 
     internal val completedFrameSerial: Long? get() = completedFrame?.serial
+    internal val completedFrameWitness: EditorRenderWitness? get() = completedFrame?.witness
+    internal val completedAutosaveContent: EditorAutosaveContent? get() = completedFrame?.content
+    internal val initialFrameSerial: Long? get() = initialFrame?.serial
+    internal val initialFrameWitness: EditorRenderWitness? get() = initialFrame?.witness
+    internal val initialAutosaveContent: EditorAutosaveContent? get() = initialFrame?.content
+    internal val unchangedFromOpening: Boolean get() {
+        val initial = initialFrame ?: return false
+        val frame = completedFrame ?: return false
+        // Composition recreation may republish the same frame with a new serial.
+        return frame.serial == initial.serial || (frame.content != null && frame.content == initial.content)
+    }
 
     internal fun acknowledgeWitness(
         witness: EditorRenderWitness?, app: PackageInfoStruct,
@@ -177,6 +194,7 @@ internal class IconDraftState(
             }
         }
         complete(witness(), bound.requested, bound.renderedOptions, raw, value.pipeline, value.rawBaked)
+        initialFrame = InitialFrame(requireNotNull(completedFrame).serial, completedFrame?.witness)
     }
     var canRestore by mutableStateOf(initialInput != null && initialIcon != null)
         private set
@@ -359,6 +377,9 @@ internal class IconDraftState(
             complete(witness, options, replay?.retained?.options, request.base,
                 replay?.retained?.pipeline ?: ModifierInputPipeline.SHARED,
                 existing?.retained?.containsBakedModifierEdits ?: (request.base != null))
+            if (initialFrame == null && sourceRevision == 0L) {
+                initialFrame = InitialFrame(requireNotNull(completedFrame).serial, witness)
+            }
             return
         }
         // A recreated composition must not reinterpret the untouched saved icon as a new edit.

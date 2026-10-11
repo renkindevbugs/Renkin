@@ -2,8 +2,8 @@ package dev.renkinProject.renkin.ui
 
 import androidx.annotation.MainThread
 import dev.renkinProject.renkin.data.editor.EditorControlsSnapshot
-import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.drawable.ResourceDrawable
 
 internal class EditorCapturePendingException : IllegalStateException("Editor capture is pending or superseded")
 
@@ -16,7 +16,8 @@ internal data class EditorRenderWitness(
     val vector: VectorEditState.Inputs,
     val onlinePath: String?,
     val replay: EditorModifierReplay?,
-    val publishedSource: IconPackDrawable?
+    val publishedSource: IconPackDrawable?,
+    val vectorSeed: VectorEditState.Inputs?
 )
 
 internal fun EditorSession.renderSource(): IconPackDrawable? = when (draft.origin) {
@@ -28,7 +29,7 @@ internal fun EditorSession.renderSource(): IconPackDrawable? = when (draft.origi
 @MainThread
 internal fun EditorSession.captureRenderWitness(): EditorRenderWitness = EditorRenderWitness(
     captureControls(), draft.origin, customIconList.toList(), upload.selection(),
-    vectorEditState.inputs(), onlineImagePath, modifierReplay, renderSource()
+    vectorEditState.inputs(), onlineImagePath, modifierReplay, renderSource(), vectorEditState.seedForDraft()
 )
 
 @MainThread

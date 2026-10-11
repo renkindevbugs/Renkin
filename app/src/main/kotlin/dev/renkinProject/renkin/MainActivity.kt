@@ -58,6 +58,8 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: MainViewModel by viewModels()
     private val presetsViewModel: PresetLibraryViewModel by viewModels()
+    private val editorViewModel: EditorSessionViewModel by viewModels()
+    private val editorDraftViewModel: EditorDraftRecoveryViewModel by viewModels()
     private var consumedSharedImageUri: String? = null
 
     // Activity-scoped (not remember-ed in composition) so non-compose code — e.g. the share
@@ -70,6 +72,7 @@ class MainActivity : ComponentActivity() {
 
         // Start loading before handling launch intents or composing the startup shell.
         viewModel
+        editorDraftViewModel.connect(editorViewModel)
 
         // Landscape is only allowed on large screens (sw >= 600dp). Phones and
         // folded foldables stay locked to portrait.
@@ -183,6 +186,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        editorDraftViewModel.setBackgrounded(false)
         // An icon pack installed while the app was away won't be in the loaded list yet.
         // On every return to the foreground, diff the installed icon packs against what we
         // have loaded; a new one (other than our own generated pack) prompts a reload so it
@@ -206,6 +210,11 @@ class MainActivity : ComponentActivity() {
                 viewModel.onIconPackInstalled(newPack.packageName, newPack.applicationName)
             }
         }
+    }
+
+    override fun onStop() {
+        if (!isChangingConfigurations) editorDraftViewModel.setBackgrounded(true)
+        super.onStop()
     }
 
     override fun onResume() {

@@ -33,7 +33,7 @@ Never restore an old `ProfileSessionToken`; successful recovery obtains a new li
   **7C3b3 (confirmed and verified)** integrates first-composition rendering.
   **7C3c1 (confirmed and verified)** installs storage/profile invalidation and
   conditional unreadable-catalog discard. **7C3c2a (verified)** adds the visible offer/error owner;
-  **7C3c2b** adds debounced lifecycle persistence using those boundaries.
+  **7C3c2b (confirmed and verified)** adds debounced lifecycle persistence using those boundaries.
 
 Each checkpoint follows CLAUDE.md's device-confirmation/test/commit sequence. The envelope is
 not evidence that arbitrary controls or artwork can already be restored. End-to-end recovery
@@ -763,10 +763,10 @@ the existing reset policy, except during verified replay. An already initialized
 keeps its working/seed inputs and suppresses unchanged publication. If the captured vector tab was
 not initialized yet, its first ordinary source seeding acknowledges the initialized inputs before
 publication; this prepares the working preview without replacing the completed Create/Upload frame.
-This intentionally differs from a live session with a vector source, where first visiting Vector
-publishes the initial vector, switches origin to VECTOR and ends replay. A recovered session keeps
-its captured origin/replay on that visit; an actual vector edit publishes normally. The recovery
-offer integration in 7C3c must preserve this distinction.
+7C3b3 initially differed from a live session with a vector source, where first visiting Vector
+published the initial vector and switched origin to VECTOR. 7C3c2b now treats ordinary seeding as
+navigation too: both live and recovered sessions keep their origin/replay until actual vector edits.
+Returning to the seed after an edit still publishes, because it differs from the last published inputs.
 Native mask suppliers and projections are not serialized or reintroduced into saved state.
 
 This checkpoint does not add a recovery-offer caller, startup restoration or autosave. The developer
@@ -919,6 +919,106 @@ race coverage. Verification logs: `build/verify-7c3c2a-targeted.log` and
 `build/verify-7c3c2a-full.log`. Process-death autosave and large Main-copy/memory measurements
 require 7C3c2b's actual capture scheduling.
 
+## Autosave and lifecycle checkpoint (7C3c2b)
+
+`EditorDraftRecoveryViewModel` serializes autosave admission, capture/save, Retry, confirmed
+replacement and explicit-close cleanup in its existing offer queue. `EditorDraftAutosave`
+owns Main-thread bookkeeping for one lifetime: admitted checkpoint, publication ownership,
+last saved coherent frame and any in-flight publication identity. MainActivity connects
+the activity-scoped VMs before composition and requests a flush at onStop, except configuration
+recreation. Foreground re-entry restores routine debounce.
+
+A lifetime-driven snapshotFlow observes the already published controls/source witness,
+completed-frame serial and readiness; it does not recapture full control trees on every gesture.
+Live controls are compared before capture. Routine changes cancel the pending delay; complete frames wait 600 ms before
+capture. Save requests coalesce to the latest frame while another queue action runs.
+The opening Create frame is recorded at its synchronous first publication rather than after a
+suspending store inspection; selecting a replacement source before that publication is already an edit.
+Unchanged opening frames do not trigger capture or payload writes, including composition recreation
+that only changes the frame serial. A separate immutable autosave comparison is derived once per
+completed frame: selectedTab and browsingIconPacks are ignored, as is a default uninitialized or unchanged
+seed vector. The full witness still retains those fields for capture coherence and persistence.
+Both opening-frame suppression and comparison with the last saved frame use this edit content,
+so navigation alone neither creates a draft nor rewrites an existing one. Initial Vector preview
+publication no longer selects the seed as a new source; actual edits and return-to-seed publications
+still select Vector. Accepted recovery records its original frame as already saved,
+even if the live editor changes while acceptance returns. After a later edit has been saved,
+returning to the opening controls still saves that return so an older edited checkpoint cannot survive.
+An unchanged saved frame is skipped. Background flush bypasses debounce; a pending render's
+next complete publication also saves without the foreground delay. Neither onStop nor
+composition waits synchronously for capture, gates or disk. An immediate process kill before
+an asynchronous write finishes can still lose changes after the last saved checkpoint.
+
+Main copies happen only inside the existing complete-capture adapter after debounce/flush.
+Resources, encoding and hashing run off Main. After capture, the owner validates the baseline
+again and checks frame, generation, profile token and original storage epoch before writing.
+Writes stay outside domain gates; store checkpoint comparison rejects invalidated writers.
+Incomplete/mismatched rendering returns Superseded, retaining the prior checkpoint.
+If that exact frame is still complete and admitted, the owner retries at most twice before
+showing a retryable failure; changed frames supersede that retry budget.
+Unsupported controls, missing resources, limits, I/O errors and OOM report failure without
+closing the editor or committing an icon. A null render witness reports unsupported controls once
+without capture; further unsupported frames keep the failure until Retry or supported values return.
+Other failures can retry on a later complete frame or explicit Retry.
+
+A normal editor is admitted automatically only against an empty inspected checkpoint.
+Existing recovery data, including postponed/other-profile drafts, blocks autosave while editing
+continues. Closing the editor permits checking that draft. Retry only inspects; it never resets
+or adopts an unrelated draft. Confirmed Discard checks the shown checkpoint/reset lease and
+requires a genuinely empty result before enabling current-editor saves. Stale actions refresh.
+Unreadable metadata exposes Retry/confirmed reset; Discard is disabled without a safe lease.
+The autosave inspection optionally returns owner metadata from the same catalog read, without
+reading artwork. Confirmed discard identifies that component using the published application name,
+falling back to its package name when absent. Unreadable metadata retains generic confirmation.
+Accepted recovery explicitly admits its checkpoint so subsequent edits update that draft.
+Its dialog uses the attachment's fresh profile token directly; saved Bundle values from a
+previous process cannot replace the newly accepted owner.
+
+Each publication gets a fresh caller-generated UUID; reusing the current identity is rejected
+before touching blobs. The UUID permits exact reconciliation if rename succeeded but final
+directory fsync/return failed; profile/component equality alone never proves ownership.
+PreparedEditorDraft passes its privately owned immutable bytes to the read-only store writer,
+avoiding another full payload copy.
+
+Apply, Clear and explicit dismissal synchronously mark the lifetime closing and release it.
+Queued captures fail ownership checks; an in-flight write finishes before queued cleanup uses
+the latest owned checkpoint. Old cleanup cannot erase a new editor's draft. If no publication
+belonged to the closing editor, an existing postponed draft is preserved. Unexpected session
+loss and onCleared preserve files. Failed cleanup retains the visible Retry/confirmed-discard
+route. Waiting/Saving/Saved remain internal bookkeeping and add no visible status row.
+Only Blocked and Failed expose text, Retry and confirmed Discard; Blocked uses a neutral color,
+while Failed uses the error color. The previous coherent disk snapshot remains during rendering.
+Apply and profile Save retain their existing behavior.
+
+Debug captures log `EditorDraftCapture`: cumulative Main artwork-copy milliseconds, elapsed
+capture milliseconds, encoded payload bytes, Java heap and native heap usage at completion.
+These are not peak-memory measurements. Device timing and large-draft memory acceptance
+remain unmeasured. The developer confirmed recovery of Scale, Colorize, Outline and brush edits
+after the immediate-dispatch queue fix. A successful send can consume its request synchronously;
+coalescing flags must be set beforehand so the receiver's reset survives the return from trySend.
+Check opening without editing (also across configuration recreation/backgrounding) creates no
+recovery offer after process death; restored-but-untouched editors produce no capture log or rewrite.
+Repeat while browsing every tab, including Vector for bitmap and vector sources. Navigation after
+a saved edit must not cause another capture. Wait at least two seconds after edits before checking
+recovery; the removed Saved notice cannot confirm publication. Debug logcat's EditorDraftCapture
+captureMs line confirms capture completion, rather than durable store publication.
+Check process-death recovery for Create/Upload/vector/brush, further edits after recovery,
+Apply/Clear/dismiss cleanup, Not now followed by blocked admission/confirmed replacement,
+background flush, configuration recreation and profile/storage invalidation.
+Twenty-nine new tests cover opening/recovered frame suppression, navigation-only changes before
+and after a saved edit, seeded-vector initialization, semantic modifier/brush changes, detached
+content and reverting a saved edit. The ordinary-Vector composition test now expects no initial
+source selection and verifies actual edits/reversal. The owner fixture implements Main.immediate
+inline dispatch, covering repeated saves after synchronous no-op requests and later observations.
+Integration tests cover debounce/background flush, restored Scale/Colorize/Outline/brush values,
+further recovery edits, foreign-draft admission/named discard, unsupported-witness suppression,
+unreadable reset, stale discard/storage work, capture failure preserving the prior checkpoint,
+close during publication and exact ownership after a final fsync failure. Compose notice tests
+verify silent routine states, explicit named discard confirmation and safe Retry availability.
+All 1,215 tests across 168 suites pass without failures, errors or skips, including both Roborazzi
+reference cases. compileDebugKotlin and assembleDebug pass with the existing local test-JVM C2
+workaround. Large Main copies and peak heap still need device measurements.
+
 ## Envelope and local files
 
 `data/editor/EditorDraftRecord.kt` contains primitive metadata, without Drawable, Compose state
@@ -992,6 +1092,10 @@ autosaves in the editor owner, debounce routine gestures, flush when leaving for
 and reject render results from older editor generations. Do not serialize while a render is
 publishing mismatched controls/artwork, or replace the last valid checkpoint with a partial
 capture. An explicit Apply must continue storing exactly the confirmed result.
+
+Set coalescing flags before sending requests to the owner's channel. Main.immediate can resume
+the receiver inside trySend; assigning a successful-send result afterward would overwrite the
+receiver's cleared flag and silently prevent subsequent saves or observations.
 
 Define canonical baseline encodings in 7C2. The original-icon fingerprint must cover the full
 persisted editor input (base/rendered artwork, recipe/input descriptors, calendar and source

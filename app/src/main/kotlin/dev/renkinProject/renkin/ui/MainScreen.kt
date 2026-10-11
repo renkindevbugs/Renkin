@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.ui
 
 import android.content.Intent
 import dev.renkinProject.renkin.EditorSessionViewModel
+import dev.renkinProject.renkin.EditorDraftRecoveryViewModel
 import dev.renkinProject.renkin.InstallerChoiceReason
 import dev.renkinProject.renkin.expiredSessionMessage
 import dev.renkinProject.renkin.data.TextFontKey
@@ -1129,15 +1130,23 @@ fun OpenAppOptions(
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val editorViewModel: EditorSessionViewModel = hiltViewModel()
+    val draftOwner: EditorDraftRecoveryViewModel = hiltViewModel()
+    LaunchedEffect(draftOwner, editorViewModel) { draftOwner.connect(editorViewModel) }
+    val autosaveState by draftOwner.autosaveState.collectAsStateWithLifecycle()
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val activity = getCurrentMainActivity()
     val toaster = LocalToaster.current
     val sessionId = recoveredSessionId ?: rememberSaveable(app.key) { UUID.randomUUID().toString() }
     var sessionAttached by rememberSaveable(app.key) { mutableStateOf(false) }
-    val profileId = rememberSaveable(app.key) { sourceSession.profileId }
-    val revision = rememberSaveable(app.key) { sourceSession.revision }
-    val providerInstance = rememberSaveable(app.key) { sourceSession.providerInstanceId }
-    val expected = ProfileSessionToken(profileId, revision, providerInstance)
+    val expected = if (recoveredSessionId != null) {
+        // Accepted recovery owns a fresh token; a previous process's Bundle cannot replace it.
+        sourceSession
+    } else {
+        val profileId = rememberSaveable(app.key) { sourceSession.profileId }
+        val revision = rememberSaveable(app.key) { sourceSession.revision }
+        val providerInstance = rememberSaveable(app.key) { sourceSession.providerInstanceId }
+        ProfileSessionToken(profileId, revision, providerInstance)
+    }
     val current = runtimeState.sessionToken
 
     if (expected != current) {
@@ -1168,8 +1177,8 @@ fun OpenAppOptions(
     }
     SideEffect { sessionAttached = true }
     val closeEditor: () -> Unit = {
-        // The recovery owner serializes checkpoint cleanup and session release for a restored editor.
-        if (recoveredSessionId == null) editorViewModel.release(sessionId)
+        // Close fences new captures synchronously; serialized cleanup waits for any in-flight save.
+        if (recoveredSessionId == null) draftOwner.closeLive(sessionId)
         onDismiss()
     }
 
@@ -1183,7 +1192,12 @@ fun OpenAppOptions(
         editorViewModel.restoreModifiers(sessionId) { state ->
             viewModel.prepareModifierReplay(state.application, state.owner)
         }
-    }, onCancelModifierRestore = { editorViewModel.cancelModifierRestore(sessionId) })
+    }, onCancelModifierRestore = { editorViewModel.cancelModifierRestore(sessionId) },
+        autosaveNotice = {
+            autosaveState?.takeIf { it.lifetime.sessionId == sessionId }?.let {
+                EditorAutosaveNotice(it, draftOwner::retryAutosave, draftOwner::discardForAutosave)
+            }
+        })
 }
 
 @Composable

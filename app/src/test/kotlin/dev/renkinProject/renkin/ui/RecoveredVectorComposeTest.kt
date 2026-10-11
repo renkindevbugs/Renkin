@@ -61,7 +61,7 @@ class RecoveredVectorComposeTest {
         compose.runOnIdle { assertEquals(2, publications); assertEquals(state.inputs(), state.publishedInputs) }
     }
 
-    @Test fun normalVectorStillSelectsVectorOnFirstVisit() {
+    @Test fun normalVectorSeedDoesNotSelectSourceButActualEditsAndReversalPublish() {
         val source = vector()
         val editor = EditorRecoveryFixtures.editor(EditorRecoveryFixtures.application(source))
         var publications = 0
@@ -73,7 +73,15 @@ class RecoveredVectorComposeTest {
                 }
             }
         }
-        compose.runOnIdle { assertEquals(1, publications); assertEquals(IconOrigin.VECTOR, editor.draft.origin) }
+        compose.runOnIdle {
+            assertEquals(0, publications); assertEquals(IconOrigin.CREATE, editor.draft.origin)
+            editor.vectorEditState.thickness = 1.5f
+        }
+        compose.runOnIdle {
+            assertEquals(1, publications); assertEquals(IconOrigin.VECTOR, editor.draft.origin)
+            editor.vectorEditState.thickness = 1f
+        }
+        compose.runOnIdle { assertEquals(2, publications) }
     }
 
     @Test fun recoveredBitmapVisitAcknowledgesEmptyVectorWithoutPublishingNull() {

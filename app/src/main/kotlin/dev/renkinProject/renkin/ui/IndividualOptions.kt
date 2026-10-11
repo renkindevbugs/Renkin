@@ -161,7 +161,8 @@ internal fun OptionsDialog(
     onDismiss: () -> Unit,
     onIconClear: () -> Unit,
     onRestoreModifiers: () -> Unit,
-    onCancelModifierRestore: () -> Unit
+    onCancelModifierRestore: () -> Unit,
+    autosaveNotice: @Composable () -> Unit = {}
 ) {
     val viewModel: MainViewModel = hiltViewModel()
     val app = session.application
@@ -769,6 +770,7 @@ internal fun OptionsDialog(
                 }
 
                 val bottomSection: @Composable () -> Unit = {
+                    autosaveNotice()
                     AnimatedVisibility(visible = selectedTab == 0) {
                         SourcePills(
                             source = browserSource.takeIf { session.modifierReplay == null },
@@ -994,8 +996,11 @@ internal fun VectorOptionsTab(
             state = state,
             onImportedImage = onImportedImage,
             onChange = {
-                val unchangedRecovered = state.preserveDraftSeedPublication && state.publishedInputs == state.inputs()
-                if (!unchangedRecovered && (!keepRetainedStage || state.hasChangesFromSeed)) onIconChange(it)
+                val inputs = state.inputs()
+                // Seeding the working preview is navigation; returning to the seed after an edit still publishes.
+                val unchanged = state.publishedInputs == inputs ||
+                    (state.publishedInputs == null && !state.hasChangesFromSeed)
+                if (!unchanged && (!keepRetainedStage || state.hasChangesFromSeed)) onIconChange(it)
             }
         )
     }

@@ -265,6 +265,10 @@
     <string name="editorRecoveryChanged">The editor or profile changed while this edit was being checked. Try again to check the latest state.</string>
     <string name="editorRecoveryFailed">The unfinished edit could not be read or restored. Try again, or discard it. If Discard is unavailable, the saved edit could not be identified safely.</string>
     <string name="editorRecoveryCleanupFailed">The editor was closed, but its saved edit could not be deleted. It may appear again after a restart. Try again, or confirm Discard to delete it.</string>
+    <string name="editorAutosaveBlocked">Existing recovery data needs attention. Close this editor to check it, or discard that data to save these changes.</string>
+    <string name="editorAutosaveFailed">These changes could not be saved for recovery. Current edits stay open and any previous valid draft is kept.</string>
+    <string name="editorAutosaveDiscardText">Discard the saved draft and enable recovery saves for this editor? Your current edits stay open.</string>
+    <string name="editorAutosaveDiscardNamedText">Discard the saved draft for %1$s and enable recovery saves for this editor? Your current edits stay open.</string>
     <string name="sortByName">Name</string>
     <string name="sortByInstallDate">Recently installed</string>
     <string name="sortApps">Sort apps</string>

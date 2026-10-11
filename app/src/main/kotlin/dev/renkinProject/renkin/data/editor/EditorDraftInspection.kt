@@ -8,6 +8,9 @@ internal class EditorDraftResetLease internal constructor(
 )
 
 internal sealed interface EditorDraftInspection {
-    data class Readable(val checkpoint: EditorDraftCheckpoint) : EditorDraftInspection
+    data class Readable(
+        val checkpoint: EditorDraftCheckpoint,
+        val owner: EditorDraftOwner? = null
+    ) : EditorDraftInspection
     data class Unreadable(val cause: Exception, val resetLease: EditorDraftResetLease?) : EditorDraftInspection
 }

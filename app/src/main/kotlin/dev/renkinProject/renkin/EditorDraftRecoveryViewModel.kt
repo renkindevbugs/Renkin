@@ -2,6 +2,7 @@ package dev.renkinProject.renkin
 
 import android.content.Context
 import androidx.annotation.MainThread
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -24,12 +25,14 @@ import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -61,8 +64,12 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
         data class Restore(val shown: EditorDraftRecoveryState.Offer) : Request
         data class Discard(val shown: EditorDraftRecoveryState) : Request
         data class Postpone(val shown: EditorDraftRecoveryState) : Request
-        data class Close(val attachment: EditorRecoveryAttachment) : Request
+        data class Close(val attachment: EditorRecoveryAttachment, val lifetime: EditorSessionLifetime) : Request
         data class Detach(val attachment: EditorRecoveryAttachment) : Request
+        data object Save : Request
+        data class RetrySave(val shown: EditorAutosaveState) : Request
+        data class DiscardForSave(val shown: EditorAutosaveState) : Request
+        data class CloseLive(val lifetime: EditorSessionLifetime) : Request
     }
 
     private data class Observation(
@@ -73,6 +80,8 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
     )
 
     private val resources = EditorRecoveryResources(context)
+    private val autosave = EditorDraftAutosave(context, provider, store)
+    internal val autosaveState = autosave.state
     private val requests = Channel<Request>(Channel.UNLIMITED)
     private val mutableState = MutableStateFlow<EditorDraftRecoveryState>(EditorDraftRecoveryState.Hidden)
     internal val state = mutableState.asStateFlow()
@@ -84,6 +93,12 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
     private var lastObservation: Observation? = null
     private var attempt = 0L
     private var observationQueued = false
+    private var saveDelay: Job? = null
+    private var pendingSave: EditorAutosaveFrame? = null
+    private var saveQueued = false
+    private var backgrounded = false
+    private var retryFrame: EditorAutosaveFrame? = null
+    private var supersededRetries = 0
 
     @MainThread
     internal fun connect(editorViewModel: EditorSessionViewModel) {
@@ -97,6 +112,11 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                         when (request) {
                             Request.Observe -> {
                                 observationQueued = false
+                                val previousLifetime = autosave.state.value?.lifetime
+                                autosave.observe(requireNotNull(editor))
+                                if (autosave.state.value?.lifetime != previousLifetime) {
+                                    scheduleSave(requireNotNull(editor).autosaveFrame())
+                                }
                                 val observation = observation()
                                 if (observation != lastObservation) refresh()
                             }
@@ -113,20 +133,47 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                                 dropPrepared()
                                 mutableState.value = EditorDraftRecoveryState.Hidden
                             }
-                            is Request.Close -> closeTransferredEditor(request.attachment)
+                            is Request.Close -> closeTransferredEditor(request.attachment, request.lifetime)
                             is Request.Detach -> {
                                 if (accepted?.first == request.attachment) accepted = null
                                 requireNotNull(editor).release(request.attachment.sessionId)
+                                enqueueObservation()
+                            }
+                            Request.Save -> {
+                                saveQueued = false
+                                val frame = pendingSave
+                                pendingSave = null
+                                if (frame != null) {
+                                    if (retryFrame != frame) { retryFrame = frame; supersededRetries = 0 }
+                                    if (autosave.save(requireNotNull(editor), frame) == EditorAutosaveAttempt.RETRY) {
+                                        if (supersededRetries++ < 2) scheduleSave(frame)
+                                        else autosave.captureStalled(frame)
+                                    }
+                                }
+                            }
+                            is Request.RetrySave -> {
+                                autosave.retry(requireNotNull(editor), request.shown)
+                                retryPendingSave()
+                            }
+                            is Request.DiscardForSave -> {
+                                autosave.discard(requireNotNull(editor), request.shown)
+                                retryPendingSave()
+                            }
+                            is Request.CloseLive -> {
+                                val checkpoint = autosave.close(request.lifetime)
+                                if (checkpoint != null) discardClosedCheckpoint(checkpoint) else refresh()
                                 enqueueObservation()
                             }
                         }
                     } catch (error: CancellationException) { throw error }
                     catch (error: Exception) {
                         Log.error("EditorDraftRecovery", "Editor draft action failed", error)
+                        autosave.unavailable(requireNotNull(editor))
                         dropPrepared()
                         mutableState.value = EditorDraftRecoveryState.Failed(null, null, cleanupCheckpoint != null)
                     } catch (error: OutOfMemoryError) {
                         Log.error("EditorDraftRecovery", "Editor draft action exceeded available memory", error)
+                        autosave.unavailable(requireNotNull(editor))
                         dropPrepared()
                         mutableState.value = EditorDraftRecoveryState.Failed(null, null, cleanupCheckpoint != null)
                     }
@@ -138,17 +185,78 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                 editorViewModel.lifetime) { _, _, _ -> Unit }
                 .collect { enqueueObservation() }
         }
+        viewModelScope.launch {
+            editorViewModel.lifetime.collectLatest {
+                snapshotFlow { editorViewModel.autosaveFrame() }.collect { scheduleSave(it) }
+            }
+        }
     }
 
     @MainThread internal fun retry(shown: EditorDraftRecoveryState) { requests.trySend(Request.Retry(shown)) }
     @MainThread internal fun restore(shown: EditorDraftRecoveryState.Offer) { requests.trySend(Request.Restore(shown)) }
     @MainThread internal fun discard(shown: EditorDraftRecoveryState) { requests.trySend(Request.Discard(shown)) }
     @MainThread internal fun postpone(shown: EditorDraftRecoveryState) { requests.trySend(Request.Postpone(shown)) }
-    @MainThread internal fun close(attachment: EditorRecoveryAttachment) { requests.trySend(Request.Close(attachment)) }
+    @MainThread internal fun close(attachment: EditorRecoveryAttachment) {
+        val owner = requireNotNull(editor)
+        if (owner.recoveryAttachment.value != attachment) return
+        val lifetime = owner.lifetime.value
+        autosave.markClosing(lifetime)
+        saveDelay?.cancel()
+        owner.release(attachment.sessionId)
+        requests.trySend(Request.Close(attachment, lifetime))
+    }
     @MainThread internal fun detach(attachment: EditorRecoveryAttachment) { requests.trySend(Request.Detach(attachment)) }
+    @MainThread internal fun retryAutosave(shown: EditorAutosaveState) { requests.trySend(Request.RetrySave(shown)) }
+    @MainThread internal fun discardForAutosave(shown: EditorAutosaveState) { requests.trySend(Request.DiscardForSave(shown)) }
+
+    @MainThread
+    internal fun closeLive(id: String) {
+        val owner = requireNotNull(editor)
+        val lifetime = owner.lifetime.value.takeIf { it.sessionId == id } ?: return
+        autosave.markClosing(lifetime)
+        saveDelay?.cancel()
+        owner.release(id)
+        requests.trySend(Request.CloseLive(lifetime))
+    }
+
+    @MainThread
+    internal fun setBackgrounded(value: Boolean) {
+        backgrounded = value
+        if (value) {
+            saveDelay?.cancel()
+            editor?.autosaveFrame()?.takeIf { it.ready }?.let(::enqueueSave)
+        }
+    }
+
+    private fun scheduleSave(frame: EditorAutosaveFrame?) {
+        saveDelay?.cancel()
+        autosave.frameChanged(frame)
+        if (frame == null || !frame.ready) return
+        saveDelay = viewModelScope.launch {
+            if (!backgrounded) delay(600)
+            enqueueSave(frame)
+        }
+    }
+
+    private fun enqueueSave(frame: EditorAutosaveFrame) {
+        pendingSave = frame
+        if (saveQueued) return
+        // Main.immediate can consume the request before trySend returns and clear this flag.
+        saveQueued = true
+        if (requests.trySend(Request.Save).isFailure) saveQueued = false
+    }
+
+    private fun retryPendingSave() {
+        if (autosave.state.value?.status != EditorAutosaveStatus.WAITING) return
+        retryFrame = null
+        supersededRetries = 0
+        editor?.autosaveFrame()?.let(::scheduleSave)
+    }
 
     private fun enqueueObservation() {
-        if (!observationQueued) observationQueued = requests.trySend(Request.Observe).isSuccess
+        if (observationQueued) return
+        observationQueued = true
+        if (requests.trySend(Request.Observe).isFailure) observationQueued = false
     }
 
     private fun observation(): Observation {
@@ -249,6 +357,7 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
             // Publication can win cancellation or a failed return dispatch. Trust the attachment.
             requireNotNull(editor).recoveryAttachment.value?.takeIf { it.sessionId == id }?.let {
                 accepted = it to draft.checkpoint
+                autosave.attachRecovered(requireNotNull(editor), draft.checkpoint, draft.owner)
                 mutableState.value = EditorDraftRecoveryState.Hidden
             }
             if (prepared === draft) prepared = null
@@ -272,20 +381,26 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
         }
     }
 
-    private suspend fun closeTransferredEditor(attachment: EditorRecoveryAttachment) {
+    private suspend fun closeTransferredEditor(attachment: EditorRecoveryAttachment, lifetime: EditorSessionLifetime) {
         val attached = accepted?.takeIf { it.first == attachment } ?: return
         accepted = null
-        cleanupCheckpoint = attached.second
+        val checkpoint = autosave.close(lifetime) ?: attached.second
         requireNotNull(editor).release(attachment.sessionId)
+        discardClosedCheckpoint(checkpoint)
+        enqueueObservation()
+    }
+
+    private suspend fun discardClosedCheckpoint(checkpoint: EditorDraftCheckpoint) {
+        cleanupCheckpoint = checkpoint
         mutableState.value = EditorDraftRecoveryState.Working
         try {
-            store.discard(attached.second)
+            store.discard(checkpoint)
             cleanupCheckpoint = null
             refresh()
         } catch (error: CancellationException) { throw error }
         catch (error: Exception) {
             Log.error("EditorDraftRecovery", "Closed editor draft could not be cleared", error)
-            showActionFailure(attached.second)
+            showActionFailure(checkpoint)
         }
     }
 
@@ -316,6 +431,7 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
     }
 
     override fun onCleared() {
+        saveDelay?.cancel()
         requests.close()
         dropPrepared()
     }
