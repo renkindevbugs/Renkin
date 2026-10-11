@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.buildinstall
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
@@ -53,6 +53,8 @@ import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.ui.CenteredFullscreenContent
+import dev.renkinProject.renkin.ui.drawVerticalScrollbar
 import dev.renkinProject.renkin.apk.InstallerOption
 import dev.renkinProject.renkin.apk.InstallerSelection
 import dev.renkinProject.renkin.apk.ShizukuState

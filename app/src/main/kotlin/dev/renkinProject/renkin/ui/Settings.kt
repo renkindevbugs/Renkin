@@ -74,6 +74,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.feature.buildinstall.InstallerPickerScreen
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.installerSelection

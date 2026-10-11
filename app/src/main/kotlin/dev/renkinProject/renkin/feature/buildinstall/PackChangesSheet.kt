@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.buildinstall
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
@@ -46,6 +46,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.ui.AppIcon
+import dev.renkinProject.renkin.ui.OpenAppOptions
+import dev.renkinProject.renkin.ui.drawVerticalScrollbar
+import dev.renkinProject.renkin.ui.rememberCreatedIconBitmap
 import dev.renkinProject.renkin.apk.PackChange
 import dev.renkinProject.renkin.apk.PackChangeKind
 import dev.renkinProject.renkin.apk.PackChangeReason

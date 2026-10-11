@@ -17,7 +17,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.isDarkModeEnabled
-import dev.renkinProject.renkin.ui.BuildPackPreviewContent
+import dev.renkinProject.renkin.feature.buildinstall.BuildPackPreviewContent
 import dev.renkinProject.renkin.ui.LocalToaster
 import dev.renkinProject.renkin.ui.ToastHost
 import dev.renkinProject.renkin.ui.Toaster

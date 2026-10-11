@@ -1040,6 +1040,29 @@ comparisons; compileDebugKotlin and assembleDebug pass with the existing local t
 Logs are under build/verify-7d5-{compile,targeted,full}.log. No new scenarios are needed for
 this package/import-only move.
 
+**7D6 (verified)** groups the build/install presentation in
+`feature.buildinstall`: `BuildPack`, `InstallerPickerScreen` and `PackChangesSheet`.
+MainScreen imports the Build action and installer prompt, Settings imports the installer picker,
+and HeroPackCard imports the pending-changes sheet. WallpaperPreviewActivity retains its class,
+manifest registration, wallpaper theme, session/result handoff and activity-owned state; only
+its preview-content import changes. The preview list ordering helper moves with its screen.
+The shared summary test retains its package/scenarios and imports that helper explicitly.
+Shared icon previews, editor entry point, dialogs, scrolling, haptics and shape tokens remain
+in UI. MainViewModel/BuildInstallCoordinator retain build/install ownership and preferences;
+APK generation/signing, installer services/catalog, session gates and diff baselines stay in
+their existing domain packages. This is a file/package/import-only move: preview ordering,
+calendar warnings, pending-change filters, editor handoff, installer selection/Shizuku actions,
+build progress and activity-result checks are unchanged. No new owner, Gradle module,
+dependency, manifest entry or persistence format is introduced. Static source comparison
+verifies unchanged bodies, and the device checkpoint passed. All 38 targeted tests and all
+1,225 tests across 169 suites pass without failures/errors/skips, including both Roborazzi
+comparisons; compileDebugKotlin and assembleDebug pass with the existing local test-JVM workaround.
+Logs are under build/verify-7d6-{compile,targeted,full}.log. No new scenarios are needed for
+this package/import-only move.
+This package is not an independent module boundary: PackChangesSheet still opens the editor
+through `ui.OpenAppOptions`, while UI hosts import `feature.buildinstall`. Before extracting
+Gradle modules, replace this editor entry-point dependency with a host-supplied callback.
+
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
 typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.

@@ -87,6 +87,7 @@ import androidx.core.graphics.drawable.toBitmap
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.MainViewModel
+import dev.renkinProject.renkin.feature.buildinstall.PackChangesSheet
 import dev.renkinProject.renkin.apk.ApplicationListState
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.R

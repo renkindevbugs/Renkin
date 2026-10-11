@@ -1,5 +1,5 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.buildinstall
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Image
@@ -74,6 +74,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.OptionsViewModel
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.ui.DisabledExplanation
+import dev.renkinProject.renkin.ui.LocalToaster
+import dev.renkinProject.renkin.ui.RenkinAlertDialog
+import dev.renkinProject.renkin.ui.drawVerticalScrollbar
+import dev.renkinProject.renkin.ui.getCurrentContext
+import dev.renkinProject.renkin.ui.performConfirmHaptic
+import dev.renkinProject.renkin.ui.performTapHaptic
 import dev.renkinProject.renkin.ui.theme.AddedGreen
 import dev.renkinProject.renkin.ui.theme.ChangedOrange
 import dev.renkinProject.renkin.data.ExportThemedKey
