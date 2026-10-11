@@ -28,9 +28,10 @@ It is a fork of **Alembicons** (formerly *Iconeration*). The upstream attributio
 
 ## Layers
 
-Continue the ownership-based refactor: finish coherent domain state, then durable editor drafts
-and incremental feature packages. Further service/module extraction
-requires an independent responsibility or measured need, rather than a line-count target.
+The ownership refactor has completed coherent domain state (7B), durable editor drafts (7C)
+and seven incremental feature-package moves (7D1–7D7). The closing 7D8 assessment below records
+the remaining boundaries and follow-ups. Further service/module extraction requires an
+independent responsibility or measured need, rather than a line-count target.
 
 ```
 Composables (ui/, feature/*/)             ← stateless-ish views, read VM state, call VM funcs
@@ -714,9 +715,9 @@ active profile. The deletion fixture resets/closes its Watch singleton because R
 resets SQLite connections independently of production static instances between tests.
 Targeted checks and all 938 unit tests across 149 suites pass without failures or skips;
 `assembleDebug` passes. The full suite uses the same local test-JVM C2 workaround described
-above; project/application JVM settings remain unchanged. The remaining
-primary work after domain identity is **7C** (durable drafts) and **7D** (feature packages),
-plus the separately designed legacy `prefsSnapshot` retirement described below.
+above; project/application JVM settings remain unchanged. At that checkpoint the remaining
+primary work was **7C** (durable drafts) and **7D** (feature packages). Their subsequent
+checkpoints and the separate legacy `prefsSnapshot` retirement are documented below.
 
 Rendering regression tests now use test-only Roborazzi 1.41.0 alongside the existing Robolectric
 4.14.1. The first reference covers a gradient and shadow in the actual bitmap modifier pipeline.
@@ -725,9 +726,10 @@ See [rendering-tests.md](rendering-tests.md) for commands, scope and native-host
 
 ## Threading & state
 
-The domain StateFlow migration in **7B** is complete. The remaining primary roadmap phases are
-**7C** (durable unsaved drafts with ownership checks after process death) and **7D** (incremental
-feature-package moves). Each may need several independently confirmed checkpoints.
+The domain StateFlow migration in **7B**, durable editor drafts in **7C** and feature-package
+moves **7D1–7D7** have passed their checkpoints. **7D8** is the closing documentation review;
+its assessment and separate follow-ups appear after the checkpoint history below. The following
+7C entries describe the rollout at each historical checkpoint, rather than missing live wiring.
 
 The developer chose a Restore/Discard offer for the last unfinished individual editor in 7C.
 The first checkpoint, **7C1**, adds only `data/editor/EditorDraftRecord`, `EditorDraftCodec` and
@@ -933,7 +935,9 @@ identifying the stored application's name (package fallback) from an optional me
 Unsupported witnesses report failure once and wait for Retry or supported values before resuming.
 Queue coalescing flags are set before channel sends: Main.immediate can consume a request inline,
 and a post-send assignment must not undo the receiver's reset or disable later saves/observations.
-The device checkpoint confirms process-death recovery of Scale, Colorize, Outline and brush edits.
+The developer confirmed recovery after the autosave fix; the explicit follow-up device scenario
+changed Scale before process death. The earlier combined Scale/Colorize/Outline/brush scenario
+exposed the original failure, so it is not recorded as a successful combined regression check.
 Twenty-nine new tests cover semantic edit comparison, repeated immediate-dispatch saves, debounce,
 background flush, recovery edits, admission/reset and close/publication races. All 1,215 tests across
 168 suites pass, including both Roborazzi cases; compileDebugKotlin and assembleDebug pass with
@@ -1079,14 +1083,118 @@ comparisons; compileDebugKotlin and assembleDebug pass with the existing local t
 Logs are under build/verify-7d7-{compile,targeted,full}.log. No new scenarios are needed for
 this package/import-only move.
 
-The remaining planned 7D checkpoints are this profile presentation move and **7D8**, a closing
-architecture review and documentation reconciliation. 7D8 will compare the historical assessment
-against the current code, retain applicable decisions here and retire the historical report.
-This is an estimate of the remaining checkpoint count, not a fixed guarantee if review finds
-another concrete issue. Further package/module extraction requires an independent responsibility
-or measured need. Legacy prefsSnapshot retirement, artwork/backup memory and performance
-measurement, and CI/toolchain hardening remain three separate follow-up areas; each may require
-multiple checkpoints and is not silently included in the package moves.
+### 7D8 — closing architecture review (reviewed)
+
+This documentation-only checkpoint reconciles the historical assessment after 7B4 (`f031a40`)
+with the source at `8cec2744` (verified 7D7). Its applicable decisions now live here; the separate
+historical assessment is retired and remains available in Git history. No production/test code,
+dependencies, manifest or persistence formats change. Room/portable-backup/recovery-prefs versions
+remain 21/4/3. The 7D7 verification above is the tested baseline, not a new 7D8 test run.
+Structural graph hints were checked against imports, declarations and representative callers;
+this is not a line-by-line correctness, security or performance audit.
+
+| Historical recommendation | Current assessment and decision |
+| --- | --- |
+| Finish domain state ownership | Completed in 7B: ApplicationProvider publishes read-only application/runtime StateFlows; related application fields share an aggregate. ProfileManager's active-profile field is an operation-time snapshot, not observable Compose state. Keep local ViewModel/UI Compose state where it has a clear owner. |
+| Add durable individual editor drafts | Completed in 7C: bounded capture, validated recovery, explicit offer/acceptance, debounced autosave and storage invalidation are wired into the application. The developer confirmed recovery after the autosave fix, with an explicit Scale follow-up; the earlier failing combined Colorize/Outline/brush scenario is not claimed as a successful combined device check. Resource limits and memory measurement remain separate concerns; see [editor-draft-recovery.md](editor-draft-recovery.md). |
+| Group independent presentation responsibilities | Completed in 7D1–7D7: presets, watch, online, help, backup, build/install and profiles have feature packages. Provider and ViewModel orchestrators remain broad where they still own cross-feature policy. Do not add forwarding owners merely to reduce file sizes. |
+| Measure artwork and backup memory | Open: Room drawable/baseDrawable payload strings and BackupCodec's JSON tree remain. Draft payload limits do not bound total Java/native peak memory. Measure before choosing a file or streaming migration. |
+| Close CI/toolchain verification gaps | Open: CI compiles Kotlin and runs unit tests; it does not run lintDebug, assemble an APK or validate release/R8 behavior. Local debug assembly and Roborazzi checks do not close those gaps. |
+
+#### Package boundaries
+
+These are presentation packages inside one app module, not independently extractable Gradle
+modules. All seven feature packages import shared UI while UI/activity hosts import feature
+entry points. The reciprocal dependency is permitted by the current module, but a future module
+split must separate shared widgets/theme contracts from host-specific behavior first.
+
+| Feature package | Remaining UI dependency relevant to extraction |
+| --- | --- |
+| `feature.presets` | Shared dialogs/search/theme plus editor AdjustmentState, ModifierPreviews and modifier shape labels; define a shared editor-preview contract before separating modules. |
+| `feature.watch` | Shared app/pack previews, sorting/filtering, preferences and haptics; WatchScreen also obtains MainActivity directly. Pass host actions explicitly before extracting a module. |
+| `feature.online` | Shared dialogs/search/empty state, toaster, scrolling and theme; import-result types cross into the editor. Keep resource ownership explicit when moving that contract. |
+| `feature.help` | Shared fullscreen/dialog/link/text/icon/scroll/theme helpers. |
+| `feature.backup` | Shared confirmation/alert/text/theme helpers; recovery and transfer owners stay in the domain layer. |
+| `feature.buildinstall` | Shared previews/dialogs/scroll/haptics/theme plus PackChangesSheet → ui.OpenAppOptions. Replace the direct editor call with a host-supplied callback before a module split. |
+| `feature.profiles` | Shared dialogs, portability warnings and preference/text helpers; MainViewModel/ProfileManager retain mutations and session transitions. |
+
+A source import scan under `apk`, `data`, `service`, `icon` and `vector` found no imports of
+`ui.*` or `feature.*`. This checks one dependency direction; it does not establish platform
+independence or complete separation of Compose concerns. In particular, DataPreferences still
+contains Compose adapters, as noted below.
+
+#### Large UI files and visibility
+
+At the reviewed baseline, MainScreen has 1,419 lines and IndividualOptions has 1,359. Their size
+is a maintenance concern, not evidence that the recent package moves changed behavior.
+MainScreen combines home routing, list/header/filter presentation and the OpenAppOptions editor
+host. A future split can separate those presentations while keeping state and host actions
+hoisted; it must not introduce competing profile/editor/autosave owners. IndividualOptions
+combines editor sections/layouts with preview effects, completed-frame witnesses, replay and
+source/mask handoffs. Extract sections or rendering coordination only with the existing
+EditorSession ownership, effect keys, recovered seed/mask behavior and exact Apply preserved.
+No line-count-driven extraction is required to close 7D.
+
+Several default-public types are candidates for `internal`, but narrowing a type requires
+narrowing its exposing signatures in the same reviewed change:
+
+- OnlineIconPreview, OnlineIconImport and OnlineImageImport are exposed by public ViewModel
+  methods and browser/editor callbacks. Review those entry points together, rather than only
+  changing the model declarations.
+- ColorPresetStore and ModifierPresetStore are exposed by public composition locals/providers;
+  ModifierPresetApplication and ModifierPresetGroup also appear in public mapper functions.
+  Narrow the connected interfaces, locals and functions together.
+- Existing private/internal helpers (including BuildPreviewApps, IntroTargets and
+  OnlineIconCachedPreview) already limit implementation details. Framework/Hilt entry points
+  need an accessibility review; public is not automatically a defect.
+
+No visibility change is made here. A follow-up must compile KSP/Hilt-generated callers and run
+the affected/full suites plus debug assembly; public types cannot simply become internal while
+public functions still expose them.
+
+#### Residual seams and follow-up scope
+
+DataPreferences still mixes preference adaptation with lifecycle-aware Compose getters. Separate
+UI adapters only while preserving ProfileStyleAccess bootstrap/repair ownership; replacing its
+resolver with raw DataStore reads would bypass that contract. UploadedImageThumbnail still
+initiates file loading from a composable effect, although decodeFile already runs on IO with
+inSampleSize=2. Moving it to a loader/repository is a separate ownership cleanup, not evidence
+that decoding currently runs on Main. WatchViewModel injects its repository/provider but still
+constructs WatchChecker for operations; consider an injected factory when changing checker
+lifetime or test substitution. These seams remain explicit backlog, not completed work.
+
+Three earlier notes also need an explicit disposition:
+
+- Baseline retry limits are already implemented: MainViewModel.loadChangeBaselines uses
+  MAX_BASELINE_READ_ATTEMPTS=3 and leaves the diff unready if publication keeps losing its
+  revision. This is resolved, not an unbounded-loop backlog item.
+- Refresh recipe validation still reconstructs both preference snapshots using the same current
+  Context. Review capturing the effective displayed night mode/resource configuration with the
+  refresh plan, then rejecting commits after a change; the captured recipe does not currently
+  carry that configuration independently. Do not fold a behavior fix into this documentation.
+- Review preview-cache visual keys during performance work: distinguish visual changes from
+  bookkeeping-only option changes and mutable drawable identity/revision. PackBrowserPreviews
+  already keys displayed night mode, pack version and Material You capability; this is not a
+  claim that every preview cache lacks those inputs. Global/app/pack caches need separate checks.
+
+The proposed editor-session-checks document has no tracked history or current file to reconcile;
+there is no outstanding decision to retain it. Current editor contracts remain in this guide
+and [editor-draft-recovery.md](editor-draft-recovery.md).
+
+Preserve storage → profile lock order, avoid waiting for UI emissions while holding their gate,
+and keep rendering/signing/SAF copying outside critical sections where the existing contract
+permits. Preserve cancellation propagation, intentional NonCancellable cleanup/rollback, exact
+Apply/replay, bounded refresh, stale-result rejection and artifact cleanup. Structural moves do
+not justify weakening these contracts.
+
+The documentation review is approved; no further checkpoint is planned inside 7D. Follow-up
+order is CI/toolchain/release hardening first, artwork/backup memory and performance measurement
+second, then legacy prefsSnapshot retirement. Each may require multiple checkpoints; the
+residual UI/visibility seams above require their own scoped change if pursued. For memory work,
+record realistic profile/backup sizes, Java/native peaks, capture Main-copy times and refresh/UI
+latency before choosing storage changes. For CI work, validate lint, debug assembly and suitable
+release/R8 checks without exposing signing secrets, and investigate the local JVM workaround
+independently. No dependency replacement or database migration is included in 7D8.
 
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
