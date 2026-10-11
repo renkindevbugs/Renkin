@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.icon.creator
 
+import dev.renkinProject.renkin.drawable.MaterialYouPackEditState
+
 data class MaterialYouPackModifier(
     val foreground: Int? = null,
     val background: Int? = null,
@@ -10,6 +12,12 @@ data class MaterialYouPackModifier(
 ) {
     val hasRestyling: Boolean
         get() = foreground != null || background != null || strokeScale != 1f
+
+    fun editState(): MaterialYouPackEditState? {
+        val foreground = customForeground ?: return null
+        val background = customBackground ?: return null
+        return MaterialYouPackEditState(selectedScheme, foreground, background, strokeScale)
+    }
 }
 
 // Colour changes replay from retained adaptive layers; stroke edits need the pack's own vectors.

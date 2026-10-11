@@ -130,6 +130,21 @@ class ModifierReplayTest {
         assertEquals(Color.GREEN, recoloured.getPixel(recoloured.width / 2, recoloured.height / 2))
     }
 
+    @Test fun secondReplayRestoresTheColoursSavedByTheFirstReplay() = runBlocking {
+        val original = MaterialYouPackEditState(5, ColorizerStyle(firstColor = Color.RED), ColorizerStyle(firstColor = Color.BLACK), 1f)
+        val edited = MaterialYouPackModifier(Color.RED, Color.BLUE, 5, original.customForeground, ColorizerStyle(firstColor = Color.BLUE))
+        val saved = options().withModifiers { copy(materialYouPack = edited) }
+        val input = AdaptiveIconPackDrawable(layer(Color.RED), layer(Color.BLACK), materialYouEditState = original)
+        val retained = IconModifierInput(saved, false, ModifierInputOrigin.FRESH_SOURCE, liveInput = input,
+            pipeline = ModifierInputPipeline.IMAGE_EDIT)
+        val base = IconModifierStageRenderer(resources, saved).renderRetained(input, ModifierInputPipeline.IMAGE_EDIT)
+        val session = session(checkNotNull(VerifiedModifierInput.verify(resources, input, retained, base)))
+
+        assertEquals(edited.editState(), session.modifierReplay!!.packEditState)
+        assertEquals(edited.customBackground, session.materialYouPackAdjustments.customBackground)
+        assertEquals(edited, session.modifierReplay!!.optionsFor(ui(session, saved)).modifiers.materialYouPack)
+    }
+
     @Test fun packBrowsingKeepsReplayButActualPickEndsIt() = runBlocking {
         val session = session(verified())
         val replay = session.modifierReplay

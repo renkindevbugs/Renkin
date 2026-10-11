@@ -169,22 +169,13 @@ internal class IconImageEditPipeline(
      */
     internal fun restyleRetainedPackIcon(icon: IconPackDrawable): IconPackDrawable {
         if (icon !is AdaptiveIconPackDrawable || icon.materialYouEditState == null) return icon
-        if (packEditState() == icon.materialYouEditState) return icon
+        if (materialYouPack.editState() == icon.materialYouEditState) return icon
         return restyleMaterialYouPackIcon(icon)
-    }
-
-    private fun packEditState(): MaterialYouPackEditState? {
-        return MaterialYouPackEditState(
-            selectedScheme = materialYouPack.selectedScheme,
-            customForeground = materialYouPack.customForeground ?: return null,
-            customBackground = materialYouPack.customBackground ?: return null,
-            strokeScale = materialYouPack.strokeScale
-        )
     }
 
     private fun restyleMaterialYouPackIcon(icon: AdaptiveIconPackDrawable): AdaptiveIconPackDrawable {
         if (icon.materialYouEditState == null) return icon
-        val state = packEditState() ?: return icon
+        val state = materialYouPack.editState() ?: return icon
         if (state.selectedScheme < 0) return icon.restoreOriginalMaterialYouLayers(state)
 
         val foregroundColor = materialYouPack.foreground ?: return icon

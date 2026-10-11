@@ -31,10 +31,12 @@ internal class EditorModifierReplay(val verified: VerifiedModifierInput) {
     private lateinit var baseline: ModifierStack
     private var baselinePlateStyle: ColorizerStyle? = null
     val allowsImageEdits: Boolean get() = verified.retained.pipeline != ModifierInputPipeline.ADJUSTMENTS_ONLY
-    // Pack colours stay editable because the retained layers can be recoloured exactly.
+    // Pack colours stay editable because the retained layers can be recoloured exactly. A replayed
+    // edit keeps its input, so the saved options hold the current colours and the input the older ones.
     val packEditState: MaterialYouPackEditState? =
         (verified.input as? AdaptiveIconPackDrawable)?.materialYouEditState
             ?.takeIf { verified.retained.pipeline == ModifierInputPipeline.IMAGE_EDIT }
+            ?.let { saved.modifiers.materialYouPack.editState() ?: it }
     internal data class Bookkeeping(val baseline: ModifierStack, val plate: ColorizerStyle?)
     internal fun captureBookkeeping() = Bookkeeping(baseline, baselinePlateStyle)
 
