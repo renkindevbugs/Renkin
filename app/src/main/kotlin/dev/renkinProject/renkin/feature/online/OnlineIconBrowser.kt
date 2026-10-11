@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.feature.online
 
+import android.os.SystemClock
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -42,12 +43,16 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -66,6 +71,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIcon
@@ -78,10 +84,13 @@ import dev.renkinProject.renkin.ui.boldStringResource
 import dev.renkinProject.renkin.ui.drawVerticalScrollbar
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
+import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.vector.ColorDecoder
 import dev.renkinProject.renkin.vector.SvgVectorImporter
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 
 /**
  * Fullscreen browser over the Iconify catalogue (200+ FOSS icon sets): a filterable set list
@@ -104,6 +113,13 @@ internal fun OnlineIconBrowserDialog(
     val notImportableMessage = stringResource(R.string.onlineIconNotImportable)
     val loadFailedMessage = stringResource(R.string.onlineIconLoadFailed)
     val rasterTintArgb = MaterialTheme.colorScheme.onSurface.toArgb()
+    val rateLimitUntil by viewModel.rateLimitUntil.collectAsStateWithLifecycle()
+    val rateLimited by produceState(false, rateLimitUntil) {
+        val waitMs = (rateLimitUntil - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+        value = waitMs > 0L
+        if (waitMs > 0L) delay(waitMs)
+        value = false
+    }
 
     // null = the set list; non-null = that set's icon grid (back returns to the list).
     var importing by remember { mutableStateOf(false) }
@@ -155,6 +171,15 @@ internal fun OnlineIconBrowserDialog(
                     if (importing) {
                         LoadingIndicator(color = MaterialTheme.colorScheme.primary, modifier = Modifier.size(28.dp))
                     }
+                }
+
+                if (rateLimited) {
+                    Text(
+                        text = stringResource(R.string.onlineIconsRateLimited),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 }
 
                 // Every surface an icon can be tapped on (set grid and the cross-set search
@@ -246,12 +271,8 @@ private fun OnlineIconDetailDialog(
     val tint = MaterialTheme.colorScheme.onSurface
     // Bumping the attempt key re-runs the fetch after a connection failure.
     var attempt by remember(icon) { mutableStateOf(0) }
-    var failed by remember(icon) { mutableStateOf(false) }
-    val preview by produceState<OnlineIconPreview?>(null, icon, tint, attempt) {
-        failed = false
-        value = viewModel.detailPreview(icon, tint.toArgb())
-        failed = value == null
-    }
+    val result by rememberOnlineIconPreview(icon, viewModel, tint, attempt, detail = true)
+    val preview = (result as? OnlinePreviewLoadState.Ready)?.preview
     val collection = remember(viewModel.collections, icon.prefix) {
         viewModel.collections?.firstOrNull { it.prefix == icon.prefix }
     }
@@ -272,7 +293,7 @@ private fun OnlineIconDetailDialog(
                         contentAlignment = Alignment.Center
                     ) {
                         when {
-                            failed -> EmptyState(
+                            result == OnlinePreviewLoadState.Failed -> EmptyState(
                                 icon = Icons.Filled.CloudOff,
                                 text = stringResource(R.string.onlineIconLoadFailed),
                                 actionLabel = stringResource(R.string.reload),
@@ -341,6 +362,9 @@ private fun CollectionList(
         initialFirstVisibleItemScrollOffset = viewModel.collectionListOffset
     )
     val filterScrollState = rememberScrollState(viewModel.filterRowOffset)
+    val visibleKeys by remember(listState) {
+        derivedStateOf { listState.layoutInfo.visibleItemsInfo.map { it.key }.toSet() }
+    }
 
     val categories = remember(collections) {
         collections.orEmpty().mapNotNull { it.category.takeIf(String::isNotEmpty) }
@@ -454,7 +478,11 @@ private fun CollectionList(
                     .drawVerticalScrollbar(listState)
             ) {
                 items(filtered, key = { it.prefix }) { set ->
-                    CollectionRow(set, viewModel) {
+                    CollectionRow(
+                        set,
+                        viewModel,
+                        loadPreviews = set.prefix in visibleKeys && !listState.isScrollInProgress
+                    ) {
                         viewModel.openCollection(
                             set,
                             listState.firstVisibleItemIndex,
@@ -506,6 +534,9 @@ private fun SearchResults(
 
         else -> {
             val gridState = rememberLazyGridState()
+            val visibleKeys by remember(gridState) {
+                derivedStateOf { gridState.layoutInfo.visibleItemsInfo.map { it.key }.toSet() }
+            }
             LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Adaptive(96.dp),
@@ -521,7 +552,8 @@ private fun SearchResults(
                         icon,
                         viewModel,
                         enabled = enabled,
-                        subLabel = setNames[icon.prefix] ?: icon.prefix
+                        subLabel = setNames[icon.prefix] ?: icon.prefix,
+                        loadPreview = "${icon.prefix}/${icon.name}" in visibleKeys && !gridState.isScrollInProgress
                     ) { onPick(icon) }
                 }
             }
@@ -534,6 +566,7 @@ private fun SearchResults(
 private fun CollectionRow(
     set: IconifyCollection,
     viewModel: OnlineIconBrowserViewModel,
+    loadPreviews: Boolean,
     onOpen: () -> Unit
 ) {
     Surface(
@@ -550,7 +583,7 @@ private fun CollectionRow(
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             set.samples.take(3).forEach { sample ->
-                SamplePreview(OnlineIcon(set.prefix, sample), viewModel)
+                SamplePreview(OnlineIcon(set.prefix, sample), viewModel, loadPreviews)
             }
             Column(
                 Modifier
@@ -585,13 +618,20 @@ private fun CollectionRow(
 
 /** A small lazily-fetched sample icon for a set row. */
 @Composable
-private fun SamplePreview(icon: OnlineIcon, viewModel: OnlineIconBrowserViewModel) {
+private fun SamplePreview(
+    icon: OnlineIcon,
+    viewModel: OnlineIconBrowserViewModel,
+    loadPreview: Boolean
+) {
     val tint = MaterialTheme.colorScheme.onSurface
-    val preview by produceState<OnlineIconPreview?>(null, icon, tint) {
-        value = viewModel.preview(icon, tint.toArgb())
-    }
+    val result by rememberOnlineIconPreview(icon, viewModel, tint, load = loadPreview)
+    val preview = (result as? OnlinePreviewLoadState.Ready)?.preview
     Box(Modifier.size(26.dp), contentAlignment = Alignment.Center) {
-        OnlinePreviewImage(preview, tint, contentDescription = null)
+        if (result == OnlinePreviewLoadState.Failed) {
+            OnlinePreviewFailure(Modifier.size(18.dp))
+        } else {
+            OnlinePreviewImage(preview, tint, contentDescription = null)
+        }
     }
 }
 
@@ -644,6 +684,9 @@ private fun CollectionGrid(
 
         else -> {
             val gridState = rememberLazyGridState()
+            val visibleKeys by remember(gridState) {
+                derivedStateOf { gridState.layoutInfo.visibleItemsInfo.map { it.key }.toSet() }
+            }
             LazyVerticalGrid(
                 state = gridState,
                 columns = GridCells.Adaptive(84.dp),
@@ -655,7 +698,12 @@ private fun CollectionGrid(
                     .drawVerticalScrollbar(gridState)
             ) {
                 items(filtered, key = { "${it.prefix}/${it.name}" }) { icon ->
-                    OnlineIconTile(icon, viewModel, enabled = enabled) { onPick(icon) }
+                    OnlineIconTile(
+                        icon,
+                        viewModel,
+                        enabled = enabled,
+                        loadPreview = "${icon.prefix}/${icon.name}" in visibleKeys && !gridState.isScrollInProgress
+                    ) { onPick(icon) }
                 }
             }
         }
@@ -672,12 +720,12 @@ private fun OnlineIconTile(
     viewModel: OnlineIconBrowserViewModel,
     enabled: Boolean,
     subLabel: String? = null,
+    loadPreview: Boolean,
     onClick: () -> Unit
 ) {
     val tint = MaterialTheme.colorScheme.onSurface
-    val preview by produceState<OnlineIconPreview?>(null, icon, tint) {
-        value = viewModel.preview(icon, tint.toArgb())
-    }
+    val result by rememberOnlineIconPreview(icon, viewModel, tint, load = loadPreview)
+    val preview = (result as? OnlinePreviewLoadState.Ready)?.preview
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
@@ -685,7 +733,9 @@ private fun OnlineIconTile(
             .padding(vertical = 6.dp, horizontal = 2.dp)
     ) {
         Box(Modifier.size(44.dp), contentAlignment = Alignment.Center) {
-            if (preview == null) {
+            if (result == OnlinePreviewLoadState.Failed) {
+                OnlinePreviewFailure(Modifier.size(24.dp))
+            } else if (preview == null) {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     shape = dev.renkinProject.renkin.ui.theme.InnerShape,
@@ -736,6 +786,55 @@ private fun OnlineIconTile(
             )
         }
     }
+}
+
+private sealed interface OnlinePreviewLoadState {
+    data object Loading : OnlinePreviewLoadState
+    data object Failed : OnlinePreviewLoadState
+    data class Ready(val preview: OnlineIconPreview) : OnlinePreviewLoadState
+}
+
+@Composable
+private fun rememberOnlineIconPreview(
+    icon: OnlineIcon,
+    viewModel: OnlineIconBrowserViewModel,
+    tint: Color,
+    attempt: Int = 0,
+    detail: Boolean = false,
+    load: Boolean = true
+): State<OnlinePreviewLoadState> {
+    val loadRequested by rememberUpdatedState(load)
+    return produceState<OnlinePreviewLoadState>(
+        OnlinePreviewLoadState.Loading, icon, viewModel, tint, attempt, detail
+    ) {
+        value = OnlinePreviewLoadState.Loading
+        val preview = try {
+            val cached = if (detail) viewModel.detailPreview(icon, tint.toArgb(), cachedOnly = true)
+            else viewModel.preview(icon, tint.toArgb(), cachedOnly = true)
+            cached ?: run {
+                // Gate network work; cached previews stay available during scrolling and rate limits.
+                snapshotFlow { loadRequested }.first { it }
+                if (detail) viewModel.detailPreview(icon, tint.toArgb())
+                else viewModel.preview(icon, tint.toArgb())
+            }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.error("OnlineIcons", "Could not load preview: ${icon.svgUrl}", error)
+            null
+        }
+        value = preview?.let { OnlinePreviewLoadState.Ready(it) } ?: OnlinePreviewLoadState.Failed
+    }
+}
+
+@Composable
+private fun OnlinePreviewFailure(modifier: Modifier = Modifier) {
+    Icon(
+        imageVector = Icons.Filled.CloudOff,
+        contentDescription = stringResource(R.string.onlineIconLoadFailed),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier
+    )
 }
 
 /**

@@ -17,6 +17,7 @@ import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIcon
 import dev.renkinProject.renkin.data.online.OnlineIconRepository
+import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.vector.SvgRasterizer
 import dev.renkinProject.renkin.vector.SvgVectorImporter
 import javax.inject.Inject
@@ -118,6 +119,8 @@ class OnlineIconBrowserViewModel @Inject constructor(
     var filterRowOffset by mutableIntStateOf(0)
         private set
 
+    val rateLimitUntil = repository.rateLimitUntil
+
     private var sessionActive = false
     private val parsedSvgCache = LruCache<String, SvgVectorImporter.ImportedSvg>(PARSED_SVG_COUNT)
 
@@ -177,13 +180,14 @@ class OnlineIconBrowserViewModel @Inject constructor(
     suspend fun preview(
         icon: OnlineIcon,
         tintArgb: Int,
-        rasterSize: Int = PREVIEW_RASTER_SIZE
+        rasterSize: Int = PREVIEW_RASTER_SIZE,
+        cachedOnly: Boolean = false
     ): OnlineIconPreview? {
         parsedSvgCache.get(icon.svgUrl)?.let { return OnlineIconPreview.Editable(it) }
         val rasterKey = "${icon.svgUrl}#$tintArgb#$rasterSize"
         rasterCache.get(rasterKey)?.let { return OnlineIconPreview.PreviewOnly(it) }
-        val markup = repository.svg(icon) ?: return null
-        return withContext(Dispatchers.Default) {
+        val markup = repository.svg(icon, cachedOnly = cachedOnly) ?: return null
+        val preview = withContext(Dispatchers.Default) {
             SvgVectorImporter.parse(markup)?.let { parsed ->
                 parsedSvgCache.put(icon.svgUrl, parsed)
                 OnlineIconPreview.Editable(parsed)
@@ -194,11 +198,15 @@ class OnlineIconBrowserViewModel @Inject constructor(
                     OnlineIconPreview.PreviewOnly(bitmap)
                 }
         }
+        if (preview == null) {
+            Log.error("OnlineIcons", "SVG could not be parsed or rasterized: ${icon.svgUrl}")
+        }
+        return preview
     }
 
     /** The close-up preview for the detail dialog — rasters render at [DETAIL_RASTER_SIZE]. */
-    suspend fun detailPreview(icon: OnlineIcon, tintArgb: Int): OnlineIconPreview? =
-        preview(icon, tintArgb, DETAIL_RASTER_SIZE)
+    suspend fun detailPreview(icon: OnlineIcon, tintArgb: Int, cachedOnly: Boolean = false): OnlineIconPreview? =
+        preview(icon, tintArgb, DETAIL_RASTER_SIZE, cachedOnly)
 
     /**
      * Full-size raster for "use as image": the icon exactly as its SVG paints it, at the

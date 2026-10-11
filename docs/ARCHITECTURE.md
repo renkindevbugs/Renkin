@@ -980,6 +980,38 @@ This commit changes only file locations, package declarations and imports. Onlin
 fixes are handled separately on `fix/online-icon-previews`. No build or automated tests were run
 for this split; source bodies were compared with the original versions.
 
+**Online preview loading fix (device checkpoint pending)**
+Uncached collection tiles and detail previews failed to load. SVG endpoints responded from the
+development host, but the affected collection's first grid icon was absent from the debug cache;
+the exact device network failure has not been confirmed. The existing client retried only one
+host with 10-second connect/20-second read timeouts, and failed grid/sample requests remained
+indistinguishable from loading.
+This checkpoint now also adds Iconify's documented backup hosts (`api.simplesvg.com` and
+`api.unisvg.com`), preferring the last successful host and failing over after transport/transient
+server failures. Each connection uses 3-second connect/5-second read timeouts; HTTP 429 keeps
+the same host and respects Retry-After. Canonical source URLs and cache keys remain unchanged.
+Shared preview presentation distinguishes Loading/Ready/Failed, reports failed tiles/samples,
+and retains the detail dialog's explicit Retry. A later device log sample contains 250 interrupted
+requests, with no HTTP 429 or parsing failures in that sample; it does not establish the original
+network failure. A subsequent device log sample confirms repeated HTTP 429 responses for different
+icons in the `cif` collection. Per-request backoff alone was insufficient: new icons still sent
+requests during a server-imposed pause. The repository now spaces all HTTP starts by 300 ms and
+shares a monotonic rate-limit deadline across requests and hosts. HTTP 429 extends that deadline
+using the full Retry-After value, or a 60-second fallback when absent; it does not rotate hosts.
+Pending work waits without holding SVG permits and resumes automatically, while the browser
+explains the temporary server limit. Cached-only preview lookup bypasses visibility gating and
+network admission, including disk cache reads after parsed/raster memory-cache eviction.
+New sample/grid network work waits until its item is visible and scrolling stops;
+scroll events do not restart an already running preview. Lazy item disposal still cancels its work.
+Cancellation actively disconnects the HTTP connection, and cancelled IO failures propagate without
+logging a network error or retrying a mirror. Only network attempts hold the six SVG permits;
+disk cache access and retry backoff do not. Canonical input URLs are checked before host substitution.
+Debug OnlineIcons logs include header/complete request timings, and invalid SVG or failed rendering
+is logged separately. The F-Droid description lists all three contacted domains and search inputs.
+No new Gradle module or persistence format is introduced.
+Compilation and automated tests remain pending. This separate fix commit records the reviewed
+implementation; it has not been merged into dev and further device verification is required.
+
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
 typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.

@@ -15,3 +15,7 @@ Fork of <a href="https://codeberg.org/kaanelloed/Alembicons">Alembicons</a> by k
 <li>Backup and restore — one file with every profile, setting, watch rule and upload</li>
 <li>Icon watch — get notified when a followed pack adds an icon for one of your apps</li>
 <li>Calendar day icons that rotate with the date</li></ul>
+
+<b>Optional online icons</b>
+
+Browsing online icons contacts api.iconify.design and its official backup servers api.simplesvg.com and api.unisvg.com to load collections, search results and SVG images. Search terms and requested icon names are sent to the selected server. Local editing and icon-pack building work offline.
