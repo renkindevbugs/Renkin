@@ -128,4 +128,16 @@ class OnlineIconRepositoryTest {
         )
         assertNull(OnlineIconRepository.retryAfterDelayMs("invalid", now))
     }
+
+    @Test
+    fun rateLimitRetryAfterCapsSecondsAndDatesAtFiveMinutes() {
+        val now = 1_700_000_000_000L
+        val maxDelayMs = 300_000L
+        assertEquals(maxDelayMs, OnlineIconRepository.retryAfterDelayMs("3600", now, maxDelayMs))
+        assertEquals(maxDelayMs, OnlineIconRepository.retryAfterDelayMs(Long.MAX_VALUE.toString(), now, maxDelayMs))
+        assertEquals(0L, OnlineIconRepository.retryAfterDelayMs("-1", now, maxDelayMs))
+        val future = java.time.Instant.ofEpochMilli(now + 3_600_000)
+            .atZone(java.time.ZoneOffset.UTC).format(DateTimeFormatter.RFC_1123_DATE_TIME)
+        assertEquals(maxDelayMs, OnlineIconRepository.retryAfterDelayMs(future, now, maxDelayMs))
+    }
 }

@@ -970,47 +970,40 @@ All 30 targeted Watch tests and all 1,215 tests across 168 suites pass without f
 including both Roborazzi cases; compileDebugKotlin and assembleDebug pass with the existing
 local test-JVM workaround. Existing scenarios cover this package/import-only move.
 
-**7D3 (package move)** groups online icon browsing in `feature.online`:
+**7D3 (verified)** groups online icon browsing in `feature.online`:
 `OnlineIconBrowserViewModel`, its preview/vector/image import result types and the browser/detail
-composables in `OnlineIconBrowser`. VectorEditTab imports the browser entry point; it and
-IndividualOptions import the image handoff type explicitly. Hilt ownership, session behavior,
-preview caches and import handoffs are unchanged. Shared UI controls and shape tokens stay in UI;
-catalogue/HTTP/disk cache ownership stays in `data.online`, and parsing/rasterization stay in `vector`.
-This commit changes only file locations, package declarations and imports. Online preview loading
-fixes are handled separately on `fix/online-icon-previews`. No build or automated tests were run
-for this split; source bodies were compared with the original versions.
+composables in `OnlineIconBrowser`. VectorEditTab and IndividualOptions import the feature handoffs
+explicitly. Hilt ownership, session reset, debounced search and editor import behavior are preserved.
+Shared UI controls and shape tokens stay in UI, HTTP/disk cache ownership stays in `data.online`,
+and SVG parsing/rasterization stay in `vector`. The package-only commit is `2d4938b8` on
+`feature/online-icons-feature-package`; the loading changes are separate on `fix/online-icon-previews`.
 
-**Online preview loading fix (device checkpoint pending)**
-Uncached collection tiles and detail previews failed to load. SVG endpoints responded from the
-development host, but the affected collection's first grid icon was absent from the debug cache;
-the exact device network failure has not been confirmed. The existing client retried only one
-host with 10-second connect/20-second read timeouts, and failed grid/sample requests remained
-indistinguishable from loading.
-This checkpoint now also adds Iconify's documented backup hosts (`api.simplesvg.com` and
-`api.unisvg.com`), preferring the last successful host and failing over after transport/transient
-server failures. Each connection uses 3-second connect/5-second read timeouts; HTTP 429 keeps
-the same host and respects Retry-After. Canonical source URLs and cache keys remain unchanged.
-Shared preview presentation distinguishes Loading/Ready/Failed, reports failed tiles/samples,
-and retains the detail dialog's explicit Retry. A later device log sample contains 250 interrupted
-requests, with no HTTP 429 or parsing failures in that sample; it does not establish the original
-network failure. A subsequent device log sample confirms repeated HTTP 429 responses for different
-icons in the `cif` collection. Per-request backoff alone was insufficient: new icons still sent
-requests during a server-imposed pause. The repository now spaces all HTTP starts by 300 ms and
-shares a monotonic rate-limit deadline across requests and hosts. HTTP 429 extends that deadline
-using the full Retry-After value, or a 60-second fallback when absent; it does not rotate hosts.
-Pending work waits without holding SVG permits and resumes automatically, while the browser
-explains the temporary server limit. Cached-only preview lookup bypasses visibility gating and
-network admission, including disk cache reads after parsed/raster memory-cache eviction.
-New sample/grid network work waits until its item is visible and scrolling stops;
-scroll events do not restart an already running preview. Lazy item disposal still cancels its work.
-Cancellation actively disconnects the HTTP connection, and cancelled IO failures propagate without
-logging a network error or retrying a mirror. Only network attempts hold the six SVG permits;
-disk cache access and retry backoff do not. Canonical input URLs are checked before host substitution.
-Debug OnlineIcons logs include header/complete request timings, and invalid SVG or failed rendering
-is logged separately. The F-Droid description lists all three contacted domains and search inputs.
-No new Gradle module or persistence format is introduced.
-Compilation and automated tests remain pending. This separate fix commit records the reviewed
-implementation; it has not been merged into dev and further device verification is required.
+**Online preview loading fix (verified)** addresses confirmed device HTTP 429 responses and
+scroll-driven request churn. Only visible, stationary items start new network previews; cache-first
+lookup remains available while scrolling or waiting for the server, including disk lookup after
+parsed/raster memory-cache eviction. Cached lookup distinguishes missing content from an SVG that
+cannot be rendered, avoiding duplicate parsing/logging through the network path.
+All HTTP starts are spaced by 300 ms. HTTP 429 shares a monotonic deadline across requests and hosts,
+using Retry-After capped at five minutes or a 60-second fallback when absent. It does not rotate
+hosts. Pending work waits without holding any of the six SVG network permits; cache reads and
+retry backoff also bypass those permits. The browser shows seconds until the next attempt in an
+isolated composable. Another 429 can start a new pause; the countdown does not promise completion.
+Transport/transient server failures can use the documented `api.simplesvg.com` and `api.unisvg.com`
+mirrors; the last successful host is preferred. Connections use 3-second connect/5-second read
+timeouts. Canonical source URLs/cache keys stay unchanged and input URLs are checked before host
+substitution. Cancellation disconnects HTTP work and propagates without mirror retries or spurious
+network errors. Loading/Ready/Failed previews and detail Retry remain explicit. Debug OnlineIcons
+logs include HTTP timing and distinguish invalid SVG/render failures. The F-Droid description
+lists the contacted domains and submitted search/icon names.
+The Hilt constructor retains the production HTTP transport, elapsedRealtime clock and IO dispatcher;
+an internal constructor lets regression tests control responses and time without contacting Iconify.
+Nine loading tests cover shared pauses, pacing, bounded/fallback waits, cancellation, permit release,
+cache availability, mirror preference and permanent failures; a parser case covers the five-minute
+bound for numeric/date Retry-After values. The device checkpoint passed. All 34 targeted tests and
+all 1,225 tests across 169 suites pass without failures/errors/skips, including both Roborazzi
+comparisons; compileDebugKotlin and assembleDebug pass with the existing local test-JVM workaround.
+Logs are under build/verify-7d3-{compile,targeted,full}.log. No new production dependency, Gradle
+module or persistence format is introduced.
 
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged

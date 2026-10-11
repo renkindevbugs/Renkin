@@ -21,6 +21,7 @@ import java.time.format.DateTimeFormatter
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -79,9 +80,15 @@ fun onlineAttributionLabel(url: String): String? {
  * instead of throwing — the browser shows a retryable error state.
  */
 @Singleton
-class OnlineIconRepository @Inject constructor(
-    @ApplicationContext private val context: Context
+class OnlineIconRepository internal constructor(
+    private val context: Context,
+    private val request: suspend (String, Int) -> HttpTextResponse,
+    private val monotonicMillis: () -> Long,
+    private val ioDispatcher: CoroutineDispatcher
 ) {
+    @Inject constructor(@ApplicationContext context: Context) : this(
+        context, ::executeHttpGet, SystemClock::elapsedRealtime, Dispatchers.IO
+    )
 
     @Volatile private var memoryCollections: List<IconifyCollection>? = null
     private val memoryIndexes = ConcurrentHashMap<String, List<OnlineIcon>>()
@@ -101,7 +108,7 @@ class OnlineIconRepository @Inject constructor(
     private val cacheRoot: File
         get() = File(context.cacheDir, "online-icons").apply { mkdirs() }
 
-    suspend fun collections(): List<IconifyCollection>? = withContext(Dispatchers.IO) {
+    suspend fun collections(): List<IconifyCollection>? = withContext(ioDispatcher) {
         memoryCollections?.let { return@withContext it }
         indexLocks.getOrPut("collections") { Mutex() }.withLock {
             memoryCollections ?: cachedOrFetch(
@@ -112,7 +119,7 @@ class OnlineIconRepository @Inject constructor(
         }
     }
 
-    suspend fun icons(collection: IconifyCollection): List<OnlineIcon>? = withContext(Dispatchers.IO) {
+    suspend fun icons(collection: IconifyCollection): List<OnlineIcon>? = withContext(ioDispatcher) {
         memoryIndexes[collection.prefix]?.let { return@withContext it }
         indexLocks.getOrPut("set:${collection.prefix}") { Mutex() }.withLock {
             memoryIndexes[collection.prefix] ?: cachedOrFetch(
@@ -129,7 +136,7 @@ class OnlineIconRepository @Inject constructor(
      * like the search box on iconify.design. Memory-cached per query for the session; an
      * empty list is a valid "no matches", null means the request failed.
      */
-    suspend fun search(query: String): List<OnlineIcon>? = withContext(Dispatchers.IO) {
+    suspend fun search(query: String): List<OnlineIcon>? = withContext(ioDispatcher) {
         val key = query.trim().lowercase()
         searchMemory.get(key)?.let { return@withContext it }
         val json = httpGetText(
@@ -140,7 +147,7 @@ class OnlineIconRepository @Inject constructor(
         parseSearch(json)?.also { searchMemory.put(key, it) }
     }
 
-    suspend fun svg(icon: OnlineIcon, cachedOnly: Boolean = false): String? = withContext(Dispatchers.IO) {
+    suspend fun svg(icon: OnlineIcon, cachedOnly: Boolean = false): String? = withContext(ioDispatcher) {
         svgMemory.get(icon.svgUrl)?.let { return@withContext it }
         if (cachedOnly) {
             return@withContext readCachedSvg(icon)?.also { svgMemory.put(icon.svgUrl, it) }
@@ -256,7 +263,7 @@ class OnlineIconRepository @Inject constructor(
     ): HttpTextResponse {
         while (true) {
             val waitMs = requestTimingMutex.withLock {
-                (maxOf(nextRequestAt, mutableRateLimitUntil.value) - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+                (maxOf(nextRequestAt, mutableRateLimitUntil.value) - monotonicMillis()).coerceAtLeast(0L)
             }
             if (waitMs > 0) {
                 delay(waitMs)
@@ -266,21 +273,21 @@ class OnlineIconRepository @Inject constructor(
             try {
                 // Recheck after acquiring a slot: another response may have imposed a shared pause.
                 val admitted = requestTimingMutex.withLock {
-                    val now = SystemClock.elapsedRealtime()
+                    val now = monotonicMillis()
                     if (now < maxOf(nextRequestAt, mutableRateLimitUntil.value)) false else {
                         nextRequestAt = now + HTTP_REQUEST_INTERVAL_MS
                         true
                     }
                 }
                 if (!admitted) continue
-                val response = executeHttpGet(url, maxBytes)
+                val response = request(url, maxBytes)
                 if (response.status == 429) {
                     val pauseMs = (response.retryAfterMs ?: HTTP_RATE_LIMIT_FALLBACK_MS)
-                        .coerceAtLeast(HTTP_REQUEST_INTERVAL_MS)
+                        .coerceIn(HTTP_REQUEST_INTERVAL_MS, HTTP_MAX_RATE_LIMIT_MS)
                     requestTimingMutex.withLock {
                         mutableRateLimitUntil.value = maxOf(
                             mutableRateLimitUntil.value,
-                            SystemClock.elapsedRealtime() + pauseMs
+                            monotonicMillis() + pauseMs
                         )
                     }
                     if (BuildConfig.DEBUG) {
@@ -312,6 +319,7 @@ class OnlineIconRepository @Inject constructor(
         private const val HTTP_MAX_RETRY_AFTER_MS = 15_000L
         private const val HTTP_REQUEST_INTERVAL_MS = 300L
         private const val HTTP_RATE_LIMIT_FALLBACK_MS = 60_000L
+        private const val HTTP_MAX_RATE_LIMIT_MS = 5 * 60_000L
 
         fun parseSearch(json: String): List<OnlineIcon>? = runCatching {
             val array = JSONObject(json).optJSONArray("icons") ?: return null
@@ -437,7 +445,7 @@ class OnlineIconRepository @Inject constructor(
                     retryAfterMs = if (status == 429 || status == 503) {
                         retryAfterDelayMs(
                             connection.getHeaderField("Retry-After"),
-                            maxDelayMs = if (status == 429) Long.MAX_VALUE / 2 else HTTP_MAX_RETRY_AFTER_MS
+                            maxDelayMs = if (status == 429) HTTP_MAX_RATE_LIMIT_MS else HTTP_MAX_RETRY_AFTER_MS
                         )
                     } else {
                         null
@@ -487,7 +495,7 @@ class OnlineIconRepository @Inject constructor(
             return buffer.toByteArray()
         }
 
-        private data class HttpTextResponse(
+        internal data class HttpTextResponse(
             val body: String? = null,
             val status: Int? = null,
             val retryable: Boolean = false,

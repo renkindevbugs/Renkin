@@ -114,12 +114,6 @@ internal fun OnlineIconBrowserDialog(
     val loadFailedMessage = stringResource(R.string.onlineIconLoadFailed)
     val rasterTintArgb = MaterialTheme.colorScheme.onSurface.toArgb()
     val rateLimitUntil by viewModel.rateLimitUntil.collectAsStateWithLifecycle()
-    val rateLimited by produceState(false, rateLimitUntil) {
-        val waitMs = (rateLimitUntil - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
-        value = waitMs > 0L
-        if (waitMs > 0L) delay(waitMs)
-        value = false
-    }
 
     // null = the set list; non-null = that set's icon grid (back returns to the list).
     var importing by remember { mutableStateOf(false) }
@@ -173,14 +167,7 @@ internal fun OnlineIconBrowserDialog(
                     }
                 }
 
-                if (rateLimited) {
-                    Text(
-                        text = stringResource(R.string.onlineIconsRateLimited),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
+                OnlineRateLimitNotice(rateLimitUntil)
 
                 // Every surface an icon can be tapped on (set grid and the cross-set search
                 // results) opens the close-up detail first — importing happens from there.
@@ -788,6 +775,26 @@ private fun OnlineIconTile(
     }
 }
 
+@Composable
+private fun OnlineRateLimitNotice(retryAt: Long) {
+    val secondsLeft by produceState(0L, retryAt) {
+        while (true) {
+            val remainingMs = (retryAt - SystemClock.elapsedRealtime()).coerceAtLeast(0L)
+            value = (remainingMs + 999L) / 1_000L
+            if (remainingMs == 0L) break
+            delay(minOf(1_000L, remainingMs))
+        }
+    }
+    if (secondsLeft > 0L) {
+        Text(
+            text = stringResource(R.string.onlineIconsRateLimited, secondsLeft),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+    }
+}
+
 private sealed interface OnlinePreviewLoadState {
     data object Loading : OnlinePreviewLoadState
     data object Failed : OnlinePreviewLoadState
@@ -809,13 +816,15 @@ private fun rememberOnlineIconPreview(
     ) {
         value = OnlinePreviewLoadState.Loading
         val preview = try {
-            val cached = if (detail) viewModel.detailPreview(icon, tint.toArgb(), cachedOnly = true)
-            else viewModel.preview(icon, tint.toArgb(), cachedOnly = true)
-            cached ?: run {
-                // Gate network work; cached previews stay available during scrolling and rate limits.
-                snapshotFlow { loadRequested }.first { it }
-                if (detail) viewModel.detailPreview(icon, tint.toArgb())
-                else viewModel.preview(icon, tint.toArgb())
+            when (val cached = viewModel.cachedPreview(icon, tint.toArgb(), detail)) {
+                is OnlineIconCachedPreview.Ready -> cached.preview
+                OnlineIconCachedPreview.Failed -> null
+                OnlineIconCachedPreview.Missing -> {
+                    // Gate network work; cached previews stay available during scrolling and rate limits.
+                    snapshotFlow { loadRequested }.first { it }
+                    if (detail) viewModel.detailPreview(icon, tint.toArgb())
+                    else viewModel.preview(icon, tint.toArgb())
+                }
             }
         } catch (error: CancellationException) {
             throw error

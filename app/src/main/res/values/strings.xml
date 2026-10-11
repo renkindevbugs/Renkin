@@ -686,7 +686,7 @@
     <string name="onlineUnknownLicense">Unknown licence</string>
     <string name="onlineIconNotImportable">Preview only — this icon uses gradients or effects the vector editor can\'t import</string>
     <string name="onlineIconLoadFailed">Couldn\'t download this icon. Check your connection and try again.</string>
-    <string name="onlineIconsRateLimited">The online service is temporarily limiting downloads. New requests will resume automatically; cached icons remain available.</string>
+    <string name="onlineIconsRateLimited">The online service is limiting downloads. Next attempt in %1$d seconds. Cached icons remain available.</string>
     <string name="onlineIconUse">Use icon</string>
     <string name="onlineIconUseAsImage">Use as image</string>
     <string name="onlineIconImageNote">This icon uses gradients or effects that can\'t be edited as vector paths — **Use as image** saves it to your uploaded images and uses it as a picture. Modifiers still apply.</string>

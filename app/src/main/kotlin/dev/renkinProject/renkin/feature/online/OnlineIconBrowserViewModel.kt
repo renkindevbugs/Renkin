@@ -37,6 +37,12 @@ sealed interface OnlineIconPreview {
     data class PreviewOnly(val bitmap: ImageBitmap) : OnlineIconPreview
 }
 
+internal sealed interface OnlineIconCachedPreview {
+    data object Missing : OnlineIconCachedPreview
+    data object Failed : OnlineIconCachedPreview
+    data class Ready(val preview: OnlineIconPreview) : OnlineIconCachedPreview
+}
+
 /** Import resolution for a tapped icon — the UI explains each failure differently. */
 sealed interface OnlineIconImport {
     data class Imported(val svg: SvgVectorImporter.ImportedSvg) : OnlineIconImport
@@ -180,13 +186,38 @@ class OnlineIconBrowserViewModel @Inject constructor(
     suspend fun preview(
         icon: OnlineIcon,
         tintArgb: Int,
-        rasterSize: Int = PREVIEW_RASTER_SIZE,
-        cachedOnly: Boolean = false
+        rasterSize: Int = PREVIEW_RASTER_SIZE
     ): OnlineIconPreview? {
+        memoryPreview(icon, tintArgb, rasterSize)?.let { return it }
+        val markup = repository.svg(icon) ?: return null
+        return renderPreview(icon, markup, tintArgb, rasterSize)
+    }
+
+    internal suspend fun cachedPreview(
+        icon: OnlineIcon,
+        tintArgb: Int,
+        detail: Boolean
+    ): OnlineIconCachedPreview {
+        val rasterSize = if (detail) DETAIL_RASTER_SIZE else PREVIEW_RASTER_SIZE
+        memoryPreview(icon, tintArgb, rasterSize)?.let { return OnlineIconCachedPreview.Ready(it) }
+        val markup = repository.svg(icon, cachedOnly = true) ?: return OnlineIconCachedPreview.Missing
+        return renderPreview(icon, markup, tintArgb, rasterSize)
+            ?.let { OnlineIconCachedPreview.Ready(it) } ?: OnlineIconCachedPreview.Failed
+    }
+
+    private fun memoryPreview(icon: OnlineIcon, tintArgb: Int, rasterSize: Int): OnlineIconPreview? {
         parsedSvgCache.get(icon.svgUrl)?.let { return OnlineIconPreview.Editable(it) }
         val rasterKey = "${icon.svgUrl}#$tintArgb#$rasterSize"
-        rasterCache.get(rasterKey)?.let { return OnlineIconPreview.PreviewOnly(it) }
-        val markup = repository.svg(icon, cachedOnly = cachedOnly) ?: return null
+        return rasterCache.get(rasterKey)?.let { OnlineIconPreview.PreviewOnly(it) }
+    }
+
+    private suspend fun renderPreview(
+        icon: OnlineIcon,
+        markup: String,
+        tintArgb: Int,
+        rasterSize: Int
+    ): OnlineIconPreview? {
+        val rasterKey = "${icon.svgUrl}#$tintArgb#$rasterSize"
         val preview = withContext(Dispatchers.Default) {
             SvgVectorImporter.parse(markup)?.let { parsed ->
                 parsedSvgCache.put(icon.svgUrl, parsed)
@@ -205,8 +236,8 @@ class OnlineIconBrowserViewModel @Inject constructor(
     }
 
     /** The close-up preview for the detail dialog — rasters render at [DETAIL_RASTER_SIZE]. */
-    suspend fun detailPreview(icon: OnlineIcon, tintArgb: Int, cachedOnly: Boolean = false): OnlineIconPreview? =
-        preview(icon, tintArgb, DETAIL_RASTER_SIZE, cachedOnly)
+    suspend fun detailPreview(icon: OnlineIcon, tintArgb: Int): OnlineIconPreview? =
+        preview(icon, tintArgb, DETAIL_RASTER_SIZE)
 
     /**
      * Full-size raster for "use as image": the icon exactly as its SVG paints it, at the
