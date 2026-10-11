@@ -3,7 +3,7 @@
     androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class
 )
 
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.help
 
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
@@ -45,6 +45,10 @@ import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.LATEST_WHATS_NEW_VERSION_NAME
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.ui.CenteredFullscreenContent
+import dev.renkinProject.renkin.ui.RenkinAlertDialog
+import dev.renkinProject.renkin.ui.boldStringResource
+import dev.renkinProject.renkin.ui.drawVerticalScrollbar
 
 private data class WhatsNewRelease(
     val version: String,

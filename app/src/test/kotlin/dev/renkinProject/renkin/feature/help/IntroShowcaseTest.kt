@@ -1,4 +1,4 @@
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.help
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

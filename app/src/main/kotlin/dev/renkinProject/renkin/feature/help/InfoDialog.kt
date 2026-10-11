@@ -1,5 +1,5 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.help
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
@@ -38,6 +38,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.ui.LinkText
+import dev.renkinProject.renkin.ui.rememberPackIcon
 import dev.renkinProject.renkin.ui.theme.DialogShape
 
 @Composable

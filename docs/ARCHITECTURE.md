@@ -1005,6 +1005,22 @@ comparisons; compileDebugKotlin and assembleDebug pass with the existing local t
 Logs are under build/verify-7d3-{compile,targeted,full}.log. No new production dependency, Gradle
 module or persistence format is introduced.
 
+**7D4 (verified)** groups the help presentation in `feature.help`:
+`IntroShowcase`, `InfoDialog` and `WhatsNewDialog` (including the full history screen).
+The guided-tour targets, composition local and placement helper move with the tour. MainScreen
+and Settings import the feature entry points explicitly; shared dialog/scroll/text/icon helpers
+and shape tokens remain in UI. MainScreen and MainViewModel retain startup visibility, dismissal
+and preference ownership. Root `WhatsNew.kt` retains the version constants and display policy.
+Only file locations, packages and imports change: tour steps, target revelation, saved step state,
+About attribution and release content are preserved. No new ViewModel, Gradle module, dependency
+or persistence format is introduced. The existing tour-placement test moves to the matching
+feature test package without changing scenarios. Static source comparison verifies unchanged
+bodies, and the device checkpoint passed. All 10 targeted tests and all 1,225 tests across 169
+suites pass without failures/errors/skips, including both Roborazzi comparisons;
+compileDebugKotlin and assembleDebug pass with the existing local test-JVM workaround.
+Logs are under build/verify-7d4-{compile,targeted,full}.log. No new scenarios are needed for
+this package/import-only move.
+
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
 typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.

@@ -131,6 +131,13 @@ import dev.renkinProject.renkin.profileSession
 import dev.renkinProject.renkin.withProfileSession
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.OptionsViewModel
+import dev.renkinProject.renkin.feature.help.InfoDialog
+import dev.renkinProject.renkin.feature.help.IntroShowcase
+import dev.renkinProject.renkin.feature.help.IntroTarget
+import dev.renkinProject.renkin.feature.help.IntroTargets
+import dev.renkinProject.renkin.feature.help.LocalIntroTargets
+import dev.renkinProject.renkin.feature.help.WhatsNewDialog
+import dev.renkinProject.renkin.feature.help.introTarget
 import dev.renkinProject.renkin.feature.watch.WatchApplyModal
 import dev.renkinProject.renkin.feature.watch.WatchScreen
 import dev.renkinProject.renkin.feature.watch.WatchViewModel

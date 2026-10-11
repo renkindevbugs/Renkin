@@ -89,6 +89,9 @@ import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.transfer.BackupManager
 import dev.renkinProject.renkin.util.CrashReporter
+import dev.renkinProject.renkin.feature.help.InfoDialog
+import dev.renkinProject.renkin.feature.help.WhatsNewDialog
+import dev.renkinProject.renkin.feature.help.WhatsNewScreen
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext

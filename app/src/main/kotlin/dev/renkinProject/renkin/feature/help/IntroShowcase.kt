@@ -1,4 +1,4 @@
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.help
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
