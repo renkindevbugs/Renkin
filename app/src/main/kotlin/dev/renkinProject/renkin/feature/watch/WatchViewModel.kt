@@ -1,4 +1,4 @@
-package dev.renkinProject.renkin
+package dev.renkinProject.renkin.feature.watch
 
 import android.app.Application
 import androidx.compose.runtime.getValue

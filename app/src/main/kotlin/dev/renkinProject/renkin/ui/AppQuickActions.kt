@@ -41,7 +41,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.WatchViewModel
+import dev.renkinProject.renkin.feature.watch.WatchScreen
+import dev.renkinProject.renkin.feature.watch.WatchViewModel
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.RuleWithDetails

@@ -36,7 +36,7 @@ requires an independent responsibility or measured need, rather than a line-coun
 Composables (ui/)                         ← stateless-ish views, read VM state, call VM funcs
         │  hiltViewModel()
         ▼
-MainViewModel / WatchViewModel            ← @HiltViewModel; own session/UI state, orchestrate
+MainViewModel / feature.watch.WatchViewModel ← @HiltViewModel; own session/UI state, orchestrate
 EditorSessionViewModel                   ← owns the individual editor's live draft and controls
 EditorDraftRecoveryViewModel             ← serializes recovery offers, autosave and checkpoint cleanup
         │                                    operations on viewModelScope
@@ -954,6 +954,21 @@ UI test imports without changing any test scenarios or bodies. The device checkp
 All 36 targeted tests and all 1,215 tests across 168 suites pass without failures or skips, including
 both Roborazzi cases; compileDebugKotlin and assembleDebug pass with the existing local test-JVM
 workaround. No new scenarios are needed for this package/import-only move.
+
+**7D2 (verified)** groups the icon-watch presentation in
+`feature.watch`: `WatchViewModel`, `WatchScreen`, `WatchRuleEditor` and `WatchApplyModal`.
+MainScreen and AppQuickActions import the feature entry points explicitly; Hilt still supplies
+the activity-owned ViewModel. The feature imports shared UI controls, icon previews, filtering,
+haptics and shape tokens. Rule storage remains in `data.watch`, checks and scheduling remain in
+`service`, and profile/session-aware Apply remains with MainViewModel/ApplicationProvider.
+Worker class names stay unchanged so existing WorkManager requests retain their targets.
+This checkpoint changes only file locations, packages and imports, with no new owner, Gradle
+module, persistence format or notification route. Rule editing, per-profile subscriptions,
+completed badges, manual/debug checks and suggestion acceptance retain their existing behavior.
+Static source comparison verifies unchanged bodies, and the device checkpoint passed.
+All 30 targeted Watch tests and all 1,215 tests across 168 suites pass without failures or skips,
+including both Roborazzi cases; compileDebugKotlin and assembleDebug pass with the existing
+local test-JVM workaround. Existing scenarios cover this package/import-only move.
 
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged

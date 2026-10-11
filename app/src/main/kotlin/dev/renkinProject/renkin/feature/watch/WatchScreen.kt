@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalLayoutApi::class, androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.watch
 
 import android.text.format.DateUtils
 import androidx.activity.compose.BackHandler
@@ -85,7 +85,6 @@ import dev.renkinProject.renkin.ui.theme.InnerShape
 import dev.renkinProject.renkin.BuildConfig
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
-import dev.renkinProject.renkin.WatchViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.ui.theme.CardShape
@@ -96,6 +95,15 @@ import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.PermissionManager
 import dev.renkinProject.renkin.packages.notificationSettingsIntent
+import dev.renkinProject.renkin.ui.AppIcon
+import dev.renkinProject.renkin.ui.ConfirmDialog
+import dev.renkinProject.renkin.ui.LocalToaster
+import dev.renkinProject.renkin.ui.PackIconImage
+import dev.renkinProject.renkin.ui.RenkinAlertDialog
+import dev.renkinProject.renkin.ui.drawVerticalScrollbar
+import dev.renkinProject.renkin.ui.getCurrentContext
+import dev.renkinProject.renkin.ui.getCurrentMainActivity
+import dev.renkinProject.renkin.ui.performTapHaptic
 import kotlinx.coroutines.flow.first
 
 @Composable

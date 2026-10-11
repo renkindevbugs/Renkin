@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.watch
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -80,6 +80,16 @@ import dev.renkinProject.renkin.data.watch.AppComponent
 import dev.renkinProject.renkin.data.watch.RuleWithDetails
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.ui.AppIcon
+import dev.renkinProject.renkin.ui.AppSortFilterMenu
+import dev.renkinProject.renkin.ui.DisabledExplanation
+import dev.renkinProject.renkin.ui.EmptyState
+import dev.renkinProject.renkin.ui.PackIconImage
+import dev.renkinProject.renkin.ui.WavyLoadingBar
+import dev.renkinProject.renkin.ui.performConfirmHaptic
+import dev.renkinProject.renkin.ui.rememberAppBitmap
+import dev.renkinProject.renkin.ui.rememberPackIcon
+import dev.renkinProject.renkin.ui.sortedFilteredApps
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

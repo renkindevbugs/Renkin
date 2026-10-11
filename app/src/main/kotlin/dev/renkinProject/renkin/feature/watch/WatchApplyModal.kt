@@ -1,5 +1,5 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.watch
 
 import androidx.compose.animation.Crossfade
 import androidx.compose.foundation.Image
@@ -51,7 +51,6 @@ import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.apk.IconApplyOutcome
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.WatchViewModel
 import dev.renkinProject.renkin.apk.IconPackBuilder
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
@@ -59,6 +58,14 @@ import dev.renkinProject.renkin.data.watch.IconSuggestion
 import dev.renkinProject.renkin.data.watch.IconSuggestionCandidate
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.ui.DisabledExplanation
+import dev.renkinProject.renkin.ui.LocalToaster
+import dev.renkinProject.renkin.ui.PackIconImage
+import dev.renkinProject.renkin.ui.RenkinAlertDialog
+import dev.renkinProject.renkin.ui.getCurrentContext
+import dev.renkinProject.renkin.ui.getPreferences
+import dev.renkinProject.renkin.ui.performConfirmHaptic
+import dev.renkinProject.renkin.ui.rememberAppBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
