@@ -1,4 +1,4 @@
-package dev.renkinProject.renkin
+package dev.renkinProject.renkin.feature.online
 
 import android.content.Context
 import android.graphics.Bitmap

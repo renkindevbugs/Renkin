@@ -63,7 +63,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.ui.theme.IconShape
-import dev.renkinProject.renkin.OnlineImageImport
+import dev.renkinProject.renkin.feature.online.OnlineIconBrowserDialog
+import dev.renkinProject.renkin.feature.online.OnlineImageImport
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.drawable.IconPackDrawable

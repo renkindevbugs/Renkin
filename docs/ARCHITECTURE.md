@@ -33,7 +33,7 @@ and incremental feature packages. Further service/module extraction
 requires an independent responsibility or measured need, rather than a line-count target.
 
 ```
-Composables (ui/)                         ← stateless-ish views, read VM state, call VM funcs
+Composables (ui/, feature/*/)             ← stateless-ish views, read VM state, call VM funcs
         │  hiltViewModel()
         ▼
 MainViewModel / feature.watch.WatchViewModel ← @HiltViewModel; own session/UI state, orchestrate
@@ -969,6 +969,16 @@ Static source comparison verifies unchanged bodies, and the device checkpoint pa
 All 30 targeted Watch tests and all 1,215 tests across 168 suites pass without failures or skips,
 including both Roborazzi cases; compileDebugKotlin and assembleDebug pass with the existing
 local test-JVM workaround. Existing scenarios cover this package/import-only move.
+
+**7D3 (package move)** groups online icon browsing in `feature.online`:
+`OnlineIconBrowserViewModel`, its preview/vector/image import result types and the browser/detail
+composables in `OnlineIconBrowser`. VectorEditTab imports the browser entry point; it and
+IndividualOptions import the image handoff type explicitly. Hilt ownership, session behavior,
+preview caches and import handoffs are unchanged. Shared UI controls and shape tokens stay in UI;
+catalogue/HTTP/disk cache ownership stays in `data.online`, and parsing/rasterization stay in `vector`.
+This commit changes only file locations, package declarations and imports. Online preview loading
+fixes are handled separately on `fix/online-icon-previews`. No build or automated tests were run
+for this split; source bodies were compared with the original versions.
 
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged

@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalMaterial3ExpressiveApi::class)
 
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.online
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -66,13 +66,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
-import dev.renkinProject.renkin.OnlineIconBrowserViewModel
-import dev.renkinProject.renkin.OnlineIconImport
-import dev.renkinProject.renkin.OnlineIconPreview
-import dev.renkinProject.renkin.OnlineImageImport
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.online.IconifyCollection
 import dev.renkinProject.renkin.data.online.OnlineIcon
+import dev.renkinProject.renkin.ui.EmptyState
+import dev.renkinProject.renkin.ui.LinkText
+import dev.renkinProject.renkin.ui.LocalToaster
+import dev.renkinProject.renkin.ui.RenkinAlertDialog
+import dev.renkinProject.renkin.ui.SearchField
+import dev.renkinProject.renkin.ui.boldStringResource
+import dev.renkinProject.renkin.ui.drawVerticalScrollbar
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.vector.ColorDecoder
