@@ -72,7 +72,7 @@ internal class IconImageEditPipeline(
                 val foreground = colorizeAdaptiveForeground(icon.foreground)
                 return icon.withForeground(foreground)
             }
-            return applyToBitmap(icon.toBitmap(), imageEdit, colorizer.blendMode)
+            return applyToBitmap(adjustments.rasterFrame(icon), imageEdit, colorizer.blendMode)
         }
 
         if (imageEdit == ImageEdit.COLORIZE &&

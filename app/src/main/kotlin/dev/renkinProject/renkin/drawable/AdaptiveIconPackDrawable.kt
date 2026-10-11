@@ -7,6 +7,8 @@ import android.graphics.ColorFilter
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.PixelFormat
+import android.graphics.PorterDuff
+import android.graphics.PorterDuffXfermode
 import android.graphics.Rect
 import android.graphics.RectF
 import android.graphics.drawable.AdaptiveIconDrawable
@@ -66,7 +68,11 @@ class AdaptiveIconPackDrawable internal constructor(
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     override fun isAdaptiveIcon(): Boolean = true
     override fun toBitmap(): Bitmap = render(PREVIEW_SIZE)
-    override fun toModifierBitmap(size: Int): Bitmap = render(size)
+    // Flattening modifiers produce a legacy bitmap shown without viewport compensation, so they
+    // start from the compensated preview artwork; otherwise the icon shrinks by 72/108 once enabled.
+    // The launcher mask is reapplied at frame size so outline and shadow still have a silhouette.
+    override fun toModifierBitmap(size: Int): Bitmap =
+        maskToLauncherShape(render(size, ADAPTIVE_ICON_SCALE))
     override fun previewBitmap(): Bitmap = previewBitmap(PREVIEW_SIZE)
     override fun previewBitmap(sizePx: Int): Bitmap {
         require(sizePx > 0)
@@ -147,6 +153,21 @@ class AdaptiveIconPackDrawable internal constructor(
             val target = RectF(-inset, -inset, extent + inset, extent + inset)
             canvas.drawBitmap(renderedBackground, null, target, paint)
             canvas.drawBitmap(renderedForeground, null, target, paint)
+        }
+    }
+
+    private fun maskToLauncherShape(artwork: Bitmap): Bitmap {
+        val size = artwork.width
+        val mask = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            AdaptiveIconDrawable(null, null).apply { setBounds(0, 0, size, size) }.iconMask
+        } else {
+            Path().apply { addOval(0f, 0f, size.toFloat(), size.toFloat(), Path.Direction.CW) }
+        }
+        return newArgbBitmap(size, artwork.height) { canvas ->
+            val maskPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+            canvas.drawPath(mask, maskPaint)
+            maskPaint.xfermode = PorterDuffXfermode(PorterDuff.Mode.SRC_IN)
+            canvas.drawBitmap(artwork, 0f, 0f, maskPaint)
         }
     }
 
