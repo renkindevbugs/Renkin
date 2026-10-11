@@ -1021,6 +1021,25 @@ compileDebugKotlin and assembleDebug pass with the existing local test-JVM worka
 Logs are under build/verify-7d4-{compile,targeted,full}.log. No new scenarios are needed for
 this package/import-only move.
 
+**7D5 (verified)** groups the backup presentation in `feature.backup`:
+`BackupRecoveryScreen`, its restore-progress dialog and `BackupRestorePreviewDialog`.
+MainActivity imports the startup recovery screen, and MainScreen imports the preview/progress
+entry points. Shared confirmation/dialog/text helpers and shape tokens remain in UI.
+MainViewModel and BackupUiCoordinator retain operation and UI-state ownership; BackupManager,
+AutoBackupManager and StorageOperationGate retain persistence, scheduling, recovery and locking.
+Settings actions and profile-switcher import routes keep their existing owners and callbacks.
+Only file locations, package declarations and imports change. Import preview metadata, progress
+stages, preparation cancellation, commit restrictions and Retry/Keep current behavior are unchanged.
+No Gradle module, dependency, ViewModel, schema or backup-format change is introduced.
+Static source comparison verifies unchanged bodies. Existing backup tests keep their packages and
+scenarios because they exercise the unchanged owners/services. The device checkpoint passed for
+import preview/progress and cancellation. The startup failure screen is not reached by ordinary
+imports; its move is verified by source comparison and compilation. All 106 targeted tests and
+all 1,225 tests across 169 suites pass without failures/errors/skips, including both Roborazzi
+comparisons; compileDebugKotlin and assembleDebug pass with the existing local test-JVM workaround.
+Logs are under build/verify-7d5-{compile,targeted,full}.log. No new scenarios are needed for
+this package/import-only move.
+
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
 typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.

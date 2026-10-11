@@ -1,4 +1,4 @@
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.backup
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -26,6 +26,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.ui.ConfirmDialog
+import dev.renkinProject.renkin.ui.RenkinAlertDialog
 import dev.renkinProject.renkin.data.StorageRecoveryState
 import dev.renkinProject.renkin.data.StorageRecoveryFailureReason
 import dev.renkinProject.renkin.data.transfer.BackupManager
