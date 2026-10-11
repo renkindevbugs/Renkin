@@ -25,6 +25,9 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.renkinProject.renkin.feature.presets.PresetLibraryViewModel
+import dev.renkinProject.renkin.feature.presets.ProvideColorPresets
+import dev.renkinProject.renkin.feature.presets.ProvideModifierPresets
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ApplicationRuntimeState
 import dev.renkinProject.renkin.apk.IconApplyOutcome
@@ -41,9 +44,7 @@ import dev.renkinProject.renkin.icon.creator.IconGenerationResult
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.ui.GlobalOptionsScreen
 import dev.renkinProject.renkin.ui.LocalToaster
-import dev.renkinProject.renkin.ui.ProvideColorPresets
 import dev.renkinProject.renkin.ui.ProvideAdaptiveLayoutInfo
-import dev.renkinProject.renkin.ui.ProvideModifierPresets
 import dev.renkinProject.renkin.ui.ToastHost
 import dev.renkinProject.renkin.ui.Toaster
 import dev.renkinProject.renkin.ui.theme.RenkinTheme

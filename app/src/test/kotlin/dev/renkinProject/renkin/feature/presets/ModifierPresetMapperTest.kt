@@ -1,4 +1,4 @@
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.presets
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -6,6 +6,7 @@ import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
 import dev.renkinProject.renkin.icon.creator.ModifierPresetShape
+import dev.renkinProject.renkin.ui.AdjustmentState
 import org.junit.Assert.assertEquals
 import org.junit.Test
 

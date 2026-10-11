@@ -1,6 +1,6 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.presets
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -50,6 +50,10 @@ import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.decodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.encodeColorizerStyle
 import dev.renkinProject.renkin.icon.creator.evenGradientPositions
+import dev.renkinProject.renkin.ui.ConfirmDialog
+import dev.renkinProject.renkin.ui.RenkinAlertDialog
+import dev.renkinProject.renkin.ui.SearchField
+import dev.renkinProject.renkin.ui.colorizerSwatch
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import dev.renkinProject.renkin.ui.theme.InnerShape
 

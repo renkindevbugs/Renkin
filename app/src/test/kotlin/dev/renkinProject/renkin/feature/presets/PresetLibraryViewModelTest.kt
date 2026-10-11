@@ -1,9 +1,10 @@
-package dev.renkinProject.renkin
+package dev.renkinProject.renkin.feature.presets
 
 import android.app.Application
 import android.os.Looper
 import androidx.lifecycle.ViewModelStore
 import androidx.room.Room
+import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.StorageOperationGate

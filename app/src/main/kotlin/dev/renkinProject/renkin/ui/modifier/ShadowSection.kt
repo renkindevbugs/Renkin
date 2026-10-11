@@ -42,6 +42,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import dev.renkinProject.renkin.feature.presets.applyShadowPreset
+import dev.renkinProject.renkin.feature.presets.shadowPreset
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
@@ -64,11 +66,9 @@ import dev.renkinProject.renkin.ui.OptionGroup
 import dev.renkinProject.renkin.ui.SegmentCell
 import dev.renkinProject.renkin.ui.SegmentedRow
 import dev.renkinProject.renkin.ui.WavyLoadingBar
-import dev.renkinProject.renkin.ui.applyShadowPreset
 import dev.renkinProject.renkin.ui.horizontalPaneLayout
 import dev.renkinProject.renkin.ui.percentRuler
 import dev.renkinProject.renkin.ui.pixelRuler
-import dev.renkinProject.renkin.ui.shadowPreset
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import kotlin.math.abs

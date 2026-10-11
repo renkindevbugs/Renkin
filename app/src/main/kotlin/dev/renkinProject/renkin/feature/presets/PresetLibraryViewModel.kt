@@ -1,9 +1,10 @@
-package dev.renkinProject.renkin
+package dev.renkinProject.renkin.feature.presets
 
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException

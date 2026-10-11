@@ -1,4 +1,4 @@
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.presets
 
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -9,6 +9,7 @@ import dev.renkinProject.renkin.icon.creator.ModifierPresetOutline
 import dev.renkinProject.renkin.icon.creator.ModifierPresetPayload
 import dev.renkinProject.renkin.icon.creator.ModifierPresetShape
 import dev.renkinProject.renkin.icon.creator.ModifierPresetShadow
+import dev.renkinProject.renkin.ui.AdjustmentState
 
 /**
  * The groups a preset can carry. They match how the Modifier tab is laid out, so "include

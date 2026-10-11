@@ -63,6 +63,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.foundation.Image
+import dev.renkinProject.renkin.feature.presets.ColorPresetDialog
+import dev.renkinProject.renkin.feature.presets.LocalColorPresets
+import dev.renkinProject.renkin.feature.presets.SaveColorPresetDialog
+import dev.renkinProject.renkin.feature.presets.savedPresetMatching
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle

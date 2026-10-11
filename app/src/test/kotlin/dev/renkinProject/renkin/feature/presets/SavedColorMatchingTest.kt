@@ -1,4 +1,4 @@
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.presets
 
 import android.graphics.Color
 import dev.renkinProject.renkin.data.ColorPreset

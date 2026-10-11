@@ -93,7 +93,7 @@ commit cancellation boundary, archive format and recovery snapshots are unchange
 profile import remains additive and does not reload the active profile. Cancellation propagates
 through automatic-backup updates and post-import verdict verification.
 
-`PresetLibraryViewModel` owns the device-wide colour and modifier libraries for each activity.
+`feature.presets.PresetLibraryViewModel` owns the device-wide colour and modifier libraries for each activity.
 MainActivity and GlobalOptionsActivity obtain it through Hilt and use the same library UI callbacks.
 It receives the singleton RenkinPackRepository through constructor injection and reads and writes
 the library directly. MainViewModel and GlobalOptionsViewModel retain profile and editor operations.
@@ -939,6 +939,21 @@ background flush, recovery edits, admission/reset and close/publication races. A
 168 suites pass, including both Roborazzi cases; compileDebugKotlin and assembleDebug pass with
 the existing local test-JVM workaround. Debug capture logs include copy time, payload size and heap
 observations; peak memory and large-draft device performance still need measurement.
+
+**7D1 (verified)** starts feature packaging with the preset library.
+`feature.presets` contains `PresetLibraryViewModel`, the colour/modifier library composables and
+their preset-to-editor mapping. MainActivity and GlobalOptionsActivity still supply activity-owned
+library flows/callbacks, and editor colour/modifier controls explicitly import the library entry points.
+The feature imports shared UI controls, shape tokens, editor adjustment state and preview callbacks;
+it introduces no repository facade, duplicated owner or Gradle module. Room entities/repository,
+modifier payload codecs and rendering remain in their existing data/creator packages.
+Only file locations, package declarations and imports change. Existing libraries, partial-group
+application, preview/selection lifetimes and error/toast handling retain their behavior. Review-requested
+test package/import alignment moves the preset library tests alongside the feature and updates shared
+UI test imports without changing any test scenarios or bodies. The device checkpoint passed.
+All 36 targeted tests and all 1,215 tests across 168 suites pass without failures or skips, including
+both Roborazzi cases; compileDebugKotlin and assembleDebug pass with the existing local test-JVM
+workaround. No new scenarios are needed for this package/import-only move.
 
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged

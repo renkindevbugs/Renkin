@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
+import dev.renkinProject.renkin.feature.presets.SavedColorToggle
 import dev.renkinProject.renkin.OptionsViewModel
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.GradientFamily
