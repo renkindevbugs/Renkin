@@ -68,6 +68,20 @@ class StoredIconModifierInputTest {
         }
     }
 
+    @Test fun colourOnlyPackRestylingPersistsOnlyForAdaptiveLayerStages() {
+        val pack = MaterialYouPackModifier(android.graphics.Color.RED, android.graphics.Color.BLUE, 5,
+            ColorizerStyle(firstColor = android.graphics.Color.RED), ColorizerStyle(firstColor = android.graphics.Color.BLUE))
+        fun stage(pack: MaterialYouPackModifier, pipeline: ModifierInputPipeline) = IconModifierInput(
+            modifierInputTestOptions().withSource { copy(primarySource = Source.ICON_PACK) }.withModifiers { copy(materialYouPack = pack) },
+            false, ModifierInputOrigin.FRESH_SOURCE, pipeline = pipeline
+        )
+        val encoded = checkNotNull(StoredIconModifierInput.encode(stage(pack, ModifierInputPipeline.IMAGE_EDIT), artwork))
+        assertEquals(pack, checkNotNull(StoredIconModifierInput.readState(encoded)).options.modifiers.materialYouPack)
+        assertNull(StoredIconModifierInput.encode(stage(pack.copy(strokeScale = 1.4f), ModifierInputPipeline.IMAGE_EDIT), artwork))
+        assertNull(StoredIconModifierInput.encode(stage(pack, ModifierInputPipeline.BITMAP_IMAGE_EDIT),
+            artwork.copy(isXml = false, isAdaptive = false)))
+    }
+
     private val artwork = StoredModifierArtwork("a".repeat(64), isXml = true, isAdaptive = true)
 
     private fun state(options: GenerationOptions = modifierInputTestOptions()) =
