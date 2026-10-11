@@ -1063,6 +1063,31 @@ This package is not an independent module boundary: PackChangesSheet still opens
 through `ui.OpenAppOptions`, while UI hosts import `feature.buildinstall`. Before extracting
 Gradle modules, replace this editor entry-point dependency with a host-supplied callback.
 
+**7D7 (verified)** groups profile management presentation in
+`feature.profiles`: the title/dropdown, profile action menu and create/edit form in
+`ProfileSwitcher`. MainScreen imports the title explicitly. MainViewModel and ProfileManager
+retain profile mutations, session transitions, Save/Discard behavior and persistence; export
+and import still use the existing ViewModel/backup owners. Shared dialogs, portability warnings
+and preference/text helpers remain in UI. Only the file location, package and imports change.
+Form limits/state, default-profile protections, sharing warnings, launcher contracts and
+save-before-switch/create prompts retain their behavior. The existing action-menu Compose test
+moves to the matching feature test package without changing scenarios. No new owner, module,
+dependency, manifest entry or persistence format is introduced. Static source comparison
+verifies unchanged bodies, and the device checkpoint passed. All 136 targeted tests and all
+1,225 tests across 169 suites pass without failures/errors/skips, including both Roborazzi
+comparisons; compileDebugKotlin and assembleDebug pass with the existing local test-JVM workaround.
+Logs are under build/verify-7d7-{compile,targeted,full}.log. No new scenarios are needed for
+this package/import-only move.
+
+The remaining planned 7D checkpoints are this profile presentation move and **7D8**, a closing
+architecture review and documentation reconciliation. 7D8 will compare the historical assessment
+against the current code, retain applicable decisions here and retire the historical report.
+This is an estimate of the remaining checkpoint count, not a fixed guarantee if review finds
+another concrete issue. Further package/module extraction requires an independent responsibility
+or measured need. Legacy prefsSnapshot retirement, artwork/backup memory and performance
+measurement, and CI/toolchain hardening remain three separate follow-up areas; each may require
+multiple checkpoints and is not silently included in the package moves.
+
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
 typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.

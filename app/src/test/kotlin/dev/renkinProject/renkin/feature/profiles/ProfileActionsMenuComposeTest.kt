@@ -1,4 +1,4 @@
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.profiles
 
 import android.app.Application
 import androidx.compose.ui.test.assertIsDisplayed

@@ -1,4 +1,4 @@
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.feature.profiles
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -45,6 +45,13 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.ui.ConfirmDialog
+import dev.renkinProject.renkin.ui.IconPackStudioExportWarningDialog
+import dev.renkinProject.renkin.ui.IconPackStudioWarningTarget
+import dev.renkinProject.renkin.ui.ProfileShareWarningDialog
+import dev.renkinProject.renkin.ui.RenkinAlertDialog
+import dev.renkinProject.renkin.ui.boldStringResource
+import dev.renkinProject.renkin.ui.getPreferences
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.HideProfileShareWarningKey
 import dev.renkinProject.renkin.data.Profile
