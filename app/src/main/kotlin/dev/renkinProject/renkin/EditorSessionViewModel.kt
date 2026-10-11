@@ -48,6 +48,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
+internal data class EditorSessionLifetime(val generation: Long, val sessionId: String?)
+
 @HiltViewModel
 class EditorSessionViewModel @Inject constructor() : ViewModel() {
     private data class ActiveSession(val id: String, val state: EditorSession)
@@ -60,8 +62,10 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
     private val captureMutex = Mutex()
     private val mutableRecoveryAttachment = MutableStateFlow<EditorRecoveryAttachment?>(null)
     internal val recoveryAttachment = mutableRecoveryAttachment.asStateFlow()
+    private val mutableLifetime = MutableStateFlow(EditorSessionLifetime(0, null))
+    internal val lifetime = mutableLifetime.asStateFlow()
 
-    // Dormant until the offer/error owner is integrated. Preparation never attaches a session.
+    // Preparation never attaches a session; the offer owner must retain or dispose Ready.
     internal suspend fun prepareDraftRecovery(
         expected: EditorDraftCheckpoint,
         provider: ApplicationProvider,
@@ -155,7 +159,8 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
                 else ActiveSession(id, prepared.sessionForAcceptance())
             } ?: return@withLock EditorRecoveryAcceptance.Superseded
             val result = EditorRecoveryAcceptance.Accepted(EditorRecoveryAttachment(
-                id, active.state.application.packageName, active.state.application.activityName, active.state.owner))
+                id, active.state.application.packageName, active.state.application.activityName, active.state.owner,
+                prepared.bound.requested.export.themed))
             accepted = result
             val caller = currentCoroutineContext()
             val attached = provider.publishEditorDraftRecovery(prepared.baseline) {
@@ -167,6 +172,7 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
                         activeSession = active
                         published = true
                         mutableRecoveryAttachment.value = result.attachment
+                        publishLifetime()
                         true
                     }
                 }
@@ -323,7 +329,20 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
         mutableRecoveryAttachment.value = null
         return EditorSession(owner, app, initialPack, initialFont).also {
             activeSession = ActiveSession(id, it)
+            publishLifetime()
         }
+    }
+
+    @MainThread
+    internal fun recoveredSession(attachment: EditorRecoveryAttachment): EditorSession? =
+        activeSession?.takeIf {
+            mutableRecoveryAttachment.value == attachment && it.id == attachment.sessionId &&
+                it.state.owner == attachment.owner
+        }?.state
+
+    @MainThread
+    private fun publishLifetime() {
+        mutableLifetime.value = EditorSessionLifetime(sessionGeneration, activeSession?.id)
     }
 
     @MainThread
@@ -333,6 +352,7 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
             sessionGeneration++
             activeSession = null
             mutableRecoveryAttachment.value = null
+            publishLifetime()
         }
     }
 
@@ -342,5 +362,6 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
         sessionGeneration++
         activeSession = null
         mutableRecoveryAttachment.value = null
+        publishLifetime()
     }
 }

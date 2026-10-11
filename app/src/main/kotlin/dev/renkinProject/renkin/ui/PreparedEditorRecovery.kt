@@ -51,7 +51,8 @@ internal data class EditorRecoveryAttachment(
     val sessionId: String,
     val packageName: String,
     val activityName: String,
-    val owner: ProfileSessionToken
+    val owner: ProfileSessionToken,
+    val themed: Boolean
 )
 
 internal sealed interface EditorRecoveryAcceptance {

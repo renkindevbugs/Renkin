@@ -887,12 +887,27 @@ both production and standalone constructors. The store never acquires the domain
 preserving storage/profile gate → store mutex → acceptance fence order.
 `inspectCheckpoint` can supply a process-local confirmed-reset lease for unreadable metadata;
 `discardUnreadable` compares store identity, admitted-write version and exact metadata fingerprints,
-then refuses reset if retry now reads a valid catalog. Reset inspection/actions have no production
-caller yet. Visible recovery/error handling remains 7C3c2a; debounced lifecycle persistence remains
-7C3c2b. Capture/autosave stay disabled. Thirty new regressions cover store invalidation/reset and
+then refuses reset if retry now reads a valid catalog. Thirty new regressions cover store invalidation/reset and
 backup integration, including draft failures during rollback/startup recovery/Abandon and strict
 failure before import/Previous-state session replacement. All 1,165 tests across 164 suites,
 compileDebugKotlin and assembleDebug pass, including both Roborazzi scenarios.
+
+**7C3c2a (verified)** adds the activity-scoped
+`EditorDraftRecoveryViewModel` and shared recovery/confirmed-discard dialogs. Its serial action
+queue coalesces observations of provider session/storage readiness and editor lifetime;
+app-list revisions never trigger catalog rereads or repeated preparation during bulk refresh.
+Normal editors supersede pending recovery through the VM's existing generation checks. Retry
+preserves unreadable metadata; only confirmed Discard uses its observed reset lease. Another
+profile is named without switching; obsolete drafts have a discard option. Valid offers also
+allow Not now/Back/outside dismissal, preserving files with memory-only postponement until restart.
+Preparation and acceptance run off Main, with authoritative attachment publication on Main; the offer has no
+native preview consumers. Superseded results refresh automatically. The host opens an accepted
+session id with its captured themed flag. Explicitly closing the restored editor releases it and
+clears only its checkpoint; failed cleanup stays visible and can be retried. Unexpected session
+expiration/loss only detaches the editor and preserves its draft for another offer. No automatic
+capture/save is enabled. Debounced lifecycle persistence and normal-editor cleanup remain 7C3c2b.
+After device confirmation, 21 owner/Compose cases were added; all 1,186 tests across 166 suites pass,
+including both Roborazzi scenarios. compileDebugKotlin and assembleDebug also pass.
 
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged

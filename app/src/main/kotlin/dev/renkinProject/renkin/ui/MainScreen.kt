@@ -642,6 +642,10 @@ fun MainColumn(iconPacks: List<IconPack>) {
             }
         )
     }
+    EditorDraftRecoveryHost(iconPacks,
+        showPrompt = onboardingSeen && !viewModel.whatsNewVisible && pendingSuggestion == null &&
+            viewModel.pendingBackupImport == null && !viewModel.backupInProgress &&
+            profileActionProgress == null && !viewModel.showMissingPacksDialog && !viewModel.watchProfileMissing)
 }
 
 /**
@@ -1119,6 +1123,8 @@ fun OpenAppOptions(
     app: PackageInfoStruct,
     themed: Boolean,
     sourceSession: ProfileSessionToken,
+    recoveredSessionId: String? = null,
+    onSessionInvalidated: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val viewModel: MainViewModel = hiltViewModel()
@@ -1126,7 +1132,7 @@ fun OpenAppOptions(
     val runtimeState by viewModel.runtimeState.collectAsStateWithLifecycle()
     val activity = getCurrentMainActivity()
     val toaster = LocalToaster.current
-    val sessionId = rememberSaveable(app.key) { UUID.randomUUID().toString() }
+    val sessionId = recoveredSessionId ?: rememberSaveable(app.key) { UUID.randomUUID().toString() }
     var sessionAttached by rememberSaveable(app.key) { mutableStateOf(false) }
     val profileId = rememberSaveable(app.key) { sourceSession.profileId }
     val revision = rememberSaveable(app.key) { sourceSession.revision }
@@ -1138,7 +1144,7 @@ fun OpenAppOptions(
         LaunchedEffect(expected, current) {
             editorViewModel.release(sessionId)
             toaster.show(activity.getString(expected.expiredSessionMessage(current)))
-            onDismiss()
+            (onSessionInvalidated ?: onDismiss)()
         }
         return
     }
@@ -1156,13 +1162,14 @@ fun OpenAppOptions(
         LaunchedEffect(sessionId) {
             editorViewModel.release(sessionId)
             toaster.show(activity.getString(R.string.editorDraftLost))
-            onDismiss()
+            (onSessionInvalidated ?: onDismiss)()
         }
         return
     }
     SideEffect { sessionAttached = true }
     val closeEditor: () -> Unit = {
-        editorViewModel.release(sessionId)
+        // The recovery owner serializes checkpoint cleanup and session release for a restored editor.
+        if (recoveredSessionId == null) editorViewModel.release(sessionId)
         onDismiss()
     }
 

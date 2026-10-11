@@ -32,7 +32,7 @@ Never restore an old `ProfileSessionToken`; successful recovery obtains a new li
   **7C3b2 (confirmed and verified)** adds validated acceptance/native ownership transfer.
   **7C3b3 (confirmed and verified)** integrates first-composition rendering.
   **7C3c1 (confirmed and verified)** installs storage/profile invalidation and
-  conditional unreadable-catalog discard. **7C3c2a** adds the visible offer/error owner;
+  conditional unreadable-catalog discard. **7C3c2a (verified)** adds the visible offer/error owner;
   **7C3c2b** adds debounced lifecycle persistence using those boundaries.
 
 Each checkpoint follows CLAUDE.md's device-confirmation/test/commit sequence. The envelope is
@@ -832,7 +832,7 @@ allocating a whole invalid document. Ordinary inspection and Retry do not rotate
 or discard files, although AtomicFile may perform its normal backup recovery. When fallback
 invalidation is pending, every catalog access first retries the required empty-generation rotation.
 
-Only a future explicitly confirmed error action may call `discardUnreadable`. Under the same
+Only an explicitly confirmed error action may call `discardUnreadable`. Under the same
 store mutex it checks store identity, write version and metadata fingerprint, retries catalog
 reading, and refuses reset if it is now readable. It checks the fingerprint again after a failed
 retry because AtomicFile may have promoted a backup. A mismatch returns null (Superseded); an
@@ -860,6 +860,64 @@ source-reviewed and still needs platform integration coverage. All 1,165 tests a
 compileDebugKotlin and assembleDebug pass with the existing local test-JVM C2 workaround; both
 ordinary Roborazzi scenarios verify the unchanged reference. Logs are
 `build/verify-7c3c1-targeted.log` and `build/verify-7c3c1-full.log`.
+
+## Recovery offer checkpoint (7C3c2a)
+
+`EditorDraftRecoveryViewModel` is the activity-scoped Hilt offer owner, connected to the same
+`EditorSessionViewModel` used by normal individual editors. It requires the production provider
+and singleton store. It observes domain readiness/session identity, storage recovery and
+the editor's generation/id. A serial request queue owns inspection, preparation, Restore,
+confirmed Discard and restored-editor cleanup. Observation requests coalesce while an action is
+running. Normal editor creation remains synchronous; its published lifetime and the existing VM
+generation checks supersede preparation/acceptance rather than making Main wait for an owner lock.
+Application-list revisions are deliberately excluded: bulk-refresh publications must not reread
+the catalog or repeatedly decode a hidden offer. Acceptance still revalidates baseline/checkpoint
+ownership and refreshes a superseded preparation before transfer.
+
+Inspection starts after storage/domain startup is ready and no individual editor is attached.
+Metadata failures produce a visible Retry/confirmed-discard offer; there is no empty-draft fallback.
+An unavailable reset lease disables Discard. Retry never resets unreadable metadata. An owner
+from another existing profile gets a named-profile message without switching; a deleted profile
+or obsolete baseline gets an informational discard option. Not now retains the files and
+suppresses that checkpoint in the current profile for this run; switching profiles checks again.
+The valid Restore offer also has Not now; Back/outside dismissal postpones it without deleting
+files. Postponement is memory-only and intentionally expires after process restart.
+The prompt waits behind onboarding, release notes, pending watch suggestions and the main
+backup/profile progress dialogs. It uses the shared alert/confirmation components and English
+strings. No artwork preview consumes the prepared native resources.
+
+Decode/preparation and acceptance run on Default, retaining the existing explicit Main publication
+boundary. A Ready result lost during return dispatch is still disposed on Main. Unattached native
+values are dropped before a new preparation, postponement or confirmed discard; transferred values
+are never recycled by the offer. Each UI action must match the currently shown prompt by identity,
+then the store/VM revalidate its checkpoint and live generation. Superseded preparation retries
+automatically up to three times before showing an informational Try again option; superseded
+acceptance immediately refreshes. The VM's recovery attachment is authoritative even if acceptance
+publishes before a cancelled/failed return dispatch.
+
+The host opens the accepted session id through the existing `OpenAppOptions`, preserving its
+captured themed flag instead of reading today's preference. Apply, Clear and explicit dismissal
+keep their existing icon-operation behavior; closing the restored dialog additionally releases
+its live session and attempts checkpoint-aware persistent cleanup. A failed cleanup stays visible
+with Retry. Unexpected session expiration/loss instead releases/detaches the editor and preserves
+its checkpoint for another offer; it never uses the explicit-close cleanup path. Metadata failure
+still requires confirmed Discard when unreadable. Ambiguous publication is inspected
+again, and a changed checkpoint is never erased by an old cleanup. This checkpoint adds no automatic
+capture or save, so ordinary edits do not yet create a durable recovery offer. Debounce, background
+flush, normal-editor dismissal/Apply cleanup and capture-error handling remain 7C3c2b. Do not infer
+autosave availability from a hidden/postponed recovery prompt.
+
+The developer confirmed on-device behavior before automated verification. Fourteen owner tests
+cover transfer/close, native disposal, memory-only postponement and a fresh owner, reconnect,
+bulk publications without preparation, session-loss preservation, stale UI actions/checkpoints,
+automatic re-preparation after superseded acceptance, obsolete/other-profile drafts, unreadable
+metadata Retry/reset, repaired metadata and cleanup Retry. Seven Compose tests cover Restore,
+Not now, confirmed/cancelled Discard, disabled unsafe Discard, Retry and named-profile messages.
+All 1,186 tests across 166 suites pass with no failures, errors or skips, including both Roborazzi
+scenarios; compileDebugKotlin and assembleDebug also pass. The existing preparation/acceptance suites retain cancellation, ownership and generation
+race coverage. Verification logs: `build/verify-7c3c2a-targeted.log` and
+`build/verify-7c3c2a-full.log`. Process-death autosave and large Main-copy/memory measurements
+require 7C3c2b's actual capture scheduling.
 
 ## Envelope and local files
 
@@ -922,7 +980,7 @@ A corrupt catalog also blocks `checkpoint()` and `save()`. In 7C3 the owner must
 that draft autosaving is unavailable and offer Retry or an explicit confirmed discard of the
 unreadable draft. Retry must preserve existing files. Confirmed discard must serialize with
 opening/autosaving editors, recheck the failure so an old error dialog cannot clear a newer
-valid draft, then explicitly rotate the generation through `invalidateStorage()`. After a
+valid draft, then explicitly rotate through the inspected `discardUnreadable` lease. After a
 successful reset, obtain a fresh checkpoint and revalidate the live editor before resuming
 autosaves. A failed reset keeps the error visible; do not silently disable autosaving or
 pretend an empty draft was recovered. Do not enable capture/recovery without this error path.
