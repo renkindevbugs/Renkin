@@ -46,6 +46,17 @@ class EditorDraftResourcesTest {
         assertArrayEquals(bytes, captured.copyBytes())
     }
 
+    @Test
+    @Config(sdk = [23, 26, 27, 33])
+    @GraphicsMode(GraphicsMode.Mode.LEGACY)
+    fun uploadKeepsExactBytesAndAtomicProtectedOpenAcrossSdkBoundary() = runBlocking {
+        val file = png()
+        val expected = file.readBytes()
+        val captured = reader.upload(file.absolutePath)
+        assertArrayEquals(expected, captured.copyBytes())
+        assertEquals(0, EditorResourceOsShadow.openCount)
+    }
+
     @Test fun resourceConstructorAlsoDetachesCallerBytesAndRejectsInvalidBudgets() {
         val bytes = byteArrayOf(1, 2, 3)
         val captured = EditorDraftResource(EditorDraftResourceKind.FONT, "font", bytes)
@@ -54,6 +65,8 @@ class EditorDraftResourcesTest {
         assertThrows(IllegalArgumentException::class.java) { EditorDraftResource(EditorDraftResourceKind.FONT, "x".repeat(65537), byteArrayOf(1)) }
     }
 
+    @Config(sdk = [23, 26, 27, 33])
+    @GraphicsMode(GraphicsMode.Mode.LEGACY)
     @Test fun bundledFontIsCapturedAsOwnedBytesWithoutASystemPath() = runBlocking {
         val captured = reader.font("")
         assertEquals(EditorDraftResourceKind.FONT, captured.kind); assertEquals("", captured.selectionReference)

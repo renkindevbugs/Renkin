@@ -52,6 +52,7 @@ import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
 import android.graphics.drawable.AdaptiveIconDrawable
+import android.os.Build
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
@@ -252,7 +253,8 @@ internal fun OptionsDialog(
     // Renkin's labelled generated fallback instead.
     val appHasAdaptiveIcon = remember(app.icon) { app.icon.isAdaptiveIconDrawable() }
     val appHasMaterialYouIcon = remember(app.icon, appHasAdaptiveIcon) {
-        appHasAdaptiveIcon && (app.icon as AdaptiveIconDrawable).haveMonochrome()
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            appHasAdaptiveIcon && (app.icon as AdaptiveIconDrawable).haveMonochrome()
     }
 
     val isMaterialYouVariant = source == Source.APPLICATION_ICON &&

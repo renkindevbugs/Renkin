@@ -390,6 +390,21 @@ class IconGeneratorTest {
     }
 
     @Test
+    @Config(sdk = [26, 32])
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    fun adaptiveApplicationUsesGeneratedMaterialYouFallbackBeforeMonochromeApi() {
+        val generated = generateOnce(
+            options(
+                source = Source.APPLICATION_ICON,
+                applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU
+            ),
+            app(icon = lawniconsStyleDrawable())
+        )
+        assertNotNull(generated)
+        assertTrue(generated!!.isAdaptiveIcon())
+    }
+
+    @Test
     fun materialYouVariantGeneratesUnofficialDuotoneWhenLayerIsMissing() {
         val sourceBitmap = Bitmap.createBitmap(90, 90, Bitmap.Config.ARGB_8888).apply {
             for (y in 0 until height) for (x in 0 until width) {

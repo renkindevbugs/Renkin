@@ -444,15 +444,16 @@ internal fun WatchRuleEditor(
                         .height(gridHeight)
                         .padding(top = 10.dp)
                 )
-            } else
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 10.dp)
-                    .height(gridHeight)
-            ) { page ->
-                TileRows(appPages.getOrNull(page).orEmpty(), columns) { appTile(it) }
+            } else {
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 10.dp)
+                        .height(gridHeight)
+                ) { page ->
+                    TileRows(appPages.getOrNull(page).orEmpty(), columns) { appTile(it) }
+                }
             }
 
             if (appPages.size > 1) {

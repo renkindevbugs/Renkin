@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.packages
 
 import android.os.Build
+import androidx.annotation.ChecksSdkIntAtLeast
 
 class PackageVersion {
     companion object {
@@ -20,6 +21,7 @@ class PackageVersion {
             return Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1
         }
 
+        @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.O)
         fun is26OrMore(): Boolean {
             return Build.VERSION.SDK_INT >= Build.VERSION_CODES.O
         }
@@ -48,6 +50,7 @@ class PackageVersion {
             return Build.VERSION.SDK_INT >= Build.VERSION_CODES.S_V2
         }
 
+        @ChecksSdkIntAtLeast(api = Build.VERSION_CODES.TIRAMISU)
         fun is33OrMore(): Boolean {
             return Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
         }

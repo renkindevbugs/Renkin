@@ -1196,6 +1196,18 @@ latency before choosing storage changes. For CI work, validate lint, debug assem
 release/R8 checks without exposing signing secrets, and investigate the local JVM workaround
 independently. No dependency replacement or database migration is included in 7D8.
 
+**CI1a (verified)** addresses 17 existing debug lint errors exposed by the first CI
+verification run. The isolated fix branch adds adaptive API contracts and SDK-check
+annotations, protects notification publication, preserves exact bundled-font reads and
+atomic close-on-exec on older APIs, and clarifies the Watch pager branch. After developer
+device confirmation, 66 targeted tests and the full 1,240-test suite (170 suites) pass without
+failures, errors or skips, including both Roborazzi comparisons. Compilation, lintDebug and
+assembleDebug pass; lint retains zero errors, 174 warnings and seven informational findings.
+API-boundary and notification-revocation cases are covered by Robolectric; older-device
+execution is not claimed. CI configuration/release integration remains separate. See
+[ci-lint-findings.md](ci-lint-findings.md) for compatibility sources, verification limits and
+integration order.
+
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
 typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.

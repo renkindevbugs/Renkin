@@ -1,7 +1,9 @@
 package dev.renkinProject.renkin.data.editor
 
+import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.os.Build
 import android.system.Os
 import android.system.OsConstants
 import dev.renkinProject.renkin.R
@@ -56,7 +58,7 @@ internal class EditorDraftResources(private val context: Context) {
     suspend fun font(reference: String): EditorDraftResource = withContext(Dispatchers.IO) {
         require(reference.length <= EditorControlsCodec.MAX_TEXT_BYTES) { "Editor font reference is too large" }
         val bytes = if (reference.isEmpty()) {
-            context.resources.openRawResource(R.font.arcticonssans_regular).use { readStream(it) }
+            bundledFontBytes()
         } else {
             require(FontCatalog.systemFonts().any { it.path == reference }) { "Unknown editor font selection" }
             val root = File("/system/fonts").canonicalFile
@@ -68,6 +70,11 @@ internal class EditorDraftResources(private val context: Context) {
         }) { "Unsupported editor font data" }
         EditorDraftResource(EditorDraftResourceKind.FONT, reference, bytes)
     }
+
+    // Font resources are file-backed APK entries; openRawResource preserves their exact bytes.
+    @SuppressLint("ResourceType")
+    private suspend fun bundledFontBytes(): ByteArray =
+        context.resources.openRawResource(R.font.arcticonssans_regular).use { readStream(it) }
 
     private fun selectedFile(path: String, root: File): File {
         require(path.length <= EditorControlsCodec.MAX_TEXT_BYTES) { "Editor resource reference is too large" }
@@ -83,7 +90,13 @@ internal class EditorDraftResources(private val context: Context) {
     }
 
     private suspend fun readFile(file: File): ByteArray {
-        val descriptor = Os.open(file.absolutePath, OsConstants.O_RDONLY or OsConstants.O_NOFOLLOW or OsConstants.O_CLOEXEC, 0)
+        // The Linux flag predates its public SDK field; keep close-on-exec atomic on API 23-26.
+        val closeOnExec = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+            OsConstants.O_CLOEXEC
+        } else {
+            LEGACY_O_CLOEXEC
+        }
+        val descriptor = Os.open(file.absolutePath, OsConstants.O_RDONLY or OsConstants.O_NOFOLLOW or closeOnExec, 0)
         try {
             val before = Os.fstat(descriptor)
             if (!OsConstants.S_ISREG(before.st_mode) || before.st_size !in 1..EditorDraftCodec.MAX_ARTIFACT_BYTES) {
@@ -126,6 +139,8 @@ internal class EditorDraftResources(private val context: Context) {
     }
 
     private companion object {
+        // Linux O_CLOEXEC is 02000000 (octal) in Android bionic.
+        const val LEGACY_O_CLOEXEC = 0x80000
         val PNG_SIGNATURE = byteArrayOf(0x89.toByte(), 0x50, 0x4e, 0x47, 13, 10, 26, 10)
         val fontSignatures = listOf(byteArrayOf(0, 1, 0, 0), "OTTO".toByteArray(), "ttcf".toByteArray(), "true".toByteArray())
     }

@@ -29,7 +29,8 @@ class EditorResourceOsShadow {
 
         @JvmStatic @Implementation fun open(path: String, flags: Int, mode: Int): FileDescriptor {
             check(flags and OsConstants.O_NOFOLLOW != 0)
-            check(flags and OsConstants.O_CLOEXEC != 0)
+            // Assert the Linux flag independently of the SDK field, which is unavailable before API 27.
+            check(flags and 0x80000 != 0)
             return FileDescriptor().also { opened[it] = Opened(path, RandomAccessFile(path, "r")) }
         }
 

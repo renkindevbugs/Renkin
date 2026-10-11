@@ -14,6 +14,7 @@ import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import android.os.Build
 import android.view.Gravity
+import androidx.annotation.RequiresApi
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
 import dev.renkinProject.renkin.extension.newArgbBitmap
@@ -153,6 +154,7 @@ class AdaptiveIconPackDrawable internal constructor(
         const val PREVIEW_SIZE = 500
         const val LAYER_SIZE = 750
 
+        @RequiresApi(Build.VERSION_CODES.O)
         fun capture(
             icon: AdaptiveIconDrawable,
             monochrome: Drawable? = null,

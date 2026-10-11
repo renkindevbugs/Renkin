@@ -432,7 +432,7 @@ class IconGenerator(
     }
 
     private fun generateMaterialYou(icon: Drawable): IconPackDrawable? {
-        if (!icon.isAdaptiveIconDrawable()) return null
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU || !icon.isAdaptiveIconDrawable()) return null
         // Read the monochrome layer directly — it may be any Drawable type (often an InsetDrawable
         // wrapping a vector), so we can't rely on getAppIconBitmap's Bitmap/Vector-only path.
         val mono = (icon as AdaptiveIconDrawable).monochrome?.mutate() ?: return null
@@ -550,7 +550,8 @@ class IconGenerator(
         preserveAdaptiveAppearance: Boolean = false,
         retainable: Boolean = true
     ): IconSourceStage {
-        if (imageEdit == ImageEdit.NONE && preserveAdaptiveAppearance && !export.themed) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            imageEdit == ImageEdit.NONE && preserveAdaptiveAppearance && !export.themed) {
             val adaptiveIcon = parsedIcon as? AdaptiveIconDrawable
             renderAdaptivePackIcon(adaptiveIcon)?.let {
                 return IconSourceStage(it, ModifierInputPipeline.IMAGE_EDIT, imageEdit, retainable)
@@ -845,6 +846,7 @@ class IconGenerator(
             iconPackCatalog.changesWithMaterialYouColors(iconPackName)
         }
 
+    @RequiresApi(Build.VERSION_CODES.O)
     private fun renderAdaptivePackIcon(icon: AdaptiveIconDrawable?): BitmapIconDrawable? {
         icon ?: return null
         val rendered = icon.toSafeBitmapOrNull(
@@ -858,6 +860,7 @@ class IconGenerator(
     }
 
     private fun styleMaterialYouPackIcon(parsedIcon: Drawable?): Drawable? {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return parsedIcon
         val adaptive = parsedIcon as? AdaptiveIconDrawable ?: return parsedIcon
         val vector = adaptive.foregroundVectorOrNull()
 
