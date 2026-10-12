@@ -102,6 +102,21 @@ class ModifierPresetPayloadTest {
     }
 
     @Test
+    fun platePresetKeepsTheGeneratedMaterialYouBackgroundColour() {
+        val plate = ColorizerStyle(firstColor = Color.WHITE)
+        val payload = ModifierPresetPayload(shape = ModifierPresetShape(IconShape.COOKIE, false, 1f, plate))
+        val materialYou = options()
+            .withSource { copy(applicationIconVariant = ApplicationIconVariant.MATERIAL_YOU) }
+            .withExport { copy(background = ColorFill(Color.BLACK)) }
+
+        val generated = materialYou.withModifierPreset(payload).export.background
+        val ordinary = options().withModifierPreset(payload).export.background
+
+        assertEquals(ColorFill(Color.BLACK, plate), generated)
+        assertEquals(ColorFill(Color.WHITE, plate), ordinary)
+    }
+
+    @Test
     fun decode_shadowWithoutStyleFallsBackToBlackAndDefaults() {
         val shadow = checkNotNull(
             decodeModifierPreset("v=1\nshadow=1\nshadow.enabled=true")?.shadow

@@ -34,6 +34,19 @@ class PackBrowserPreviewsTest {
     }
 
     @Test
+    fun calendarDaysSortNumerically() {
+        val days = listOf("cal_10", "cal_2", "cal_1", "cal_31", "cal_3", "cal_02", "calendar")
+        assertEquals(
+            listOf("cal_1", "cal_02", "cal_2", "cal_3", "cal_10", "cal_31", "calendar"),
+            orderDrawableNames(days, emptyList(), "", IconSortOrder.NAME_ASC)
+        )
+        assertEquals(
+            listOf("calendar", "cal_31", "cal_10", "cal_3", "cal_2", "cal_02", "cal_1"),
+            orderDrawableNames(days, emptyList(), "", IconSortOrder.NAME_DESC)
+        )
+    }
+
+    @Test
     fun nameDesc_sortsDescending() {
         val result = orderDrawableNames(names, emptyList(), "", IconSortOrder.NAME_DESC)
         assertEquals(listOf("maps_pin", "google_maps", "gmail", "calendar"), result)
