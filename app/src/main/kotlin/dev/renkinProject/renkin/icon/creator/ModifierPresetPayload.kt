@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.icon.creator
 
 import dev.renkinProject.renkin.data.ImageEdit
+import dev.renkinProject.renkin.data.Source
 
 /**
  * A reusable Modifier-tab recipe, independent of any one icon.
@@ -89,12 +90,20 @@ fun decodeModifierPreset(encoded: String): ModifierPresetPayload? = ModifierReci
  */
 fun GenerationOptions.withModifierPreset(payload: ModifierPresetPayload): GenerationOptions {
     val plate = payload.shape?.takeIf { it.shape != IconShape.NONE && !it.crop }?.style
-    val background = ColorFill(plate?.firstColor ?: export.background.color, plate ?: export.background.style)
+    // Like the editor, a generated Material You icon keeps its own background colour under a plate;
+    // replacing it with the plate colour painted the glyph's background in the plate colour too.
+    val color = if (generatesMaterialYouBackground) export.background.color
+        else plate?.firstColor ?: export.background.color
+    val background = ColorFill(color, plate ?: export.background.style)
     return copy(
         export = export.copy(background = background),
         modifiers = modifiers.withModifierPreset(payload)
     )
 }
+
+private val GenerationOptions.generatesMaterialYouBackground: Boolean
+    get() = source.primarySource == Source.APPLICATION_ICON &&
+        source.applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU
 
 internal fun ModifierStack.withModifierPreset(payload: ModifierPresetPayload): ModifierStack {
     val newEffect = payload.effect?.let { preset ->
