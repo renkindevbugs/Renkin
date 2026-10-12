@@ -9,7 +9,10 @@ import dev.renkinProject.renkin.IconPreviewBuilder
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
+import dev.renkinProject.renkin.drawable.MaterialYouPackEditState
+import dev.renkinProject.renkin.extension.getBytes
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.icon.creator.*
@@ -99,6 +102,47 @@ class ModifierReplayTest {
         assertNull(result.modifiers.shape.fill)
         assertEquals(saved.export, result.export)
         assertEquals(saved.source, result.source)
+    }
+
+    private fun layer(color: Int) = Bitmap.createBitmap(
+        AdaptiveIconPackDrawable.LAYER_SIZE, AdaptiveIconPackDrawable.LAYER_SIZE, Bitmap.Config.ARGB_8888
+    ).apply { eraseColor(color) }.getBytes(Bitmap.CompressFormat.PNG, 100)
+
+    @Test fun replayedPackIconRestoresAndForwardsEditableColours() = runBlocking {
+        val state = MaterialYouPackEditState(5, ColorizerStyle(firstColor = Color.RED), ColorizerStyle(firstColor = Color.BLACK), 1f)
+        val pack = MaterialYouPackModifier(Color.RED, Color.BLACK, 5, state.customForeground, state.customBackground)
+        val saved = options().withModifiers { copy(materialYouPack = pack) }
+        val input = AdaptiveIconPackDrawable(layer(Color.RED), layer(Color.BLACK), materialYouEditState = state)
+        val retained = IconModifierInput(saved, false, ModifierInputOrigin.FRESH_SOURCE, liveInput = input,
+            pipeline = ModifierInputPipeline.IMAGE_EDIT)
+        val base = IconModifierStageRenderer(resources, saved).render(input, ModifierInputPipeline.IMAGE_EDIT)
+        val session = session(checkNotNull(VerifiedModifierInput.verify(resources, input, retained, base)))
+        val replay = session.modifierReplay!!
+
+        assertEquals(state, replay.packEditState)
+        assertEquals(5, session.materialYouPackAdjustments.selectedScheme)
+        assertEquals(state.customForeground, session.materialYouPackAdjustments.customForeground)
+        assertEquals(pack, replay.optionsFor(ui(session, saved)).modifiers.materialYouPack)
+        val edited = pack.copy(foreground = Color.GREEN, customForeground = ColorizerStyle(firstColor = Color.GREEN))
+        val result = replay.optionsFor(ui(session, saved).withModifiers { copy(materialYouPack = edited) })
+        assertEquals(edited, result.modifiers.materialYouPack)
+        val recoloured = replay.verified.render(result).icon!!.toBitmap()
+        assertEquals(Color.GREEN, recoloured.getPixel(recoloured.width / 2, recoloured.height / 2))
+    }
+
+    @Test fun secondReplayRestoresTheColoursSavedByTheFirstReplay() = runBlocking {
+        val original = MaterialYouPackEditState(5, ColorizerStyle(firstColor = Color.RED), ColorizerStyle(firstColor = Color.BLACK), 1f)
+        val edited = MaterialYouPackModifier(Color.RED, Color.BLUE, 5, original.customForeground, ColorizerStyle(firstColor = Color.BLUE))
+        val saved = options().withModifiers { copy(materialYouPack = edited) }
+        val input = AdaptiveIconPackDrawable(layer(Color.RED), layer(Color.BLACK), materialYouEditState = original)
+        val retained = IconModifierInput(saved, false, ModifierInputOrigin.FRESH_SOURCE, liveInput = input,
+            pipeline = ModifierInputPipeline.IMAGE_EDIT)
+        val base = IconModifierStageRenderer(resources, saved).renderRetained(input, ModifierInputPipeline.IMAGE_EDIT)
+        val session = session(checkNotNull(VerifiedModifierInput.verify(resources, input, retained, base)))
+
+        assertEquals(edited.editState(), session.modifierReplay!!.packEditState)
+        assertEquals(edited.customBackground, session.materialYouPackAdjustments.customBackground)
+        assertEquals(edited, session.modifierReplay!!.optionsFor(ui(session, saved)).modifiers.materialYouPack)
     }
 
     @Test fun packBrowsingKeepsReplayButActualPickEndsIt() = runBlocking {

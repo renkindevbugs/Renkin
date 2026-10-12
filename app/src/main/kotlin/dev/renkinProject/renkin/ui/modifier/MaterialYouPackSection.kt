@@ -36,7 +36,9 @@ internal fun MaterialYouPackSection(
     adjustments: MaterialYouPackAdjustmentState,
     schemes: List<Pair<Color, Color>>,
     previews: ModifierPreviews?,
-    sampleBitmap: Bitmap?
+    sampleBitmap: Bitmap?,
+    // A replayed stage keeps only captured layers, whose stroke width can no longer change.
+    lineThicknessEditable: Boolean = true
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -48,7 +50,7 @@ internal fun MaterialYouPackSection(
             color = MaterialTheme.colorScheme.onSurface,
             modifier = Modifier.weight(1f)
         )
-        if (adjustments.selectedScheme >= 0 || adjustments.strokeScale != 1f) {
+        if (adjustments.selectedScheme >= 0 || (lineThicknessEditable && adjustments.strokeScale != 1f)) {
             TextButton(onClick = adjustments::reset) {
                 Text(stringResource(R.string.resetToDefault))
             }
@@ -76,20 +78,22 @@ internal fun MaterialYouPackSection(
                 allowOriginal = true,
                 sampleBitmap = sampleBitmap
             )
-            LabeledSlider(
-                label = stringResource(R.string.lineThickness),
-                value = lineWeightToCenteredSlider(adjustments.strokeScale),
-                onValueChange = {
-                    adjustments.strokeScale = centeredSliderToLineWeight(it)
-                },
-                valueRange = 0f..2f,
-                centered = true,
-                ruler = percentRuler(
-                    valueRange = 0.5f..2f,
-                    toRulerValue = ::centeredSliderToLineWeight,
-                    fromRulerValue = ::lineWeightToCenteredSlider
+            if (lineThicknessEditable) {
+                LabeledSlider(
+                    label = stringResource(R.string.lineThickness),
+                    value = lineWeightToCenteredSlider(adjustments.strokeScale),
+                    onValueChange = {
+                        adjustments.strokeScale = centeredSliderToLineWeight(it)
+                    },
+                    valueRange = 0f..2f,
+                    centered = true,
+                    ruler = percentRuler(
+                        valueRange = 0.5f..2f,
+                        toRulerValue = ::centeredSliderToLineWeight,
+                        fromRulerValue = ::lineWeightToCenteredSlider
+                    )
                 )
-            )
+            }
         }
     }
 }

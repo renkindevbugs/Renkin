@@ -72,7 +72,7 @@ internal class IconImageEditPipeline(
                 val foreground = colorizeAdaptiveForeground(icon.foreground)
                 return icon.withForeground(foreground)
             }
-            return applyToBitmap(icon.toBitmap(), imageEdit, colorizer.blendMode)
+            return applyToBitmap(adjustments.rasterFrame(icon), imageEdit, colorizer.blendMode)
         }
 
         if (imageEdit == ImageEdit.COLORIZE &&
@@ -163,16 +163,19 @@ internal class IconImageEditPipeline(
         }
     }
 
+    /**
+     * A retained pack icon already carries the colours of its edit state. Recolouring it again would
+     * round its anti-aliased layers differently, so only an edited state is applied.
+     */
+    internal fun restyleRetainedPackIcon(icon: IconPackDrawable): IconPackDrawable {
+        if (icon !is AdaptiveIconPackDrawable || icon.materialYouEditState == null) return icon
+        if (materialYouPack.editState() == icon.materialYouEditState) return icon
+        return restyleMaterialYouPackIcon(icon)
+    }
+
     private fun restyleMaterialYouPackIcon(icon: AdaptiveIconPackDrawable): AdaptiveIconPackDrawable {
         if (icon.materialYouEditState == null) return icon
-        val customForeground = materialYouPack.customForeground ?: return icon
-        val customBackground = materialYouPack.customBackground ?: return icon
-        val state = MaterialYouPackEditState(
-            selectedScheme = materialYouPack.selectedScheme,
-            customForeground = customForeground,
-            customBackground = customBackground,
-            strokeScale = materialYouPack.strokeScale
-        )
+        val state = materialYouPack.editState() ?: return icon
         if (state.selectedScheme < 0) return icon.restoreOriginalMaterialYouLayers(state)
 
         val foregroundColor = materialYouPack.foreground ?: return icon

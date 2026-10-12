@@ -22,6 +22,13 @@ internal class MaterialYouPackAdjustmentState(initial: MaterialYouPackEditState?
     )
     var strokeScale by mutableFloatStateOf(initial?.strokeScale ?: 1f)
 
+    fun restore(state: MaterialYouPackEditState) {
+        selectedScheme = state.selectedScheme
+        customForeground = state.customForeground
+        customBackground = state.customBackground
+        strokeScale = state.strokeScale
+    }
+
     fun reset() {
         selectedScheme = -1
         customForeground = MaterialYouPackEditState.DEFAULT_FOREGROUND

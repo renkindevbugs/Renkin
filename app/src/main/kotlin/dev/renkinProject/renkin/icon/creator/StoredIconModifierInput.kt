@@ -77,7 +77,9 @@ internal object StoredIconModifierInput {
         }
         if (options.source.primarySource != Source.ICON_PACK &&
             options.source.primarySource != Source.APPLICATION_ICON) return false
-        if (options.source.primarySource == Source.ICON_PACK && options.modifiers.materialYouPack.hasRestyling) return false
+        if (options.source.primarySource == Source.ICON_PACK &&
+            !options.modifiers.materialYouPack.isReplayableOn(isAdaptive && pipeline == ModifierInputPipeline.IMAGE_EDIT)
+        ) return false
         return pipeline != ModifierInputPipeline.BITMAP_IMAGE_EDIT || (!isXml && !isAdaptive && previewScale == 1f)
     }
 

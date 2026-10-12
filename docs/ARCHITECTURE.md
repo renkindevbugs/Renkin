@@ -1370,8 +1370,9 @@ be assumed to open the upgraded database.
   The pipeline kind preserves these differences instead of guessing that all paths
   use the same vector recolour or rasterization rules. Material You pack restyling performed
   during resource parsing (especially vector stroke width) is not reversible from captured PNG
-  layers, so fresh pack picks with active pack restyling retain only their baked result and v19
-  recipe for now. Brush geometry remains unsupported. Bulk refresh/fallback and watch keep
+  layers, so fresh pack picks that change line thickness retain only their baked result and v19
+  recipe. Colour-only restyling of preserved adaptive layers is retained: those layers carry their
+  edit state and original PNGs, and a retained stage recolours them only when that state changes. Brush geometry remains unsupported. Bulk refresh/fallback and watch keep
   their existing persistence contract; this step does not add retained input to generated rows.
   Initial controls remain neutral until the user requests verified restoration in the Modifier
   tab. Reopening without a new
@@ -1437,8 +1438,9 @@ be assumed to open the upgraded database.
   adaptive/monochrome layers, vector geometry and resolved reference colours. Conservative
   mismatches leave the baked editor usable and explain that saved modifiers are unavailable.
   An input containing earlier baked edits restores only its last stage, with an explicit hint.
-  Active Material You pack restyling remains unsupported; its original vector stroke semantics
-  cannot be reconstructed from captured PNGs. Text restoration disables image effects and retains
+  Material You pack restyling with a changed line thickness remains unsupported; its original vector
+  stroke semantics cannot be reconstructed from captured PNGs. A colour-only restyle replays with
+  the Material You colour controls restored and line thickness hidden. Text restoration disables image effects and retains
   the adjustments-only pipeline; text/font/colours are frozen source artwork, not editable glyphs.
   `EditorModifierReplay` seeds the existing controls and preserves original source/export settings
   and values not represented exactly by those controls until their corresponding control changes.
@@ -1923,8 +1925,8 @@ when composing the 500 px preview. Original layer insets are not removed or norm
 stay compressed in memory, and the exported resources never reference another installed APK.
 Adaptive drawables do not retain full-size rendered/preview bitmap fields. List and browser
 previews render directly to their requested size with the same 108/72 viewport compensation;
-small previews decode sampled PNG layers. Export and modifier rasterization retain their own
-uncompensated geometry and the stored/exported PNG payloads remain at full resolution.
+small previews decode sampled PNG layers. Export keeps its own uncompensated geometry and the
+stored/exported PNG payloads remain at full resolution.
 Generated-icon previews use `IconPreviewCache` with a total 8 MiB budget: 6 MiB for previews
 up to 256 px and 2 MiB for larger editor/painter images, so detail previews cannot evict list
 thumbnails. Keys weakly reference drawables and verify identity rather than relying on identity
@@ -1940,7 +1942,9 @@ downscaling preserves aspect ratio in both lists and the browser.
 
 Position/scale transform foreground and monochrome together while leaving the background in
 place. Colorize changes only the foreground; gradients retain its alpha. Shape, Outline,
-Remove background, Path, Edge and segment colorize consume the complete masked composition
+Remove background, Path, Edge, Shadow and segment colorize consume the masked composition at the
+preview's 108/72-compensated size (`toModifierBitmap`), with the launcher mask reapplied at frame
+size, so enabling one keeps the optical size shown without a modifier,
 and produce a non-adaptive result. Global modifiers continue deriving from the saved base icon,
 so disabling a flattening modifier restores the adaptive layers. The app-icon source's
 "Full app icon" behaviour and the explicit global themed export remain separate policies.

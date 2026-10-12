@@ -154,14 +154,14 @@ internal fun rememberModifierPreviews(
             materialYouPackForeground = { style ->
                 currentRender(
                     currentOptions.withModifiers {
-                        copy(materialYouPack = materialYouPack.copy(foreground = style.firstColor))
+                        copy(materialYouPack = materialYouPack.copy(foreground = style.firstColor, customForeground = style))
                     }
                 )
             },
             materialYouPackBackground = { style ->
                 currentRender(
                     currentOptions.withModifiers {
-                        copy(materialYouPack = materialYouPack.copy(background = style.firstColor))
+                        copy(materialYouPack = materialYouPack.copy(background = style.firstColor, customBackground = style))
                     }
                 )
             },

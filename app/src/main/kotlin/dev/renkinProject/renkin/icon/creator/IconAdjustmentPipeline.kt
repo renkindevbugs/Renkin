@@ -50,7 +50,7 @@ internal class IconAdjustmentPipeline(
         )
         if (vectorAdjusted != null && !modifiers.requiresRasterization) return vectorAdjusted
 
-        var bitmap = vectorAdjusted?.toModifierBitmap() ?: icon.toBitmap()
+        var bitmap = vectorAdjusted?.toModifierBitmap() ?: rasterFrame(icon)
         if (bitmap.width <= 0 || bitmap.height <= 0) return icon
 
         val source = icon as? BitmapIconDrawable
@@ -111,6 +111,10 @@ internal class IconAdjustmentPipeline(
             previewScale = if (modifiers.flattensOutput) 1f else source?.previewScale ?: 1f
         )
     }
+
+    internal fun rasterFrame(icon: IconPackDrawable): Bitmap =
+        if (icon is AdaptiveIconPackDrawable) icon.toModifierBitmap(AdaptiveIconPackDrawable.PREVIEW_SIZE)
+        else icon.toBitmap()
 
     internal fun modifierVector(icon: IconPackDrawable): ImageVectorDrawable? {
         return when (icon) {
