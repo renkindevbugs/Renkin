@@ -490,7 +490,7 @@
     <string name="monochromeHint">Removes color while keeping the app\'s original icon.</string>
     <string name="reverseMonochrome">Reverse colors</string>
     <string name="materialYouColors">Color</string>
-    <string name="materialYouColorsHint">Android dynamic system colors. Some launchers use separate wallpaper colors. Pick Custom to choose your own in the Modifier tab.</string>
+    <string name="materialYouColorsHint">Android dynamic system colors. Some launchers use separate wallpaper colors. Pick Custom to choose your own colors.</string>
     <string name="materialYouGradientHint">Gradients work on the generated Material You icon. A pack\'s own Material You icon and vector export keep the first color only.</string>
     <string name="custom">Custom</string>
     <string name="refreshIcons">Refresh icons</string>
