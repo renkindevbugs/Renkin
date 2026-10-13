@@ -6,6 +6,7 @@ import android.util.JsonReader
 import android.util.JsonToken
 import android.util.JsonWriter
 import androidx.sqlite.db.SupportSQLiteDatabase
+import dev.renkinProject.renkin.data.OversizedText
 import dev.renkinProject.renkin.data.StorageRecoverySchemaException
 import dev.renkinProject.renkin.data.StorageRecoverySnapshotException
 import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
@@ -80,14 +81,22 @@ internal object BackupDatabaseSnapshot {
             writer.beginObject().name("version").value(db.version.toLong()).name("tables").beginArray()
             for (table in tableNames) {
                 currentCoroutineContext().ensureActive()
-                db.query("SELECT * FROM ${quoted(table)}").use { cursor ->
+                val columnNames = db.query("SELECT * FROM ${quoted(table)} LIMIT 0").use { it.columnNames.toList() }
+                db.query(windowSafeSelect(table, columnNames)).use { cursor ->
                     writer.beginObject().name("name").value(table).name("columns").beginArray()
-                    cursor.columnNames.forEach { writer.value(it) }
+                    columnNames.forEach { writer.value(it) }
                     writer.endArray().name("rows").beginArray()
                     while (cursor.moveToNext()) {
                         currentCoroutineContext().ensureActive()
                         writer.beginArray()
-                        for (column in 0 until cursor.columnCount) {
+                        for ((index, name) in columnNames.withIndex()) {
+                            val column = index + 1
+                            if (cursor.getInt(column + columnNames.size) != 0) {
+                                writer.beginArray().value(Cursor.FIELD_TYPE_STRING.toLong())
+                                writer.value(readOversizedText(db, table, name, cursor.getLong(0)))
+                                writer.endArray()
+                                continue
+                            }
                             writer.beginArray().value(cursor.getType(column).toLong())
                             when (cursor.getType(column)) {
                                 Cursor.FIELD_TYPE_NULL -> writer.nullValue()
@@ -106,6 +115,28 @@ internal object BackupDatabaseSnapshot {
             writer.endArray().endObject()
             writer.flush()
             output.fd.sync()
+        }
+    }
+
+    /**
+     * Every row with its rowid first, long TEXT values replaced by NULL, then one flag per column
+     * marking those values. A whole stored icon can exceed a CursorWindow (issue #19).
+     */
+    private fun windowSafeSelect(table: String, columns: List<String>): String {
+        fun oversized(column: String) =
+            "(typeof(${quoted(column)}) = 'text' AND length(${quoted(column)}) > ${OversizedText.INLINE_CHARS})"
+        val values = columns.map { "CASE WHEN ${oversized(it)} THEN NULL ELSE ${quoted(it)} END" }
+        val flags = columns.map { oversized(it) }
+        return "SELECT rowid, ${(values + flags).joinToString()} FROM ${quoted(table)}"
+    }
+
+    private fun readOversizedText(db: SupportSQLiteDatabase, table: String, column: String, rowid: Long): String {
+        val select = "FROM ${quoted(table)} WHERE rowid = ?"
+        val length = db.query("SELECT length(${quoted(column)}) $select", arrayOf<Any>(rowid))
+            .use { if (it.moveToFirst()) it.getInt(0) else 0 }
+        return OversizedText.read(length) { start, count ->
+            db.query("SELECT substr(${quoted(column)}, ?, ?) $select", arrayOf<Any>(start, count, rowid))
+                .use { if (it.moveToFirst()) it.getString(0).orEmpty() else "" }
         }
     }
 

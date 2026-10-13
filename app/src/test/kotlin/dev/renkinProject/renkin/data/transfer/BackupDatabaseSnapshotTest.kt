@@ -61,7 +61,7 @@ class BackupDatabaseSnapshotTest {
                 assertEquals("legacy preferences", profile.prefsSnapshot)
                 assertTrue(profile.hasUnbuiltChanges)
                 assertTrue(profile.hideMissingPackWarning)
-                val icon = database.renkinPackDao().getAll(7).single()
+                val icon = database.renkinPackDao().getAllInline(7).single()
                 assertEquals("rendered", icon.drawable)
                 assertEquals("base", icon.baseDrawable)
                 assertEquals(if (version >= 19) "kept recipe" else "", icon.modifierRecipe)
@@ -203,7 +203,7 @@ class BackupDatabaseSnapshotTest {
                 val sql = database.openHelper.writableDatabase
                 BackupDatabaseSnapshot.checkCompatibility(sql, file)
                 database.withTransaction { BackupDatabaseSnapshot.restore(sql, file) }
-                val row = database.renkinPackDao().getAll(1).single()
+                val row = database.renkinPackDao().getAllInline(1).single()
                 assertEquals("rendered", row.drawable)
                 assertEquals("base", row.baseDrawable)
                 assertEquals("original recipe", row.modifierRecipe)
@@ -230,7 +230,7 @@ class BackupDatabaseSnapshotTest {
             }
             BackupDatabaseSnapshot.write(sql, file)
             database.withTransaction { BackupDatabaseSnapshot.restore(sql, file) }
-            val rows = database.renkinPackDao().getAll(1).associateBy { it.packageName }
+            val rows = database.renkinPackDao().getAllInline(1).associateBy { it.packageName }
             assertEquals(valid, rows.getValue("valid").modifierInput)
             assertEquals("", rows.getValue("inline").modifierInput)
             rows.values.forEach {

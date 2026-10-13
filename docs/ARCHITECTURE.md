@@ -1316,7 +1316,12 @@ be assumed to open the upgraded database.
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
   rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the
   Global options UI, only unsaved refresh output is Generated; saved/built non-custom rows are
-  Existing and have their own apply toggle. Individual Apply stores exactly the reviewed draft
+  Existing and have their own apply toggle. A stored icon row can exceed the ~2 MB CursorWindow
+  (detailed adaptive layers kept as both render and base; issue #19). Icon rows are therefore
+  never read with `SELECT *`: `RenkinPackDao` row queries return `drawable`/`baseDrawable` inline
+  only up to `OversizedText.INLINE_CHARS`, and `RenkinPackRepository` reads longer values in
+  `substr()` chunks inside the same transaction. The recovery snapshot does the same per rowid.
+  Individual Apply stores exactly the reviewed draft
   as both base and current render. The Custom target toggle controls an explicit Global Options
   Apply; it does not automatically restyle later editor or watch picks. Custom reference rows
   also materialize without the global layer, including after their source pack becomes usable.

@@ -241,21 +241,34 @@ interface PackVerdictDao {
 
 @Dao
 interface RenkinPackDao {
-    @Query("SELECT * FROM DbApplication WHERE profileId = :profileId AND packageName = :packageName AND activityName = :activityName")
-    fun editorBaseline(profileId: Long, packageName: String, activityName: String): DbApplication?
+    // Row reads return over-long artwork empty; RenkinPackRepository completes it in chunks.
+    @Query("SELECT $ICON_ROW_COLUMNS FROM DbApplication WHERE profileId = :profileId AND packageName = :packageName AND activityName = :activityName")
+    fun editorBaselineInline(profileId: Long, packageName: String, activityName: String): DbApplication?
 
-    @Query("SELECT packageName, activityName, drawable, calendarEnabled, calendarPrefix FROM DbApplication WHERE profileId = :profileId")
-    fun fingerprintRows(profileId: Long): List<IconFingerprintRow>
+    @Query("SELECT $FINGERPRINT_COLUMNS FROM DbApplication WHERE profileId = :profileId")
+    fun fingerprintRowsInline(profileId: Long): List<IconFingerprintRow>
 
     @Query("SELECT modifierInput FROM DbApplication WHERE modifierInput != ''")
     fun modifierInputDocuments(): List<String>
 
-    @Query("SELECT * FROM DbApplication WHERE profileId = :profileId")
-    fun getAll(profileId: Long): List<DbApplication>
+    @Query("SELECT $ICON_ROW_COLUMNS FROM DbApplication WHERE profileId = :profileId")
+    fun getAllInline(profileId: Long): List<DbApplication>
 
     /** Every profile's rows in one query — backup export. */
-    @Query("SELECT * FROM DbApplication")
-    fun getAllProfiles(): List<DbApplication>
+    @Query("SELECT $ICON_ROW_COLUMNS FROM DbApplication")
+    fun getAllProfilesInline(): List<DbApplication>
+
+    @Query("SELECT $OVERSIZED_ARTWORK_COLUMNS FROM DbApplication WHERE $OVERSIZED_ARTWORK_FILTER AND profileId = :profileId")
+    fun oversizedArtwork(profileId: Long): List<OversizedIconArtwork>
+
+    @Query("SELECT $OVERSIZED_ARTWORK_COLUMNS FROM DbApplication WHERE $OVERSIZED_ARTWORK_FILTER")
+    fun oversizedArtworkAllProfiles(): List<OversizedIconArtwork>
+
+    @Query("SELECT substr(drawable, :start, :count) FROM DbApplication WHERE profileId = :profileId AND packageName = :packageName AND activityName = :activityName")
+    fun drawableChunk(profileId: Long, packageName: String, activityName: String, start: Int, count: Int): String?
+
+    @Query("SELECT substr(baseDrawable, :start, :count) FROM DbApplication WHERE profileId = :profileId AND packageName = :packageName AND activityName = :activityName")
+    fun baseDrawableChunk(profileId: Long, packageName: String, activityName: String, start: Int, count: Int): String?
 
     @Insert
     fun insertAll(apps: List<DbApplication>)
