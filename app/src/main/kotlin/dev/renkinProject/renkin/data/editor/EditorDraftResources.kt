@@ -8,6 +8,7 @@ import android.system.Os
 import android.system.OsConstants
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.UploadedImageStore
+import dev.renkinProject.renkin.extension.toLowerHex
 import dev.renkinProject.renkin.icon.creator.FontCatalog
 import java.io.File
 import java.io.IOException
@@ -32,7 +33,7 @@ internal class EditorDraftResource internal constructor(
     }
     private val content = bytes.copyOf()
     val byteCount: Int get() = content.size
-    val sha256: String = MessageDigest.getInstance("SHA-256").digest(content).editorDraftHex()
+    val sha256: String = MessageDigest.getInstance("SHA-256").digest(content).toLowerHex()
     fun copyBytes(): ByteArray = content.copyOf()
 }
 

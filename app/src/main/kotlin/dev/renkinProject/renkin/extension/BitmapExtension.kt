@@ -268,7 +268,7 @@ fun Bitmap.toBase64(format: Bitmap.CompressFormat, quality: Int, base64Flag: Int
 fun Bitmap.contentHash(): String {
     val bytes = getBytes(Bitmap.CompressFormat.PNG, 100)
     val digest = MessageDigest.getInstance("SHA-256").digest(bytes)
-    return digest.joinToString("") { "%02x".format(it) }
+    return digest.toLowerHex()
 }
 
 private val standardBase64Pattern = Regex("[A-Za-z0-9+/]*={0,2}")

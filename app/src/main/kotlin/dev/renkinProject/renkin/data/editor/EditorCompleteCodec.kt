@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.data.editor
 
+import dev.renkinProject.renkin.extension.toLowerHex
 import dev.renkinProject.renkin.icon.creator.ModifierInputOrigin
 import dev.renkinProject.renkin.icon.creator.ModifierInputPipeline
 import java.io.IOException
@@ -169,7 +170,7 @@ internal object EditorCompleteCodec {
         val owner = currentCoroutineContext()
         return EditorArtworkWriter { owner.ensureActive() }.run {
             output.writeInt(MAGIC); output.writeInt(VERSION)
-            text(MessageDigest.getInstance("SHA-256").digest(controls).editorDraftHex())
+            text(MessageDigest.getInstance("SHA-256").digest(controls).toLowerHex())
             output.writeLong(value.serial); text(value.origin.name); boolean(value.initialized); boolean(value.canRestore)
             boolean(value.vectorBaked); boolean(value.restoredSourceBaked); boolean(value.modifierRestoreFailed)
             with(value.original) {
@@ -195,7 +196,7 @@ internal object EditorCompleteCodec {
         val owner = currentCoroutineContext()
         return try { EditorArtworkReader(bytes) { owner.ensureActive() }.run {
             require(input.readInt() == MAGIC && input.readInt() == VERSION) { "Unsupported complete editor capture" }
-            require(text() == MessageDigest.getInstance("SHA-256").digest(controlsBytes).editorDraftHex()) { "Completed frame/control digest mismatch" }
+            require(text() == MessageDigest.getInstance("SHA-256").digest(controlsBytes).toLowerHex()) { "Completed frame/control digest mismatch" }
             val serial = input.readLong(); val origin = enumValueOf<EditorDraftOrigin>(text())
             val initialized = boolean(); val canRestore = boolean(); val vectorBaked = boolean(); val restoredBaked = boolean(); val failed = boolean()
             val original = EditorOriginalSnapshot(text(), text(), optionalText(), optionalText(), optionalText(MAX_RECIPE_BYTES), inputState(),

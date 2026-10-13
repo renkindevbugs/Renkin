@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.data.transfer
 
 import dev.renkinProject.renkin.data.IconModifierInputStore
+import dev.renkinProject.renkin.extension.toLowerHex
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -102,7 +103,7 @@ internal class StagedBackupArchive private constructor(
                     }
                 }
                 archive.delete()
-                return StagedBackupArchive(directory, files, digest.digest().joinToString("") { "%02x".format(it) })
+                return StagedBackupArchive(directory, files, digest.digest().toLowerHex())
             } catch (error: Throwable) {
                 if (error is OutOfMemoryError) Log.error("BackupArchive", "Out of memory reading archive; sourceBytes=${File(directory, "archive.zip").length()}, stagedBytes=${directory.listFiles()?.sumOf { it.length() }}", error)
                 BackupStaging.release(directory)

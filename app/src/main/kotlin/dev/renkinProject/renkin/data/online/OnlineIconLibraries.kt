@@ -7,6 +7,7 @@ import android.util.LruCache
 import android.util.Xml
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.renkinProject.renkin.BuildConfig
+import dev.renkinProject.renkin.extension.toLowerHex
 import dev.renkinProject.renkin.util.Log
 import java.io.File
 import java.io.IOException
@@ -353,7 +354,7 @@ class OnlineIconRepository internal constructor(
         private fun cacheKey(value: String): String =
             MessageDigest.getInstance("SHA-256")
                 .digest(value.toByteArray(Charsets.UTF_8))
-                .joinToString("") { byte -> "%02x".format(byte.toInt() and 0xff) }
+                .toLowerHex()
 
         fun parseCollections(json: String): List<IconifyCollection>? = runCatching {
             val root = JSONObject(json)

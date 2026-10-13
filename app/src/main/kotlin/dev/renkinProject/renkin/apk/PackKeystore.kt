@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.apk
 
+import dev.renkinProject.renkin.extension.toLowerHex
 import java.io.File
 import java.security.SecureRandom
 
@@ -46,6 +47,6 @@ object PackKeystore {
     private fun generatePassword(): String {
         val bytes = ByteArray(24)
         SecureRandom().nextBytes(bytes)
-        return bytes.joinToString("") { "%02x".format(it) }
+        return bytes.toLowerHex()
     }
 }

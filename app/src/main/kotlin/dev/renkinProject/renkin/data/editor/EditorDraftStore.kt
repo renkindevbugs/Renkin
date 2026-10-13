@@ -1,10 +1,10 @@
 package dev.renkinProject.renkin.data.editor
 
 import android.content.Context
-import android.system.Os
-import android.system.OsConstants
 import android.util.AtomicFile
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.renkinProject.renkin.data.syncDirectory
+import dev.renkinProject.renkin.extension.toLowerHex
 import dev.renkinProject.renkin.util.Log
 import java.io.ByteArrayOutputStream
 import java.io.File
@@ -143,7 +143,7 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
                 }
                 output.fd.sync()
             }
-            artifact.copy(sha256 = digest.hex())
+            artifact.copy(sha256 = digest.digest().toLowerHex())
         }
         val completed = record.copy(artifacts = artifacts)
         val saved = EditorDraftCatalog(current.storageGeneration, completed)
@@ -320,7 +320,7 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
                 retained?.let { buffer.copyInto(it, offset, 0, count) }
                 offset += count
             }
-            if (offset.toLong() != artifact.bytes || digest.hex() != artifact.sha256) {
+            if (offset.toLong() != artifact.bytes || digest.digest().toLowerHex() != artifact.sha256) {
                 throw IOException("Editor draft artifact checksum changed")
             }
         }
@@ -358,7 +358,7 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
             }
             if (read != length || file.length() != length) throw IOException("Editor draft metadata changed during inspection")
         }
-        return digest.hex()
+        return digest.digest().toLowerHex()
     }
 
     private fun requireCheckpoint(catalog: EditorDraftCatalog, expected: EditorDraftCheckpoint) {
@@ -407,22 +407,6 @@ internal class EditorDraftStore @Inject constructor(@ApplicationContext context:
                 }
             } catch (error: IOException) {
                 Log.error("EditorDraftStore", "Could not inspect an unused draft artifact", error)
-            }
-        }
-    }
-
-    private fun syncDirectory(directory: File) {
-        val descriptor = Os.open(directory.absolutePath, OsConstants.O_RDONLY, 0)
-        try { Os.fsync(descriptor) } finally { Os.close(descriptor) }
-    }
-
-    private fun MessageDigest.hex(): String {
-        val alphabet = "0123456789abcdef"
-        return buildString {
-            digest().forEach { byte ->
-                val value = byte.toInt() and 0xff
-                append(alphabet[value ushr 4])
-                append(alphabet[value and 0x0f])
             }
         }
     }
