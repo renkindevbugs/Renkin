@@ -77,13 +77,15 @@ internal object IconPreviewCache {
     }
 }
 
-private class EmptyIconPreviewPainter(sizePx: Int) : Painter() {
-    override val intrinsicSize = Size(sizePx.toFloat(), sizePx.toFloat())
+private class EmptyIconPreviewPainter(override val intrinsicSize: Size) : Painter() {
     override fun DrawScope.onDraw() = Unit
 }
 
 @Composable
-internal fun IconPackDrawable.rememberPreviewPainter(sizePx: Int): Painter {
+internal fun IconPackDrawable.rememberPreviewPainter(
+    sizePx: Int,
+    intrinsicSize: Size = Size(sizePx.toFloat(), sizePx.toFloat())
+): Painter {
     val key = remember(this, sizePx) { IconPreviewCacheKey(this, sizePx) }
     var bitmap by remember { mutableStateOf(IconPreviewCache.get(key)) }
     LaunchedEffect(key) {
@@ -94,7 +96,7 @@ internal fun IconPackDrawable.rememberPreviewPainter(sizePx: Int): Painter {
         }
     }
     val visibleBitmap = IconPreviewCache.get(key) ?: bitmap
-    return remember(visibleBitmap, sizePx) {
-        visibleBitmap?.let { BitmapPainter(it.asImageBitmap()) } ?: EmptyIconPreviewPainter(sizePx)
+    return remember(visibleBitmap, intrinsicSize) {
+        visibleBitmap?.let { BitmapPainter(it.asImageBitmap()) } ?: EmptyIconPreviewPainter(intrinsicSize)
     }
 }

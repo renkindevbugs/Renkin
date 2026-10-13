@@ -1942,6 +1942,19 @@ smali class package must match IconPackBuilder's activity FQN string. Signing us
 file name (a package with several activities must not overwrite one icon with the other).
 Packs identify apps by `ComponentInfo` in appfilter.xml — never by name.
 
+### Saved raster artwork
+
+Saved PNG rows use `BitmapIconDrawable` with immutable encoded backing rather than retaining
+full decoded rendered/base buffers for every app. Independent wrappers share only encoded
+pixels; full bitmap reads are detached, while target-sized previews use sampled decoding and
+`IconPreviewCache`. Compose painter loads run off Main and keep stable aspect ratios. Loading
+still fully validates PNGs with two concurrent row decoders; corrupt-row preservation is unchanged.
+Live generated/editor/recovery bitmaps remain eager. Accessing the mutable `drawable` property
+explicitly materializes pixels for that wrapper. Adaptive preview zoom does not affect browser
+or export geometry, and stored text can be written back without decoding. No formats change.
+Ownership details, device comparison and remaining costs are in
+[performance-bitmap-ownership.md](performance-bitmap-ownership.md).
+
 ### Adaptive icons imported from packs
 
 `AdaptiveIconPackDrawable` owns separate foreground/background PNG layers and an optional
