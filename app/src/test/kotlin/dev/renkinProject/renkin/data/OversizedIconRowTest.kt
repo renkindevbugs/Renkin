@@ -87,6 +87,16 @@ class OversizedIconRowTest {
         } finally { file.delete() }
     }
 
+    @Test fun iconRowQueriesSelectEveryStoredColumn() {
+        val sql = db.openHelper.readableDatabase
+        val stored = sql.query("PRAGMA table_info(DbApplication)").use { cursor ->
+            val name = cursor.getColumnIndexOrThrow("name")
+            buildSet { while (cursor.moveToNext()) add(cursor.getString(name)) }
+        }
+        val selected = sql.query("SELECT $ICON_ROW_COLUMNS FROM DbApplication LIMIT 0").use { it.columnNames.toSet() }
+        assertEquals(stored, selected)
+    }
+
     @Test fun valueChangedBetweenChunksIsRejected() {
         val parts = listOf("abc", "")
         var call = 0

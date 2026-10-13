@@ -9,6 +9,7 @@ private const val EDGE_SOFTNESS = 0.06f
 // The ring the background is read from, as a fraction of the icon's half-size.
 private const val BORDER_RING = 0.8f
 private const val DARK_PLATE_MAJORITY = 1.5f
+private const val OTSU_BINS = 64
 
 /**
  * How much each pixel belongs to the generated Material You foreground, 0..1. The artwork is split
@@ -19,10 +20,16 @@ private const val DARK_PLATE_MAJORITY = 1.5f
  */
 internal fun materialYouForegroundCoverage(pixels: IntArray, width: Int, height: Int): FloatArray {
     val luminance = FloatArray(pixels.size) { luminanceOf(pixels[it]) }
-    val opaque = pixels.indices.filter { Color.alpha(pixels[it]) >= OPAQUE_ALPHA }
+    val histogram = IntArray(OTSU_BINS)
+    var opaqueCount = 0
+    for (index in pixels.indices) {
+        if (Color.alpha(pixels[index]) < OPAQUE_ALPHA) continue
+        histogram[otsuBin(luminance[index])]++
+        opaqueCount++
+    }
     val coverage = FloatArray(pixels.size)
-    if (opaque.isEmpty()) return coverage
-    val threshold = otsuThreshold(opaque.map { luminance[it] })
+    if (opaqueCount == 0) return coverage
+    val threshold = otsuThreshold(histogram, opaqueCount)
     val backgroundIsLight = borderIsLight(pixels, luminance, width, height, threshold)
     for (index in pixels.indices) {
         val light = smoothStep(threshold - EDGE_SOFTNESS, threshold + EDGE_SOFTNESS, luminance[index])
@@ -50,12 +57,12 @@ private fun borderIsLight(pixels: IntArray, luminance: FloatArray, width: Int, h
     return light + dark == 0 || dark < light * DARK_PLATE_MAJORITY
 }
 
-/** Otsu's method over 64 luminance bins: the split that best separates two tones. */
-internal fun otsuThreshold(values: List<Float>): Float {
-    val bins = 64
-    val histogram = IntArray(bins)
-    values.forEach { histogram[(it * (bins - 1)).toInt().coerceIn(0, bins - 1)]++ }
-    val total = values.size.toFloat()
+private fun otsuBin(luminance: Float): Int = (luminance * (OTSU_BINS - 1)).toInt().coerceIn(0, OTSU_BINS - 1)
+
+/** Otsu's method over [OTSU_BINS] luminance bins of [count] pixels: the split that best separates two tones. */
+private fun otsuThreshold(histogram: IntArray, count: Int): Float {
+    val bins = OTSU_BINS
+    val total = count.toFloat()
     val weightedSum = histogram.indices.sumOf { it.toDouble() * histogram[it] }
     var backgroundWeight = 0f
     var backgroundSum = 0.0

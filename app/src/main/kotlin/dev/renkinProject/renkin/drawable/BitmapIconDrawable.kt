@@ -73,9 +73,9 @@ class BitmapIconDrawable private constructor(
         resident?.let { it.draw(canvas); return }
         val size = maxOf(contentBounds.width(), contentBounds.height())
         if (size <= 0) return
-        val bitmap = if (previewScale == 1f) {
-            IconPreviewCache.getOrRender(IconPreviewCacheKey(this, size)) ?: return
-        } else requireNotNull(stored).preview(size)
+        // draw() keeps raw geometry, so a zoomed icon caches it apart from its zoomed in-app preview.
+        val key = IconPreviewCacheKey(this, size, rawGeometry = previewScale != 1f)
+        val bitmap = IconPreviewCache.getOrRender(key) { requireNotNull(stored).preview(size) } ?: return
         // A hardware Canvas may retain this bitmap in its display list after draw() returns.
         canvas.drawBitmap(bitmap, null, contentBounds, paint)
     }

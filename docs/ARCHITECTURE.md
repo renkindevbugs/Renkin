@@ -1337,6 +1337,8 @@ be assumed to open the upgraded database.
   never read with `SELECT *`: `RenkinPackDao` row queries return `drawable`/`baseDrawable` inline
   only up to `OversizedText.INLINE_CHARS`, and `RenkinPackRepository` reads longer values in
   `substr()` chunks inside the same transaction. The recovery snapshot does the same per rowid.
+  The explicit column list `ICON_ROW_COLUMNS` must name every `DbApplication` column (guarded by
+  `OversizedIconRowTest`): a column it omits would read as its default and be lost on the next write.
   Individual Apply stores exactly the reviewed draft
   as both base and current render. The Custom target toggle controls an explicit Global Options
   Apply; it does not automatically restyle later editor or watch picks. Custom reference rows

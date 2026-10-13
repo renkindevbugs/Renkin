@@ -28,10 +28,18 @@ internal class VerifiedModifierInput private constructor(
             try {
                 val adaptiveLayers = input is AdaptiveIconPackDrawable && retained.pipeline == ModifierInputPipeline.IMAGE_EDIT
                 if (!retained.options.modifiers.materialYouPack.isReplayableOn(adaptiveLayers)) return@withContext null
-                currentCoroutineContext().ensureActive()
-                val replay = IconModifierStageRenderer(resources, retained.options).renderRetained(input, retained.pipeline)
-                currentCoroutineContext().ensureActive()
-                val matches = sameLocalArtwork(base, replay)
+                val renderer = IconModifierStageRenderer(resources, retained.options)
+                suspend fun replays(frameInput: IconPackDrawable): Boolean {
+                    currentCoroutineContext().ensureActive()
+                    val replay = renderer.renderRetained(frameInput, retained.pipeline)
+                    currentCoroutineContext().ensureActive()
+                    return sameLocalArtwork(base, replay)
+                }
+                // Adaptive icons flattened before modifiers started from the launcher-sized frame
+                // (488c37e6) stored the smaller output. The recipe is still genuine; restoring it
+                // renders the corrected size, so the next Apply upgrades the stored icon.
+                val matches = replays(input) ||
+                    (input is AdaptiveIconPackDrawable && replays(input.withLegacyModifierFrame()))
                 currentCoroutineContext().ensureActive()
                 if (matches) VerifiedModifierInput(resources, input, retained) else null
             } catch (error: CancellationException) {
