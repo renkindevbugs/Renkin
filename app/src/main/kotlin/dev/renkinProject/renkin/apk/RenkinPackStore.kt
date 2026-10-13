@@ -9,11 +9,9 @@ import dev.renkinProject.renkin.data.IconFingerprintRow
 import dev.renkinProject.renkin.data.IconModifierInputStore
 import dev.renkinProject.renkin.data.RenkinPackRepository
 import dev.renkinProject.renkin.data.StorageOperationGate
-import dev.renkinProject.renkin.drawable.ADAPTIVE_ICON_SCALE
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
-import dev.renkinProject.renkin.extension.bitmapFromBase64
 import dev.renkinProject.renkin.icon.creator.IconModifierInput
 import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
 import dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe
@@ -76,11 +74,10 @@ class RenkinPackStore(
 
     /** Loads [profileId]'s saved icons + calendar flags, keyed by "package/activity". */
     suspend fun load(profileId: Long, defaultColor: Color): Map<String, SavedEntry> = withContext(Dispatchers.Default) {
-        // Row decoding (bitmap decompress / vector XML parse) is independent per row —
-        // decode in parallel so a profile full of icons doesn't gate startup serially.
+        // Bound transient PNG validation buffers and XML parsing while loading independent rows.
         coroutineScope {
             repo.getAll(profileId).map { dbApp ->
-                async {
+                async(artworkDispatcher) {
                     "${dbApp.packageName}/${dbApp.activityName}" to decodeRow(dbApp, defaultColor)
                 }
             }.awaitAll().toMap()
@@ -101,11 +98,7 @@ class RenkinPackStore(
                 // Adaptive Material You bitmaps are stored in their 108dp safe-zone form. Restore
                 // the preview zoom too; otherwise a restart displays and later re-renders the raw
                 // inset bitmap even though the adaptive export flag itself survived.
-                else -> BitmapIconDrawable(
-                    bitmapFromBase64(drawable),
-                    isAdaptive,
-                    if (isAdaptive) ADAPTIVE_ICON_SCALE else 1f
-                )
+                else -> BitmapIconDrawable.fromStored(drawable, isAdaptive)
             }
         }.getOrNull()
         val icon = decode(dbApp.drawable, dbApp.isXml, dbApp.isAdaptiveIcon)
@@ -119,7 +112,7 @@ class RenkinPackStore(
                 runCatching {
                     when (icon) {
                         is ImageVectorDrawable -> icon.deepCopy()
-                        is BitmapIconDrawable -> icon.toBitmap().let { bitmap ->
+                        is BitmapIconDrawable -> icon.detachedStoredCopy() ?: icon.toBitmap().let { bitmap ->
                             bitmap.copy(bitmap.config ?: Bitmap.Config.ARGB_8888, bitmap.isMutable)?.let {
                                 BitmapIconDrawable(it, icon.isAdaptiveIcon(), icon.previewScale)
                             }
