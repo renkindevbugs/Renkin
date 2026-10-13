@@ -11,11 +11,17 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
-// Release signing credentials live in local.properties (gitignored), so a signed release
-// builds with plain `gradlew assembleRelease`; without them (CI, F-Droid) the release APK
-// is simply unsigned, exactly as before.
+// Verification must not load signing credentials even on a configured developer machine.
+val unsignedRelease = providers.gradleProperty("renkin.unsignedRelease")
+    .map { it.toBooleanStrict() }
+    .orElse(false)
+    .get()
+
+// Plain assembleRelease keeps local signing; CI explicitly requests an unsigned release.
 val localProps = Properties().apply {
-    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    if (!unsignedRelease) {
+        rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+    }
 }
 
 android {

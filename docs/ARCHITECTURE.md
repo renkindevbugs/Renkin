@@ -1208,6 +1208,22 @@ execution is not claimed. CI configuration/release integration remains separate.
 [ci-lint-findings.md](ci-lint-findings.md) for compatibility sources, verification limits and
 integration order.
 
+**CI1 (locally verified)** starts the first follow-up on
+`feature/ci-release-verification`. CI adds explicit lintDebug/debug assembly alongside the full
+unit suite and a separate unsigned release/R8 assembly job. An explicit signing opt-out leaves
+ordinary local release signing unchanged. No production Kotlin, shrinker rules, dependency or
+persistence format changes. Verification against dev at a0923f46 includes CI1a, adaptive
+rendering/replay fixes, Match app color and chunked reads for oversized icon rows. On 2026-10-13,
+compilation, all 1,270 tests in 173 suites (including both Roborazzi comparisons), lintDebug
+and assembleDebug passed. Lint has zero errors, 174 warnings and seven informational findings,
+unchanged from CI1a. Unsigned release/R8 assembly and ordinary signed release assembly passed;
+apksigner rejects the unsigned artifact and verifies v1/v2 signatures on the signed APK.
+R8 Kotlin metadata warnings remain an explicit toolchain follow-up. Historical CI gaps in the
+7D8 assessment describe its reviewed baseline; no actual GitHub execution is claimed here.
+See [ci-release-checks.md](ci-release-checks.md) for results, commands, reports and later
+optimized-release device scenarios. Performance measurement will include the developer's
+larger profile after the verification gate is green.
+
 A separate compatibility cleanup remains from 7A: retire `Profile.prefsSnapshot` and its Room
 dual writes. It is not another source of truth. Current keep-current recovery repairs damaged
 typed documents from this copy, and supported legacy recovery/bootstrap still consumes it.
