@@ -42,7 +42,9 @@ class AdaptiveIconPackDrawable internal constructor(
     internal val monochromePng: ByteArray? = null,
     val materialYouEditState: MaterialYouPackEditState? = null,
     internal val originalForegroundPng: ByteArray? = null,
-    internal val originalBackgroundPng: ByteArray? = null
+    internal val originalBackgroundPng: ByteArray? = null,
+    // Only for verifying recipes saved before modifiers started from the zoomed, masked frame.
+    private val legacyModifierFrame: Boolean = false
 ) : IconPackDrawable() {
     private constructor(
         foreground: Bitmap,
@@ -72,7 +74,7 @@ class AdaptiveIconPackDrawable internal constructor(
     // start from the compensated preview artwork; otherwise the icon shrinks by 72/108 once enabled.
     // The launcher mask is reapplied at frame size so outline and shadow still have a silhouette.
     override fun toModifierBitmap(size: Int): Bitmap =
-        maskToLauncherShape(render(size, ADAPTIVE_ICON_SCALE))
+        if (legacyModifierFrame) render(size) else maskToLauncherShape(render(size, ADAPTIVE_ICON_SCALE))
     override fun previewBitmap(): Bitmap = previewBitmap(PREVIEW_SIZE)
     override fun previewBitmap(sizePx: Int): Bitmap {
         require(sizePx > 0)
@@ -108,7 +110,8 @@ class AdaptiveIconPackDrawable internal constructor(
             monochrome?.let(::encodeLayer) ?: monochromePng,
             materialYouEditState,
             originalForegroundPng,
-            originalBackgroundPng
+            originalBackgroundPng,
+            legacyModifierFrame
         )
 
     fun withMaterialYouLayers(
@@ -123,7 +126,13 @@ class AdaptiveIconPackDrawable internal constructor(
         monochromePng,
         state,
         originalForegroundPng,
-        originalBackgroundPng
+        originalBackgroundPng,
+        legacyModifierFrame
+    )
+
+    internal fun withLegacyModifierFrame(): AdaptiveIconPackDrawable = AdaptiveIconPackDrawable(
+        foregroundPng, backgroundPng, monochromePng, materialYouEditState,
+        originalForegroundPng, originalBackgroundPng, legacyModifierFrame = true
     )
 
     fun restoreOriginalMaterialYouLayers(state: MaterialYouPackEditState): AdaptiveIconPackDrawable {
@@ -131,7 +140,7 @@ class AdaptiveIconPackDrawable internal constructor(
         val background = originalBackgroundPng ?: backgroundPng
         return AdaptiveIconPackDrawable(
             foreground, background, monochromePng, state,
-            originalForegroundPng = null, originalBackgroundPng = null
+            originalForegroundPng = null, originalBackgroundPng = null, legacyModifierFrame = legacyModifierFrame
         )
     }
 

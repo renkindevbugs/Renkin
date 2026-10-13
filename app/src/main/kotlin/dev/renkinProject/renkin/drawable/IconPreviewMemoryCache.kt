@@ -21,16 +21,25 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.lang.ref.WeakReference
 
-internal class IconPreviewCacheKey(icon: IconPackDrawable, val targetPx: Int, val revision: Int = 0) {
+// [rawGeometry] keeps draw() frames, which skip the in-app preview zoom, apart from preview bitmaps
+// of the same icon; [revision] is a caller-owned counter (for example an app's reload version).
+internal class IconPreviewCacheKey(
+    icon: IconPackDrawable,
+    val targetPx: Int,
+    val revision: Int = 0,
+    val rawGeometry: Boolean = false
+) {
     private val reference = WeakReference(icon)
     private val identityHash = System.identityHashCode(icon)
     val icon: IconPackDrawable? get() = reference.get()
 
-    override fun hashCode(): Int = 31 * (31 * identityHash + targetPx) + revision
+    override fun hashCode(): Int = 31 * (31 * (31 * identityHash + targetPx) + revision) + rawGeometry.hashCode()
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
-        if (other !is IconPreviewCacheKey || targetPx != other.targetPx || revision != other.revision) return false
+        if (other !is IconPreviewCacheKey || targetPx != other.targetPx || revision != other.revision ||
+            rawGeometry != other.rawGeometry
+        ) return false
         val live = icon ?: return false
         return live === other.icon
     }
@@ -43,11 +52,14 @@ internal class IconPreviewMemoryCache(maxSizeBytes: Int) {
 
     fun get(key: IconPreviewCacheKey): Bitmap? = cache.get(key)
 
-    fun getOrRender(key: IconPreviewCacheKey): Bitmap? {
+    fun getOrRender(
+        key: IconPreviewCacheKey,
+        render: (IconPackDrawable) -> Bitmap = { it.previewBitmap(key.targetPx) }
+    ): Bitmap? {
         cache.get(key)?.let { return it }
         val icon = key.icon ?: return null
         return synchronized(icon) {
-            cache.get(key) ?: icon.previewBitmap(key.targetPx).also { cache.put(key, it) }
+            cache.get(key) ?: render(icon).also { cache.put(key, it) }
         }
     }
 
@@ -63,8 +75,11 @@ internal object IconPreviewCache {
 
     fun get(key: IconPreviewCacheKey): Bitmap? = cacheFor(key).get(key)
 
-    fun getOrRender(key: IconPreviewCacheKey): Bitmap? = try {
-        cacheFor(key).getOrRender(key)
+    fun getOrRender(
+        key: IconPreviewCacheKey,
+        render: (IconPackDrawable) -> Bitmap = { it.previewBitmap(key.targetPx) }
+    ): Bitmap? = try {
+        cacheFor(key).getOrRender(key, render)
     } catch (error: CancellationException) {
         throw error
     } catch (_: OutOfMemoryError) {

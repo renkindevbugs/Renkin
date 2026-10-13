@@ -49,15 +49,17 @@ private const val NEUTRAL_MAX_VALUE_FOR_DARK = 0.15f
 
 /**
  * Reads the colour or two-stop gradient of [appIcon]'s adaptive background. Only the part a
- * launcher shows (the inner 72 of 108 dp) is sampled. Works on a copy, so the caller's drawable
- * keeps its bounds while the UI may be drawing it.
+ * launcher shows (the inner 72 of 108 dp) is sampled. Works only on a copy, so the caller's
+ * drawable keeps its bounds while the UI may be drawing it; an icon that cannot be copied has
+ * no readable colour.
  */
 fun appBackgroundColor(appIcon: Drawable): AppBackgroundColor {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O || !appIcon.isAdaptiveIconDrawable()) {
         return AppBackgroundColor.Missing(AppColorUnavailable.NOT_ADAPTIVE)
     }
-    val copy = appIcon.constantState?.newDrawable()?.mutate() ?: appIcon
-    val background = (copy as AdaptiveIconDrawable).background
+    val copy = appIcon.constantState?.newDrawable()?.mutate() as? AdaptiveIconDrawable
+        ?: return AppBackgroundColor.Missing(AppColorUnavailable.NOT_ADAPTIVE)
+    val background = copy.background
         ?: return AppBackgroundColor.Missing(AppColorUnavailable.NOT_ADAPTIVE)
     val layer = newArgbBitmap(SAMPLE_SIZE, SAMPLE_SIZE) { canvas ->
         background.setBounds(0, 0, SAMPLE_SIZE, SAMPLE_SIZE)
