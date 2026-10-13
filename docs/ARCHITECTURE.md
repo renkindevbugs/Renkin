@@ -1957,6 +1957,16 @@ Ownership details, device comparison and remaining costs are in
 The controlled device check of generated versus reloaded pack export resources is recorded in
 [performance-pack-builds.md](performance-pack-builds.md).
 
+### Installed application icon inventory
+
+`InstalledAppCatalog` can emit an aggregate `InstalledIconMemory` inventory in debug builds.
+The collector follows exposed bitmap/layer/wrapper references by object identity without
+rendering or changing artwork; stateful containers, unknown leaves and hidden native caches
+remain outside its allocation sum. It has depth/node limits and retains no drawable references
+after inspection. Release callers are guarded by `BuildConfig.DEBUG`; R8 removes the collector.
+The device attribution, transient APK-mapping costs and follow-up source-loading contract are
+recorded in [performance-installed-icons.md](performance-installed-icons.md).
+
 ### Adaptive icons imported from packs
 
 `AdaptiveIconPackDrawable` owns separate foreground/background PNG layers and an optional

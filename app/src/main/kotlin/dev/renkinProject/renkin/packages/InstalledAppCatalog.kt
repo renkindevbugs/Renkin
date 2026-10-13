@@ -8,7 +8,9 @@ import android.content.res.Configuration
 import android.content.res.Resources
 import android.graphics.Bitmap
 import android.graphics.drawable.Drawable
+import android.os.SystemClock
 import android.os.UserManager
+import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.drawable.hasValidDimensions
 import dev.renkinProject.renkin.extension.toDrawable
@@ -64,6 +66,7 @@ internal class InstalledAppCatalog(private val context: Context) {
     }
 
     suspend fun getAllInstalledApps(): Array<PackageInfoStruct> = coroutineScope {
+        val started = if (BuildConfig.DEBUG) SystemClock.elapsedRealtimeNanos() else 0L
         val userManager = context.getSystemService(Context.USER_SERVICE) as UserManager
         val launcherApps = context.getSystemService(Context.LAUNCHER_APPS_SERVICE) as LauncherApps
 
@@ -106,7 +109,11 @@ internal class InstalledAppCatalog(private val context: Context) {
             }
             .awaitAll()
 
-        linkedSetOf<PackageInfoStruct>().apply { addAll(structs) }.toTypedArray()
+        val result = linkedSetOf<PackageInfoStruct>().apply { addAll(structs) }.toTypedArray()
+        if (BuildConfig.DEBUG) {
+            reportInstalledIconMemory(result.map { it.icon }, (SystemClock.elapsedRealtimeNanos() - started) / 1_000_000.0)
+        }
+        result
     }
 
     /** Reads an app's English resource label without changing the process locale. */
