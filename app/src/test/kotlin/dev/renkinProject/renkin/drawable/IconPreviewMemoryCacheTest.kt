@@ -48,6 +48,17 @@ class IconPreviewMemoryCacheTest {
     }
 
     @Test
+    fun rawDrawFrameNeverAliasesAPreviewWithTheSameRevision() {
+        val cache = IconPreviewMemoryCache(1024)
+        val icon = TestIcon()
+        val preview = cache.getOrRender(IconPreviewCacheKey(icon, 56, revision = 1))
+        val raw = cache.getOrRender(IconPreviewCacheKey(icon, 56, revision = 1, rawGeometry = true))
+        assertNotSame(preview, raw)
+        assertSame(raw, cache.getOrRender(IconPreviewCacheKey(icon, 56, revision = 1, rawGeometry = true)))
+        assertEquals(2, icon.renders)
+    }
+
+    @Test
     fun drawableValueEqualityCannotAliasAnotherInstance() {
         class EqualIcon : TestIcon() {
             override fun equals(other: Any?): Boolean = other is EqualIcon
