@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.withTransaction
 import dev.renkinProject.renkin.data.transfer.BackupDatabaseSnapshot
 import java.io.File
+import java.util.concurrent.Callable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
@@ -49,16 +50,51 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
     private val profileDao = db.profileDao()
 
     suspend fun getAll(profileId: Long): List<DbApplication> = access {
-        dao.getAll(profileId)
+        consistentRead { withFullArtwork(dao.getAllInline(profileId), dao.oversizedArtwork(profileId)) }
     }
 
     internal suspend fun editorBaseline(profileId: Long, packageName: String, activityName: String): DbApplication? = access {
-        dao.editorBaseline(profileId, packageName, activityName)
+        consistentRead {
+            dao.editorBaselineInline(profileId, packageName, activityName)?.let { row ->
+                withFullArtwork(listOf(row), dao.oversizedArtwork(profileId)).single()
+            }
+        }
     }
 
     internal suspend fun fingerprintRows(profileId: Long): List<IconFingerprintRow> = access {
-        dao.fingerprintRows(profileId)
+        consistentRead {
+            val oversized = dao.oversizedArtwork(profileId).associateBy { it.packageName to it.activityName }
+            dao.fingerprintRowsInline(profileId).map { row ->
+                val artwork = oversized[row.packageName to row.activityName]
+                if (artwork == null || artwork.drawableChars <= OversizedText.INLINE_CHARS) row
+                else row.copy(drawable = readDrawable(artwork))
+            }
+        }
     }
+
+    // The inline rows and the chunked artwork must describe the same stored state.
+    private fun <T> consistentRead(block: () -> T): T = db.runInTransaction(Callable { block() })
+
+    private fun withFullArtwork(rows: List<DbApplication>, oversized: List<OversizedIconArtwork>): List<DbApplication> {
+        if (oversized.isEmpty()) return rows
+        val byKey = oversized.associateBy { Triple(it.profileId, it.packageName, it.activityName) }
+        return rows.map { row ->
+            val artwork = byKey[Triple(row.profileId, row.packageName, row.activityName)] ?: return@map row
+            row.copy(
+                drawable = if (artwork.drawableChars > OversizedText.INLINE_CHARS) readDrawable(artwork) else row.drawable,
+                baseDrawable = if (artwork.baseDrawableChars > OversizedText.INLINE_CHARS) {
+                    OversizedText.read(artwork.baseDrawableChars) { start, count ->
+                        dao.baseDrawableChunk(artwork.profileId, artwork.packageName, artwork.activityName, start, count).orEmpty()
+                    }
+                } else row.baseDrawable
+            )
+        }
+    }
+
+    private fun readDrawable(artwork: OversizedIconArtwork): String =
+        OversizedText.read(artwork.drawableChars) { start, count ->
+            dao.drawableChunk(artwork.profileId, artwork.packageName, artwork.activityName, start, count).orEmpty()
+        }
 
     /**
      * Replaces the stored set of [profileId] in one shot — atomically: a crash or error
@@ -71,7 +107,7 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
 
     /** Every profile's stored icons in one read — backup export. */
     suspend fun getAllProfilesApplications(): List<DbApplication> = access {
-        dao.getAllProfiles()
+        consistentRead { withFullArtwork(dao.getAllProfilesInline(), dao.oversizedArtworkAllProfiles()) }
     }
 
     internal suspend fun modifierInputDocuments(): List<String> = access { dao.modifierInputDocuments() }
