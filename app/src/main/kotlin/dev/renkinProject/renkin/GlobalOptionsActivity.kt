@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.graphics.Bitmap
+import android.net.Uri
 import android.os.Bundle
 import android.util.LruCache
 import androidx.activity.ComponentActivity
@@ -25,6 +26,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dev.renkinProject.renkin.data.SharedIconHandoff
 import dev.renkinProject.renkin.feature.presets.PresetLibraryViewModel
 import dev.renkinProject.renkin.feature.presets.ProvideColorPresets
 import dev.renkinProject.renkin.feature.presets.ProvideModifierPresets
@@ -232,6 +234,9 @@ class GlobalOptionsViewModel @Inject constructor(
     val applicationState = appProvider.applicationState
     val runtimeState = appProvider.runtimeState
     val iconPackState = appProvider.iconPackState
+
+    /** A content URI an external editor can read [bitmap] from, or null when it cannot be written. */
+    suspend fun shareIconForEditing(bitmap: Bitmap): Uri? = SharedIconHandoff.write(getApplication(), bitmap)
 
     private val previewCache = GlobalPreviewBitmapCache()
     private val previewLock = Any()

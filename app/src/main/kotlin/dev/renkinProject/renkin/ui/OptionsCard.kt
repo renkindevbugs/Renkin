@@ -320,7 +320,7 @@ private fun AdvancedSourceSection(
     // edit dialog). Shown when any source produces text icons.
     if (needTextType(state.primarySource) || needTextType(state.secondarySource)) {
         Box(Modifier.padding(horizontal = 12.dp)) {
-            FontPickerRow(selectedPath = state.textFont) {
+            FontPickerRow(selectedPath = state.textFont, fonts = viewModel.fonts) {
                 viewModel.setTextFont(it)
             }
         }

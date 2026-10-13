@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.DropdownMenuItem
@@ -48,6 +47,7 @@ import dev.renkinProject.renkin.data.getTextTypeLabels
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
 import dev.renkinProject.renkin.drawable.shrinkIfBiggerThan
+import dev.renkinProject.renkin.ui.theme.SwatchShape
 
 @Composable
 fun VectorSwitch(useVector: Boolean, onChange: (newValue: Boolean) -> Unit) {
@@ -212,7 +212,7 @@ fun IconPackDropdown(
                                 contentDescription = null,
                                 modifier = Modifier
                                     .size(36.dp)
-                                    .clip(RoundedCornerShape(9.dp))
+                                    .clip(SwatchShape)
                             )
                         }
                     },

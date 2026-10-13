@@ -1,0 +1,84 @@
+package dev.renkinProject.renkin.data
+
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
+import dev.renkinProject.renkin.vector.SvgRasterizer
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
+import kotlin.math.max
+
+// Blocking readers for user-picked or shared files; callers run them off the main thread.
+
+// Imported images end up as icons, so anything bigger than this per side is wasted RAM — a 48 MP
+// camera photo would otherwise materialise as a ~190 MB ARGB_8888 bitmap and risk an OOM.
+private const val MAX_IMPORT_SIZE = 1024
+internal const val MAX_TEXT_IMPORT_BYTES = 5 * 1024 * 1024
+
+/** A picked or shared image (raster or SVG), downsampled so its longest side stays near 1024 px. */
+internal fun decodeImportedImage(context: Context, uri: Uri): Bitmap? {
+    val contentResolver = context.contentResolver
+
+    // Bounds-only pass first, so a huge photo is downsampled during decode instead of after it.
+    val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, boundsOptions) }
+    val decodeOptions = BitmapFactory.Options().apply {
+        inSampleSize = 1
+        // Cap the LARGEST side: with the textbook both-sides condition a 20000x500 panorama
+        // never downsamples (the short side bails the loop out) and allocates tens of MB.
+        while (max(boundsOptions.outWidth, boundsOptions.outHeight) / (inSampleSize * 2) >= MAX_IMPORT_SIZE) {
+            inSampleSize *= 2
+        }
+    }
+
+    contentResolver.openInputStream(uri).use { BitmapFactory.decodeStream(it, null, decodeOptions) }
+        ?.let { return it }
+
+    // Not a raster image — try SVG. Reading as text is cheap here: this branch is only
+    // reached when the raster decode already failed, and real SVGs are small.
+    val markup = runCatching { readImportedText(context, uri) }.getOrNull()
+    return if (markup != null && markup.contains("<svg", ignoreCase = true)) decodeSvgToBitmap(markup) else null
+}
+
+/** A picked text file (SVG markup), or null when it is unreadable or larger than the import limit. */
+internal fun readImportedText(context: Context, uri: Uri): String? =
+    context.contentResolver.openInputStream(uri)?.use { it.readUtf8TextLimited() }
+
+/** Reads text imports without allowing a malformed/renamed file to consume unbounded memory. */
+internal fun InputStream.readUtf8TextLimited(
+    maxBytes: Int = MAX_TEXT_IMPORT_BYTES
+): String? {
+    if (maxBytes < 0) return null
+    val output = ByteArrayOutputStream(minOf(maxBytes, 16 * 1024))
+    val buffer = ByteArray(8 * 1024)
+    var total = 0
+    while (true) {
+        val read = read(buffer)
+        if (read < 0) break
+        total += read
+        if (total > maxBytes) return null
+        output.write(buffer, 0, read)
+    }
+    return output.toString(Charsets.UTF_8.name())
+}
+
+/**
+ * Renders SVG markup to a bitmap at the full import size (scaling in SvgRasterizer). A render
+ * that painted nothing at all reports failure (error toast) instead of leaving a blank tile
+ * in the gallery.
+ */
+private fun decodeSvgToBitmap(markup: String): Bitmap? {
+    val bitmap = SvgRasterizer.rasterize(markup, MAX_IMPORT_SIZE) ?: return null
+    return if (bitmap.hasAnyVisiblePixel()) bitmap else null
+}
+
+private fun Bitmap.hasAnyVisiblePixel(): Boolean {
+    val step = (max(width, height) / 64).coerceAtLeast(1)
+    for (x in 0 until width step step) {
+        for (y in 0 until height step step) {
+            if ((getPixel(x, y) ushr 24) != 0) return true
+        }
+    }
+    return false
+}

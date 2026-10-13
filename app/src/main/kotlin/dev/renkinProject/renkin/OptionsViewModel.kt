@@ -50,6 +50,8 @@ import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.FontLibrary
+import dev.renkinProject.renkin.icon.creator.SystemFontLibrary
 import dev.renkinProject.renkin.util.Log
 import javax.inject.Inject
 import kotlin.math.roundToInt
@@ -76,6 +78,7 @@ class OptionsViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val preferences = context.dataStore
+    val fonts: FontLibrary = SystemFontLibrary
 
     val runtimeState = appProvider.runtimeState
 

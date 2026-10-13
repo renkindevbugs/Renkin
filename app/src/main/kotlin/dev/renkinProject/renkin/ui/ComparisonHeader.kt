@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
@@ -84,6 +83,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.animation.EnterTransition
+import dev.renkinProject.renkin.ui.theme.iconTileShape
 import kotlinx.coroutines.delay
 @Composable
 internal fun ComparisonHeader(
@@ -445,12 +445,12 @@ private fun CurrentSlot(
                     contentDescription = null,
                     modifier = Modifier
                         .size(size)
-                        .clip(RoundedCornerShape(size / 4))
+                        .clip(iconTileShape(size))
                 )
             } else {
                 Surface(
                     modifier = Modifier.size(size),
-                    shape = RoundedCornerShape(size / 4),
+                    shape = iconTileShape(size),
                     color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -499,7 +499,7 @@ private fun NewSlot(
                 modifier = Modifier
                     .size(size)
                     .clickable(enabled = previewIcon != null) { enlarged = true },
-                shape = RoundedCornerShape(size / 4),
+                shape = iconTileShape(size),
                 color = MaterialTheme.colorScheme.surfaceVariant,
                 border = BorderStroke(2.dp, borderColor)
             ) {

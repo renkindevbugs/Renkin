@@ -1,11 +1,11 @@
-package dev.renkinProject.renkin.ui
+package dev.renkinProject.renkin.data
 
 import java.io.ByteArrayInputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-class UploadImageProcessingTest {
+class ImportedContentTest {
 
     @Test
     fun limitedTextRead_acceptsContentAtTheLimit() {

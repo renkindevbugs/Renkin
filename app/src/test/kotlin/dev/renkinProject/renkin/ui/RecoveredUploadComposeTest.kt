@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.data.StoredUploadedImageLibrary
 import org.junit.Assert.*
 import org.junit.Rule
 import org.junit.Test
@@ -23,6 +24,8 @@ import org.robolectric.annotation.GraphicsMode
 class RecoveredUploadComposeTest {
     @get:Rule val compose = createComposeRule()
 
+    private fun library() = StoredUploadedImageLibrary(RuntimeEnvironment.getApplication())
+
     private fun state() = UploadEditorState().apply {
         selectedImagePath = "/missing/recovered-gallery.png"
         asAdaptiveIcon = true
@@ -37,7 +40,7 @@ class RecoveredUploadComposeTest {
         var publications = 0
         compose.setContent {
             CompositionLocalProvider(LocalToaster provides Toaster()) {
-                if (visible.value) UploadColumn(SnackbarHostState(), state) { _, _ -> publications++ }
+                if (visible.value) UploadColumn(SnackbarHostState(), state, library()) { _, _ -> publications++ }
             }
         }
         val message = RuntimeEnvironment.getApplication().getString(R.string.deadZone)
@@ -58,7 +61,7 @@ class RecoveredUploadComposeTest {
         var publications = 0
         compose.setContent {
             CompositionLocalProvider(LocalToaster provides Toaster()) {
-                UploadColumn(SnackbarHostState(), state) { icon, path ->
+                UploadColumn(SnackbarHostState(), state, library()) { icon, path ->
                     assertNotNull(icon); assertEquals(state.selectedImagePath, path)
                     publications++; state.publishedSelection = state.selection()
                 }
