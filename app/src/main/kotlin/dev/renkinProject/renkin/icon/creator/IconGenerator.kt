@@ -470,8 +470,8 @@ class IconGenerator(
 
     /**
      * Creates an unofficial two-colour Material You approximation from regular icon artwork.
-     * Transparent and light pixels become the selected background; dark artwork becomes the
-     * foreground. This keeps the simple approximation used before foreground extraction trials.
+     * The artwork's plate (its outer tone, or transparency) becomes the selected background and
+     * the contrasting tone the foreground; see [materialYouForegroundCoverage].
      */
     private fun generateMaterialYouFromOriginal(icon: Bitmap): BitmapIconDrawable {
         val pixels = IntArray(icon.width * icon.height)
@@ -482,17 +482,10 @@ class IconGenerator(
         val fgG = android.graphics.Color.green(modifiers.effect.colorizer.firstColor)
         val fgB = android.graphics.Color.blue(modifiers.effect.colorizer.firstColor)
 
+        val coverage = materialYouForegroundCoverage(pixels, icon.width, icon.height)
         for (i in pixels.indices) {
-            val source = pixels[i]
-            val sourceAlpha = android.graphics.Color.alpha(source) / 255f
-            val luminance = (
-                0.2126f * android.graphics.Color.red(source) +
-                    0.7152f * android.graphics.Color.green(source) +
-                    0.0722f * android.graphics.Color.blue(source)
-                ) / 255f
-            val coverage = sourceAlpha * (1f - luminance)
             pixels[i] = android.graphics.Color.argb(
-                (fgA * coverage).toInt().coerceIn(0, 255), fgR, fgG, fgB
+                (fgA * coverage[i]).toInt().coerceIn(0, 255), fgR, fgG, fgB
             )
         }
 
@@ -691,7 +684,10 @@ class IconGenerator(
      */
     private fun adaptiveLayer(layer: Drawable?): Drawable? {
         val unwrapped = if (layer is InsetDrawable) layer.drawable else layer
-        return unwrapped?.takeIf { it is BitmapDrawable || it is VectorDrawable }
+        // Keep the wrapper itself: its inset places the artwork inside the 108 dp layer.
+        // ForegroundIconDrawable crops that layer to the launcher's 72 dp, so dropping an
+        // authored inset (e.g. a complete legacy icon in the safe zone) zoomed the result 1.5x.
+        return layer.takeIf { unwrapped is BitmapDrawable || unwrapped is VectorDrawable }
     }
 
     private fun getAppIconBitmap(icon: Drawable, maxSize: Int = 500): Bitmap? {
