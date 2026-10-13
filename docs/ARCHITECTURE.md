@@ -1954,6 +1954,8 @@ explicitly materializes pixels for that wrapper. Adaptive preview zoom does not 
 or export geometry, and stored text can be written back without decoding. No formats change.
 Ownership details, device comparison and remaining costs are in
 [performance-bitmap-ownership.md](performance-bitmap-ownership.md).
+The controlled device check of generated versus reloaded pack export resources is recorded in
+[performance-pack-builds.md](performance-pack-builds.md).
 
 ### Adaptive icons imported from packs
 
