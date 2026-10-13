@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Colorize
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -37,7 +38,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.icon.creator.AppBackgroundColor
+import dev.renkinProject.renkin.icon.creator.AppColorMatch
+import dev.renkinProject.renkin.icon.creator.AppColorUnavailable
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.matchAppColor
 import dev.renkinProject.renkin.icon.creator.SegmentLayer
 import dev.renkinProject.renkin.icon.creator.applySegmentLayers
 import dev.renkinProject.renkin.ui.theme.FieldShape
@@ -54,7 +59,9 @@ internal fun SegmentLayerEditor(
     sampleBitmap: Bitmap?,
     layers: List<SegmentLayer>,
     onLayersChange: (List<SegmentLayer>) -> Unit,
-    renderLayersPreview: (suspend (Int, ColorizerStyle) -> Bitmap?)?
+    renderLayersPreview: (suspend (Int, ColorizerStyle) -> Bitmap?)?,
+    // Null when the host has no application to read a brand colour from.
+    appBackground: AppBackgroundColor? = null
 ) {
     var selected by remember { mutableIntStateOf(0) }
     var sheetOpen by remember { mutableStateOf(false) }
@@ -85,6 +92,20 @@ internal fun SegmentLayerEditor(
     }
 
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        if (appBackground != null) {
+            // Match against what the existing layers already painted, like every layer's picker;
+            // the untouched artwork would target white again after it has been recoloured.
+            val painted = remember(layers) { layers.filter { it.targets.isNotEmpty() } }
+            val matchSource by produceState(source, source, painted) {
+                value = if (painted.isEmpty()) source
+                    else withContext(Dispatchers.Default) { applySegmentLayers(source, painted) }
+            }
+            MatchAppColorButton(matchSource, appBackground) { match ->
+                val result = addMatchedLayer(layers, match)
+                onLayersChange(result.layers)
+                selected = result.selectedIndex
+            }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -194,6 +215,64 @@ internal fun SegmentLayerEditor(
             }
         )
     }
+}
+
+@Composable
+private fun MatchAppColorButton(
+    source: Bitmap,
+    appBackground: AppBackgroundColor,
+    onMatch: (List<SegmentLayer>) -> Unit
+) {
+    val match by produceState<AppColorMatch?>(null, source, appBackground) {
+        value = withContext(Dispatchers.Default) { matchAppColor(source, appBackground) }
+    }
+    val available = match as? AppColorMatch.Available
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        OutlinedButton(
+            onClick = { available?.let { onMatch(it.layers) } },
+            enabled = available != null,
+            shape = FieldShape,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(imageVector = Icons.Filled.Colorize, contentDescription = null)
+            Text(
+                text = stringResource(R.string.matchAppColor),
+                modifier = Modifier.padding(horizontal = 8.dp)
+            )
+            available?.let {
+                Box(
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clip(CircleShape)
+                        .colorizerSwatch(it.logo.style)
+                )
+            }
+        }
+        val hint = when (val current = match) {
+            null, is AppColorMatch.Available -> R.string.matchAppColorHint
+            is AppColorMatch.Unavailable -> when (current.reason) {
+                AppColorUnavailable.NOT_ADAPTIVE -> R.string.matchAppColorNotAdaptive
+                AppColorUnavailable.NEUTRAL_BACKGROUND -> R.string.matchAppColorNeutralBackground
+                AppColorUnavailable.NO_NEUTRAL_LOGO -> R.string.matchAppColorNoNeutralLogo
+            }
+        }
+        Text(
+            text = stringResource(hint),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+    }
+}
+
+/**
+ * Puts the matched layers where the user expects it: they replace the untouched starter layer an
+ * empty stack is seeded with, otherwise they are appended so earlier colours keep their regions.
+ */
+internal fun addMatchedLayer(layers: List<SegmentLayer>, matched: List<SegmentLayer>): SegmentLayerSelection {
+    val onlyStarter = layers.size == 1 && layers.single().targets.isEmpty()
+    val result = if (onlyStarter) matched else layers + matched
+    return SegmentLayerSelection(result, result.lastIndex)
 }
 
 /** The layer list and valid selection resulting from a structural editor operation. */

@@ -27,6 +27,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -73,6 +74,8 @@ import dev.renkinProject.renkin.icon.creator.IconSourceOptions
 import dev.renkinProject.renkin.icon.creator.IconExportOptions
 import dev.renkinProject.renkin.icon.creator.MaterialYouPackModifier
 import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
+import dev.renkinProject.renkin.icon.creator.AppBackgroundColor
+import dev.renkinProject.renkin.icon.creator.appBackgroundColor
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import androidx.compose.foundation.background
@@ -247,6 +250,12 @@ internal fun OptionsDialog(
 
     val heroBitmap = remember(app.icon) {
         runCatching { app.icon.toSafeBitmapOrNull() }.getOrNull()
+    }
+    // The brand colour comes from the app itself, so it is available whatever source is edited.
+    val appBackground by produceState<AppBackgroundColor?>(null, app.icon) {
+        value = withContext(Dispatchers.Default) {
+            runCatching { appBackgroundColor(app.icon) }.getOrNull()
+        }
     }
 
     // Whether the app ships an official Material You <monochrome> layer. Apps without one use
@@ -723,6 +732,7 @@ internal fun OptionsDialog(
                                     materialYouPackAdjustments.takeIf { selectedMaterialYouPackIcon },
                                 materialYouSchemes = materialYouSchemes,
                                 materialYouPackLineThicknessEditable = session.modifierReplay == null,
+                                appBackground = appBackground,
                                 onImageEditChange = {
                                     imageEdit = if (session.modifierReplay?.allowsImageEdits == false) ImageEdit.NONE else it
                                 },
@@ -953,6 +963,7 @@ private fun ModifierOptionsTab(
     materialYouPackAdjustments: MaterialYouPackAdjustmentState?,
     materialYouSchemes: List<Pair<Color, Color>>,
     materialYouPackLineThicknessEditable: Boolean,
+    appBackground: AppBackgroundColor?,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
@@ -976,6 +987,7 @@ private fun ModifierOptionsTab(
             materialYouPackAdjustments = materialYouPackAdjustments,
             materialYouSchemes = materialYouSchemes,
             materialYouPackLineThicknessEditable = materialYouPackLineThicknessEditable,
+            appBackground = appBackground,
             onImageEditChange = onImageEditChange,
             onColorChange = onColorChange,
             onVectorChange = onVectorChange,

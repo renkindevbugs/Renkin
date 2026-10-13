@@ -226,6 +226,11 @@
     <string name="segmentLayerAdd">Add another color</string>
     <string name="segmentLayerRemove">Remove this color</string>
     <string name="segmentLayerHint">Each color paints its own regions, in order from left to right.</string>
+    <string name="matchAppColor">Match app color</string>
+    <string name="matchAppColorHint">Paints the icon\'s main white or black part in the app\'s own background color. If the icon still has that background, it is removed.</string>
+    <string name="matchAppColorNotAdaptive">Unavailable: this app\'s icon has no separate background color.</string>
+    <string name="matchAppColorNeutralBackground">Unavailable: this app\'s background is white, black or gray.</string>
+    <string name="matchAppColorNoNeutralLogo">Unavailable: the icon has no main white or black part.</string>
     <string name="segmentNoneSelected">Nothing selected yet — the whole icon gets colorized.</string>
     <string name="segmentSelectedCount">%1$d segments selected</string>
     <string name="segmentPickedRemove">Remove %1$s</string>
