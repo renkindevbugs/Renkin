@@ -19,6 +19,7 @@ import dev.renkinProject.renkin.extension.scaleFromCenter
 import dev.renkinProject.renkin.extension.toBase64
 
 internal const val ADAPTIVE_ICON_SCALE = 1.5f // 108dp / 72dp
+private const val RAW_DRAW_REVISION = 1
 
 /**
  * Live artwork keeps its original bitmap. Stored PNG artwork keeps validated encoded pixels:
@@ -73,9 +74,9 @@ class BitmapIconDrawable private constructor(
         resident?.let { it.draw(canvas); return }
         val size = maxOf(contentBounds.width(), contentBounds.height())
         if (size <= 0) return
-        val bitmap = if (previewScale == 1f) {
-            IconPreviewCache.getOrRender(IconPreviewCacheKey(this, size)) ?: return
-        } else requireNotNull(stored).preview(size)
+        // draw() keeps raw geometry, so a zoomed icon caches it apart from its zoomed in-app preview.
+        val key = IconPreviewCacheKey(this, size, if (previewScale == 1f) 0 else RAW_DRAW_REVISION)
+        val bitmap = IconPreviewCache.getOrRender(key) { requireNotNull(stored).preview(size) } ?: return
         // A hardware Canvas may retain this bitmap in its display list after draw() returns.
         canvas.drawBitmap(bitmap, null, contentBounds, paint)
     }

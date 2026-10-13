@@ -43,11 +43,14 @@ internal class IconPreviewMemoryCache(maxSizeBytes: Int) {
 
     fun get(key: IconPreviewCacheKey): Bitmap? = cache.get(key)
 
-    fun getOrRender(key: IconPreviewCacheKey): Bitmap? {
+    fun getOrRender(
+        key: IconPreviewCacheKey,
+        render: (IconPackDrawable) -> Bitmap = { it.previewBitmap(key.targetPx) }
+    ): Bitmap? {
         cache.get(key)?.let { return it }
         val icon = key.icon ?: return null
         return synchronized(icon) {
-            cache.get(key) ?: icon.previewBitmap(key.targetPx).also { cache.put(key, it) }
+            cache.get(key) ?: render(icon).also { cache.put(key, it) }
         }
     }
 
@@ -63,8 +66,11 @@ internal object IconPreviewCache {
 
     fun get(key: IconPreviewCacheKey): Bitmap? = cacheFor(key).get(key)
 
-    fun getOrRender(key: IconPreviewCacheKey): Bitmap? = try {
-        cacheFor(key).getOrRender(key)
+    fun getOrRender(
+        key: IconPreviewCacheKey,
+        render: (IconPackDrawable) -> Bitmap = { it.previewBitmap(key.targetPx) }
+    ): Bitmap? = try {
+        cacheFor(key).getOrRender(key, render)
     } catch (error: CancellationException) {
         throw error
     } catch (_: OutOfMemoryError) {
