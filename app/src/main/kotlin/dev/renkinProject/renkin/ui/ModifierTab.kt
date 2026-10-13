@@ -58,6 +58,7 @@ import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.feature.presets.ModifierPresetsSection
 import dev.renkinProject.renkin.feature.presets.colorizerStyleWith
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.icon.creator.AppBackgroundColor
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
 import dev.renkinProject.renkin.data.getImageEditLabels
@@ -101,6 +102,8 @@ internal fun ModifierTab(
     materialYouPackAdjustments: MaterialYouPackAdjustmentState? = null,
     materialYouSchemes: List<Pair<Color, Color>> = emptyList(),
     materialYouPackLineThicknessEditable: Boolean = true,
+    // The app's own brand colour for "Match app color"; null hides that action.
+    appBackground: AppBackgroundColor? = null,
     onImageEditChange: (ImageEdit) -> Unit,
     onColorChange: (Color) -> Unit,
     onVectorChange: (Boolean) -> Unit,
@@ -305,7 +308,8 @@ internal fun ModifierTab(
                                             sampleBitmap = sampleBitmap,
                                             layers = adjustments.colorizeLayers,
                                             onLayersChange = { adjustments.colorizeLayers = it },
-                                            renderLayersPreview = previews?.layers
+                                            renderLayersPreview = previews?.layers,
+                                            appBackground = appBackground
                                         )
                                     }
                                 }

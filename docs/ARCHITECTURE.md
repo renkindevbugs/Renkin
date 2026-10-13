@@ -1884,6 +1884,11 @@ identically and none of them re-implements the maths.
   regeneration and rescaling. `ImageEdit.COLORIZE_SEGMENTS` stacks `SegmentLayer`s — each layer's
   picker shows the output of the layers before it, and generation matches against that same
   accumulated image so the stored colours describe exactly what the user selected.
+  "Match app color" (`icon/creator/AppColorMatch.kt`, issue #18) only creates an ordinary layer:
+  it reads the solid colour or two-stop linear gradient of the edited app's own adaptive
+  background (whatever source the icon came from) and targets the icon's largest region when
+  that region is white or black. Neutral backgrounds, non-adaptive app icons and colourful logos
+  leave the action disabled with a reason. No new modifier type or persisted field exists.
 - **Adaptive panes**: `ProvideAdaptiveLayoutInfo` supplies current WindowMetrics and a separating
   vertical fold. Pane layouts switch only when both sides meet their content-specific minimum
   width; nested editors such as the segment picker decide from their actual container width.
@@ -1948,6 +1953,12 @@ size, so enabling one keeps the optical size shown without a modifier,
 and produce a non-adaptive result. Global modifiers continue deriving from the saved base icon,
 so disabling a flattening modifier restores the adaptive layers. The app-icon source's
 "Full app icon" behaviour and the explicit global themed export remain separate policies.
+The app-icon source's foreground keeps the layer's own `InsetDrawable`: some apps place their
+complete legacy icon (plate and logo) inset inside both adaptive layers, and dropping that inset
+before the 72 dp crop zoomed Default and Monochrome 1.5x. The generated (unofficial) Material You
+variant splits the artwork into two tones and treats the tone of its outer ring as background
+(`GeneratedMaterialYou.kt`), so a light logo on a dark or gradient plate becomes the foreground;
+dark art on a light or transparent background keeps the previous result.
 
 The per-icon Shadow modifier runs last from the final alpha silhouette. Blur, direction, distance,
 opacity and the shared colour-or-gradient style are deterministic at the 256 px working scale.
