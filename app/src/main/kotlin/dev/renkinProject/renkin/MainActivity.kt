@@ -120,7 +120,10 @@ class MainActivity : ComponentActivity() {
 
             // Detected once per launch: if the previous session crashed, offer the log for
             // manual reporting (copy / email / GitHub) — nothing is sent automatically.
-            var crashPending by remember { mutableStateOf(CrashReporter.hasNewCrash(this@MainActivity)) }
+            var crashPending by remember { mutableStateOf(false) }
+            LaunchedEffect(Unit) {
+                crashPending = withContext(Dispatchers.IO) { CrashReporter.hasNewCrash(this@MainActivity) }
+            }
 
             val colorPresets by presetsViewModel.colorPresets.collectAsStateWithLifecycle()
             val modifierPresets by presetsViewModel.modifierPresets.collectAsStateWithLifecycle()
