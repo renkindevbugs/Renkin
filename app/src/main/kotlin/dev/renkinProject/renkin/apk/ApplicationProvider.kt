@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.apk
 
 import android.content.Context
 import android.graphics.Typeface
+import android.net.Uri
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.BuildConfig
@@ -955,6 +956,9 @@ class ApplicationProvider internal constructor(
         (iconPack.storageEpoch == null || iconPack.storageEpoch == storageEpoch) &&
             profileManager.profileExists(iconPack.profileId)
     }
+
+    suspend fun exportBuiltApk(iconPack: BuiltIconPack, target: Uri): Boolean =
+        iconPackBuildService.exportApk(iconPack, target)
 
     suspend fun releaseBuiltArtifacts(iconPack: BuiltIconPack, completed: Boolean = true) =
         iconPackBuildService.releaseArtifacts(iconPack, completed)

@@ -528,8 +528,11 @@
     <string name="iconPackUpdateFailed">The icon pack wasn\'t updated</string>
     <string name="installFailureTitle">Icon pack installation failed</string>
     <string name="installFailureText">Android rejected the installation. Copy these diagnostic details and include them when reporting the problem.</string>
-    <string name="installNoSystemInstaller">A required Android installer activity is unavailable. Select Shizuku or an external installer, then build the pack again to retry.</string>
+    <string name="installNoSystemInstaller">A required Android installer activity is unavailable. Select Shizuku or an external installer and build the pack again, or save the APK and install it manually.</string>
     <string name="installFailureCopy">Copy details</string>
+    <string name="installFailureSaveApk">Save APK</string>
+    <string name="installFailureApkSaved">APK saved. Install it with any installer; Renkin detects the pack on its next refresh.</string>
+    <string name="installFailureApkSaveFailed">The APK could not be saved. Build the pack again to create a new one.</string>
     <string name="installFailureCopied">Installation details copied</string>
     <string name="installFallbackTitle">Replace existing icon pack?</string>
     <string name="installFallbackText">Android can\'t update the installed pack, usually because its signing key is different. To continue, Renkin must **uninstall the existing pack and then install the new one**. Complete both system dialogs. If you cancel the second installation, the old pack will no longer be installed.</string>

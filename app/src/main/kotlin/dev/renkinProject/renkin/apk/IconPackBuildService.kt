@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.apk
 
 import android.content.Context
 import android.net.Uri
+import android.provider.DocumentsContract
 import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.data.CalendarIconsKey
 import dev.renkinProject.renkin.data.DbApplication
@@ -17,6 +18,7 @@ import dev.renkinProject.renkin.extension.toHexString
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.util.Log
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.currentCoroutineContext
@@ -157,6 +159,24 @@ class IconPackBuildService internal constructor(
             withContext(NonCancellable + Dispatchers.IO) { builtDirectory?.let(artifacts::abandon) }
             throw error
         }
+    }
+
+    /** Copies a built APK to a user-chosen document; false when it is gone or the copy failed. */
+    suspend fun exportApk(iconPack: BuiltIconPack, target: Uri): Boolean {
+        var copied = false
+        try {
+            copied = artifacts.export(iconPack.uri) { context.contentResolver.openOutputStream(target, "wt") }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.error("IconPackBuildService", "Could not export the built APK", error)
+        } finally {
+            // A partially written document would look like an installable APK.
+            if (!copied) withContext(NonCancellable + Dispatchers.IO) {
+                runCatching { DocumentsContract.deleteDocument(context.contentResolver, target) }
+            }
+        }
+        return copied
     }
 
     internal suspend fun releaseArtifacts(iconPack: BuiltIconPack, completed: Boolean = true): Unit =

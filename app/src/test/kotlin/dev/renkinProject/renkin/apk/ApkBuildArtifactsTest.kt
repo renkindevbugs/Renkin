@@ -2,8 +2,10 @@ package dev.renkinProject.renkin.apk
 
 import android.app.Application
 import android.net.Uri
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -11,7 +13,11 @@ import org.junit.rules.TemporaryFolder
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.IOException
+import java.io.OutputStream
+import kotlinx.coroutines.runBlocking
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33])
@@ -87,5 +93,65 @@ class ApkBuildArtifactsTest {
         artifacts.create()
         assertTrue(outside.resolve("app-release.apk").exists())
         assertFalse(outside.resolve(".finished").exists())
+    }
+
+    @Test
+    fun exportPinsAReleasedArtifactAgainstPruningUntilTheCopyFinishes() = runBlocking {
+        val artifacts = ApkBuildArtifacts(temporary.root)
+        val failed = artifacts.create()
+        val uri = apk(failed)
+        artifacts.release(uri, completed = true)
+        val target = ByteArrayOutputStream()
+        val copied = artifacts.export(uri) {
+            artifacts.create()
+            assertTrue(failed.exists())
+            target
+        }
+        assertTrue(copied)
+        assertEquals("signed APK", target.toString(Charsets.UTF_8.name()))
+        artifacts.create()
+        assertFalse(failed.exists())
+    }
+
+    @Test
+    fun exportReportsAnAlreadyPrunedArtifactWithoutOpeningTheTarget() = runBlocking {
+        val artifacts = ApkBuildArtifacts(temporary.root)
+        val failed = artifacts.create()
+        val uri = apk(failed)
+        artifacts.release(uri, completed = true)
+        artifacts.create()
+        assertFalse(artifacts.export(uri) { error("A pruned artifact must not open the target") })
+    }
+
+    @Test
+    fun unavailableTargetReleasesThePin() = runBlocking {
+        val artifacts = ApkBuildArtifacts(temporary.root)
+        val failed = artifacts.create()
+        val uri = apk(failed)
+        artifacts.release(uri, completed = true)
+        assertFalse(artifacts.export(uri) { null })
+        artifacts.create()
+        assertFalse(failed.exists())
+    }
+
+    @Test
+    fun failedCopyReleasesThePinAndPropagatesTheError() = runBlocking {
+        val artifacts = ApkBuildArtifacts(temporary.root)
+        val failed = artifacts.create()
+        val uri = apk(failed)
+        artifacts.release(uri, completed = true)
+        val broken = object : OutputStream() {
+            override fun write(b: Int) = throw IOException("disk full")
+        }
+        assertThrows(IOException::class.java) { runBlocking { artifacts.export(uri) { broken } } }
+        artifacts.create()
+        assertFalse(failed.exists())
+    }
+
+    @Test
+    fun exportIgnoresFilesOutsideTheArtifactRoot() = runBlocking {
+        val artifacts = ApkBuildArtifacts(temporary.root)
+        val outside = temporary.newFolder("outside")
+        assertFalse(artifacts.export(apk(outside)) { error("Foreign files must not be exported") })
     }
 }
