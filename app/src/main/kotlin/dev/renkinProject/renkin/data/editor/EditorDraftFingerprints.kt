@@ -44,7 +44,9 @@ internal object EditorDraftFingerprints {
                     output.writeBoolean(it.calendarEnabled); text(it.calendarPrefix); text(it.calendarPackName)
                     text(it.sourcePackName); text(it.sourceDrawableName)
                     output.writeBoolean(it.isCustomIcon); output.writeBoolean(it.isLegacyIcon)
-                    text(it.baseDrawable, EditorDraftCodec.MAX_ARTIFACT_BYTES.toInt())
+                    // An empty base means "same as rendered" (see RenkinPackStore.decodeRow): compacting a
+                    // row on its next save must not invalidate drafts recorded against the repeated payload.
+                    text(it.baseDrawable.ifEmpty { it.drawable }, EditorDraftCodec.MAX_ARTIFACT_BYTES.toInt())
                     output.writeBoolean(it.baseIsAdaptiveIcon); output.writeBoolean(it.baseIsXml)
                     text(it.sourceUrl); output.writeBoolean(it.isFallbackIcon)
                     // Preserve the persisted documents verbatim: normalization must not hide a change.

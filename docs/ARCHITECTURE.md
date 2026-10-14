@@ -1349,6 +1349,11 @@ be assumed to open the upgraded database.
   never read with `SELECT *`: `RenkinPackDao` row queries return `drawable`/`baseDrawable` inline
   only up to `OversizedText.INLINE_CHARS`, and `RenkinPackRepository` reads longer values in
   `substr()` chunks inside the same transaction. The recovery snapshot does the same per rowid.
+  A base identical to the rendered icon (same payload and flags) is stored as an empty
+  `baseDrawable` and decoded as a detached copy of the rendered icon, halving the common row; older
+  rows that repeat the payload read the same way, and portable backups and older builds already
+  treat an empty base as the rendered icon. Draft fingerprints hash the resolved base, so a row
+  compacted on its next save keeps its draft.
   The explicit column list `ICON_ROW_COLUMNS` must name every `DbApplication` column (guarded by
   `OversizedIconRowTest`): a column it omits would read as its default and be lost on the next write.
   Individual Apply stores exactly the reviewed draft
