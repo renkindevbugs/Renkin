@@ -341,15 +341,51 @@ class EditorDraftRecoveryOwnerTest {
         assertEquals(store.checkpoint(), shown<EditorDraftRecoveryState.Obsolete>().checkpoint)
     }
 
-    @Test fun anotherProfileIsNamedWithoutSwitchingIt() = runBlocking {
+    @Test fun anotherProfileRemainsQuietUntilExplicitReviewWithoutSwitchingIt() = runBlocking {
         val candidate = save()
         val other = provider.createProfile("Other", "", "Other")
         provider.switchProfile(other)
         connect()
+        idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        openLive()
+        val blocked = withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED }!! }
+        assertTrue(withContext(main) { owner.reviewSavedEdit(blocked) })
         val shown = shown<EditorDraftRecoveryState.NeedsProfile>()
         assertEquals(candidate.record.owner.profileId, shown.profileId)
         assertTrue(shown.profileName.isNotBlank())
         assertEquals(other, provider.runtimeState.value.activeProfileId)
+    }
+
+    @Test fun returningToOwningProfileReoffersPostponedDraftButOtherProfilesStayQuiet() = runBlocking {
+        val offered = offer()
+        val owningProfileId = provider.sessionToken.profileId
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        val other = provider.createProfile("Other", "", "Other")
+        provider.switchProfile(other); idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        val third = provider.createProfile("Third", "", "Third")
+        provider.switchProfile(third); idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        provider.switchProfile(owningProfileId)
+        assertEquals(offered.checkpoint, shown<EditorDraftRecoveryState.Offer>().checkpoint)
+    }
+
+    @Test fun postponedUnreadableCatalogStaysQuietAcrossProfileSwitches() = runBlocking {
+        store.checkpoint()
+        File(context.noBackupFilesDir, "editor-draft/catalog.json").writeText("broken")
+        connect()
+        val failed = shown<EditorDraftRecoveryState.Failed>()
+        withContext(main) { owner.postpone(failed) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        val owningProfileId = provider.sessionToken.profileId
+        val other = provider.createProfile("Other", "", "Other")
+        provider.switchProfile(other); idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        provider.switchProfile(owningProfileId); idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        assertEquals("broken", File(context.noBackupFilesDir, "editor-draft/catalog.json").readText())
     }
 
     @Test fun retryDoesNotResetUnreadableMetadataAndConfirmedDiscardDoes() = runBlocking {
@@ -532,6 +568,63 @@ class EditorDraftRecoveryOwnerTest {
         val blocked = withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED }!! }
         withContext(main) { owner.discardForAutosave(blocked) }
         assertEquals(0.7f, savedScale(saved(offered.checkpoint)), 0f)
+    }
+
+    @Test fun blockedReviewClosesCurrentEditorAndReoffersPreservedDraft() = runBlocking {
+        val offered = offer()
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        val session = openLive()
+        publish(session) { adjustments.iconScale = 0.7f }
+        val blocked = withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED }!! }
+        assertTrue(withContext(main) { owner.reviewSavedEdit(blocked) })
+        assertEquals(offered.checkpoint, shown<EditorDraftRecoveryState.Offer>().checkpoint)
+        assertNull(editor.lifetime.value.sessionId)
+        assertEquals(offered.checkpoint, store.checkpoint())
+        assertNull(owner.autosaveState.value)
+    }
+
+    @Test fun staleBlockedReviewCannotCloseCurrentEditor() = runBlocking {
+        val offered = offer()
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        openLive()
+        val blocked = withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED }!! }
+        assertFalse(withContext(main) { owner.reviewSavedEdit(blocked.copy()) })
+        assertEquals("live", editor.lifetime.value.sessionId)
+        withContext(main) { owner.closeLive("live") }
+        quiet()
+        openLive()
+        withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED } }
+        assertFalse(withContext(main) { owner.reviewSavedEdit(blocked) })
+        assertEquals("live", editor.lifetime.value.sessionId)
+        assertEquals(offered.checkpoint, store.checkpoint())
+    }
+
+    @Test fun blockedAutosaveRechecksExternallyClearedDraftWithoutClosingEditor() = runBlocking {
+        val offered = offer()
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        val session = openLive()
+        publish(session) { adjustments.iconScale = 0.7f }
+        withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED } }
+        assertTrue(store.discard(offered.checkpoint))
+        withContext(main) { owner.setBackgrounded(true) }
+        assertEquals(0.7f, savedScale(saved(offered.checkpoint)), 0f)
+        assertEquals("live", editor.lifetime.value.sessionId)
+    }
+
+    @Test fun blockedAutosaveRecheckNeverOverwritesAnExistingForeignDraft() = runBlocking {
+        val offered = offer()
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        val session = openLive()
+        publish(session) { adjustments.iconScale = 0.7f }
+        withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED } }
+        withContext(main) { owner.setBackgrounded(true) }
+        quiet()
+        assertEquals(EditorAutosaveStatus.BLOCKED, owner.autosaveState.value?.status)
+        assertEquals(offered.checkpoint, store.checkpoint())
     }
 
     @Test fun unsupportedWitnessFailsWithoutReplacingCheckpointAndSupportedEditResumes() = runBlocking {

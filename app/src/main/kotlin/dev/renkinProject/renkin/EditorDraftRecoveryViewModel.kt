@@ -72,7 +72,7 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
         data object Save : Request
         data class RetrySave(val shown: EditorAutosaveState) : Request
         data class DiscardForSave(val shown: EditorAutosaveState) : Request
-        data class CloseLive(val lifetime: EditorSessionLifetime) : Request
+        data class CloseLive(val lifetime: EditorSessionLifetime, val reviewRecovery: Boolean = false) : Request
     }
 
     private data class Observation(
@@ -81,6 +81,8 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
         val storageReady: Boolean,
         val lifetime: EditorSessionLifetime
     )
+
+    private data class PostponedDraft(val checkpoint: EditorDraftCheckpoint?, val profileVisit: Long)
 
     private val resources = EditorRecoveryResources(context)
     private val autosave = EditorDraftAutosave(context, provider, store)
@@ -92,8 +94,10 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
     private var prepared: PreparedEditorRecovery? = null
     private var accepted: Pair<EditorRecoveryAttachment, EditorDraftCheckpoint>? = null
     private var cleanupCheckpoint: EditorDraftCheckpoint? = null
-    private var postponed: Pair<EditorDraftCheckpoint?, Long>? = null
+    private var postponed: PostponedDraft? = null
     private var lastObservation: Observation? = null
+    private var observedProfileId: Long? = null
+    private var profileVisit = 0L
     private var attempt = 0L
     private var observationQueued = false
     private var saveDelay: Job? = null
@@ -115,11 +119,11 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                         when (request) {
                             Request.Observe -> {
                                 observationQueued = false
-                                val previousLifetime = autosave.state.value?.lifetime
+                                val previousAutosave = autosave.state.value
                                 autosave.observe(requireNotNull(editor))
-                                if (autosave.state.value?.lifetime != previousLifetime) {
+                                if (autosave.state.value?.lifetime != previousAutosave?.lifetime) {
                                     scheduleSave(requireNotNull(editor).autosaveFrame())
-                                }
+                                } else if (previousAutosave?.status == EditorAutosaveStatus.BLOCKED) retryPendingSave()
                                 val observation = observation()
                                 if (observation != lastObservation) refresh()
                             }
@@ -132,7 +136,7 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                             is Request.Restore -> if (mutableState.value === request.shown) performRestore(request.shown)
                             is Request.Discard -> if (mutableState.value === request.shown) performDiscard(request.shown)
                             is Request.Postpone -> if (mutableState.value === request.shown) {
-                                postponed = checkpointOf(request.shown) to provider.runtimeState.value.activeProfileId
+                                postponed = PostponedDraft(checkpointOf(request.shown), profileVisit)
                                 dropPrepared()
                                 mutableState.value = EditorDraftRecoveryState.Hidden
                             }
@@ -163,8 +167,13 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                                 retryPendingSave()
                             }
                             is Request.CloseLive -> {
+                                if (accepted?.first?.sessionId == request.lifetime.sessionId) accepted = null
                                 val checkpoint = autosave.close(request.lifetime)
-                                if (checkpoint != null) discardClosedCheckpoint(checkpoint) else refresh()
+                                if (checkpoint != null) discardClosedCheckpoint(checkpoint)
+                                else {
+                                    if (request.reviewRecovery) postponed = null
+                                    refresh(reviewRequested = request.reviewRecovery)
+                                }
                                 enqueueObservation()
                             }
                         }
@@ -213,13 +222,23 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
     @MainThread internal fun discardForAutosave(shown: EditorAutosaveState) { requests.trySend(Request.DiscardForSave(shown)) }
 
     @MainThread
-    internal fun closeLive(id: String) {
+    internal fun reviewSavedEdit(shown: EditorAutosaveState): Boolean {
+        val owner = requireNotNull(editor)
+        if (autosave.state.value !== shown || owner.lifetime.value != shown.lifetime ||
+            shown.status != EditorAutosaveStatus.BLOCKED) return false
+        val id = shown.lifetime.sessionId ?: return false
+        closeLive(id, reviewRecovery = true)
+        return true
+    }
+
+    @MainThread
+    internal fun closeLive(id: String, reviewRecovery: Boolean = false) {
         val owner = requireNotNull(editor)
         val lifetime = owner.lifetime.value.takeIf { it.sessionId == id } ?: return
         autosave.markClosing(lifetime)
         saveDelay?.cancel()
         owner.release(id)
-        requests.trySend(Request.CloseLive(lifetime))
+        requests.trySend(Request.CloseLive(lifetime, reviewRecovery))
     }
 
     @MainThread
@@ -268,10 +287,14 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
             StorageOperationGate.recoveryState.value == StorageRecoveryState.READY, requireNotNull(editor).lifetime.value)
     }
 
-    private suspend fun refresh() {
+    private suspend fun refresh(reviewRequested: Boolean = false) {
         val current = observation()
         lastObservation = current
         dropPrepared()
+        if (current.ready && observedProfileId != current.session.profileId) {
+            observedProfileId = current.session.profileId
+            profileVisit++
+        }
         if (!current.ready || !current.storageReady || current.lifetime.sessionId != null) {
             mutableState.value = EditorDraftRecoveryState.Hidden
             return
@@ -279,7 +302,7 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
         repeat(3) {
             when (val inspected = store.inspectCheckpoint()) {
                 is EditorDraftInspection.Unreadable -> {
-                    if (postponed == (null to current.session.profileId)) {
+                    if (postponed != null && postponed?.checkpoint == null) {
                         mutableState.value = EditorDraftRecoveryState.Hidden
                     } else mutableState.value = EditorDraftRecoveryState.Failed(null, inspected.resetLease, cleanupCheckpoint != null)
                     return
@@ -289,14 +312,14 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                     val pending = cleanupCheckpoint
                     if (pending != null) {
                         if (pending == checkpoint) {
-                            mutableState.value = if (postponed == (checkpoint to current.session.profileId)) {
+                            mutableState.value = if (postponed?.checkpoint == checkpoint) {
                                 EditorDraftRecoveryState.Hidden
                             } else EditorDraftRecoveryState.Failed(checkpoint, null, closingEditor = true)
                             return
                         }
                         cleanupCheckpoint = null
                     }
-                    if (checkpoint.draftId == null || postponed == (checkpoint to current.session.profileId)) {
+                    if (checkpoint.draftId == null || postponed == PostponedDraft(checkpoint, profileVisit)) {
                         mutableState.value = EditorDraftRecoveryState.Hidden
                         return
                     }
@@ -323,9 +346,16 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                             }
                             is EditorRecoveryPreparation.NeedsProfile -> {
                                 val profile = provider.profilesFlow().first().firstOrNull { profile -> profile.id == recovered.profileId }
-                                mutableState.value = if (profile != null) {
-                                    EditorDraftRecoveryState.NeedsProfile(checkpoint, recovered.profileId, profile.name)
-                                } else EditorDraftRecoveryState.Obsolete(checkpoint)
+                                if (observation() != current) {
+                                    mutableState.value = EditorDraftRecoveryState.Hidden
+                                    enqueueObservation()
+                                    return
+                                }
+                                mutableState.value = when {
+                                    profile == null -> EditorDraftRecoveryState.Obsolete(checkpoint)
+                                    reviewRequested -> EditorDraftRecoveryState.NeedsProfile(checkpoint, recovered.profileId, profile.name)
+                                    else -> EditorDraftRecoveryState.Hidden
+                                }
                             }
                             EditorRecoveryPreparation.Obsolete -> mutableState.value = EditorDraftRecoveryState.Obsolete(checkpoint)
                             EditorRecoveryPreparation.Empty -> mutableState.value = EditorDraftRecoveryState.Hidden

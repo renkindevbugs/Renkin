@@ -1223,7 +1223,8 @@ fun OpenAppOptions(
     }, onCancelModifierRestore = { editorViewModel.cancelModifierRestore(sessionId) },
         autosaveNotice = {
             autosaveState?.takeIf { it.lifetime.sessionId == sessionId }?.let {
-                EditorAutosaveNotice(it, draftOwner::retryAutosave, draftOwner::discardForAutosave)
+                EditorAutosaveNotice(it, draftOwner::retryAutosave, draftOwner::discardForAutosave,
+                    onReview = { shown -> if (draftOwner.reviewSavedEdit(shown)) onDismiss() })
             }
         })
 }
