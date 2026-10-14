@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin
 
 import android.app.Application
+import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -10,6 +11,7 @@ import androidx.datastore.preferences.core.Preferences
 import dev.renkinProject.renkin.apk.ApkInstallBackend
 import dev.renkinProject.renkin.apk.ApkInstallOutcome
 import dev.renkinProject.renkin.apk.ApkInstallResult
+import dev.renkinProject.renkin.apk.ApkInstallRoute
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.InstallerSelection
@@ -63,9 +65,11 @@ internal sealed interface BuildInstallState {
     data object Idle : BuildInstallState
     data class Building(val step: String = "", val progress: Pair<Int, Int>? = null) : BuildInstallState
     data class ChoosingInstaller(val request: PackInstallRequest, val reason: InstallerChoiceReason) : BuildInstallState
-    data class Installing(val request: PackInstallRequest, val replacing: Boolean = false) : BuildInstallState
+    data class Installing(val request: PackInstallRequest, val replacing: Boolean = false,
+        val route: ApkInstallRoute? = null) : BuildInstallState
     data class Conflict(val request: PackInstallRequest) : BuildInstallState
-    data class Done(val wasUpdate: Boolean, val packLabel: String) : BuildInstallState
+    data class Done(val wasUpdate: Boolean, val packLabel: String, val installerLabel: String,
+        val savingProfile: Boolean = false, val profileSaveFailed: Boolean = false) : BuildInstallState
     data class Failed(@StringRes val message: Int, val summary: String, val report: String) : BuildInstallState
 }
 
@@ -75,17 +79,20 @@ internal class BuildInstallCoordinator(
     private val scope: CoroutineScope,
     private val syncBaselines: suspend (BuiltIconPack) -> Unit,
     private val refreshMissingPacks: suspend () -> Unit,
-    private val notify: (Int) -> Unit
+    private val notify: (Int) -> Unit,
+    private val notifyText: (String) -> Unit
 ) {
     var state by mutableStateOf<BuildInstallState>(BuildInstallState.Idle)
         private set
     private var operation = 0L
     private var job: Job? = null
     private var closed = false
+    private data class InstallCompletionOwner(val operation: Long, val pack: BuiltIconPack)
+    private var completingInstallOwner by mutableStateOf<InstallCompletionOwner?>(null)
     // Main-confined cleanup ownership survives the prompt's transition to Idle.
     private val finishingPacks = mutableListOf<BuiltIconPack>()
 
-    val busy: Boolean get() = when (state) {
+    val busy: Boolean get() = completingInstallOwner != null || when (state) {
         is BuildInstallState.Building, is BuildInstallState.ChoosingInstaller,
         is BuildInstallState.Installing, is BuildInstallState.Conflict -> true
         else -> false
@@ -214,17 +221,56 @@ internal class BuildInstallCoordinator(
     }
 
     private suspend fun installBuiltPack(owner: Long, request: PackInstallRequest, replacing: Boolean) {
-        val outcome = if (replacing) provider.replaceIconPack(request.pack, request.selection)
-            else provider.installIconPack(request.pack, request.selection)
+        try {
+            installAndFinish(owner, request, replacing)
+        } finally {
+            if (completingInstallOwner?.operation == owner) completingInstallOwner = null
+        }
+    }
+
+    private suspend fun installAndFinish(owner: Long, request: PackInstallRequest, replacing: Boolean) {
+        val onRoute: suspend (ApkInstallRoute) -> Unit = { route ->
+            withContext(Dispatchers.Main) {
+                if (state is BuildInstallState.Installing) {
+                    publish(owner, BuildInstallState.Installing(request, replacing, route))
+                }
+            }
+        }
+        val onInstalled: suspend (ApkInstallOutcome) -> Unit = { confirmed ->
+            withContext(Dispatchers.Main) {
+                if (!closed && owner == operation) {
+                    completingInstallOwner = InstallCompletionOwner(owner, request.pack)
+                    val installerLabel = confirmed.attempts.lastOrNull { it.result == ApkInstallResult.SUCCESS }
+                        ?.installerLabel ?: application.getString(R.string.installerSystem)
+                    val wasUpdate = if (replacing) request.wasUpdate else confirmed.wasUpdate ?: request.wasUpdate
+                    publish(owner, BuildInstallState.Done(
+                        wasUpdate, request.pack.packLabel, installerLabel,
+                        savingProfile = true
+                    ))
+                    if (BuildConfig.DEBUG) confirmed.confirmedAtMillis?.let { confirmedAt ->
+                        Log.debug("InstallPerformance", "confirmedToUiPublicationMs=${SystemClock.elapsedRealtime() - confirmedAt}")
+                    }
+                    notifyText(application.getString(
+                        installSuccessMessage(confirmed, wasUpdate), request.pack.packLabel, installerLabel
+                    ))
+                }
+            }
+        }
+        val completion = if (replacing) provider.replaceIconPack(request.pack, request.selection, onRoute, onInstalled)
+            else provider.installIconPack(request.pack, request.selection, onRoute, onInstalled)
+        val outcome = completion.outcome
         currentCoroutineContext().ensureActive()
         if (closed || owner != operation) return
         when (outcome.result) {
             ApkInstallResult.SUCCESS -> {
-                if (outcome.requestedMethod == InstallMethod.SHIZUKU && outcome.attempts.any {
-                    it.backend == ApkInstallBackend.SHIZUKU && it.result != ApkInstallResult.SUCCESS
-                }) notify(R.string.shizukuSystemFallback)
-                publish(owner, BuildInstallState.Done(request.wasUpdate, request.pack.packLabel))
-                synchronizeAfterInstall(request.pack, refreshMissing = true)
+                val done = state as? BuildInstallState.Done
+                if (done != null) {
+                    publish(owner, done.copy(savingProfile = false, profileSaveFailed = completion.profileSaveFailed))
+                } else if (completion.profileSaveFailed) {
+                    notify(R.string.buildInstalledProfileSaveFailed)
+                }
+                if (!completion.profileSaveFailed) synchronizeAfterInstall(request.pack, refreshMissing = true)
+                else followUp("Missing pack synchronization failed") { refreshMissingPacks() }
             }
             ApkInstallResult.CONFLICT -> if (!replacing) {
                 publish(owner, BuildInstallState.Conflict(request))
@@ -309,6 +355,7 @@ internal class BuildInstallCoordinator(
         if (pendingPack() === pack || finishingPacks.any { it === pack }) return
         // A conflict can be confirmed while the previous attempt synchronizes its baseline.
         if (owner != operation && (state as? BuildInstallState.Installing)?.request?.pack === pack) return
+        if (owner != operation && completingInstallOwner?.pack === pack) return
         withContext(NonCancellable) { provider.releaseBuiltArtifacts(pack, completed = false) }
     }
 
@@ -328,6 +375,19 @@ internal class BuildInstallCoordinator(
         state = BuildInstallState.Idle
         job?.cancel()
         if (pending != null) scope.launch(NonCancellable) { releaseFinishingBuild(pending) }
+    }
+}
+
+@StringRes
+internal fun installSuccessMessage(outcome: ApkInstallOutcome, wasUpdate: Boolean): Int {
+    val shizukuFallback = outcome.requestedMethod == InstallMethod.SHIZUKU &&
+        outcome.attempts.lastOrNull { it.result == ApkInstallResult.SUCCESS }?.backend
+            ?.let { it != ApkInstallBackend.SHIZUKU } == true
+    return when {
+        shizukuFallback && wasUpdate -> R.string.buildUpdatedShizukuFallbackToast
+        shizukuFallback -> R.string.buildInstalledShizukuFallbackToast
+        wasUpdate -> R.string.buildUpdatedToast
+        else -> R.string.buildInstalledToast
     }
 }
 

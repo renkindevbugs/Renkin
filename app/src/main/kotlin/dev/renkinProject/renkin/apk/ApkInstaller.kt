@@ -5,9 +5,12 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.SystemClock
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
 import dev.renkinProject.renkin.data.InstallMethod
+import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -42,14 +45,19 @@ enum class ApkInstallBackend(val diagnosticName: String) {
 data class ApkInstallAttempt(
     val backend: ApkInstallBackend,
     val result: ApkInstallResult,
-    val detail: String? = null
+    val detail: String? = null,
+    val installerLabel: String? = null
 )
+
+data class ApkInstallRoute(val backend: ApkInstallBackend, val label: String)
 
 data class ApkInstallOutcome(
     val result: ApkInstallResult,
     val detail: String? = null,
     val requestedMethod: InstallMethod = InstallMethod.SYSTEM,
-    val attempts: List<ApkInstallAttempt> = emptyList()
+    val attempts: List<ApkInstallAttempt> = emptyList(),
+    val wasUpdate: Boolean? = null,
+    val confirmedAtMillis: Long? = null
 )
 
 internal const val APK_MIME_TYPE = "application/vnd.android.package-archive"
@@ -78,7 +86,10 @@ internal fun installationChanged(
         current.versionCode == previous.versionCode && current.lastUpdateTime > previous.lastUpdateTime
     )
 
-class ApkInstaller(context: Context) {
+class ApkInstaller(
+    context: Context,
+    private val onRoute: suspend (ApkInstallRoute) -> Unit = {}
+) {
     private val appContext = context.applicationContext
     private val packageInstaller = PackageInstaller.getInstance(appContext)
 
@@ -89,13 +100,18 @@ class ApkInstaller(context: Context) {
         externalComponent: String = ""
     ): ApkInstallOutcome {
         val previous = installedState(packageName)
-        return when (method) {
+        val started = SystemClock.elapsedRealtime()
+        val outcome = when (method) {
             InstallMethod.SYSTEM -> installThroughSystem(apk, packageName, previous, method)
             InstallMethod.SHIZUKU -> installThroughShizuku(apk, packageName, previous)
             InstallMethod.EXTERNAL -> installThroughExternal(
                 apk, packageName, previous, externalComponent
             )
         }
+        val confirmedAt = SystemClock.elapsedRealtime().takeIf { outcome.result == ApkInstallResult.SUCCESS }
+        if (BuildConfig.DEBUG) Log.debug("InstallPerformance",
+            "installerResult=${outcome.result} elapsedMs=${SystemClock.elapsedRealtime() - started}")
+        return outcome.copy(wasUpdate = previous != null, confirmedAtMillis = confirmedAt)
     }
 
     private suspend fun installThroughExternal(
@@ -134,8 +150,10 @@ class ApkInstaller(context: Context) {
             )
         }
 
-        val result = launchAndAwaitExternalInstaller(sharedApk, packageName, previous, component)
-        val attempt = ApkInstallAttempt(ApkInstallBackend.EXTERNAL, result.first, result.second)
+        val label = InstallerCatalog(appContext).labelFor(InstallerSelection(InstallMethod.EXTERNAL, flattenedComponent))
+            ?: component.packageName
+        val result = launchAndAwaitExternalInstaller(sharedApk, packageName, previous, component, label)
+        val attempt = ApkInstallAttempt(ApkInstallBackend.EXTERNAL, result.first, result.second, label)
         if (result.first == ApkInstallResult.FAILED) {
             return installThroughSystem(
                 apk = apk,
@@ -157,7 +175,8 @@ class ApkInstaller(context: Context) {
         apk: Uri,
         packageName: String,
         previous: InstalledPackageState?,
-        component: ComponentName
+        component: ComponentName,
+        installerLabel: String
     ): Pair<ApkInstallResult, String> {
         val returnGeneration = ExternalInstallAwaiter.currentGeneration()
         val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -173,6 +192,7 @@ class ApkInstaller(context: Context) {
             putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
             putExtra(Intent.EXTRA_INSTALLER_PACKAGE_NAME, appContext.packageName)
         }
+        val signal = PackageInstallSignal(appContext, packageName)
         return try {
             appContext.grantUriPermission(
                 component.packageName,
@@ -181,27 +201,35 @@ class ApkInstaller(context: Context) {
                     Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
                     Intent.FLAG_GRANT_PREFIX_URI_PERMISSION
             )
+            onRoute(ApkInstallRoute(ApkInstallBackend.EXTERNAL, installerLabel))
             withContext(Dispatchers.Main) { appContext.startActivity(intent) }
 
-            var checksSinceReturn = 0
-            repeat(EXTERNAL_INSTALL_PACKAGE_CHECKS) {
+            val deadline = SystemClock.elapsedRealtime() + EXTERNAL_INSTALL_TIMEOUT_MS
+            var returnedAt: Long? = null
+            while (true) {
                 if (installationChanged(previous, installedState(packageName))) {
                     return ApkInstallResult.SUCCESS to
                         "Package state confirmed installation through ${component.packageName}."
                 }
+                val now = SystemClock.elapsedRealtime()
+                if (now >= deadline) break
                 if (ExternalInstallAwaiter.currentGeneration() > returnGeneration) {
-                    checksSinceReturn++
+                    if (returnedAt == null) returnedAt = now
                     // Installers such as InstallerX close their UI and keep installing in the
                     // background, so returning to Renkin only means "cancelled" once no install
                     // session of theirs is still making progress.
-                    if (checksSinceReturn > EXTERNAL_RETURN_GRACE_CHECKS &&
+                    if (now - returnedAt >= EXTERNAL_RETURN_GRACE_MS &&
                         !hasActiveInstallSession(component.packageName, packageName)
                     ) {
+                        // Recheck after the session query: it may have just completed.
+                        if (installationChanged(previous, installedState(packageName))) {
+                            return ApkInstallResult.SUCCESS to "Package state confirmed installation after return."
+                        }
                         return ApkInstallResult.ABORTED to
                             "${component.packageName} returned without installing the package."
                     }
                 }
-                delay(EXTERNAL_INSTALL_PACKAGE_CHECK_DELAY_MS)
+                signal.awaitChange(minOf(EXTERNAL_INSTALL_PACKAGE_CHECK_DELAY_MS, deadline - now))
             }
             ApkInstallResult.TIMEOUT to
                 "Timed out while waiting for ${component.packageName} to install $packageName."
@@ -211,6 +239,7 @@ class ApkInstaller(context: Context) {
             Log.error(TAG, "External installer could not be launched", e)
             ApkInstallResult.FAILED to e.stackTraceToString()
         } finally {
+            signal.close()
             runCatching { appContext.revokeUriPermission(apk, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         }
     }
@@ -351,6 +380,12 @@ class ApkInstaller(context: Context) {
         apk: Uri,
         backend: ApkInstallBackend
     ): ApkInstallOutcome {
+        val label = appContext.getString(when (backend) {
+            ApkInstallBackend.SHIZUKU -> R.string.installerShizuku
+            ApkInstallBackend.SYSTEM_SESSION, ApkInstallBackend.COMPATIBILITY -> R.string.installerSystem
+            ApkInstallBackend.EXTERNAL -> error("External installers do not use Ackpine sessions")
+        })
+        onRoute(ApkInstallRoute(backend, label))
         val rawOutcome = try {
             val session = packageInstaller.createSession(apk) {
                 confirmation = Confirmation.IMMEDIATE
@@ -377,7 +412,7 @@ class ApkInstaller(context: Context) {
             ApkInstallOutcome(ApkInstallResult.FAILED, e.stackTraceToString())
         }
         return rawOutcome.copy(
-            attempts = listOf(ApkInstallAttempt(backend, rawOutcome.result, rawOutcome.detail))
+            attempts = listOf(ApkInstallAttempt(backend, rawOutcome.result, rawOutcome.detail, label))
         )
     }
 
@@ -410,7 +445,8 @@ class ApkInstaller(context: Context) {
         attempts = attempts + ApkInstallAttempt(
             backend = attempts.lastOrNull()?.backend ?: ApkInstallBackend.SYSTEM_SESSION,
             result = ApkInstallResult.SUCCESS,
-            detail = "Package state confirmed the installed update for $packageName."
+            detail = "Package state confirmed the installed update for $packageName.",
+            installerLabel = attempts.lastOrNull()?.installerLabel
         )
     )
 
@@ -447,8 +483,8 @@ class ApkInstaller(context: Context) {
         // session is gone, so the window has to outlast that scan (32 * 250 ms = 8 s).
         const val DEAD_SESSION_PACKAGE_CHECKS = 32
         const val DEAD_SESSION_PACKAGE_CHECK_DELAY_MS = 250L
-        const val EXTERNAL_INSTALL_PACKAGE_CHECKS = 480
-        const val EXTERNAL_RETURN_GRACE_CHECKS = 8
+        const val EXTERNAL_INSTALL_TIMEOUT_MS = 120_000L
+        const val EXTERNAL_RETURN_GRACE_MS = 2_000L
         const val EXTERNAL_INSTALL_PACKAGE_CHECK_DELAY_MS = 250L
     }
 }

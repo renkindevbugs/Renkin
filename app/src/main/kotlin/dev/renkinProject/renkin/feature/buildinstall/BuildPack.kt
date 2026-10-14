@@ -159,6 +159,10 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
 
     ExtendedFloatingActionButton(
         onClick = {
+            if (viewModel.buildBusy) {
+                toaster.show(context.getString(R.string.buildOperationPending))
+                return@ExtendedFloatingActionButton
+            }
             if (isInRefresh) {
                 toaster.show(context.getString(R.string.iconsStillGenerated))
                 return@ExtendedFloatingActionButton

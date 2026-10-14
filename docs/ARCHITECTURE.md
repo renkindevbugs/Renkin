@@ -99,6 +99,18 @@ so starting another build does not skip it. Dismissing a pending prompt or clear
 claims artifact cleanup before changing state; the previous job cannot release that APK as
 unfinished while its completion cleanup is still running.
 
+Confirmed installation is published before saving the captured profile. The same awaited job
+finishes saving; an operation-owned completion marker prevents another build after the success
+dialog closes.
+Profile-save errors are separate from the confirmed installer outcome. External package
+broadcasts wake a baseline verifier, with polling and active-session return protection retained.
+Installer progress and success carry the actual route's captured label, including fallbacks.
+MainViewModel forwards one formatted success notice to the shared Toaster, with Shizuku fallback
+explained in the success text. Opening an external installer updates progress without a toast.
+Both first installs and updates also show the existing launcher guide, with separate instructions
+for selecting a new pack and refreshing cached icons. Dismissing it consumes the Done state.
+A profile-save failure appears in the open dialog or as a separate notice after dismissal.
+
 `MainViewModel` also owns a `BackupUiCoordinator`. It owns backup/export/import jobs, the
 pending prepared import, confirmation metadata, cancellation presentation, service progress
 projections and automatic-backup settings flows. UI receives only the import preview; the staged

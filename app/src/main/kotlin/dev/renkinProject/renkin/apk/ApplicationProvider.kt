@@ -908,29 +908,47 @@ class ApplicationProvider internal constructor(
 
     suspend fun installIconPack(
         iconPack: BuiltIconPack,
-        selection: InstallerSelection? = null
-    ): ApkInstallOutcome {
+        selection: InstallerSelection? = null,
+        onRoute: suspend (ApkInstallRoute) -> Unit = {},
+        onInstalled: suspend (ApkInstallOutcome) -> Unit = {}
+    ): IconPackInstallCompletion = withContext(Dispatchers.Default) {
         if (!canInstallSnapshot(iconPack)) {
             iconPackBuildService.releaseArtifacts(iconPack)
-            return ApkInstallOutcome(ApkInstallResult.ABORTED)
+            return@withContext IconPackInstallCompletion(ApkInstallOutcome(ApkInstallResult.ABORTED))
         }
-        val outcome = iconPackBuildService.install(iconPack, selection)
-        finishInstallAttempt(iconPack, outcome)
-        return outcome
+        val outcome = iconPackBuildService.install(iconPack, selection, onRoute)
+        completeInstallAttempt(iconPack, outcome, onInstalled)
     }
 
     /** Explicitly approved fallback after an update conflict: uninstall, then install the APK. */
     suspend fun replaceIconPack(
         iconPack: BuiltIconPack,
-        selection: InstallerSelection? = null
-    ): ApkInstallOutcome {
+        selection: InstallerSelection? = null,
+        onRoute: suspend (ApkInstallRoute) -> Unit = {},
+        onInstalled: suspend (ApkInstallOutcome) -> Unit = {}
+    ): IconPackInstallCompletion = withContext(Dispatchers.Default) {
         if (!canInstallSnapshot(iconPack)) {
             iconPackBuildService.releaseArtifacts(iconPack)
-            return ApkInstallOutcome(ApkInstallResult.ABORTED)
+            return@withContext IconPackInstallCompletion(ApkInstallOutcome(ApkInstallResult.ABORTED))
         }
-        val outcome = iconPackBuildService.replace(iconPack, selection)
-        finishInstallAttempt(iconPack, outcome)
-        return outcome
+        val outcome = iconPackBuildService.replace(iconPack, selection, onRoute)
+        completeInstallAttempt(iconPack, outcome, onInstalled)
+    }
+
+    private suspend fun completeInstallAttempt(
+        iconPack: BuiltIconPack,
+        outcome: ApkInstallOutcome,
+        onInstalled: suspend (ApkInstallOutcome) -> Unit
+    ): IconPackInstallCompletion {
+        if (outcome.result != ApkInstallResult.SUCCESS) {
+            timeProfilePhase("install.finishAttempt") { finishInstallAttempt(iconPack, outcome) }
+            return IconPackInstallCompletion(outcome)
+        }
+        // Once Android confirms success, finish this exact snapshot even if its UI owner closes.
+        // The caller still owns and awaits the work; no detached persistence job is launched.
+        return finishConfirmedInstallation(outcome, onInstalled) {
+            timeProfilePhase("install.persistConfirmedSnapshot") { finishInstallAttempt(iconPack, outcome) }
+        }
     }
 
     private suspend fun canInstallSnapshot(iconPack: BuiltIconPack): Boolean = profileOperations.run {

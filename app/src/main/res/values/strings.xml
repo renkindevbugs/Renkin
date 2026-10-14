@@ -50,7 +50,6 @@
     <string name="shizukuPermissionDenied">Shizuku permission was denied. Grant it to enable silent installation.</string>
     <string name="shizukuReady">Ready for installation without the Android confirmation screen.</string>
     <string name="shizukuError">Shizuku status could not be read. The system installer will be used.</string>
-    <string name="shizukuSystemFallback">Shizuku was unavailable, so the system installer was used</string>
     <string name="version">Version %s</string>
     <string name="aboutTitle">About</string>
     <string name="aboutApp">Renkin gives your apps custom icons. Pick an icon from an installed pack, upload or draw your own, adjust it, then build an installable icon pack — all on device.</string>
@@ -108,6 +107,16 @@
     <string name="buildInstalling">Installing …</string>
     <string name="buildUpdating">Updating …</string>
     <string name="buildReplacing">Replacing existing pack …</string>
+    <string name="buildOpeningInstaller">Opening %1$s …</string>
+    <string name="buildInstallingVia">Installing via %1$s …</string>
+    <string name="buildUpdatingVia">Updating via %1$s …</string>
+    <string name="buildSavingInstalledProfile">Installation confirmed. Saving profile …</string>
+    <string name="buildInstalledToast">%1$s installed via %2$s</string>
+    <string name="buildUpdatedToast">%1$s updated via %2$s</string>
+    <string name="buildInstalledShizukuFallbackToast">Shizuku failed. %1$s installed via %2$s</string>
+    <string name="buildUpdatedShizukuFallbackToast">Shizuku failed. %1$s updated via %2$s</string>
+    <string name="buildInstalledProfileSaveFailed">Installation succeeded, but the profile could not be saved. Build again to retry saving.</string>
+    <string name="buildOperationPending">The previous build is still finishing. Please wait.</string>
     <string name="followSystem">Follow System</string>
     <string name="darkMode">Dark Mode</string>
     <string name="lightMode">Light Mode</string>
@@ -118,9 +127,9 @@
     <string name="applicationName">Application Name</string>
     <string name="ok">OK</string>
     <string name="buildInstalledTitle">Icon pack installed</string>
-    <string name="buildInstalledText">The icon pack was installed as **“%1$s”**. Select it as the icon pack in your **launcher’s settings** to see your icons.</string>
+    <string name="buildInstalledText">**“%1$s”** was installed via **%2$s**. Select it as the icon pack in your **launcher’s settings** to see your icons.</string>
     <string name="buildUpdatedTitle">Icon pack updated</string>
-    <string name="buildUpdatedText">Launchers cache icons, so the changes may not show right away. In your launcher’s settings, **switch to another icon pack and back to “%1$s”** to refresh them.</string>
+    <string name="buildUpdatedText">**“%1$s”** was updated via **%2$s**. Launchers cache icons, so the changes may not show right away. In your launcher’s settings, **switch to another icon pack and back to “%1$s”** to refresh them.</string>
     <string name="saveBeforeSwitchTitle">Save changes?</string>
     <string name="saveBeforeSwitchText">This profile has changes that aren’t saved. **Save them before switching?** Saved icons are kept without building; tap outside to cancel.</string>
     <string name="saveAction">Save</string>

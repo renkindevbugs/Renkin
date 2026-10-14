@@ -344,8 +344,13 @@ fun MainColumn(iconPacks: List<IconPack>) {
         optionsViewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
     }
     val coroutineScope = rememberCoroutineScope()
-    LaunchedEffect(Unit) {
-        viewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
+    LaunchedEffect(viewModel) {
+        launch {
+            viewModel.toastEvents.collect { resId -> toaster.show(context.getString(resId)) }
+        }
+        launch {
+            viewModel.installToastEvents.collect { message -> toaster.show(message) }
+        }
     }
 
     // Undoable changes get a snackbar instead of a toast: a toast cannot be acted on, and the
@@ -475,8 +480,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
         )
     }
 
-    // Post-build next steps: launchers need a nudge to pick up a (re)built pack, and the nudge
-    // differs between a first install (pick the pack) and an update (switch away and back).
+    // Launcher setup differs for a first install and an update of cached icons.
     val buildOutcome = viewModel.buildOutcome
     if (buildOutcome != null) {
         val isUpdate = buildOutcome.outcome == MainViewModel.BuildOutcome.UPDATE
@@ -495,10 +499,20 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 ))
             },
             text = {
-                Text(boldStringResource(
-                    if (isUpdate) R.string.buildUpdatedText else R.string.buildInstalledText,
-                    buildOutcome.packLabel
-                ))
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(boldStringResource(
+                        if (isUpdate) R.string.buildUpdatedText else R.string.buildInstalledText,
+                        buildOutcome.packLabel, buildOutcome.installerLabel
+                    ))
+                    if (buildOutcome.savingProfile) {
+                        Text(stringResource(R.string.buildSavingInstalledProfile),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else if (buildOutcome.profileSaveFailed) {
+                        Text(stringResource(R.string.buildInstalledProfileSaveFailed),
+                            color = MaterialTheme.colorScheme.error)
+                    }
+                }
             },
             confirmButton = {
                 TextButton(onClick = { viewModel.dismissBuildOutcome() }) { Text(stringResource(R.string.ok)) }
