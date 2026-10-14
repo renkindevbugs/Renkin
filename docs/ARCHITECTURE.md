@@ -960,8 +960,13 @@ supports exact reconciliation after ambiguous fsync failure without claiming a f
 Private prepared bytes go directly to the read-only writer without another full payload copy.
 Explicit Apply/Clear/dismiss fences captures synchronously, then queued cleanup waits for an
 in-flight write and removes only the latest owned checkpoint. Unexpected loss/clearing preserves
-the draft. Routine autosave is silent; only Blocked/Failed show Retry and confirmed Discard,
+the draft. Routine autosave is silent; Failed shows Retry and confirmed Discard. Blocked shows
+confirmed Review saved edit and Discard: review closes the current editor, warns about losing
+unapplied changes, preserves the foreign draft and explicitly requests its recovery offer,
 identifying the stored application's name (package fallback) from an optional metadata-only inspection.
+Blocked autosave re-inspects on valid runtime/storage observations and later save requests. An
+externally cleared checkpoint admits the current editor; a surviving foreign checkpoint still blocks
+writes. Review is a required UI callback, and its confirmation is fenced by displayed state/lifetime.
 Unsupported witnesses report failure once and wait for Retry or supported values before resuming.
 Queue coalescing flags are set before channel sends: Main.immediate can consume a request inline,
 and a post-send assignment must not undo the receiver's reset or disable later saves/observations.
@@ -973,6 +978,20 @@ background flush, recovery edits, admission/reset and close/publication races. A
 168 suites pass, including both Roborazzi cases; compileDebugKotlin and assembleDebug pass with
 the existing local test-JVM workaround. Debug capture logs include copy time, payload size and heap
 observations; peak memory and large-draft device performance still need measurement.
+
+Recovery offers include application/profile identity and saved-render thumbnails. Optional preview
+preparation copies already bound artwork off Main into small independent immutable bitmaps;
+the dialog never borrows pixels recycled by preparation disposal or transfer. Preview failure,
+including allocation failure, keeps a valid offer recoverable and does not disable autosave.
+Cancellation still propagates. Refresh replaces the UI state without first hiding an offer just
+to dispose its native preparation. Checkpoint/lease and profile/session validation remain with
+the recovery owners. Not now postpones the observed checkpoint during the current profile visit;
+returning to its owning profile offers it again. Automatic checks on other profiles remain hidden;
+explicit review can explain which profile owns the edit without switching silently. A fresh owner
+may offer the draft at launch. A different checkpoint is not hidden by postponement. Unreadable
+catalog postponement remains owner-local because its profile cannot be identified safely.
+Verification status is recorded in
+[editor-recovery-preview-checkpoint.md](editor-recovery-preview-checkpoint.md).
 
 **7D1 (verified)** starts feature packaging with the preset library.
 `feature.presets` contains `PresetLibraryViewModel`, the colour/modifier library composables and

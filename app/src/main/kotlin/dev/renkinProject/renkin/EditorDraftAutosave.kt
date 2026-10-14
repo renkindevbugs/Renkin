@@ -98,7 +98,13 @@ internal class EditorDraftAutosave(
         val lifetime = editor.lifetime.value
         if (live?.lifetime?.let { it in closing } == true) return
         closing.removeAll { it.generation < lifetime.generation && it != live?.lifetime }
-        if (live?.lifetime == lifetime) return
+        if (live?.lifetime == lifetime) {
+            if (mutableState.value?.status == EditorAutosaveStatus.BLOCKED && provider.runtimeState.value.ready &&
+                StorageOperationGate.recoveryState.value == StorageRecoveryState.READY) {
+                inspect(requireNotNull(live), allowEmpty = true)
+            }
+            return
+        }
         live = null
         mutableState.value = null
         if (lifetime.sessionId == null || lifetime in closing) return

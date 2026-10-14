@@ -3,12 +3,15 @@ package dev.renkinProject.renkin
 import android.app.Application
 import android.content.Context
 import android.content.ContextWrapper
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModelStore
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import androidx.room.Room
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.IconApplyOutcome
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.ProfileStyle
 import dev.renkinProject.renkin.data.ProfileStyleCodec
@@ -31,6 +34,7 @@ import dev.renkinProject.renkin.ui.PreparedEditorRecovery
 import dev.renkinProject.renkin.ui.EditorSession
 import dev.renkinProject.renkin.ui.captureRenderWitness
 import dev.renkinProject.renkin.ui.renderWitnessOrNull
+import dev.renkinProject.renkin.ui.prepareEditorRecoveryPreview
 import dev.renkinProject.renkin.ui.withModifierAdjustments
 import dev.renkinProject.renkin.ui.BrushStroke
 import dev.renkinProject.renkin.ui.buildEraseMask
@@ -48,6 +52,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.CoroutineContext
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.MainCoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -138,9 +143,9 @@ class EditorDraftRecoveryOwnerTest {
     private fun newOwner() = EditorDraftRecoveryViewModel(context, provider, store).also {
         models.put("owner", it)
     }
-    private fun stage(application: PackageInfoStruct) {
+    private fun stage(vararg applications: PackageInfoStruct) {
         ApplicationProvider::class.java.getDeclaredField("stagedApplications").apply { isAccessible = true }
-            .set(provider, listOf(application).toPersistentList())
+            .set(provider, applications.toList().toPersistentList())
     }
     private suspend fun save(): EditorDraftCandidate {
         val baseline = provider.captureEditorDraftBaseline(provider.sessionToken, app)
@@ -189,6 +194,73 @@ class EditorDraftRecoveryOwnerTest {
         connect(); idle()
         assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
         assertFalse(bound.canTransfer)
+    }
+
+    @Test fun savedPreviewKeepsIndependentImmutablePixelsAfterPreparationDisposal() = runBlocking {
+        val offered = offer()
+        val image = requireNotNull(offered.preview?.savedRender)
+        val original = prepared().bound.artwork.getValue(requireNotNull(prepared().bound.capture.snapshot.rendered)).previewBitmap(512)
+        assertNotSame(original, image)
+        assertEquals(original.getPixel(0, 0), image.getPixel(0, 0))
+        assertFalse(image.isMutable)
+        val pixel = image.getPixel(0, 0)
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        assertFalse(image.isRecycled)
+        assertEquals(pixel, image.getPixel(0, 0))
+    }
+
+    @Test fun savedPreviewSurvivesTransferAndExplicitEditorClose() = runBlocking {
+        val offered = offer()
+        val image = requireNotNull(offered.preview?.savedRender)
+        val pixel = image.getPixel(0, 0)
+        withContext(main) { owner.restore(offered) }
+        val attachment = withTimeout(30_000) { editor.recoveryAttachment.first { it != null }!! }
+        assertFalse(image.isRecycled)
+        withContext(main) { owner.close(attachment) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        assertFalse(image.isRecycled)
+        assertEquals(pixel, image.getPixel(0, 0))
+    }
+
+    private fun failOptionalPreview(error: Throwable) {
+        val icon = object : ColorDrawable() {
+            override fun getConstantState(): Drawable.ConstantState? = throw error
+        }
+        app = PackageInfoStruct("App", app.packageName, app.activityName, icon, 0, createdIcon = app.createdIcon)
+        stage(app)
+    }
+
+    private suspend fun previewFailureStillAllowsRecovery(error: Throwable) {
+        failOptionalPreview(error)
+        val offered = offer()
+        assertNull(offered.preview)
+        withContext(main) { owner.restore(offered) }
+        withTimeout(30_000) { editor.recoveryAttachment.first { it != null } }
+        assertEquals(offered.checkpoint, store.checkpoint())
+        assertEquals(EditorAutosaveStatus.SAVED, owner.autosaveState.value?.status)
+    }
+
+    @Test fun optionalPreviewExceptionDoesNotFailRecoveryOrDisableAutosave() = runBlocking {
+        previewFailureStillAllowsRecovery(IllegalStateException("Optional preview"))
+    }
+
+    @Test fun optionalPreviewAllocationFailureDoesNotFailRecoveryOrDisableAutosave() = runBlocking {
+        previewFailureStillAllowsRecovery(OutOfMemoryError("Optional preview"))
+    }
+
+    @Test fun optionalPreviewCancellationPropagatesWithoutDisposingThePreparedDraft() = runBlocking {
+        val offered = offer()
+        val draft = prepared()
+        val failure = CancellationException("Optional preview cancelled")
+        val application = PackageInfoStruct("App", app.packageName, app.activityName,
+            object : ColorDrawable() { override fun getConstantState(): Drawable.ConstantState? = throw failure }, 0)
+        val injected = PreparedEditorRecovery(draft.checkpoint, draft.owner,
+            draft.baseline.copy(application = application), draft.editorGeneration, draft.bound, draft.editorOwner)
+        try { prepareEditorRecoveryPreview(injected); fail("Cancellation was swallowed") }
+        catch (cancelled: CancellationException) { assertSame(failure, cancelled) }
+        assertTrue(draft.canTransfer)
+        assertEquals(offered.checkpoint, store.checkpoint())
     }
 
     @Test fun freshOwnerOffersMemoryOnlyPostponedDraftAgain() = runBlocking {
@@ -270,15 +342,111 @@ class EditorDraftRecoveryOwnerTest {
         assertEquals(store.checkpoint(), shown<EditorDraftRecoveryState.Obsolete>().checkpoint)
     }
 
-    @Test fun anotherProfileIsNamedWithoutSwitchingIt() = runBlocking {
+    @Test fun watchApplyPreservesUnfinishedDraftAndRecoveryDoesNotApplyItAutomatically() = runBlocking {
+        val offered = offer()
+        val reviewed = EditorRecoveryFixtures.icon(android.graphics.Color.BLUE)
+        assertEquals(IconApplyOutcome.APPLIED, provider.applyWatchIcon(provider.sessionToken, app, reviewed, null))
+        assertEquals(offered.checkpoint, store.checkpoint())
+        withContext(main) { owner.retry(offered) }
+        val reoffered = withTimeout(30_000) {
+            owner.state.first { it is EditorDraftRecoveryState.Offer && it !== offered } as EditorDraftRecoveryState.Offer
+        }
+        withContext(main) { owner.restore(reoffered) }
+        withTimeout(30_000) { editor.recoveryAttachment.first { it != null } }
+        assertSame(reviewed, provider.applicationList.single().createdIcon)
+        assertEquals(offered.checkpoint, store.checkpoint())
+    }
+
+    @Test fun persistingWatchIconForSameAppMakesOldDraftObsoleteWithoutDeletingIt() = runBlocking {
+        val offered = offer()
+        val reviewed = EditorRecoveryFixtures.icon(android.graphics.Color.BLUE)
+        assertEquals(IconApplyOutcome.APPLIED, provider.applyWatchIcon(provider.sessionToken, app, reviewed, null))
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        assertEquals(offered.checkpoint, store.checkpoint())
+        withContext(main) { owner.retry(offered) }
+        assertEquals(offered.checkpoint, shown<EditorDraftRecoveryState.Obsolete>().checkpoint)
+        assertEquals(offered.checkpoint, store.candidate()?.checkpoint)
+        assertSame(reviewed, provider.applicationList.single().createdIcon)
+        assertNull(editor.recoveryAttachment.value)
+    }
+
+    @Test fun persistingWatchIconForAnotherAppKeepsUnfinishedDraftRecoverable() = runBlocking {
+        val other = PackageInfoStruct("Other", "test.other", "Main", ColorDrawable(0), 0,
+            createdIcon = EditorRecoveryFixtures.icon())
+        stage(app, other)
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        val offered = offer()
+        val reviewed = EditorRecoveryFixtures.icon(android.graphics.Color.BLUE)
+        assertEquals(IconApplyOutcome.APPLIED, provider.applyWatchIcon(provider.sessionToken, other, reviewed, null))
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        withContext(main) { owner.retry(offered) }
+        val reoffered = withTimeout(30_000) {
+            owner.state.first { it is EditorDraftRecoveryState.Offer && it !== offered } as EditorDraftRecoveryState.Offer
+        }
+        assertEquals(offered.checkpoint, reoffered.checkpoint)
+        assertEquals(offered.checkpoint, store.checkpoint())
+        assertSame(reviewed, provider.applicationList.first { it.packageName == other.packageName }.createdIcon)
+    }
+
+    @Test fun firstProfileSaveCanExpireDraftBaselineWithoutOverwritingItsCheckpoint() = runBlocking {
+        val other = PackageInfoStruct("Other", "test.other", "Main", ColorDrawable(0), 0,
+            createdIcon = EditorRecoveryFixtures.icon())
+        stage(app, other)
+        val offered = offer()
+        assertEquals(IconApplyOutcome.APPLIED, provider.applyWatchIcon(provider.sessionToken, other,
+            EditorRecoveryFixtures.icon(android.graphics.Color.BLUE), null))
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        withContext(main) { owner.retry(offered) }
+        assertEquals(offered.checkpoint, shown<EditorDraftRecoveryState.Obsolete>().checkpoint)
+        assertEquals(offered.checkpoint, store.candidate()?.checkpoint)
+        assertNull(editor.recoveryAttachment.value)
+    }
+
+    @Test fun anotherProfileRemainsQuietUntilExplicitReviewWithoutSwitchingIt() = runBlocking {
         val candidate = save()
         val other = provider.createProfile("Other", "", "Other")
         provider.switchProfile(other)
         connect()
+        idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        openLive()
+        val blocked = withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED }!! }
+        assertTrue(withContext(main) { owner.reviewSavedEdit(blocked) })
         val shown = shown<EditorDraftRecoveryState.NeedsProfile>()
         assertEquals(candidate.record.owner.profileId, shown.profileId)
         assertTrue(shown.profileName.isNotBlank())
         assertEquals(other, provider.runtimeState.value.activeProfileId)
+    }
+
+    @Test fun returningToOwningProfileReoffersPostponedDraftButOtherProfilesStayQuiet() = runBlocking {
+        val offered = offer()
+        val owningProfileId = provider.sessionToken.profileId
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        val other = provider.createProfile("Other", "", "Other")
+        provider.switchProfile(other); idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        val third = provider.createProfile("Third", "", "Third")
+        provider.switchProfile(third); idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        provider.switchProfile(owningProfileId)
+        assertEquals(offered.checkpoint, shown<EditorDraftRecoveryState.Offer>().checkpoint)
+    }
+
+    @Test fun postponedUnreadableCatalogStaysQuietAcrossProfileSwitches() = runBlocking {
+        store.checkpoint()
+        File(context.noBackupFilesDir, "editor-draft/catalog.json").writeText("broken")
+        connect()
+        val failed = shown<EditorDraftRecoveryState.Failed>()
+        withContext(main) { owner.postpone(failed) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        val owningProfileId = provider.sessionToken.profileId
+        val other = provider.createProfile("Other", "", "Other")
+        provider.switchProfile(other); idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        provider.switchProfile(owningProfileId); idle()
+        assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
+        assertEquals("broken", File(context.noBackupFilesDir, "editor-draft/catalog.json").readText())
     }
 
     @Test fun retryDoesNotResetUnreadableMetadataAndConfirmedDiscardDoes() = runBlocking {
@@ -461,6 +629,63 @@ class EditorDraftRecoveryOwnerTest {
         val blocked = withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED }!! }
         withContext(main) { owner.discardForAutosave(blocked) }
         assertEquals(0.7f, savedScale(saved(offered.checkpoint)), 0f)
+    }
+
+    @Test fun blockedReviewClosesCurrentEditorAndReoffersPreservedDraft() = runBlocking {
+        val offered = offer()
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        val session = openLive()
+        publish(session) { adjustments.iconScale = 0.7f }
+        val blocked = withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED }!! }
+        assertTrue(withContext(main) { owner.reviewSavedEdit(blocked) })
+        assertEquals(offered.checkpoint, shown<EditorDraftRecoveryState.Offer>().checkpoint)
+        assertNull(editor.lifetime.value.sessionId)
+        assertEquals(offered.checkpoint, store.checkpoint())
+        assertNull(owner.autosaveState.value)
+    }
+
+    @Test fun staleBlockedReviewCannotCloseCurrentEditor() = runBlocking {
+        val offered = offer()
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        openLive()
+        val blocked = withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED }!! }
+        assertFalse(withContext(main) { owner.reviewSavedEdit(blocked.copy()) })
+        assertEquals("live", editor.lifetime.value.sessionId)
+        withContext(main) { owner.closeLive("live") }
+        quiet()
+        openLive()
+        withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED } }
+        assertFalse(withContext(main) { owner.reviewSavedEdit(blocked) })
+        assertEquals("live", editor.lifetime.value.sessionId)
+        assertEquals(offered.checkpoint, store.checkpoint())
+    }
+
+    @Test fun blockedAutosaveRechecksExternallyClearedDraftWithoutClosingEditor() = runBlocking {
+        val offered = offer()
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        val session = openLive()
+        publish(session) { adjustments.iconScale = 0.7f }
+        withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED } }
+        assertTrue(store.discard(offered.checkpoint))
+        withContext(main) { owner.setBackgrounded(true) }
+        assertEquals(0.7f, savedScale(saved(offered.checkpoint)), 0f)
+        assertEquals("live", editor.lifetime.value.sessionId)
+    }
+
+    @Test fun blockedAutosaveRecheckNeverOverwritesAnExistingForeignDraft() = runBlocking {
+        val offered = offer()
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        val session = openLive()
+        publish(session) { adjustments.iconScale = 0.7f }
+        withTimeout(30_000) { owner.autosaveState.first { it?.status == EditorAutosaveStatus.BLOCKED } }
+        withContext(main) { owner.setBackgrounded(true) }
+        quiet()
+        assertEquals(EditorAutosaveStatus.BLOCKED, owner.autosaveState.value?.status)
+        assertEquals(offered.checkpoint, store.checkpoint())
     }
 
     @Test fun unsupportedWitnessFailsWithoutReplacingCheckpointAndSupportedEditResumes() = runBlocking {

@@ -8,7 +8,7 @@ The developer approved priorities 1–2 on-device and explicitly authorized test
 into `dev`. The post-install blocking delay is gone by manual observation; exact timings remain
 unmeasured. At final approval, the developer requested removal of the opening toast; the success
 toast and both launcher-guide dialogs remain. Debug and release verification passed; the change
-is approved for commit and merge into `dev`.
+was committed as `f3e23d69` and merged into `dev` as `acc638ee` after explicit approval.
 Both historical stashes and unrelated worktrees are preserved.
 
 ## Installation flow
@@ -130,8 +130,10 @@ before persistence, caller and callback cancellation, saving/publication failure
 
 ## Remaining work
 
-- Priority 3: editor recovery dialog with application identity and the actual saved render.
-  Start on a separate branch/checkpoint after priorities 1–2; do not re-render from current prefs.
+- Priority 3: editor recovery dialog implemented on the separate `feature/editor-recovery-preview`
+  branch. The developer confirmed the scenarios tried on-device; regression verification and
+  the follow-up blocked-state recheck are recorded in
+  [editor-recovery-preview-checkpoint.md](editor-recovery-preview-checkpoint.md).
 - Installed original-icon memory: UI thumbnails plus on-demand full sources, preserving user,
   activity, badges, adaptive/monochrome and replay/recovery identity. See
   [performance-installed-icons.md](performance-installed-icons.md).

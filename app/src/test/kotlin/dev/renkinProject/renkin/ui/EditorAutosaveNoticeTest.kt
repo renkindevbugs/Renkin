@@ -7,6 +7,7 @@ import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -34,7 +35,7 @@ class EditorAutosaveNoticeTest {
 
     @Test fun routineStatusesStaySilent() {
         val status = mutableStateOf(EditorAutosaveStatus.WAITING)
-        compose.setContent { EditorAutosaveNotice(EditorAutosaveState(lifetime, status.value), {}, {}) }
+        compose.setContent { EditorAutosaveNotice(EditorAutosaveState(lifetime, status.value), {}, {}, {}) }
         for (next in listOf(EditorAutosaveStatus.WAITING, EditorAutosaveStatus.SAVING, EditorAutosaveStatus.SAVED)) {
             compose.runOnIdle { status.value = next }
             compose.onNodeWithText(string(R.string.editorRecoveryRetry)).assertDoesNotExist()
@@ -46,7 +47,7 @@ class EditorAutosaveNoticeTest {
         val shown = EditorAutosaveState(lifetime, EditorAutosaveStatus.BLOCKED,
             EditorDraftCheckpoint("generation", "draft"), draftApplicationName = "Other app")
         var discarded: EditorAutosaveState? = null
-        compose.setContent { EditorAutosaveNotice(shown, {}, { discarded = it }) }
+        compose.setContent { EditorAutosaveNotice(shown, {}, { discarded = it }, {}) }
         compose.onNodeWithText(string(R.string.editorAutosaveBlocked)).assertIsDisplayed()
         compose.onNodeWithText(string(R.string.editorRecoveryDiscard)).performClick()
         assertNull(discarded)
@@ -58,10 +59,31 @@ class EditorAutosaveNoticeTest {
     @Test fun failedNoticeRetriesExactShownStateAndDisablesUnsafeDiscard() {
         val shown = EditorAutosaveState(lifetime, EditorAutosaveStatus.FAILED)
         var retried: EditorAutosaveState? = null
-        compose.setContent { EditorAutosaveNotice(shown, { retried = it }, { error("Unsafe discard") }) }
+        compose.setContent { EditorAutosaveNotice(shown, { retried = it }, { error("Unsafe discard") }, {}) }
         compose.onNodeWithText(string(R.string.editorAutosaveFailed)).assertIsDisplayed()
         compose.onNodeWithText(string(R.string.editorRecoveryDiscard)).assertIsNotEnabled()
         compose.onNodeWithText(string(R.string.editorRecoveryRetry)).performClick()
         assertSame(shown, retried)
+    }
+
+    @Test fun blockedReviewRequiresConfirmationAndUsesTheDisplayedState() {
+        val shown = EditorAutosaveState(lifetime, EditorAutosaveStatus.BLOCKED,
+            EditorDraftCheckpoint("generation", "draft"))
+        var reviewed: EditorAutosaveState? = null
+        compose.setContent { EditorAutosaveNotice(shown, { error("Blocked retry") }, {}, { reviewed = it }) }
+        compose.onNodeWithText(string(R.string.editorRecoveryRetry)).assertDoesNotExist()
+        compose.onNodeWithText(string(R.string.editorAutosaveReview)).performClick()
+        assertNull(reviewed)
+        compose.onNodeWithText(string(R.string.editorAutosaveReviewText)).assertIsDisplayed()
+        compose.onNode(hasText(string(R.string.editorAutosaveReview)) and hasAnyAncestor(isDialog()) and hasClickAction()).performClick()
+        assertSame(shown, reviewed)
+    }
+
+    @Test fun cancellingBlockedReviewKeepsTheCurrentEditor() {
+        val shown = EditorAutosaveState(lifetime, EditorAutosaveStatus.BLOCKED)
+        compose.setContent { EditorAutosaveNotice(shown, {}, {}, { error("Cancelled review") }) }
+        compose.onNodeWithText(string(R.string.editorAutosaveReview)).performClick()
+        compose.onNodeWithText(string(R.string.dismiss)).performClick()
+        compose.onNodeWithText(string(R.string.editorAutosaveBlocked)).assertIsDisplayed()
     }
 }
