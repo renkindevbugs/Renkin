@@ -38,6 +38,7 @@
     <string name="installerSelect">Select installer</string>
     <string name="installerFirstChoiceDescription">Choose how Renkin installs icon packs. Change it or enable Ask every time in Settings.</string>
     <string name="installerUnavailable">Unavailable installer</string>
+    <string name="installerSystemUnavailable">No enabled Android installer was found.</string>
     <string name="installerAskEveryTime">Ask every time</string>
     <string name="installerAskEveryTimeDescription">Show this installer picker whenever a generated icon pack is ready to install.</string>
     <string name="installerAskEveryTimeEnabled">Installer picker will open before each installation</string>
@@ -527,6 +528,7 @@
     <string name="iconPackUpdateFailed">The icon pack wasn\'t updated</string>
     <string name="installFailureTitle">Icon pack installation failed</string>
     <string name="installFailureText">Android rejected the installation. Copy these diagnostic details and include them when reporting the problem.</string>
+    <string name="installNoSystemInstaller">A required Android installer activity is unavailable. Select Shizuku or an external installer, then build the pack again to retry.</string>
     <string name="installFailureCopy">Copy details</string>
     <string name="installFailureCopied">Installation details copied</string>
     <string name="installFallbackTitle">Replace existing icon pack?</string>

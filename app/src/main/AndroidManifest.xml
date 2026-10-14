@@ -23,6 +23,13 @@
             <category android:name="android.intent.category.DEFAULT" />
             <data android:mimeType="application/vnd.android.package-archive" />
         </intent>
+        <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <intent>
+            <action android:name="android.content.pm.action.CONFIRM_INSTALL" />
+        </intent>
     </queries>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Used for exactly two things: asking the Play Store whether an icon pack referenced

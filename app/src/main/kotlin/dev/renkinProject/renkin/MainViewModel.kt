@@ -15,6 +15,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApkInstallBackend
+import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ApplicationRuntimeState
 import dev.renkinProject.renkin.apk.BuiltIconPack
@@ -735,9 +736,9 @@ class MainViewModel @Inject constructor(
     }
     fun dismissBuildOutcome() = buildCoordinator.dismissBuildOutcome()
 
-    data class InstallFailureInfo(val summary: String, val report: String)
+    data class InstallFailureInfo(val summary: String, val report: String, val missingSystemInstaller: Boolean)
     val installFailure: InstallFailureInfo? get() = (buildState as? BuildInstallState.Failed)?.let {
-        InstallFailureInfo(it.summary, it.report)
+        InstallFailureInfo(it.summary, it.report, it.result == ApkInstallResult.NO_SYSTEM_INSTALLER)
     }
     fun dismissInstallFailure() = buildCoordinator.dismissInstallFailure()
 
