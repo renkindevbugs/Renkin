@@ -11,6 +11,7 @@ import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.geometry.Offset
 import androidx.room.Room
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.IconApplyOutcome
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.ProfileStyle
 import dev.renkinProject.renkin.data.ProfileStyleCodec
@@ -142,9 +143,9 @@ class EditorDraftRecoveryOwnerTest {
     private fun newOwner() = EditorDraftRecoveryViewModel(context, provider, store).also {
         models.put("owner", it)
     }
-    private fun stage(application: PackageInfoStruct) {
+    private fun stage(vararg applications: PackageInfoStruct) {
         ApplicationProvider::class.java.getDeclaredField("stagedApplications").apply { isAccessible = true }
-            .set(provider, listOf(application).toPersistentList())
+            .set(provider, applications.toList().toPersistentList())
     }
     private suspend fun save(): EditorDraftCandidate {
         val baseline = provider.captureEditorDraftBaseline(provider.sessionToken, app)
@@ -339,6 +340,66 @@ class EditorDraftRecoveryOwnerTest {
             listOf(DbApplication(app.packageName, app.activityName, false, false, "changed")))
         connect()
         assertEquals(store.checkpoint(), shown<EditorDraftRecoveryState.Obsolete>().checkpoint)
+    }
+
+    @Test fun watchApplyPreservesUnfinishedDraftAndRecoveryDoesNotApplyItAutomatically() = runBlocking {
+        val offered = offer()
+        val reviewed = EditorRecoveryFixtures.icon(android.graphics.Color.BLUE)
+        assertEquals(IconApplyOutcome.APPLIED, provider.applyWatchIcon(provider.sessionToken, app, reviewed, null))
+        assertEquals(offered.checkpoint, store.checkpoint())
+        withContext(main) { owner.retry(offered) }
+        val reoffered = withTimeout(30_000) {
+            owner.state.first { it is EditorDraftRecoveryState.Offer && it !== offered } as EditorDraftRecoveryState.Offer
+        }
+        withContext(main) { owner.restore(reoffered) }
+        withTimeout(30_000) { editor.recoveryAttachment.first { it != null } }
+        assertSame(reviewed, provider.applicationList.single().createdIcon)
+        assertEquals(offered.checkpoint, store.checkpoint())
+    }
+
+    @Test fun persistingWatchIconForSameAppMakesOldDraftObsoleteWithoutDeletingIt() = runBlocking {
+        val offered = offer()
+        val reviewed = EditorRecoveryFixtures.icon(android.graphics.Color.BLUE)
+        assertEquals(IconApplyOutcome.APPLIED, provider.applyWatchIcon(provider.sessionToken, app, reviewed, null))
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        assertEquals(offered.checkpoint, store.checkpoint())
+        withContext(main) { owner.retry(offered) }
+        assertEquals(offered.checkpoint, shown<EditorDraftRecoveryState.Obsolete>().checkpoint)
+        assertEquals(offered.checkpoint, store.candidate()?.checkpoint)
+        assertSame(reviewed, provider.applicationList.single().createdIcon)
+        assertNull(editor.recoveryAttachment.value)
+    }
+
+    @Test fun persistingWatchIconForAnotherAppKeepsUnfinishedDraftRecoverable() = runBlocking {
+        val other = PackageInfoStruct("Other", "test.other", "Main", ColorDrawable(0), 0,
+            createdIcon = EditorRecoveryFixtures.icon())
+        stage(app, other)
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        val offered = offer()
+        val reviewed = EditorRecoveryFixtures.icon(android.graphics.Color.BLUE)
+        assertEquals(IconApplyOutcome.APPLIED, provider.applyWatchIcon(provider.sessionToken, other, reviewed, null))
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        withContext(main) { owner.retry(offered) }
+        val reoffered = withTimeout(30_000) {
+            owner.state.first { it is EditorDraftRecoveryState.Offer && it !== offered } as EditorDraftRecoveryState.Offer
+        }
+        assertEquals(offered.checkpoint, reoffered.checkpoint)
+        assertEquals(offered.checkpoint, store.checkpoint())
+        assertSame(reviewed, provider.applicationList.first { it.packageName == other.packageName }.createdIcon)
+    }
+
+    @Test fun firstProfileSaveCanExpireDraftBaselineWithoutOverwritingItsCheckpoint() = runBlocking {
+        val other = PackageInfoStruct("Other", "test.other", "Main", ColorDrawable(0), 0,
+            createdIcon = EditorRecoveryFixtures.icon())
+        stage(app, other)
+        val offered = offer()
+        assertEquals(IconApplyOutcome.APPLIED, provider.applyWatchIcon(provider.sessionToken, other,
+            EditorRecoveryFixtures.icon(android.graphics.Color.BLUE), null))
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        withContext(main) { owner.retry(offered) }
+        assertEquals(offered.checkpoint, shown<EditorDraftRecoveryState.Obsolete>().checkpoint)
+        assertEquals(offered.checkpoint, store.candidate()?.checkpoint)
+        assertNull(editor.recoveryAttachment.value)
     }
 
     @Test fun anotherProfileRemainsQuietUntilExplicitReviewWithoutSwitchingIt() = runBlocking {

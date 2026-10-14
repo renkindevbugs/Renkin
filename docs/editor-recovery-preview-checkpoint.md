@@ -5,10 +5,11 @@ Branch: `feature/editor-recovery-preview`, based on `dev` at `acc638ee`.
 ## Status
 
 The developer confirmed that the device scenarios they tried work, including the revised recovery
-behavior. This does not claim that every scenario below was exercised. Regression verification
-passed after that confirmation; the follow-up automatic blocked-state recheck still needs its
-focused device check. Preview and behavior changes are recorded as separate commits on this
-branch. No merge has been performed for this checkpoint. Installation priorities
+behavior. This does not claim that every scenario below was exercised. The developer subsequently
+explicitly authorized verification and merge into dev. Preview and behavior changes are recorded
+as separate commits, with a follow-up regression checkpoint for watch notifications. The automatic
+blocked-state recheck has regression coverage; no additional device run by the agent is claimed.
+Installation priorities
 1–2 are already verified and merged separately: change `f3e23d69`, merge `acc638ee`.
 Their results do not verify this new recovery UI.
 
@@ -113,8 +114,12 @@ Use a disposable test profile and edit. Preserve existing personal drafts.
     expect the next valid observation/edit/background flush to recheck and resume saving without
     requiring Review or discarding the current edit. If that operation expires the profile/storage
     session, the existing expired-editor handling applies. Do not delete private files manually.
+12. Open a New icon watch notification while a draft exists. Dismissing the suggestion must keep
+    the checkpoint. Confirming the suggestion intentionally changes the profile icon, but does not
+    replace the draft. Restore alone must not apply the draft over that icon. After saving a changed
+    target baseline, expect the existing Obsolete protection rather than automatic restoration.
 
-Sixteen new regression scenarios cover detached immutable preview pixels after preparation
+Sixteen initial regression scenarios cover detached immutable preview pixels after preparation
 disposal and transfer/close; preview exceptions/OOM without recovery/autosave failure; cancellation
 propagation; named discard and missing-preview captions; profile-visit postponement and unreadable
 catalog postponement; blocked review confirmation/cancellation and stale state/lifetime rejection;
@@ -122,18 +127,29 @@ automatic recheck after an external clear and preservation of surviving foreign 
 The previous owner, recovery, codec and Failed retry scenarios also remain green. The automatic
 foreign-profile test now checks silence until explicit review, then the named-profile explanation.
 
+Four follow-up watch cases verify that applying a reviewed suggestion leaves the draft checkpoint
+unchanged, restoring an offered draft does not itself replace the newly selected profile icon,
+persisting a change to the draft's application expires its original baseline without deleting it,
+and a different application remains independent when the draft baseline was already persisted.
+The first profile save may create a previously absent target row even after a watch change to a
+different application; that conservatively makes the draft Obsolete, also without deleting it.
+
 Verification on 2026-10-14:
 
 - `compileDebugKotlin`: passed.
-- Targeted owner/dialog/notice tests: 59 passed.
-- `testDebugUnitTest`: 1,326 tests across 180 suites, zero failures/errors/skips.
+- Initial targeted owner/dialog/notice tests: 59 passed.
+- Follow-up owner/watch-apply integrity tests: 73 passed.
+- Initial `testDebugUnitTest`: 1,326 tests across 180 suites, zero failures/errors/skips.
+- Follow-up `testDebugUnitTest`: 1,330 tests across 180 suites, zero failures/errors/skips.
 - `assembleDebug`: passed. No installation was performed.
 - `git diff --check`: passed.
 
 Tests use the existing local ignored `build/verify-jvm.gradle` JVM workaround. Logs are ignored
-local files `build/editor-recovery-targeted.log` and `build/editor-recovery-verification.log`.
+local files `build/editor-recovery-targeted.log`, `build/editor-recovery-verification.log`,
+`build/editor-watch-targeted.log` and `build/editor-watch-verification.log`.
 Existing BuildInstallCoordinator NonCancellable-launch deprecation warnings remain outside scope.
-No merge or push is included in this checkpoint.
+Merge into dev is explicitly authorized after the follow-up checks. No push or main release is
+authorized by that merge instruction.
 
 ## Release note draft
 
