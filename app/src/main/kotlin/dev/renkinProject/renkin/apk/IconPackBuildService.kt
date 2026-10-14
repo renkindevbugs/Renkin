@@ -168,12 +168,13 @@ class IconPackBuildService internal constructor(
 
     suspend fun install(
         iconPack: BuiltIconPack,
-        selectionOverride: InstallerSelection? = null
+        selectionOverride: InstallerSelection? = null,
+        onRoute: suspend (ApkInstallRoute) -> Unit = {}
     ): ApkInstallOutcome =
         withContext(Dispatchers.Default) {
             try {
                 installOrReportConflict(iconPack.canBeInstalled) {
-                    runInstall(iconPack, resolveInstaller(iconPack, selectionOverride))
+                    runInstall(iconPack, resolveInstaller(iconPack, selectionOverride), onRoute)
                 }
             } catch (error: Throwable) {
                 withContext(NonCancellable) { releaseArtifacts(iconPack, completed = false) }
@@ -183,13 +184,14 @@ class IconPackBuildService internal constructor(
 
     suspend fun replace(
         iconPack: BuiltIconPack,
-        selectionOverride: InstallerSelection? = null
+        selectionOverride: InstallerSelection? = null,
+        onRoute: suspend (ApkInstallRoute) -> Unit = {}
     ): ApkInstallOutcome =
         withContext(Dispatchers.Default) {
             try {
                 replaceAfterConflict(
                     uninstall = { ApkUninstaller(context).uninstall(iconPack.packageName) },
-                    install = { runInstall(iconPack, resolveInstaller(iconPack, selectionOverride)) }
+                    install = { runInstall(iconPack, resolveInstaller(iconPack, selectionOverride), onRoute) }
                 )
             } catch (error: Throwable) {
                 withContext(NonCancellable) { releaseArtifacts(iconPack, completed = false) }
@@ -204,8 +206,9 @@ class IconPackBuildService internal constructor(
 
     private suspend fun runInstall(
         iconPack: BuiltIconPack,
-        selection: InstallerSelection
-    ): ApkInstallOutcome = ApkInstaller(context).install(
+        selection: InstallerSelection,
+        onRoute: suspend (ApkInstallRoute) -> Unit
+    ): ApkInstallOutcome = ApkInstaller(context, onRoute).install(
         iconPack.uri,
         iconPack.packageName,
         selection.method,

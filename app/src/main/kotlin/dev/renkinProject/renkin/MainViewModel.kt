@@ -14,6 +14,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.renkinProject.renkin.apk.ApkUninstaller
+import dev.renkinProject.renkin.apk.ApkInstallBackend
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.ApplicationRuntimeState
 import dev.renkinProject.renkin.apk.BuiltIconPack
@@ -352,6 +353,8 @@ class MainViewModel @Inject constructor(
     // Replaces the old mirrored buildInstalled/syncDone/appsRefreshed flag + consume pairs.
     private val _toastEvents = Channel<Int>(Channel.BUFFERED)
     val toastEvents = _toastEvents.receiveAsFlow()
+    private val _installToastEvents = Channel<String>(Channel.BUFFERED)
+    val installToastEvents = _installToastEvents.receiveAsFlow()
 
     /**
      * A change that can still be taken back: [messageRes] describes it, [count] fills its
@@ -700,13 +703,20 @@ class MainViewModel @Inject constructor(
         scope = viewModelScope,
         syncBaselines = ::syncBuildBaselines,
         refreshMissingPacks = { refreshMissingPacks(prompt = false) },
-        notify = { _toastEvents.trySend(it) }
+        notify = { _toastEvents.trySend(it) },
+        notifyText = { _installToastEvents.trySend(it) }
     )
 
     internal val buildState: BuildInstallState get() = buildCoordinator.state
     val buildStep: String? get() = when (val current = buildState) {
         is BuildInstallState.Building -> current.step
-        is BuildInstallState.Installing -> getApplication<Application>().getString(when {
+        is BuildInstallState.Installing -> current.route?.let { route ->
+            getApplication<Application>().getString(when {
+                route.backend == ApkInstallBackend.EXTERNAL -> R.string.buildOpeningInstaller
+                current.request.wasUpdate -> R.string.buildUpdatingVia
+                else -> R.string.buildInstallingVia
+            }, route.label)
+        } ?: getApplication<Application>().getString(when {
             current.replacing -> R.string.buildReplacing
             current.request.wasUpdate -> R.string.buildUpdating
             else -> R.string.buildInstalling
@@ -714,11 +724,14 @@ class MainViewModel @Inject constructor(
         else -> null
     }
     val buildProgress: Pair<Int, Int>? get() = (buildState as? BuildInstallState.Building)?.progress
+    val buildBusy: Boolean get() = buildCoordinator.busy
 
     enum class BuildOutcome { FIRST_INSTALL, UPDATE }
-    data class BuildOutcomeInfo(val outcome: BuildOutcome, val packLabel: String)
+    data class BuildOutcomeInfo(val outcome: BuildOutcome, val packLabel: String, val installerLabel: String,
+        val savingProfile: Boolean, val profileSaveFailed: Boolean)
     val buildOutcome: BuildOutcomeInfo? get() = (buildState as? BuildInstallState.Done)?.let {
-        BuildOutcomeInfo(if (it.wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL, it.packLabel)
+        BuildOutcomeInfo(if (it.wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL,
+            it.packLabel, it.installerLabel, it.savingProfile, it.profileSaveFailed)
     }
     fun dismissBuildOutcome() = buildCoordinator.dismissBuildOutcome()
 
@@ -736,7 +749,10 @@ class MainViewModel @Inject constructor(
     fun dismissInstallFallback() = buildCoordinator.dismissInstallFallback()
 
     fun build(expected: ProfileSessionToken) {
-        if (buildCoordinator.busy) return
+        if (buildCoordinator.busy) {
+            _toastEvents.trySend(R.string.buildOperationPending)
+            return
+        }
         if (longOperationRunning) {
             _toastEvents.trySend(R.string.profileRenderBusy)
             return

@@ -75,7 +75,8 @@ class BuildInstallCoordinatorTest {
         application, provider, scope,
         syncBaselines = { error("A rejected build has no baseline to synchronize") },
         refreshMissingPacks = { error("A rejected build must not refresh installed packs") },
-        notify = { notifications += it }
+        notify = { notifications += it },
+        notifyText = { error("A rejected build must not emit installer notices") }
     )
 
     private suspend fun Job.awaitChildren() = withTimeout(5_000) { children.toList().joinAll() }
