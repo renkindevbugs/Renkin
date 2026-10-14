@@ -123,6 +123,7 @@ import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.apk.installerSelection
+import dev.renkinProject.renkin.apk.APK_MIME_TYPE
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.GlobalOptionsActivity
 import dev.renkinProject.renkin.MainViewModel
@@ -423,6 +424,9 @@ fun MainColumn(iconPacks: List<IconPack>) {
             onDismiss = { chooseFailureInstaller = false }
         )
     }
+    val failedApkExport = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument(APK_MIME_TYPE)
+    ) { target -> viewModel.finishFailedApkExport(target) }
     val installFailure = viewModel.installFailure
     if (installFailure != null) {
         val copiedMessage = stringResource(R.string.installFailureCopied)
@@ -467,6 +471,11 @@ fun MainColumn(iconPacks: List<IconPack>) {
                             viewModel.dismissInstallFailure()
                             chooseFailureInstaller = true
                         }) { Text(stringResource(R.string.installerSelect)) }
+                    }
+                    if (installFailure.canSaveApk) {
+                        TextButton(onClick = {
+                            viewModel.beginFailedApkExport()?.let(failedApkExport::launch)
+                        }) { Text(stringResource(R.string.installFailureSaveApk)) }
                     }
                     TextButton(onClick = { viewModel.dismissInstallFailure() }) {
                         Text(stringResource(R.string.dismiss))

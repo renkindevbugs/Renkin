@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin
 
 import android.app.Application
+import android.net.Uri
 import android.os.SystemClock
 import androidx.annotation.StringRes
 import androidx.compose.runtime.getValue
@@ -71,7 +72,7 @@ internal sealed interface BuildInstallState {
     data class Done(val wasUpdate: Boolean, val packLabel: String, val installerLabel: String,
         val savingProfile: Boolean = false, val profileSaveFailed: Boolean = false) : BuildInstallState
     data class Failed(@StringRes val message: Int, val summary: String, val report: String,
-        val result: ApkInstallResult? = null) : BuildInstallState
+        val result: ApkInstallResult? = null, val pack: BuiltIconPack? = null) : BuildInstallState
 }
 
 internal class BuildInstallCoordinator(
@@ -92,6 +93,7 @@ internal class BuildInstallCoordinator(
     private var completingInstallOwner by mutableStateOf<InstallCompletionOwner?>(null)
     // Main-confined cleanup ownership survives the prompt's transition to Idle.
     private val finishingPacks = mutableListOf<BuiltIconPack>()
+    private var pendingApkExport: BuiltIconPack? = null
 
     val busy: Boolean get() = completingInstallOwner != null || when (state) {
         is BuildInstallState.Building, is BuildInstallState.ChoosingInstaller,
@@ -217,6 +219,24 @@ internal class BuildInstallCoordinator(
         if (state is BuildInstallState.Done) state = BuildInstallState.Idle
     }
 
+    /** Remembers the failed pack while the document picker is open; returns its suggested file name. */
+    fun beginFailedApkExport(): String? {
+        val pack = (state as? BuildInstallState.Failed)?.pack ?: return null
+        pendingApkExport = pack
+        return apkExportFileName(pack)
+    }
+
+    // Saving a file never proves installation and never records the profile as built.
+    fun finishFailedApkExport(target: Uri?) {
+        val pack = pendingApkExport ?: return
+        pendingApkExport = null
+        if (target == null || closed) return
+        scope.launch {
+            val saved = provider.exportBuiltApk(pack, target)
+            if (!closed) notify(if (saved) R.string.installFailureApkSaved else R.string.installFailureApkSaveFailed)
+        }
+    }
+
     fun dismissInstallFailure() {
         if (state is BuildInstallState.Failed) state = BuildInstallState.Idle
     }
@@ -327,7 +347,7 @@ internal class BuildInstallCoordinator(
             append(detail)
         }
         if (publish(owner, BuildInstallState.Failed(request.failedMessage,
-            "${outcome.result.name}: ${detail.lineSequence().first().take(300)}", report, outcome.result))) notify(request.failedMessage)
+            "${outcome.result.name}: ${detail.lineSequence().first().take(300)}", report, outcome.result, request.pack))) notify(request.failedMessage)
     }
 
     private fun fail(owner: Long, @StringRes message: Int) {
@@ -377,6 +397,11 @@ internal class BuildInstallCoordinator(
         job?.cancel()
         if (pending != null) scope.launch(NonCancellable) { releaseFinishingBuild(pending) }
     }
+}
+
+internal fun apkExportFileName(pack: BuiltIconPack): String {
+    val label = pack.packLabel.replace(Regex("[^\\p{L}\\p{N} ._-]"), "_").trim(' ', '.', '_')
+    return "${label.ifEmpty { pack.packageName }}.apk"
 }
 
 @StringRes
