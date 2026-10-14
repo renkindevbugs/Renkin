@@ -123,6 +123,15 @@ Ordinary success avoids hashing. A Shizuku abort never triggers another installe
 The local upstream guard proposal remains unapplied; its status and device checks are in
 [install-compatibility-c1-checkpoint.md](install-compatibility-c1-checkpoint.md).
 
+`shouldTryNextRoute` is the single fallback table: a system session or external installer moves on
+only after a technical FAILED, Shizuku also after BLOCKED (a user restriction that a confirmed
+system install can pass); cancellation, conflict, incompatible/invalid APK, storage, policy and
+timeout results end the attempt. A failure report keeps its BuiltIconPack so the user can save the
+APK through the document picker. Export pins the artifact directory against pruning without
+reclaiming installer ownership, deletes a partially written document, and never counts as an
+installation or records the profile as built. See
+[install-compatibility-c2-checkpoint.md](install-compatibility-c2-checkpoint.md).
+
 `MainViewModel` also owns a `BackupUiCoordinator`. It owns backup/export/import jobs, the
 pending prepared import, confirmation metadata, cancellation presentation, service progress
 projections and automatic-backup settings flows. UI receives only the import preview; the staged

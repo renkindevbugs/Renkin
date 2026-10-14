@@ -78,6 +78,18 @@ internal fun isDeadInstallerSession(outcome: ApkInstallOutcome): Boolean =
         ?.lineSequence()
         ?.any { line -> deadSessionPatterns.any { it.containsMatchIn(line) } } == true
 
+/**
+ * Only failures another route can plausibly overcome move on, at most once per route; user
+ * cancellation, conflicts, invalid APKs, storage, policy blocks and timeouts end the attempt.
+ */
+internal fun shouldTryNextRoute(backend: ApkInstallBackend, result: ApkInstallResult): Boolean = when (backend) {
+    ApkInstallBackend.SYSTEM_SESSION, ApkInstallBackend.EXTERNAL -> result == ApkInstallResult.FAILED
+    // A user restriction such as Xiaomi's disabled "Install via USB" blocks the shell installer,
+    // while a user-confirmed system install can still succeed.
+    ApkInstallBackend.SHIZUKU -> result == ApkInstallResult.FAILED || result == ApkInstallResult.BLOCKED
+    ApkInstallBackend.COMPATIBILITY -> false
+}
+
 internal fun installationChanged(
     previous: InstalledPackageState?,
     current: InstalledPackageState?
@@ -159,7 +171,7 @@ class ApkInstaller(
             ?: component.packageName
         val result = launchAndAwaitExternalInstaller(sharedApk, packageName, previous, component, label)
         val attempt = ApkInstallAttempt(ApkInstallBackend.EXTERNAL, result.first, result.second, label)
-        if (result.first == ApkInstallResult.FAILED) {
+        if (shouldTryNextRoute(ApkInstallBackend.EXTERNAL, result.first)) {
             return installThroughSystem(
                 apk = apk,
                 packageName = packageName,
@@ -290,7 +302,7 @@ class ApkInstaller(
             if (outcome.result == ApkInstallResult.SUCCESS) {
                 return outcome.copy(requestedMethod = InstallMethod.SHIZUKU)
             }
-            if (outcome.result == ApkInstallResult.ABORTED) {
+            if (!shouldTryNextRoute(ApkInstallBackend.SHIZUKU, outcome.result)) {
                 return finishOutcome(InstallMethod.SHIZUKU, outcome.attempts, outcome, previous, packageName)
             }
             outcome.attempts
@@ -336,11 +348,11 @@ class ApkInstaller(
         }
         val sessionOutcome = installAndVerify(apk, ApkInstallBackend.SYSTEM_SESSION, packageName, previous, digest)
         val attempts = precedingAttempts + sessionOutcome.attempts
-        if (!isDeadInstallerSession(sessionOutcome)) {
+        if (!shouldTryNextRoute(ApkInstallBackend.SYSTEM_SESSION, sessionOutcome.result)) {
             return finishOutcome(requestedMethod, attempts, sessionOutcome, previous, packageName)
         }
 
-        Log.error(TAG, "Native installer session died; retrying with compatibility installer")
+        Log.error(TAG, "Native installer session failed technically; retrying with compatibility installer")
         return installThroughCompatibility(
             apk = apk,
             packageName = packageName,
