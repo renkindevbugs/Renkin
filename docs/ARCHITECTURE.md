@@ -25,6 +25,12 @@ It is a fork of **Alembicons** (formerly *Iconeration*). The upstream attributio
 - Dependencies live in `gradle/libs.versions.toml` (version catalog) + `app/build.gradle.kts`.
   KSP is used for annotation processing (Room + Hilt) — prefer KSP over kapt.
 - `.gitattributes` normalizes the repo to LF.
+- Performance: `:macrobenchmark` measures cold start and app-list scrolling on a device against the
+  release-like `benchmark` build type (`...renkin.benchmark`, debug key):
+  `./gradlew -Prenkin.unsignedRelease=true :macrobenchmark:connectedBenchmarkAndroidTest`.
+  `-Prenkin.composeReports=true` writes Compose Compiler stability reports to
+  `app/build/compose_compiler`. Baseline Profiles stay disabled (F-Droid reproducibility); see
+  `docs/perf-audit-2026-10-14-app.md`.
 
 ## Layers
 

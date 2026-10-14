@@ -73,6 +73,15 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
         }
+        // Release code and R8 for on-device measurement (the :macrobenchmark module). Its own
+        // application id and the debug key keep it from ever replacing an installed release build.
+        create("benchmark") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".benchmark"
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+            isDebuggable = false
+        }
     }
 
     compileOptions {
@@ -191,6 +200,15 @@ class RoomSchemaArgProvider(
 
     override fun asArguments(): Iterable<String> {
         return listOf("room.schemaLocation=${schemaDir.path}")
+    }
+}
+
+// Compose stability diagnostics on demand: -Prenkin.composeReports=true writes classes.txt and
+// composables.txt for every compiled variant into app/build/compose_compiler.
+if (providers.gradleProperty("renkin.composeReports").orNull == "true") {
+    composeCompiler {
+        reportsDestination = layout.buildDirectory.dir("compose_compiler")
+        metricsDestination = layout.buildDirectory.dir("compose_compiler")
     }
 }
 

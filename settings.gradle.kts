@@ -19,3 +19,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Renkin"
 include(":app")
+include(":macrobenchmark")
