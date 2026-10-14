@@ -1925,6 +1925,10 @@ identically and none of them re-implements the maths.
   regeneration and rescaling. `ImageEdit.COLORIZE_SEGMENTS` stacks `SegmentLayer`s — each layer's
   picker shows the output of the layers before it, and generation matches against that same
   accumulated image so the stored colours describe exactly what the user selected.
+  Repainting and segment removal use `segmentEdgeMask`: matched pixels count fully, and an
+  unmatched pixel touching a selected one counts by how far its colour lies between the segment
+  and its outside neighbour, so anti-aliased edges blend instead of stair-stepping. Pixels away
+  from a selection, and therefore the stored layer format, are unchanged.
   "Match app color" (`icon/creator/AppColorMatch.kt`, issue #18) only creates an ordinary layer:
   it reads the solid colour or two-stop linear gradient of the edited app's own adaptive
   background (whatever source the icon came from) and targets the icon's largest region when

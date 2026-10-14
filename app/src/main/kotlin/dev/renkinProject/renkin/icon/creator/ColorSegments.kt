@@ -170,12 +170,8 @@ fun mergeSegmentLayer(
     current.getPixels(currentPixels, 0, width, 0, 0, width, height)
     colorized.getPixels(colorizedPixels, 0, width, 0, 0, width, height)
 
-    for (i in matchPixels.indices) {
-        val original = matchPixels[i]
-        if (Color.alpha(original) == 0 || !matchesSegment(original, targets, tolerance)) {
-            colorizedPixels[i] = currentPixels[i]
-        }
-    }
+    val mask = segmentEdgeMask(matchPixels, width, height, targets, tolerance)
+    for (i in matchPixels.indices) colorizedPixels[i] = blendPremultiplied(currentPixels[i], colorizedPixels[i], mask[i])
     return Bitmap.createBitmap(colorizedPixels, width, height, Bitmap.Config.ARGB_8888).apply {
         density = matchSource.density
     }
@@ -237,11 +233,8 @@ fun removeSegmentColors(icon: Bitmap, targets: List<Int>, tolerance: Float): Bit
     val height = icon.height
     val pixels = IntArray(width * height)
     icon.getPixels(pixels, 0, width, 0, 0, width, height)
-    for (i in pixels.indices) {
-        val pixel = pixels[i]
-        if (Color.alpha(pixel) == 0) continue
-        if (matchesSegment(pixel, targets, tolerance)) pixels[i] = Color.TRANSPARENT
-    }
+    val mask = segmentEdgeMask(pixels, width, height, targets, tolerance)
+    for (i in pixels.indices) pixels[i] = blendPremultiplied(pixels[i], Color.TRANSPARENT, mask[i])
     return Bitmap.createBitmap(pixels, width, height, Bitmap.Config.ARGB_8888).apply {
         density = icon.density
     }
