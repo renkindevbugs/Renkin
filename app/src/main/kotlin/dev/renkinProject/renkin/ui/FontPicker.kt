@@ -35,8 +35,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.icon.creator.FontCatalog
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import dev.renkinProject.renkin.icon.creator.FontLibrary
 
 /**
  * The text-icon font row: shows the picked font's name and opens a list of the bundled
@@ -44,11 +43,9 @@ import kotlinx.coroutines.withContext
  * is the TTF/OTF path ("" = Arcticons Sans).
  */
 @Composable
-fun FontPickerRow(selectedPath: String, onChange: (String) -> Unit) {
+fun FontPickerRow(selectedPath: String, fonts: FontLibrary, onChange: (String) -> Unit) {
     var open by remember { mutableStateOf(false) }
-    val effectivePath by produceState("", selectedPath) {
-        value = withContext(Dispatchers.IO) { FontCatalog.usablePathOrDefault(selectedPath) }
-    }
+    val effectivePath by produceState("", selectedPath) { value = fonts.usablePathOrDefault(selectedPath) }
     val selectedLabel = if (effectivePath.isEmpty()) FontCatalog.DEFAULT.label
         else remember(effectivePath) { FontCatalog.prettyLabelFor(effectivePath) }
 
@@ -69,6 +66,7 @@ fun FontPickerRow(selectedPath: String, onChange: (String) -> Unit) {
     if (open) {
         FontPickerDialog(
             selectedPath = effectivePath,
+            fonts = fonts,
             onSelect = {
                 onChange(it)
                 open = false
@@ -89,13 +87,15 @@ internal fun pickerFonts(
 }
 
 @Composable
-private fun FontPickerDialog(selectedPath: String, onSelect: (String) -> Unit, onDismiss: () -> Unit) {
-    // Scanning /system/fonts is I/O — tiny, but off the main thread anyway.
-    val fonts by produceState(listOf(FontCatalog.DEFAULT)) {
-        value = withContext(Dispatchers.IO) { listOf(FontCatalog.DEFAULT) + FontCatalog.systemFonts() }
-    }
+private fun FontPickerDialog(
+    selectedPath: String,
+    fonts: FontLibrary,
+    onSelect: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val choices by produceState(listOf(FontCatalog.DEFAULT)) { value = fonts.choices() }
     var query by rememberSaveable { mutableStateOf("") }
-    val shownFonts = remember(fonts, query) { pickerFonts(fonts, query) }
+    val shownFonts = remember(choices, query) { pickerFonts(choices, query) }
 
     // Same reasoning as the pack picker: a device can list dozens of system fonts, and the
     // picked one is often well below the fold. Skipped while searching.
@@ -136,9 +136,8 @@ private fun FontPickerDialog(selectedPath: String, onSelect: (String) -> Unit, o
                         .drawVerticalScrollbar(listState)
                 ) {
                 items(shownFonts, key = { it.path }) { font ->
-                    val family = remember(font.path) {
-                        font.path.takeIf { it.isNotEmpty() }
-                            ?.let { path -> FontCatalog.typeface(path)?.let { FontFamily(it) } }
+                    val family by produceState<FontFamily?>(null, font.path) {
+                        value = font.path.takeIf { it.isNotEmpty() }?.let { fonts.typeface(it) }?.let { FontFamily(it) }
                     }
                     Row(
                         modifier = Modifier

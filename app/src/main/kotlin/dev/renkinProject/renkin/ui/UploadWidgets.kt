@@ -1,7 +1,6 @@
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.combinedClickable
@@ -13,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Done
@@ -43,27 +41,21 @@ import androidx.compose.ui.unit.dp
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.R
 import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 @Composable
 internal fun UploadedImageThumbnail(
     file: File,
     selected: Boolean,
     marked: Boolean,
+    loadThumbnail: suspend (File) -> Bitmap?,
     onClick: () -> Unit,
     onLongClick: () -> Unit
 ) {
     var thumbnail by remember(file.absolutePath) { mutableStateOf<Bitmap?>(null) }
 
-    LaunchedEffect(file.absolutePath) {
-        // Grid cells are small, so decode a downsampled bitmap — decoding the full
-        // ~500px image for every thumbnail is what made bulk uploads stutter
-        thumbnail = withContext(Dispatchers.IO) {
-            val opts = BitmapFactory.Options().apply { inSampleSize = 2 }
-            BitmapFactory.decodeFile(file.absolutePath, opts)
-        }
-    }
+    // Grid cells are small, so they show a downsampled decode: decoding the full ~500px image
+    // for every thumbnail is what made bulk uploads stutter.
+    LaunchedEffect(file.absolutePath) { thumbnail = loadThumbnail(file) }
 
     val borderColor = when {
         marked -> MaterialTheme.colorScheme.error

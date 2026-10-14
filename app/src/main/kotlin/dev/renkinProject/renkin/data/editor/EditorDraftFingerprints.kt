@@ -3,6 +3,7 @@ package dev.renkinProject.renkin.data.editor
 import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.ProfileStyleCodec
+import dev.renkinProject.renkin.extension.toLowerHex
 import java.io.DataOutputStream
 import java.io.OutputStream
 import java.io.OutputStreamWriter
@@ -64,7 +65,7 @@ internal object EditorDraftFingerprints {
         writer.text(domain)
         writer.write()
         context.ensureActive()
-        return digest.digest().editorDraftHex()
+        return digest.digest().toLowerHex()
     }
 
     private class HashWriter(val output: DataOutputStream, private val context: CoroutineContext) {
@@ -100,16 +101,6 @@ internal object EditorDraftFingerprints {
                 offset += count
             }
             writer.flush()
-        }
-    }
-}
-
-internal fun ByteArray.editorDraftHex(): String {
-    val alphabet = "0123456789abcdef"
-    return buildString(size * 2) {
-        for (byte in this@editorDraftHex) {
-            val value = byte.toInt() and 0xff
-            append(alphabet[value ushr 4]); append(alphabet[value and 15])
         }
     }
 }

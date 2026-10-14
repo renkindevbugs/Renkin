@@ -1132,8 +1132,12 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
                                 val bitmap = withContext(Dispatchers.Default) {
                                     icon.toModifierBitmap()
                                 }
-                                val opened = if (toolbox) openInImageToolbox(context, bitmap)
-                                    else editInAnotherApp(context, bitmap)
+                                val sharedIcon = viewModel.shareIconForEditing(bitmap)
+                                val opened = when {
+                                    sharedIcon == null -> false
+                                    toolbox -> openInImageToolbox(context, sharedIcon)
+                                    else -> editInAnotherApp(context, sharedIcon)
+                                }
                                 if (!opened) toaster.show(externalEditorError)
                             }
                         }

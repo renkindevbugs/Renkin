@@ -2,10 +2,12 @@
 
 package dev.renkinProject.renkin.ui
 
+import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import dev.renkinProject.renkin.data.UploadedImageLibrary
 import dev.renkinProject.renkin.ui.theme.DialogShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -89,6 +91,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import dev.renkinProject.renkin.vector.SvgVectorImporter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -700,6 +703,7 @@ internal fun OptionsDialog(
                                 contentPadding = headerPadding,
                                 snackbarHostState = snackbarHostState,
                                 state = session.upload,
+                                library = viewModel.uploadedImages,
                                 onSelection = { icon, path ->
                                     if (icon == null) {
                                         draft.clearUpload()
@@ -752,10 +756,11 @@ internal fun OptionsDialog(
                                             val bitmap = withContext(Dispatchers.Default) {
                                                 icon.toModifierBitmap()
                                             }
-                                            val opened = if (toolbox) {
-                                                openInImageToolbox(context, bitmap)
-                                            } else {
-                                                editInAnotherApp(context, bitmap)
+                                            val sharedIcon = viewModel.shareIconForEditing(bitmap)
+                                            val opened = when {
+                                                sharedIcon == null -> false
+                                                toolbox -> openInImageToolbox(context, sharedIcon)
+                                                else -> editInAnotherApp(context, sharedIcon)
                                             }
                                             if (!opened) toaster.show(externalEditorError)
                                         }
@@ -768,6 +773,7 @@ internal fun OptionsDialog(
                                 contentPadding = headerPadding,
                                 app = app,
                                 state = vectorEditState,
+                                importSvg = viewModel::importSvg,
                                 onImportedImage = { imported, url ->
                                     session.upload.selectImported(imported.galleryPath)
                                     activateUpload(BitmapIconDrawable(imported.bitmap, false))
@@ -934,12 +940,14 @@ private fun UploadOptionsTab(
     contentPadding: PaddingValues,
     snackbarHostState: SnackbarHostState,
     state: UploadEditorState,
+    library: UploadedImageLibrary,
     onSelection: (IconPackDrawable?, String?) -> Unit
 ) {
     Box(Modifier.fillMaxSize().padding(contentPadding)) {
         UploadColumn(
             snackbarHostState = snackbarHostState,
             state = state,
+            library = library,
             onChange = onSelection
         )
     }
@@ -1004,6 +1012,7 @@ internal fun VectorOptionsTab(
     contentPadding: PaddingValues,
     app: PackageInfoStruct,
     state: VectorEditState,
+    importSvg: suspend (Uri) -> SvgVectorImporter.ImportedSvg?,
     onImportedImage: (OnlineImageImport, String) -> Unit,
     onIconChange: (IconPackDrawable?) -> Unit
 ) {
@@ -1012,6 +1021,7 @@ internal fun VectorOptionsTab(
             app = app,
             sourceIcon = sourceIcon,
             state = state,
+            importSvg = importSvg,
             onImportedImage = onImportedImage,
             onChange = {
                 val inputs = state.inputs()

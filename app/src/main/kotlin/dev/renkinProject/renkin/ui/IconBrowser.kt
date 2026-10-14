@@ -384,7 +384,7 @@ fun CreateTab(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
-                FontPickerRow(selectedPath = fontPath, onChange = onFontPathChange)
+                FontPickerRow(selectedPath = fontPath, fonts = viewModel.fonts, onChange = onFontPathChange)
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)

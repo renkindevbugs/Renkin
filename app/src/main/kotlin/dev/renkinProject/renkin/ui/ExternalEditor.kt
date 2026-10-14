@@ -2,13 +2,8 @@ package dev.renkinProject.renkin.ui
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.net.Uri
-import androidx.core.content.FileProvider
 import dev.renkinProject.renkin.R
-import java.io.File
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 // ImageToolbox keeps its original applicationId for update compatibility, even though its package
 // namespace is now com.t8rin.imagetoolbox.
@@ -19,13 +14,13 @@ fun imageToolboxInstalled(context: Context): Boolean =
     runCatching { context.packageManager.getPackageInfo(IMAGE_TOOLBOX_PACKAGE, 0) }.isSuccess
 
 /**
- * Sends [bitmap] (the icon being edited) straight to ImageToolbox so the user can touch it up with
- * tools we don't have (ML background erase, filters, …). The result doesn't return automatically:
- * the user shares the edited image back to Renkin, where the share receiver in
- * [dev.renkinProject.renkin.MainActivity] drops it into the upload gallery.
+ * Sends [sharedIcon] (the edited icon, written by [dev.renkinProject.renkin.data.SharedIconHandoff])
+ * straight to ImageToolbox so the user can touch it up with tools we don't have (ML background
+ * erase, filters, …). The result doesn't return automatically: the user shares the edited image
+ * back to Renkin, where the share receiver in [dev.renkinProject.renkin.MainActivity] drops it
+ * into the upload gallery.
  */
-internal suspend fun openInImageToolbox(context: Context, bitmap: Bitmap): Boolean {
-    val sharedIcon = runCatching { writeSharedIcon(context, bitmap) }.getOrNull() ?: return false
+internal fun openInImageToolbox(context: Context, sharedIcon: Uri): Boolean {
     val intent = Intent(Intent.ACTION_SEND).apply {
         type = "image/png"
         putExtra(Intent.EXTRA_STREAM, sharedIcon)
@@ -49,12 +44,11 @@ fun openImageToolboxStore(context: Context) {
 }
 
 /**
- * Sends [bitmap] to an editor the user picks. `ACTION_EDIT` lists only image editors — not
+ * Sends [sharedIcon] to an editor the user picks. `ACTION_EDIT` lists only image editors — not
  * unrelated apps like mail or messengers (`ACTION_SEND` would). The edited image comes back the
  * same way as [openInImageToolbox]: shared back to Renkin into the upload gallery.
  */
-internal suspend fun editInAnotherApp(context: Context, bitmap: Bitmap): Boolean {
-    val sharedIcon = runCatching { writeSharedIcon(context, bitmap) }.getOrNull() ?: return false
+internal fun editInAnotherApp(context: Context, sharedIcon: Uri): Boolean {
     val edit = Intent(Intent.ACTION_EDIT).apply {
         setDataAndType(sharedIcon, "image/*")
         addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -65,13 +59,3 @@ internal suspend fun editInAnotherApp(context: Context, bitmap: Bitmap): Boolean
     }.isSuccess
 }
 
-private suspend fun writeSharedIcon(context: Context, bitmap: Bitmap): Uri = withContext(Dispatchers.IO) {
-    val dir = File(context.cacheDir, "shared").apply { mkdirs() }
-    // Previous handoffs are stale once a new one starts — don't let them pile up in the cache.
-    dir.listFiles()?.forEach { it.delete() }
-    val file = File(dir, "icon_${System.currentTimeMillis()}.png")
-    file.outputStream().use {
-        check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, it)) { "PNG compression failed" }
-    }
-    FileProvider.getUriForFile(context, "${context.packageName}.fileProvider", file)
-}

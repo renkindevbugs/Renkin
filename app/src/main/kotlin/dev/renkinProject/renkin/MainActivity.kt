@@ -33,7 +33,6 @@ import dev.renkinProject.renkin.feature.presets.PresetLibraryViewModel
 import dev.renkinProject.renkin.feature.backup.BackupRecoveryScreen
 import dev.renkinProject.renkin.feature.presets.ProvideColorPresets
 import dev.renkinProject.renkin.feature.presets.ProvideModifierPresets
-import dev.renkinProject.renkin.data.UploadedImageStore
 import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.StorageRecoveryState
 import dev.renkinProject.renkin.data.isDarkModeEnabled
@@ -45,8 +44,6 @@ import dev.renkinProject.renkin.service.WatchWorker
 import dev.renkinProject.renkin.util.CrashReporter
 import dev.renkinProject.renkin.ui.*
 import dev.renkinProject.renkin.ui.theme.RenkinTheme
-import dev.renkinProject.renkin.util.Log
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -250,26 +247,10 @@ class MainActivity : ComponentActivity() {
         if (consumedSharedImageUri == uriKey) return
         consumedSharedImageUri = uriKey
 
-        lifecycleScope.launch(Dispatchers.IO) {
-            // A shared URI can be revoked, one-shot or served by a broken provider — the same
-            // failures the gallery import already tolerates. None of them may take the app down.
-            val added = try {
-                val bitmap = getBitmapFromURI(applicationContext, uri)
-                if (bitmap == null) {
-                    false
-                } else {
-                    UploadedImageStore.save(applicationContext, bitmap)
-                    true
-                }
-            } catch (error: CancellationException) {
-                throw error
-            } catch (error: Exception) {
-                Log.error("MainActivity", "Cannot import the shared image", error)
-                false
-            }
-            toaster.show(
-                getString(if (added) R.string.sharedImageAdded else R.string.uploadImageError)
-            )
+        lifecycleScope.launch {
+            // Same import as the gallery: a revoked, one-shot or broken provider URI only fails.
+            val added = viewModel.uploadedImages.import(listOf(uri)).added.isNotEmpty()
+            toaster.show(getString(if (added) R.string.sharedImageAdded else R.string.uploadImageError))
         }
     }
 

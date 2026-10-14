@@ -57,6 +57,18 @@ ApplicationProvider (apk/)                ← orchestrator: owns the app list, p
 WatchRepository (data/watch/)             ← icon-watch rules/suggestions on WatchDatabase
 ```
 
+Composables never open files, content URIs or font files themselves. They receive the data-layer
+service from their ViewModel as a parameter, so Robolectric compose tests can pass a real or fake
+one without Hilt: `UploadedImageLibrary` (upload gallery list/import/trash/decode/thumbnails,
+including images shared back from external editors), `FontLibrary` (system font scan and
+typefaces), `MainViewModel.importSvg` (picked SVG files, via `data/ImportedContent.kt`) and
+`shareIconForEditing` (`SharedIconHandoff`, the FileProvider handoff to external editors).
+`rememberPackIcon` is the one shared image loader that calls `packages/PackIconLoader` directly:
+it is a process-wide, thread-safe cache used by unrelated screens. Shared low-level helpers live
+once: `ByteArray.toLowerHex()` for every stored digest, `data/syncDirectory` for directory
+fsyncs, and `data/editor/EditorBinary.kt` for the bounded text, boolean and capped-buffer
+primitives of the editor draft codecs (their stored format is pinned by golden hash tests).
+
 `MainViewModel` owns a `BuildInstallCoordinator` for its lifetime. The coordinator owns the
 build/install job, APK handoffs and one sealed `BuildInstallState`: Idle, Building,
 ChoosingInstaller, Installing, Conflict, Done or Failed. Progress and pending artifacts belong
@@ -1739,7 +1751,8 @@ follow-ups; CRC verifies transport integrity only.
 - **Feedback**: plain notices go through the shared `Toaster` (`LocalToaster` + `ToastHost`);
   a `SnackbarHost` exists only where an action is attached (upload gallery's Undo).
 - **Shapes**: use the tokens in `ui/theme/Shapes.kt` (`DialogShape`/`CardShape`/`FieldShape`/
-  `InnerShape`/`IconShape`) — no raw `RoundedCornerShape(n.dp)` at call sites.
+  `InnerShape`/`IconShape`/`SwatchShape`, plus `iconTileShape(size)` for tiles whose corner is a
+  quarter of their size) — no raw `RoundedCornerShape(...)` at call sites.
 - **Scroll chrome** (`ui/ScrollChrome.kt`): `OverlayHeaderLayout` lays a collapsing header
   *over* scroll-under content (Mihon-style — the content keeps its size, so flings stay
   smooth while the bar animates; used by the edit dialog), and `Modifier.drawVerticalScrollbar`

@@ -2,7 +2,6 @@
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -22,14 +21,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.res.stringResource
 import dev.renkinProject.renkin.R
-import dev.renkinProject.renkin.data.UploadedImageStore
+import dev.renkinProject.renkin.data.UploadedImageLibrary
 import dev.renkinProject.renkin.drawable.IconPackDrawable
-import dev.renkinProject.renkin.drawable.shrinkIfBiggerThan
-import dev.renkinProject.renkin.extension.toDrawable
 import java.io.File
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 const val MIME_TYPE_IMAGE = "image/*"
 
@@ -37,6 +32,7 @@ const val MIME_TYPE_IMAGE = "image/*"
 internal fun UploadColumn(
     snackbarHostState: SnackbarHostState,
     state: UploadEditorState,
+    library: UploadedImageLibrary,
     onChange: (icon: IconPackDrawable?, path: String?) -> Unit
 ) {
     var asAdaptiveIcon by state::asAdaptiveIcon
@@ -50,8 +46,6 @@ internal fun UploadColumn(
     var selection by remember { mutableStateOf(GallerySelection()) }
     var isUploading by remember { mutableStateOf(false) }
 
-    val context = getCurrentContext()
-    val resources = context.resources
     val scope = rememberCoroutineScope()
     val toaster = LocalToaster.current
     val uploadErrorMessage = stringResource(R.string.uploadImageError)
@@ -64,9 +58,7 @@ internal fun UploadColumn(
         if (toDelete.isEmpty()) return
         snackbarHostState.currentSnackbarData?.dismiss()
         scope.launch {
-            val trashed = withContext(Dispatchers.IO) {
-                UploadedImageStore.moveToTrash(context, toDelete)
-            }
+            val trashed = library.moveToTrash(toDelete)
             if (trashed.isEmpty()) {
                 toaster.show(uploadErrorMessage)
                 return@launch
@@ -84,19 +76,16 @@ internal fun UploadColumn(
                 duration = SnackbarDuration.Long
             )
             if (result == SnackbarResult.ActionPerformed) {
-                withContext(Dispatchers.IO) { UploadedImageStore.restore(trashed) }
-                savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
+                library.restore(trashed)
+                savedImages = library.list()
             } else {
-                withContext(Dispatchers.IO) { UploadedImageStore.permanentlyDelete(trashed) }
+                library.permanentlyDelete(trashed)
             }
         }
     }
 
     LaunchedEffect(Unit) {
-        savedImages = withContext(Dispatchers.IO) {
-            UploadedImageStore.cleanupTrash(context)
-            UploadedImageStore.list(context)
-        }
+        savedImages = library.load()
     }
 
     val launcher = rememberLauncherForActivityResult(
@@ -106,24 +95,10 @@ internal fun UploadColumn(
         scope.launch {
             isUploading = true
             try {
-                var failed = false
-                val added = withContext(Dispatchers.IO) {
-                    uris.mapNotNull { uri ->
-                        try {
-                            getBitmapFromURI(context, uri)
-                                ?.toDrawable(resources)
-                                ?.shrinkIfBiggerThan(MAX_UPLOADED_IMAGE_SIZE)
-                                ?.let { UploadedImageStore.save(context, it) }
-                                .also { if (it == null) failed = true }
-                        } catch (_: Exception) {
-                            failed = true
-                            null
-                        }
-                    }
-                }
-                savedImages = withContext(Dispatchers.IO) { UploadedImageStore.list(context) }
-                added.firstOrNull()?.absolutePath?.let(state::selectGallery)
-                if (failed) toaster.show(uploadErrorMessage)
+                val imported = library.import(uris)
+                savedImages = library.list()
+                imported.added.firstOrNull()?.absolutePath?.let(state::selectGallery)
+                if (imported.anyFailed) toaster.show(uploadErrorMessage)
             } finally {
                 isUploading = false
             }
@@ -141,7 +116,7 @@ internal fun UploadColumn(
             return@LaunchedEffect
         }
         hadSelectedImage = true
-        val bitmap = state.ownedImage ?: withContext(Dispatchers.IO) { BitmapFactory.decodeFile(path) }
+        val bitmap = state.ownedImage ?: library.decode(path)
         if (bitmap == null) {
             uploadedImage = null
             mask = null
@@ -179,6 +154,7 @@ internal fun UploadColumn(
             onZoomChange = { zoomLevel = it },
             onSelectedImageChange = state::selectGallery,
             onSelectionChange = { selection = it },
+            loadThumbnail = library::thumbnail,
             onChange = { icon, path ->
                 if (path != null && previewSelection == state.selection() && path == previewSelection.path &&
                     previewOwnedImage === state.ownedImage
@@ -200,5 +176,3 @@ internal fun UploadColumn(
         if (isUploading) UploadLoadingOverlay()
     }
 }
-
-private const val MAX_UPLOADED_IMAGE_SIZE = 500

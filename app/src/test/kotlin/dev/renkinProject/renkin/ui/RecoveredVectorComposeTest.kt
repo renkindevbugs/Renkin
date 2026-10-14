@@ -42,7 +42,7 @@ class RecoveredVectorComposeTest {
             RenkinTheme {
                 CompositionLocalProvider(LocalToaster provides Toaster()) {
                     if (visible.value) VectorOptionsTab(false, source, PaddingValues(), editor.application, state,
-                        { _, _ -> error("Unexpected import") }, {
+                        { null }, { _, _ -> error("Unexpected import") }, {
                             publications++
                             if (it == null) editor.draft.clearVector() else editor.activateVector(it)
                         })
@@ -69,7 +69,7 @@ class RecoveredVectorComposeTest {
             RenkinTheme {
                 CompositionLocalProvider(LocalToaster provides Toaster()) {
                     VectorOptionsTab(false, source, PaddingValues(), editor.application, editor.vectorEditState,
-                        { _, _ -> error("Unexpected import") }, { publications++; editor.activateVector(requireNotNull(it)) })
+                        { null }, { _, _ -> error("Unexpected import") }, { publications++; editor.activateVector(requireNotNull(it)) })
                 }
             }
         }
@@ -91,7 +91,7 @@ class RecoveredVectorComposeTest {
             RenkinTheme {
                 CompositionLocalProvider(LocalToaster provides Toaster()) {
                     VectorOptionsTab(false, editor.application.baseIcon, PaddingValues(), editor.application, state,
-                        { _, _ -> error("Unexpected import") }, { error("Unchanged recovered bitmap published a vector") })
+                        { null }, { _, _ -> error("Unexpected import") }, { error("Unchanged recovered bitmap published a vector") })
                 }
             }
         }

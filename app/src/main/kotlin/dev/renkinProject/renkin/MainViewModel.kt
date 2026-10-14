@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin
 
 import android.app.Application
+import android.graphics.Bitmap
 import android.graphics.Typeface
 import android.net.Uri
 import androidx.compose.runtime.getValue
@@ -27,7 +28,13 @@ import dev.renkinProject.renkin.apk.InstallerSelection
 import dev.renkinProject.renkin.apk.ShizukuSupport
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.apk.IconApplyOutcome
+import dev.renkinProject.renkin.data.SharedIconHandoff
+import dev.renkinProject.renkin.data.StoredUploadedImageLibrary
+import dev.renkinProject.renkin.data.UploadedImageLibrary
+import dev.renkinProject.renkin.data.readImportedText
+import dev.renkinProject.renkin.icon.creator.FontLibrary
 import dev.renkinProject.renkin.icon.creator.IconModifierInput
+import dev.renkinProject.renkin.icon.creator.SystemFontLibrary
 import dev.renkinProject.renkin.icon.creator.VerifiedModifierInput
 import dev.renkinProject.renkin.icon.creator.IconGenerationResult
 import dev.renkinProject.renkin.apk.IconUndoStep
@@ -73,6 +80,7 @@ import dev.renkinProject.renkin.icon.creator.PackRowPreviews
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.util.Log
 import dev.renkinProject.renkin.util.timeProfilePhase
+import dev.renkinProject.renkin.vector.SvgVectorImporter
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -129,6 +137,8 @@ class MainViewModel @Inject constructor(
     autoBackupManager: AutoBackupManager
 ) : AndroidViewModel(application), IconPreviewBuilder {
     private val installerCatalog = InstallerCatalog(application)
+    val uploadedImages: UploadedImageLibrary = StoredUploadedImageLibrary(application)
+    val fonts: FontLibrary = SystemFontLibrary
     /**
      * Keeps profile-session bookkeeping on the same side of a profile switch as the provider
      * operation that changed the icon. The provider separately protects its live icon list.
@@ -619,6 +629,14 @@ class MainViewModel @Inject constructor(
 
     fun setAskInstallerEveryTime(enabled: Boolean) = updatePreferences {
         setBooleanValue(AskInstallerEveryTimeKey, enabled)
+    }
+
+    /** A content URI an external editor can read [bitmap] from, or null when it cannot be written. */
+    suspend fun shareIconForEditing(bitmap: Bitmap): Uri? = SharedIconHandoff.write(getApplication(), bitmap)
+
+    /** A picked SVG file parsed for the vector editor, or null when it is unreadable or invalid. */
+    suspend fun importSvg(uri: Uri): SvgVectorImporter.ImportedSvg? = withContext(Dispatchers.IO) {
+        runCatching { readImportedText(getApplication(), uri) }.getOrNull()?.let(SvgVectorImporter::parse)
     }
 
     suspend fun installerEntries(): List<InstallerOption> = withContext(Dispatchers.IO) {

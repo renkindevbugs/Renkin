@@ -74,6 +74,14 @@ class EditorArtworkCodecTest {
         assertArrayEquals(encoded, EditorArtworkCodec.encode(captureEditorArtwork(restoreEditorArtwork(value))))
     }
 
+    // Stored drafts outlive builds: any byte change here needs a codec version bump, not a new hash.
+    @Test fun encodedArtworkKeepsItsStoredFormat() = runBlocking<Unit> {
+        val value = vector(group(listOf(group().copy(name = "nested", rotation = -21f), path())))
+        val bytes = EditorArtworkCodec.encode(value)
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        assertEquals(STORED_FORMAT_SHA256, hash)
+    }
+
     @Test fun everyPathCommandAndVectorPropertySurvivesCodecAndNativeBinding() = runBlocking<Unit> {
         assertEquals(19, commands.map { it.javaClass }.distinct().size)
         val value = vector(group(listOf(group().copy(name = "nested", rotation = -21f), path())))
@@ -333,3 +341,5 @@ class EditorArtworkCodecTest {
         }
     }
 }
+
+private const val STORED_FORMAT_SHA256 = "f1911e5ff89e50ae96afa865ab5678d9ca508b3bf99fe53c6fcd73e09f8ed9a0"

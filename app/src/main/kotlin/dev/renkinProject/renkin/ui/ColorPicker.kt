@@ -16,10 +16,12 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import dev.renkinProject.renkin.feature.presets.LocalColorPresets
 import dev.renkinProject.renkin.feature.presets.SaveColorPresetDialog
 import dev.renkinProject.renkin.feature.presets.savedPresetMatching
+import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.FieldShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.extension.alphaInt
@@ -48,13 +50,11 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Alignment.Companion.CenterHorizontally
 import androidx.compose.ui.Modifier
@@ -123,11 +123,11 @@ fun ColorButton(caption: String, initialColor: Color, onColorSelected: (Color) -
             Canvas(
                 modifier = Modifier
                     .size(30.dp)
-                    .clip(RoundedCornerShape(20))
+                    .clip(SwatchShape)
                     .border(
                         1.dp,
                         MaterialTheme.colorScheme.onBackground.copy(alpha = 0.75f),
-                        RoundedCornerShape(20)
+                        SwatchShape
                     )
                     .background(currentlySelected)
                     .clickable {
@@ -437,8 +437,8 @@ private fun IconEyedropper(bitmap: Bitmap, onPick: (Color) -> Unit) {
         Canvas(
             modifier = Modifier
                 .size(120.dp)
-                .clip(RoundedCornerShape(20))
-                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20))
+                .clip(CardShape)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CardShape)
                 .pointerInput(bitmap) { detectTapGestures { sample(it) } }
                 .pointerInput(bitmap) {
                     detectDragGestures { change, _ ->

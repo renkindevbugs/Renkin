@@ -12,6 +12,7 @@ import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ImageVectorDrawable
+import dev.renkinProject.renkin.extension.toLowerHex
 import dev.renkinProject.renkin.icon.creator.IconModifierInput
 import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
 import dev.renkinProject.renkin.icon.creator.StoredIconModifierRecipe
@@ -320,12 +321,5 @@ internal fun iconFingerprint(
     if (drawable.isEmpty() && !calendarEnabled) return ""
     val payload = "$drawable|$calendarEnabled|${calendarPrefix.orEmpty()}"
     val digest = java.security.MessageDigest.getInstance("SHA-1").digest(payload.toByteArray())
-    val alphabet = "0123456789abcdef"
-    return buildString(digest.size * 2) {
-        digest.forEach { byte ->
-            val value = byte.toInt() and 0xff
-            append(alphabet[value ushr 4])
-            append(alphabet[value and 0x0f])
-        }
-    }
+    return digest.toLowerHex()
 }

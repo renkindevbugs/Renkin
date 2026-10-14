@@ -4,11 +4,11 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.system.Os
-import android.system.OsConstants
 import android.util.Base64
 import dev.renkinProject.renkin.data.transfer.ensureBackupSpace
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.extension.toLowerHex
 import dev.renkinProject.renkin.icon.parser.XmlNodeParser
 import dev.renkinProject.renkin.xml.XmlDecoder
 import dev.renkinProject.renkin.xml.XmlNode
@@ -64,7 +64,7 @@ internal class IconModifierInputStore(private val context: Context) {
                 }
                 if (input.read() != -1) return@withContext null
             }
-            val hash = digest.digest().joinToString("") { "%02x".format(it) }
+            val hash = digest.digest().toLowerHex()
             if (hash != artwork.hash) return@withContext null
             currentCoroutineContext().ensureActive()
             ReadInput.Stored(payload, artwork)
@@ -170,7 +170,7 @@ internal class IconModifierInputStore(private val context: Context) {
                 if (temporary.length() > MAX_ARTWORK_BYTES) throw IOException("Modifier input is too large")
                 output.fd.sync()
             }
-            val hash = digest.digest().joinToString("") { "%02x".format(it) }
+            val hash = digest.digest().toLowerHex()
             val target = file(context, hash)
             if (!validFile(target, hash)) Os.rename(temporary.absolutePath, target.absolutePath)
             syncDirectory(root)
@@ -227,7 +227,7 @@ internal class IconModifierInputStore(private val context: Context) {
                     digest.update(buffer, 0, count)
                 }
             }
-            return digest.digest().joinToString("") { "%02x".format(it) } == hash
+            return digest.digest().toLowerHex() == hash
         }
 
         // Run only after startup recovery, before live drafts/undo can reference unsaved files.
@@ -240,12 +240,6 @@ internal class IconModifierInputStore(private val context: Context) {
                     if (!file.delete()) Log.info("IconModifierInputStore", "Cannot remove unused input ${file.name}")
                 }
             }
-        }
-
-        private fun syncDirectory(directory: File) {
-            if (!directory.isDirectory) throw IOException("Cannot sync modifier input directory")
-            val descriptor = Os.open(directory.absolutePath, OsConstants.O_RDONLY, 0)
-            try { Os.fsync(descriptor) } finally { Os.close(descriptor) }
         }
     }
 }

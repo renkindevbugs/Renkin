@@ -37,6 +37,13 @@ class EditorControlsCodecTest {
         value.indices.all { this[offset + it] == value[it] }
     }
 
+    // Stored drafts outlive builds: any byte change here needs a codec version bump, not a new hash.
+    @Test fun encodedControlsKeepTheirStoredFormat() {
+        val bytes = EditorControlsCodec.encode(fixture())
+        val hash = java.security.MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        assertEquals(STORED_FORMAT_SHA256, hash)
+    }
+
     @Test fun allControlsCaptureAndRoundTripWithDistinctValues() {
         val editor = session().apply {
             selectedTab = 3; source = Source.entries.last(); browsingIconPacks = true
@@ -222,3 +229,5 @@ class EditorControlsCodecTest {
         rejected { editor.captureControls() }
     }
 }
+
+private const val STORED_FORMAT_SHA256 = "acd2e102b213dacaf2e1c9f279d9f5019c222d29a434dcef5eb8d0ab1cdba7ea"

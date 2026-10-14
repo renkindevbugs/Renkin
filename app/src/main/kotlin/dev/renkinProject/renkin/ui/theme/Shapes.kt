@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.ui.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 
 /**
@@ -13,6 +14,7 @@ import androidx.compose.ui.unit.dp
  *  - [InnerShape]  — nested blocks inside a card or dialog (code blocks, previews)
  *  - [IconShape]   — rounded-square app-icon tiles and icon previews
  *  - [SwatchShape] — small inline tiles: colour swatches, badges, tiny overlays
+ *  - [iconTileShape] — app-icon tiles whose corner follows their size (a quarter of it)
  */
 val DialogShape = RoundedCornerShape(28.dp)
 val CardShape = RoundedCornerShape(20.dp)
@@ -20,3 +22,4 @@ val FieldShape = RoundedCornerShape(16.dp)
 val InnerShape = RoundedCornerShape(12.dp)
 val IconShape = RoundedCornerShape(14.dp)
 val SwatchShape = RoundedCornerShape(8.dp)
+fun iconTileShape(size: Dp) = RoundedCornerShape(size / 4)

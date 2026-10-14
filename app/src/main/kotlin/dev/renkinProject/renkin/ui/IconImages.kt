@@ -3,7 +3,6 @@ package dev.renkinProject.renkin.ui
 import android.graphics.Bitmap
 import android.util.LruCache
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -26,7 +25,9 @@ import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
 import dev.renkinProject.renkin.drawable.IconPreviewCacheKey
 import dev.renkinProject.renkin.drawable.IconPreviewCache
+import dev.renkinProject.renkin.packages.PackIconLoader
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.ui.theme.iconTileShape
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -147,49 +148,27 @@ internal fun AppIcon(app: PackageInfoStruct?, size: Dp) {
             contentDescription = null,
             modifier = Modifier
                 .size(size)
-                .clip(RoundedCornerShape(size / 4))
+                .clip(iconTileShape(size))
         )
     } else {
         Surface(
             modifier = Modifier.size(size),
-            shape = RoundedCornerShape(size / 4),
+            shape = iconTileShape(size),
             color = MaterialTheme.colorScheme.surfaceVariant
         ) {}
     }
 }
 
-// Pack icons appear as small chips repeated across many rows (the pack browser, watch lists,
-// the about dialog). Decode each once OFF the main thread (decoding in remember{} blocked the
-// UI while the editor dialog opened) and cache it process-wide, keyed by the pack's last-update
-// time so an updated or reinstalled pack is re-decoded instead of showing a stale icon.
-private const val PACK_ICON_PX = 96
-
-private data class CachedPackIcon(val stamp: Long, val bitmap: ImageBitmap?)
-private val packIconCache = mutableMapOf<String, CachedPackIcon>()
-
 /**
- * The single shared pack-icon loader: a package's launcher icon as an [ImageBitmap], decoded
- * once off the main thread and cached. Null until it has loaded (and if the package is gone).
+ * The single shared pack-icon loader for composables: a package's launcher icon from
+ * [PackIconLoader], null while it loads, when [packPackage] is null or when the package is gone.
  */
 @Composable
-internal fun rememberPackIcon(packPackage: String): ImageBitmap? {
+internal fun rememberPackIcon(packPackage: String?): ImageBitmap? {
     val context = getCurrentContext()
-    var icon by remember(packPackage) { mutableStateOf(packIconCache[packPackage]?.bitmap) }
+    var icon by remember(packPackage) { mutableStateOf(packPackage?.let(PackIconLoader::cached)) }
     LaunchedEffect(packPackage) {
-        icon = withContext(Dispatchers.IO) {
-            try {
-                val pm = context.packageManager
-                val stamp = pm.getPackageInfo(packPackage, 0).lastUpdateTime
-                packIconCache[packPackage]?.takeIf { it.stamp == stamp }?.let { return@withContext it.bitmap }
-                val bitmap = pm.getApplicationIcon(packPackage)
-                    .toSafeBitmapOrNull(PACK_ICON_PX, PACK_ICON_PX)?.asImageBitmap()
-                packIconCache[packPackage] = CachedPackIcon(stamp, bitmap)
-                bitmap
-            } catch (_: Exception) {
-                packIconCache[packPackage] = CachedPackIcon(0L, null)
-                null
-            }
-        }
+        icon = packPackage?.let { PackIconLoader.load(context, it) }
     }
     return icon
 }
@@ -203,12 +182,12 @@ internal fun PackIconImage(packPackage: String, size: Dp) {
             contentDescription = null,
             modifier = Modifier
                 .size(size)
-                .clip(RoundedCornerShape(size / 4))
+                .clip(iconTileShape(size))
         )
     } else {
         Surface(
             modifier = Modifier.size(size),
-            shape = RoundedCornerShape(size / 4),
+            shape = iconTileShape(size),
             color = MaterialTheme.colorScheme.surfaceVariant
         ) {}
     }

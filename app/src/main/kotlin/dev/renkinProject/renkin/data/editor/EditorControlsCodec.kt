@@ -13,13 +13,9 @@ import dev.renkinProject.renkin.icon.creator.OutlineMode
 import dev.renkinProject.renkin.icon.creator.SegmentLayer
 import dev.renkinProject.renkin.icon.creator.TextCase
 import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.IOException
-import java.io.OutputStream
-import java.nio.ByteBuffer
-import java.nio.charset.CodingErrorAction
 
 /** Fixed versioned fields preserve inactive controls and exact finite float/packed-color bits. */
 internal object EditorControlsCodec {
@@ -32,7 +28,7 @@ internal object EditorControlsCodec {
     const val MAX_POINTS = 100_000
 
     internal fun encodePack(value: EditorPackControls): ByteArray {
-        val bytes = BoundedOutput()
+        val bytes = CappedByteArrayOutputStream(EditorDraftCodec.MAX_CONTROLS_BYTES, "Editor controls are too large")
         with(Writer(DataOutputStream(bytes))) {
             output.writeInt(0x524b4550); output.writeInt(VERSION) // RKEP
             output.writeInt(value.selectedScheme); style(value.customForeground); style(value.customBackground); number(value.strokeScale)
@@ -55,7 +51,7 @@ internal object EditorControlsCodec {
 
     fun encode(snapshot: EditorControlsSnapshot): ByteArray {
         require(snapshot.selectedTab in 0..3 && snapshot.create.materialYouScheme >= 0) { "Invalid editor selection" }
-        val bytes = BoundedOutput()
+        val bytes = CappedByteArrayOutputStream(EditorDraftCodec.MAX_CONTROLS_BYTES, "Editor controls are too large")
         val writer = Writer(DataOutputStream(bytes))
         with(writer) {
             output.writeInt(MAGIC)
@@ -158,13 +154,8 @@ internal object EditorControlsCodec {
 
         private fun enumeration(value: Enum<*>) = text(value.name, 128)
 
-        private fun text(value: String, limit: Int = MAX_TEXT_BYTES) {
-            require(value.length <= limit && Charsets.UTF_8.newEncoder().canEncode(value)) { "Invalid editor control text" }
-            val encoded = value.toByteArray(Charsets.UTF_8)
-            require(encoded.size <= limit) { "Editor control text is too large" }
-            output.writeInt(encoded.size)
-            output.write(encoded)
-        }
+        private fun text(value: String, limit: Int = MAX_TEXT_BYTES) =
+            output.writeBoundedUtf8(value, limit, "Invalid editor control text", "Editor control text is too large")
 
         fun optionalText(value: String?) { boolean(value != null); value?.let { text(it) } }
 
@@ -223,11 +214,7 @@ internal object EditorControlsCodec {
             EditorBrushStroke(brush, points, action)
         }
 
-        fun boolean(): Boolean = when (input.readUnsignedByte()) {
-            0 -> false
-            1 -> true
-            else -> throw IllegalArgumentException("Invalid editor control boolean")
-        }
+        fun boolean(): Boolean = input.readStrictBoolean("Invalid editor control boolean")
 
         fun number(): Float = input.readFloat().also { require(it.isFinite()) { "Non-finite editor control" } }
 
@@ -241,8 +228,7 @@ internal object EditorControlsCodec {
             require(count in 0..limit && count <= input.available()) { "Invalid editor control text size" }
             val encoded = ByteArray(count)
             input.readFully(encoded)
-            return Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
-                .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(encoded)).toString()
+            return strictUtf8(encoded)
         }
 
         fun optionalText(): String? = if (boolean()) text() else null
@@ -252,21 +238,5 @@ internal object EditorControlsCodec {
             require(count in 0..limit && count <= input.available() / minimumBytes) { "Invalid editor control list size" }
             return List(count) { read() }
         }
-    }
-
-    private class BoundedOutput : OutputStream() {
-        private val bytes = ByteArrayOutputStream()
-
-        override fun write(value: Int) {
-            require(bytes.size().toLong() < EditorDraftCodec.MAX_CONTROLS_BYTES) { "Editor controls are too large" }
-            bytes.write(value)
-        }
-
-        override fun write(value: ByteArray, offset: Int, length: Int) {
-            require(bytes.size().toLong() + length <= EditorDraftCodec.MAX_CONTROLS_BYTES) { "Editor controls are too large" }
-            bytes.write(value, offset, length)
-        }
-
-        fun toByteArray(): ByteArray = bytes.toByteArray()
     }
 }

@@ -2,7 +2,6 @@ package dev.renkinProject.renkin.data.transfer
 
 import android.content.Context
 import android.system.Os
-import android.system.OsConstants
 import android.util.AtomicFile
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.apk.PackKeystore
@@ -13,8 +12,10 @@ import dev.renkinProject.renkin.data.StorageOperationGate
 import dev.renkinProject.renkin.data.StorageRecoveryState
 import dev.renkinProject.renkin.data.StorageRecoverySnapshotException
 import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
+import dev.renkinProject.renkin.data.syncDirectory
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.dataStore
+import dev.renkinProject.renkin.extension.toLowerHex
 import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.currentCoroutineContext
@@ -342,7 +343,7 @@ internal class BackupRecoveryStore(private val context: Context) {
                 digest.update(buffer, 0, count)
             }
         }
-        return digest.digest().joinToString("") { "%02x".format(it) }
+        return digest.digest().toLowerHex()
     }
 
     private fun readPointer(pointer: AtomicFile): String? {
@@ -419,11 +420,5 @@ internal class BackupRecoveryStore(private val context: Context) {
             if (!finished) file.failWrite(output)
             throw error
         }
-    }
-
-    private fun syncDirectory(directory: File) {
-        if (!directory.isDirectory) throw IOException("Cannot sync recovery directory")
-        val descriptor = Os.open(directory.absolutePath, OsConstants.O_RDONLY, 0)
-        try { Os.fsync(descriptor) } finally { Os.close(descriptor) }
     }
 }
