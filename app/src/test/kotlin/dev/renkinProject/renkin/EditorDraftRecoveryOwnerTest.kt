@@ -3,6 +3,8 @@ package dev.renkinProject.renkin
 import android.app.Application
 import android.content.Context
 import android.content.ContextWrapper
+import android.graphics.drawable.ColorDrawable
+import android.graphics.drawable.Drawable
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModelStore
 import androidx.compose.runtime.snapshots.Snapshot
@@ -31,6 +33,7 @@ import dev.renkinProject.renkin.ui.PreparedEditorRecovery
 import dev.renkinProject.renkin.ui.EditorSession
 import dev.renkinProject.renkin.ui.captureRenderWitness
 import dev.renkinProject.renkin.ui.renderWitnessOrNull
+import dev.renkinProject.renkin.ui.prepareEditorRecoveryPreview
 import dev.renkinProject.renkin.ui.withModifierAdjustments
 import dev.renkinProject.renkin.ui.BrushStroke
 import dev.renkinProject.renkin.ui.buildEraseMask
@@ -48,6 +51,7 @@ import java.util.concurrent.atomic.AtomicReference
 import kotlin.coroutines.CoroutineContext
 import kotlinx.collections.immutable.toPersistentList
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.MainCoroutineDispatcher
 import kotlinx.coroutines.asCoroutineDispatcher
@@ -189,6 +193,73 @@ class EditorDraftRecoveryOwnerTest {
         connect(); idle()
         assertEquals(EditorDraftRecoveryState.Hidden, owner.state.value)
         assertFalse(bound.canTransfer)
+    }
+
+    @Test fun savedPreviewKeepsIndependentImmutablePixelsAfterPreparationDisposal() = runBlocking {
+        val offered = offer()
+        val image = requireNotNull(offered.preview?.savedRender)
+        val original = prepared().bound.artwork.getValue(requireNotNull(prepared().bound.capture.snapshot.rendered)).previewBitmap(512)
+        assertNotSame(original, image)
+        assertEquals(original.getPixel(0, 0), image.getPixel(0, 0))
+        assertFalse(image.isMutable)
+        val pixel = image.getPixel(0, 0)
+        withContext(main) { owner.postpone(offered) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        assertFalse(image.isRecycled)
+        assertEquals(pixel, image.getPixel(0, 0))
+    }
+
+    @Test fun savedPreviewSurvivesTransferAndExplicitEditorClose() = runBlocking {
+        val offered = offer()
+        val image = requireNotNull(offered.preview?.savedRender)
+        val pixel = image.getPixel(0, 0)
+        withContext(main) { owner.restore(offered) }
+        val attachment = withTimeout(30_000) { editor.recoveryAttachment.first { it != null }!! }
+        assertFalse(image.isRecycled)
+        withContext(main) { owner.close(attachment) }
+        shown<EditorDraftRecoveryState.Hidden>()
+        assertFalse(image.isRecycled)
+        assertEquals(pixel, image.getPixel(0, 0))
+    }
+
+    private fun failOptionalPreview(error: Throwable) {
+        val icon = object : ColorDrawable() {
+            override fun getConstantState(): Drawable.ConstantState? = throw error
+        }
+        app = PackageInfoStruct("App", app.packageName, app.activityName, icon, 0, createdIcon = app.createdIcon)
+        stage(app)
+    }
+
+    private suspend fun previewFailureStillAllowsRecovery(error: Throwable) {
+        failOptionalPreview(error)
+        val offered = offer()
+        assertNull(offered.preview)
+        withContext(main) { owner.restore(offered) }
+        withTimeout(30_000) { editor.recoveryAttachment.first { it != null } }
+        assertEquals(offered.checkpoint, store.checkpoint())
+        assertEquals(EditorAutosaveStatus.SAVED, owner.autosaveState.value?.status)
+    }
+
+    @Test fun optionalPreviewExceptionDoesNotFailRecoveryOrDisableAutosave() = runBlocking {
+        previewFailureStillAllowsRecovery(IllegalStateException("Optional preview"))
+    }
+
+    @Test fun optionalPreviewAllocationFailureDoesNotFailRecoveryOrDisableAutosave() = runBlocking {
+        previewFailureStillAllowsRecovery(OutOfMemoryError("Optional preview"))
+    }
+
+    @Test fun optionalPreviewCancellationPropagatesWithoutDisposingThePreparedDraft() = runBlocking {
+        val offered = offer()
+        val draft = prepared()
+        val failure = CancellationException("Optional preview cancelled")
+        val application = PackageInfoStruct("App", app.packageName, app.activityName,
+            object : ColorDrawable() { override fun getConstantState(): Drawable.ConstantState? = throw failure }, 0)
+        val injected = PreparedEditorRecovery(draft.checkpoint, draft.owner,
+            draft.baseline.copy(application = application), draft.editorGeneration, draft.bound, draft.editorOwner)
+        try { prepareEditorRecoveryPreview(injected); fail("Cancellation was swallowed") }
+        catch (cancelled: CancellationException) { assertSame(failure, cancelled) }
+        assertTrue(draft.canTransfer)
+        assertEquals(offered.checkpoint, store.checkpoint())
     }
 
     @Test fun freshOwnerOffersMemoryOnlyPostponedDraftAgain() = runBlocking {

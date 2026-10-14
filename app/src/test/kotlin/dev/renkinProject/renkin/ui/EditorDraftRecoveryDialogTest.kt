@@ -1,11 +1,13 @@
 package dev.renkinProject.renkin.ui
 
 import android.app.Application
+import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import dev.renkinProject.renkin.EditorDraftRecoveryState
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.editor.EditorDraftCheckpoint
@@ -36,7 +38,7 @@ class EditorDraftRecoveryDialogTest {
 
     @Test fun restoreUsesTheDisplayedOfferOnly() {
         show()
-        compose.onNodeWithText(string(R.string.editorRecoveryText, "Example")).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.editorRecoveryText)).performScrollTo().assertIsDisplayed()
         compose.onNodeWithText(string(R.string.editorRecoveryRestore)).performClick()
         assertSame(offer, restored)
         assertNull(discarded); assertNull(postponed)
@@ -54,6 +56,7 @@ class EditorDraftRecoveryDialogTest {
         compose.onNodeWithText(string(R.string.editorRecoveryDiscard)).performClick()
         compose.onNodeWithText(string(R.string.editorRecoveryDiscardTitle)).assertIsDisplayed()
         assertNull(discarded)
+        compose.onNodeWithText(string(R.string.editorRecoveryDiscardAppText, "Example").replace("**", "")).assertIsDisplayed()
         compose.onNodeWithText(string(R.string.editorRecoveryDiscard)).performClick()
         assertSame(offer, discarded)
         assertNull(restored); assertNull(postponed)
@@ -91,5 +94,28 @@ class EditorDraftRecoveryDialogTest {
         compose.onNodeWithText(string(R.string.editorRecoveryLater)).performClick()
         assertSame(other, postponed)
         assertNull(restored); assertNull(discarded)
+    }
+
+    @Test fun unavailablePreviewDoesNotShowSavedPreviewCaptionAndStillAllowsResume() {
+        show()
+        compose.onNodeWithText(string(R.string.editorRecoveryPreviewUnavailable)).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.editorRecoveryPreviewLabel)).assertDoesNotExist()
+        compose.onNodeWithText(string(R.string.editorRecoveryRestore)).performClick()
+        assertSame(offer, restored)
+    }
+
+    @Test fun missingCompletedRenderDoesNotShowSavedPreviewCaption() {
+        show(offer.copy(preview = EditorRecoveryPreview(null, null)))
+        compose.onNodeWithText(string(R.string.editorRecoveryPreviewMissing)).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.editorRecoveryPreviewLabel)).assertDoesNotExist()
+    }
+
+    @Test fun savedRenderShowsItsCaptionAndProfileIdentity() {
+        show(offer.copy(profileName = "Work", preview = EditorRecoveryPreview(null,
+            Bitmap.createBitmap(8, 8, Bitmap.Config.ARGB_8888))))
+        compose.onNodeWithText("Example").assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.editorRecoveryProfile, "Work")).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.editorRecoveryPreviewLabel)).performScrollTo().assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.editorRecoveryPreviewUnavailable)).assertDoesNotExist()
     }
 }

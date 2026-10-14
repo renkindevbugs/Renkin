@@ -20,6 +20,8 @@ import dev.renkinProject.renkin.ui.EditorRecoveryAcceptance
 import dev.renkinProject.renkin.ui.EditorRecoveryAttachment
 import dev.renkinProject.renkin.ui.EditorRecoveryPreparation
 import dev.renkinProject.renkin.ui.PreparedEditorRecovery
+import dev.renkinProject.renkin.ui.EditorRecoveryPreview
+import dev.renkinProject.renkin.ui.prepareEditorRecoveryPreview
 import dev.renkinProject.renkin.util.Log
 import java.util.UUID
 import javax.inject.Inject
@@ -40,7 +42,8 @@ import kotlinx.coroutines.withContext
 internal sealed interface EditorDraftRecoveryState {
     data object Hidden : EditorDraftRecoveryState
     data object Working : EditorDraftRecoveryState
-    data class Offer(val checkpoint: EditorDraftCheckpoint, val applicationName: String, val attempt: Long) : EditorDraftRecoveryState
+    data class Offer(val checkpoint: EditorDraftCheckpoint, val applicationName: String, val attempt: Long,
+        val profileName: String? = null, val preview: EditorRecoveryPreview? = null) : EditorDraftRecoveryState
     data class NeedsProfile(val checkpoint: EditorDraftCheckpoint, val profileId: Long, val profileName: String) : EditorDraftRecoveryState
     data class Obsolete(val checkpoint: EditorDraftCheckpoint) : EditorDraftRecoveryState
     data class Changed(val checkpoint: EditorDraftCheckpoint) : EditorDraftRecoveryState
@@ -298,9 +301,13 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                         return
                     }
                     var result: EditorRecoveryPreparation? = null
+                    var preview: EditorRecoveryPreview? = null
                     try {
                         val recovered = withContext(Dispatchers.Default) {
-                            requireNotNull(editor).prepareDraftRecovery(checkpoint, provider, store, resources).also { result = it }
+                            requireNotNull(editor).prepareDraftRecovery(checkpoint, provider, store, resources).also {
+                                result = it
+                                if (it is EditorRecoveryPreparation.Ready) preview = prepareEditorRecoveryPreview(it.draft)
+                            }
                         }
                         if (observation() != current) {
                             mutableState.value = EditorDraftRecoveryState.Hidden
@@ -311,7 +318,8 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                             is EditorRecoveryPreparation.Ready -> {
                                 prepared = recovered.draft
                                 mutableState.value = EditorDraftRecoveryState.Offer(checkpoint,
-                                    recovered.draft.baseline.application.appName, ++attempt)
+                                    recovered.draft.baseline.application.appName, ++attempt,
+                                    recovered.draft.baseline.profile.name, preview)
                             }
                             is EditorRecoveryPreparation.NeedsProfile -> {
                                 val profile = provider.profilesFlow().first().firstOrNull { profile -> profile.id == recovered.profileId }
