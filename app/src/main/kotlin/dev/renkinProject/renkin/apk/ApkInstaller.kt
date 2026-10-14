@@ -13,9 +13,9 @@ import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.util.Log
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import ru.solrudev.ackpine.installer.PackageInstaller
 import ru.solrudev.ackpine.installer.createSession
 import ru.solrudev.ackpine.installer.parameters.InstallerType
@@ -32,7 +32,8 @@ enum class ApkInstallResult {
     INVALID,
     STORAGE,
     TIMEOUT,
-    FAILED
+    FAILED,
+    NO_SYSTEM_INSTALLER
 }
 
 enum class ApkInstallBackend(val diagnosticName: String) {
@@ -100,12 +101,13 @@ class ApkInstaller(
         externalComponent: String = ""
     ): ApkInstallOutcome {
         val previous = installedState(packageName)
+        val digest = InstalledApkDigest(appContext, apk)
         val started = SystemClock.elapsedRealtime()
         val outcome = when (method) {
-            InstallMethod.SYSTEM -> installThroughSystem(apk, packageName, previous, method)
-            InstallMethod.SHIZUKU -> installThroughShizuku(apk, packageName, previous)
+            InstallMethod.SYSTEM -> installThroughSystem(apk, packageName, previous, method, digest = digest)
+            InstallMethod.SHIZUKU -> installThroughShizuku(apk, packageName, previous, digest)
             InstallMethod.EXTERNAL -> installThroughExternal(
-                apk, packageName, previous, externalComponent
+                apk, packageName, previous, externalComponent, digest
             )
         }
         val confirmedAt = SystemClock.elapsedRealtime().takeIf { outcome.result == ApkInstallResult.SUCCESS }
@@ -118,7 +120,8 @@ class ApkInstaller(
         apk: Uri,
         packageName: String,
         previous: InstalledPackageState?,
-        flattenedComponent: String
+        flattenedComponent: String,
+        digest: InstalledApkDigest
     ): ApkInstallOutcome {
         val component = ComponentName.unflattenFromString(flattenedComponent)
         val sharedApk = runCatching { shareableApkUri(apk) }.getOrElse { error ->
@@ -132,6 +135,7 @@ class ApkInstaller(
                 packageName = packageName,
                 previous = previous,
                 requestedMethod = InstallMethod.EXTERNAL,
+                digest = digest,
                 precedingAttempts = listOf(failedShare)
             )
         }
@@ -146,6 +150,7 @@ class ApkInstaller(
                 packageName = packageName,
                 previous = previous,
                 requestedMethod = InstallMethod.EXTERNAL,
+                digest = digest,
                 precedingAttempts = listOf(unavailable)
             )
         }
@@ -160,6 +165,7 @@ class ApkInstaller(
                 packageName = packageName,
                 previous = previous,
                 requestedMethod = InstallMethod.EXTERNAL,
+                digest = digest,
                 precedingAttempts = listOf(attempt)
             )
         }
@@ -275,18 +281,17 @@ class ApkInstaller(
     private suspend fun installThroughShizuku(
         apk: Uri,
         packageName: String,
-        previous: InstalledPackageState?
+        previous: InstalledPackageState?,
+        digest: InstalledApkDigest
     ): ApkInstallOutcome {
         val readiness = ShizukuSupport.state(appContext)
         val initialAttempts = if (readiness == ShizukuState.READY) {
-            val outcome = installWith(apk, ApkInstallBackend.SHIZUKU)
+            val outcome = installAndVerify(apk, ApkInstallBackend.SHIZUKU, packageName, previous, digest)
             if (outcome.result == ApkInstallResult.SUCCESS) {
                 return outcome.copy(requestedMethod = InstallMethod.SHIZUKU)
             }
-            if (shouldVerifyLateResult(outcome.result) &&
-                awaitInstallation(previous, packageName)
-            ) {
-                return verifiedSuccess(InstallMethod.SHIZUKU, outcome.attempts, packageName)
+            if (outcome.result == ApkInstallResult.ABORTED) {
+                return finishOutcome(InstallMethod.SHIZUKU, outcome.attempts, outcome, previous, packageName)
             }
             outcome.attempts
         } else {
@@ -309,6 +314,7 @@ class ApkInstaller(
             packageName = packageName,
             previous = previous,
             requestedMethod = InstallMethod.SHIZUKU,
+            digest = digest,
             precedingAttempts = initialAttempts
         )
     }
@@ -318,19 +324,20 @@ class ApkInstaller(
         packageName: String,
         previous: InstalledPackageState?,
         requestedMethod: InstallMethod,
+        digest: InstalledApkDigest,
         precedingAttempts: List<ApkInstallAttempt> = emptyList()
     ): ApkInstallOutcome {
-        val sessionOutcome = installWith(apk, ApkInstallBackend.SYSTEM_SESSION)
+        val systemAvailable = withContext(Dispatchers.IO) {
+            hasSystemInstallActivity(appContext.packageManager, shareableApkUri(apk))
+        }
+        if (!systemAvailable) {
+            val detail = "No enabled system activity handles CONFIRM_INSTALL or INSTALL_PACKAGE. No system session was started."
+            return missingSystemInstaller(ApkInstallBackend.SYSTEM_SESSION, requestedMethod, precedingAttempts, detail)
+        }
+        val sessionOutcome = installAndVerify(apk, ApkInstallBackend.SYSTEM_SESSION, packageName, previous, digest)
         val attempts = precedingAttempts + sessionOutcome.attempts
         if (!isDeadInstallerSession(sessionOutcome)) {
             return finishOutcome(requestedMethod, attempts, sessionOutcome, previous, packageName)
-        }
-
-        // Some OEM installers remove the platform session before Ackpine receives its final
-        // status broadcast. First accept an install that actually completed; otherwise retry
-        // through Android's ACTION_INSTALL_PACKAGE path, which doesn't depend on that session.
-        if (awaitInstallation(previous, packageName)) {
-            return verifiedSuccess(requestedMethod, attempts, packageName)
         }
 
         Log.error(TAG, "Native installer session died; retrying with compatibility installer")
@@ -339,6 +346,7 @@ class ApkInstaller(
             packageName = packageName,
             previous = previous,
             requestedMethod = requestedMethod,
+            digest = digest,
             precedingAttempts = attempts
         )
     }
@@ -348,32 +356,73 @@ class ApkInstaller(
         packageName: String,
         previous: InstalledPackageState?,
         requestedMethod: InstallMethod,
+        digest: InstalledApkDigest,
         precedingAttempts: List<ApkInstallAttempt>
     ): ApkInstallOutcome {
-        val fallbackOutcome = installWith(apk, ApkInstallBackend.COMPATIBILITY)
+        val compatibilityAvailable = withContext(Dispatchers.IO) {
+            hasSystemInstallActivity(appContext.packageManager, shareableApkUri(apk), includeSessionConfirmation = false)
+        }
+        if (!compatibilityAvailable) {
+            return missingSystemInstaller(ApkInstallBackend.COMPATIBILITY, requestedMethod, precedingAttempts,
+                "No enabled system activity handles INSTALL_PACKAGE. No compatibility session was started.")
+        }
+        val fallbackOutcome = installAndVerify(apk, ApkInstallBackend.COMPATIBILITY, packageName, previous, digest)
         val attempts = precedingAttempts + fallbackOutcome.attempts
         if (fallbackOutcome.result == ApkInstallResult.SUCCESS) {
             return fallbackOutcome.copy(requestedMethod = requestedMethod, attempts = attempts)
         }
-        // Late result delivery is meaningful for technical failures, but waiting after an
-        // explicit user cancellation would make the UI appear frozen for eight seconds.
-        if (shouldVerifyLateResult(fallbackOutcome.result) &&
-            awaitInstallation(previous, packageName)
-        ) {
-            return verifiedSuccess(requestedMethod, attempts, packageName)
-        }
         return finishOutcome(requestedMethod, attempts, fallbackOutcome, previous, packageName)
     }
 
-    private suspend fun awaitInstallation(
+    private fun missingSystemInstaller(
+        backend: ApkInstallBackend,
+        requestedMethod: InstallMethod,
+        precedingAttempts: List<ApkInstallAttempt>,
+        detail: String
+    ): ApkInstallOutcome = ApkInstallOutcome(
+        ApkInstallResult.NO_SYSTEM_INSTALLER, detail, requestedMethod,
+        precedingAttempts + ApkInstallAttempt(backend, ApkInstallResult.NO_SYSTEM_INSTALLER, detail,
+            appContext.getString(R.string.installerSystem))
+    )
+
+    private suspend fun installAndVerify(
+        apk: Uri,
+        backend: ApkInstallBackend,
+        packageName: String,
         previous: InstalledPackageState?,
-        packageName: String
-    ): Boolean {
-        repeat(DEAD_SESSION_PACKAGE_CHECKS) {
-            if (installationChanged(previous, installedState(packageName))) return true
-            delay(DEAD_SESSION_PACKAGE_CHECK_DELAY_MS)
+        digest: InstalledApkDigest
+    ): ApkInstallOutcome {
+        val outcome = installWith(apk, backend)
+        if (!shouldVerifyLateResult(outcome.result)) return outcome
+        val timeout = if (isDeadInstallerSession(outcome)) DEAD_SESSION_VERIFY_TIMEOUT_MS else AMBIGUOUS_VERIFY_TIMEOUT_MS
+        var verificationDetail = "No changed installed package was confirmed within the ${timeout}ms verification window."
+        val confirmed = PackageInstallSignal(appContext, packageName).use { signal ->
+            withTimeoutOrNull(timeout) {
+                var checked: InstalledPackageState? = null
+                while (true) {
+                    val current = installedState(packageName)
+                    if (installationChanged(previous, current) && current != checked) {
+                        when (digest.matches(packageName)) {
+                            null -> {
+                                verificationDetail = "The package changed, but the submitted or installed APK could not be read."
+                                return@withTimeoutOrNull false
+                            }
+                            true -> if (installedState(packageName) == current) return@withTimeoutOrNull true
+                            false -> {
+                                verificationDetail = "The package changed, but its SHA-256 did not match the submitted APK."
+                                checked = current
+                            }
+                        }
+                    }
+                    signal.awaitChange(EXTERNAL_INSTALL_PACKAGE_CHECK_DELAY_MS)
+                }
+                @Suppress("UNREACHABLE_CODE")
+                false
+            } == true
         }
-        return false
+        if (confirmed) return verifiedSuccess(outcome, packageName)
+        val detail = listOfNotNull(outcome.detail, "Verification: $verificationDetail").joinToString("\n")
+        return outcome.copy(detail = detail, attempts = outcome.attempts.map { it.copy(detail = detail) })
     }
 
     private suspend fun installWith(
@@ -416,7 +465,7 @@ class ApkInstaller(
         )
     }
 
-    private fun finishOutcome(
+    private suspend fun finishOutcome(
         requestedMethod: InstallMethod,
         attempts: List<ApkInstallAttempt>,
         finalOutcome: ApkInstallOutcome,
@@ -435,28 +484,29 @@ class ApkInstaller(
     }
 
     private fun verifiedSuccess(
-        requestedMethod: InstallMethod,
-        attempts: List<ApkInstallAttempt>,
+        outcome: ApkInstallOutcome,
         packageName: String
-    ) = ApkInstallOutcome(
+    ) = outcome.copy(
         result = ApkInstallResult.SUCCESS,
-        detail = "Installation was confirmed from package state after a delayed installer callback.",
-        requestedMethod = requestedMethod,
-        attempts = attempts + ApkInstallAttempt(
-            backend = attempts.lastOrNull()?.backend ?: ApkInstallBackend.SYSTEM_SESSION,
+        detail = "Package state and submitted APK SHA-256 confirmed installation after ${outcome.result.name}.",
+        attempts = outcome.attempts + ApkInstallAttempt(
+            backend = outcome.attempts.last().backend,
             result = ApkInstallResult.SUCCESS,
-            detail = "Package state confirmed the installed update for $packageName.",
-            installerLabel = attempts.lastOrNull()?.installerLabel
+            detail = "Package state changed and the installed APK for $packageName matches the submitted artifact after ${outcome.result.name}.",
+            installerLabel = outcome.attempts.last().installerLabel
         )
     )
 
-    private fun installedState(packageName: String): InstalledPackageState? = runCatching {
-        val packageInfo = appContext.packageManager.getPackageInfo(packageName, 0)
-        InstalledPackageState(
-            versionCode = PackageInfoCompat.getLongVersionCode(packageInfo),
-            lastUpdateTime = packageInfo.lastUpdateTime
-        )
-    }.getOrNull()
+    private suspend fun installedState(packageName: String): InstalledPackageState? = withContext(Dispatchers.IO) {
+        try {
+            val packageInfo = appContext.packageManager.getPackageInfo(packageName, 0)
+            InstalledPackageState(PackageInfoCompat.getLongVersionCode(packageInfo), packageInfo.lastUpdateTime)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Exception) {
+            null
+        }
+    }
 
     private fun buildDiagnosticDetail(
         attempts: List<ApkInstallAttempt>,
@@ -475,14 +525,14 @@ class ApkInstaller(
     } ?: "not installed"
 
     private fun shouldVerifyLateResult(result: ApkInstallResult): Boolean =
-        result == ApkInstallResult.FAILED || result == ApkInstallResult.TIMEOUT
+        result == ApkInstallResult.ABORTED || result == ApkInstallResult.FAILED || result == ApkInstallResult.TIMEOUT
 
     private companion object {
         const val TAG = "ApkInstaller"
         // Samsung's installer can keep scanning a sideloaded APK for several seconds after the
         // session is gone, so the window has to outlast that scan (32 * 250 ms = 8 s).
-        const val DEAD_SESSION_PACKAGE_CHECKS = 32
-        const val DEAD_SESSION_PACKAGE_CHECK_DELAY_MS = 250L
+        const val DEAD_SESSION_VERIFY_TIMEOUT_MS = 8_000L
+        const val AMBIGUOUS_VERIFY_TIMEOUT_MS = 3_000L
         const val EXTERNAL_INSTALL_TIMEOUT_MS = 120_000L
         const val EXTERNAL_RETURN_GRACE_MS = 2_000L
         const val EXTERNAL_INSTALL_PACKAGE_CHECK_DELAY_MS = 250L

@@ -70,7 +70,8 @@ internal sealed interface BuildInstallState {
     data class Conflict(val request: PackInstallRequest) : BuildInstallState
     data class Done(val wasUpdate: Boolean, val packLabel: String, val installerLabel: String,
         val savingProfile: Boolean = false, val profileSaveFailed: Boolean = false) : BuildInstallState
-    data class Failed(@StringRes val message: Int, val summary: String, val report: String) : BuildInstallState
+    data class Failed(@StringRes val message: Int, val summary: String, val report: String,
+        val result: ApkInstallResult? = null) : BuildInstallState
 }
 
 internal class BuildInstallCoordinator(
@@ -326,7 +327,7 @@ internal class BuildInstallCoordinator(
             append(detail)
         }
         if (publish(owner, BuildInstallState.Failed(request.failedMessage,
-            "${outcome.result.name}: ${detail.lineSequence().first().take(300)}", report))) notify(request.failedMessage)
+            "${outcome.result.name}: ${detail.lineSequence().first().take(300)}", report, outcome.result))) notify(request.failedMessage)
     }
 
     private fun fail(owner: Long, @StringRes message: Int) {

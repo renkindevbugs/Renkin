@@ -411,6 +411,18 @@ fun MainColumn(iconPacks: List<IconPack>) {
         )
     }
 
+    var chooseFailureInstaller by rememberSaveable { mutableStateOf(false) }
+    if (chooseFailureInstaller) {
+        InstallerPromptDialog(
+            selected = prefs.getPreferencesValue().installerSelection(),
+            explainSavedChoice = false,
+            onSelect = { selection ->
+                viewModel.setInstallMethod(selection.method, selection.externalComponent)
+                chooseFailureInstaller = false
+            },
+            onDismiss = { chooseFailureInstaller = false }
+        )
+    }
     val installFailure = viewModel.installFailure
     if (installFailure != null) {
         val copiedMessage = stringResource(R.string.installFailureCopied)
@@ -427,7 +439,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
             title = { Text(stringResource(R.string.installFailureTitle)) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.installFailureText))
+                    Text(stringResource(if (installFailure.missingSystemInstaller)
+                        R.string.installNoSystemInstaller else R.string.installFailureText))
                     Text(
                         text = installFailure.summary,
                         style = MaterialTheme.typography.bodySmall,
@@ -448,8 +461,16 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.dismissInstallFailure() }) {
-                    Text(stringResource(R.string.dismiss))
+                Column {
+                    if (installFailure.missingSystemInstaller) {
+                        TextButton(onClick = {
+                            viewModel.dismissInstallFailure()
+                            chooseFailureInstaller = true
+                        }) { Text(stringResource(R.string.installerSelect)) }
+                    }
+                    TextButton(onClick = { viewModel.dismissInstallFailure() }) {
+                        Text(stringResource(R.string.dismiss))
+                    }
                 }
             }
         )

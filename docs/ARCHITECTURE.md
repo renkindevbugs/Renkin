@@ -111,6 +111,18 @@ Both first installs and updates also show the existing launcher guide, with sepa
 for selecting a new pack and refreshing cached icons. Dismissing it consumes the Done state.
 A profile-save failure appears in the open dialog or as a separate notice after dismissal.
 
+System routing first discovers enabled system confirmation/install handlers; a missing-handler
+outcome opens a typed failure report with access to the existing installer picker for the next build.
+This pre-flight is a heuristic, not a replacement for guarding Ackpine's actual confirmation Activity.
+Ambiguous session abort/failure/timeout results are checked against the attempt's original package
+state and the exact submitted APK digest, followed by a stable package-state read. File streams
+use bounded buffers on IO, and the submitted digest is cached per attempt across routes. A 3 s
+cancellable verification window preserves prompt cancellation; recognized dead sessions retain
+the existing 8 s allowance before compatibility fallback. Broadcasts only wake the verifier.
+Ordinary success avoids hashing. A Shizuku abort never triggers another installer after verification.
+The local upstream guard proposal remains unapplied; its status and device checks are in
+[install-compatibility-c1-checkpoint.md](install-compatibility-c1-checkpoint.md).
+
 `MainViewModel` also owns a `BackupUiCoordinator`. It owns backup/export/import jobs, the
 pending prepared import, confirmation metadata, cancellation presentation, service progress
 projections and automatic-backup settings flows. UI receives only the import preview; the staged
