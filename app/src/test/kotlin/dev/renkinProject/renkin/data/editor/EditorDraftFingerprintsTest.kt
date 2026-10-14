@@ -104,7 +104,8 @@ class EditorDraftFingerprintsTest {
             data.writeInt(0x524b4546); data.writeInt(1); text("icon"); data.writeLong(7); text("pkg"); text("Act")
             data.writeBoolean(true); data.writeBoolean(false); data.writeBoolean(false); text(longText)
             data.writeBoolean(false); repeat(4) { text("") }; data.writeBoolean(false); data.writeBoolean(false)
-            text(""); data.writeBoolean(false); data.writeBoolean(false); text(""); data.writeBoolean(false); text(""); text("")
+            // An empty base reads as the rendered icon, so the base field hashes the drawable text.
+            text(longText); data.writeBoolean(false); data.writeBoolean(false); text(""); data.writeBoolean(false); text(""); text("")
         }
         val expected = MessageDigest.getInstance("SHA-256").digest(output.toByteArray()).joinToString("") { "%02x".format(it) }
         assertEquals(expected, fingerprint(row.copy(drawable = longText)))

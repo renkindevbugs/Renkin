@@ -104,10 +104,14 @@ class RenkinPackStore(
         }.getOrNull()
         val icon = decode(dbApp.drawable, dbApp.isXml, dbApp.isAdaptiveIcon)
         fun decodeBase() = decode(dbApp.baseDrawable, dbApp.baseIsXml, dbApp.baseIsAdaptiveIcon)
-        val baseIcon = when {
-            dbApp.baseDrawable.isEmpty() -> icon
+        // A base identical to the rendered icon is stored empty (issue #19: detailed adaptive
+        // payloads stored twice outgrew a CursorWindow); older rows repeat the identical payload.
+        val baseIsRendered = dbApp.drawable.isNotEmpty() && (dbApp.baseDrawable.isEmpty() ||
             dbApp.baseDrawable == dbApp.drawable && dbApp.baseIsXml == dbApp.isXml &&
-                dbApp.baseIsAdaptiveIcon == dbApp.isAdaptiveIcon -> {
+            dbApp.baseIsAdaptiveIcon == dbApp.isAdaptiveIcon)
+        val baseIcon = when {
+            dbApp.baseDrawable.isEmpty() && dbApp.drawable.isEmpty() -> icon
+            baseIsRendered -> {
                 // Avoid parsing/decompressing identical payloads twice, while keeping the
                 // editable source detached from the rendered icon's mutable geometry/pixels.
                 runCatching {
@@ -120,7 +124,7 @@ class RenkinPackStore(
                         }
                         else -> null
                     }
-                }.getOrNull() ?: decodeBase()
+                }.getOrNull() ?: decode(dbApp.drawable, dbApp.isXml, dbApp.isAdaptiveIcon)
             }
             else -> decodeBase()
         }
@@ -208,11 +212,19 @@ class RenkinPackStore(
         if (rendered == null && !app.calendarEnabled) return null
         // The same source/export instance needs only one PNG/XML serialization.
         val renderedPayload = rendered?.toDbString() ?: ""
+        val renderedIsAdaptive = rendered?.isAdaptiveIcon() ?: false
+        val renderedIsXml = rendered != null && rendered !is BitmapIconDrawable
+        val basePayload = if (base === rendered) renderedPayload else base?.toDbString() ?: ""
+        val baseIsAdaptive = base?.isAdaptiveIcon() ?: false
+        val baseIsXml = base != null && base !is BitmapIconDrawable
+        // Read back as the rendered icon; see decodeRow.
+        val baseIsRendered = renderedPayload.isNotEmpty() && basePayload == renderedPayload &&
+            baseIsAdaptive == renderedIsAdaptive && baseIsXml == renderedIsXml
         return DbApplication(
             app.packageName,
             app.activityName,
-            rendered?.isAdaptiveIcon() ?: false,
-            rendered != null && rendered !is BitmapIconDrawable,
+            renderedIsAdaptive,
+            renderedIsXml,
             renderedPayload,
             app.calendarEnabled,
             app.calendarPrefix ?: "",
@@ -221,9 +233,9 @@ class RenkinPackStore(
             profileId,
             isCustomIcon = app.isCustom,
             isLegacyIcon = app.isLegacy,
-            baseDrawable = if (base === rendered) renderedPayload else base?.toDbString() ?: "",
-            baseIsAdaptiveIcon = base?.isAdaptiveIcon() ?: false,
-            baseIsXml = base != null && base !is BitmapIconDrawable,
+            baseDrawable = if (baseIsRendered) "" else basePayload,
+            baseIsAdaptiveIcon = baseIsAdaptive,
+            baseIsXml = baseIsXml,
             sourceUrl = app.sourceUrl ?: "",
             isFallbackIcon = app.isFallback,
             modifierRecipe = if (base != null) app.modifierRecipe.orEmpty() else "",
