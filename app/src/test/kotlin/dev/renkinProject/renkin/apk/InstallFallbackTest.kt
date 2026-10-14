@@ -132,4 +132,28 @@ class InstallFallbackTest {
         assertEquals(ApkInstallResult.SUCCESS, outcome.result)
         assertTrue(installerCalled)
     }
+
+    @Test
+    fun onlyTechnicalFailuresMoveOnToTheNextRoute() {
+        val terminal = listOf(
+            ApkInstallResult.ABORTED, ApkInstallResult.CONFLICT, ApkInstallResult.INCOMPATIBLE,
+            ApkInstallResult.INVALID, ApkInstallResult.STORAGE, ApkInstallResult.TIMEOUT,
+            ApkInstallResult.NO_SYSTEM_INSTALLER, ApkInstallResult.SUCCESS
+        )
+        for (backend in ApkInstallBackend.entries) {
+            for (result in terminal) assertFalse("$backend $result", shouldTryNextRoute(backend, result))
+        }
+        assertTrue(shouldTryNextRoute(ApkInstallBackend.SYSTEM_SESSION, ApkInstallResult.FAILED))
+        assertTrue(shouldTryNextRoute(ApkInstallBackend.EXTERNAL, ApkInstallResult.FAILED))
+        assertTrue(shouldTryNextRoute(ApkInstallBackend.SHIZUKU, ApkInstallResult.FAILED))
+        assertFalse(shouldTryNextRoute(ApkInstallBackend.COMPATIBILITY, ApkInstallResult.FAILED))
+    }
+
+    @Test
+    fun onlyShizukuTreatsAUserRestrictionAsPassableByTheSystemInstaller() {
+        assertTrue(shouldTryNextRoute(ApkInstallBackend.SHIZUKU, ApkInstallResult.BLOCKED))
+        assertFalse(shouldTryNextRoute(ApkInstallBackend.SYSTEM_SESSION, ApkInstallResult.BLOCKED))
+        assertFalse(shouldTryNextRoute(ApkInstallBackend.EXTERNAL, ApkInstallResult.BLOCKED))
+        assertFalse(shouldTryNextRoute(ApkInstallBackend.COMPATIBILITY, ApkInstallResult.BLOCKED))
+    }
 }
