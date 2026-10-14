@@ -10,6 +10,7 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.RequiresApi
 import androidx.annotation.VisibleForTesting
 import androidx.core.net.toUri
+import app.revanced.library.ApkSigner
 import app.revanced.library.ApkUtils
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.constants.SuppressDeprecation
@@ -756,8 +757,15 @@ class IconPackBuilder(
 
     private suspend fun signApk(file: File, outFile: File): Unit = StorageOperationGate.run {
         val pwd = PackKeystore.password(ctx.filesDir)
-
-        val dtl = ApkUtils.KeyStoreDetails(keyStoreFile, pwd, PackKeystore.KEY_ALIAS, pwd)
-        ApkUtils.signApk(file, outFile, packLabel, dtl)
+        if (!keyStoreFile.exists()) {
+            // The library creates the keystore on first use.
+            ApkUtils.signApk(file, outFile, packLabel, ApkUtils.KeyStoreDetails(keyStoreFile, pwd, PackKeystore.KEY_ALIAS, pwd))
+            return@run
+        }
+        // ApkUtils reads an existing keystore through a stream it never closes (StrictMode: a
+        // leaked FileInputStream per build), so load the same key pair here and close it.
+        val keyStore = keyStoreFile.inputStream().use { ApkSigner.readKeyStore(it, pwd) }
+        val keyPair = ApkSigner.readPrivateKeyCertificatePair(keyStore, PackKeystore.KEY_ALIAS, pwd)
+        ApkSigner.newApkSigner(packLabel, keyPair).signApk(file, outFile)
     }
 }

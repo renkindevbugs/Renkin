@@ -17,6 +17,7 @@ import dev.renkinProject.renkin.service.BackgroundWorkScheduler
 import dagger.hilt.android.EntryPointAccessors
 import dev.renkinProject.renkin.util.CrashReporter
 import dev.renkinProject.renkin.util.Log
+import dev.renkinProject.renkin.util.enableDebugStrictMode
 import dev.renkinProject.renkin.util.timeProfilePhase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +52,7 @@ class RenkinApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        if (BuildConfig.DEBUG) enableDebugStrictMode()
         // Capture uncaught exceptions to a local file so the next launch can offer to email
         // the log (see CrashReporter / the crash dialog in MainActivity).
         CrashReporter.install(this)
