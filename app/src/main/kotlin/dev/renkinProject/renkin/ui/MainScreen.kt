@@ -35,6 +35,7 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoFixHigh
@@ -124,6 +125,8 @@ import dev.renkinProject.renkin.data.getEnumValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.apk.APK_MIME_TYPE
+import dev.renkinProject.renkin.apk.HomeLauncher
+import dev.renkinProject.renkin.apk.LauncherIconPackSupport
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.GlobalOptionsActivity
 import dev.renkinProject.renkin.MainViewModel
@@ -534,6 +537,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
                         if (isUpdate) R.string.buildUpdatedText else R.string.buildInstalledText,
                         buildOutcome.packLabel, buildOutcome.installerLabel
                     ))
+                    if (!isUpdate) Text(launcherSetupGuide(buildOutcome.launcher, buildOutcome.packLabel))
                     if (buildOutcome.savingProfile) {
                         Text(stringResource(R.string.buildSavingInstalledProfile),
                             style = MaterialTheme.typography.bodySmall,
@@ -1460,5 +1464,16 @@ fun SearchBar(
                 )
             }
         )
+    }
+}
+
+@Composable
+private fun launcherSetupGuide(launcher: HomeLauncher?, packLabel: String): AnnotatedString = when {
+    launcher == null -> boldStringResource(R.string.launcherGuideGeneric)
+    else -> when (launcher.iconPackSupport) {
+        LauncherIconPackSupport.PICK_IN_SETTINGS -> boldStringResource(R.string.launcherGuidePick, launcher.label, packLabel)
+        LauncherIconPackSupport.THEME_PARK -> boldStringResource(R.string.launcherGuideThemePark, packLabel)
+        LauncherIconPackSupport.NONE -> boldStringResource(R.string.launcherGuideUnsupported, launcher.label, packLabel)
+        LauncherIconPackSupport.UNKNOWN -> boldStringResource(R.string.launcherGuideUnknown, launcher.label, packLabel)
     }
 }
