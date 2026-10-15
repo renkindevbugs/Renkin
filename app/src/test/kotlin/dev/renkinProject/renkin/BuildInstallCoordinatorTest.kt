@@ -3,6 +3,7 @@ package dev.renkinProject.renkin
 import android.app.Application
 import androidx.datastore.preferences.core.edit
 import androidx.room.Room
+import androidx.lifecycle.SavedStateHandle
 import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
 import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.apk.ApplicationProvider
@@ -76,7 +77,8 @@ class BuildInstallCoordinatorTest {
         syncBaselines = { error("A rejected build has no baseline to synchronize") },
         refreshMissingPacks = { error("A rejected build must not refresh installed packs") },
         notify = { notifications += it },
-        notifyText = { error("A rejected build must not emit installer notices") }
+        notifyText = { error("A rejected build must not emit installer notices") },
+        pendingApkExport = PendingApkExportState(SavedStateHandle())
     )
 
     private suspend fun Job.awaitChildren() = withTimeout(5_000) { children.toList().joinAll() }

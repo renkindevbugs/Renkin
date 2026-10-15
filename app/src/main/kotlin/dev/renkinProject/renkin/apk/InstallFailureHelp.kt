@@ -18,7 +18,9 @@ internal fun installFailureHelp(result: ApkInstallResult, detail: String, manufa
         "INSTALL_FAILED_USER_RESTRICTED" in text || "USER RESTRICTION" in text ->
             if (brand in xiaomiBrands) InstallFailureHelp.XIAOMI_INSTALL_VIA_USB else InstallFailureHelp.USER_RESTRICTION
         "INSTALL_FAILED_VERIFICATION_FAILURE" in text || "PLAY PROTECT" in text -> InstallFailureHelp.PLAY_PROTECT
-        result == ApkInstallResult.BLOCKED && brand == "samsung" -> InstallFailureHelp.SAMSUNG_AUTO_BLOCKER
+        result == ApkInstallResult.BLOCKED && brand == "samsung" &&
+            ("AUTO BLOCKER" in text || "AUTO_BLOCKER" in text) -> InstallFailureHelp.SAMSUNG_AUTO_BLOCKER
+        result == ApkInstallResult.BLOCKED -> InstallFailureHelp.USER_RESTRICTION
         else -> null
     }
 }
