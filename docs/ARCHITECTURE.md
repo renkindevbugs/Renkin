@@ -137,6 +137,13 @@ dialog maps it through an evidence-only support table; unknown launchers get neu
 never a brand-based verdict. Failure reports name the launcher. See
 [install-compatibility-c3-checkpoint.md](install-compatibility-c3-checkpoint.md).
 
+Before an install starts, a definite signer mismatch between the installed pack and the built APK
+becomes a CONFLICT with a signature-specific Replace explanation; an unreadable signature never
+blocks. Failure reports add help only for recognised failure classes, with the brand choosing
+wording. Sessions created while Renkin is in the background use Ackpine's notification
+confirmation (API 26+, notifications allowed, not Shizuku). See
+[install-compatibility-c4-checkpoint.md](install-compatibility-c4-checkpoint.md).
+
 `MainViewModel` also owns a `BackupUiCoordinator`. It owns backup/export/import jobs, the
 pending prepared import, confirmation metadata, cancellation presentation, service progress
 projections and automatic-backup settings flows. UI receives only the import preview; the staged

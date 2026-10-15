@@ -539,6 +539,8 @@
     <string name="installHelpUserRestriction">A device policy or user restriction blocked the installation. Check that Renkin may **install unknown apps**, or ask the device administrator.</string>
     <string name="installHelpAutoBlocker">Samsung **Auto Blocker** can block apps from unknown sources. Turn it off in Settings → Security and privacy while installing, or use Shizuku.</string>
     <string name="installHelpPlayProtect">Google **Play Protect** stopped the installation. Build again and, when Play Protect asks, choose to install anyway.</string>
+    <string name="installConfirmNotificationTitle">Confirm icon pack installation</string>
+    <string name="installConfirmNotificationText">Tap to finish installing the icon pack Renkin built.</string>
     <string name="installFailureCopy">Copy details</string>
     <string name="installFailureSaveApk">Save APK</string>
     <string name="installFailureApkSaved">APK saved. Install it with any installer; Renkin detects the pack on its next refresh.</string>

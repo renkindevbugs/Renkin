@@ -49,6 +49,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import android.Manifest
 import android.app.Activity
 import android.content.Intent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -87,6 +88,8 @@ import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.getBackgroundColor
 import dev.renkinProject.renkin.data.getBooleanValue
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.packages.PackageVersion
+import dev.renkinProject.renkin.packages.canPostNotifications
 import dev.renkinProject.renkin.packages.supportDynamicColors
 
 internal data class BuildPreviewApps(
@@ -142,11 +145,17 @@ fun BuildPackFab(isInRefresh: Boolean, expanded: Boolean = true, modifier: Modif
 
     // The preview lives in its own activity (WallpaperPreviewActivity) so the real wallpaper can
     // show behind it; RESULT_OK = the user pressed Build there.
+    // Lets a confirmation reach the user if they leave Renkin while the pack builds; the build
+    // never waits for the answer.
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
     val previewLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val expected = result.data?.profileSession() ?: return@rememberLauncherForActivityResult
             view.performConfirmHaptic()
             viewModel.build(expected)
+            if (PackageVersion.is33OrMore() && !canPostNotifications(context)) {
+                notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
         } else if (result.data?.getBooleanExtra(WallpaperPreviewActivity.EXTRA_SESSION_LOST, false) == true) {
             // The process was killed while the preview was in front: it closed itself rather
             // than review a state the user never saw. Say so instead of looking like a no-op.
