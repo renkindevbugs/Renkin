@@ -5,7 +5,6 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Color
 import dev.renkinProject.renkin.extension.getBytes
-import dev.renkinProject.renkin.extension.scaleFromCenter
 import android.graphics.Canvas
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertSame
@@ -70,16 +69,18 @@ class AdaptiveIconPackDrawableTest {
     }
 
     @Test
-    fun directPreviewMatchesFormerViewportCompensation() {
+    fun previewShowsTheLaunchersViewportWithoutZoomingItAgain() {
         val foreground = Bitmap.createBitmap(750, 750, Bitmap.Config.ARGB_8888)
+        // A 190 px square in the 750 px layer covers 190/500 of the launcher's 72dp viewport.
         Canvas(foreground).drawRect(280f, 280f, 470f, 470f,
             android.graphics.Paint().apply { color = Color.RED })
         val icon = AdaptiveIconPackDrawable(foreground.getBytes(Bitmap.CompressFormat.PNG, 100), layer(Color.BLUE))
-        val previous = icon.toBitmap().scaleFromCenter(ADAPTIVE_ICON_SCALE)
-        val current = icon.previewBitmap(500)
-        for (y in 100..400 step 30) for (x in 100..400 step 30) {
-            assertEquals("Pixel $x,$y", previous.getPixel(x, y), current.getPixel(x, y))
-        }
+        val preview = icon.previewBitmap(500)
+
+        assertEquals(Color.RED, preview.getPixel(250, 250))
+        assertEquals(Color.RED, preview.getPixel(165, 250))
+        assertEquals(Color.BLUE, preview.getPixel(150, 250))
+        assertTrue(icon.toBitmap().sameAs(preview))
     }
 
     @Test

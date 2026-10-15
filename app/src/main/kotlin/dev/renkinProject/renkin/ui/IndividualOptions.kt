@@ -266,40 +266,16 @@ internal fun OptionsDialog(
                 iconPacks.firstOrNull { it.packageName == iconPack }
                     ?.changesWithMaterialYouColors == true
         })
-    val isCustomScheme = materialYouScheme >= materialYouSchemes.size
-    val scheme = materialYouSchemes.getOrNull(materialYouScheme)
-    // The generated approximation maps the regular artwork's light/dark roles in reverse. Swap
-    // only its Custom inputs for now; official monochrome layers and wallpaper schemes stay put.
-    val swapGeneratedCustomColors = isMaterialYouVariant && !appHasMaterialYouIcon && isCustomScheme
-    val effectiveColor = when {
-        swapGeneratedCustomColors -> customBgColor
-        isMaterialYouVariant && !isCustomScheme -> scheme!!.first
-        else -> iconColor
-    }
-    // Background only applies to the Material You variant and the shape plate; other sources
-    // keep the transparent default.
-    val effectiveBgColor = when {
-        swapGeneratedCustomColors -> iconColor
-        isMaterialYouVariant && !isCustomScheme -> scheme!!.second
-        isMaterialYouVariant -> customBgColor
-        adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop -> Color(adjustments.shapeStyle.firstColor)
-        else -> Color.Transparent
-    }
-    // Styles only exist for the Custom scheme: a wallpaper scheme is two flat colours by
-    // definition, and the shape plate has its own style further down.
-    val effectiveForegroundStyle = when {
-        !isMaterialYouVariant || !isCustomScheme -> null
-        swapGeneratedCustomColors -> materialYouBackgroundStyle
-        else -> materialYouForegroundStyle
-    }
-    val effectiveBackgroundStyle = when {
-        isMaterialYouVariant && isCustomScheme && swapGeneratedCustomColors ->
-            materialYouForegroundStyle
-        isMaterialYouVariant && isCustomScheme -> materialYouBackgroundStyle
-        // The shape plate's own style is applied by withModifierAdjustments; adding it here too
-        // would just be a second place to keep in sync.
-        else -> null
-    }
+    val createColors = createSourceColors(
+        materialYouVariant = isMaterialYouVariant,
+        wallpaperScheme = materialYouSchemes.getOrNull(materialYouScheme),
+        iconColor = iconColor,
+        customBackground = customBgColor,
+        customForegroundStyle = materialYouForegroundStyle,
+        customBackgroundStyle = materialYouBackgroundStyle,
+        shapePlate = Color(adjustments.shapeStyle.firstColor)
+            .takeIf { adjustments.iconShape != IconShape.NONE && !adjustments.shapeCrop }
+    )
     val selectedPackScheme = materialYouSchemes.getOrNull(
         materialYouPackAdjustments.selectedScheme
     )
@@ -350,14 +326,14 @@ internal fun OptionsDialog(
             materialYou = if (session.modifierReplay != null) session.replayMaterialYou
                 else applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU,
             themed = themed,
-            foregroundStyle = effectiveForegroundStyle,
+            foregroundStyle = createColors.foregroundStyle,
             background = ColorFill(
-                color = effectiveBgColor.toInt(),
-                style = effectiveBackgroundStyle
+                color = createColors.background.toInt(),
+                style = createColors.backgroundStyle
             )
         ),
         modifiers = ModifierStack(
-            effect = EffectModifier(imageEdit, ColorizerStyle(firstColor = effectiveColor.toInt())),
+            effect = EffectModifier(imageEdit, ColorizerStyle(firstColor = createColors.foreground.toInt())),
             materialYouPack = MaterialYouPackModifier(
                 foreground = materialYouPackForeground,
                 background = materialYouPackBackground,
@@ -646,39 +622,21 @@ internal fun OptionsDialog(
                                     customBgColor = Color(it.firstColor)
                                     activateCreate()
                                 },
-                                // The generated variant swaps the Custom inputs, so each control
-                                // previews through whichever field it actually feeds.
                                 renderMaterialYouForeground = { style ->
                                     renderPreviewWith(
-                                        if (swapGeneratedCustomColors) {
-                                            generatingOptions.withExport {
-                                                copy(background = ColorFill(style.firstColor, style))
-                                            }
-                                        } else {
-                                            generatingOptions
-                                                .withExport { copy(foregroundStyle = style) }
-                                                .withModifiers {
-                                                    withEffect {
-                                                        copy(colorizer = colorizer.copy(firstColor = style.firstColor))
-                                                    }
+                                        generatingOptions
+                                            .withExport { copy(foregroundStyle = style) }
+                                            .withModifiers {
+                                                withEffect {
+                                                    copy(colorizer = colorizer.copy(firstColor = style.firstColor))
                                                 }
-                                        }
+                                            }
                                     )
                                 },
                                 renderMaterialYouBackground = { style ->
                                     renderPreviewWith(
-                                        if (swapGeneratedCustomColors) {
-                                            generatingOptions
-                                                .withExport { copy(foregroundStyle = style) }
-                                                .withModifiers {
-                                                    withEffect {
-                                                        copy(colorizer = colorizer.copy(firstColor = style.firstColor))
-                                                    }
-                                                }
-                                        } else {
-                                            generatingOptions.withExport {
-                                                copy(background = ColorFill(style.firstColor, style))
-                                            }
+                                        generatingOptions.withExport {
+                                            copy(background = ColorFill(style.firstColor, style))
                                         }
                                     )
                                 }

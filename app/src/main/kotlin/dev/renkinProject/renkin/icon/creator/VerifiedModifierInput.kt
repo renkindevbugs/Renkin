@@ -35,11 +35,11 @@ internal class VerifiedModifierInput private constructor(
                     currentCoroutineContext().ensureActive()
                     return sameLocalArtwork(base, replay)
                 }
-                // Adaptive icons flattened before modifiers started from the launcher-sized frame
-                // (488c37e6) stored the smaller output. The recipe is still genuine; restoring it
-                // renders the corrected size, so the next Apply upgrades the stored icon.
+                // Adaptive icons flattened while modifiers started from a 1.5x zoomed frame (488c37e6,
+                // unreleased) stored oversized output. The recipe is still genuine; restoring it
+                // renders the launcher size, so the next Apply corrects the stored icon.
                 val matches = replays(input) ||
-                    (input is AdaptiveIconPackDrawable && replays(input.withLegacyModifierFrame()))
+                    (input is AdaptiveIconPackDrawable && replays(input.withZoomedModifierFrame()))
                 currentCoroutineContext().ensureActive()
                 if (matches) VerifiedModifierInput(resources, input, retained) else null
             } catch (error: CancellationException) {
