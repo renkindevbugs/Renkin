@@ -15,12 +15,14 @@ import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApkInstallRoute
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.BuiltIconPack
+import dev.renkinProject.renkin.apk.HomeLauncher
 import dev.renkinProject.renkin.apk.InstallerSelection
 import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.apk.installerSelection
+import dev.renkinProject.renkin.apk.resolveHomeLauncher
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
 import dev.renkinProject.renkin.data.ExternalInstallerComponentKey
 import dev.renkinProject.renkin.data.InstallMethod
@@ -70,7 +72,8 @@ internal sealed interface BuildInstallState {
         val route: ApkInstallRoute? = null) : BuildInstallState
     data class Conflict(val request: PackInstallRequest) : BuildInstallState
     data class Done(val wasUpdate: Boolean, val packLabel: String, val installerLabel: String,
-        val savingProfile: Boolean = false, val profileSaveFailed: Boolean = false) : BuildInstallState
+        val savingProfile: Boolean = false, val profileSaveFailed: Boolean = false,
+        val launcher: HomeLauncher? = null) : BuildInstallState
     data class Failed(@StringRes val message: Int, val summary: String, val report: String,
         val result: ApkInstallResult? = null, val pack: BuiltIconPack? = null) : BuildInstallState
 }
@@ -250,6 +253,7 @@ internal class BuildInstallCoordinator(
     }
 
     private suspend fun installAndFinish(owner: Long, request: PackInstallRequest, replacing: Boolean) {
+        val launcher = withContext(Dispatchers.IO) { resolveHomeLauncher(application.packageManager) }
         val onRoute: suspend (ApkInstallRoute) -> Unit = { route ->
             withContext(Dispatchers.Main) {
                 if (state is BuildInstallState.Installing) {
@@ -266,7 +270,7 @@ internal class BuildInstallCoordinator(
                     val wasUpdate = if (replacing) request.wasUpdate else confirmed.wasUpdate ?: request.wasUpdate
                     publish(owner, BuildInstallState.Done(
                         wasUpdate, request.pack.packLabel, installerLabel,
-                        savingProfile = true
+                        savingProfile = true, launcher = launcher
                     ))
                     if (BuildConfig.DEBUG) confirmed.confirmedAtMillis?.let { confirmedAt ->
                         Log.debug("InstallPerformance", "confirmedToUiPublicationMs=${SystemClock.elapsedRealtime() - confirmedAt}")
@@ -298,7 +302,7 @@ internal class BuildInstallCoordinator(
                 synchronizeAfterInstall(request.pack)
             } else {
                 withContext(NonCancellable) { provider.releaseBuiltArtifacts(request.pack) }
-                showInstallFailure(owner, outcome, request)
+                showInstallFailure(owner, outcome, request, launcher)
                 synchronizeAfterInstall(request.pack)
             }
             ApkInstallResult.ABORTED -> {
@@ -306,7 +310,7 @@ internal class BuildInstallCoordinator(
                 synchronizeAfterInstall(request.pack)
             }
             else -> {
-                showInstallFailure(owner, outcome, request)
+                showInstallFailure(owner, outcome, request, launcher)
                 synchronizeAfterInstall(request.pack)
             }
         }
@@ -329,7 +333,9 @@ internal class BuildInstallCoordinator(
         }
     }
 
-    private fun showInstallFailure(owner: Long, outcome: ApkInstallOutcome, request: PackInstallRequest) {
+    private fun showInstallFailure(
+        owner: Long, outcome: ApkInstallOutcome, request: PackInstallRequest, launcher: HomeLauncher?
+    ) {
         val detail = outcome.detail?.trim().takeUnless { it.isNullOrEmpty() }
             ?: "No additional details were provided by Android."
         val report = buildString {
@@ -337,6 +343,7 @@ internal class BuildInstallCoordinator(
             appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             appendLine("Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
             appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
+            appendLine("Launcher: " + (launcher?.let { "${it.label} (${it.packageName})" } ?: "no default home app"))
             appendLine("Pack: ${request.pack.packageName}")
             appendLine("Requested installer: ${outcome.requestedMethod.name}")
             appendLine("Result: ${outcome.result.name}")

@@ -17,6 +17,7 @@ import dev.renkinProject.renkin.apk.ApkUninstaller
 import dev.renkinProject.renkin.apk.ApkInstallBackend
 import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApplicationProvider
+import dev.renkinProject.renkin.apk.HomeLauncher
 import dev.renkinProject.renkin.apk.ApplicationRuntimeState
 import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.PackChangeBaselines
@@ -729,10 +730,10 @@ class MainViewModel @Inject constructor(
 
     enum class BuildOutcome { FIRST_INSTALL, UPDATE }
     data class BuildOutcomeInfo(val outcome: BuildOutcome, val packLabel: String, val installerLabel: String,
-        val savingProfile: Boolean, val profileSaveFailed: Boolean)
+        val savingProfile: Boolean, val profileSaveFailed: Boolean, val launcher: HomeLauncher?)
     val buildOutcome: BuildOutcomeInfo? get() = (buildState as? BuildInstallState.Done)?.let {
         BuildOutcomeInfo(if (it.wasUpdate) BuildOutcome.UPDATE else BuildOutcome.FIRST_INSTALL,
-            it.packLabel, it.installerLabel, it.savingProfile, it.profileSaveFailed)
+            it.packLabel, it.installerLabel, it.savingProfile, it.profileSaveFailed, it.launcher)
     }
     fun dismissBuildOutcome() = buildCoordinator.dismissBuildOutcome()
 

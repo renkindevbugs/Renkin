@@ -132,6 +132,11 @@ reclaiming installer ownership, deletes a partially written document, and never 
 installation or records the profile as built. See
 [install-compatibility-c2-checkpoint.md](install-compatibility-c2-checkpoint.md).
 
+Each install attempt resolves the default home app on IO (`HomeLauncher`). The first-install
+dialog maps it through an evidence-only support table; unknown launchers get neutral wording,
+never a brand-based verdict. Failure reports name the launcher. See
+[install-compatibility-c3-checkpoint.md](install-compatibility-c3-checkpoint.md).
+
 `MainViewModel` also owns a `BackupUiCoordinator`. It owns backup/export/import jobs, the
 pending prepared import, confirmation metadata, cancellation presentation, service progress
 projections and automatic-backup settings flows. UI receives only the import preview; the staged
