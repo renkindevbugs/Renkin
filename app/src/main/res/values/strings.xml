@@ -534,6 +534,11 @@
     <string name="installFailureTitle">Icon pack installation failed</string>
     <string name="installFailureText">Android rejected the installation. Copy these diagnostic details and include them when reporting the problem.</string>
     <string name="installNoSystemInstaller">A required Android installer activity is unavailable. Select Shizuku or an external installer and build the pack again, or save the APK and install it manually.</string>
+    <string name="installHelpHyperOsIsolation">HyperOS blocked this installation route. Try **Shizuku** or an external installer, or save the APK and install it from your file manager.</string>
+    <string name="installHelpXiaomiUsb">Xiaomi blocks installs from Shizuku and ADB unless **Developer options → Install via USB** is turned on. Turn it on, or use the system installer.</string>
+    <string name="installHelpUserRestriction">A device policy or user restriction blocked the installation. Check that Renkin may **install unknown apps**, or ask the device administrator.</string>
+    <string name="installHelpAutoBlocker">Samsung **Auto Blocker** can block apps from unknown sources. Turn it off in Settings → Security and privacy while installing, or use Shizuku.</string>
+    <string name="installHelpPlayProtect">Google **Play Protect** stopped the installation. Build again and, when Play Protect asks, choose to install anyway.</string>
     <string name="installFailureCopy">Copy details</string>
     <string name="installFailureSaveApk">Save APK</string>
     <string name="installFailureApkSaved">APK saved. Install it with any installer; Renkin detects the pack on its next refresh.</string>

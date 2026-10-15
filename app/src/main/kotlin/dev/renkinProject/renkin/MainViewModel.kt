@@ -18,6 +18,7 @@ import dev.renkinProject.renkin.apk.ApkInstallBackend
 import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.HomeLauncher
+import dev.renkinProject.renkin.apk.InstallFailureHelp
 import dev.renkinProject.renkin.apk.ApplicationRuntimeState
 import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.PackChangeBaselines
@@ -738,9 +739,9 @@ class MainViewModel @Inject constructor(
     fun dismissBuildOutcome() = buildCoordinator.dismissBuildOutcome()
 
     data class InstallFailureInfo(val summary: String, val report: String, val missingSystemInstaller: Boolean,
-        val canSaveApk: Boolean)
+        val canSaveApk: Boolean, val help: InstallFailureHelp?)
     val installFailure: InstallFailureInfo? get() = (buildState as? BuildInstallState.Failed)?.let {
-        InstallFailureInfo(it.summary, it.report, it.result == ApkInstallResult.NO_SYSTEM_INSTALLER, it.pack != null)
+        InstallFailureInfo(it.summary, it.report, it.result == ApkInstallResult.NO_SYSTEM_INSTALLER, it.pack != null, it.help)
     }
     fun dismissInstallFailure() = buildCoordinator.dismissInstallFailure()
     fun beginFailedApkExport(): String? = buildCoordinator.beginFailedApkExport()
