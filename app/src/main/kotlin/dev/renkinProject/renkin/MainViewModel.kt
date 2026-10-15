@@ -750,6 +750,7 @@ class MainViewModel @Inject constructor(
     fun confirmInstallerSelection(selection: InstallerSelection) = buildCoordinator.confirmInstallerSelection(selection)
     fun dismissInstallerSelection() = buildCoordinator.dismissInstallerSelection()
     val installFallbackPending: Boolean get() = buildState is BuildInstallState.Conflict
+    val installFallbackSignatureMismatch: Boolean get() = (buildState as? BuildInstallState.Conflict)?.signatureMismatch == true
     fun confirmInstallFallback() = buildCoordinator.confirmInstallFallback()
     fun dismissInstallFallback() = buildCoordinator.dismissInstallFallback()
 

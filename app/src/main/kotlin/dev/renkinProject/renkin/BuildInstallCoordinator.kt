@@ -21,6 +21,7 @@ import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
 import dev.renkinProject.renkin.apk.ProfileSessionToken
+import dev.renkinProject.renkin.apk.SIGNATURE_MISMATCH_DETAIL
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.apk.resolveHomeLauncher
 import dev.renkinProject.renkin.data.AskInstallerEveryTimeKey
@@ -70,7 +71,7 @@ internal sealed interface BuildInstallState {
     data class ChoosingInstaller(val request: PackInstallRequest, val reason: InstallerChoiceReason) : BuildInstallState
     data class Installing(val request: PackInstallRequest, val replacing: Boolean = false,
         val route: ApkInstallRoute? = null) : BuildInstallState
-    data class Conflict(val request: PackInstallRequest) : BuildInstallState
+    data class Conflict(val request: PackInstallRequest, val signatureMismatch: Boolean = false) : BuildInstallState
     data class Done(val wasUpdate: Boolean, val packLabel: String, val installerLabel: String,
         val savingProfile: Boolean = false, val profileSaveFailed: Boolean = false,
         val launcher: HomeLauncher? = null) : BuildInstallState
@@ -298,7 +299,7 @@ internal class BuildInstallCoordinator(
                 else followUp("Missing pack synchronization failed") { refreshMissingPacks() }
             }
             ApkInstallResult.CONFLICT -> if (!replacing) {
-                publish(owner, BuildInstallState.Conflict(request))
+                publish(owner, BuildInstallState.Conflict(request, outcome.detail == SIGNATURE_MISMATCH_DETAIL))
                 synchronizeAfterInstall(request.pack)
             } else {
                 withContext(NonCancellable) { provider.releaseBuiltArtifacts(request.pack) }
