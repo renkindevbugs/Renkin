@@ -480,7 +480,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
                     }
                     if (installFailure.canSaveApk) {
                         TextButton(onClick = {
-                            viewModel.beginFailedApkExport()?.let(failedApkExport::launch)
+                            viewModel.beginFailedApkExport { failedApkExport.launch(it) }
                         }) { Text(stringResource(R.string.installFailureSaveApk)) }
                     }
                     TextButton(onClick = { viewModel.dismissInstallFailure() }) {

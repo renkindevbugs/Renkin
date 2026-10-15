@@ -13,6 +13,7 @@ import dev.renkinProject.renkin.apk.ApkInstallBackend
 import dev.renkinProject.renkin.apk.ApkInstallOutcome
 import dev.renkinProject.renkin.apk.ApkInstallResult
 import dev.renkinProject.renkin.apk.ApkInstallRoute
+import dev.renkinProject.renkin.apk.ApkExportLease
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.HomeLauncher
@@ -89,7 +90,8 @@ internal class BuildInstallCoordinator(
     private val syncBaselines: suspend (BuiltIconPack) -> Unit,
     private val refreshMissingPacks: suspend () -> Unit,
     private val notify: (Int) -> Unit,
-    private val notifyText: (String) -> Unit
+    private val notifyText: (String) -> Unit,
+    private val pendingApkExport: PendingApkExportState
 ) {
     var state by mutableStateOf<BuildInstallState>(BuildInstallState.Idle)
         private set
@@ -100,7 +102,7 @@ internal class BuildInstallCoordinator(
     private var completingInstallOwner by mutableStateOf<InstallCompletionOwner?>(null)
     // Main-confined cleanup ownership survives the prompt's transition to Idle.
     private val finishingPacks = mutableListOf<BuiltIconPack>()
-    private var pendingApkExport: BuiltIconPack? = null
+    private var preparingApkExport = false
 
     val busy: Boolean get() = completingInstallOwner != null || when (state) {
         is BuildInstallState.Building, is BuildInstallState.ChoosingInstaller,
@@ -226,20 +228,53 @@ internal class BuildInstallCoordinator(
         if (state is BuildInstallState.Done) state = BuildInstallState.Idle
     }
 
-    /** Remembers the failed pack while the document picker is open; returns its suggested file name. */
-    fun beginFailedApkExport(): String? {
-        val pack = (state as? BuildInstallState.Failed)?.pack ?: return null
-        pendingApkExport = pack
-        return apkExportFileName(pack)
+    fun beginFailedApkExport(openPicker: (String) -> Unit) {
+        if (closed || preparingApkExport || pendingApkExport.lease != null) return
+        val pack = (state as? BuildInstallState.Failed)?.pack ?: return
+        preparingApkExport = true
+        scope.launch {
+            var handedOff = false
+            var lease: ApkExportLease? = null
+            try {
+                lease = provider.reserveApkExport(pack.uri)
+                if (lease == null) {
+                    if (!closed) notify(R.string.installFailureApkSaveFailed)
+                    return@launch
+                }
+                if (closed) return@launch
+                pendingApkExport.lease = lease
+                openPicker(apkExportFileName(pack))
+                handedOff = true
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                Log.error("BuildInstallCoordinator", "Could not prepare APK export", error)
+                if (!closed) notify(R.string.installFailureApkSaveFailed)
+            } finally {
+                preparingApkExport = false
+                if (!handedOff) {
+                    pendingApkExport.lease = null
+                    lease?.let { withContext(NonCancellable) { provider.releaseApkExport(it) } }
+                }
+            }
+        }
     }
 
     // Saving a file never proves installation and never records the profile as built.
     fun finishFailedApkExport(target: Uri?) {
-        val pack = pendingApkExport ?: return
-        pendingApkExport = null
-        if (target == null || closed) return
-        scope.launch {
-            val saved = provider.exportBuiltApk(pack, target)
+        val lease = pendingApkExport.lease
+        pendingApkExport.lease = null
+        if (closed || target == null) {
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                withContext(NonCancellable) {
+                    lease?.let { provider.releaseApkExport(it) }
+                    if (target != null) provider.exportBuiltApk(null, target)
+                }
+            }
+            return
+        }
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            val saved = provider.exportBuiltApk(lease, target)
             if (!closed) notify(if (saved) R.string.installFailureApkSaved else R.string.installFailureApkSaveFailed)
         }
     }
@@ -359,7 +394,8 @@ internal class BuildInstallCoordinator(
         }
         if (publish(owner, BuildInstallState.Failed(request.failedMessage,
             "${outcome.result.name}: ${detail.lineSequence().first().take(300)}", report, outcome.result, request.pack,
-            installFailureHelp(outcome.result, report, android.os.Build.MANUFACTURER)))) notify(request.failedMessage)
+            installFailureHelp(outcome.result, outcome.attempts.lastOrNull()?.detail ?: detail,
+                android.os.Build.MANUFACTURER)))) notify(request.failedMessage)
     }
 
     private fun fail(owner: Long, @StringRes message: Int) {
@@ -407,6 +443,12 @@ internal class BuildInstallCoordinator(
         if (pending != null) finishingPacks += pending
         state = BuildInstallState.Idle
         job?.cancel()
+        pendingApkExport.lease?.let { lease ->
+            pendingApkExport.lease = null
+            scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                withContext(NonCancellable) { provider.releaseApkExport(lease) }
+            }
+        }
         if (pending != null) scope.launch(NonCancellable) { releaseFinishingBuild(pending) }
     }
 }

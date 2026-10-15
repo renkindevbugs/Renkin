@@ -165,16 +165,37 @@ class IconPackBuildService internal constructor(
         }
     }
 
-    /** Copies a built APK to a user-chosen document; false when it is gone or the copy failed. */
-    suspend fun exportApk(iconPack: BuiltIconPack, target: Uri): Boolean {
+    internal suspend fun reserveApkExport(source: Uri): ApkExportLease? {
+        var reserved: ApkExportLease? = null
+        try {
+            return withContext(Dispatchers.IO) { artifacts.reserveExport(source).also { reserved = it } }
+        } catch (error: Throwable) {
+            reserved?.let { withContext(NonCancellable) { releaseApkExport(it) } }
+            throw error
+        }
+    }
+
+    internal suspend fun releaseApkExport(lease: ApkExportLease) = withContext(Dispatchers.IO) {
+        try {
+            artifacts.releaseExport(lease)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (error: Exception) {
+            Log.error("IconPackBuildService", "Could not release APK export reservation", error)
+        }
+    }
+
+    /** Copies the reserved APK; an orphaned picker result also removes its empty document. */
+    internal suspend fun exportApk(lease: ApkExportLease?, target: Uri): Boolean {
         var copied = false
         try {
-            copied = artifacts.export(iconPack.uri) { context.contentResolver.openOutputStream(target, "wt") }
+            copied = lease != null && artifacts.export(lease) { context.contentResolver.openOutputStream(target, "wt") }
         } catch (error: CancellationException) {
             throw error
         } catch (error: Exception) {
             Log.error("IconPackBuildService", "Could not export the built APK", error)
         } finally {
+            if (lease != null) withContext(NonCancellable) { releaseApkExport(lease) }
             // A partially written document would look like an installable APK.
             if (!copied) withContext(NonCancellable + Dispatchers.IO) {
                 runCatching { DocumentsContract.deleteDocument(context.contentResolver, target) }

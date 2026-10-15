@@ -127,10 +127,16 @@ The local upstream guard proposal remains unapplied; its status and device check
 only after a technical FAILED, Shizuku also after BLOCKED (a user restriction that a confirmed
 system install can pass); cancellation, conflict, incompatible/invalid APK, storage, policy and
 timeout results end the attempt. A failure report keeps its BuiltIconPack so the user can save the
-APK through the document picker. Export pins the artifact directory against pruning without
-reclaiming installer ownership, deletes a partially written document, and never counts as an
+APK through the document picker. Export reserves the artifact on IO before opening the picker.
+A per-export disk marker protects the directory across process restarts; SavedStateHandle keeps
+only its source URI and reservation token, not the build snapshot. Cancellation releases the
+reservation, completed copies release it in finally, and abandoned picker markers expire after
+the existing 24-hour orphan grace period. A missing handoff or missing source deletes the empty
+document and reports failure. Export never reclaims installer ownership and never counts as an
 installation or records the profile as built. See
 [install-compatibility-c2-checkpoint.md](install-compatibility-c2-checkpoint.md).
+Regression checks and the device procedure for picker handoffs are recorded in
+[apk-export-recovery-checkpoint.md](apk-export-recovery-checkpoint.md).
 
 Each install attempt resolves the default home app on IO (`HomeLauncher`). The first-install
 dialog maps it through an evidence-only support table; unknown launchers get neutral wording,

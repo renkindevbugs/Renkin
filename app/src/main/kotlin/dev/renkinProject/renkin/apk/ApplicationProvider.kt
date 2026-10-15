@@ -957,8 +957,12 @@ class ApplicationProvider internal constructor(
             profileManager.profileExists(iconPack.profileId)
     }
 
-    suspend fun exportBuiltApk(iconPack: BuiltIconPack, target: Uri): Boolean =
-        iconPackBuildService.exportApk(iconPack, target)
+    internal suspend fun reserveApkExport(source: Uri): ApkExportLease? = iconPackBuildService.reserveApkExport(source)
+
+    internal suspend fun releaseApkExport(lease: ApkExportLease) = iconPackBuildService.releaseApkExport(lease)
+
+    internal suspend fun exportBuiltApk(lease: ApkExportLease?, target: Uri): Boolean =
+        iconPackBuildService.exportApk(lease, target)
 
     suspend fun releaseBuiltArtifacts(iconPack: BuiltIconPack, completed: Boolean = true) =
         iconPackBuildService.releaseArtifacts(iconPack, completed)

@@ -28,16 +28,21 @@ class InstallFailureHelpTest {
     }
 
     @Test
-    fun samsungAutoBlockerNeedsAnActualBlockedResult() {
+    fun samsungAutoBlockerNeedsSpecificEvidenceAndABlockedResult() {
         assertEquals(InstallFailureHelp.SAMSUNG_AUTO_BLOCKER,
+            installFailureHelp(ApkInstallResult.BLOCKED, "Installation blocked by Auto Blocker", "samsung"))
+        assertEquals(InstallFailureHelp.USER_RESTRICTION,
             installFailureHelp(ApkInstallResult.BLOCKED, "Installation blocked", "samsung"))
+        assertEquals(InstallFailureHelp.USER_RESTRICTION,
+            installFailureHelp(ApkInstallResult.BLOCKED, "blocked by device policy", "samsung"))
         assertNull(installFailureHelp(ApkInstallResult.FAILED, "Installation blocked", "samsung"))
     }
 
     @Test
     fun unrecognisedFailuresGetNoAdviceEvenOnKnownBrands() {
         assertNull(installFailureHelp(ApkInstallResult.FAILED, "Session 12 is dead.", "Xiaomi"))
-        assertNull(installFailureHelp(ApkInstallResult.BLOCKED, "Installation blocked", "OnePlus"))
+        assertEquals(InstallFailureHelp.USER_RESTRICTION,
+            installFailureHelp(ApkInstallResult.BLOCKED, "Installation blocked", "OnePlus"))
         assertNull(installFailureHelp(ApkInstallResult.STORAGE, "INSTALL_FAILED_INSUFFICIENT_STORAGE", "samsung"))
     }
 }

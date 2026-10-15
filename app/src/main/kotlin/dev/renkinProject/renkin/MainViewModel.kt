@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin
 
 import android.app.Application
+import androidx.lifecycle.SavedStateHandle
 import android.graphics.Bitmap
 import android.graphics.Typeface
 import android.net.Uri
@@ -138,7 +139,8 @@ class MainViewModel @Inject constructor(
     private val appProvider: ApplicationProvider,
     private val watchRepo: WatchRepository,
     private val backupManager: BackupManager,
-    autoBackupManager: AutoBackupManager
+    autoBackupManager: AutoBackupManager,
+    savedStateHandle: SavedStateHandle
 ) : AndroidViewModel(application), IconPreviewBuilder {
     private val installerCatalog = InstallerCatalog(application)
     val uploadedImages: UploadedImageLibrary = StoredUploadedImageLibrary(application)
@@ -707,7 +709,8 @@ class MainViewModel @Inject constructor(
         syncBaselines = ::syncBuildBaselines,
         refreshMissingPacks = { refreshMissingPacks(prompt = false) },
         notify = { _toastEvents.trySend(it) },
-        notifyText = { _installToastEvents.trySend(it) }
+        notifyText = { _installToastEvents.trySend(it) },
+        pendingApkExport = PendingApkExportState(savedStateHandle)
     )
 
     internal val buildState: BuildInstallState get() = buildCoordinator.state
@@ -744,7 +747,7 @@ class MainViewModel @Inject constructor(
         InstallFailureInfo(it.summary, it.report, it.result == ApkInstallResult.NO_SYSTEM_INSTALLER, it.pack != null, it.help)
     }
     fun dismissInstallFailure() = buildCoordinator.dismissInstallFailure()
-    fun beginFailedApkExport(): String? = buildCoordinator.beginFailedApkExport()
+    fun beginFailedApkExport(openPicker: (String) -> Unit) = buildCoordinator.beginFailedApkExport(openPicker)
     fun finishFailedApkExport(target: Uri?) = buildCoordinator.finishFailedApkExport(target)
 
     val installerPromptReason: InstallerChoiceReason? get() = (buildState as? BuildInstallState.ChoosingInstaller)?.reason
