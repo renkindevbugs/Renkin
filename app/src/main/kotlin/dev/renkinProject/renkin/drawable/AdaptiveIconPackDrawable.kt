@@ -43,8 +43,8 @@ class AdaptiveIconPackDrawable internal constructor(
     val materialYouEditState: MaterialYouPackEditState? = null,
     internal val originalForegroundPng: ByteArray? = null,
     internal val originalBackgroundPng: ByteArray? = null,
-    // Only for verifying recipes saved before modifiers started from the zoomed, masked frame.
-    private val legacyModifierFrame: Boolean = false
+    // Only for verifying recipes saved while modifiers started from a 1.5x zoomed frame.
+    private val zoomedModifierFrame: Boolean = false
 ) : IconPackDrawable() {
     private constructor(
         foreground: Bitmap,
@@ -70,15 +70,16 @@ class AdaptiveIconPackDrawable internal constructor(
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     override fun isAdaptiveIcon(): Boolean = true
     override fun toBitmap(): Bitmap = render(PREVIEW_SIZE)
-    // Flattening modifiers produce a legacy bitmap shown without viewport compensation, so they
-    // start from the compensated preview artwork; otherwise the icon shrinks by 72/108 once enabled.
-    // The launcher mask is reapplied at frame size so outline and shadow still have a silhouette.
+    // Flattening modifiers start from the masked 72dp frame the launcher shows for these layers,
+    // so a flattened icon keeps the glyph size of its unmodified adaptive export.
     override fun toModifierBitmap(size: Int): Bitmap =
-        if (legacyModifierFrame) render(size) else maskToLauncherShape(render(size, ADAPTIVE_ICON_SCALE))
+        if (zoomedModifierFrame) maskToLauncherShape(render(size, ADAPTIVE_ICON_SCALE)) else render(size)
     override fun previewBitmap(): Bitmap = previewBitmap(PREVIEW_SIZE)
+    // AdaptiveIconDrawable already shows only the launcher's 72dp viewport; zooming again made the
+    // preview 1.5x larger than the installed icon.
     override fun previewBitmap(sizePx: Int): Bitmap {
         require(sizePx > 0)
-        return render(sizePx.coerceAtMost(PREVIEW_SIZE), ADAPTIVE_ICON_SCALE)
+        return render(sizePx.coerceAtMost(PREVIEW_SIZE))
     }
     override fun toBrowserPreviewBitmap(): Bitmap = previewBitmap()
     override fun toBrowserPreviewBitmap(sizePx: Int): Bitmap = previewBitmap(sizePx)
@@ -111,7 +112,7 @@ class AdaptiveIconPackDrawable internal constructor(
             materialYouEditState,
             originalForegroundPng,
             originalBackgroundPng,
-            legacyModifierFrame
+            zoomedModifierFrame
         )
 
     fun withMaterialYouLayers(
@@ -127,12 +128,12 @@ class AdaptiveIconPackDrawable internal constructor(
         state,
         originalForegroundPng,
         originalBackgroundPng,
-        legacyModifierFrame
+        zoomedModifierFrame
     )
 
-    internal fun withLegacyModifierFrame(): AdaptiveIconPackDrawable = AdaptiveIconPackDrawable(
+    internal fun withZoomedModifierFrame(): AdaptiveIconPackDrawable = AdaptiveIconPackDrawable(
         foregroundPng, backgroundPng, monochromePng, materialYouEditState,
-        originalForegroundPng, originalBackgroundPng, legacyModifierFrame = true
+        originalForegroundPng, originalBackgroundPng, zoomedModifierFrame = true
     )
 
     fun restoreOriginalMaterialYouLayers(state: MaterialYouPackEditState): AdaptiveIconPackDrawable {
@@ -140,14 +141,13 @@ class AdaptiveIconPackDrawable internal constructor(
         val background = originalBackgroundPng ?: backgroundPng
         return AdaptiveIconPackDrawable(
             foreground, background, monochromePng, state,
-            originalForegroundPng = null, originalBackgroundPng = null, legacyModifierFrame = legacyModifierFrame
+            originalForegroundPng = null, originalBackgroundPng = null, zoomedModifierFrame = zoomedModifierFrame
         )
     }
 
-    private fun render(size: Int, previewScale: Float = 1f): Bitmap = newArgbBitmap(size, size) { canvas ->
-        // Match the launcher's 108/72 viewport without allocating a second full-size preview.
-        if (previewScale != 1f) canvas.scale(previewScale, previewScale, size / 2f, size / 2f)
-        val layerSize = (size * ADAPTIVE_ICON_SCALE * previewScale).toInt().coerceAtLeast(1)
+    private fun render(size: Int, zoom: Float = 1f): Bitmap = newArgbBitmap(size, size) { canvas ->
+        if (zoom != 1f) canvas.scale(zoom, zoom, size / 2f, size / 2f)
+        val layerSize = (size * ADAPTIVE_ICON_SCALE * zoom).toInt().coerceAtLeast(1)
         val renderedBackground = decodeLayer(backgroundPng, layerSize)
         val renderedForeground = decodeLayer(foregroundPng, layerSize)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

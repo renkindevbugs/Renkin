@@ -273,32 +273,32 @@ class AdaptiveModifierRenderingTest {
     }
 
     @Test
-    fun iconFlattenedBeforeTheLauncherFrameStillRestoresAtTheCorrectedSize() = runBlocking {
+    fun iconFlattenedFromTheZoomedFrameStillRestoresAtTheLauncherSize() = runBlocking {
         val outline = modifiers[0].second
         val fresh = generateFromPack(outline)
         val retained = requireNotNull(fresh.modifierInput)
         val input = requireNotNull(retained.liveInput) as AdaptiveIconPackDrawable
-        // What builds before 488c37e6 stored: the same recipe rendered from the unzoomed frame.
-        val legacy = IconModifierStageRenderer(context.resources, outline)
-            .renderRetained(input.withLegacyModifierFrame(), retained.pipeline)
+        // What dev builds after 488c37e6 stored: the same recipe rendered from a 1.5x zoomed frame.
+        val zoomed = IconModifierStageRenderer(context.resources, outline)
+            .renderRetained(input.withZoomedModifierFrame(), retained.pipeline)
         val corrected = requireNotNull(fresh.icon).shown()
-        assertTrue("Legacy output must be the smaller one",
-            legacy.shown().glyphWidth(GLYPH) < corrected.glyphWidth(GLYPH) * 0.8f)
+        assertTrue("Zoomed output must be the larger one",
+            zoomed.shown().glyphWidth(GLYPH) > corrected.glyphWidth(GLYPH) * 1.25f)
 
-        val verified = requireNotNull(VerifiedModifierInput.verify(context.resources, input, retained, legacy)) {
-            "A recipe saved from the legacy frame must still be restorable"
+        val verified = requireNotNull(VerifiedModifierInput.verify(context.resources, input, retained, zoomed)) {
+            "A recipe saved from the zoomed frame must still be restorable"
         }
         assertTrue(requireNotNull(verified.render(outline).icon).shown().sameAs(corrected))
     }
 
     @Test
-    fun legacyFrameDoesNotAcceptAnotherRecipe() = runBlocking {
+    fun zoomedFrameDoesNotAcceptAnotherRecipe() = runBlocking {
         val fresh = generateFromPack(modifiers[0].second)
         val retained = requireNotNull(fresh.modifierInput)
         val input = requireNotNull(retained.liveInput) as AdaptiveIconPackDrawable
         val otherRecipe = options(outline = OutlineModifier(OutlineMode.ADD, 12f, ColorFill(Color.RED)))
         val other = IconModifierStageRenderer(context.resources, otherRecipe)
-            .renderRetained(input.withLegacyModifierFrame(), retained.pipeline)
+            .renderRetained(input.withZoomedModifierFrame(), retained.pipeline)
 
         assertEquals(null, VerifiedModifierInput.verify(context.resources, input, retained, other))
     }

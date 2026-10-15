@@ -2086,9 +2086,10 @@ monochrome layer. Source vectors, bitmaps and drawable wrappers are rendered ind
 750 px (108dp layer space); Android applies the adaptive mask and 1.5x viewport expansion only
 when composing the 500 px preview. Original layer insets are not removed or normalized. Layers
 stay compressed in memory, and the exported resources never reference another installed APK.
-Adaptive drawables do not retain full-size rendered/preview bitmap fields. List and browser
-previews render directly to their requested size with the same 108/72 viewport compensation;
-small previews decode sampled PNG layers. Export keeps its own uncompensated geometry and the
+Adaptive drawables do not retain full-size rendered/preview bitmap fields. List, browser and
+Pack preview images render directly to their requested size through `AdaptiveIconDrawable`, which
+already shows only the launcher's 72dp viewport; they must not add another 108/72 zoom (doing so
+made previews 1.5x larger than the installed icon). Small previews decode sampled PNG layers. Export keeps its own uncompensated geometry and the
 stored/exported PNG payloads remain at full resolution.
 Generated-icon previews use `IconPreviewCache` with a total 8 MiB budget: 6 MiB for previews
 up to 256 px and 2 MiB for larger editor/painter images, so detail previews cannot evict list
@@ -2105,10 +2106,11 @@ downscaling preserves aspect ratio in both lists and the browser.
 
 Position/scale transform foreground and monochrome together while leaving the background in
 place. Colorize changes only the foreground; gradients retain its alpha. Shape, Outline,
-Remove background, Path, Edge, Shadow and segment colorize consume the masked composition at the
-preview's 108/72-compensated size (`toModifierBitmap`), with the launcher mask reapplied at frame
-size, so enabling one keeps the optical size shown without a modifier,
-and produce a non-adaptive result. Global modifiers continue deriving from the saved base icon,
+Remove background, Path, Edge, Shadow and segment colorize consume that same masked 72dp frame
+(`toModifierBitmap`), so a flattened icon keeps the glyph size the launcher shows for the
+unmodified adaptive export, and produce a non-adaptive result. Recipes saved while this frame was
+zoomed 1.5x (unreleased dev builds after 488c37e6) still verify for Restore and re-render at the
+launcher size. Global modifiers continue deriving from the saved base icon,
 so disabling a flattening modifier restores the adaptive layers. The app-icon source's
 "Full app icon" behaviour and the explicit global themed export remain separate policies.
 The app-icon source's foreground keeps the layer's own `InsetDrawable`: some apps place their
