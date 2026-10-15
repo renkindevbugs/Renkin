@@ -541,6 +541,7 @@
     <string name="installFailureCopied">Installation details copied</string>
     <string name="installFallbackTitle">Replace existing icon pack?</string>
     <string name="installFallbackText">Android can\'t update the installed pack, usually because its signing key is different. To continue, Renkin must **uninstall the existing pack and then install the new one**. Complete both system dialogs. If you cancel the second installation, the old pack will no longer be installed.</string>
+    <string name="installFallbackSignatureText">The installed pack was signed with a different key, for example by another Renkin installation or before Renkin was reinstalled without restoring a backup. Android can\'t update it in place. To continue, Renkin must **uninstall the existing pack and then install the new one**. Complete both system dialogs. If you cancel the second installation, the old pack will no longer be installed.</string>
     <string name="installFallbackAction">Replace pack</string>
     <string name="settingsBackup">Backup</string>
     <string name="exportBackup">Export backup</string>

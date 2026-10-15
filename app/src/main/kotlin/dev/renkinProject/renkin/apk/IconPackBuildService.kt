@@ -46,9 +46,13 @@ data class BuiltIconPack(
 
 internal suspend fun installOrReportConflict(
     canUpdateInPlace: Boolean,
+    sameSigner: Boolean? = null,
     install: suspend () -> ApkInstallOutcome
-): ApkInstallOutcome =
-    if (canUpdateInPlace) install() else ApkInstallOutcome(ApkInstallResult.CONFLICT)
+): ApkInstallOutcome = when {
+    sameSigner == false -> ApkInstallOutcome(ApkInstallResult.CONFLICT, SIGNATURE_MISMATCH_DETAIL)
+    canUpdateInPlace -> install()
+    else -> ApkInstallOutcome(ApkInstallResult.CONFLICT)
+}
 
 internal suspend fun replaceAfterConflict(
     uninstall: suspend () -> Boolean,
@@ -193,7 +197,10 @@ class IconPackBuildService internal constructor(
     ): ApkInstallOutcome =
         withContext(Dispatchers.Default) {
             try {
-                installOrReportConflict(iconPack.canBeInstalled) {
+                val sameSigner = iconPack.uri.path?.let { path ->
+                    withContext(Dispatchers.IO) { canUpdateWithSameSigner(context.packageManager, iconPack.packageName, path) }
+                }
+                installOrReportConflict(iconPack.canBeInstalled, sameSigner) {
                     runInstall(iconPack, resolveInstaller(iconPack, selectionOverride), onRoute)
                 }
             } catch (error: Throwable) {

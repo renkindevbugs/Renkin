@@ -499,7 +499,8 @@ fun MainColumn(iconPacks: List<IconPack>) {
                 )
             },
             title = { Text(stringResource(R.string.installFallbackTitle)) },
-            text = { Text(boldStringResource(R.string.installFallbackText)) },
+            text = { Text(boldStringResource(if (viewModel.installFallbackSignatureMismatch)
+                R.string.installFallbackSignatureText else R.string.installFallbackText)) },
             confirmButton = {
                 TextButton(onClick = { viewModel.confirmInstallFallback() }) {
                     Text(stringResource(R.string.installFallbackAction))
