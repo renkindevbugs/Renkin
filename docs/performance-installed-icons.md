@@ -110,6 +110,10 @@ contract. Rasterizing the whole catalog to thumbnails would lose source informat
 generation. A follow-up should measure source acquisition, APK mapping and transient overlap
 of old/new catalogs, then test exact generation and lifecycle cancellation before rollout.
 
+The new baseline, controlled catalog-overlap/source-acquisition measurements and proposed
+loading boundary are recorded in [PERF5a](performance-installed-icon-loading.md). That checkpoint
+does not yet replace production source ownership or claim a memory reduction.
+
 All raw logs, scripts and samples remain local and ignored under
 `build/performance/2026-10-13-perf4/`. No temporary profiles were created, no icon Apply/Clear or
 pack build occurred, and no original profile data was exported. The original profile's final
