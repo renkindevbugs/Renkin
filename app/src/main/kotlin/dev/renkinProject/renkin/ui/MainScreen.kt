@@ -11,6 +11,7 @@ import java.util.UUID
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.StringRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -126,6 +127,7 @@ import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.apk.installerSelection
 import dev.renkinProject.renkin.apk.APK_MIME_TYPE
 import dev.renkinProject.renkin.apk.HomeLauncher
+import dev.renkinProject.renkin.apk.InstallFailureHelp
 import dev.renkinProject.renkin.apk.LauncherIconPackSupport
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.GlobalOptionsActivity
@@ -453,6 +455,7 @@ fun MainColumn(iconPacks: List<IconPack>) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    installFailure.help?.let { Text(boldStringResource(installFailureHelpText(it))) }
                 }
             },
             confirmButton = {
@@ -1477,4 +1480,13 @@ private fun launcherSetupGuide(launcher: HomeLauncher?, packLabel: String): Anno
         LauncherIconPackSupport.NONE -> boldStringResource(R.string.launcherGuideUnsupported, launcher.label, packLabel)
         LauncherIconPackSupport.UNKNOWN -> boldStringResource(R.string.launcherGuideUnknown, launcher.label, packLabel)
     }
+}
+
+@StringRes
+private fun installFailureHelpText(help: InstallFailureHelp): Int = when (help) {
+    InstallFailureHelp.HYPEROS_ISOLATION -> R.string.installHelpHyperOsIsolation
+    InstallFailureHelp.XIAOMI_INSTALL_VIA_USB -> R.string.installHelpXiaomiUsb
+    InstallFailureHelp.USER_RESTRICTION -> R.string.installHelpUserRestriction
+    InstallFailureHelp.SAMSUNG_AUTO_BLOCKER -> R.string.installHelpAutoBlocker
+    InstallFailureHelp.PLAY_PROTECT -> R.string.installHelpPlayProtect
 }

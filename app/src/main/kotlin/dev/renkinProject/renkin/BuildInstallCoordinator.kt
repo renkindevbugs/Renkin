@@ -16,7 +16,9 @@ import dev.renkinProject.renkin.apk.ApkInstallRoute
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.HomeLauncher
+import dev.renkinProject.renkin.apk.InstallFailureHelp
 import dev.renkinProject.renkin.apk.InstallerSelection
+import dev.renkinProject.renkin.apk.installFailureHelp
 import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
@@ -76,7 +78,8 @@ internal sealed interface BuildInstallState {
         val savingProfile: Boolean = false, val profileSaveFailed: Boolean = false,
         val launcher: HomeLauncher? = null) : BuildInstallState
     data class Failed(@StringRes val message: Int, val summary: String, val report: String,
-        val result: ApkInstallResult? = null, val pack: BuiltIconPack? = null) : BuildInstallState
+        val result: ApkInstallResult? = null, val pack: BuiltIconPack? = null,
+        val help: InstallFailureHelp? = null) : BuildInstallState
 }
 
 internal class BuildInstallCoordinator(
@@ -355,7 +358,8 @@ internal class BuildInstallCoordinator(
             append(detail)
         }
         if (publish(owner, BuildInstallState.Failed(request.failedMessage,
-            "${outcome.result.name}: ${detail.lineSequence().first().take(300)}", report, outcome.result, request.pack))) notify(request.failedMessage)
+            "${outcome.result.name}: ${detail.lineSequence().first().take(300)}", report, outcome.result, request.pack,
+            installFailureHelp(outcome.result, report, android.os.Build.MANUFACTURER)))) notify(request.failedMessage)
     }
 
     private fun fail(owner: Long, @StringRes message: Int) {
