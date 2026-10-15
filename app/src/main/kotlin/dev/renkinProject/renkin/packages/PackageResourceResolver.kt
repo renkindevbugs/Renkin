@@ -21,7 +21,7 @@ import org.xmlpull.v1.XmlPullParserFactory
  * This is deliberately independent from app and icon-pack discovery: renderers that only need
  * a drawable or XML resource should not have to construct the full [ApplicationManager].
  */
-internal class PackageResourceResolver(context: Context) {
+internal class PackageResourceResolver(private val context: Context) {
     private val packageManager = context.packageManager
 
     companion object {
@@ -37,6 +37,12 @@ internal class PackageResourceResolver(context: Context) {
     } catch (_: PackageManager.NameNotFoundException) {
         null
     }
+
+    fun getResources(info: android.content.pm.ApplicationInfo, configuration: Configuration? = null): Resources? = try {
+        val manager = configuration?.let { context.createConfigurationContext(Configuration(it)).packageManager }
+            ?: packageManager
+        manager.getResourcesForApplication(info).withDisplayedNightMode()
+    } catch (_: PackageManager.NameNotFoundException) { null }
 
     fun getDrawable(packageName: String, resourceId: Int): Drawable? =
         getResources(packageName)?.let { resources -> getDrawable(resources, resourceId) }

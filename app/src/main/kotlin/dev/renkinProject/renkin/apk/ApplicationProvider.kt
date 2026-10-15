@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.apk
 
+import dev.renkinProject.renkin.packages.InstalledIconLoader
+
 import android.content.Context
 import android.graphics.Typeface
 import android.net.Uri
@@ -181,7 +183,9 @@ class ApplicationProvider internal constructor(
     private val iconPackBuildService: IconPackBuildService,
     private val appManager: ApplicationManager,
     private val installedAppCatalog: InstalledAppCatalog,
-    private val editorDraftInvalidation: EditorDraftInvalidation
+    private val editorDraftInvalidation: EditorDraftInvalidation,
+    val installedIcons: InstalledIconLoader =
+        InstalledIconLoader(context)
 ) {
     // Persistent updates share storage; published lists cannot change underneath a collector.
     @Volatile private var stagedApplications = persistentListOf<PackageInfoStruct>()
@@ -866,7 +870,7 @@ class ApplicationProvider internal constructor(
         }
         if (result == null) {
             currentCoroutineContext().ensureActive()
-            val bitmap = application.icon.toSafeBitmapOrNull() ?: return null
+            val bitmap = installedIcons.load(application.iconSource)?.drawable?.toSafeBitmapOrNull() ?: return null
             val base = BitmapIconDrawable(bitmap, exportAsAdaptiveIcon = false)
             val rendered = modifierOptions?.let { iconGenService.applyModifier(base, it) } ?: base
             result = EmptyIconGeneration(base, rendered, origin = null)

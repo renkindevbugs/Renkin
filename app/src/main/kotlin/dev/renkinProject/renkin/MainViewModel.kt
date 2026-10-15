@@ -152,6 +152,7 @@ class MainViewModel @Inject constructor(
     private val profileSessionOperations = Mutex()
 
     val applicationState = appProvider.applicationState
+    val installedIcons = appProvider.installedIcons
     val runtimeState = appProvider.runtimeState
     /** Action-time snapshot only; composables collect [applicationState]. */
     val applicationList: List<PackageInfoStruct> get() = appProvider.applicationList

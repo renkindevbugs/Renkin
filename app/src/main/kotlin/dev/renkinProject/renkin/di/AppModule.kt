@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.di
 
+import dev.renkinProject.renkin.packages.InstalledIconLoader
+
 import android.content.Context
 import dagger.Module
 import dagger.Provides
@@ -104,11 +106,13 @@ object AppModule {
     fun provideIconGenerationService(
         @ApplicationContext context: Context,
         iconPackRepository: IconPackRepository,
-        iconPackCatalog: IconPackCatalog
+        iconPackCatalog: IconPackCatalog,
+        installedIconLoader: InstalledIconLoader
     ): IconGenerationService = IconGenerationService(
         context,
         iconPackRepository,
-        iconPackCatalog
+        iconPackCatalog,
+        installedIconLoader
     )
 
     @Provides
@@ -140,7 +144,8 @@ object AppModule {
         profileManager: ProfileManager,
         iconGenerationService: IconGenerationService,
         iconPackBuildService: IconPackBuildService,
-        editorDraftInvalidation: EditorDraftInvalidation
+        editorDraftInvalidation: EditorDraftInvalidation,
+        installedIconLoader: InstalledIconLoader
     ): ApplicationProvider = ApplicationProvider(
         context = context,
         renkinPackStore = renkinPackStore,
@@ -152,6 +157,7 @@ object AppModule {
         iconPackBuildService = iconPackBuildService,
         appManager = ApplicationManager(context),
         installedAppCatalog = InstalledAppCatalog(context),
-        editorDraftInvalidation = editorDraftInvalidation
+        editorDraftInvalidation = editorDraftInvalidation,
+        installedIcons = installedIconLoader
     )
 }

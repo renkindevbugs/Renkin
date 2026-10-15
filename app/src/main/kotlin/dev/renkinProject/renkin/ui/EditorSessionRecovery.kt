@@ -33,7 +33,7 @@ internal fun reconstructEditorSession(prepared: PreparedEditorRecovery): EditorS
     fun artwork(slot: String?) = slot?.let { bound.artwork.getValue(it) }
     val application = PackageInfoStruct(
         appName = original.appName, packageName = live.packageName, activityName = live.activityName,
-        icon = live.icon, iconID = live.iconID, internalVersion = live.internalVersion,
+        iconSource = live.iconSource, iconID = live.iconID, internalVersion = live.internalVersion,
         originalName = original.originalName, baseIcon = artwork(original.base), createdIcon = artwork(original.rendered),
         modifierRecipe = original.recipe, modifierInput = bound.originalInput,
         calendarEnabled = original.calendar.enabled, calendarPrefix = original.calendar.prefix,

@@ -1242,6 +1242,7 @@ fun OpenAppOptions(
         return
     }
     SideEffect { sessionAttached = true }
+    LaunchedEffect(sessionId, session) { editorViewModel.prepareApplicationIcon(sessionId, viewModel.installedIcons) }
     val closeEditor: () -> Unit = {
         // Close fences new captures synchronously; serialized cleanup waits for any in-flight save.
         if (recoveredSessionId == null) draftOwner.closeLive(sessionId)

@@ -90,11 +90,12 @@ class EditorRecoveryPreparationTest {
         val icons = AppModule.provideIconPackRepository(context, catalog)
         val locks = AppModule.provideIconLockManager(context, repository)
         val profiles = AppModule.provideProfileManager(context, repository)
+        val installedIcons = dev.renkinProject.renkin.packages.InstalledIconLoader(context)
         store = EditorDraftStore(context)
         provider = AppModule.provideApplicationProvider(context, AppModule.provideRenkinPackStore(context, repository), repository,
-            icons, locks, profiles, AppModule.provideIconGenerationService(context, icons, catalog),
+            icons, locks, profiles, AppModule.provideIconGenerationService(context, icons, catalog, installedIcons),
             AppModule.provideIconPackBuildService(context, icons, repository, locks, profiles, catalog),
-            editorDraftInvalidation = draftInvalidation)
+            editorDraftInvalidation = draftInvalidation, installedIconLoader = installedIcons)
         provider.ensureInitialized()
         repository.writeProfileStyles(listOf(dev.renkinProject.renkin.data.ProfileStyleUpdate(provider.sessionToken.profileId,
             dev.renkinProject.renkin.data.ProfileStyleCodec.encode(dev.renkinProject.renkin.data.ProfileStyle()), "")))

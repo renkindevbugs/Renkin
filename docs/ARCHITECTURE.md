@@ -50,7 +50,8 @@ EditorDraftRecoveryViewModel             ← serializes recovery offers, autosav
         ▼
 ApplicationProvider (apk/)                ← orchestrator: owns the app list, profiles, refresh,
         │                                    build snapshots and persisted results
-        ├── InstalledAppCatalog            ← launcher activities, labels and application icons
+        ├── InstalledAppCatalog            ← launcher activities, labels and icon-source descriptors
+        ├── InstalledIconLoader             ← small previews and operation-owned full app sources
         ├── IconPackCatalog                ← installed icon-pack discovery and package metadata
         ├── IconPackRepository             ← installed packs, app-filter elements, per-app
         │     │                              drawables, calendar icons (pack StateFlow)
@@ -69,8 +70,8 @@ one without Hilt: `UploadedImageLibrary` (upload gallery list/import/trash/decod
 including images shared back from external editors), `FontLibrary` (system font scan and
 typefaces), `MainViewModel.importSvg` (picked SVG files, via `data/ImportedContent.kt`) and
 `shareIconForEditing` (`SharedIconHandoff`, the FileProvider handoff to external editors).
-`rememberPackIcon` is the one shared image loader that calls `packages/PackIconLoader` directly:
-it is a process-wide, thread-safe cache used by unrelated screens. Shared low-level helpers live
+The shared app/pack image loaders call `packages/InstalledIconLoader` and `PackIconLoader` directly:
+their process-wide, thread-safe bounded caches serve unrelated screens. Shared low-level helpers live
 once: `ByteArray.toLowerHex()` for every stored digest, `data/syncDirectory` for directory
 fsyncs, and `data/editor/EditorBinary.kt` for the bounded text, boolean and capped-buffer
 primitives of the editor draft codecs (their stored format is pinned by golden hash tests).
@@ -2059,7 +2060,18 @@ The controlled device check of generated versus reloaded pack export resources i
 
 ### Installed application icon inventory
 
-`InstalledAppCatalog` can emit an aggregate `InstalledIconMemory` inventory in debug builds.
+`InstalledAppCatalog` retains `ApplicationIconSource.Installed` descriptors rather than full
+launcher drawables. The shared `InstalledIconLoader` provides an 8 MiB thumbnail cache with source
+identity keys that do not retain Drawables. Full sources are acquired for generator operations and
+one live editor, preserving component/user/resource/configuration provenance and adaptive layers.
+Editor preparation and recovery-original previews run off Main; reviewed/recovered artwork keeps
+its existing ownership. Reload carries fresh descriptors together with preserved optional modifier
+metadata. Details and the pending developer checkpoint are in
+[performance-installed-icon-source-checkpoint.md](performance-installed-icon-source-checkpoint.md).
+
+`InstalledAppCatalog` can emit an aggregate `InstalledIconMemory` inventory of resident source
+drawables in debug builds. A descriptor-only catalog reports zero resident roots, not zero process
+bitmap memory; `InstalledIconSources` separately reports its entry count.
 The collector follows exposed bitmap/layer/wrapper references by object identity without
 rendering or changing artwork; stateful containers, unknown leaves and hidden native caches
 remain outside its allocation sum. It has depth/node limits and retains no drawable references

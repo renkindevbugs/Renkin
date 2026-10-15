@@ -929,10 +929,12 @@ private fun GlobalIconEditDialog(app: PackageInfoStruct, onDismiss: () -> Unit) 
 
     // The icon the modifiers act on: the stored icon, or the app's own launcher icon for
     // apps that don't have one yet.
-    val heroBitmap = remember(app) {
-        runCatching { app.icon.toSafeBitmapOrNull() }.getOrNull()
+    val heroBitmap by produceState<Bitmap?>(null, app.iconSource) {
+        value = withContext(Dispatchers.Default) {
+            viewModel.installedIcons.load(app.iconSource)?.drawable?.toSafeBitmapOrNull()
+        }
     }
-    val base = remember(app) {
+    val base = remember(app, heroBitmap) {
         app.baseIcon ?: app.createdIcon ?: heroBitmap?.let { BitmapIconDrawable(it, false) }
     }
 

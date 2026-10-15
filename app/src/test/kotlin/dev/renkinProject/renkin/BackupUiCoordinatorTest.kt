@@ -85,12 +85,14 @@ class BackupUiCoordinatorTest {
         val icons = AppModule.provideIconPackRepository(application, catalog)
         val locks = AppModule.provideIconLockManager(application, repository)
         val profiles = AppModule.provideProfileManager(application, repository)
+        val installedIcons = dev.renkinProject.renkin.packages.InstalledIconLoader(application)
         provider = AppModule.provideApplicationProvider(
             application, AppModule.provideRenkinPackStore(application, repository), repository,
             icons, locks, profiles,
-            AppModule.provideIconGenerationService(application, icons, catalog),
+            AppModule.provideIconGenerationService(application, icons, catalog, installedIcons),
             AppModule.provideIconPackBuildService(application, icons, repository, locks, profiles, catalog),
-            editorDraftInvalidation = draftInvalidation
+            editorDraftInvalidation = draftInvalidation,
+            installedIconLoader = installedIcons
         )
         manager = BackupManager(application, repository, WatchRepository(watchDb), catalog, editorDraftInvalidation = draftInvalidation)
     }

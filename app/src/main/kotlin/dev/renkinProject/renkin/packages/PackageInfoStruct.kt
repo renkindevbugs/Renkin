@@ -10,7 +10,7 @@ class PackageInfoStruct(
     val appName: String,
     val packageName: String,
     val activityName: String,
-    val icon: Drawable,
+    icon: Drawable? = null,
     val iconID: Int,
     val createdIcon: IconPackDrawable? = null,
     val internalVersion: Int = 0,
@@ -55,7 +55,8 @@ class PackageInfoStruct(
     val sourceUrl: String? = null,
     /** Last local modifier stage for [baseIcon]. Informational; never applied onto that base. */
     val modifierRecipe: String? = null,
-    val modifierInput: IconModifierInput? = null
+    val modifierInput: IconModifierInput? = null,
+    val iconSource: ApplicationIconSource = ApplicationIconSource.Inline(requireNotNull(icon), iconID)
 ) : Comparable<PackageInfoStruct> {
     private val normalizedSortName by lazy {
         Normalizer.normalize(appName, Normalizer.Form.NFD)
@@ -93,9 +94,14 @@ class PackageInfoStruct(
         baseIcon: IconPackDrawable? = this.baseIcon,
         sourceUrl: String? = this.sourceUrl,
         modifierRecipe: String? = this.modifierRecipe,
-        modifierInput: IconModifierInput? = this.modifierInput
+        modifierInput: IconModifierInput? = this.modifierInput,
+        iconSource: ApplicationIconSource = this.iconSource,
+        internalVersion: Int = this.internalVersion + 1
     ): PackageInfoStruct =
-        PackageInfoStruct(appName, packageName, activityName, icon, iconID, createdIcon, internalVersion + 1, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon, sourceUrl, modifierRecipe, modifierInput)
+        PackageInfoStruct(appName, packageName, activityName, null, iconID, createdIcon, internalVersion, calendarEnabled, calendarPrefix, calendarPackName, sourcePackName, originalName, isFallback, isRefreshMade, isCustom, isLegacy, baseIcon, sourceUrl, modifierRecipe, modifierInput, iconSource)
+
+    internal fun withLoadedApplicationIcon(icon: LoadedApplicationIcon): PackageInfoStruct =
+        copyWith(iconSource = ApplicationIconSource.Prepared(icon), internalVersion = internalVersion)
 
     // Clearing the icon (createdIcon == null) also drops the recorded source pack and the
     // refresh-made flag, so a removed icon never lingers in the usage counts.
