@@ -1,14 +1,17 @@
 package dev.renkinProject.renkin.apk
 
+import android.app.ActivityManager
 import android.content.ClipData
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.SystemClock
 import androidx.core.content.FileProvider
 import androidx.core.content.pm.PackageInfoCompat
 import dev.renkinProject.renkin.data.InstallMethod
+import dev.renkinProject.renkin.packages.canPostNotifications
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.util.Log
@@ -19,7 +22,9 @@ import kotlinx.coroutines.withTimeoutOrNull
 import ru.solrudev.ackpine.installer.PackageInstaller
 import ru.solrudev.ackpine.installer.createSession
 import ru.solrudev.ackpine.installer.parameters.InstallerType
+import ru.solrudev.ackpine.resources.ResolvableString
 import ru.solrudev.ackpine.session.parameters.Confirmation
+import ru.solrudev.ackpine.session.parameters.NotificationData
 import ru.solrudev.ackpine.shizuku.ShizukuPlugin
 import java.io.File
 
@@ -449,7 +454,11 @@ class ApkInstaller(
         onRoute(ApkInstallRoute(backend, label))
         val rawOutcome = try {
             val session = packageInstaller.createSession(apk) {
-                confirmation = Confirmation.IMMEDIATE
+                confirmation = confirmationFor(backend)
+                if (confirmation == Confirmation.DEFERRED) notificationData = NotificationData {
+                    title = ResolvableString.raw(appContext.getString(R.string.installConfirmNotificationTitle))
+                    contentText = ResolvableString.raw(appContext.getString(R.string.installConfirmNotificationText))
+                }
                 installerType = when (backend) {
                     ApkInstallBackend.COMPATIBILITY -> InstallerType.INTENT_BASED
                     ApkInstallBackend.EXTERNAL -> error("External installers do not use Ackpine sessions")
@@ -535,6 +544,20 @@ class ApkInstaller(
     private fun InstalledPackageState?.describe(): String = this?.let {
         "version=${it.versionCode}, lastUpdateTime=${it.lastUpdateTime}"
     } ?: "not installed"
+
+    // Android blocks activity starts from the background, so an immediate confirmation would never
+    // appear; a notification lets the user confirm later. Shizuku needs no confirmation. VIBRATE is
+    // deliberately not requested (5e95d666), so the vibrating notification is limited to API 26+,
+    // where the channel, not the app, owns vibration.
+    private fun confirmationFor(backend: ApkInstallBackend): Confirmation =
+        if (backend != ApkInstallBackend.SHIZUKU && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !isAppInForeground() && canPostNotifications(appContext)
+        ) {
+            Confirmation.DEFERRED
+        } else Confirmation.IMMEDIATE
+
+    private fun isAppInForeground(): Boolean = ActivityManager.RunningAppProcessInfo()
+        .also(ActivityManager::getMyMemoryState).importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
 
     private fun shouldVerifyLateResult(result: ApkInstallResult): Boolean =
         result == ApkInstallResult.ABORTED || result == ApkInstallResult.FAILED || result == ApkInstallResult.TIMEOUT
