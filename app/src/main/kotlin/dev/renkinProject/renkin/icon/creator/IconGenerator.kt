@@ -1,5 +1,8 @@
 package dev.renkinProject.renkin.icon.creator
 
+import dev.renkinProject.renkin.packages.LoadedApplicationIcon
+import dev.renkinProject.renkin.packages.InstalledIconLoader
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -82,7 +85,9 @@ class IconGenerator(
     private val primaryFallback: IconPackFallback = IconPackFallback(),
     private val fallbackPackName: String = "",
     private val iconPackCatalog: IconPackCatalog = IconPackCatalog(ctx),
-    private val ownedTypeface: Typeface? = null
+    private val ownedTypeface: Typeface? = null,
+    private val installedIcons: InstalledIconLoader =
+        InstalledIconLoader(ctx)
 ) {
     private val source = options.source
     private val modifiers = options.modifiers
@@ -90,6 +95,21 @@ class IconGenerator(
     private val adaptiveIconScale = ADAPTIVE_ICON_SCALE
     private val resourceResolver by lazy { PackageResourceResolver(ctx) }
     private val materialYouPackSupport = mutableMapOf<String, Boolean>()
+    private var applicationIconLoaded = false
+    private var applicationIcon: LoadedApplicationIcon? = null
+
+    private fun applicationIcon(app: PackageInfoStruct): LoadedApplicationIcon? {
+        if (!applicationIconLoaded) {
+            applicationIcon = installedIcons.load(app.iconSource)
+            applicationIconLoaded = true
+        }
+        return applicationIcon
+    }
+
+    private fun releaseApplicationIcon() {
+        applicationIcon = null
+        applicationIconLoaded = false
+    }
     private val stageRenderer by lazy { IconModifierStageRenderer(ctx.resources, options) }
     private val adjustmentPipeline get() = stageRenderer.adjustments
     private val imageEditPipeline get() = stageRenderer.imageEdits
@@ -141,6 +161,8 @@ class IconGenerator(
         } catch (e: Exception) {
             Log.error("IconGenerator", "Failed to generate icon for ${application.packageName}", e)
             IconGenerationResult(null)
+        } finally {
+            releaseApplicationIcon()
         }
     }
 
@@ -193,6 +215,8 @@ class IconGenerator(
                 throw e
             } catch (e: Exception) {
                 Log.error("IconGenerator", "Failed to generate icon for ${app.packageName}", e)
+            } finally {
+                releaseApplicationIcon()
             }
         }
     }
@@ -210,7 +234,9 @@ class IconGenerator(
      * doesn't re-mask legacy icons). Returns null when the pack declares no fallback.
      */
     /** Public entry for previewing the fallback styling on a sample app (Options card). */
-    fun fallbackIcon(app: PackageInfoStruct): IconPackDrawable? = generateFallback(app)
+    fun fallbackIcon(app: PackageInfoStruct): IconPackDrawable? = try {
+        generateFallback(app)
+    } finally { releaseApplicationIcon() }
 
     private fun generateFallback(app: PackageInfoStruct): IconPackDrawable? {
         if (primaryFallback.isEmpty) return null
@@ -233,7 +259,7 @@ class IconGenerator(
             ?.let { load(it) }
         val mask = load(primaryFallback.mask)
         val upon = load(primaryFallback.upon)
-        val original = getIconBitmap(app.icon) ?: return null
+        val original = applicationIcon(app)?.drawable?.let { getIconBitmap(it.copyForRendering()) } ?: return null
 
         val size = back?.width ?: original.width
         val full = Rect(0, 0, size, size)
@@ -345,7 +371,8 @@ class IconGenerator(
     private fun generateImageFromApplication(
         application: PackageInfoStruct,
         imageEdit: ImageEdit): IconSourceStage? {
-        val applicationIcon = application.icon.copyForRendering()
+        val loaded = applicationIcon(application) ?: return null
+        val applicationIcon = loaded.drawable.copyForRendering()
 
         // Material You variant: recolor the app's own <monochrome> layer directly — tint it with
         // the chosen foreground over the chosen background. No path-tracing (that produces line
@@ -383,7 +410,7 @@ class IconGenerator(
             // Material You layer: every app is supported and its original design stays intact.
             return generateImage(toMonochrome(bitmapIcon), null, imageEdit)
         }
-        val parsedIcon = parseApplicationIcon(application)
+        val parsedIcon = parseApplicationIcon(application, loaded)
 
         return generateImage(bitmapIcon, parsedIcon, imageEdit)
     }
@@ -647,10 +674,12 @@ class IconGenerator(
         return newIcon.toImageVectorDrawable()
     }
 
-    private fun parseApplicationIcon(application: PackageInfoStruct): Drawable? {
-        if (isVectorDrawable(application.icon) && export.vector) {
-            val res = resourceResolver.getResources(application.packageName) ?: return null
-            return IconParser.parseDrawable(res, application.icon, application.iconID)
+    private fun parseApplicationIcon(application: PackageInfoStruct, loaded: LoadedApplicationIcon): Drawable? {
+        if (isVectorDrawable(loaded.drawable) && export.vector) {
+            val res = (loaded.applicationInfo?.let { resourceResolver.getResources(it, loaded.configuration) }
+                ?: if (loaded.applicationInfo == null) resourceResolver.getResources(application.packageName) else null)
+                ?: return null
+            return IconParser.parseDrawable(res, loaded.drawable, loaded.resourceId)
         }
 
         return null

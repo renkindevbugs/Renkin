@@ -83,6 +83,7 @@ class ProfileSessionIntegrityTest {
         val icons = AppModule.provideIconPackRepository(context, catalog)
         val locks = AppModule.provideIconLockManager(context, repository)
         val profiles = AppModule.provideProfileManager(context, repository)
+        val installedIcons = dev.renkinProject.renkin.packages.InstalledIconLoader(context)
         return AppModule.provideApplicationProvider(
             context,
             AppModule.provideRenkinPackStore(context, repository),
@@ -90,9 +91,10 @@ class ProfileSessionIntegrityTest {
             icons,
             locks,
             profiles,
-            AppModule.provideIconGenerationService(context, icons, catalog),
+            AppModule.provideIconGenerationService(context, icons, catalog, installedIcons),
             AppModule.provideIconPackBuildService(context, icons, repository, locks, profiles, catalog),
-            editorDraftInvalidation = draftInvalidation
+            editorDraftInvalidation = draftInvalidation,
+            installedIconLoader = installedIcons
         )
     }
 

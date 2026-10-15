@@ -329,7 +329,9 @@ class EditorDraftRecoveryViewModel @Inject internal constructor(
                         val recovered = withContext(Dispatchers.Default) {
                             requireNotNull(editor).prepareDraftRecovery(checkpoint, provider, store, resources).also {
                                 result = it
-                                if (it is EditorRecoveryPreparation.Ready) preview = prepareEditorRecoveryPreview(it.draft)
+                                if (it is EditorRecoveryPreparation.Ready) preview = prepareEditorRecoveryPreview(it.draft) { source ->
+                                    provider.installedIcons.load(source)?.drawable
+                                }
                             }
                         }
                         if (observation() != current) {

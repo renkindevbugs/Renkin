@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.apk
 
+import dev.renkinProject.renkin.packages.InstalledIconLoader
+
 import android.content.Context
 import android.graphics.Typeface
 import dev.renkinProject.renkin.data.ImageEdit
@@ -41,7 +43,9 @@ internal data class IconGenerationSources(
 class IconGenerationService(
     private val context: Context,
     private val iconPackRepo: IconPackRepository,
-    private val iconPackCatalog: IconPackCatalog
+    private val iconPackCatalog: IconPackCatalog,
+    private val installedIcons: InstalledIconLoader =
+        InstalledIconLoader(context)
 ) {
     data class ValidatedPackIcon(val icon: IconPackDrawable?, val sourceChanged: Boolean)
 
@@ -86,7 +90,8 @@ class IconGenerationService(
             pack1,
             pack2,
             iconPackCatalog = iconPackCatalog,
-            ownedTypeface = ownedTypeface
+            ownedTypeface = ownedTypeface,
+            installedIcons = installedIcons
         )
         val preview = builder.generatePreview(application, customIcon, retainInput)
         currentCoroutineContext().ensureActive()
@@ -226,7 +231,8 @@ class IconGenerationService(
             pack2,
             fallback,
             sources.fallbackPack,
-            iconPackCatalog
+            iconPackCatalog,
+            installedIcons = installedIcons
         )
     }
 

@@ -8,6 +8,9 @@ It adds two debug-device measurement methods and this design; production loading
 No memory reduction, leak, generation-equivalence result or optimized-release timing is claimed.
 PERF4's historical 217 Bitmap objects / 130.4 MiB is an earlier inventory, not an optimization.
 
+The subsequent implementation and its device checkpoint are recorded in
+[PERF5b](performance-installed-icon-source-checkpoint.md).
+
 ## Verified ownership paths
 
 The codebase-memory graph's catalog callers and generator consumers were checked against current

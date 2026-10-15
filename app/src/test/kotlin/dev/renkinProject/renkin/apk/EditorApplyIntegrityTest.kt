@@ -58,7 +58,7 @@ import org.robolectric.util.ReflectionHelpers
 import org.robolectric.util.ReflectionHelpers.ClassParameter
 
 @RunWith(RobolectricTestRunner::class)
-@Config(application = Application::class, sdk = [28])
+@Config(application = Application::class, sdk = [28], shadows = [ResolvingLauncherAppsShadow::class])
 class EditorApplyIntegrityTest {
     private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(context)) }
     private lateinit var context: Application
@@ -106,11 +106,13 @@ class EditorApplyIntegrityTest {
         val icons = AppModule.provideIconPackRepository(context, catalog)
         locks = AppModule.provideIconLockManager(context, repository)
         val profiles = AppModule.provideProfileManager(context, repository)
+        val installedIcons = dev.renkinProject.renkin.packages.InstalledIconLoader(context)
         return AppModule.provideApplicationProvider(
             context, AppModule.provideRenkinPackStore(context, repository), repository,
-            icons, locks, profiles, AppModule.provideIconGenerationService(context, icons, catalog),
+            icons, locks, profiles, AppModule.provideIconGenerationService(context, icons, catalog, installedIcons),
             AppModule.provideIconPackBuildService(context, icons, repository, locks, profiles, catalog),
-            editorDraftInvalidation = draftInvalidation
+            editorDraftInvalidation = draftInvalidation,
+            installedIconLoader = installedIcons
         )
     }
 

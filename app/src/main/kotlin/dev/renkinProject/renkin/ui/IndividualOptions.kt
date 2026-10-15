@@ -29,7 +29,6 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
@@ -54,14 +53,11 @@ import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.ImageEdit
 import dev.renkinProject.renkin.data.Source
-import android.graphics.drawable.AdaptiveIconDrawable
-import android.os.Build
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
-import dev.renkinProject.renkin.drawable.haveMonochrome
 import dev.renkinProject.renkin.drawable.isAdaptiveIconDrawable
 import dev.renkinProject.renkin.packages.supportDynamicColors
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
@@ -77,7 +73,6 @@ import dev.renkinProject.renkin.icon.creator.IconExportOptions
 import dev.renkinProject.renkin.icon.creator.MaterialYouPackModifier
 import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.AppBackgroundColor
-import dev.renkinProject.renkin.icon.creator.appBackgroundColor
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.icon.creator.IconSortOrder
 import androidx.compose.foundation.background
@@ -251,23 +246,12 @@ internal fun OptionsDialog(
         derivedStateOf { dialogTransition.isIdle && dialogTransition.currentState }
     }
 
-    val heroBitmap = remember(app.icon) {
-        runCatching { app.icon.toSafeBitmapOrNull() }.getOrNull()
-    }
-    // The brand colour comes from the app itself, so it is available whatever source is edited.
-    val appBackground by produceState<AppBackgroundColor?>(null, app.icon) {
-        value = withContext(Dispatchers.Default) {
-            runCatching { appBackgroundColor(app.icon) }.getOrNull()
-        }
-    }
-
-    // Whether the app ships an official Material You <monochrome> layer. Apps without one use
-    // Renkin's labelled generated fallback instead.
-    val appHasAdaptiveIcon = remember(app.icon) { app.icon.isAdaptiveIconDrawable() }
-    val appHasMaterialYouIcon = remember(app.icon, appHasAdaptiveIcon) {
-        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
-            appHasAdaptiveIcon && (app.icon as AdaptiveIconDrawable).haveMonochrome()
-    }
+    val applicationIcon = session.applicationIcon
+    val heroBitmap = applicationIcon?.hero
+    val appBackground = applicationIcon?.background
+    val appHasAdaptiveIcon = applicationIcon?.adaptive == true
+    val appHasMaterialYouIcon = applicationIcon?.monochrome == true
+    val generationApplication = applicationIcon?.application ?: app
 
     val isMaterialYouVariant = source == Source.APPLICATION_ICON &&
         applicationIconVariant == ApplicationIconVariant.MATERIAL_YOU
@@ -408,8 +392,8 @@ internal fun OptionsDialog(
     // current icon) would show a different icon than the one Apply produces.
     val renderCreateSource: suspend (GenerationOptions, ResourceDrawable?) -> IconGenerationResult = { settings, custom ->
         val font = session.recoveryResources?.typeface(settings.source.textFontPath)
-        if (font != null) viewModel.previewIconWithOwnedFont(app, settings, custom, font)
-        else viewModel.previewIconWithInput(app, settings, custom)
+        if (font != null) viewModel.previewIconWithOwnedFont(generationApplication, settings, custom, font)
+        else viewModel.previewIconWithInput(generationApplication, settings, custom)
     }
     val renderPreviewWith: suspend (GenerationOptions) -> Bitmap? = { previewOptions ->
         val replay = draft.replay
@@ -423,12 +407,12 @@ internal fun OptionsDialog(
                     previewOptions.source.primarySource == Source.APPLICATION_NAME &&
                         session.recoveryResources?.typeface(previewOptions.source.textFontPath) != null ->
                         renderCreateSource(previewOptions, custom).icon
-                    custom != null -> viewModel.previewIcon(app, previewOptions, custom)
+                    custom != null -> viewModel.previewIcon(generationApplication, previewOptions, custom)
                     previewOptions.source.primarySource == Source.ICON_PACK ->
                         (session.restoredIconSource ?: app.baseIcon ?: app.createdIcon)?.let {
                             viewModel.applyModifier(it, previewOptions)
                         }
-                    else -> viewModel.previewIcon(app, previewOptions, null)
+                    else -> viewModel.previewIcon(generationApplication, previewOptions, null)
                 }
             }
         }
@@ -442,7 +426,7 @@ internal fun OptionsDialog(
             IconOrigin.VECTOR -> draft.vectorIcon
             IconOrigin.CREATE -> draft.recoveredCreateStage?.input ?: customIconList.firstOrNull()?.let {
                 iconPack to it.resourceId
-            } ?: (session.restoredIconSource ?: app.baseIcon ?: app.createdIcon ?: app.icon)
+            } ?: (session.restoredIconSource ?: app.baseIcon ?: app.createdIcon ?: app.iconSource)
         },
         render = renderPreviewWith
     )

@@ -10,6 +10,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.painter.Painter
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.icon.creator.GenerationOptions
+import dev.renkinProject.renkin.icon.creator.IconExportOptions
+import dev.renkinProject.renkin.icon.creator.IconModifierInput
+import dev.renkinProject.renkin.icon.creator.IconSourceOptions
+import dev.renkinProject.renkin.icon.creator.ModifierInputOrigin
+import dev.renkinProject.renkin.icon.creator.ModifierStack
+import dev.renkinProject.renkin.icon.creator.EffectModifier
+import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.data.Source
+import dev.renkinProject.renkin.data.ImageEdit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -78,7 +88,7 @@ class ApplicationReloadTest {
 
         assertEquals("New label", merged.appName)
         assertEquals(9, merged.iconID)
-        assertSame(fresh.icon, merged.icon)
+        assertSame(fresh.iconSource, merged.iconSource)
         assertEquals("New label original", merged.originalName)
         assertSame(icon, merged.createdIcon)
         assertEquals("pack.source", merged.sourcePackName)
@@ -89,6 +99,28 @@ class ApplicationReloadTest {
         assertTrue(merged.isCustom)
         assertTrue(merged.isLegacy)
         assertSame(base, merged.baseIcon)
+    }
+
+    @Test
+    fun unsavedModifierReplayInputSurvivesReloadWithFreshSource() {
+        val artwork = FakeIcon()
+        val input = IconModifierInput(
+            GenerationOptions(IconSourceOptions(Source.APPLICATION_ICON),
+                ModifierStack(EffectModifier(ImageEdit.NONE, ColorizerStyle(firstColor = android.graphics.Color.BLACK))),
+                IconExportOptions(), true),
+            containsBakedModifierEdits = true, origin = ModifierInputOrigin.EXISTING_ICON,
+            liveInput = artwork
+        )
+        val current = app("Old", "com.app").changeExport(artwork,
+            modifierRecipe = "stored-recipe", modifierInput = input)
+        val fresh = app("Fresh", "com.app", iconId = 42)
+
+        val merged = mergeApplicationReload(listOf(current), listOf(fresh), setOf(current.key)).single()
+
+        assertSame(fresh.iconSource, merged.iconSource)
+        assertSame(artwork, merged.baseIcon)
+        assertSame(input, merged.modifierInput)
+        assertEquals("stored-recipe", merged.modifierRecipe)
     }
 
     @Test

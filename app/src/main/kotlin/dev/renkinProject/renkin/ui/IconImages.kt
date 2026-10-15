@@ -1,7 +1,6 @@
 package dev.renkinProject.renkin.ui
 
 import android.graphics.Bitmap
-import android.util.LruCache
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.size
 import androidx.compose.material3.MaterialTheme
@@ -18,9 +17,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
+import dev.renkinProject.renkin.packages.InstalledIconLoader
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.AdaptiveIconPackDrawable
 import dev.renkinProject.renkin.drawable.IconPreviewCacheKey
@@ -37,34 +37,6 @@ import kotlinx.coroutines.withContext
 // (the app list, watch list/editor/apply modal, the about dialog, …). Decoding once here —
 // downscaled to the on-screen size — keeps icon-heavy lists cheap and off the main thread.
 
-internal data class AppBitmapCacheKey(
-    val component: String,
-    val iconId: Int,
-    // Identity changes when the launcher metadata or a rendered icon changes, invalidating an
-    // otherwise unchanged id without retaining entries forever (LRU).
-    val drawable: Any,
-    val targetPx: Int
-)
-
-internal class AppBitmapMemoryCache(maxSizeBytes: Int = DEFAULT_APP_BITMAP_CACHE_BYTES) {
-    private val cache = object : LruCache<AppBitmapCacheKey, Bitmap>(maxSizeBytes) {
-        override fun sizeOf(key: AppBitmapCacheKey, value: Bitmap): Int = value.allocationByteCount
-    }
-
-    fun get(key: AppBitmapCacheKey): Bitmap? = cache.get(key)
-
-    fun getOrLoad(key: AppBitmapCacheKey, load: () -> Bitmap?): Bitmap? {
-        cache.get(key)?.let { return it }
-        return load()?.also { cache.put(key, it) }
-    }
-
-    companion object {
-        private const val DEFAULT_APP_BITMAP_CACHE_BYTES = 8 * 1024 * 1024
-    }
-}
-
-private val appBitmapCache = AppBitmapMemoryCache()
-
 /**
  * The app's launcher icon as an [ImageBitmap], decoded to [size] (never upscaled past the
  * icon's own resolution) so lists of icons stay light. Re-decoded when the app's launcher
@@ -75,21 +47,14 @@ private val appBitmapCache = AppBitmapMemoryCache()
 internal fun rememberAppBitmap(app: PackageInfoStruct, size: Dp = 54.dp): ImageBitmap? {
     val density = LocalDensity.current
     val target = with(density) { size.roundToPx() }
-    val key = remember(app.key, app.iconID, app.icon, target) {
-        AppBitmapCacheKey(app.key, app.iconID, app.icon, target)
-    }
-    var bitmap by remember(key) { mutableStateOf(appBitmapCache.get(key)?.asImageBitmap()) }
+    val context = LocalContext.current.applicationContext
+    val loader = remember(context) { InstalledIconLoader(context) }
+    val source = app.iconSource
+    var bitmap by remember(source, target) { mutableStateOf(loader.cachedPreview(source, target)?.asImageBitmap()) }
 
-    LaunchedEffect(key) {
+    LaunchedEffect(source, target) {
         if (bitmap == null) {
-            val loaded = withContext(Dispatchers.Default) {
-                appBitmapCache.getOrLoad(key) {
-                    val px = app.icon.intrinsicWidth.let { if (it in 1 until target) it else target }
-                    // Drawable rasterisation temporarily mutates bounds. The same app can be
-                    // requested at several sizes by home/watch surfaces, so serialize on it.
-                    synchronized(app.icon) { app.icon.toSafeBitmapOrNull(px, px) }
-                }
-            }
+            val loaded = loader.preview(source, target)
             bitmap = loaded?.asImageBitmap()
         }
     }

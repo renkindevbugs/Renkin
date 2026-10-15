@@ -1,5 +1,8 @@
 package dev.renkinProject.renkin
 
+import dev.renkinProject.renkin.packages.InstalledIconLoader
+import dev.renkinProject.renkin.ui.prepareEditorApplicationIcon
+
 import android.os.Debug
 import android.os.SystemClock
 import androidx.annotation.MainThread
@@ -78,6 +81,7 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
     )
     private var activeSession: ActiveSession? = null
     private var restoreJob: Job? = null
+    private var applicationIconJob: Job? = null
     private var restoreGeneration = 0L
     private var sessionGeneration = 0L
     private var cleared = false
@@ -350,6 +354,30 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
     }
 
     @MainThread
+    internal fun prepareApplicationIcon(id: String, loader: InstalledIconLoader) {
+        val active = activeSession?.takeIf { it.id == id } ?: return
+        if (active.state.applicationIconPrepared || applicationIconJob?.isActive == true) return
+        applicationIconJob = viewModelScope.launch {
+            try {
+                val prepared = withContext(Dispatchers.Default) {
+                    prepareEditorApplicationIcon(active.state.application, loader)
+                }
+                if (activeSession === active) {
+                    active.state.applicationIcon = prepared
+                    active.state.applicationIconPrepared = true
+                }
+            } catch (error: CancellationException) { throw error }
+            catch (error: Exception) {
+                Log.error("EditorSessionViewModel", "Application icon could not be prepared", error)
+                if (activeSession === active) active.state.applicationIconPrepared = true
+            } catch (error: OutOfMemoryError) {
+                Log.error("EditorSessionViewModel", "Application icon preparation exceeded available memory", error)
+                if (activeSession === active) active.state.applicationIconPrepared = true
+            }
+        }
+    }
+
+    @MainThread
     internal fun getOrCreate(
         id: String,
         owner: ProfileSessionToken,
@@ -362,6 +390,7 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
             it.id == id && it.state.owner == owner && it.state.application.key == app.key
         }?.let { return it.state }
         if (!allowCreate) return null
+        applicationIconJob?.cancel()
         activeSession?.id?.let(::cancelModifierRestore)
         sessionGeneration++
         mutableRecoveryAttachment.value = null
@@ -414,6 +443,7 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
     internal fun release(id: String) {
         cancelModifierRestore(id)
         if (activeSession?.id == id) {
+            applicationIconJob?.cancel()
             sessionGeneration++
             activeSession = null
             mutableRecoveryAttachment.value = null
@@ -422,6 +452,7 @@ class EditorSessionViewModel @Inject constructor() : ViewModel() {
     }
 
     override fun onCleared() {
+        applicationIconJob?.cancel()
         restoreJob?.cancel()
         cleared = true
         sessionGeneration++

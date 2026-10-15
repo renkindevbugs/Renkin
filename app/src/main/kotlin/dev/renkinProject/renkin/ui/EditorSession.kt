@@ -42,6 +42,9 @@ internal class EditorSession(
     }
 
     var selectedTab by mutableIntStateOf(0)
+    var applicationIcon by mutableStateOf<EditorApplicationIcon?>(null)
+        internal set
+    internal var applicationIconPrepared = false
     private var lastEnteredTab = selectedTab
     var source by mutableStateOf(Source.ICON_PACK)
     var browsingIconPacks by mutableStateOf(false)

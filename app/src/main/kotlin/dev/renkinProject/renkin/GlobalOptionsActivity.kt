@@ -232,6 +232,7 @@ class GlobalOptionsViewModel @Inject constructor(
     val toastEvents = _toastEvents.receiveAsFlow()
 
     val applicationState = appProvider.applicationState
+    val installedIcons = appProvider.installedIcons
     val runtimeState = appProvider.runtimeState
     val iconPackState = appProvider.iconPackState
 

@@ -117,11 +117,12 @@ class EditorDraftRecoveryOwnerTest {
         val icons = AppModule.provideIconPackRepository(context, catalog)
         val locks = AppModule.provideIconLockManager(context, repository)
         val profiles = AppModule.provideProfileManager(context, repository)
+        val installedIcons = dev.renkinProject.renkin.packages.InstalledIconLoader(context)
         store = EditorDraftStore(context)
         provider = AppModule.provideApplicationProvider(context, AppModule.provideRenkinPackStore(context, repository), repository,
-            icons, locks, profiles, AppModule.provideIconGenerationService(context, icons, catalog),
+            icons, locks, profiles, AppModule.provideIconGenerationService(context, icons, catalog, installedIcons),
             AppModule.provideIconPackBuildService(context, icons, repository, locks, profiles, catalog),
-            editorDraftInvalidation = EditorDraftInvalidation(store))
+            editorDraftInvalidation = EditorDraftInvalidation(store), installedIconLoader = installedIcons)
         provider.ensureInitialized()
         repository.writeProfileStyles(listOf(ProfileStyleUpdate(provider.sessionToken.profileId,
             ProfileStyleCodec.encode(ProfileStyle()), "")))

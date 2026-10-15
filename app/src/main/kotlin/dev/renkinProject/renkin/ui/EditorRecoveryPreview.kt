@@ -1,5 +1,7 @@
 package dev.renkinProject.renkin.ui
 
+import dev.renkinProject.renkin.packages.ApplicationIconSource
+
 import android.graphics.Bitmap
 import androidx.annotation.WorkerThread
 import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
@@ -9,10 +11,15 @@ import kotlinx.coroutines.CancellationException
 internal data class EditorRecoveryPreview(val applicationIcon: Bitmap?, val savedRender: Bitmap?)
 
 @WorkerThread
-internal fun prepareEditorRecoveryPreview(draft: PreparedEditorRecovery): EditorRecoveryPreview? = try {
-    val original = draft.baseline.application.icon
-    val applicationIcon = (original.constantState?.newDrawable()?.mutate() ?: original)
-        .toSafeBitmapOrNull(128, 128)?.detachedPreview()
+internal fun prepareEditorRecoveryPreview(
+    draft: PreparedEditorRecovery,
+    loadIcon: (ApplicationIconSource) -> android.graphics.drawable.Drawable? = {
+        (it as? ApplicationIconSource.Inline)?.drawable
+    }
+): EditorRecoveryPreview? = try {
+    val original = loadIcon(draft.baseline.application.iconSource)
+    val applicationIcon = original?.let { (it.constantState?.newDrawable()?.mutate() ?: it)
+        .toSafeBitmapOrNull(128, 128)?.detachedPreview() }
     val renderedSlot = draft.bound.capture.snapshot.rendered
     val savedRender = renderedSlot?.let { draft.bound.artwork.getValue(it).previewBitmap(512).detachedPreview() }
     EditorRecoveryPreview(applicationIcon, savedRender)
