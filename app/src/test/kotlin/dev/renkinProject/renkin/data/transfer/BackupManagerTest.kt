@@ -561,6 +561,24 @@ class BackupManagerTest {
         assertTrue(prepared.staged.entries.values.none { it.exists() })
     }
 
+    @Test fun preparedInspectionNeverSubstitutesEmptyArtworkAtCommit() = runBlocking {
+        val pack = RenkinPackRepository(tgtPackDb)
+        pack.replaceEverything(listOf(Profile(id = 1, name = "Before")), emptyList())
+        val incoming = DbApplication("app.incoming", "Main", false, false, "rendered".repeat(10_000),
+            baseDrawable = "base".repeat(10_000), isCustomIcon = true, sourceUrl = "https://example.org/icon")
+        val data = minimalData().let { it.copy(profiles = listOf(it.profiles.single().copy(icons = listOf(incoming)))) }
+        val manager = BackupManager(context, pack, WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
+        val source = context.cacheDir.resolve("prepared-artwork.renkin").apply { writeBytes(archive(data)) }
+        val prepared = manager.prepareImport(Uri.fromFile(source))
+        assertEquals(1, prepared.inspection.backup?.iconCount)
+        assertTrue(pack.getAll(1).isEmpty())
+        assertTrue(source.delete())
+        manager.importPrepared(prepared)
+        assertEquals(incoming, pack.getAll(1).single())
+        assertTrue(prepared.closed)
+        assertTrue(prepared.staged.entries.values.none { it.exists() })
+    }
+
     @Test fun discardedImport_releasesFilesAndCannotBeCommitted() = runBlocking {
         val manager = BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
         val source = context.cacheDir.resolve("discard.renkin").apply { writeBytes(archive(minimalData())) }

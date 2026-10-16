@@ -85,7 +85,9 @@ At the maximum-PSS samples, `.apk mmap` alone accounted for approximately 318.2 
 PSS, respectively, alongside native and Java heaps. These peaks are not all bitmap memory.
 The exact mapped files were not traced. The process returned near its starting memory; this
 does not prove that every allocation was freed or that there is no leak. Maxima sampled roughly
-once per second are lower bounds, not true peaks. No GC was forced during measurements.
+once per second are lower bounds, not true peaks. The harness issued no separate GC command,
+but ordinary meminfo probes request GC inside Android. These are collection-perturbed observations;
+the later [PERF6a control](performance-backup-memory.md) documents this measurement effect.
 
 ## Verification and next boundary
 
