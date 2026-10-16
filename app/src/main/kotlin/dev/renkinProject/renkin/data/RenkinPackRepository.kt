@@ -137,8 +137,8 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         }
     }
 
-    internal suspend fun exportSourcePacks(profileId: Long? = null): Set<String> = access {
-        dao.exportSourcePacks(profileId).toSet()
+    internal suspend fun exportSourcePacks(profileId: Long? = null, excludedProfileId: Long? = null): Set<String> = access {
+        dao.exportSourcePacks(profileId, excludedProfileId).toSet()
     }
 
     internal suspend fun modifierInputDocuments(): List<String> = access { dao.modifierInputDocuments() }

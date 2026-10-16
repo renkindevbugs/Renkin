@@ -264,8 +264,10 @@ interface RenkinPackDao {
     @Query("SELECT profileId, packageName, activityName FROM DbApplication ORDER BY rowid")
     fun exportKeys(): List<IconExportKey>
 
-    @Query("SELECT DISTINCT sourcePackName FROM DbApplication WHERE sourcePackName != '' AND (:profileId IS NULL OR profileId = :profileId)")
-    fun exportSourcePacks(profileId: Long?): List<String>
+    @Query("SELECT DISTINCT sourcePackName FROM DbApplication WHERE sourcePackName != '' " +
+        "AND (:profileId IS NULL OR profileId = :profileId) " +
+        "AND (:excludedProfileId IS NULL OR profileId != :excludedProfileId)")
+    fun exportSourcePacks(profileId: Long?, excludedProfileId: Long?): List<String>
 
     @Query("SELECT $OVERSIZED_ARTWORK_COLUMNS FROM DbApplication WHERE $OVERSIZED_ARTWORK_FILTER AND profileId = :profileId")
     fun oversizedArtwork(profileId: Long): List<OversizedIconArtwork>

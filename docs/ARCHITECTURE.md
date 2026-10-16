@@ -1694,6 +1694,12 @@ as rows pass; sharing removes hidden input and preserves appfilter fallback. The
 gate freezes all supported writers until the immutable ZIP is complete; its transfer remains
 outside locks. Metadata and the largest row remain memory costs. Room/backup/recovery stay 21/4/3.
 
+[PERF6d](performance-backup-warning-metadata.md) removes artwork reads from the saved-profile IPS
+warning preflight before the picker opens. The source-pack projection filters the requested or
+excluded profile in SQL, selecting distinct nonempty names only; the existing case-insensitive
+Kotlin classifier remains authoritative. MainViewModel still checks live active-profile sources
+so unsaved selections participate. Warning behavior/preferences and actual export remain unchanged.
+
 [PERF6b](performance-backup-inspection.md) adds a strict inspection projection: rendered/base
 values are consumed field by field, while existing metadata decoding/validation and arbitrary
 field order are preserved. inspectFile/prepareImport retain no full artwork in their model.
