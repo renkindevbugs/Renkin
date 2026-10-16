@@ -132,6 +132,16 @@ class BackupMemoryDeviceTest {
     }
 
     @Test
+    fun measureRestorePreparationBoundary() = withReadyApp {
+        BackupRestoreMemoryProbe(context, this).run()
+    }
+
+    @Test
+    fun measureRestorePreparationWithLargestActive() = withReadyApp(activateLargest = true) {
+        BackupRestoreMemoryProbe(context, this).run()
+    }
+
+    @Test
     fun measureIconPackStudioPreflight() = withReadyApp { manager ->
         val largest = footprint().first
         val active = context.dataStore.getPreferencesAfterPendingWrites()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
@@ -326,7 +336,7 @@ class BackupMemoryDeviceTest {
 
     private fun heapUsed() = runtime.totalMemory() - runtime.freeMemory()
 
-    private suspend fun <T> measured(phase: String, operation: suspend () -> T): T = coroutineScope {
+    internal suspend fun <T> measured(phase: String, operation: suspend () -> T): T = coroutineScope {
         val started = SystemClock.elapsedRealtimeNanos()
         val before = heapUsed()
         val peak = AtomicLong(before)
@@ -356,7 +366,7 @@ class BackupMemoryDeviceTest {
         }
     }
 
-    private fun emit(value: JSONObject) {
+    internal fun emit(value: JSONObject) {
         value.put("elapsedRealtimeMs", SystemClock.elapsedRealtime())
         instrumentation.sendStatus(0, Bundle().apply { putString("backupMemory", value.toString()) })
     }

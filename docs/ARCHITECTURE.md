@@ -1681,8 +1681,8 @@ candidate counts at info level, including cascaded removals, without logging pay
 Production reads/writes `data.json` through `JsonReader`/`JsonWriter` rather than allocating
 a complete JSON string and a second UTF-8 byte array. Identical `drawable`/`baseDrawable`
 strings share a reference during decoding. Full import models and JSON trees still retain icon
-payloads; very large imports can still exceed a device's heap. A future format with separate
-icon entries and a streaming storage commit remains necessary for bounded import payload memory.
+payloads; very large imports can still exceed a device's heap. Disk-spooled incoming rows and a
+streaming storage commit remain future work for bounded import payload memory.
 
 [PERF6c](performance-backup-export.md) replaces portable export's all-artwork model with metadata
 and a scoped repository row reader. Component keys and oversized-value lengths are captured in one
@@ -1699,6 +1699,13 @@ warning preflight before the picker opens. The source-pack projection filters th
 excluded profile in SQL, selecting distinct nonempty names only; the existing case-insensitive
 Kotlin classifier remains authoritative. MainViewModel still checks live active-profile sources
 so unsaved selections participate. Warning behavior/preferences and actual export remain unchanged.
+
+[PERF6e](performance-backup-restore-memory.md) measures full decoding, recovery capture and file
+preparation on disk-backed clones, stopping before the durable commit callback executes its operation.
+Draft/journal stores and file paths are scoped; the shared process DataStore is only read. This
+diagnostic checkpoint does not execute SQL replacement, preferences restore or rollback. The design
+keeps archive formats 1–4 and existing cross-store recovery while proposing validated row staging
+and a transactional row consumer; production import and Room remain unchanged.
 
 [PERF6b](performance-backup-inspection.md) adds a strict inspection projection: rendered/base
 values are consumed field by field, while existing metadata decoding/validation and arbitrary
