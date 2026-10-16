@@ -42,7 +42,6 @@ import dev.renkinProject.renkin.data.watch.SuggestionImport
 import dev.renkinProject.renkin.data.watch.WatchRepository
 import dev.renkinProject.renkin.data.watch.WatchRuleImport
 import dev.renkinProject.renkin.dataStore
-import dev.renkinProject.renkin.icon.creator.StoredIconModifierInput
 import dev.renkinProject.renkin.packages.ApplicationManager
 import dev.renkinProject.renkin.packages.IconPackCatalog
 import dev.renkinProject.renkin.service.WatchChecker
@@ -309,7 +308,7 @@ class BackupManager(
         }.toMutableMap()
         val availableInputs = IconModifierInputStore.directory(context).listFiles().orEmpty()
             .filter { it.isFile && IconModifierInputStore.validName(it.name) }.associateBy { it.name }
-        val inputs = ModifierInputPreparation(availableInputs)
+        val inputs = BackupModifierInputPreparation(availableInputs)
         val metadata = BackupValidator.prepare(data, ImportKind.BACKUP, BackupCodec.FORMAT_VERSION)
         exportArchive(KIND_BACKUP, metadata, files) { writer ->
             packRepo.readExportIcons { rows ->
@@ -622,32 +621,11 @@ class BackupManager(
         data: BackupData,
         available: Map<String, File>
     ): Pair<BackupData, Map<String, File>> {
-        val inputs = ModifierInputPreparation(available)
+        val inputs = BackupModifierInputPreparation(available)
         val profiles = data.profiles.map { profile ->
             profile.copy(icons = profile.icons.map { inputs.prepare(it) })
         }
         return data.copy(profiles = profiles) to inputs.files
-    }
-
-    private class ModifierInputPreparation(private val available: Map<String, File>) {
-        private val verified = mutableMapOf<String, Boolean>()
-        val files = mutableMapOf<String, File>()
-
-        suspend fun prepare(icon: DbApplication): DbApplication {
-            val artwork = StoredIconModifierInput.artwork(icon.modifierInput)
-            val name = artwork?.let { "${it.hash}.input" }
-            val source = name?.let(available::get)
-            val valid = if (artwork == null || name == null || source == null) false else {
-                verified[name] ?: IconModifierInputStore.validFile(source, artwork.hash).also { verified[name] = it }
-            }
-            return if (valid) {
-                files[requireNotNull(name)] = requireNotNull(source)
-                icon
-            } else {
-                if (icon.modifierInput.isNotEmpty()) Log.info("BackupManager", "Discarded missing or invalid optional modifier input")
-                icon.copy(modifierInput = "")
-            }
-        }
     }
 
     private class ArchiveContents(

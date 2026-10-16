@@ -262,6 +262,43 @@ object BackupCodec {
             .put("modifierRecipe", StoredIconModifierRecipe.normalize(icon.modifierRecipe).orEmpty())
             .put("modifierInput", StoredIconModifierInput.normalize(icon.modifierInput).orEmpty())
 
+    internal fun decodeIcon(icon: JSONObject, profileId: Long): DbApplication = DbApplication(
+        packageName = icon.getString("packageName"),
+        activityName = icon.getString("activityName"),
+        isAdaptiveIcon = icon.getBoolean("isAdaptiveIcon"),
+        isXml = icon.getBoolean("isXml"),
+        drawable = icon.getString("drawable"),
+        calendarEnabled = icon.optBoolean("calendarEnabled"),
+        calendarPrefix = icon.optString("calendarPrefix"),
+        calendarPackName = icon.optString("calendarPackName"),
+        sourcePackName = icon.optString("sourcePackName"),
+        profileId = profileId,
+        sourceDrawableName = icon.optString("sourceDrawableName"),
+        // The separate legacy flag below protects pre-classification files.
+        isCustomIcon = icon.optBoolean("isCustomIcon"),
+        isLegacyIcon = if (icon.has("isLegacyIcon")) {
+            icon.optBoolean("isLegacyIcon")
+        } else {
+            // Files created before classification cannot be inferred safely.
+            !icon.has("isCustomIcon")
+        },
+        baseDrawable = icon.optString("baseDrawable", icon.getString("drawable")),
+        baseIsAdaptiveIcon = if (icon.has("baseIsAdaptiveIcon")) {
+            icon.optBoolean("baseIsAdaptiveIcon")
+        } else icon.getBoolean("isAdaptiveIcon"),
+        baseIsXml = if (icon.has("baseIsXml")) {
+            icon.optBoolean("baseIsXml")
+        } else icon.getBoolean("isXml"),
+        // Absent in pre-v13 files — no online attribution to carry.
+        sourceUrl = icon.optString("sourceUrl"),
+        // Absent in pre-v14 files — safe default: not fallback-styled.
+        isFallbackIcon = icon.optBoolean("isFallbackIcon"),
+        // Optional metadata must never prevent restoration of valid artwork.
+        modifierRecipe = StoredIconModifierRecipe.normalize(icon.optString("modifierRecipe")).orEmpty(),
+        modifierInput = StoredIconModifierInput.normalize(icon.optString("modifierInput")).orEmpty()
+    )
+
+
     /** Archive callers pass the manifest version; malformed input is surfaced as a failed import. */
     fun decode(json: String, formatVersion: Int): BackupData = decodeJson(parseBackupJson(json), formatVersion)
 
@@ -310,43 +347,7 @@ object BackupCodec {
             val iconsJson = p.getJSONArray("icons")
             for (j in 0 until iconsJson.length()) {
                 val icon = iconsJson.getJSONObject(j)
-                icons.add(
-                    DbApplication(
-                        packageName = icon.getString("packageName"),
-                        activityName = icon.getString("activityName"),
-                        isAdaptiveIcon = icon.getBoolean("isAdaptiveIcon"),
-                        isXml = icon.getBoolean("isXml"),
-                        drawable = icon.getString("drawable"),
-                        calendarEnabled = icon.optBoolean("calendarEnabled"),
-                        calendarPrefix = icon.optString("calendarPrefix"),
-                        calendarPackName = icon.optString("calendarPackName"),
-                        sourcePackName = icon.optString("sourcePackName"),
-                        profileId = profileId,
-                        sourceDrawableName = icon.optString("sourceDrawableName"),
-                        // The separate legacy flag below protects pre-classification files.
-                        isCustomIcon = icon.optBoolean("isCustomIcon"),
-                        isLegacyIcon = if (icon.has("isLegacyIcon")) {
-                            icon.optBoolean("isLegacyIcon")
-                        } else {
-                            // Files created before classification cannot be inferred safely.
-                            !icon.has("isCustomIcon")
-                        },
-                        baseDrawable = icon.optString("baseDrawable", icon.getString("drawable")),
-                        baseIsAdaptiveIcon = if (icon.has("baseIsAdaptiveIcon")) {
-                            icon.optBoolean("baseIsAdaptiveIcon")
-                        } else icon.getBoolean("isAdaptiveIcon"),
-                        baseIsXml = if (icon.has("baseIsXml")) {
-                            icon.optBoolean("baseIsXml")
-                        } else icon.getBoolean("isXml"),
-                        // Absent in pre-v13 files — no online attribution to carry.
-                        sourceUrl = icon.optString("sourceUrl"),
-                        // Absent in pre-v14 files — safe default: not fallback-styled.
-                        isFallbackIcon = icon.optBoolean("isFallbackIcon"),
-                        // Optional metadata must never prevent restoration of valid artwork.
-                        modifierRecipe = StoredIconModifierRecipe.normalize(icon.optString("modifierRecipe")).orEmpty(),
-                        modifierInput = StoredIconModifierInput.normalize(icon.optString("modifierInput")).orEmpty()
-                    )
-                )
+                icons.add(decodeIcon(icon, profileId))
             }
 
             val rules = mutableListOf<BackupWatchRule>()

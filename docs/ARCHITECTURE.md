@@ -1707,6 +1707,13 @@ diagnostic checkpoint does not execute SQL replacement, preferences restore or r
 keeps archive formats 1–4 and existing cross-store recovery while proposing validated row staging
 and a transactional row consumer; production import and Room remain unchanged.
 
+[PERF6f](performance-backup-import-staging.md) adds a validated disk-backed data model with one
+row file per nonempty profile and no artwork rows in its published metadata. It reuses the strict
+parser, per-icon codec, whole-document validator and optional-file verification. Parsing positions
+preserve arbitrary field order; final ids are assigned during replay. Scope ownership covers
+failure/cancellation and startup cleanup. The model is verified independently and is not yet wired
+to the live import transaction; actual recovery/commit and the complete incoming DTO remain unchanged.
+
 [PERF6b](performance-backup-inspection.md) adds a strict inspection projection: rendered/base
 values are consumed field by field, while existing metadata decoding/validation and arbitrary
 field order are preserved. inspectFile/prepareImport retain no full artwork in their model.

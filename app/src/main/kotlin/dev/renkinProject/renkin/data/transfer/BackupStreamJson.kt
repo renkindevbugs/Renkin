@@ -20,7 +20,37 @@ internal suspend fun readBackupData(input: Reader, formatVersion: Int): BackupDa
 internal suspend fun readBackupInspectionData(input: Reader, formatVersion: Int): BackupData =
     readBackupDocument(input, formatVersion, BackupJsonNode.ROOT)
 
-private suspend fun readBackupDocument(input: Reader, formatVersion: Int, node: BackupJsonNode): BackupData {
+internal interface BackupJsonRowSink {
+    suspend fun icon(profileIndex: Int, value: JSONObject): JSONObject
+    fun endProfile(profileIndex: Int)
+}
+
+internal suspend fun readBackupStagingMetadata(input: Reader, formatVersion: Int, rows: BackupJsonRowSink): BackupData =
+    readBackupDocument(input, formatVersion, BackupJsonNode.ROOT, rows)
+
+private suspend fun readBackupDocument(
+    input: Reader, formatVersion: Int, node: BackupJsonNode, rows: BackupJsonRowSink? = null
+): BackupData = withBackupJsonReader(input) { reader ->
+    val root = readJsonValue(reader, 0, node, rows = rows) as? JSONObject ?: throw IOException("Backup data must be an object")
+    if (reader.peek() != JsonToken.END_DOCUMENT) throw IOException("Trailing backup JSON content")
+    BackupCodec.decodeJson(root, formatVersion)
+}
+
+internal suspend fun readBackupIconRows(input: Reader, profileId: Long, consume: suspend (DbApplication) -> Unit) =
+    withBackupJsonReader(input) { reader ->
+        reader.beginArray()
+        while (reader.hasNext()) {
+            val value = readJsonValue(reader, 1) as? JSONObject ?: throw IOException("Invalid staged icon")
+            consume(BackupCodec.decodeIcon(value, profileId))
+        }
+        reader.endArray()
+        if (reader.peek() != JsonToken.END_DOCUMENT) throw IOException("Trailing staged icon content")
+    }
+
+internal suspend fun writeBackupIcon(writer: JsonWriter, icon: DbApplication) =
+    writeJsonValue(writer, BackupCodec.encodeIcon(icon))
+
+private suspend fun <T> withBackupJsonReader(input: Reader, operation: suspend (JsonReader) -> T): T {
     val context = currentCoroutineContext()
     val cancellable = object : Reader() {
         override fun read(buffer: CharArray, offset: Int, count: Int): Int {
@@ -29,15 +59,12 @@ private suspend fun readBackupDocument(input: Reader, formatVersion: Int, node: 
         }
         override fun close() = input.close()
     }
-    return JsonReader(cancellable).use { reader ->
-        val root = readJsonValue(reader, 0, node) as? JSONObject ?: throw IOException("Backup data must be an object")
-        if (reader.peek() != JsonToken.END_DOCUMENT) throw IOException("Trailing backup JSON content")
-        BackupCodec.decodeJson(root, formatVersion)
-    }
+    return JsonReader(cancellable).use { operation(it) }
 }
 
 private suspend fun readJsonValue(
-    reader: JsonReader, depth: Int, node: BackupJsonNode = BackupJsonNode.FULL, retain: Boolean = true
+    reader: JsonReader, depth: Int, node: BackupJsonNode = BackupJsonNode.FULL, retain: Boolean = true,
+    rows: BackupJsonRowSink? = null, profileIndex: Int = 0
 ): Any {
     currentCoroutineContext().ensureActive()
     if (depth > 64) throw IOException("Backup JSON is nested too deeply")
@@ -52,10 +79,10 @@ private suspend fun readJsonValue(
                     throw IOException("Duplicate backup JSON field")
                 }
                 val keep = retain && node.retains(name)
-                val child = readJsonValue(reader, depth + 1, node.child(name), keep)
+                val child = readJsonValue(reader, depth + 1, node.child(name), keep, rows, profileIndex)
                 if (keep) {
                     value!!.put(name, child)
-                    if (node == BackupJsonNode.ICON && (name == "drawable" || name == "baseDrawable")) {
+                    if (rows == null && node == BackupJsonNode.ICON && (name == "drawable" || name == "baseDrawable")) {
                         // Preserve the required field/coercion check, then drop this one value.
                         if (name == "drawable") value.getString(name)
                         value.put(name, "")
@@ -65,18 +92,23 @@ private suspend fun readJsonValue(
             reader.endObject()
             // Most saved icons have an unchanged base. Share their identical strings while
             // reading each icon instead of keeping both payloads until the whole JSON is parsed.
-            value?.also {
+            value?.let {
                 val drawable = it.opt("drawable")
                 if (drawable is String && drawable == it.opt("baseDrawable")) it.put("baseDrawable", drawable)
                 node.finish(it)
+                if (node == BackupJsonNode.PROFILE) rows?.endProfile(profileIndex)
+                if (node == BackupJsonNode.ICON && rows != null) rows.icon(profileIndex, it) else it
             } ?: JSONObject.NULL
         }
         JsonToken.BEGIN_ARRAY -> {
             reader.beginArray()
             val value = if (retain) JSONArray() else null
+            var index = 0
             while (reader.hasNext()) {
-                val child = readJsonValue(reader, depth + 1, node.element(), retain)
+                val child = readJsonValue(reader, depth + 1, node.element(), retain, rows,
+                    if (node == BackupJsonNode.PROFILES) index else profileIndex)
                 value?.put(child)
+                index++
             }
             reader.endArray()
             value ?: JSONObject.NULL
