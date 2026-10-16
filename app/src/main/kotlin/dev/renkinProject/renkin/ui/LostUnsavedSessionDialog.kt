@@ -82,7 +82,7 @@ internal fun RestoreLostIconsDialog(
         )
         return
     }
-    val restorable = pluralStringResource(R.plurals.lostUnsavedEditedCount, lost.restorableCount, lost.restorableCount)
+    val restorable = lost.restorableCount
     val refreshed = lost.refreshedCount
     val dropped = lost.offer?.droppedCount ?: 0
     RenkinAlertDialog(
@@ -91,7 +91,10 @@ internal fun RestoreLostIconsDialog(
         title = { Text(stringResource(R.string.lostIconsRestoreTitle)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(boldStringResource(R.string.lostIconsRestoreText, restorable, profileName))
+                Text(
+                    pluralStringResource(R.plurals.lostIconsRestoreText, restorable, restorable, profileName)
+                        .withBoldMarkers()
+                )
                 if (dropped > 0) {
                     Text(stringResource(
                         R.string.lostIconsDroppedNote,
@@ -100,10 +103,7 @@ internal fun RestoreLostIconsDialog(
                 }
                 if (refreshed > 0) {
                     Text(
-                        stringResource(
-                            R.string.lostIconsRefreshedNote,
-                            pluralStringResource(R.plurals.lostUnsavedRefreshedCount, refreshed, refreshed)
-                        ),
+                        pluralStringResource(R.plurals.lostIconsRefreshedNote, refreshed, refreshed),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }

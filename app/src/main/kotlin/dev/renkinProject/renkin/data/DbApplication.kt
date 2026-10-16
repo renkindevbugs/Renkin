@@ -112,6 +112,9 @@ interface BuiltIconDao {
     @Query("DELETE FROM BuiltIcon WHERE profileId = :profileId")
     fun deleteForProfile(profileId: Long)
 
+    @Query("DELETE FROM BuiltIcon WHERE profileId NOT IN (SELECT id FROM Profile)")
+    fun deleteForMissingProfiles()
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     fun insertAll(rows: List<BuiltIcon>)
 }

@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.preferencesOf
 import androidx.room.Room
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
+import dev.renkinProject.renkin.data.BuiltIcon
 import dev.renkinProject.renkin.data.BuiltPrimaryIconPackKey
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
@@ -160,6 +161,38 @@ class ProfileManagerTest {
 
         assertEquals(null, repo.profile(profileId))
         assertEquals(emptyList<DbApplication>(), repo.getAll(profileId))
+    }
+
+    @Test
+    fun deleteProfileRemovesItsBuildRecordAndEarlierOrphans() = runBlocking {
+        repo.ensureDefaultProfile()
+        val kept = repo.createProfile(Profile(name = "Kept"))
+        val deleted = repo.createProfile(Profile(name = "Disposable"))
+        val orphan = deleted + 100
+        listOf(DEFAULT_PROFILE_ID, kept, deleted, orphan).forEach { id ->
+            repo.replaceBuiltIcons(id, listOf(BuiltIcon(id, "com.example", "com.example.Main", "hash$id")))
+        }
+
+        repo.deleteProfile(deleted)
+
+        assertEquals(emptyList<BuiltIcon>(), repo.builtIcons(deleted))
+        assertEquals(emptyList<BuiltIcon>(), repo.builtIcons(orphan))
+        assertEquals(listOf("hash$kept"), repo.builtIcons(kept).map { it.iconHash })
+        assertEquals(listOf("hash$DEFAULT_PROFILE_ID"), repo.builtIcons(DEFAULT_PROFILE_ID).map { it.iconHash })
+    }
+
+    @Test
+    fun backupImportDropsBuildRecordsOfProfilesItDoesNotContain() = runBlocking {
+        repo.ensureDefaultProfile()
+        val gone = repo.createProfile(Profile(name = "Local only"))
+        listOf(DEFAULT_PROFILE_ID, gone).forEach { id ->
+            repo.replaceBuiltIcons(id, listOf(BuiltIcon(id, "com.example", "com.example.Main", "hash$id")))
+        }
+
+        repo.replaceEverything(listOf(Profile(id = DEFAULT_PROFILE_ID, name = "Restored")), emptyList())
+
+        assertEquals(emptyList<BuiltIcon>(), repo.builtIcons(gone))
+        assertEquals(listOf("hash$DEFAULT_PROFILE_ID"), repo.builtIcons(DEFAULT_PROFILE_ID).map { it.iconHash })
     }
 
     @Test
