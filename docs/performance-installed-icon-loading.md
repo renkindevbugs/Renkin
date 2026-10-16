@@ -121,7 +121,9 @@ icon counts after each completed aggregate arrives:
 The native/bitmap maxima are independent samples, not components to add to the maximum PSS.
 Instrumentation adds significant runtime/DEX cost, so its settled PSS cannot be compared directly
 with the uninstrumented cold group. Meminfo probes cost 94–344 ms, followed by 300 ms pauses;
-observed maxima are lower bounds. Readiness is not diff-baseline completion. No GC was forced.
+observed maxima are lower bounds. Readiness is not diff-baseline completion. The harness issued
+no separate GC command, but ordinary meminfo probes request GC inside Android. See the later
+[PERF6a control](performance-backup-memory.md); these historical results are not unsampled peaks.
 These reloads also rediscover icon packs and decode saved rows, so their peaks cannot be assigned
 solely to original icons. Exact mapped APK files and native allocation stacks were not traced.
 

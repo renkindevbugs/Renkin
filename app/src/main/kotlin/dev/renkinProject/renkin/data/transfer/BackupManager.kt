@@ -440,7 +440,7 @@ class BackupManager(
     }
 
     suspend fun inspectFile(open: () -> InputStream): ImportInspection = runOperation {
-        readArchive(open).use(::inspectArchive)
+        readArchive(open, inspectionOnly = true).use(::inspectArchive)
     }
 
     class PreparedImport internal constructor(
@@ -454,9 +454,9 @@ class BackupManager(
         var prepared: PreparedImport? = null
         try {
             return runOperation {
-                val archive = readArchive {
+                val archive = readArchive(inspectionOnly = true, open = {
                     context.contentResolver.openInputStream(uri) ?: throw IOException("Cannot open $uri for reading")
-                }
+                })
                 try {
                     PreparedImport(archive.staged, inspectArchive(archive)).also { prepared = it }
                 } catch (error: Throwable) {
@@ -559,6 +559,7 @@ class BackupManager(
         archive: ArchiveContents,
         commit: suspend (suspend () -> ImportResult) -> ImportResult
     ): ImportResult {
+        check(!archive.inspectionOnly) { "Inspection metadata cannot be imported" }
         currentCoroutineContext().ensureActive()
         return when (kindOf(archive.manifest)) {
             ImportKind.BACKUP -> restoreBackup(archive, commit)
@@ -573,11 +574,11 @@ class BackupManager(
         }
     }
 
-    private suspend fun readArchive(open: () -> InputStream): ArchiveContents {
-        return readContents(StagedBackupArchive.read(stagingRoot(), open))
+    private suspend fun readArchive(open: () -> InputStream, inspectionOnly: Boolean = false): ArchiveContents {
+        return readContents(StagedBackupArchive.read(stagingRoot(), open), inspectionOnly)
     }
 
-    private suspend fun readContents(staged: StagedBackupArchive): ArchiveContents {
+    private suspend fun readContents(staged: StagedBackupArchive, inspectionOnly: Boolean = false): ArchiveContents {
         try {
             val manifest = parseBackupJson(staged.entries[MANIFEST_ENTRY]?.readText(Charsets.UTF_8)
                 ?: throw IOException("Not a Renkin file (no manifest)"))
@@ -587,7 +588,9 @@ class BackupManager(
             val kind = kindOf(manifest)
             val dataFile = staged.entries[DATA_ENTRY] ?: throw IOException("File has no data entry")
             val parsedData = BackupValidator.prepare(
-                dataFile.reader(Charsets.UTF_8).use { readBackupData(it, format) }, kind, format
+                dataFile.reader(Charsets.UTF_8).use {
+                    if (inspectionOnly) readBackupInspectionData(it, format) else readBackupData(it, format)
+                }, kind, format
             )
             val uploads = staged.entries.filterKeys { name -> name.startsWith("$UPLOADS_DIR/") }.map { (name, file) ->
                 val filename = name.removePrefix("$UPLOADS_DIR/")
@@ -607,7 +610,7 @@ class BackupManager(
                 throw IOException("Shared profile contains device files")
             }
             val (data, inputFiles) = prepareModifierInputs(parsedData, if (kind == ImportKind.BACKUP) inputs else emptyMap())
-            return ArchiveContents(staged, manifest, data, uploads, keystore, password, inputFiles)
+            return ArchiveContents(staged, manifest, data, uploads, keystore, password, inputFiles, inspectionOnly)
         } catch (error: Throwable) {
             if (error is OutOfMemoryError) Log.error("BackupManager", "Out of memory decoding; dataBytes=${staged.entries[DATA_ENTRY]?.length()}", error)
             staged.close()
@@ -648,7 +651,8 @@ class BackupManager(
         val uploadedImages: Map<String, File>,
         val keystore: File?,
         val password: File?,
-        val modifierInputs: Map<String, File>
+        val modifierInputs: Map<String, File>,
+        val inspectionOnly: Boolean
     ) : Closeable {
         val fingerprint: String get() = staged.fingerprint
         override fun close() = staged.close()

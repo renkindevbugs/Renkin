@@ -80,7 +80,10 @@ after `am start -W` returned:
 PSS, native/Java allocation and malloced-bitmap memory are separate accounting domains. Do not
 add them or assign every byte of the PSS difference to original icons. Initial display is not
 full asynchronous readiness. These small debug groups establish the observed memory difference,
-not a startup-speed improvement or optimized-release result. No GC was forced.
+not a startup-speed improvement or optimized-release result. The harness issued no separate GC
+command, but ordinary meminfo probes request GC inside Android. The later
+[PERF6a control](performance-backup-memory.md) confirms that effect. These historical observations
+remain valid for their sampled setup; they do not establish natural-collection memory peaks.
 
 Both simultaneously retained catalogs contained 219 descriptors and **zero resident source
 Drawables/Bitmaps**. The inventory explicitly reports `retained-source-drawables`; zero does not

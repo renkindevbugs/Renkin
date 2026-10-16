@@ -11,7 +11,14 @@ import java.io.IOException
 import java.io.Reader
 import java.io.Writer
 
-internal suspend fun readBackupData(input: Reader, formatVersion: Int): BackupData {
+internal suspend fun readBackupData(input: Reader, formatVersion: Int): BackupData =
+    readBackupDocument(input, formatVersion, BackupJsonNode.FULL)
+
+/** Metadata for inspection only; never use this model for an import or export. */
+internal suspend fun readBackupInspectionData(input: Reader, formatVersion: Int): BackupData =
+    readBackupDocument(input, formatVersion, BackupJsonNode.ROOT)
+
+private suspend fun readBackupDocument(input: Reader, formatVersion: Int, node: BackupJsonNode): BackupData {
     val context = currentCoroutineContext()
     val cancellable = object : Reader() {
         override fun read(buffer: CharArray, offset: Int, count: Int): Int {
@@ -21,37 +28,56 @@ internal suspend fun readBackupData(input: Reader, formatVersion: Int): BackupDa
         override fun close() = input.close()
     }
     return JsonReader(cancellable).use { reader ->
-        val root = readJsonValue(reader, 0) as? JSONObject ?: throw IOException("Backup data must be an object")
+        val root = readJsonValue(reader, 0, node) as? JSONObject ?: throw IOException("Backup data must be an object")
         if (reader.peek() != JsonToken.END_DOCUMENT) throw IOException("Trailing backup JSON content")
         BackupCodec.decodeJson(root, formatVersion)
     }
 }
 
-private suspend fun readJsonValue(reader: JsonReader, depth: Int): Any {
+private suspend fun readJsonValue(
+    reader: JsonReader, depth: Int, node: BackupJsonNode = BackupJsonNode.FULL, retain: Boolean = true
+): Any {
     currentCoroutineContext().ensureActive()
     if (depth > 64) throw IOException("Backup JSON is nested too deeply")
     return when (reader.peek()) {
         JsonToken.BEGIN_OBJECT -> {
             reader.beginObject()
-            val value = JSONObject()
+            val value = if (retain) JSONObject() else null
+            val names = if (!retain || node != BackupJsonNode.FULL) mutableSetOf<String>() else null
             while (reader.hasNext()) {
                 val name = reader.nextName()
-                if (value.has(name)) throw IOException("Duplicate backup JSON field")
-                value.put(name, readJsonValue(reader, depth + 1))
+                if (names?.add(name) == false || (names == null && value!!.has(name))) {
+                    throw IOException("Duplicate backup JSON field")
+                }
+                val keep = retain && node.retains(name)
+                val child = readJsonValue(reader, depth + 1, node.child(name), keep)
+                if (keep) {
+                    value!!.put(name, child)
+                    if (node == BackupJsonNode.ICON && (name == "drawable" || name == "baseDrawable")) {
+                        // Preserve the required field/coercion check, then drop this one value.
+                        if (name == "drawable") value.getString(name)
+                        value.put(name, "")
+                    }
+                }
             }
             reader.endObject()
             // Most saved icons have an unchanged base. Share their identical strings while
             // reading each icon instead of keeping both payloads until the whole JSON is parsed.
-            val drawable = value.opt("drawable")
-            if (drawable is String && drawable == value.opt("baseDrawable")) value.put("baseDrawable", drawable)
-            value
+            value?.also {
+                val drawable = it.opt("drawable")
+                if (drawable is String && drawable == it.opt("baseDrawable")) it.put("baseDrawable", drawable)
+                node.finish(it)
+            } ?: JSONObject.NULL
         }
         JsonToken.BEGIN_ARRAY -> {
             reader.beginArray()
-            val value = JSONArray()
-            while (reader.hasNext()) value.put(readJsonValue(reader, depth + 1))
+            val value = if (retain) JSONArray() else null
+            while (reader.hasNext()) {
+                val child = readJsonValue(reader, depth + 1, node.element(), retain)
+                value?.put(child)
+            }
             reader.endArray()
-            value
+            value ?: JSONObject.NULL
         }
         JsonToken.STRING -> reader.nextString()
         JsonToken.BOOLEAN -> reader.nextBoolean()

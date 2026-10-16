@@ -1662,9 +1662,23 @@ candidate counts at info level, including cascaded removals, without logging pay
 
 Production reads/writes `data.json` through `JsonReader`/`JsonWriter` rather than allocating
 a complete JSON string and a second UTF-8 byte array. Identical `drawable`/`baseDrawable`
-strings share a reference during decoding. Models and a JSON tree still retain the icon
-payloads; very large imports can still exceed a device's heap. A future format with separate
+strings share a reference during decoding. Full import/export models and JSON trees still retain
+icon payloads; very large imports can still exceed a device's heap. A future format with separate
 icon entries and a streaming storage commit remains necessary for bounded payload memory.
+
+[PERF6b](performance-backup-inspection.md) adds a strict inspection projection: rendered/base
+values are consumed field by field, while existing metadata decoding/validation and arbitrary
+field order are preserved. inspectFile/prepareImport retain no full artwork in their model.
+Inspection-only archives cannot reach applyArchive; actual import rereads complete staged bytes.
+Unknown fields still receive duplicate/depth/number/cancellation checks. Metadata and individual
+large parser values remain possible memory costs; this is not a bounded full-import commit.
+
+[PERF6a](performance-backup-memory.md) measures current profile/full exports and read-only
+inspection separately. The export tree shares source payload strings; retaining all row models
+and parsing complete incoming artwork remain the larger ownership boundaries. Ordinary meminfo
+requests GC, so the primary heap runs omit it and separate PSS probes use the calibrated local
+mode. Streaming inspection is implemented in the accepted PERF6b checkpoint; row-wise export and
+bounded import commit remain distinct next steps. No backup-format or Room change is included.
 
 Both export and import cap archives at 10,000 entries, 64 KiB for the manifest, 512 MiB for
 `data.json`, 32 MiB per modifier-input file, 64 MiB per other file and 1 GiB total uncompressed.
