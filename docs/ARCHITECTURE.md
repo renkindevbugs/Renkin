@@ -1680,9 +1680,19 @@ candidate counts at info level, including cascaded removals, without logging pay
 
 Production reads/writes `data.json` through `JsonReader`/`JsonWriter` rather than allocating
 a complete JSON string and a second UTF-8 byte array. Identical `drawable`/`baseDrawable`
-strings share a reference during decoding. Full import/export models and JSON trees still retain
-icon payloads; very large imports can still exceed a device's heap. A future format with separate
-icon entries and a streaming storage commit remains necessary for bounded payload memory.
+strings share a reference during decoding. Full import models and JSON trees still retain icon
+payloads; very large imports can still exceed a device's heap. A future format with separate
+icon entries and a streaming storage commit remains necessary for bounded import payload memory.
+
+[PERF6c](performance-backup-export.md) replaces portable export's all-artwork model with metadata
+and a scoped repository row reader. Component keys and oversized-value lengths are captured in one
+Room transaction; ICON_ROW_COLUMNS and the existing chunk reader reconstruct one icon for emission.
+The same codec writes icon fields, including optional-document normalization. Profile/style/watch/
+preference/preset validation precedes staging; row identity/uniqueness/ownership validation runs
+during writing, before any destination opens. Full exports collect verified modifier-input files
+as rows pass; sharing removes hidden input and preserves appfilter fallback. The outer storage
+gate freezes all supported writers until the immutable ZIP is complete; its transfer remains
+outside locks. Metadata and the largest row remain memory costs. Room/backup/recovery stay 21/4/3.
 
 [PERF6b](performance-backup-inspection.md) adds a strict inspection projection: rendered/base
 values are consumed field by field, while existing metadata decoding/validation and arbitrary
@@ -1695,8 +1705,9 @@ large parser values remain possible memory costs; this is not a bounded full-imp
 inspection separately. The export tree shares source payload strings; retaining all row models
 and parsing complete incoming artwork remain the larger ownership boundaries. Ordinary meminfo
 requests GC, so the primary heap runs omit it and separate PSS probes use the calibrated local
-mode. Streaming inspection is implemented in the accepted PERF6b checkpoint; row-wise export and
-bounded import commit remain distinct next steps. No backup-format or Room change is included.
+mode. Streaming inspection is implemented in the accepted PERF6b checkpoint; row-wise export is
+the separate PERF6c checkpoint, and bounded import commit remains future work. No backup-format or
+Room change is included.
 
 Both export and import cap archives at 10,000 entries, 64 KiB for the manifest, 512 MiB for
 `data.json`, 32 MiB per modifier-input file, 64 MiB per other file and 1 GiB total uncompressed.

@@ -261,6 +261,12 @@ interface RenkinPackDao {
     @Query("SELECT $ICON_ROW_COLUMNS FROM DbApplication")
     fun getAllProfilesInline(): List<DbApplication>
 
+    @Query("SELECT profileId, packageName, activityName FROM DbApplication ORDER BY rowid")
+    fun exportKeys(): List<IconExportKey>
+
+    @Query("SELECT DISTINCT sourcePackName FROM DbApplication WHERE sourcePackName != '' AND (:profileId IS NULL OR profileId = :profileId)")
+    fun exportSourcePacks(profileId: Long?): List<String>
+
     @Query("SELECT $OVERSIZED_ARTWORK_COLUMNS FROM DbApplication WHERE $OVERSIZED_ARTWORK_FILTER AND profileId = :profileId")
     fun oversizedArtwork(profileId: Long): List<OversizedIconArtwork>
 
@@ -294,6 +300,12 @@ data class IconFingerprintRow(
     val drawable: String,
     val calendarEnabled: Boolean,
     val calendarPrefix: String
+)
+
+data class IconExportKey(
+    val profileId: Long,
+    val packageName: String,
+    val activityName: String
 )
 
 @Dao

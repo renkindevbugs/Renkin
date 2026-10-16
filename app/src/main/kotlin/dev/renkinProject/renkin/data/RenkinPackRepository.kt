@@ -6,6 +6,8 @@ import dev.renkinProject.renkin.data.transfer.BackupDatabaseSnapshot
 import java.io.File
 import java.util.concurrent.Callable
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 
@@ -108,6 +110,35 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
     /** Every profile's stored icons in one read — backup export. */
     suspend fun getAllProfilesApplications(): List<DbApplication> = access {
         consistentRead { withFullArtwork(dao.getAllProfilesInline(), dao.oversizedArtworkAllProfiles()) }
+    }
+
+    internal suspend fun <T> readExportIcons(block: suspend (ExportIcons) -> T): T = transaction {
+        val rows = ExportIcons(dao.exportKeys(), dao.oversizedArtworkAllProfiles())
+        try { block(rows) } finally { rows.active = false }
+    }
+
+    internal inner class ExportIcons(
+        private val keys: List<IconExportKey>,
+        oversized: List<OversizedIconArtwork>
+    ) {
+        internal var active = true
+        private val artwork = oversized.associateBy { Triple(it.profileId, it.packageName, it.activityName) }
+
+        suspend fun visit(profileId: Long, consume: suspend (DbApplication) -> Unit) {
+            check(active) { "Export read has expired" }
+            for (key in keys) {
+                if (key.profileId != profileId) continue
+                currentCoroutineContext().ensureActive()
+                val row = checkNotNull(dao.editorBaselineInline(profileId, key.packageName, key.activityName)) {
+                    "Stored icon changed during export"
+                }
+                consume(withFullArtwork(listOf(row), listOfNotNull(artwork[Triple(profileId, key.packageName, key.activityName)])).single())
+            }
+        }
+    }
+
+    internal suspend fun exportSourcePacks(profileId: Long? = null): Set<String> = access {
+        dao.exportSourcePacks(profileId).toSet()
     }
 
     internal suspend fun modifierInputDocuments(): List<String> = access { dao.modifierInputDocuments() }

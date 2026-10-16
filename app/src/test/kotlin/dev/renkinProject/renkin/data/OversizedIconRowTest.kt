@@ -5,8 +5,16 @@ import androidx.room.Room
 import androidx.room.withTransaction
 import dev.renkinProject.renkin.data.transfer.BackupDatabaseSnapshot
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -66,6 +74,60 @@ class OversizedIconRowTest {
         assertEquals(big, repo.editorBaseline(1, "app.big", "Main"))
         assertEquals(small, repo.editorBaseline(1, "app.small", "Main"))
         assertEquals(setOf(big, baseOnly, small, otherProfile), repo.getAllProfilesApplications().toSet())
+    }
+
+    @Test fun rowWiseExportReadsEveryColumnAndOversizedValueInStoredOrder() = runBlocking {
+        val exported = mutableListOf<DbApplication>()
+        repo.readExportIcons { rows ->
+            rows.visit(1) { exported += it }
+            rows.visit(2) { exported += it }
+        }
+        assertEquals(listOf(big, baseOnly, small, otherProfile), exported)
+    }
+
+    @Test fun exportSnapshotBlocksAnotherWriterAcrossSuspension() = runBlocking {
+        val entered = CompletableDeferred<Unit>()
+        val resume = CompletableDeferred<Unit>()
+        val exported = mutableListOf<DbApplication>()
+        val reading = async(Dispatchers.Default) {
+            repo.readExportIcons { rows ->
+                rows.visit(1) { row ->
+                    exported += row
+                    if (exported.size == 1) {
+                        entered.complete(Unit)
+                        resume.await()
+                    }
+                }
+            }
+        }
+        entered.await()
+        val writing = async(start = CoroutineStart.UNDISPATCHED) { repo.replaceAll(1, listOf(small)) }
+        assertFalse(writing.isCompleted)
+        resume.complete(Unit)
+        reading.await()
+        writing.await()
+        assertEquals(listOf(big, baseOnly, small), exported)
+        assertEquals(listOf(small), repo.getAll(1))
+    }
+
+    @Test fun cancelledExportExpiresItsReaderAndReleasesTransactionAndGate() = runBlocking {
+        var saved: RenkinPackRepository.ExportIcons? = null
+        var count = 0
+        val task = launch(Dispatchers.Default) {
+            repo.readExportIcons { rows ->
+                saved = rows
+                rows.visit(1) {
+                    count++
+                    currentCoroutineContext().job.cancel()
+                }
+            }
+        }
+        task.join()
+        assertTrue(task.isCancelled)
+        assertEquals(1, count)
+        assertTrue(runCatching { saved!!.visit(1) {} }.exceptionOrNull() is IllegalStateException)
+        repo.replaceAll(1, listOf(small))
+        assertEquals(listOf(small), repo.getAll(1))
     }
 
     @Test fun fingerprintsUseTheCompleteRenderedArtwork() = runBlocking {
