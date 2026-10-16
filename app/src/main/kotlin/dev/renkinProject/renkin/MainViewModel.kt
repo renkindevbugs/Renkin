@@ -25,6 +25,7 @@ import dev.renkinProject.renkin.apk.BuiltIconPack
 import dev.renkinProject.renkin.apk.PackChangeBaselines
 import dev.renkinProject.renkin.apk.observePackChanges
 import dev.renkinProject.renkin.apk.unsavedApplicationKeys
+import dev.renkinProject.renkin.apk.UnsavedSessionMonitor
 import dev.renkinProject.renkin.apk.IconGenerationService
 import dev.renkinProject.renkin.apk.IconLockManager
 import dev.renkinProject.renkin.apk.InstallerCatalog
@@ -140,6 +141,7 @@ class MainViewModel @Inject constructor(
     private val watchRepo: WatchRepository,
     private val backupManager: BackupManager,
     autoBackupManager: AutoBackupManager,
+    private val unsavedSessionMonitor: UnsavedSessionMonitor,
     savedStateHandle: SavedStateHandle
 ) : AndroidViewModel(application), IconPreviewBuilder {
     private val installerCatalog = InstallerCatalog(application)
@@ -514,6 +516,7 @@ class MainViewModel @Inject constructor(
     }
 
     init {
+        unsavedSessionMonitor.start()
         loadStartup()
         observeProfileSession()
         loadWhatsNewState()
@@ -590,6 +593,17 @@ class MainViewModel @Inject constructor(
 
     fun setOnboardingSeen(seen: Boolean) = updatePreferences {
         setBooleanValue(OnboardingSeenKey, seen)
+    }
+
+    /** Unsaved icons a previous process held when Android ended it; explained once after startup. */
+    val lostUnsavedSession = unsavedSessionMonitor.lostSession
+
+    fun dismissLostUnsavedSession() = unsavedSessionMonitor.dismiss()
+
+    fun refreshAfterLostSession() {
+        val lost = lostUnsavedSession.value
+        unsavedSessionMonitor.dismiss()
+        if (lost != null && lost.profileId == activeProfileId && startupComplete) refresh()
     }
 
     var whatsNewVisible by mutableStateOf(false)

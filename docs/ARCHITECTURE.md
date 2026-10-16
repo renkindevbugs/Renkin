@@ -1417,6 +1417,12 @@ be assumed to open the upgraded database.
   profile selection; the shared owner overlays Room profile values for readers. Typed accessors:
   Composable `DataStore.getXValue()` for reading in composition; `Preferences.getXValue()`
   for reading a captured snapshot off the main thread.
+- **Unsaved-session marker** (`data/UnsavedSessionMarkerStore.kt`, `noBackupFilesDir/unsaved-session.json`)
+  — counts only: edited and refreshed unsaved icons, their profile and provider instance. Unsaved
+  icons stay memory-only until Build or Save. `UnsavedSessionMonitor` reads the previous marker
+  before recording its own process state; a marker from another provider instance with changes
+  shows the lost-icons notice once, before the editor-draft offer. It is never part of a save,
+  backup or the install-confirmation snapshot.
 - **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v21) — profiles + rendered and base icons
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
   rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the

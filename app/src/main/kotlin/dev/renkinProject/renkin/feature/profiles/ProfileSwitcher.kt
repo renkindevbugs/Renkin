@@ -29,6 +29,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -92,6 +93,14 @@ fun ProfileSwitcherTitle() {
     var pendingCreateName by rememberSaveable { mutableStateOf("") }
     var pendingCreateDescription by rememberSaveable { mutableStateOf("") }
     var pendingCreatePackLabel by rememberSaveable { mutableStateOf("") }
+    // Unsaved icons die with the process, so a prompt restored into a new one asks about nothing.
+    var pendingPromptProcess by rememberSaveable { mutableStateOf<String?>(null) }
+    val currentProcess = runtimeState.sessionToken.providerInstanceId
+    val savePromptRequested = pendingSwitch != null || pendingCreate
+    val savePromptCurrent = pendingPromptProcess == currentProcess
+    if (savePromptRequested && !savePromptCurrent) {
+        LaunchedEffect(currentProcess) { pendingSwitch = null; pendingCreate = false }
+    }
 
     // Profile whose share was requested, held while the system file picker is up.
     var pendingShareId by rememberSaveable { mutableStateOf<Long?>(null) }
@@ -233,8 +242,10 @@ fun ProfileSwitcherTitle() {
                             actionsFor = null
                             if (profile.id != activeId) {
                                 // Unsaved work on the current profile? Offer to save it first.
-                                if (viewModel.hasUnsavedChanges()) pendingSwitch = profile.id
-                                else viewModel.switchProfile(profile.id)
+                                if (viewModel.hasUnsavedChanges()) {
+                                    pendingPromptProcess = currentProcess
+                                    pendingSwitch = profile.id
+                                } else viewModel.switchProfile(profile.id)
                             }
                         }
                     )
@@ -272,6 +283,7 @@ fun ProfileSwitcherTitle() {
                     pendingCreateName = name
                     pendingCreateDescription = description
                     pendingCreatePackLabel = packLabel
+                    pendingPromptProcess = currentProcess
                     pendingCreate = true
                 } else {
                     createOpen = false
@@ -299,7 +311,7 @@ fun ProfileSwitcherTitle() {
 
     // Save-before-switch prompt: Save keeps the current profile's icons without building
     // (marked "not built yet"), Don't save discards them; tapping outside cancels the switch.
-    if (pendingSwitch != null || pendingCreate) {
+    if (savePromptRequested && savePromptCurrent) {
         RenkinAlertDialog(
             onDismissRequest = { pendingSwitch = null; pendingCreate = false },
             icon = { Icon(Icons.Filled.Save, contentDescription = null, tint = MaterialTheme.colorScheme.primary) },
@@ -307,13 +319,15 @@ fun ProfileSwitcherTitle() {
             text = { Text(boldStringResource(R.string.saveBeforeSwitchText)) },
             confirmButton = {
                 TextButton(onClick = {
-                    pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = true) }
+                    // Saving an unchanged profile would still mark it "not built yet".
+                    val saveFirst = viewModel.hasUnsavedChanges()
+                    pendingSwitch?.let { viewModel.switchProfile(it, saveFirst = saveFirst) }
                     if (pendingCreate) {
                         viewModel.createProfile(
                             pendingCreateName,
                             pendingCreateDescription,
                             pendingCreatePackLabel,
-                            saveFirst = true
+                            saveFirst = saveFirst
                         )
                         // The form did its job — close it only once the profile is on its way.
                         createOpen = false

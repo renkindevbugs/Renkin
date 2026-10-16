@@ -709,10 +709,22 @@ fun MainColumn(iconPacks: List<IconPack>) {
             }
         )
     }
-    EditorDraftRecoveryHost(iconPacks,
-        showPrompt = onboardingSeen && !viewModel.whatsNewVisible && pendingSuggestion == null &&
-            viewModel.pendingBackupImport == null && !viewModel.backupInProgress &&
-            profileActionProgress == null && !viewModel.showMissingPacksDialog && !viewModel.watchProfileMissing)
+    val startupPromptsAllowed = onboardingSeen && !viewModel.whatsNewVisible && pendingSuggestion == null &&
+        viewModel.pendingBackupImport == null && !viewModel.backupInProgress &&
+        profileActionProgress == null && !viewModel.showMissingPacksDialog && !viewModel.watchProfileMissing
+    val lostUnsavedSession by viewModel.lostUnsavedSession.collectAsStateWithLifecycle()
+    val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
+    lostUnsavedSession?.takeIf { startupPromptsAllowed && runtimeState.ready }?.let { lost ->
+        LostUnsavedSessionDialog(
+            lost = lost,
+            profileName = profiles.firstOrNull { it.id == lost.profileId }?.name,
+            canRefresh = lost.refreshedCount > 0 && lost.profileId == runtimeState.activeProfileId,
+            onRefresh = viewModel::refreshAfterLostSession,
+            onDismiss = viewModel::dismissLostUnsavedSession
+        )
+    }
+    // The lost-icons notice comes first; the editor-draft offer is the more specific follow-up.
+    EditorDraftRecoveryHost(iconPacks, showPrompt = startupPromptsAllowed && lostUnsavedSession == null)
 }
 
 /**
@@ -1218,7 +1230,11 @@ fun OpenAppOptions(
     if (expected != current) {
         LaunchedEffect(expected, current) {
             editorViewModel.release(sessionId)
-            toaster.show(activity.getString(expected.expiredSessionMessage(current)))
+            // After process death the draft offer and the lost-icons notice speak for the old
+            // editor; a toast here would contradict a Resume offer and cover its buttons.
+            if (expected.providerInstanceId == current.providerInstanceId) {
+                toaster.show(activity.getString(expected.expiredSessionMessage(current)))
+            }
             (onSessionInvalidated ?: onDismiss)()
         }
         return
