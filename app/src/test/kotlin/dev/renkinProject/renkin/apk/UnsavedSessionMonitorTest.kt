@@ -4,6 +4,10 @@ import android.app.Application
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
+import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.UnsavedIconJournal
+import dev.renkinProject.renkin.data.UnsavedIconJournalEntry
+import dev.renkinProject.renkin.data.UnsavedIconJournalStore
 import dev.renkinProject.renkin.data.UnsavedSessionMarker
 import dev.renkinProject.renkin.data.UnsavedSessionMarkerStore
 import dev.renkinProject.renkin.drawable.BitmapIconDrawable
@@ -34,10 +38,12 @@ import java.io.File
 class UnsavedSessionMonitorTest {
     private val context = RuntimeEnvironment.getApplication()
     private val store = UnsavedSessionMarkerStore(context)
+    private val journal = UnsavedIconJournalStore(context)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     @Before fun clearMarker() {
         File(context.noBackupFilesDir, "unsaved-session.json").delete()
+        File(context.noBackupFilesDir, "unsaved-journal").deleteRecursively()
     }
 
     @After fun stopMonitor() = scope.cancel()
@@ -66,7 +72,7 @@ class UnsavedSessionMonitorTest {
     )
 
     private fun monitor(instance: String, states: MutableStateFlow<ApplicationListState>) =
-        UnsavedSessionMonitor(store, { instance }, states, scope)
+        UnsavedSessionMonitor(store, journal, { instance }, states, { _, apps -> apps.map(::row) }, scope, journalDelayMs = 0)
 
     private suspend fun awaitStored(expected: UnsavedSessionMarker) {
         var last: UnsavedSessionMarker? = null
@@ -100,10 +106,10 @@ class UnsavedSessionMonitorTest {
 
         monitor.start()
 
-        assertEquals(lost, withTimeout(5_000) { monitor.lostSession.first { it != null } })
+        assertEquals(lost, withTimeout(5_000) { monitor.lostWork.first { it != null }?.marker })
         awaitStored(UnsavedSessionMarker("new", 7, 0, 0))
         monitor.dismiss()
-        assertNull(monitor.lostSession.value)
+        assertNull(monitor.lostWork.value)
     }
 
     @Test fun sameProcessMarkerIsNotReported() = runBlocking {
@@ -115,7 +121,7 @@ class UnsavedSessionMonitorTest {
         monitor.start()
         awaitStored(UnsavedSessionMarker("same", 7, 1, 0))
 
-        assertNull(monitor.lostSession.value)
+        assertNull(monitor.lostWork.value)
     }
 
     @Test fun markerWithoutChangesIsNotReported() = runBlocking {
@@ -126,7 +132,7 @@ class UnsavedSessionMonitorTest {
         monitor.start()
         awaitStored(UnsavedSessionMarker("new", 7, 0, 0))
 
-        assertNull(monitor.lostSession.value)
+        assertNull(monitor.lostWork.value)
     }
 
     @Test fun laterEditsReplaceTheRecordedCounts() = runBlocking {
@@ -140,6 +146,70 @@ class UnsavedSessionMonitorTest {
         awaitStored(UnsavedSessionMarker("new", 7, 1, 1))
         states.value = state("new", listOf(picked, refreshed.locked()), emptySet())
         awaitStored(UnsavedSessionMarker("new", 7, 0, 0))
+    }
+
+    private fun row(app: PackageInfoStruct): DbApplication? = app.createdIcon?.let {
+        DbApplication(app.packageName, app.activityName, false, false, "payload-${app.appName}", profileId = 7)
+    }
+
+    private val currentJournal get() = File(context.noBackupFilesDir, "unsaved-journal/current.json")
+
+    @Test fun handMadeRowsAreJournaledButRefreshOutputIsNot() = runBlocking {
+        val picked = app("picked")
+        val cleared = app("cleared", withIcon = false)
+        val refreshed = app("refreshed", refreshMade = true)
+        val states = MutableStateFlow(
+            state("new", listOf(picked, cleared, refreshed, app("clean")), setOf(picked.key, cleared.key, refreshed.key))
+        )
+        monitor("new", states).start()
+        withTimeout(5_000) { while (!currentJournal.exists()) delay(10) }
+
+        val written = journal.takeOverPrevious("next")!!
+        assertEquals(listOf(picked.key, cleared.key), written.entries.map { it.key })
+        assertEquals("payload-picked", written.entries[0].row!!.drawable)
+        assertNull(written.entries[1].row)
+        assertEquals(7L, written.profileId)
+    }
+
+    @Test fun journalEmptiesOnceTheRowsAreSaved() = runBlocking {
+        val picked = app("picked")
+        val states = MutableStateFlow(state("new", listOf(picked), setOf(picked.key)))
+        monitor("new", states).start()
+        withTimeout(5_000) { while (!currentJournal.exists()) delay(10) }
+
+        states.value = state("new", listOf(picked), emptySet())
+        withTimeout(5_000) { while (currentJournal.exists()) delay(10) }
+    }
+
+    @Test fun previousJournalIsOfferedUntilClosed() = runBlocking {
+        val entry = UnsavedIconJournalEntry("com.a/com.a.Main", DbApplication("com.a", "com.a.Main", false, false, "x", profileId = 7))
+        journal.writeCurrent(UnsavedIconJournal("old", 7, listOf(entry)))
+        store.write(UnsavedSessionMarker("old", 7, editedCount = 1, refreshedCount = 45))
+        val monitor = monitor("new", MutableStateFlow(state("new", listOf(app("a")), emptySet())))
+
+        monitor.start()
+        val lost = withTimeout(5_000) { monitor.lostWork.first { it != null } }!!
+
+        assertEquals(listOf(entry), lost.offer!!.entries)
+        assertEquals(1, lost.restorableCount)
+        assertEquals(45, lost.refreshedCount)
+        monitor.dismiss()
+        assertEquals(listOf(entry), journal.takeOverPrevious("new")!!.entries)
+        monitor.closeOffer()
+        assertNull(monitor.lostWork.value)
+        assertNull(journal.takeOverPrevious("new"))
+    }
+
+    @Test fun ownJournalIsNotOffered() = runBlocking {
+        val entry = UnsavedIconJournalEntry("com.a/com.a.Main", null)
+        journal.writeCurrent(UnsavedIconJournal("same", 7, listOf(entry)))
+        val picked = app("picked")
+        val monitor = monitor("same", MutableStateFlow(state("same", listOf(picked), setOf(picked.key))))
+
+        monitor.start()
+        awaitStored(UnsavedSessionMarker("same", 7, 1, 0))
+
+        assertNull(monitor.lostWork.value)
     }
 
     @Test fun unreadableMarkerIsIgnored() = runBlocking {

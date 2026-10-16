@@ -11,6 +11,7 @@ import dev.renkinProject.renkin.BuildConfig
 import dev.renkinProject.renkin.data.BuiltPrimarySourceKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
 import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.UnsavedIconJournal
 import dev.renkinProject.renkin.data.IconPack
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.PrimaryIconPackKey
@@ -1019,6 +1020,55 @@ class ApplicationProvider internal constructor(
         runProfileOperation(expected) { persistActiveProfileIcons(unbuiltAfter = true) }
     }
 
+    internal suspend fun encodeUnsavedIcons(profileId: Long, apps: List<PackageInfoStruct>): List<DbApplication?> =
+        renkinPackStore.encodeUnsaved(profileId, apps)
+
+    /**
+     * Puts journaled hand-made icons back as unsaved edits of the active profile. Skips apps that
+     * are gone or held back, and rows the saved set already matches. Returns the restored keys.
+     */
+    suspend fun restoreUnsavedIcons(expected: ProfileSessionToken, journal: UnsavedIconJournal): Set<String> =
+        withContext(Dispatchers.Default) {
+            runProfileOperation(expected) {
+                if (journal.profileId != activeProfileId) return@runProfileOperation emptySet()
+                val defaultColor = context.dataStore.getPreferencesAfterPendingWrites().getDefaultIconColor(context)
+                val saved = renkinPackStore.savedHashes(activeProfileId)
+                val locked = lockManager.lockedIconKeys
+                val restored = mutableSetOf<String>()
+                for (entry in journal.entries) {
+                    val index = applicationList.indexOfFirst { it.key == entry.key }
+                    if (index < 0 || entry.key in locked) continue
+                    val app = applicationList[index]
+                    val row = entry.row
+                    val updated = if (row == null) {
+                        if (app.createdIcon == null && !app.calendarEnabled) continue
+                        app.changeExport(null).changeCalendar(false, null, null)
+                    } else {
+                        if (saved[entry.key] == row.fingerprint()) continue
+                        val decoded = renkinPackStore.decodeRow(row, defaultColor)
+                        if (decoded.decodeFailed) continue
+                        val icon = decoded.icon ?: decoded.baseIcon
+                        val withIcon = if (icon == null) app.changeExport(null) else app.changeExport(
+                            icon,
+                            isFallback = decoded.isFallback,
+                            sourcePackName = decoded.sourcePackName,
+                            isRefreshMade = false,
+                            isCustom = decoded.isCustom,
+                            isLegacy = decoded.isLegacy,
+                            baseIcon = decoded.baseIcon ?: icon,
+                            sourceUrl = decoded.sourceUrl,
+                            modifierRecipe = decoded.modifierRecipe,
+                            modifierInput = decoded.modifierInput
+                        )
+                        withIcon.changeCalendar(decoded.calendarEnabled, decoded.calendarPrefix, decoded.calendarPackName)
+                    }
+                    editApplication(index, updated)
+                    restored += entry.key
+                }
+                restored
+            }
+        }
+
     /**
      * Saves the active profile's icons and locks the refresh-made ones in (from now on a
      * refresh replaces none of them — the user clears icons or hand-edits to change them).
@@ -1047,6 +1097,7 @@ class ApplicationProvider internal constructor(
         if (!profileManager.profileExists(profileId)) return
         renkinPackStore.save(profileId, apps, preservedRows)
         savedProfileRevisions[profileId] = (savedProfileRevisions[profileId] ?: 0L) + 1L
+        editorDraftInvalidation.afterProfileSaved(profileId)
         profileManager.markUnbuilt(profileId, unbuiltAfter)
 
         // Only the matching live session may be mutated. An inactive profile will load these

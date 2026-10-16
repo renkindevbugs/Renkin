@@ -712,19 +712,34 @@ fun MainColumn(iconPacks: List<IconPack>) {
     val startupPromptsAllowed = onboardingSeen && !viewModel.whatsNewVisible && pendingSuggestion == null &&
         viewModel.pendingBackupImport == null && !viewModel.backupInProgress &&
         profileActionProgress == null && !viewModel.showMissingPacksDialog && !viewModel.watchProfileMissing
-    val lostUnsavedSession by viewModel.lostUnsavedSession.collectAsStateWithLifecycle()
+    val lostUnsavedWork by viewModel.lostUnsavedWork.collectAsStateWithLifecycle()
     val profiles by viewModel.profiles.collectAsStateWithLifecycle(initialValue = emptyList())
-    lostUnsavedSession?.takeIf { startupPromptsAllowed && runtimeState.ready }?.let { lost ->
-        LostUnsavedSessionDialog(
-            lost = lost,
-            profileName = profiles.firstOrNull { it.id == lost.profileId }?.name,
-            canRefresh = lost.refreshedCount > 0 && lost.profileId == runtimeState.activeProfileId,
-            onRefresh = viewModel::refreshAfterLostSession,
-            onDismiss = viewModel::dismissLostUnsavedSession
-        )
+    lostUnsavedWork?.takeIf { startupPromptsAllowed && runtimeState.ready }?.let { lost ->
+        // Journaled icons restore only into their own profile, which is active after a restart
+        // unless the user switched first; otherwise the journal waits for a later start.
+        val offer = lost.offer?.takeIf { it.entries.isNotEmpty() && it.profileId == runtimeState.activeProfileId }
+        val marker = lost.marker
+        when {
+            offer != null -> RestoreLostIconsDialog(
+                lost = lost,
+                profileName = profiles.firstOrNull { it.id == offer.profileId }?.name.orEmpty(),
+                onRestore = { viewModel.restoreLostIcons(refreshAfter = false) },
+                onRefresh = { viewModel.restoreLostIcons(refreshAfter = true) },
+                onLater = viewModel::dismissLostUnsavedWork,
+                onDiscard = viewModel::discardLostIcons
+            )
+            marker != null -> LostUnsavedSessionDialog(
+                lost = marker,
+                profileName = profiles.firstOrNull { it.id == marker.profileId }?.name,
+                canRefresh = marker.refreshedCount > 0 && marker.profileId == runtimeState.activeProfileId,
+                onRefresh = viewModel::refreshAfterLostSession,
+                onDismiss = viewModel::dismissLostUnsavedWork
+            )
+            else -> LaunchedEffect(lost) { viewModel.dismissLostUnsavedWork() }
+        }
     }
-    // The lost-icons notice comes first; the editor-draft offer is the more specific follow-up.
-    EditorDraftRecoveryHost(iconPacks, showPrompt = startupPromptsAllowed && lostUnsavedSession == null)
+    // Lost or restorable icons come first; the editor-draft offer is the more specific follow-up.
+    EditorDraftRecoveryHost(iconPacks, showPrompt = startupPromptsAllowed && lostUnsavedWork == null)
 }
 
 /**

@@ -6,6 +6,9 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import dev.renkinProject.renkin.R
+import dev.renkinProject.renkin.apk.LostUnsavedWork
+import dev.renkinProject.renkin.data.UnsavedIconJournal
+import dev.renkinProject.renkin.data.UnsavedIconJournalEntry
 import dev.renkinProject.renkin.data.UnsavedSessionMarker
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -44,6 +47,52 @@ class LostUnsavedSessionDialogTest {
         show(UnsavedSessionMarker("old", 9, editedCount = 2, refreshedCount = 0), profileName = null)
 
         compose.onNodeWithText("Renkin was closed before 2 edited icons could be built or saved.").assertIsDisplayed()
+    }
+
+    private var restored = 0
+    private var later = 0
+    private var discarded = 0
+    private val offer = UnsavedIconJournal(
+        "old", 1, listOf(UnsavedIconJournalEntry("com.a/com.a.Main", null), UnsavedIconJournalEntry("com.b/com.b.Main", null)),
+        droppedCount = 1
+    )
+
+    private fun showOffer(refreshedCount: Int) = compose.setContent {
+        RestoreLostIconsDialog(
+            LostUnsavedWork(UnsavedSessionMarker("old", 1, 3, refreshedCount), offer), "Main",
+            { restored++ }, { refreshed++ }, { later++ }, { discarded++ }
+        )
+    }
+
+    @Test fun restoreOfferNamesKeptDroppedAndRefreshedIcons() {
+        showOffer(refreshedCount = 45)
+
+        compose.onNodeWithText("Renkin was closed before 2 edited icons in Main could be built or saved. They can be restored as unsaved changes.")
+            .assertIsDisplayed()
+        compose.onNodeWithText("1 edited icon couldn't be kept (too large).").assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.lostUnsavedRefresh)).performClick()
+        assertEquals(1, refreshed)
+        compose.onNodeWithText(string(R.string.lostIconsRestore)).performClick()
+        assertEquals(1, restored)
+    }
+
+    @Test fun refreshIsOfferedOnlyWithRefreshedIcons() {
+        showOffer(refreshedCount = 0)
+
+        compose.onNodeWithText(string(R.string.lostUnsavedRefresh)).assertDoesNotExist()
+        compose.onNodeWithText(string(R.string.editorRecoveryLater)).performClick()
+        assertEquals(1, later)
+        assertEquals(0, discarded)
+    }
+
+    @Test fun discardNeedsConfirmation() {
+        showOffer(refreshedCount = 0)
+
+        compose.onNodeWithText(string(R.string.editorRecoveryDiscard)).performClick()
+        assertEquals(0, discarded)
+        compose.onNodeWithText(string(R.string.lostIconsDiscardTitle)).assertIsDisplayed()
+        compose.onNodeWithText(string(R.string.editorRecoveryDiscard)).performClick()
+        assertEquals(1, discarded)
     }
 
     @Test fun okOnlyDismissesAndRefreshIsHiddenWhenUnavailable() {

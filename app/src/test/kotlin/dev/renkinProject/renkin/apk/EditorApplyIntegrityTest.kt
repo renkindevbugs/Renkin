@@ -12,6 +12,9 @@ import android.os.UserHandle
 import androidx.datastore.preferences.core.edit
 import androidx.room.Room
 import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
+import dev.renkinProject.renkin.data.UnsavedIconJournal
+import dev.renkinProject.renkin.data.UnsavedIconJournalEntry
+import dev.renkinProject.renkin.data.UnsavedIconJournalStore
 import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.R
 import dev.renkinProject.renkin.data.DbApplication
@@ -60,7 +63,7 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [28], shadows = [ResolvingLauncherAppsShadow::class])
 class EditorApplyIntegrityTest {
-    private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(context)) }
+    private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(context), UnsavedIconJournalStore(context)) }
     private lateinit var context: Application
     private lateinit var database: RenkinPackDatabase
     private lateinit var repository: RenkinPackRepository
@@ -309,6 +312,77 @@ class EditorApplyIntegrityTest {
         assertEquals(reviewed.toDbString(), loaded.baseIcon!!.toDbString())
         assertTrue(loaded.isCustom)
         assertEquals("day_", loaded.calendarPrefix)
+    }
+
+    private suspend fun journalOf(vararg apps: PackageInfoStruct) = UnsavedIconJournal(
+        provider.sessionToken.providerInstanceId, 1L,
+        apps.toList().zip(provider.encodeUnsavedIcons(1L, apps.toList())) { app, row ->
+            UnsavedIconJournalEntry(app.key, row)
+        }
+    )
+
+    @Test
+    fun journaledApplyRestoresAsAnUnsavedEditAfterProviderRecreation() = runBlocking {
+        val app = initializeApp()
+        val reviewed = draft()
+        assertEquals(IconApplyOutcome.APPLIED, apply(app, reviewed))
+        val journal = journalOf(provider.applicationList.single())
+
+        val restarted = newProvider()
+        restarted.ensureInitialized()
+        assertNull(restarted.applicationList.single().createdIcon)
+        val restored = restarted.restoreUnsavedIcons(restarted.sessionToken, journal)
+
+        val live = restarted.applicationList.single()
+        assertEquals(setOf(app.key), restored)
+        assertEquals(setOf(app.key), restarted.unsavedIconKeys)
+        assertEquals(reviewed.toDbString(), live.baseIcon!!.toDbString())
+        assertTrue(live.isCustom)
+        assertFalse(live.isRefreshMade)
+        assertEquals("day_", live.calendarPrefix)
+        assertEquals("https://example.com/icon.svg", live.sourceUrl)
+        assertTrue("Restoring must not save", repository.getAll(1L).isEmpty())
+    }
+
+    @Test
+    fun journaledRowThatWasSavedMeanwhileIsNotRestoredAgain() = runBlocking {
+        val app = initializeApp()
+        assertEquals(IconApplyOutcome.APPLIED, apply(app, draft()))
+        val journal = journalOf(provider.applicationList.single())
+        provider.saveActiveProfileIcons(provider.sessionToken)
+
+        val restarted = newProvider()
+        restarted.ensureInitialized()
+
+        assertEquals(emptySet<String>(), restarted.restoreUnsavedIcons(restarted.sessionToken, journal))
+        assertEquals(emptySet<String>(), restarted.unsavedIconKeys)
+    }
+
+    @Test
+    fun journaledClearRemovesTheSavedIconWithoutSaving() = runBlocking {
+        val app = initializeApp()
+        assertEquals(IconApplyOutcome.APPLIED, apply(app, draft()))
+        provider.saveActiveProfileIcons(provider.sessionToken)
+        val cleared = UnsavedIconJournal(provider.sessionToken.providerInstanceId, 1L, listOf(UnsavedIconJournalEntry(app.key, null)))
+
+        val restarted = newProvider()
+        restarted.ensureInitialized()
+        assertEquals(setOf(app.key), restarted.restoreUnsavedIcons(restarted.sessionToken, cleared))
+
+        assertNull(restarted.applicationList.single().createdIcon)
+        assertEquals(1, repository.getAll(1L).size)
+    }
+
+    @Test
+    fun journalForAnotherProfileRestoresNothing() = runBlocking {
+        val app = initializeApp()
+        assertEquals(IconApplyOutcome.APPLIED, apply(app, draft()))
+        val foreign = journalOf(provider.applicationList.single()).copy(profileId = 99L)
+
+        val restarted = newProvider()
+        restarted.ensureInitialized()
+
+        assertEquals(emptySet<String>(), restarted.restoreUnsavedIcons(restarted.sessionToken, foreign))
     }
 
     @Test

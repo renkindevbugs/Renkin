@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.data.editor
 
 import android.app.Application
+import dev.renkinProject.renkin.data.UnsavedIconJournalStore
 import android.content.Context
 import android.content.ContextWrapper
 import dev.renkinProject.renkin.data.transfer.BackupOsShadow
@@ -60,7 +61,7 @@ class EditorDraftInvalidationTest {
     @Test fun deletingOwningProfileRemovesDraftAndExpiresWritersAndAcceptance() = runBlocking {
         val saved = save()
         val lease = requireNotNull(store.acceptanceLease(saved.checkpoint))
-        EditorDraftInvalidation(store).beforeProfileDeletion(owner.profileId)
+        EditorDraftInvalidation(store, UnsavedIconJournalStore(context)).beforeProfileDeletion(owner.profileId)
         assertNull(store.candidate())
         assertFalse(lease.publishIfCurrent { true })
         rejects { store.save(saved.checkpoint, owner, payloads) }
@@ -124,7 +125,7 @@ class EditorDraftInvalidationTest {
         val sibling = File(base, "unrelated").apply { writeText("keep") }
         val lease = requireNotNull(store.acceptanceLease(saved.checkpoint))
         BackupOsShadow.beforeDirectorySync = { throw IOException("Draft fsync failure") }
-        EditorDraftInvalidation(store).duringStorageRecovery()
+        EditorDraftInvalidation(store, UnsavedIconJournalStore(context)).duringStorageRecovery()
         assertFalse(root.exists())
         assertEquals("keep", sibling.readText())
         assertFalse(lease.publishIfCurrent { true })
@@ -137,7 +138,7 @@ class EditorDraftInvalidationTest {
         val saved = save()
         val lease = requireNotNull(store.acceptanceLease(saved.checkpoint))
         BackupOsShadow.beforeDirectorySync = { throw IOException("Draft fsync failure") }
-        rejects { EditorDraftInvalidation(store).beforeStorageReplacement() }
+        rejects { EditorDraftInvalidation(store, UnsavedIconJournalStore(context)).beforeStorageReplacement() }
         BackupOsShadow.beforeDirectorySync = null
         assertEquals(saved, store.candidate())
         assertFalse(lease.publishIfCurrent { true })

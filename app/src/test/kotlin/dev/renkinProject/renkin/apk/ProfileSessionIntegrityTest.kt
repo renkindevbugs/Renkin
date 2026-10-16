@@ -7,6 +7,7 @@ import android.content.ContextWrapper
 import androidx.datastore.preferences.core.edit
 import androidx.room.Room
 import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
+import dev.renkinProject.renkin.data.UnsavedIconJournalStore
 import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
@@ -51,7 +52,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 class ProfileSessionIntegrityTest {
-    private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(context)) }
+    private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(context), UnsavedIconJournalStore(context)) }
     private class DiscoveryContext(base: Context) : ContextWrapper(base) {
         var failDiscovery = false
         override fun getSystemService(name: String): Any? {

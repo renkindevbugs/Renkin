@@ -217,7 +217,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
-        if (!isChangingConfigurations) editorDraftViewModel.setBackgrounded(true)
+        if (!isChangingConfigurations) {
+            editorDraftViewModel.setBackgrounded(true)
+            viewModel.flushUnsavedJournal()
+        }
         super.onStop()
     }
 

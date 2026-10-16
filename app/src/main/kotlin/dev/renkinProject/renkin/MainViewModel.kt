@@ -595,16 +595,37 @@ class MainViewModel @Inject constructor(
         setBooleanValue(OnboardingSeenKey, seen)
     }
 
-    /** Unsaved icons a previous process held when Android ended it; explained once after startup. */
-    val lostUnsavedSession = unsavedSessionMonitor.lostSession
+    /** Unsaved work a previous process held when Android ended it; offered or explained after startup. */
+    val lostUnsavedWork = unsavedSessionMonitor.lostWork
 
-    fun dismissLostUnsavedSession() = unsavedSessionMonitor.dismiss()
+    /** OK on the notice, or Not now on the restore offer: the journal stays for a later start. */
+    fun dismissLostUnsavedWork() = unsavedSessionMonitor.dismiss()
+
+    fun discardLostIcons() {
+        viewModelScope.launch { unsavedSessionMonitor.closeOffer() }
+    }
+
+    /** Restores the offered hand-made icons; with [refreshAfter] also regenerates refresh output. */
+    fun restoreLostIcons(refreshAfter: Boolean) {
+        val offer = lostUnsavedWork.value?.offer ?: return
+        unsavedSessionMonitor.dismiss()
+        launchProfileOperation { expected ->
+            val restored = appProvider.restoreUnsavedIcons(expected, offer)
+            appProvider.commitSessionState(expected) { updatedKeys = updatedKeys + restored }
+            unsavedSessionMonitor.closeOffer()
+            _toastEvents.trySend(if (restored.isEmpty()) R.string.lostIconsNothingRestored else R.string.lostIconsRestored)
+            if (refreshAfter) refresh(expected)
+        }
+    }
 
     fun refreshAfterLostSession() {
-        val lost = lostUnsavedSession.value
+        val lost = lostUnsavedWork.value?.marker
         unsavedSessionMonitor.dismiss()
         if (lost != null && lost.profileId == activeProfileId && startupComplete) refresh()
     }
+
+    /** The app is leaving the foreground: write journaled icons without waiting for the delay. */
+    fun flushUnsavedJournal() = unsavedSessionMonitor.flush()
 
     var whatsNewVisible by mutableStateOf(false)
         private set

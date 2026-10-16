@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin
 
 import android.app.Application
+import dev.renkinProject.renkin.data.UnsavedIconJournalStore
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.drawable.ColorDrawable
@@ -122,7 +123,7 @@ class EditorDraftRecoveryOwnerTest {
         provider = AppModule.provideApplicationProvider(context, AppModule.provideRenkinPackStore(context, repository), repository,
             icons, locks, profiles, AppModule.provideIconGenerationService(context, icons, catalog, installedIcons),
             AppModule.provideIconPackBuildService(context, icons, repository, locks, profiles, catalog),
-            editorDraftInvalidation = EditorDraftInvalidation(store), installedIconLoader = installedIcons)
+            editorDraftInvalidation = EditorDraftInvalidation(store, UnsavedIconJournalStore(context)), installedIconLoader = installedIcons)
         provider.ensureInitialized()
         repository.writeProfileStyles(listOf(ProfileStyleUpdate(provider.sessionToken.profileId,
             ProfileStyleCodec.encode(ProfileStyle()), "")))

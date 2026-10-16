@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.data.transfer
 
 import android.app.Application
+import dev.renkinProject.renkin.data.UnsavedIconJournalStore
 import android.content.Context
 import android.net.Uri
 import androidx.datastore.preferences.core.edit
@@ -36,7 +37,7 @@ import java.util.zip.ZipOutputStream
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 class ProfileStyleArchiveTest {
-    private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(context)) }
+    private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(context), UnsavedIconJournalStore(context)) }
     private lateinit var context: Context
     private lateinit var packDb: RenkinPackDatabase
     private lateinit var watchDb: WatchDatabase
