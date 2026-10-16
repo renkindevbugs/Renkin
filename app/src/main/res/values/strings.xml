@@ -270,6 +270,20 @@
     <string name="profileOperationBusy">A profile operation is running. Try changing the setting again when it finishes.</string>
     <string name="profileOperationSuperseded">The icons or settings changed while this operation was running. Try again.</string>
     <string name="editorSessionLost">The editing session was lost when the app restarted. Reopen the editor to repeat your unsaved changes.</string>
+    <string name="lostUnsavedTitle">Unsaved icons were lost</string>
+    <string name="lostUnsavedText">Renkin was closed before **%1$s** in **%2$s** could be built or saved.</string>
+    <string name="lostUnsavedTextNoProfile">Renkin was closed before **%1$s** could be built or saved.</string>
+    <string name="lostUnsavedTip">Android can close Renkin while it is in the background. Build the pack to keep your changes.</string>
+    <string name="lostUnsavedCountsBoth">%1$s and %2$s</string>
+    <plurals name="lostUnsavedEditedCount">
+        <item quantity="one">%1$d edited icon</item>
+        <item quantity="other">%1$d edited icons</item>
+    </plurals>
+    <plurals name="lostUnsavedRefreshedCount">
+        <item quantity="one">%1$d refreshed icon</item>
+        <item quantity="other">%1$d refreshed icons</item>
+    </plurals>
+    <string name="lostUnsavedRefresh">Refresh again</string>
     <string name="editorDraftLost">The unsaved editor draft is no longer available. Reopen the editor to continue.</string>
     <string name="editorRecoveryTitle">Resume icon edit</string>
     <string name="editorRecoveryText">Your saved changes are ready to continue.</string>
