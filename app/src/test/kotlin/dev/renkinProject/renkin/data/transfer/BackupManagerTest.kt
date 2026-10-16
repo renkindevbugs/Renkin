@@ -579,6 +579,24 @@ class BackupManagerTest {
         assertTrue(prepared.staged.entries.values.none { it.exists() })
     }
 
+    @Test fun invalidStreamedIconNeverOpensDestinationAndReleasesStaging() = runBlocking {
+        val pack = RenkinPackRepository(srcPackDb)
+        pack.replaceAll(1, listOf(
+            DbApplication("app.valid", "Main", false, false, "rendered".repeat(10_000)),
+            DbApplication(" ", "Main", false, false, "invalid")
+        ))
+        val manager = sourceManager(pack, WatchRepository(srcWatchDb))
+        var opened = false
+        assertTrue(runCatching { manager.exportBackup { opened = true; ByteArrayOutputStream() } }.isFailure)
+        assertFalse(opened)
+        val staging = context.filesDir.resolve("backup-imports")
+        assertTrue(staging.listFiles().orEmpty().none { it.name.startsWith("backup-export-") })
+        pack.replaceAll(1, listOf(DbApplication("app.valid", "Main", false, false, "after")))
+        val prepared = manager.prepareBackupExport()
+        manager.discardExport(prepared)
+        assertTrue(prepared.directory.exists().not())
+    }
+
     @Test fun discardedImport_releasesFilesAndCannotBeCommitted() = runBlocking {
         val manager = BackupManager(context, RenkinPackRepository(tgtPackDb), WatchRepository(tgtWatchDb), editorDraftInvalidation = draftInvalidation)
         val source = context.cacheDir.resolve("discard.renkin").apply { writeBytes(archive(minimalData())) }

@@ -64,6 +64,7 @@ import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.io.OutputStreamWriter
+import java.io.Writer
 
 /**
  * Writes and restores `.renkin` files (a ZIP of `manifest.json`, `data.json` and, for full
@@ -265,15 +266,13 @@ class BackupManager(
             packRepo.updateProfile(it.copy(prefsSnapshot = prefs.snapshotProfilePrefs()))
         }
 
-        val allIcons = packRepo.getAllProfilesApplications()
-        val iconsByProfile = allIcons.groupBy { it.profileId }
         val rulesByProfile = watchRepo.getAllRules()
             .groupBy { it.rule.profileId }
         val data = BackupData(
             profiles = packRepo.profiles().map { profile ->
                 BackupProfile(
                     profile = profile,
-                    icons = iconsByProfile[profile.id].orEmpty(),
+                    icons = emptyList(),
                     watchRules = rulesByProfile[profile.id].orEmpty().map { it.toBackupRule() }
                 )
             },
@@ -281,7 +280,7 @@ class BackupManager(
                 if (key.name in DEVICE_LOCAL_PREF_NAMES) return@mapNotNull null
                 BackupPref.of(value)?.let { key.name to it }
             }.toMap(),
-            packLabels = packLabelsFor(allIcons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet()),
+            packLabels = packLabelsFor(packRepo.exportSourcePacks()),
             colorPresets = packRepo.allColorPresets().map {
                 BackupColorPreset(it.name, it.style, it.createdAt)
             },
@@ -310,12 +309,19 @@ class BackupManager(
             for (file in UploadedImageStore.list(context)) {
                 put("$UPLOADS_DIR/${file.name}", file)
             }
-        }
+        }.toMutableMap()
         val availableInputs = IconModifierInputStore.directory(context).listFiles().orEmpty()
             .filter { it.isFile && IconModifierInputStore.validName(it.name) }.associateBy { it.name }
-        val (exportData, inputFiles) = prepareModifierInputs(data, availableInputs)
-        exportArchive(KIND_BACKUP, BackupValidator.prepare(exportData, ImportKind.BACKUP, BackupCodec.FORMAT_VERSION), files +
-            inputFiles.mapKeys { (name, _) -> "${IconModifierInputStore.ARCHIVE_DIR}/$name" })
+        val inputs = ModifierInputPreparation(availableInputs)
+        val metadata = BackupValidator.prepare(data, ImportKind.BACKUP, BackupCodec.FORMAT_VERSION)
+        exportArchive(KIND_BACKUP, metadata, files) { writer ->
+            packRepo.readExportIcons { rows ->
+                writeBackupExport(metadata, writer, BackupCodec.FORMAT_VERSION) { id, consume ->
+                    rows.visit(id) { consume(inputs.prepare(it)) }
+                }
+            }
+            files.putAll(inputs.files.mapKeys { (name, _) -> "${IconModifierInputStore.ARCHIVE_DIR}/$name" })
+        }
     }
 
     /**
@@ -334,37 +340,40 @@ class BackupManager(
             }
         }
         val profile = packRepo.profile(profileId) ?: throw IOException("Profile $profileId does not exist")
-        val icons = packRepo.getAll(profileId)
         val rules = watchRepo.getAllRules()
             .filter { it.rule.profileId == profileId && !it.rule.completed }
             .map { it.toBackupRule() }
 
-        val sourcePacks = icons.mapNotNull { it.sourcePackName.ifEmpty { null } }.toSet()
-        val exportIcons = icons.map { saved ->
-            // Sharing carries the reviewed image, never a hidden pre-edit upload/source.
-            val icon = saved.copy(modifierInput = "")
-            if (icon.sourcePackName.isNotEmpty() && icon.sourceDrawableName.isEmpty()) {
-                icon.copy(
-                    // Bulk-refresh icons are exactly the appfilter-mapped ones, so this
-                    // resolution is faithful; a hand-picked alternate degrades to the
-                    // pack's default icon for the app.
-                    sourceDrawableName = appFilterDrawableName(icon.sourcePackName, icon.packageName, icon.activityName) ?: ""
-                )
-            } else icon
-        }
         val data = BackupData(
-            profiles = listOf(BackupProfile(profile, exportIcons, rules)),
+            profiles = listOf(BackupProfile(profile, emptyList(), rules)),
             prefs = emptyMap(),
-            packLabels = packLabelsFor(sourcePacks)
+            packLabels = packLabelsFor(packRepo.exportSourcePacks(profileId))
         )
 
-        exportArchive(KIND_PROFILE, BackupValidator.prepare(data, ImportKind.PROFILE, BackupCodec.FORMAT_VERSION))
+        val metadata = BackupValidator.prepare(data, ImportKind.PROFILE, BackupCodec.FORMAT_VERSION)
+        exportArchive(KIND_PROFILE, metadata) { writer ->
+            packRepo.readExportIcons { rows ->
+                writeBackupExport(metadata, writer, BackupCodec.FORMAT_VERSION) { id, consume ->
+                    rows.visit(id) { consume(sharedIcon(it)) }
+                }
+            }
+        }
+    }
+
+    private fun sharedIcon(saved: DbApplication): DbApplication {
+        // Sharing carries the reviewed image, never a hidden pre-edit upload/source.
+        val icon = saved.copy(modifierInput = "")
+        return if (icon.sourcePackName.isNotEmpty() && icon.sourceDrawableName.isEmpty()) {
+            // Existing bulk-refresh fallback: hand-picked alternates degrade to the pack default.
+            icon.copy(sourceDrawableName = appFilterDrawableName(icon.sourcePackName, icon.packageName, icon.activityName) ?: "")
+        } else icon
     }
 
     private suspend fun exportArchive(
         kind: String,
         data: BackupData,
-        files: Map<String, File> = emptyMap()
+        files: Map<String, File> = emptyMap(),
+        writeData: suspend (Writer) -> Unit
     ): PreparedExport {
         val directory = BackupStaging.create(stagingRoot(), "backup-export-")
         val dataFile = File(directory, DATA_ENTRY)
@@ -388,7 +397,7 @@ class BackupManager(
                     }
                 }
                 val writer = OutputStreamWriter(bounded, Charsets.UTF_8).buffered()
-                writeBackupData(data, writer, BackupCodec.FORMAT_VERSION)
+                writeData(writer)
                 writer.flush()
                 output.fd.sync()
             }
@@ -415,7 +424,7 @@ class BackupManager(
             dataFile.delete()
             return PreparedExport(directory, archive)
         } catch (error: OutOfMemoryError) {
-            Log.error("BackupManager", "Out of memory exporting; profiles=${data.profiles.size}, icons=${data.profiles.sumOf { it.icons.size }}, dataBytes=${dataFile.length()}", error)
+            Log.error("BackupManager", "Out of memory exporting; profiles=${data.profiles.size}, dataBytes=${dataFile.length()}", error)
             BackupStaging.release(directory)
             throw error
         } catch (error: Throwable) {
@@ -622,26 +631,32 @@ class BackupManager(
         data: BackupData,
         available: Map<String, File>
     ): Pair<BackupData, Map<String, File>> {
-        val verified = mutableMapOf<String, Boolean>()
-        val files = mutableMapOf<String, File>()
+        val inputs = ModifierInputPreparation(available)
         val profiles = data.profiles.map { profile ->
-            profile.copy(icons = profile.icons.map { icon ->
-                val artwork = StoredIconModifierInput.artwork(icon.modifierInput)
-                val name = artwork?.let { "${it.hash}.input" }
-                val source = name?.let(available::get)
-                val valid = if (artwork == null || name == null || source == null) false else {
-                    verified[name] ?: IconModifierInputStore.validFile(source, artwork.hash).also { verified[name] = it }
-                }
-                if (valid) {
-                    files[requireNotNull(name)] = requireNotNull(source)
-                    icon
-                } else {
-                    if (icon.modifierInput.isNotEmpty()) Log.info("BackupManager", "Discarded missing or invalid optional modifier input")
-                    icon.copy(modifierInput = "")
-                }
-            })
+            profile.copy(icons = profile.icons.map { inputs.prepare(it) })
         }
-        return data.copy(profiles = profiles) to files
+        return data.copy(profiles = profiles) to inputs.files
+    }
+
+    private class ModifierInputPreparation(private val available: Map<String, File>) {
+        private val verified = mutableMapOf<String, Boolean>()
+        val files = mutableMapOf<String, File>()
+
+        suspend fun prepare(icon: DbApplication): DbApplication {
+            val artwork = StoredIconModifierInput.artwork(icon.modifierInput)
+            val name = artwork?.let { "${it.hash}.input" }
+            val source = name?.let(available::get)
+            val valid = if (artwork == null || name == null || source == null) false else {
+                verified[name] ?: IconModifierInputStore.validFile(source, artwork.hash).also { verified[name] = it }
+            }
+            return if (valid) {
+                files[requireNotNull(name)] = requireNotNull(source)
+                icon
+            } else {
+                if (icon.modifierInput.isNotEmpty()) Log.info("BackupManager", "Discarded missing or invalid optional modifier input")
+                icon.copy(modifierInput = "")
+            }
+        }
     }
 
     private class ArchiveContents(

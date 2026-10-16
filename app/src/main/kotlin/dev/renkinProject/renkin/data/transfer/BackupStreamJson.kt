@@ -3,6 +3,8 @@ package dev.renkinProject.renkin.data.transfer
 import android.util.JsonReader
 import android.util.JsonToken
 import android.util.JsonWriter
+import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.watch.AppComponent
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import org.json.JSONArray
@@ -101,6 +103,51 @@ internal suspend fun writeBackupData(
 ) {
     val writer = JsonWriter(output.buffered())
     writeJsonValue(writer, BackupCodec.encodeJson(data, formatVersion))
+    writer.flush()
+}
+
+internal suspend fun writeBackupExport(
+    metadata: BackupData, output: Writer, formatVersion: Int,
+    visit: suspend (Long, suspend (DbApplication) -> Unit) -> Unit
+) {
+    require(metadata.profiles.all { it.icons.isEmpty() }) { "Export metadata contains artwork rows" }
+    val root = BackupCodec.encodeJson(metadata, formatVersion)
+    val writer = JsonWriter(output.buffered())
+    writer.beginObject()
+    for (name in root.keys()) {
+        writer.name(name)
+        if (name != "profiles") {
+            writeJsonValue(writer, root.get(name))
+            continue
+        }
+        writer.beginArray()
+        val profiles = root.getJSONArray(name)
+        for (index in 0 until profiles.length()) {
+            val profile = profiles.getJSONObject(index)
+            writer.beginObject()
+            for (field in profile.keys()) {
+                writer.name(field)
+                if (field != "icons") {
+                    writeJsonValue(writer, profile.get(field))
+                    continue
+                }
+                val components = mutableSetOf<AppComponent>()
+                val profileId = metadata.profiles[index].profile.id
+                writer.beginArray()
+                visit(profileId) { icon ->
+                    BackupValidator.validateIcon(icon, profileId)
+                    if (!components.add(AppComponent(icon.packageName, icon.activityName))) {
+                        throw IOException("Duplicate profile icon")
+                    }
+                    writeJsonValue(writer, BackupCodec.encodeIcon(icon))
+                }
+                writer.endArray()
+            }
+            writer.endObject()
+        }
+        writer.endArray()
+    }
+    writer.endObject()
     writer.flush()
 }
 

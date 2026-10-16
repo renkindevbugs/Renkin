@@ -2,6 +2,7 @@ package dev.renkinProject.renkin.data.transfer
 
 import dev.renkinProject.renkin.data.ActiveProfileIdKey
 import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
+import dev.renkinProject.renkin.data.DbApplication
 import dev.renkinProject.renkin.data.ProfilePrefKeys
 import dev.renkinProject.renkin.data.isValidPersistedPreference
 import dev.renkinProject.renkin.data.watch.AppComponent
@@ -89,8 +90,7 @@ internal object BackupValidator {
             }
             val components = profile.icons.map { AppComponent(it.packageName, it.activityName) }
             requireValid(components.distinct().size == components.size, "Duplicate profile icon")
-            requireValid(components.all(::validComponent), "Invalid icon component")
-            requireValid(profile.icons.all { it.profileId == profile.profile.id }, "Icon belongs to another profile")
+            profile.icons.forEach { validateIcon(it, profile.profile.id) }
             profile.watchRules.forEach(::validateRule)
         }
         if (formatVersion > BackupCodec.LEGACY_FORMAT_VERSION && kind == BackupManager.ImportKind.BACKUP) {
@@ -111,6 +111,11 @@ internal object BackupValidator {
                 payload?.outline?.style, payload?.shadow?.style
             ).all(::validStyle), "Invalid modifier colour style")
         }
+    }
+
+    internal fun validateIcon(icon: DbApplication, profileId: Long) {
+        requireValid(validComponent(AppComponent(icon.packageName, icon.activityName)), "Invalid icon component")
+        requireValid(icon.profileId == profileId, "Icon belongs to another profile")
     }
 
     private fun validateRule(rule: BackupWatchRule) {

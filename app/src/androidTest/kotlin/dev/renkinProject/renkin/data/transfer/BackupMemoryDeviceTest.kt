@@ -6,6 +6,7 @@ import android.os.Bundle
 import android.os.Debug
 import android.os.SystemClock
 import androidx.lifecycle.ViewModelProvider
+import androidx.room.Room
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dagger.hilt.android.EntryPointAccessors
@@ -13,6 +14,13 @@ import dev.renkinProject.renkin.MainActivity
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.data.RenkinPackDatabase
 import dev.renkinProject.renkin.data.RenkinPackRepository
+import dev.renkinProject.renkin.data.DbApplication
+import dev.renkinProject.renkin.data.Profile
+import dev.renkinProject.renkin.data.ProfileStyle
+import dev.renkinProject.renkin.data.ProfileStyleCodec
+import dev.renkinProject.renkin.data.UnsavedIconJournalStore
+import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
+import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import java.io.File
 import java.io.OutputStream
 import java.security.MessageDigest
@@ -43,6 +51,34 @@ class BackupMemoryDeviceTest {
     private val runtime get() = Runtime.getRuntime()
 
     private fun inspectionFixture() = File(context.cacheDir, "perf6b-inspection-fixture.renkin")
+
+    @Test
+    fun verifyOversizedProfileExport() = withReadyApp {
+        val db = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java).build()
+        try {
+            val pack = RenkinPackRepository(db)
+            val icon = DbApplication("app.oversized", "Main", true, true,
+                "rendered\"\\\n".repeat(140_000), profileId = 777,
+                baseDrawable = "base\n\t".repeat(180_000), baseIsAdaptiveIcon = true, baseIsXml = true,
+                sourceUrl = "https://example.org/icon", isFallbackIcon = true)
+            pack.replaceEverything(listOf(Profile(id = 777, name = "Oversized fixture", prefsSnapshot = "{}",
+                profileStyle = ProfileStyleCodec.encode(ProfileStyle()))), listOf(icon))
+            val manager = BackupManager(context, pack, dev.renkinProject.renkin.data.watch.WatchRepository(context),
+                editorDraftInvalidation = EditorDraftInvalidation(EditorDraftStore(context), UnsavedIconJournalStore(context)))
+            val prepared = manager.prepareProfileExport(777)
+            try {
+                ZipFile(prepared.archive).use { zip ->
+                    val decoded = zip.getInputStream(requireNotNull(zip.getEntry("data.json"))).reader().use {
+                        readBackupData(it, BackupCodec.FORMAT_VERSION)
+                    }
+                    assertEquals(listOf(icon), decoded.profiles.single().icons)
+                }
+                emit(JSONObject().put("phase", "oversized-export-verified")
+                    .put("renderedChars", icon.drawable.length).put("baseChars", icon.baseDrawable.length))
+            } finally { manager.discardExport(prepared) }
+            assertFalse(prepared.directory.exists())
+        } finally { db.close() }
+    }
 
     @Test
     fun stageInspectionFixture() = withReadyApp { manager ->
@@ -164,8 +200,19 @@ class BackupMemoryDeviceTest {
         try {
             val archiveBytes = prepared.archive.length()
             ZipFile(prepared.archive).use { zip ->
+                val data = requireNotNull(zip.getEntry("data.json"))
+                val digest = MessageDigest.getInstance("SHA-256")
+                zip.getInputStream(data).use { input ->
+                    val buffer = ByteArray(8192)
+                    while (true) {
+                        val count = input.read(buffer)
+                        if (count < 0) break
+                        digest.update(buffer, 0, count)
+                    }
+                }
                 emit(JSONObject().put("phase", "$prefix-archive").put("zipBytes", archiveBytes)
-                    .put("jsonBytes", requireNotNull(zip.getEntry("data.json")).size)
+                    .put("jsonBytes", data.size)
+                    .put("jsonSha256", digest.digest().joinToString("") { "%02x".format(it) })
                     .put("entries", zip.size()).put("expectedIcons", expectedIcons))
             }
             val inspection = measured("$prefix-inspect") { manager.inspectFile { prepared.archive.inputStream() } }

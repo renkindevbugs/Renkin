@@ -151,30 +151,7 @@ object BackupCodec {
             }
 
             val icons = JSONArray()
-            for (icon in bp.icons) {
-                icons.put(
-                    JSONObject()
-                        .put("packageName", icon.packageName)
-                        .put("activityName", icon.activityName)
-                        .put("isAdaptiveIcon", icon.isAdaptiveIcon)
-                        .put("isXml", icon.isXml)
-                        .put("drawable", icon.drawable)
-                        .put("calendarEnabled", icon.calendarEnabled)
-                        .put("calendarPrefix", icon.calendarPrefix)
-                        .put("calendarPackName", icon.calendarPackName)
-                        .put("sourcePackName", icon.sourcePackName)
-                        .put("sourceDrawableName", icon.sourceDrawableName)
-                        .put("isCustomIcon", icon.isCustomIcon)
-                        .put("isLegacyIcon", icon.isLegacyIcon)
-                        .put("baseDrawable", icon.baseDrawable)
-                        .put("baseIsAdaptiveIcon", icon.baseIsAdaptiveIcon)
-                        .put("baseIsXml", icon.baseIsXml)
-                        .put("sourceUrl", icon.sourceUrl)
-                        .put("isFallbackIcon", icon.isFallbackIcon)
-                        .put("modifierRecipe", StoredIconModifierRecipe.normalize(icon.modifierRecipe).orEmpty())
-                        .put("modifierInput", StoredIconModifierInput.normalize(icon.modifierInput).orEmpty())
-                )
-            }
+            for (icon in bp.icons) icons.put(encodeIcon(icon))
             p.put("icons", icons)
 
             val rules = JSONArray()
@@ -262,6 +239,28 @@ object BackupCodec {
 
         return root
     }
+
+    internal fun encodeIcon(icon: DbApplication): JSONObject =
+        JSONObject()
+            .put("packageName", icon.packageName)
+            .put("activityName", icon.activityName)
+            .put("isAdaptiveIcon", icon.isAdaptiveIcon)
+            .put("isXml", icon.isXml)
+            .put("drawable", icon.drawable)
+            .put("calendarEnabled", icon.calendarEnabled)
+            .put("calendarPrefix", icon.calendarPrefix)
+            .put("calendarPackName", icon.calendarPackName)
+            .put("sourcePackName", icon.sourcePackName)
+            .put("sourceDrawableName", icon.sourceDrawableName)
+            .put("isCustomIcon", icon.isCustomIcon)
+            .put("isLegacyIcon", icon.isLegacyIcon)
+            .put("baseDrawable", icon.baseDrawable)
+            .put("baseIsAdaptiveIcon", icon.baseIsAdaptiveIcon)
+            .put("baseIsXml", icon.baseIsXml)
+            .put("sourceUrl", icon.sourceUrl)
+            .put("isFallbackIcon", icon.isFallbackIcon)
+            .put("modifierRecipe", StoredIconModifierRecipe.normalize(icon.modifierRecipe).orEmpty())
+            .put("modifierInput", StoredIconModifierInput.normalize(icon.modifierInput).orEmpty())
 
     /** Archive callers pass the manifest version; malformed input is surfaced as a failed import. */
     fun decode(json: String, formatVersion: Int): BackupData = decodeJson(parseBackupJson(json), formatVersion)
