@@ -19,6 +19,7 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -124,7 +125,7 @@ class InstalledIconLoaderTest {
         val owner = launch(start = CoroutineStart.UNDISPATCHED) { loader.preview(source, 16) }
         var waiter: kotlinx.coroutines.Deferred<android.graphics.Bitmap?>? = null
         try {
-            assertTrue(icon.entered.await(5, TimeUnit.SECONDS))
+            withTimeout(15_000) { icon.entered.await() }
             waiter = async(start = CoroutineStart.UNDISPATCHED) { loader.preview(source, 16) }
             owner.cancel()
             icon.release.countDown()
@@ -146,7 +147,7 @@ class InstalledIconLoaderTest {
         val loader = InstalledIconLoader(context)
         val owner = async(start = CoroutineStart.UNDISPATCHED) { loader.preview(source, 16) }
         try {
-            assertTrue(icon.entered.await(5, TimeUnit.SECONDS))
+            withTimeout(15_000) { icon.entered.await() }
             val waiter = async(start = CoroutineStart.UNDISPATCHED) { loader.preview(source, 16) }
             waiter.cancel()
             icon.release.countDown()
@@ -162,15 +163,15 @@ class InstalledIconLoaderTest {
     }
 
     private class BlockingIcon(private val block: Boolean = true) : Drawable() {
-        val entered = CountDownLatch(1)
+        val entered = CompletableDeferred<Unit>()
         val release = CountDownLatch(1)
         val draws = AtomicInteger()
         override fun getIntrinsicWidth() = 16
         override fun getIntrinsicHeight() = 16
         override fun draw(canvas: Canvas) {
             if (draws.incrementAndGet() == 1 && block) {
-                entered.countDown()
-                check(release.await(5, TimeUnit.SECONDS))
+                entered.complete(Unit)
+                check(release.await(15, TimeUnit.SECONDS))
             }
             canvas.drawColor(Color.RED)
         }

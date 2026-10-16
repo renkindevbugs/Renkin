@@ -2066,7 +2066,7 @@ identity keys that do not retain Drawables. Full sources are acquired for genera
 one live editor, preserving component/user/resource/configuration provenance and adaptive layers.
 Editor preparation and recovery-original previews run off Main; reviewed/recovered artwork keeps
 its existing ownership. Reload carries fresh descriptors together with preserved optional modifier
-metadata. Details and the pending developer checkpoint are in
+metadata. Details and the accepted developer checkpoint are in
 [performance-installed-icon-source-checkpoint.md](performance-installed-icon-source-checkpoint.md).
 
 `InstalledAppCatalog` can emit an aggregate `InstalledIconMemory` inventory of resident source
