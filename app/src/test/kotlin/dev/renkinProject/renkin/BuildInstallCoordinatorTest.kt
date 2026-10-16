@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.room.Room
 import androidx.lifecycle.SavedStateHandle
 import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
+import dev.renkinProject.renkin.data.UnsavedIconJournalStore
 import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import dev.renkinProject.renkin.apk.ApplicationProvider
 import dev.renkinProject.renkin.apk.InstallerSelection
@@ -43,7 +44,7 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [33])
 class BuildInstallCoordinatorTest {
-    private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(application)) }
+    private val draftInvalidation by lazy { EditorDraftInvalidation(EditorDraftStore(application), UnsavedIconJournalStore(application)) }
     private lateinit var application: Application
     private lateinit var database: RenkinPackDatabase
     private lateinit var provider: ApplicationProvider

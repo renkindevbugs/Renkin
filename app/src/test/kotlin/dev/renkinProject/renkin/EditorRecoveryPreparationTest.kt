@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin
 
 import android.app.Application
+import dev.renkinProject.renkin.data.UnsavedIconJournalStore
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.datastore.preferences.core.edit
@@ -60,7 +61,7 @@ import org.robolectric.annotation.GraphicsMode
 @Config(application = Application::class, sdk = [33], shadows = [BackupOsShadow::class])
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class EditorRecoveryPreparationTest {
-    private val draftInvalidation get() = EditorDraftInvalidation(store)
+    private val draftInvalidation get() = EditorDraftInvalidation(store, UnsavedIconJournalStore(context))
     @get:Rule val temporary = TemporaryFolder()
     private lateinit var database: RenkinPackDatabase
     private lateinit var repository: RenkinPackRepository

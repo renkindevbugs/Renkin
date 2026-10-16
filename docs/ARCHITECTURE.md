@@ -1423,6 +1423,18 @@ be assumed to open the upgraded database.
   before recording its own process state; a marker from another provider instance with changes
   shows the lost-icons notice once, before the editor-draft offer. It is never part of a save,
   backup or the install-confirmation snapshot.
+- **Unsaved-icon journal** (`data/UnsavedIconJournalStore.kt`, `noBackupFilesDir/unsaved-journal/`)
+  — hand-made unsaved rows (dirty keys that are not refresh output; a cleared icon has no row),
+  encoded exactly like a save (`RenkinPackStore.encodeUnsaved`, modifier inputs stored) but never
+  written to Room. `current.json` follows the running session 1 s after each change and on
+  MainActivity `onStop`; at startup a journal from another provider instance moves to
+  `offer.json`. The offer restores into its own profile only, as unsaved edits under the profile
+  gate, skipping rows the saved set already matches; Not now keeps it for a later start, Discard
+  and Restore delete it. Saving that profile, deleting it, storage replacement and recovery
+  invalidate it through `EditorDraftInvalidation`; startup input cleanup keeps the inputs it
+  references. Refresh output is not journaled (Refresh again regenerates it). Size cap 48 MiB;
+  rows beyond it are counted as not kept. Room, saves and install-confirmation persistence are
+  unchanged.
 - **Room — `RenkinPackDatabase`** (file `"renkinPack"`, v21) — profiles + rendered and base icons
   of the last built/saved pack per profile. `isCustomIcon` marks hand-picked vs refresh-generated
   rows; `isLegacyIcon` records pre-classification uncertainty without guessing the origin. In the

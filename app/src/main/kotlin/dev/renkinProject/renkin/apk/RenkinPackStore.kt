@@ -186,6 +186,25 @@ class RenkinPackStore(
         }
     }
 
+    /**
+     * Encodes [apps] exactly as a save would, without writing Room: null for a cleared icon.
+     * Modifier inputs are stored like a save's, so a restored row keeps its editable source.
+     */
+    suspend fun encodeUnsaved(profileId: Long, apps: List<PackageInfoStruct>): List<DbApplication?> =
+        withContext(Dispatchers.Default) {
+            val prepared = mutableMapOf<IconModifierInput, IconModifierInputStore.Prepared>()
+            for (app in apps) {
+                val state = app.modifierInput ?: continue
+                if (app.createdIcon == null || state in prepared) continue
+                inputStore.prepare(state)?.let { prepared[state] = it }
+            }
+            val rows = coroutineScope {
+                apps.map { app -> async(artworkDispatcher) { encodeRow(profileId, app, prepared) } }.awaitAll()
+            }
+            prepared.forEach { (state, input) -> inputStore.accept(state, input) }
+            rows
+        }
+
     private suspend fun encodeRows(
         profileId: Long,
         apps: List<PackageInfoStruct>,

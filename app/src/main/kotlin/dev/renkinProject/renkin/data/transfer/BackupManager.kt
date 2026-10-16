@@ -674,7 +674,10 @@ class BackupManager(
         recovery.cleanup()
         BackupStaging.cleanAfterProcessStart(context.filesDir)
         if (!inputCleanupComplete) {
-            IconModifierInputStore.cleanupAfterProcessStart(context, packRepo.modifierInputDocuments())
+            IconModifierInputStore.cleanupAfterProcessStart(
+                context,
+                packRepo.modifierInputDocuments() + editorDraftInvalidation.retainedModifierInputs()
+            )
             inputCleanupComplete = true
         }
         refreshAbandonedRecoveryAvailability()

@@ -284,6 +284,15 @@
         <item quantity="other">%1$d refreshed icons</item>
     </plurals>
     <string name="lostUnsavedRefresh">Refresh again</string>
+    <string name="lostIconsRestoreTitle">Restore unsaved icons?</string>
+    <string name="lostIconsRestoreText">Renkin was closed before **%1$s** in **%2$s** could be built or saved. They can be restored as unsaved changes.</string>
+    <string name="lostIconsRefreshedNote">%1$s weren\'t kept. Refresh again restores the icons above and regenerates them.</string>
+    <string name="lostIconsDroppedNote">%1$s couldn\'t be kept (too large).</string>
+    <string name="lostIconsRestore">Restore</string>
+    <string name="lostIconsDiscardTitle">Discard unsaved icons?</string>
+    <string name="lostIconsDiscardText">The kept icons will be deleted. Your current icons stay as they are.</string>
+    <string name="lostIconsRestored">Unsaved icons restored</string>
+    <string name="lostIconsNothingRestored">Nothing to restore: these icons are already saved or their apps are gone</string>
     <string name="editorDraftLost">The unsaved editor draft is no longer available. Reopen the editor to continue.</string>
     <string name="editorRecoveryTitle">Resume icon edit</string>
     <string name="editorRecoveryText">Your saved changes are ready to continue.</string>
