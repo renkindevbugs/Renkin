@@ -142,6 +142,16 @@ class BackupMemoryDeviceTest {
     }
 
     @Test
+    fun measureValidatedImportStaging() = withReadyApp(activateLargest = true) { manager ->
+        BackupStagingDeviceProbe(context, this, manager).run()
+    }
+
+    @Test
+    fun measureValidatedImportStagingFromStore() = withReadyApp(activateLargest = true) { manager ->
+        BackupStagingDeviceProbe(context, this, manager).run(compareFull = false)
+    }
+
+    @Test
     fun measureIconPackStudioPreflight() = withReadyApp { manager ->
         val largest = footprint().first
         val active = context.dataStore.getPreferencesAfterPendingWrites()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
