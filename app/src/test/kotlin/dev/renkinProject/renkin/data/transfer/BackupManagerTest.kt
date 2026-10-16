@@ -135,6 +135,43 @@ class BackupManagerTest {
     }
 
     @Test
+    fun iconPackStudioPreflightReadsOnlyScopedSourceNames() = runBlocking {
+        val queries = java.util.concurrent.ConcurrentLinkedQueue<String>()
+        val db = Room.inMemoryDatabaseBuilder(context, RenkinPackDatabase::class.java)
+            .allowMainThreadQueries()
+            .setQueryCallback({ sql, _ -> queries.add(sql) }, java.util.concurrent.Executor { it.run() })
+            .build()
+        try {
+            val pack = RenkinPackRepository(db)
+            val shared = "GINLEMON.ICONPACKSTUDIO.EXPORTED"
+            val large = DbApplication("app.large", "Main", true, true, "rendered".repeat(90_000),
+                baseDrawable = "base".repeat(150_000), sourcePackName = shared)
+            pack.replaceEverything(listOf(Profile(id = 1, name = "First"), Profile(id = 4, name = "Second"),
+                Profile(id = 7, name = "Regular")), listOf(
+                large, large.copy(profileId = 4),
+                large.copy(packageName = "app.substring", profileId = 4, sourcePackName = "prefix.iconpackstudio.exported.suffix"),
+                large.copy(profileId = 7, sourcePackName = "iconpackstudio.export"),
+                large.copy(packageName = "app.empty", profileId = 7, sourcePackName = "")
+            ))
+            val manager = BackupManager(context, pack, WatchRepository(srcWatchDb), editorDraftInvalidation = draftInvalidation)
+            queries.clear()
+            assertTrue(manager.profileUsesIconPackStudio(1))
+            assertTrue(manager.profileUsesIconPackStudio(4))
+            assertFalse(manager.profileUsesIconPackStudio(7))
+            assertFalse(manager.profileUsesIconPackStudio(999))
+            assertTrue(manager.otherProfilesUseIconPackStudio(1))
+            assertTrue(manager.otherProfilesUseIconPackStudio(4))
+            assertTrue(manager.otherProfilesUseIconPackStudio(7))
+            assertTrue(manager.otherProfilesUseIconPackStudio(999))
+            assertTrue(pack.exportSourcePacks(profileId = 4, excludedProfileId = 4).isEmpty())
+            val reads = queries.filter { it.contains("DbApplication") }
+            assertEquals(9, reads.size)
+            assertTrue(reads.all { it.startsWith("SELECT DISTINCT sourcePackName FROM DbApplication") })
+            assertTrue(reads.none { it.contains("drawable", ignoreCase = true) || it.contains("SELECT *") })
+        } finally { db.close() }
+    }
+
+    @Test
     fun exportImport_roundTripsProfilesIconsAndRules() = runBlocking {
         val srcPackRepo = RenkinPackRepository(srcPackDb)
         val srcWatchRepo = WatchRepository(srcWatchDb)

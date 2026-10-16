@@ -19,6 +19,10 @@ import dev.renkinProject.renkin.data.Profile
 import dev.renkinProject.renkin.data.ProfileStyle
 import dev.renkinProject.renkin.data.ProfileStyleCodec
 import dev.renkinProject.renkin.data.UnsavedIconJournalStore
+import dev.renkinProject.renkin.data.ActiveProfileIdKey
+import dev.renkinProject.renkin.data.DEFAULT_PROFILE_ID
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
+import dev.renkinProject.renkin.dataStore
 import dev.renkinProject.renkin.data.editor.EditorDraftInvalidation
 import dev.renkinProject.renkin.data.editor.EditorDraftStore
 import java.io.File
@@ -125,6 +129,29 @@ class BackupMemoryDeviceTest {
     @Test
     fun measureIdleReadyBaseline() = withReadyApp {
         measured("idle-ready-control") { delay(10_000) }
+    }
+
+    @Test
+    fun measureIconPackStudioPreflight() = withReadyApp { manager ->
+        val largest = footprint().first
+        val active = context.dataStore.getPreferencesAfterPendingWrites()[ActiveProfileIdKey] ?: DEFAULT_PROFILE_ID
+        val sources = mutableListOf<Pair<Long, String>>()
+        RenkinPackDatabase.get(context).openHelper.readableDatabase.query(
+            "SELECT DISTINCT profileId, sourcePackName FROM DbApplication"
+        ).use { cursor ->
+            while (cursor.moveToNext()) sources += cursor.getLong(0) to cursor.getString(1)
+        }
+        val expectedProfile = sources.any { it.first == largest && isIconPackStudioExport(it.second) }
+        val expectedOthers = sources.any { it.first != active && isIconPackStudioExport(it.second) }
+        repeat(3) { index ->
+            val profile = measured("ips-profile-${index + 1}") { manager.profileUsesIconPackStudio(largest) }
+            val others = measured("ips-others-${index + 1}") { manager.otherProfilesUseIconPackStudio(active) }
+            assertEquals(expectedProfile, profile)
+            assertEquals(expectedOthers, others)
+            emit(JSONObject().put("phase", "ips-verified").put("trial", index + 1)
+                .put("storedProfileUsesIps", profile).put("otherProfilesUseIps", others))
+            delay(500)
+        }
     }
 
     @Test

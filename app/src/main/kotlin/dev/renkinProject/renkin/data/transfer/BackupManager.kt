@@ -184,14 +184,11 @@ class BackupManager(
 
     /** Whether a saved profile references at least one personal Icon Pack Studio export. */
     suspend fun profileUsesIconPackStudio(profileId: Long): Boolean =
-        packRepo.getAll(profileId).usesIconPackStudioExport()
+        packRepo.exportSourcePacks(profileId).any(::isIconPackStudioExport)
 
     /** Whether any saved profile except [excludedProfileId] references an IPS export. */
     suspend fun otherProfilesUseIconPackStudio(excludedProfileId: Long): Boolean =
-        packRepo.getAllProfilesApplications()
-            .asSequence()
-            .filterNot { it.profileId == excludedProfileId }
-            .usesIconPackStudioExport()
+        packRepo.exportSourcePacks(excludedProfileId = excludedProfileId).any(::isIconPackStudioExport)
 
     suspend fun exportBackup(uri: Uri) = exportBackup {
         context.contentResolver.openOutputStream(uri) ?: throw IOException("Cannot open $uri for writing")
@@ -434,12 +431,6 @@ class BackupManager(
     }
 
     private fun stagingRoot(): File = File(context.filesDir, "backup-imports")
-
-    private fun Sequence<DbApplication>.usesIconPackStudioExport(): Boolean =
-        any { isIconPackStudioExport(it.sourcePackName) }
-
-    private fun Iterable<DbApplication>.usesIconPackStudioExport(): Boolean =
-        asSequence().usesIconPackStudioExport()
 
     // ---- Import --------------------------------------------------------------------
 
