@@ -2,8 +2,8 @@
 
 Date: 2026-10-15. Branch: `feature/installed-icon-source-loading`, based on `dev`
 at `0f97a0c8`, after the approved PERF5a measurement/design merge.
-The implementation and scoped device probes are ready for developer review; remaining acceptance
-coverage is listed below. No commit or merge of this implementation checkpoint is approved yet.
+The developer approved commit and merge. Implementation `2327e89f` was merged into `dev`
+by `99c9655b`. Remaining coverage limitations are listed below.
 
 ## Implemented ownership boundary
 
@@ -24,7 +24,7 @@ reads are not an atomic package-update snapshot.
 API 31+ uses the launcher's ActivityInfo; older APIs retain a metadata fallback. Full results pair
 the actual drawable with resource id, ApplicationInfo and configuration. Vector parsing consumes
 that pair rather than resolving a same-name package in another user. Older work-profile metadata
-fallbacks still need synthetic regression coverage and device validation.
+fallbacks have synthetic metadata coverage; a real work-profile device remains unvalidated.
 
 The shared 8 MiB preview LRU now lives in `packages`. Its keys contain a source-identity token
 and dimensions, never the source Drawable or descriptor. Independent image-loader instances share
@@ -160,12 +160,18 @@ launch side effects. Temporary private backup/APK/database/UI copies were delete
 The final candidate remains installed for developer checks; release Renkin and installed packs were
 not operated or modified. Aggregate logs/scripts remain in the session scratchpad's `perf5b/`.
 
-The full unit suite, new synthetic ownership/cancellation/API regressions, lint and optimized-release
-verification await developer confirmation under CLAUDE.md. Existing unit fixtures were adapted only
-for the source property and cache-package move. No historical unit-suite result is claimed as new.
-Work-profile devices, pre-31 metadata fallback, unavailable/updated packages, cancellation races,
-Apply/Undo persistence, retained-input replay and actual process-death recovery were not exercised
-by these device probes and remain acceptance coverage before committing the implementation.
+On 2026-10-16, targeted ownership/cache/reload tests and the complete unit suite passed on `dev`
+`75c86f5b` with a test-only synchronization correction: 1,382 tests in 189 suites, zero
+failures/errors/skips. `assembleDebug` also passed. The cancellation fixture previously blocked
+the Robolectric test thread while waiting up to five seconds for the first native draw. It now
+suspends for the draw-entry handshake before cancelling either owner or waiter. The production
+loader is unchanged. Synthetic cases cover owner cancellation with waiter retry, independent waiter
+cancellation, configuration copying, prepared-editor ownership, pre-31 activity/work-user metadata
+and modifier-input preservation on reload. No historical suite result is claimed as new.
+Lint and optimized-release verification were not repeated. Actual work-profile devices,
+unavailable/updated packages, Apply/Undo persistence, retained-input replay and real process death
+were not exercised by these device probes. Synthetic metadata/cancellation cases do not replace
+those device scenarios or prove absence of every concurrency race.
 
 ## Manual developer checkpoint
 
@@ -179,6 +185,5 @@ by these device probes and remain acceptance coverage before committing the impl
 4. Resume the existing unfinished edit without reselecting its source. Artwork and controls should
    match its saved state; configuration recreation should retain the same editor and source.
 
-After device confirmation, add the relevant synthetic regressions and run the targeted/full
-suites and required build checks before committing or merging. Further memory work should proceed
-to backup/export measurement only after this source-loading checkpoint is accepted.
+The developer approved commit and merge after this checkpoint. The next performance phase is
+safe measurement of backup/export memory; no backup-memory improvement is claimed here.
