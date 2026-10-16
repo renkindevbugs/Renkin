@@ -72,6 +72,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -379,7 +380,7 @@ fun HeroPackCard(
                                 text = if (changes.isEmpty()) {
                                     stringResource(R.string.unbuiltChanges)
                                 } else {
-                                    stringResource(R.string.unbuiltChangesCount, changes.size)
+                                    pluralStringResource(R.plurals.unbuiltChangesCount, changes.size, changes.size)
                                 },
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onTertiaryContainer

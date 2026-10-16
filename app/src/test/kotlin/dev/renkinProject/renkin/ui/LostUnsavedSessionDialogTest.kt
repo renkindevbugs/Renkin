@@ -76,6 +76,28 @@ class LostUnsavedSessionDialogTest {
         assertEquals(1, restored)
     }
 
+    @Test fun restoreOfferAgreesWithASingleIcon() {
+        val single = UnsavedIconJournal("old", 1, listOf(UnsavedIconJournalEntry("com.a/com.a.Main", null)), droppedCount = 0)
+        compose.setContent {
+            RestoreLostIconsDialog(
+                LostUnsavedWork(UnsavedSessionMarker("old", 1, 1, 1), single), "Main",
+                { restored++ }, { refreshed++ }, { later++ }, { discarded++ }
+            )
+        }
+
+        compose.onNodeWithText("Renkin was closed before 1 edited icon in Main could be built or saved. It can be restored as an unsaved change.")
+            .assertIsDisplayed()
+        compose.onNodeWithText("1 refreshed icon wasn't kept. Refresh again restores the icons above and regenerates it.")
+            .assertIsDisplayed()
+    }
+
+    @Test fun unbuiltChangesLabelAgreesWithItsCount() {
+        val resources = RuntimeEnvironment.getApplication().resources
+
+        assertEquals("1 change not built yet", resources.getQuantityString(R.plurals.unbuiltChangesCount, 1, 1))
+        assertEquals("2 changes not built yet", resources.getQuantityString(R.plurals.unbuiltChangesCount, 2, 2))
+    }
+
     @Test fun refreshIsOfferedOnlyWithRefreshedIcons() {
         showOffer(refreshedCount = 0)
 

@@ -122,6 +122,7 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         profileDao.deleteEverything()
         profiles.forEach { profileDao.insert(it) }
         dao.insertAll(apps)
+        builtIconDao.deleteForMissingProfiles()
     }
 
     // ---- What the last build shipped -----------------------------------------------
@@ -283,10 +284,14 @@ class RenkinPackRepository(private val db: RenkinPackDatabase) {
         }
     }
 
-    /** Deletes the profile and all of its stored icons. The default profile is never deleted. */
-    suspend fun deleteProfile(id: Long) = access {
-        if (id == DEFAULT_PROFILE_ID) return@access
+    /**
+     * Deletes the profile, its stored icons and its last-build record. The default profile is
+     * never deleted. Build records left behind by deletions before this cleanup go too.
+     */
+    suspend fun deleteProfile(id: Long) = transaction {
+        if (id == DEFAULT_PROFILE_ID) return@transaction
         dao.deleteAllApplications(id)
         profileDao.delete(id)
+        builtIconDao.deleteForMissingProfiles()
     }
 }

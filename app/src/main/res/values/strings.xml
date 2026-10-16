@@ -141,7 +141,10 @@
     <string name="saveAction">Save</string>
     <string name="discardAction">Don\'t save</string>
     <string name="unbuiltChanges">Saved changes not built yet</string>
-    <string name="unbuiltChangesCount">%1$d changes not built yet</string>
+    <plurals name="unbuiltChangesCount">
+        <item quantity="one">%1$d change not built yet</item>
+        <item quantity="other">%1$d changes not built yet</item>
+    </plurals>
     <string name="packChangesTitle">Changes since last build</string>
     <string name="packChangesAll">All %1$d</string>
     <string name="packChangesAdded">Added %1$d</string>
@@ -285,8 +288,14 @@
     </plurals>
     <string name="lostUnsavedRefresh">Refresh again</string>
     <string name="lostIconsRestoreTitle">Restore unsaved icons?</string>
-    <string name="lostIconsRestoreText">Renkin was closed before **%1$s** in **%2$s** could be built or saved. They can be restored as unsaved changes.</string>
-    <string name="lostIconsRefreshedNote">%1$s weren\'t kept. Refresh again restores the icons above and regenerates them.</string>
+    <plurals name="lostIconsRestoreText">
+        <item quantity="one">Renkin was closed before **%1$d edited icon** in **%2$s** could be built or saved. It can be restored as an unsaved change.</item>
+        <item quantity="other">Renkin was closed before **%1$d edited icons** in **%2$s** could be built or saved. They can be restored as unsaved changes.</item>
+    </plurals>
+    <plurals name="lostIconsRefreshedNote">
+        <item quantity="one">%1$d refreshed icon wasn\'t kept. Refresh again restores the icons above and regenerates it.</item>
+        <item quantity="other">%1$d refreshed icons weren\'t kept. Refresh again restores the icons above and regenerates them.</item>
+    </plurals>
     <string name="lostIconsDroppedNote">%1$s couldn\'t be kept (too large).</string>
     <string name="lostIconsRestore">Restore</string>
     <string name="lostIconsDiscardTitle">Discard unsaved icons?</string>
