@@ -4,6 +4,7 @@ import android.util.JsonReader
 import android.util.JsonToken
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.Preferences
+import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.IconShape
@@ -21,6 +22,12 @@ internal object ProfileStyleSchema {
         add(StringField(SecondaryIconPackKey, "source.secondary.iconPack") { it.source.secondary.iconPack })
         add(EnumField(FallbackSourceKey, "source.fallback", FallbackSource.entries) { it.source.fallback })
         add(StringField(TextFontKey, "source.fontPath") { it.source.fontPath })
+        add(EnumField(AppIconVariantKey, "source.applicationIcon.variant", ApplicationIconVariant.entries) { it.source.applicationIcon.variant })
+        add(BooleanField(AppIconFullIconKey, "source.applicationIcon.fullIcon") { it.source.applicationIcon.fullIcon })
+        add(BooleanField(AppIconInvertMonochromeKey, "source.applicationIcon.invertMonochrome") { it.source.applicationIcon.invertMonochrome })
+        add(IntField(AppIconMaterialYouSchemeKey, "source.applicationIcon.materialYouScheme") { it.source.applicationIcon.materialYouScheme })
+        addAll(colorFields(AppIconMaterialYouForegroundStyleKeys, "source.applicationIcon.materialYouForeground") { it.source.applicationIcon.materialYouForeground })
+        addAll(colorFields(AppIconMaterialYouBackgroundStyleKeys, "source.applicationIcon.materialYouBackground") { it.source.applicationIcon.materialYouBackground })
         add(EnumField(PrimaryImageEditKey, "modifiers.generation.primaryEffect", ImageEdit.entries) { it.modifiers.generation.primaryEffect })
         add(EnumField(SecondaryImageEditKey, "modifiers.generation.secondaryEffect", ImageEdit.entries) { it.modifiers.generation.secondaryEffect })
         addAll(colorFields(ColorizerStyleKeys, "modifiers.generation.color") { it.modifiers.generation.color })

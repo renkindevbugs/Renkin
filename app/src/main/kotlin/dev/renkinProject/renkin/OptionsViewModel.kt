@@ -43,12 +43,19 @@ import dev.renkinProject.renkin.data.TextFontKey
 import dev.renkinProject.renkin.data.TextType
 import dev.renkinProject.renkin.data.observePreferences
 import dev.renkinProject.renkin.data.setBooleanValue
+import dev.renkinProject.renkin.data.AppIconFullIconKey
+import dev.renkinProject.renkin.data.AppIconInvertMonochromeKey
+import dev.renkinProject.renkin.data.AppIconMaterialYouBackgroundStyleKeys
+import dev.renkinProject.renkin.data.AppIconMaterialYouForegroundStyleKeys
+import dev.renkinProject.renkin.data.AppIconMaterialYouSchemeKey
+import dev.renkinProject.renkin.data.AppIconVariantKey
 import dev.renkinProject.renkin.data.setColorStyle
 import dev.renkinProject.renkin.data.setColorValue
 import dev.renkinProject.renkin.data.setEnumValue
 import dev.renkinProject.renkin.data.setIntValue
 import dev.renkinProject.renkin.data.setStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.FontLibrary
 import dev.renkinProject.renkin.icon.creator.SystemFontLibrary
@@ -151,6 +158,20 @@ class OptionsViewModel @Inject constructor(
     fun setColorizerStyle(style: ColorizerStyle) = writeColorStyle(ColorizerStyleKeys, style)
 
     fun setBackgroundStyle(style: ColorizerStyle) = writeColorStyle(BackgroundStyleKeys, style)
+
+    fun setAppIconVariant(value: ApplicationIconVariant) = write { setEnumValue(AppIconVariantKey, value) }
+
+    fun setAppIconFullIcon(enabled: Boolean) = write { setBooleanValue(AppIconFullIconKey, enabled) }
+
+    fun setAppIconInvertMonochrome(enabled: Boolean) = write { setBooleanValue(AppIconInvertMonochromeKey, enabled) }
+
+    fun setAppIconMaterialYouScheme(index: Int) = write { setIntValue(AppIconMaterialYouSchemeKey, index) }
+
+    fun setAppIconMaterialYouForeground(style: ColorizerStyle) =
+        writeColorStyle(AppIconMaterialYouForegroundStyleKeys, style)
+
+    fun setAppIconMaterialYouBackground(style: ColorizerStyle) =
+        writeColorStyle(AppIconMaterialYouBackgroundStyleKeys, style)
 
     fun setOutlineEnabled(enabled: Boolean) = write { setBooleanValue(OutlineAddKey, enabled) }
 

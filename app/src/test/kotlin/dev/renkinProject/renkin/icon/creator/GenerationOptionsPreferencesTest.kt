@@ -4,8 +4,16 @@ import android.app.Application
 
 import android.content.Context
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
+import dev.renkinProject.renkin.extension.toHexString
 import androidx.datastore.preferences.core.preferencesOf
 import androidx.test.core.app.ApplicationProvider
+import dev.renkinProject.renkin.data.AppIconFullIconKey
+import dev.renkinProject.renkin.data.AppIconInvertMonochromeKey
+import dev.renkinProject.renkin.data.AppIconMaterialYouBackgroundKey
+import dev.renkinProject.renkin.data.AppIconMaterialYouForegroundKey
+import dev.renkinProject.renkin.data.AppIconMaterialYouSchemeKey
+import dev.renkinProject.renkin.data.AppIconVariantKey
 import dev.renkinProject.renkin.data.DarkMode
 import dev.renkinProject.renkin.data.DarkModeKey
 import dev.renkinProject.renkin.data.ImageEdit
@@ -146,4 +154,95 @@ class GenerationOptionsPreferencesTest {
         assertEquals(ApplicationIconVariant.MATERIAL_YOU, options.source.applicationIconVariant)
     }
 
+
+    @Test
+    fun appIconStyleAppliesWhenTheAppsOwnIconIsThePrimarySource() {
+        val prefs = preferencesOf(
+            PrimarySourceKey to Source.APPLICATION_ICON.ordinal,
+            AppIconVariantKey to ApplicationIconVariant.MONOCHROME.ordinal,
+            AppIconInvertMonochromeKey to true,
+            AppIconFullIconKey to true
+        )
+
+        val source = GenerationOptions.fromPreferences(prefs, context).source
+
+        assertEquals(ApplicationIconVariant.MONOCHROME, source.applicationIconVariant)
+        assertTrue(source.invertMonochrome)
+        assertTrue(source.useFullApplicationIcon)
+    }
+
+    @Test
+    fun appIconStyleIsIgnoredForIconPackSources() {
+        val prefs = preferencesOf(
+            PrimarySourceKey to Source.ICON_PACK.ordinal,
+            AppIconVariantKey to ApplicationIconVariant.MATERIAL_YOU.ordinal,
+            AppIconFullIconKey to true
+        )
+
+        val source = GenerationOptions.fromPreferences(prefs, context).source
+
+        assertEquals(ApplicationIconVariant.DEFAULT, source.applicationIconVariant)
+        assertFalse(source.useFullApplicationIcon)
+    }
+
+    @Test
+    fun pathTracingKeepsItsOwnMaterialYouSwitchOverTheAppIconStyle() {
+        val prefs = preferencesOf(
+            PrimarySourceKey to Source.APPLICATION_ICON.ordinal,
+            PrimaryImageEditKey to ImageEdit.PATH.ordinal,
+            AppIconVariantKey to ApplicationIconVariant.MONOCHROME.ordinal
+        )
+
+        val source = GenerationOptions.fromPreferences(prefs, context).source
+
+        assertEquals(ApplicationIconVariant.DEFAULT, source.applicationIconVariant)
+    }
+
+    @Test
+    fun materialYouPaintsWithTheSelectedWallpaperScheme() {
+        val (foreground, background) = materialYouSchemes(context)[1]
+        val prefs = preferencesOf(
+            PrimarySourceKey to Source.APPLICATION_ICON.ordinal,
+            AppIconVariantKey to ApplicationIconVariant.MATERIAL_YOU.ordinal,
+            AppIconMaterialYouSchemeKey to 1
+        )
+
+        val options = GenerationOptions.fromPreferences(prefs, context)
+
+        assertEquals(ApplicationIconVariant.MATERIAL_YOU, options.source.applicationIconVariant)
+        assertEquals(foreground.toArgb(), options.modifiers.effect.colorizer.firstColor)
+        assertEquals(background.toArgb(), options.export.background.color)
+    }
+
+    @Test
+    fun materialYouPastTheLastSchemeUsesTheCustomColours() {
+        val custom = materialYouSchemes(context).size
+        val prefs = preferencesOf(
+            PrimarySourceKey to Source.APPLICATION_ICON.ordinal,
+            AppIconVariantKey to ApplicationIconVariant.MATERIAL_YOU.ordinal,
+            AppIconMaterialYouSchemeKey to custom,
+            AppIconMaterialYouForegroundKey to Color.Red.toHexString(),
+            AppIconMaterialYouBackgroundKey to Color.Blue.toHexString()
+        )
+
+        val options = GenerationOptions.fromPreferences(prefs, context)
+
+        assertEquals(Color.Red.toArgb(), options.modifiers.effect.colorizer.firstColor)
+        assertEquals(Color.Blue.toArgb(), options.export.background.color)
+        assertEquals(Color.Red.toArgb(), options.export.foregroundStyle?.firstColor)
+    }
+
+    @Test
+    fun nonMaterialYouVariantsKeepTheRegularColours() {
+        val prefs = preferencesOf(
+            PrimarySourceKey to Source.APPLICATION_ICON.ordinal,
+            AppIconVariantKey to ApplicationIconVariant.MONOCHROME.ordinal,
+            AppIconMaterialYouSchemeKey to 1
+        )
+
+        val options = GenerationOptions.fromPreferences(prefs, context)
+
+        assertEquals(null, options.export.foregroundStyle)
+        assertEquals(prefs.getDefaultIconColor(context).toArgb(), options.modifiers.effect.colorizer.firstColor)
+    }
 }
