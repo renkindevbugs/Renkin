@@ -2,7 +2,6 @@ package dev.renkinProject.renkin.util
 
 import android.content.Context
 import android.os.Build
-import dev.renkinProject.renkin.BuildConfig
 import java.io.File
 import java.io.PrintWriter
 import java.io.StringWriter
@@ -116,7 +115,7 @@ object CrashReporter {
         val report = buildString {
             appendLine("Renkin crash report")
             appendLine("Time: ${DateFormat.getDateTimeInstance().format(Date(now))}")
-            appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            AppBuildInfo.appendTo(this)
             appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
             appendLine()

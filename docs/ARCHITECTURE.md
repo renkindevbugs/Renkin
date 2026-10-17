@@ -121,8 +121,10 @@ use bounded buffers on IO, and the submitted digest is cached per attempt across
 cancellable verification window preserves prompt cancellation; recognized dead sessions retain
 the existing 8 s allowance before compatibility fallback. Broadcasts only wake the verifier.
 Ordinary success avoids hashing. A Shizuku abort never triggers another installer after verification.
-The local upstream guard proposal remains unapplied; its status and device checks are in
-[install-compatibility-c1-checkpoint.md](install-compatibility-c1-checkpoint.md).
+The confirmation launch is guarded in a pinned source build of Ackpine core; API, runtime,
+KTX and Shizuku retain their published versions. The adapter replaces transitive core references
+as well. Its provenance, verification and removal conditions are recorded in
+[installer-confirmation-guard-checkpoint.md](installer-confirmation-guard-checkpoint.md).
 
 `shouldTryNextRoute` is the single fallback table: a system session or external installer moves on
 only after a technical FAILED, Shizuku also after BLOCKED (a user restriction that a confirmed

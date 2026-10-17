@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # Arcticons-Font ships as a git submodule; the build copies the font from it.
+          # The font and pinned Ackpine core sources are Git submodules.
           submodules: recursive
           persist-credentials: false
 
@@ -40,7 +40,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: debug-verification-reports
+          name: debug-verification-reports-${{ github.sha }}
           retention-days: 7
           path: |
             app/build/reports/tests/
@@ -48,11 +48,14 @@ jobs:
             app/build/reports/lint-results-debug.*
             app/build/reports/roborazzi/
             app/build/outputs/screenshots_comparison/
+            compat/ackpine-core/build/reports/tests/
+            compat/ackpine-core/build/test-results/testDebugUnitTest/
+            compat/ackpine-core/build/reports/lint-results-debug.*
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
-          name: debug-apk
+          name: debug-apk-${{ github.sha }}
           retention-days: 7
           if-no-files-found: error
           path: app/build/outputs/apk/debug/*.apk
@@ -81,8 +84,8 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: release-verification-reports
-          retention-days: 7
+          name: release-verification-reports-${{ github.sha }}
+          retention-days: 90
           path: |
             app/build/outputs/mapping/release/
             app/build/reports/lint-results-release*.*
@@ -92,7 +95,7 @@ jobs:
       - name: Upload unsigned release APK
         uses: actions/upload-artifact@v4
         with:
-          name: unsigned-release-apk
-          retention-days: 7
+          name: unsigned-release-apk-${{ github.sha }}
+          retention-days: 90
           if-no-files-found: error
           path: app/build/outputs/apk/release/*.apk

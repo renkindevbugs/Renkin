@@ -367,7 +367,7 @@ fun SettingsScreen(prefs: DataStore<Preferences>, onDismiss: () -> Unit) {
                     // version visible without turning it into another action.
                     HorizontalDivider(Modifier.padding(top = 16.dp))
                     Text(
-                        text = stringResource(R.string.version, BuildConfig.VERSION_NAME),
+                        text = stringResource(R.string.version, dev.renkinProject.renkin.util.AppBuildInfo.displayVersion),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(vertical = 16.dp)
