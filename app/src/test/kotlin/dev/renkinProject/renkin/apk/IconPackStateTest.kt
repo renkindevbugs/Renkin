@@ -38,6 +38,19 @@ class IconPackStateTest {
         assertEquals(IconPackState(emptyList(), true), repo.state.value)
     }
 
+    @Test fun ownPacksOfEveryProfileAndThePreRenameNameAreNeverIconSources() = runBlocking {
+        val repo = repository()
+        val own = listOf(
+            IconPack("dev.renkinProject.renkinpack", "Renkin", 1, "1", 0),
+            IconPack("dev.renkinProject.renkinpack.p4", "Renkin profile", 1, "1", 0),
+            IconPack("dev.alembiconsProject.renkinpack", "Renkin legacy", 1, "1", 0)
+        )
+
+        repo.load(emptyList(), { own + pack }) { _, _ -> emptyList() }
+
+        assertEquals(listOf(pack), repo.state.value.packs)
+    }
+
     @Test fun discoveryIsVisibleBeforeReadinessAndReadyIncludesCompletedIndexes() = runBlocking {
         val repo = repository()
         assertEquals(IconPackState(), repo.state.value)
