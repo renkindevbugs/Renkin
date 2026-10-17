@@ -1,6 +1,6 @@
 # Architecture improvement plan — 2026-10-17
 
-Status: agreed direction; steps 1–6 merged, step 7 is next and waits for the developer.
+Status: agreed direction; steps 1–7 merged, step 8 is next and waits for the developer.
 Base: `dev` at `7ec9e93a`, revised after a second review of the plan at `a2eeab20`.
 Inputs: two architecture audits (`reports/Audit architektúry MVVM a DRY.md`,
 `reports/Umiestnenie kódu MVVM a DRY.md`, local and uncommitted, with notes in `research_notes/`)
@@ -94,7 +94,7 @@ Status values: `todo`, `in progress`, `device check`, `merged`.
 
 | # | Step | Verification | Status |
 |---|---|---|---|
-| 7 | Field contract for `DbApplication` in backups: every column is declared as preserved, derived (e.g. `profileId` supplied outside `BackupCodec`) or normalized, and a test fails on a column without a declaration | reflection over the entity against the declared contract; round trip checks preserved fields | todo |
+| 7 | Field contract for `DbApplication` in backups: every column is declared as preserved, derived (e.g. `profileId` supplied outside `BackupCodec`) or normalized, and a test fails on a column without a declaration | reflection over the entity against the declared contract; round trip checks preserved fields | merged |
 | 8 | `BackupInspectionProjection` keeps every field the decoder needs after filtered loading | test decoding from the filtered projection equals decoding from the full row | todo |
 | 9 | Global colour styles: every `ColorStyleKeys` set is covered by every writer and reader | extend the step 1 test to readers and to `ProfileStyle` capture | todo |
 | 10 | Remove verified dead code only (unused provider pass-throughs, dead persisted-undo branch, unused extensions and widgets) | references checked in main, tests, function references and the framework; full suite | todo |
