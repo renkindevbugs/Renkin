@@ -1,3 +1,6 @@
 [submodule "Arcticons-Font"]
 	path = Arcticons-Font
 	url = https://github.com/Arcticons-Team/Arcticons-Font
+[submodule "ackpine-source"]
+	path = third_party/ackpine-source
+	url = https://github.com/solrudev/Ackpine.git

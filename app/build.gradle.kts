@@ -11,6 +11,22 @@ plugins {
     alias(libs.plugins.roborazzi)
 }
 
+val revisionOverride = providers.gradleProperty("renkin.revision")
+val sourceRevision = revisionOverride.orElse(
+    providers.exec {
+        workingDir(rootDir)
+        commandLine("git", "rev-parse", "--short=12", "HEAD")
+        isIgnoreExitValue = true
+    }.standardOutput.asText.map { it.trim().ifEmpty { "unknown" } }
+).get()
+require(sourceRevision.matches(Regex("[A-Za-z0-9._-]+"))) { "Invalid renkin.revision" }
+val sourceDirty = if (revisionOverride.isPresent) false else providers.exec {
+    workingDir(rootDir)
+    commandLine("git", "status", "--porcelain", "--untracked-files=no", "--ignore-submodules=untracked")
+    isIgnoreExitValue = true
+}.standardOutput.asText.map { it.isNotBlank() }.get()
+val buildRevision = sourceRevision + if (sourceDirty) "-dirty" else ""
+
 // Verification must not load signing credentials even on a configured developer machine.
 val unsignedRelease = providers.gradleProperty("renkin.unsignedRelease")
     .map { it.toBooleanStrict() }
@@ -38,6 +54,7 @@ android {
         // app id (the 2025.02.00 / 44 values were inherited from the Alembicons fork).
         versionCode = 55
         versionName = "2026.09.02"
+        buildConfigField("String", "SOURCE_REVISION", "\"$buildRevision\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -66,6 +83,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".dev"
+            versionNameSuffix = "-dev"
         }
         release {
             isMinifyEnabled = true
@@ -78,6 +96,7 @@ android {
         create("benchmark") {
             initWith(getByName("release"))
             applicationIdSuffix = ".benchmark"
+            versionNameSuffix = "-benchmark"
             signingConfig = signingConfigs.getByName("debug")
             matchingFallbacks += listOf("release")
             isDebuggable = false

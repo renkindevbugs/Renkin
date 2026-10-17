@@ -379,7 +379,7 @@ internal class BuildInstallCoordinator(
             ?: "No additional details were provided by Android."
         val report = buildString {
             appendLine("Renkin icon pack installation report")
-            appendLine("App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+            dev.renkinProject.renkin.util.AppBuildInfo.appendTo(this)
             appendLine("Android: ${android.os.Build.VERSION.RELEASE} (API ${android.os.Build.VERSION.SDK_INT})")
             appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
             appendLine("Launcher: " + (launcher?.let { "${it.label} (${it.packageName})" } ?: "no default home app"))

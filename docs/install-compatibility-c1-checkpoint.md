@@ -1,5 +1,9 @@
 # Installation compatibility C1 checkpoint — 2026-10-14
 
+Follow-up, 2026-10-17: the [confirmation guard checkpoint](installer-confirmation-guard-checkpoint.md)
+adds a pinned source adapter for the actual Activity launch. The unapplied-proposal statements
+below describe the original C1 checkpoint; current guard verification is recorded in the follow-up.
+
 Branch: `fix/install-confirmation-crash`, based on `dev` at `74a87037`.
 
 Status: verified on a OnePlus CPH2663 (Android 16) and approved by the developer; committed on
