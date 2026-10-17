@@ -1,6 +1,6 @@
 # Architecture improvement plan — 2026-10-17
 
-Status: agreed direction; step 1 merged, step 2 is next but waits for the developer.
+Status: agreed direction; steps 1–2 merged, step 3 is next and waits for the developer.
 Base: `dev` at `7ec9e93a`, revised after a second review of the plan at `a2eeab20`.
 Inputs: two architecture audits (`reports/Audit architektúry MVVM a DRY.md`,
 `reports/Umiestnenie kódu MVVM a DRY.md`, local and uncommitted, with notes in `research_notes/`)
@@ -79,7 +79,7 @@ Status values: `todo`, `in progress`, `device check`, `merged`.
 | # | Step | Verification | Status |
 |---|---|---|---|
 | 1 | Global Save keeps the shape-plate gradient: copy the whole `GlobalShapeStyleKeys` set through one shared key list | test comparing editor writes with Save copies; device: gradient plate survives Save and reopen | merged |
-| 2 | `XmlParser` climbs to the correct parent after a multi-level depth drop | test `vector > group > group > path` followed by a sibling path; device: reopen a saved nested vector | todo |
+| 2 | `XmlParser` climbs to the correct parent after a multi-level depth drop | test `vector > group > group > path` followed by a sibling path; device: reopen a saved nested vector | merged |
 | 3 | One appfilter declaration rule (last wins, `ddf8f5b4`) for `ApplicationManager`, `DynamicClockExporter` and `WatchChecker` | fixture with a duplicated component; watch name and hash describe the same drawable; previews and dynamic clocks unchanged otherwise | todo |
 | 4 | One own-pack identity (current and legacy prefixes) used by every source filter | fixture with a legacy own pack: it is never offered as an icon source | todo |
 
