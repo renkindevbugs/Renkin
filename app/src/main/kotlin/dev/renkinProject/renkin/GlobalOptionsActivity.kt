@@ -23,6 +23,8 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.Preferences
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.SavedStateHandle
+import androidx.lifecycle.viewmodel.compose.SavedStateHandleSaveableApi
+import androidx.lifecycle.viewmodel.compose.saveable
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.AndroidEntryPoint
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,6 +39,7 @@ import dev.renkinProject.renkin.apk.ProfileSessionToken
 import dev.renkinProject.renkin.apk.ProfileOperationSupersededException
 import dev.renkinProject.renkin.apk.ProfileOperationBusyException
 import dev.renkinProject.renkin.apk.ProfileSessionChangedException
+import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 import dev.renkinProject.renkin.data.isDarkModeEnabled
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.drawable.ResourceDrawable
@@ -44,6 +47,8 @@ import dev.renkinProject.renkin.drawable.toSafeBitmapOrNull
 import dev.renkinProject.renkin.icon.creator.GenerationOptions
 import dev.renkinProject.renkin.icon.creator.IconGenerationResult
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.ui.GlobalModifierSnapshot
+import dev.renkinProject.renkin.ui.GlobalModifierState
 import dev.renkinProject.renkin.ui.GlobalOptionsScreen
 import dev.renkinProject.renkin.ui.LocalToaster
 import dev.renkinProject.renkin.ui.ProvideAdaptiveLayoutInfo
@@ -55,6 +60,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -180,8 +186,8 @@ class GlobalOptionsActivity : ComponentActivity() {
 }
 
 /**
- * The Global options screen's model: a thin pass-through to the [ApplicationProvider]
- * singleton with the screen's session bookkeeping ([editedKeys], [appliedGlobal]) that the
+ * The Global options screen's model: it owns the staged draft, its saved baseline and the Save
+ * run, and keeps the screen's session bookkeeping ([editedKeys], [appliedGlobal]) that the
  * activity reports back to MainViewModel. A cold process recreation initializes the shared
  * provider here because MainViewModel may not exist while this activity is on top.
  */
@@ -314,6 +320,57 @@ class GlobalOptionsViewModel @Inject constructor(
     var globalApplyProgress by mutableStateOf<Pair<Int, Int>?>(null)
         private set
 
+    // The staged settings and the last saved snapshot live here, not in the screen, so a Save
+    // that outlives an activity recreation still updates the baseline the screen compares with.
+    @OptIn(SavedStateHandleSaveableApi::class)
+    internal val draft: GlobalModifierState by savedStateHandle.saveable(saver = GlobalModifierState.Saver) {
+        GlobalModifierState()
+    }
+
+    @OptIn(SavedStateHandleSaveableApi::class)
+    private val savedBaseline by savedStateHandle.saveable(saver = GlobalModifierState.BaselineSaver) {
+        mutableStateOf<GlobalModifierSnapshot?>(null)
+    }
+
+    /** The snapshot the dirty check compares against; null until seeding completes. */
+    internal var baseline: GlobalModifierSnapshot?
+        get() = savedBaseline.value
+        private set(value) { savedBaseline.value = value }
+
+    internal val isDirty: Boolean get() = baseline.let { it != null && it != draft.snapshot() }
+
+    private var saveJob: Job? = null
+
+    init {
+        viewModelScope.launch {
+            if (!draft.initialized) {
+                draft.seedFrom(getApplication<Application>().dataStore.getPreferencesAfterPendingWrites())
+                baseline = draft.snapshot()
+            }
+        }
+    }
+
+    fun resetDraft() {
+        baseline?.let(draft::restore)
+    }
+
+    /** Saves the staged draft; the outcome arrives as a toast and as the updated [baseline]. */
+    fun saveGlobalStyle(): Job? {
+        if (saveJob?.isActive == true || globalApplyProgress != null) return null
+        return viewModelScope.launch {
+            val savedState = draft.snapshot()
+            val preferences = getApplication<Application>().dataStore.getPreferencesAfterPendingWrites()
+            val applied = applyGlobalModifiers(
+                draft.overlay(preferences), draft.toModifierOptions(),
+                draft.applyGenerated, draft.applyExisting, draft.applyCustom, draft.includeEmpty
+            )
+            if (applied) {
+                baseline = savedState
+                _toastEvents.trySend(R.string.globalOptionsApplied)
+            }
+        }.also { saveJob = it }
+    }
+
     override suspend fun previewIcon(
         app: PackageInfoStruct,
         options: GenerationOptions,
@@ -421,7 +478,7 @@ class GlobalOptionsViewModel @Inject constructor(
      * [preferences] contains the screen's staged values. The provider persists that recipe and
      * the rendered icons as one profile operation. Returns success for the screen's outcome toast.
      */
-    suspend fun applyGlobalModifiers(
+    private suspend fun applyGlobalModifiers(
         preferences: Preferences,
         modifierOptions: GenerationOptions,
         applyGenerated: Boolean,

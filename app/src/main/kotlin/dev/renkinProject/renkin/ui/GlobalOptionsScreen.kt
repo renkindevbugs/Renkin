@@ -2,7 +2,6 @@
 
 package dev.renkinProject.renkin.ui
 
-import dev.renkinProject.renkin.data.getPreferencesAfterPendingWrites
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
@@ -157,34 +156,18 @@ internal fun categorizeGlobalIcons(
 @Composable
 fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> Unit) {
     val viewModel: GlobalOptionsViewModel = hiltViewModel()
-    val prefs = getPreferences()
-    val prefsValue = prefs.getPreferencesValue()
+    val prefsValue = getPreferences().getPreferencesValue()
     val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val view = LocalView.current
-    val toaster = LocalToaster.current
-    val appliedMessage = stringResource(R.string.globalOptionsApplied)
     val githubIssuesUrl = stringResource(R.string.crashGithubUrl)
     val openLink = rememberLinkOpener()
 
-    val state = rememberSaveable(saver = GlobalModifierState.Saver) { GlobalModifierState() }
+    val state = viewModel.draft
     var showBetaDialog by rememberSaveable { mutableStateOf(true) }
-    // The baseline snapshot the dirty check compares against; null until seeding completes.
-    var baseline by rememberSaveable(saver = GlobalModifierState.BaselineSaver) {
-        mutableStateOf<GlobalModifierSnapshot?>(null)
-    }
-    LaunchedEffect(Unit) {
-        if (!state.initialized) {
-            state.seedFrom(prefs.getPreferencesAfterPendingWrites())
-            baseline = state.snapshot()
-        }
-    }
 
     val applying = viewModel.globalApplyProgress != null
     val previewJobs by viewModel.previewJobs.collectAsStateWithLifecycle()
-    val dirty by remember(state) {
-        derivedStateOf { baseline != null && baseline != state.snapshot() }
-    }
+    val dirty by remember(viewModel) { derivedStateOf { viewModel.isDirty } }
     var confirmDiscard by remember { mutableStateOf(false) }
     var showTargets by rememberSaveable { mutableStateOf(false) }
     var showSources by rememberSaveable { mutableStateOf(false) }
@@ -327,18 +310,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                     Button(
                         onClick = {
                             view.performConfirmHaptic()
-                            scope.launch {
-                                val savedState = state.snapshot()
-                                val applied = viewModel.applyGlobalModifiers(
-                                    state.overlay(prefsValue), state.toModifierOptions(),
-                                    state.applyGenerated, state.applyExisting,
-                                    state.applyCustom, state.includeEmpty
-                                )
-                                if (applied) {
-                                    toaster.show(appliedMessage)
-                                    baseline = savedState
-                                }
-                            }
+                            viewModel.saveGlobalStyle()
                         },
                         enabled = dirty && !applying,
                         shape = dev.renkinProject.renkin.ui.theme.FieldShape
@@ -503,7 +475,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                                     resetEnabled = dirty,
                                     onTargetsClick = { showTargets = true },
                                     onSourcesClick = { showSources = true },
-                                    onReset = { baseline?.let(state::restore) }
+                                    onReset = viewModel::resetDraft
                                 )
                             }
                             GlobalPreviewProgressIndicator(
@@ -568,7 +540,7 @@ fun GlobalOptionsScreen(onClose: (editedKeys: Set<String>, applied: Boolean) -> 
                                     resetEnabled = dirty,
                                     onTargetsClick = { showTargets = true },
                                     onSourcesClick = { showSources = true },
-                                    onReset = { baseline?.let(state::restore) }
+                                    onReset = viewModel::resetDraft
                                 )
                             }
                             GlobalPreviewProgressIndicator(
