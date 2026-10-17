@@ -195,4 +195,19 @@ class BackupInspectionReaderTest {
         assertTrue(task.isCancelled)
         assertTrue(closed)
     }
+
+    // The projection lists retained names by hand; anything the codec writes must survive it,
+    // so a new icon column (see BackupIconFieldContractTest) cannot silently vanish from imports.
+    @Test fun inspectionRetainsEveryFieldTheCodecWrites() {
+        val root = BackupCodec.encodeJson(fixture(), BackupCodec.FORMAT_VERSION)
+        val levels = listOf(
+            BackupJsonNode.ROOT to root,
+            BackupJsonNode.PROFILE to profile(root),
+            BackupJsonNode.ICON to icon(root)
+        )
+        for ((node, value) in levels) {
+            val dropped = value.keys().asSequence().filterNot(node::retains).toList()
+            assertEquals("$node drops fields the decoder reads", emptyList<String>(), dropped)
+        }
+    }
 }
