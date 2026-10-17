@@ -95,6 +95,7 @@ import android.graphics.Bitmap
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.icon.creator.IconShape
 import dev.renkinProject.renkin.packages.PackageInfoStruct
+import dev.renkinProject.renkin.packages.isMissingIcon
 import dev.renkinProject.renkin.ui.theme.CardShape
 import dev.renkinProject.renkin.ui.theme.SwatchShape
 import dev.renkinProject.renkin.ui.theme.IconShape as IconTileShape
@@ -131,7 +132,7 @@ internal fun categorizeGlobalIcons(
 
     for (app in applications) {
         if (app.createdIcon == null) {
-            if (app.key !in lockedKeys) iconless += app
+            if (app.isMissingIcon(lockedKeys)) iconless += app
         } else if (app.isCustom) {
             custom += app
         } else if (app.isRefreshMade) {

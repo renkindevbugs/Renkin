@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui.modifier
 
+import dev.renkinProject.renkin.icon.creator.MODIFIER_SCALE_RANGE
 import android.graphics.Bitmap
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -89,7 +90,7 @@ internal fun IconShapeSection(
                     label = stringResource(R.string.shapeIconScale),
                     value = adjustments.shapeScale,
                     onValueChange = { adjustments.shapeScale = it },
-                    valueRange = 0.5f..1.5f,
+                    valueRange = MODIFIER_SCALE_RANGE,
                     centered = true,
                     ruler = percentRuler()
                 )

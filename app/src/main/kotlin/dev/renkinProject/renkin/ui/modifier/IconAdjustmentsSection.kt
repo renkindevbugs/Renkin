@@ -2,6 +2,7 @@
 
 package dev.renkinProject.renkin.ui.modifier
 
+import dev.renkinProject.renkin.icon.creator.MODIFIER_SCALE_RANGE
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -31,7 +32,7 @@ internal fun IconAdjustmentsSection(
             label = stringResource(R.string.iconScale),
             value = adjustments.iconScale,
             onValueChange = { adjustments.iconScale = it },
-            valueRange = 0.5f..1.5f,
+            valueRange = MODIFIER_SCALE_RANGE,
             centered = true,
             ruler = percentRuler()
         )

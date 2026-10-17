@@ -63,7 +63,7 @@ internal object ModifierRecipeCodec {
             ModifierStack(
                 effect = effect(),
                 transform = TransformModifier(
-                    number("transform.scale", 1f, 0.5f..1.5f),
+                    number("transform.scale", 1f, MODIFIER_SCALE_RANGE),
                     number("transform.offsetX", 0f, -0.5f..0.5f),
                     number("transform.offsetY", 0f, -0.5f..0.5f)
                 ),
@@ -113,7 +113,7 @@ internal object ModifierRecipeCodec {
                         colorizerStyle = it.colorizer
                     )
                 } else null,
-                iconScale = values["iconScale"]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(0.5f, 1.5f),
+                iconScale = values["iconScale"]?.toFloatOrNull()?.takeIf { it.isFinite() }?.coerceIn(MODIFIER_SCALE_RANGE),
                 shape = if (has("shape")) shape().let {
                     ModifierPresetShape(it.shape, it.crop, it.scale, requireNotNull(it.fill?.style))
                 } else null,
@@ -285,7 +285,7 @@ internal object ModifierRecipeCodec {
         fun shape(): ShapeModifier = ShapeModifier(
             shape = enumeration("shape.name", IconShape.NONE),
             crop = boolean("shape.crop", true),
-            scale = number("shape.scale", 1f, 0.5f..1.5f),
+            scale = number("shape.scale", 1f, MODIFIER_SCALE_RANGE),
             fill = if (presetDocument) style("shape.style", Color.WHITE).let { ColorFill(it.firstColor, it) }
                 else if (has("shape.fill")) fill("shape", Color.WHITE) else null
         )
@@ -318,7 +318,7 @@ internal object ModifierRecipeCodec {
             selectedScheme = integer("pack.selectedScheme", -1),
             customForeground = if (has("pack.customForeground.mode")) style("pack.customForeground", Color.BLACK) else null,
             customBackground = if (has("pack.customBackground.mode")) style("pack.customBackground", Color.WHITE) else null,
-            strokeScale = number("pack.strokeScale", 1f, 0.5f..2f)
+            strokeScale = number("pack.strokeScale", 1f, MATERIAL_YOU_STROKE_SCALE_RANGE)
         )
 
         private fun style(key: String, fallbackColor: Int): ColorizerStyle {
