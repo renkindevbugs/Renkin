@@ -105,7 +105,7 @@ fun WatchApplyModal(suggestionId: Long, onDismiss: () -> Unit) {
         // Drop our own generated pack: a suggestion stored before the WatchChecker filter
         // could still list it, and it must never be offered as an icon source. Filtering
         // here covers the chips, the default selection and the generated preview at once.
-        val packCandidates = c.filter { !it.iconPackPackage.startsWith(IconPackBuilder.PACKAGE_NAME) }
+        val packCandidates = c.filter { !IconPackBuilder.isOwnPack(it.iconPackPackage) }
         suggestion = s
         candidates = packCandidates
         selectedPack = packCandidates.firstOrNull()?.iconPackPackage

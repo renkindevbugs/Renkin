@@ -106,9 +106,8 @@ class IconPackRepository(
         synchronized(fallbackCache) { fallbackCache.clear() }
         // Drop our own generated pack — it only ever holds icons we just built, so offering
         // it as an icon source (or a watch target) is pointless and just clutters the lists.
-        // startsWith: profile packs share the base package with a ".p<id>" suffix.
         val discovered = discover()
-            .filter { !it.packageName.startsWith(IconPackBuilder.PACKAGE_NAME) }
+            .filter { !IconPackBuilder.isOwnPack(it.packageName) }
         mutableState.update { it.copy(packs = discovered) }
         loadAppFilterElements(installedApps, loadElements)
     }

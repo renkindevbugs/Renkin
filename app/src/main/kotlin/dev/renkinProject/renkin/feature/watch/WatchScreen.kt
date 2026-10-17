@@ -719,7 +719,7 @@ private fun CompletedRuleCard(
                 // Defensive: never show our own generated pack here. New suggestions already
                 // exclude it (WatchChecker), this also hides it for rules completed earlier.
                 rule.packs
-                    .filter { !it.iconPackPackage.startsWith(IconPackBuilder.PACKAGE_NAME) }
+                    .filter { !IconPackBuilder.isOwnPack(it.iconPackPackage) }
                     .forEach { rp ->
                         val pack = packs.find { it.packageName == rp.iconPackPackage }
                         PackLabel(rp.iconPackPackage, pack?.applicationName)
