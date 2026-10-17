@@ -10,11 +10,11 @@ import android.graphics.drawable.LayerDrawable
 import dev.renkinProject.renkin.data.InstalledApplication
 import dev.renkinProject.renkin.data.RawDynamicClock
 import dev.renkinProject.renkin.data.RawElement
-import dev.renkinProject.renkin.data.RawItem
 import dev.renkinProject.renkin.data.toComponentInfo
 import dev.renkinProject.renkin.drawable.IconPackDrawable
 import dev.renkinProject.renkin.extension.getIdentifierByName
 import dev.renkinProject.renkin.packages.ApplicationManager
+import dev.renkinProject.renkin.packages.appFilterDrawableName
 import dev.renkinProject.renkin.packages.PackageResourceResolver
 import dev.renkinProject.renkin.packages.PackageInfoStruct
 import dev.renkinProject.renkin.packages.PackageVersion
@@ -55,8 +55,7 @@ class DynamicClockExporter(
         if (clocks.isEmpty()) return null
 
         val component = app.toInstalledApplication().toComponentInfo()
-        val drawableName = elements.filterIsInstance<RawItem>()
-            .firstOrNull { it.component == component }?.drawableLink ?: return null
+        val drawableName = appFilterDrawableName(elements, component) ?: return null
         val meta = clocks.firstOrNull { it.drawableLink == drawableName } ?: return null
 
         val hourIndex = meta.hourLayerIndex.toIntOrNull() ?: return null
