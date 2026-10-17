@@ -4,6 +4,7 @@ import android.util.JsonReader
 import android.util.JsonToken
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.mutablePreferencesOf
+import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.IconShape
@@ -21,7 +22,14 @@ internal object ProfileStylePreferences {
                     storedEnum(SecondarySourceKey, Source.entries), storedEnum(SecondaryTextTypeKey, TextType.entries), this[SecondaryIconPackKey]
                 ),
                 fallback = storedEnum(FallbackSourceKey, FallbackSource.entries),
-                fontPath = this[TextFontKey]
+                fontPath = this[TextFontKey],
+                applicationIcon = ProfileApplicationIconStyle(
+                    variant = storedEnum(AppIconVariantKey, ApplicationIconVariant.entries),
+                    fullIcon = this[AppIconFullIconKey], invertMonochrome = this[AppIconInvertMonochromeKey],
+                    materialYouScheme = this[AppIconMaterialYouSchemeKey],
+                    materialYouForeground = color(AppIconMaterialYouForegroundStyleKeys),
+                    materialYouBackground = color(AppIconMaterialYouBackgroundStyleKeys)
+                )
             ),
             modifiers = ProfileModifierStyle(
                 generation = ProfileGenerationStyle(

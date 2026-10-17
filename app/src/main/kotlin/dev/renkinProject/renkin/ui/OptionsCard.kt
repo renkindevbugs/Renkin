@@ -49,6 +49,8 @@ import dev.renkinProject.renkin.data.ExportThemedKey
 import dev.renkinProject.renkin.data.FALLBACK_SOURCE_DEFAULT
 import dev.renkinProject.renkin.data.FallbackSource
 import dev.renkinProject.renkin.data.FallbackSourceKey
+import dev.renkinProject.renkin.data.AppIconMaterialYouBackgroundStyleKeys
+import dev.renkinProject.renkin.data.AppIconMaterialYouForegroundStyleKeys
 import dev.renkinProject.renkin.data.IMAGE_EDIT_DEFAULT
 import androidx.compose.animation.AnimatedVisibility
 import dev.renkinProject.renkin.data.OUTLINE_WIDTH_DEFAULT
@@ -86,7 +88,10 @@ import dev.renkinProject.renkin.data.getIntValue
 import dev.renkinProject.renkin.data.getPreferencesValue
 import dev.renkinProject.renkin.data.getStringValue
 import dev.renkinProject.renkin.drawable.IconPackDrawable
+import dev.renkinProject.renkin.icon.creator.ApplicationIconStyle
+import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
+import dev.renkinProject.renkin.icon.creator.applicationIconStyle
 import dev.renkinProject.renkin.icon.creator.colorStyle
 import kotlin.math.roundToInt
 
@@ -206,8 +211,15 @@ private data class AdvancedOptionsState(
     val backgroundStyle: ColorizerStyle,
     val outlineStyle: ColorizerStyle,
     val outlineAdd: Boolean,
-    val outlineWidth: Float
+    val outlineWidth: Float,
+    val appIconStyle: ApplicationIconStyle,
+    val appIconMaterialYouForeground: ColorizerStyle,
+    val appIconMaterialYouBackground: ColorizerStyle
 ) {
+    /** The app-icon style applies only with the app's own icon as the primary source and no path tracing. */
+    val showsAppIconStyle: Boolean
+        get() = primarySource == Source.APPLICATION_ICON && !pathTracing
+
     val pathTracing: Boolean
         get() = isPathTracingEnabled(
             primarySource, primaryImageEdit, secondarySource, secondaryImageEdit
@@ -229,6 +241,8 @@ private fun advancedOptionsState(viewModel: OptionsViewModel): AdvancedOptionsSt
     val store = getPreferences()
     val prefs by viewModel.preferenceSnapshot.collectAsStateWithLifecycle()
     val iconColor = store.getIconColor()
+    // Custom Material You colours start from the first wallpaper scheme, as the refresh does.
+    val defaultScheme = rememberMaterialYouSchemes().first()
     return AdvancedOptionsState(
         primarySource = prefs.getEnumValue(PrimarySourceKey, SOURCE_DEFAULT),
         primaryImageEdit = prefs.getEnumValue(PrimaryImageEditKey, IMAGE_EDIT_DEFAULT),
@@ -254,7 +268,10 @@ private fun advancedOptionsState(viewModel: OptionsViewModel): AdvancedOptionsSt
         outlineAdd = prefs.getBooleanValue(OutlineAddKey),
         outlineWidth = normalizeOutlineWidth(
             prefs.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
-        ).toFloat()
+        ).toFloat(),
+        appIconStyle = prefs.applicationIconStyle(),
+        appIconMaterialYouForeground = prefs.colorStyle(AppIconMaterialYouForegroundStyleKeys, defaultScheme.first),
+        appIconMaterialYouBackground = prefs.colorStyle(AppIconMaterialYouBackgroundStyleKeys, defaultScheme.second)
     )
 }
 
@@ -307,6 +324,31 @@ private fun AdvancedSourceSection(
     if (needImageEdit(state.primarySource)) {
         ImageEditDropdown(R.string.primaryImageEdit, state.primaryImageEdit) {
             viewModel.setPrimaryImageEdit(it)
+        }
+    }
+
+    // The editor's per-app icon variant, chosen once for every app the refresh draws (issue #12).
+    if (state.showsAppIconStyle) {
+        val style = state.appIconStyle
+        Box(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            ApplicationIconVariantControls(
+                variant = style.variant,
+                appHasMaterialYouIcon = true,
+                appHasAdaptiveIcon = true,
+                onVariantChange = viewModel::setAppIconVariant,
+                useFullApplicationIcon = style.fullIcon,
+                onUseFullApplicationIconChange = viewModel::setAppIconFullIcon,
+                invertMonochrome = style.invertMonochrome,
+                onInvertMonochromeChange = viewModel::setAppIconInvertMonochrome,
+                schemes = rememberMaterialYouSchemes(),
+                selectedScheme = style.materialYouScheme,
+                onSchemeChange = viewModel::setAppIconMaterialYouScheme,
+                customForeground = state.appIconMaterialYouForeground,
+                customBackground = state.appIconMaterialYouBackground,
+                onCustomForegroundChange = viewModel::setAppIconMaterialYouForeground,
+                onCustomBackgroundChange = viewModel::setAppIconMaterialYouBackground,
+                appliesToAllApps = true
+            )
         }
     }
 
@@ -388,7 +430,10 @@ private fun AdvancedColorSection(state: AdvancedOptionsState, viewModel: Options
     val showIconColor = showIconColor(
         state.primarySource, state.primaryImageEdit,
         state.secondarySource, state.secondaryImageEdit, state.useThemed
-    )
+    ) &&
+        // Material You brings its own colours and Monochrome uses none, so the icon colour
+        // would do nothing there.
+        !(state.showsAppIconStyle && state.appIconStyle.variant != ApplicationIconVariant.DEFAULT)
     val showBgColor = showBackgroundColor(
         state.primarySource, state.primaryImageEdit,
         state.secondarySource, state.secondaryImageEdit, state.useThemed

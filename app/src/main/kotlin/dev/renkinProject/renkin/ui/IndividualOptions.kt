@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import dev.renkinProject.renkin.feature.online.OnlineImageImport
 import android.graphics.Bitmap
+import dev.renkinProject.renkin.icon.creator.materialYouSchemes
 import dev.renkinProject.renkin.icon.creator.ColorizerStyle
 import dev.renkinProject.renkin.MainViewModel
 import dev.renkinProject.renkin.R
@@ -1259,22 +1260,10 @@ private fun OptionsBottomBar(
  * plain light-on-dark / dark-on-light.
  */
 @Composable
-private fun rememberMaterialYouSchemes(): List<Pair<Color, Color>> {
-    if (!supportDynamicColors()) {
-        return listOf(Color.White to Color.Black, Color.Black to Color.White)
-    }
+internal fun rememberMaterialYouSchemes(): List<Pair<Color, Color>> {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
-    return remember(configuration) {
-        fun c(id: Int) = Color(context.resources.getColor(id, context.theme))
-        listOf(
-            c(android.R.color.system_accent1_100) to c(android.R.color.system_accent1_800),
-            c(android.R.color.system_accent2_100) to c(android.R.color.system_accent2_800),
-            c(android.R.color.system_accent3_100) to c(android.R.color.system_accent3_800),
-            c(android.R.color.system_neutral1_100) to c(android.R.color.system_neutral1_800),
-            c(android.R.color.system_accent1_800) to c(android.R.color.system_accent1_100)
-        )
-    }
+    return remember(configuration) { materialYouSchemes(context) }
 }
 
 @Composable

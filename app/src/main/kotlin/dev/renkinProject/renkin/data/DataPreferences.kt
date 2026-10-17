@@ -185,6 +185,26 @@ val GlobalColorizerGradientPositionsKey =
     stringPreferencesKey("GLOBAL_COLORIZER_GRADIENT_POSITIONS")
 val GlobalColorizerGradientAngleKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_ANGLE")
 val GlobalColorizerGradientTypeKey = intPreferencesKey("GLOBAL_COLORIZER_GRADIENT_TYPE")
+// How a refresh draws apps when the primary source is the app's own icon (issue #12): the same
+// Default / Material You / Monochrome choice the editor offers per app, for every app at once.
+val AppIconVariantKey = intPreferencesKey("APP_ICON_VARIANT")
+val AppIconFullIconKey = booleanPreferencesKey("APP_ICON_FULL_ICON")
+val AppIconInvertMonochromeKey = booleanPreferencesKey("APP_ICON_INVERT_MONOCHROME")
+// Index into the wallpaper Material You schemes, resolved at each refresh so icons follow the
+// current wallpaper; the value one past the last scheme selects the custom colours below.
+val AppIconMaterialYouSchemeKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_SCHEME")
+val AppIconMaterialYouForegroundKey = stringPreferencesKey("APP_ICON_MATERIAL_YOU_FOREGROUND")
+val AppIconMaterialYouForegroundModeKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_FOREGROUND_MODE")
+val AppIconMaterialYouForegroundGradientTypeKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_FOREGROUND_GRADIENT_TYPE")
+val AppIconMaterialYouForegroundGradientAngleKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_FOREGROUND_GRADIENT_ANGLE")
+val AppIconMaterialYouForegroundGradientColorsKey = stringPreferencesKey("APP_ICON_MATERIAL_YOU_FOREGROUND_GRADIENT_COLORS")
+val AppIconMaterialYouForegroundGradientPositionsKey = stringPreferencesKey("APP_ICON_MATERIAL_YOU_FOREGROUND_GRADIENT_POSITIONS")
+val AppIconMaterialYouBackgroundKey = stringPreferencesKey("APP_ICON_MATERIAL_YOU_BACKGROUND")
+val AppIconMaterialYouBackgroundModeKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_BACKGROUND_MODE")
+val AppIconMaterialYouBackgroundGradientTypeKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_BACKGROUND_GRADIENT_TYPE")
+val AppIconMaterialYouBackgroundGradientAngleKey = intPreferencesKey("APP_ICON_MATERIAL_YOU_BACKGROUND_GRADIENT_ANGLE")
+val AppIconMaterialYouBackgroundGradientColorsKey = stringPreferencesKey("APP_ICON_MATERIAL_YOU_BACKGROUND_GRADIENT_COLORS")
+val AppIconMaterialYouBackgroundGradientPositionsKey = stringPreferencesKey("APP_ICON_MATERIAL_YOU_BACKGROUND_GRADIENT_POSITIONS")
 // Which icon categories the global modifiers apply to (the Global options screen's toggle
 // buttons): refresh-generated icons (on by default — also gates the globals during a bulk
 // refresh), hand-picked (custom) icons, and apps that have no icon yet (those get one
@@ -229,7 +249,8 @@ private val ProfileBooleanPrefKeys: List<Preferences.Key<Boolean>> = listOf(
     OutlineAddKey, GlobalShapeCropKey, GlobalColorizeKey, GlobalColorizeFlatKey,
     GlobalColorizeLightenKey,
     GlobalColorizeMonochromeKey, GlobalColorizeInverseKey,
-    GlobalApplyGeneratedKey, GlobalApplyExistingKey, GlobalApplyCustomKey, GlobalIncludeEmptyKey
+    GlobalApplyGeneratedKey, GlobalApplyExistingKey, GlobalApplyCustomKey, GlobalIncludeEmptyKey,
+    AppIconFullIconKey, AppIconInvertMonochromeKey
 )
 
 private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
@@ -241,7 +262,12 @@ private val ProfileIntPrefKeys: List<Preferences.Key<Int>> = listOf(
     BackgroundColorizerModeKey, BackgroundGradientTypeKey, BackgroundGradientAngleKey,
     GlobalShapeColorizerModeKey, GlobalShapeGradientTypeKey, GlobalShapeGradientAngleKey,
     OutlineColorizerModeKey, OutlineGradientTypeKey, OutlineGradientAngleKey,
-    GlobalColorizerModeKey, GlobalColorizerGradientAngleKey, GlobalColorizerGradientTypeKey
+    GlobalColorizerModeKey, GlobalColorizerGradientAngleKey, GlobalColorizerGradientTypeKey,
+    AppIconVariantKey, AppIconMaterialYouSchemeKey,
+    AppIconMaterialYouForegroundModeKey, AppIconMaterialYouForegroundGradientTypeKey,
+    AppIconMaterialYouForegroundGradientAngleKey,
+    AppIconMaterialYouBackgroundModeKey, AppIconMaterialYouBackgroundGradientTypeKey,
+    AppIconMaterialYouBackgroundGradientAngleKey
 )
 
 private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
@@ -253,7 +279,11 @@ private val ProfileStringPrefKeys: List<Preferences.Key<String>> = listOf(
     ColorizerGradientPositionsKey, GlobalColorizerGradientPositionsKey,
     OutlineGradientPositionsKey,
     BackgroundGradientColorsKey, BackgroundGradientPositionsKey,
-    GlobalShapeGradientColorsKey, GlobalShapeGradientPositionsKey
+    GlobalShapeGradientColorsKey, GlobalShapeGradientPositionsKey,
+    AppIconMaterialYouForegroundKey, AppIconMaterialYouForegroundGradientColorsKey,
+    AppIconMaterialYouForegroundGradientPositionsKey,
+    AppIconMaterialYouBackgroundKey, AppIconMaterialYouBackgroundGradientColorsKey,
+    AppIconMaterialYouBackgroundGradientPositionsKey
 )
 
 val ProfilePrefKeys: List<Preferences.Key<*>> =
@@ -635,6 +665,24 @@ val BackgroundStyleKeys = ColorStyleKeys(
     firstColor = BackgroundColorKey,
     gradientColors = BackgroundGradientColorsKey,
     gradientPositions = BackgroundGradientPositionsKey
+)
+
+val AppIconMaterialYouForegroundStyleKeys = ColorStyleKeys(
+    mode = AppIconMaterialYouForegroundModeKey,
+    gradientType = AppIconMaterialYouForegroundGradientTypeKey,
+    gradientAngle = AppIconMaterialYouForegroundGradientAngleKey,
+    firstColor = AppIconMaterialYouForegroundKey,
+    gradientColors = AppIconMaterialYouForegroundGradientColorsKey,
+    gradientPositions = AppIconMaterialYouForegroundGradientPositionsKey
+)
+
+val AppIconMaterialYouBackgroundStyleKeys = ColorStyleKeys(
+    mode = AppIconMaterialYouBackgroundModeKey,
+    gradientType = AppIconMaterialYouBackgroundGradientTypeKey,
+    gradientAngle = AppIconMaterialYouBackgroundGradientAngleKey,
+    firstColor = AppIconMaterialYouBackgroundKey,
+    gradientColors = AppIconMaterialYouBackgroundGradientColorsKey,
+    gradientPositions = AppIconMaterialYouBackgroundGradientPositionsKey
 )
 
 val GlobalShapeStyleKeys = ColorStyleKeys(

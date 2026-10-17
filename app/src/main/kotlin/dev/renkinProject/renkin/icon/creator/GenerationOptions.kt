@@ -96,6 +96,13 @@ data class GenerationOptions(
             )
 
             val materialYou = pathOptionsRelevant && preferences.getBooleanValue(MonochromeKey)
+            // The app-icon style applies when the app's own icon is the primary source; path
+            // tracing keeps its own Material You export switch instead, so the two never compete.
+            val appIconStyle = preferences.applicationIconStyle()
+                .takeIf { primarySource == Source.APPLICATION_ICON && !pathOptionsRelevant }
+            val appIconColors = appIconStyle
+                ?.takeIf { it.variant == ApplicationIconVariant.MATERIAL_YOU }
+                ?.let { preferences.applicationIconMaterialYouColors(context, it.materialYouScheme) }
             return GenerationOptions(
                 source = IconSourceOptions(
                     primarySource = primarySource,
@@ -107,21 +114,30 @@ data class GenerationOptions(
                     secondaryIconPack = preferences.getStringValue(SecondaryIconPackKey),
                     fallbackSource = preferences.getEnumValue(FallbackSourceKey, FALLBACK_SOURCE_DEFAULT),
                     textFontPath = FontCatalog.usablePathOrDefault(preferences.getStringValue(TextFontKey)),
-                    applicationIconVariant = if (materialYou) {
-                        ApplicationIconVariant.MATERIAL_YOU
-                    } else ApplicationIconVariant.DEFAULT
+                    applicationIconVariant = when {
+                        materialYou -> ApplicationIconVariant.MATERIAL_YOU
+                        appIconStyle != null -> appIconStyle.variant
+                        else -> ApplicationIconVariant.DEFAULT
+                    },
+                    invertMonochrome = appIconStyle?.invertMonochrome == true,
+                    useFullApplicationIcon = appIconStyle?.fullIcon == true
                 ),
+                // Material You paints with the colourizer colour over the export background, as
+                // the editor does; with the app's icon as the primary source nothing else uses them.
                 export = IconExportOptions(
                     vector = pathOptionsRelevant && preferences.getBooleanValue(IncludeVectorKey),
                     materialYou = materialYou,
                     themed = preferences.getBooleanValue(ExportThemedKey),
-                    background = ColorFill(
-                        color = bgColor.toArgb(),
-                        style = preferences.colorStyle(BackgroundStyleKeys, bgColor)
-                    )
+                    background = appIconColors?.let { ColorFill(it.backgroundColor, it.background) }
+                        ?: ColorFill(
+                            color = bgColor.toArgb(),
+                            style = preferences.colorStyle(BackgroundStyleKeys, bgColor)
+                        ),
+                    foregroundStyle = appIconColors?.foreground
                 ),
                 modifiers = ModifierStack(EffectModifier(
-                    primaryImageEdit, preferences.colorStyle(ColorizerStyleKeys, iconColor)
+                    primaryImageEdit,
+                    appIconColors?.foreground ?: preferences.colorStyle(ColorizerStyleKeys, iconColor)
                 )),
                 override = override
             )

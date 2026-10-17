@@ -1,6 +1,7 @@
 package dev.renkinProject.renkin.data
 
 import android.app.Application
+import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import org.json.JSONObject
 import org.junit.Assert.*
 import org.junit.Test
@@ -129,5 +130,34 @@ class ProfileStyleCodecTest {
     @Test
     fun foreignDeepTreesAreRejectedAtTheFirstUnknownPath() {
         rejected(document("""{"primary":{"unknown":${"{\"x\":".repeat(2000)}0${"}".repeat(2000)}}}"""))
+    }
+
+    @Test
+    fun appIconStyleTravelsUnderTheSourceGroup() {
+        val style = ProfileStyle(
+            source = ProfileSourceStyle(
+                applicationIcon = ProfileApplicationIconStyle(
+                    variant = ProfileEnumValue.Known(ApplicationIconVariant.MATERIAL_YOU),
+                    fullIcon = true,
+                    invertMonochrome = false,
+                    materialYouScheme = 5,
+                    materialYouForeground = ProfileColorStyle(firstColor = "#FFFF0000"),
+                    materialYouBackground = ProfileColorStyle(firstColor = "#FF0000FF")
+                )
+            )
+        )
+
+        val encoded = ProfileStyleCodec.encode(style)
+        val appIcon = JSONObject(encoded).getJSONObject("source").getJSONObject("applicationIcon")
+
+        assertEquals("MATERIAL_YOU", appIcon.getString("variant"))
+        assertEquals(5, appIcon.getInt("materialYouScheme"))
+        assertEquals("#FFFF0000", appIcon.getJSONObject("materialYouForeground").getString("firstColor"))
+        assertEquals(style, ProfileStyleCodec.decode(encoded))
+    }
+
+    @Test
+    fun documentsWithoutAppIconStyleStillDecode() {
+        assertEquals(ProfileApplicationIconStyle(), ProfileStyleCodec.decode(document()).source.applicationIcon)
     }
 }

@@ -1,5 +1,6 @@
 package dev.renkinProject.renkin.data
 
+import dev.renkinProject.renkin.icon.creator.ApplicationIconVariant
 import dev.renkinProject.renkin.icon.creator.ColorizerMode
 import dev.renkinProject.renkin.icon.creator.GradientType
 import dev.renkinProject.renkin.icon.creator.IconShape
@@ -17,7 +18,17 @@ internal data class ProfileSourceStyle(
     val primary: ProfileSourceSelection = ProfileSourceSelection(),
     val secondary: ProfileSourceSelection = ProfileSourceSelection(),
     val fallback: ProfileEnumValue<FallbackSource>? = null,
-    val fontPath: String? = null
+    val fontPath: String? = null,
+    val applicationIcon: ProfileApplicationIconStyle = ProfileApplicationIconStyle()
+)
+
+internal data class ProfileApplicationIconStyle(
+    val variant: ProfileEnumValue<ApplicationIconVariant>? = null,
+    val fullIcon: Boolean? = null,
+    val invertMonochrome: Boolean? = null,
+    val materialYouScheme: Int? = null,
+    val materialYouForeground: ProfileColorStyle = ProfileColorStyle(),
+    val materialYouBackground: ProfileColorStyle = ProfileColorStyle()
 )
 
 internal data class ProfileSourceSelection(
