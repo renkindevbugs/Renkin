@@ -262,12 +262,7 @@ class RenkinPackStore(
         )
     }
 
-    /** Keys ("package/activity") of the apps in [profileId]'s last built/saved pack. */
-    suspend fun savedKeys(profileId: Long): Set<String> = withContext(Dispatchers.Default) {
-        repo.getAll(profileId).map { "${it.packageName}/${it.activityName}" }.toSet()
-    }
-
-    /** Every stored icon's fingerprint, keyed the same way — the "saved" side of the comparison. */
+    /** Every stored icon's fingerprint, keyed "package/activity" — the "saved" side of the comparison. */
     suspend fun savedHashes(profileId: Long): Map<String, String> =
         withContext(Dispatchers.Default) {
             fingerprints(repo.fingerprintRows(profileId))
@@ -314,17 +309,6 @@ class RenkinPackStore(
         repo.replaceBuiltIcons(profileId, encodeRows(profileId, apps, preservedRows).map {
             BuiltIcon(profileId, it.packageName, it.activityName, it.fingerprint())
         })
-    }
-
-    /**
-     * Adopts the stored icons as "already built" for a profile that has no record yet and claims
-     * no unbuilt changes — an install that predates the record. Without this every icon such a
-     * profile owns would be reported as added the first time the new list is opened.
-     */
-    suspend fun adoptBuiltIfMissing(profileId: Long): Boolean = withContext(Dispatchers.Default) {
-        if (repo.builtIcons(profileId).isNotEmpty()) return@withContext false
-        recordBuilt(profileId)
-        true
     }
 
     /** What the last build of [profileId] shipped, keyed like [savedHashes]. */

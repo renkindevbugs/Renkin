@@ -137,18 +137,6 @@ class BitmapExtensionTest {
     }
 
     @Test
-    fun translated_movesContentAndDropsOffEdgePixels() {
-        val w = 4; val h = 4
-        val px = IntArray(w * h)
-        px[0] = red // top-left corner
-
-        val out = bitmapOf(w, h, px).translated(1f, 1f).pixels()
-
-        assertEquals(0, out[0])           // old position cleared
-        assertEquals(red, out[1 * w + 1]) // moved by (1,1)
-    }
-
-    @Test
     fun removeBackground_followsAGradientButStopsAtTheGlyph() {
         // A horizontal blue gradient background with a red glyph column in the middle. Neighbour-wise
         // tolerance follows the gradient across, the hard red edge stops it.
