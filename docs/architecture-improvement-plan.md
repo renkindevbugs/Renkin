@@ -1,6 +1,6 @@
 # Architecture improvement plan — 2026-10-17
 
-Status: agreed direction; step 1 is next. Base: `dev` at `7ec9e93a`.
+Status: agreed direction; step 1 merged, step 2 is next. Base: `dev` at `7ec9e93a`.
 Inputs: two architecture audits (`reports/Audit architektúry MVVM a DRY.md`,
 `reports/Umiestnenie kódu MVVM a DRY.md`, local and uncommitted, with notes in `research_notes/`)
 and an independent second review whose corrections are adopted below. Neither `reports/` nor
@@ -68,7 +68,7 @@ Status values: `todo`, `in progress`, `device check`, `merged`.
 
 | # | Step | Verification | Status |
 |---|---|---|---|
-| 1 | Global Save keeps the shape-plate gradient: copy the whole `GlobalShapeStyleKeys` set through one shared key list | test comparing editor writes with Save copies; device: gradient plate survives Save and reopen | todo |
+| 1 | Global Save keeps the shape-plate gradient: copy the whole `GlobalShapeStyleKeys` set through one shared key list | test comparing editor writes with Save copies; device: gradient plate survives Save and reopen | merged |
 | 2 | `XmlParser` climbs to the correct parent after a multi-level depth drop | test `vector > group > group > path` followed by a sibling path; device: reopen a saved nested vector | todo |
 | 3 | One appfilter declaration rule (last wins, `ddf8f5b4`) and one own-pack identity, used by `ApplicationManager`, `DynamicClockExporter` and `WatchChecker` | fixture with a duplicated component; legacy own-pack prefix fixture | todo |
 
