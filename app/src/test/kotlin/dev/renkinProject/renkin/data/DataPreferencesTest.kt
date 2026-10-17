@@ -393,4 +393,37 @@ class DataPreferencesTest {
             scope.cancel()
         }
     }
+
+    @Test
+    fun persistGlobalStylePrefs_savesEveryKeyOfEachGlobalColorStyle() = runBlocking {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val store = PreferenceDataStoreFactory.create(scope = scope) {
+            temporaryFolder.root.resolve("global-colors.preferences_pb")
+        }
+        val styles = listOf(GlobalShapeStyleKeys, OutlineStyleKeys, GlobalColorizerStyleKeys)
+        try {
+            val staged = mutablePreferencesOf()
+            styles.forEachIndexed { index, keys ->
+                staged[keys.mode] = 1
+                staged[keys.gradientType] = 1
+                staged[keys.gradientAngle] = 30 + index
+                staged[keys.firstColor] = "#FF00000$index"
+                staged[keys.gradientColors] = "#FF11111$index,#FF22222$index"
+                staged[keys.gradientPositions] = "0.0,0.4$index,1.0"
+                keys.legacyGradientColor?.let { staged[it] = "#FF33333$index" }
+            }
+
+            store.persistGlobalStylePrefs(staged)
+            val saved = store.getPreferencesAfterPendingWrites()
+
+            styles.forEach { keys ->
+                listOfNotNull(
+                    keys.mode, keys.gradientType, keys.gradientAngle, keys.firstColor,
+                    keys.gradientColors, keys.gradientPositions, keys.legacyGradientColor
+                ).forEach { key -> assertEquals(key.name, staged[key], saved[key]) }
+            }
+        } finally {
+            scope.cancel()
+        }
+    }
 }

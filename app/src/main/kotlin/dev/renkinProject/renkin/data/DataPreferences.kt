@@ -312,33 +312,32 @@ private fun MutablePreferences.copyGlobalModifierPrefsFrom(source: Preferences) 
     this[GlobalShapeKey] = source.getIntValue(GlobalShapeKey, 0)
     this[GlobalShapeCropKey] = source.getBooleanValue(GlobalShapeCropKey, true)
     this[GlobalShapeScaleKey] = source.getIntValue(GlobalShapeScaleKey, 100)
-    this[GlobalShapeColorKey] = source.getStringValue(GlobalShapeColorKey)
+    copyColorStyleFrom(source, GlobalShapeStyleKeys)
     this[GlobalIconScaleKey] = source.getIntValue(GlobalIconScaleKey, 100)
     this[OutlineAddKey] = source.getBooleanValue(OutlineAddKey)
     this[OutlineWidthKey] = source.getIntValue(OutlineWidthKey, OUTLINE_WIDTH_DEFAULT)
-    this[OutlineColorKey] = source.getStringValue(OutlineColorKey)
-    this[OutlineColorizerModeKey] = source.getIntValue(OutlineColorizerModeKey)
-    this[OutlineGradientTypeKey] = source.getIntValue(OutlineGradientTypeKey)
-    this[OutlineGradientAngleKey] = source.getIntValue(OutlineGradientAngleKey)
-    this[OutlineGradientColorsKey] = source.getStringValue(OutlineGradientColorsKey)
-    this[OutlineGradientPositionsKey] = source.getStringValue(OutlineGradientPositionsKey)
+    copyColorStyleFrom(source, OutlineStyleKeys)
     this[GlobalColorizeKey] = source.getBooleanValue(GlobalColorizeKey)
-    this[GlobalColorizeColorKey] = source.getStringValue(GlobalColorizeColorKey)
     this[GlobalColorizeFlatKey] = source.getBooleanValue(GlobalColorizeFlatKey)
     this[GlobalColorizeLightenKey] = source.getBooleanValue(GlobalColorizeLightenKey)
     this[GlobalColorizeMonochromeKey] = source.getBooleanValue(GlobalColorizeMonochromeKey)
     this[GlobalColorizeInverseKey] = source.getBooleanValue(GlobalColorizeInverseKey)
-    this[GlobalColorizerModeKey] = source.getIntValue(GlobalColorizerModeKey)
-    this[GlobalColorizerGradientColorKey] = source.getStringValue(GlobalColorizerGradientColorKey)
-    this[GlobalColorizerGradientColorsKey] = source.getStringValue(GlobalColorizerGradientColorsKey)
-    this[GlobalColorizerGradientPositionsKey] =
-        source.getStringValue(GlobalColorizerGradientPositionsKey)
-    this[GlobalColorizerGradientAngleKey] = source.getIntValue(GlobalColorizerGradientAngleKey)
-    this[GlobalColorizerGradientTypeKey] = source.getIntValue(GlobalColorizerGradientTypeKey)
+    copyColorStyleFrom(source, GlobalColorizerStyleKeys)
     this[GlobalApplyGeneratedKey] = source.getBooleanValue(GlobalApplyGeneratedKey, true)
     this[GlobalApplyExistingKey] = source.getBooleanValue(GlobalApplyExistingKey)
     this[GlobalApplyCustomKey] = source.getBooleanValue(GlobalApplyCustomKey)
     this[GlobalIncludeEmptyKey] = source.getBooleanValue(GlobalIncludeEmptyKey)
+}
+
+// Copies every key of a colour style, so a style edited as a whole is also saved as a whole.
+private fun MutablePreferences.copyColorStyleFrom(source: Preferences, keys: ColorStyleKeys) {
+    this[keys.mode] = source.getIntValue(keys.mode)
+    this[keys.gradientType] = source.getIntValue(keys.gradientType)
+    this[keys.gradientAngle] = source.getIntValue(keys.gradientAngle)
+    this[keys.firstColor] = source.getStringValue(keys.firstColor)
+    this[keys.gradientColors] = source.getStringValue(keys.gradientColors)
+    this[keys.gradientPositions] = source.getStringValue(keys.gradientPositions)
+    keys.legacyGradientColor?.let { this[it] = source.getStringValue(it) }
 }
 
 /** Records the hero source that a successful build actually used as one atomic profile write. */
